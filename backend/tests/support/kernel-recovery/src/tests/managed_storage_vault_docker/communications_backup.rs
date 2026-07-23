@@ -1,22 +1,17 @@
-//! Disposable Docker evidence that Storage-owned offline recovery preserves
-//! canonical Communications PostgreSQL state without a domain-specific backup API.
+//! Disposable Docker evidence that Storage-owned offline recovery restores
+//! canonical Communications PostgreSQL state after destructive instance reset.
 
 use std::{fs, os::unix::fs::PermissionsExt, path::{Path, PathBuf}, process::Command};
 
 use super::{required, storage_binary};
 
 pub(super) fn assert_communications_storage_backup_restore(root: &Path) {
+    const DATABASE: &str = "hermes_storage_authenticated";
     let backup_root = root.join("communications-postgres-backup");
     fs::create_dir(&backup_root).expect("create Communications backup directory");
     fs::set_permissions(&backup_root, fs::Permissions::from_mode(0o700))
         .expect("protect Communications backup directory");
-    let target_database = format!("hermes_communications_restore_{}", std::process::id());
-    let tools = PostgresRecoveryTools::install(root, &target_database);
-    postgres_command(
-        &tools.container,
-        "postgres",
-        &format!("CREATE DATABASE {target_database}"),
-    );
+    let tools = PostgresRecoveryTools::install(root, DATABASE);
 
     run_storage_recovery(
         "export-backup",
@@ -24,13 +19,20 @@ pub(super) fn assert_communications_storage_backup_restore(root: &Path) {
             ("--pg-dump", tools.pg_dump.as_path()),
             ("--host", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST")).as_ref()),
             ("--port", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")).as_ref()),
-            ("--database", Path::new("hermes_storage_authenticated")),
+            ("--database", Path::new(DATABASE)),
             ("--username", Path::new("hermes_postgres_admin")),
             ("--ssl-mode", Path::new("disable")),
             ("--password-file", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE"))),
             ("--output", backup_root.join("communications.dump").as_path()),
         ],
     );
+    reset_disposable_database(&tools.container, DATABASE);
+    let absent = postgres_command(
+        &tools.container,
+        DATABASE,
+        "SELECT to_regclass('hermes_data.communications_evidence_summaries') IS NULL",
+    );
+    assert_eq!(absent.trim(), "t", "destructive reset must remove Communications state");
     run_storage_recovery(
         "restore-backup",
         [
@@ -38,7 +40,7 @@ pub(super) fn assert_communications_storage_backup_restore(root: &Path) {
             ("--psql", tools.psql.as_path()),
             ("--host", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST")).as_ref()),
             ("--port", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")).as_ref()),
-            ("--database", Path::new(&target_database)),
+            ("--database", Path::new(DATABASE)),
             ("--username", Path::new("hermes_postgres_admin")),
             ("--ssl-mode", Path::new("disable")),
             ("--password-file", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE"))),
@@ -47,11 +49,10 @@ pub(super) fn assert_communications_storage_backup_restore(root: &Path) {
     );
     let restored = postgres_command(
         &tools.container,
-        &target_database,
+        DATABASE,
         "SELECT count(*) > 0 FROM hermes_data.communications_evidence_summaries",
     );
     assert_eq!(restored.trim(), "t", "restored PostgreSQL must retain canonical Communications evidence");
-    postgres_command(&tools.container, "postgres", &format!("DROP DATABASE {target_database}"));
 }
 
 struct PostgresRecoveryTools {
@@ -118,4 +119,17 @@ fn postgres_command(container: &str, database: &str, query: &str) -> String {
         .expect("start disposable PostgreSQL command");
     assert!(output.status.success(), "disposable PostgreSQL command failed");
     String::from_utf8(output.stdout).expect("PostgreSQL output is UTF-8")
+}
+
+fn reset_disposable_database(container: &str, database: &str) {
+    assert!(database.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'));
+    postgres_command(
+        container,
+        "postgres",
+        &format!(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{database}' AND pid <> pg_backend_pid()"
+        ),
+    );
+    postgres_command(container, "postgres", &format!("DROP DATABASE {database}"));
+    postgres_command(container, "postgres", &format!("CREATE DATABASE {database}"));
 }
