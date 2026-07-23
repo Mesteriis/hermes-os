@@ -11,8 +11,10 @@ and Core Gateway routing to the owner-owned public query contract are present.
 `managed_communications_domain_starts_with_owner_local_storage_and_events`
 runs against the disposable authenticated Storage/NATS/Vault contour through
 `test-authenticated-storage.mjs`; it proves the generic managed-domain launch
-with owner-local Storage and Event Hub credentials. Public client conformance
-remains open.
+with owner-local Storage and Event Hub credentials, a typed integration-shaped
+ingress observation and its resulting canonical owner projection through the
+managed owner query route. External authenticated Core Gateway client
+conformance remains open.
 
 Depends on:
 

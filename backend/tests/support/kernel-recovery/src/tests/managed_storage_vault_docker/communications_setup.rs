@@ -188,6 +188,80 @@ pub(super) fn assert_communications_search_query_delivery(
     assert!(matches!(query.result, Some(QueryResult::SearchCommunications(hits)) if hits.hits.is_empty()));
 }
 
+pub(super) fn assert_communications_ingress_delivery(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+) {
+    let draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
+        "managed-ingress-observation-1",
+        hermes_communications_ingress::SourceEnvelope {
+            provider: hermes_communications_ingress::ProviderProvenanceV1::MailImap,
+            external_record_id: "integration-private-record-1".to_owned(),
+            scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                external_account_id: "integration-private-account-1".to_owned(),
+                external_conversation_id: Some("integration-private-conversation-1".to_owned()),
+                external_participant_id: None,
+                external_media_id: None,
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        hermes_communications_ingress::CommunicationEvidenceKindV1::EmailMessage,
+        hermes_communications_ingress::BodyAvailabilityV1::MetadataOnly,
+        hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+        Some(1_783_024_000),
+    )
+    .expect("build typed integration ingress draft");
+    let record = hermes_communications_ingress::build_observation_outbox_record_v1(
+        &draft,
+        &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+            runtime_instance_id: "integration-test-runtime-1".to_owned(),
+            runtime_generation: 1,
+            module_id: "integration-test-runtime".to_owned(),
+            recorded_at_unix_seconds: 1_783_024_000,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build exact typed integration envelope");
+    let endpoint = store
+        .platform_event_hub_topology()
+        .expect("read Event Hub topology")
+        .expect("Event Hub topology")
+        .nats_endpoint()
+        .to_owned();
+    tokio::runtime::Runtime::new()
+        .expect("Tokio runtime")
+        .block_on(async move {
+            let context = async_nats::jetstream::new(
+                async_nats::connect(endpoint)
+                    .await
+                    .expect("connect disposable JetStream"),
+            );
+            context
+                .publish(
+                    "hermes.observation.v1.communications.communication_observed.v1",
+                    record.exact_bytes().to_vec().into(),
+                )
+                .await
+                .expect("publish exact typed integration envelope");
+        });
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let payload = CommunicationsQueryRequestV1 {
+            protocol_major: 1,
+            operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
+        }
+        .encode_to_vec();
+        let query = route_communications_query(store, supervisor, 3, &payload);
+        if matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if !accounts.accounts.is_empty()) {
+            return;
+        }
+        assert!(std::time::Instant::now() < deadline, "typed integration ingress was not committed to Communications");
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
 fn route_communications_query(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
