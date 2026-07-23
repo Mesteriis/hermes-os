@@ -26,7 +26,7 @@ use crate::{CommunicationsConsumeOutcomeV1, CommunicationsPersistenceError};
 
 
 pub struct CommunicationsDurablePersistence {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 impl CommunicationsDurablePersistence {
@@ -87,7 +87,7 @@ impl CommunicationsDurablePersistence {
 
     pub async fn verify_storage_ready(&self) -> Result<(), CommunicationsPersistenceError> {
         sqlx::query(
-            "SELECT 1 FROM hermes_data.communications_event_inbox, hermes_data.communications_evidence_summaries, hermes_data.communications_domain_outbox, hermes_data.communications_conversations, hermes_data.communications_accounts, hermes_data.communications_messages, hermes_data.communications_observed_participants, hermes_data.communications_attachment_anchors, hermes_data.communications_message_references LIMIT 0",
+            "SELECT 1 FROM hermes_data.communications_event_inbox, hermes_data.communications_evidence_summaries, hermes_data.communications_domain_outbox, hermes_data.communications_conversations, hermes_data.communications_accounts, hermes_data.communications_messages, hermes_data.communications_observed_participants, hermes_data.communications_attachment_anchors, hermes_data.communications_message_references, hermes_data.communications_derived_index_projections, hermes_data.communications_derived_index_token_digests LIMIT 0",
         )
             .execute(&self.pool)
             .await

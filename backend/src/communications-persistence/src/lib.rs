@@ -3,8 +3,12 @@
 pub const PACKAGE: &str = "hermes-communications-persistence";
 
 mod durable;
+mod search;
 mod schema;
 pub use durable::CommunicationsDurablePersistence;
+pub use search::{
+    CommunicationsSearchProjectionWriteV1, CommunicationsSearchProjectionWriteErrorV1,
+};
 pub use schema::{
     COMMUNICATIONS_SCHEMA_V1, COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1,
     communications_storage_bundle_v1,
