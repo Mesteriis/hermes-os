@@ -203,7 +203,7 @@ impl CommunicationsDurablePersistence {
             match message.mutation {
                 CanonicalMessageMutationV1::Create => {
                     sqlx::query(
-                        "INSERT INTO hermes_data.communications_messages (message_id, conversation_id, source_cursor_sha256, body_state, direction, lifecycle_state, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id) VALUES ($1, $2, $3, $4, $5, 1, $6, $6, $7) ON CONFLICT (message_id) DO NOTHING",
+                        "INSERT INTO hermes_data.communications_messages (message_id, conversation_id, source_cursor_sha256, body_state, canonical_body_state, direction, lifecycle_state, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id) VALUES ($1, $2, $3, LEAST($4, 3), $4, $5, 1, $6, $6, $7) ON CONFLICT (message_id) DO NOTHING",
                     )
                     .bind(message.message_id.bytes().as_slice())
                     .bind(message.conversation_id.bytes().as_slice())
@@ -223,7 +223,7 @@ impl CommunicationsDurablePersistence {
                         CanonicalMessageMutationV1::Create => unreachable!(),
                     };
                     let updated = sqlx::query(
-                        "UPDATE hermes_data.communications_messages SET body_state = $3, lifecycle_state = CASE WHEN lifecycle_state = 2 THEN 2 ELSE $4 END, last_observed_at_unix_seconds = GREATEST(last_observed_at_unix_seconds, $5), last_evidence_id = CASE WHEN $5 >= last_observed_at_unix_seconds THEN $6 ELSE last_evidence_id END WHERE message_id = $1 AND conversation_id = $2 AND direction = $7",
+                        "UPDATE hermes_data.communications_messages SET body_state = LEAST($3, 3), canonical_body_state = $3, lifecycle_state = CASE WHEN lifecycle_state = 2 THEN 2 ELSE $4 END, last_observed_at_unix_seconds = GREATEST(last_observed_at_unix_seconds, $5), last_evidence_id = CASE WHEN $5 >= last_observed_at_unix_seconds THEN $6 ELSE last_evidence_id END WHERE message_id = $1 AND conversation_id = $2 AND direction = $7",
                     )
                     .bind(message.message_id.bytes().as_slice())
                     .bind(message.conversation_id.bytes().as_slice())
@@ -521,7 +521,7 @@ impl CommunicationsDurablePersistence {
         conversation_id: CommunicationConversationIdV1,
         limit: u16,
     ) -> Result<Vec<CommunicationMessageSummaryV1>, CommunicationsPersistenceError> {
-        let rows = sqlx::query("SELECT message_id, conversation_id, source_cursor_sha256, body_state, direction, lifecycle_state, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id FROM hermes_data.communications_messages WHERE conversation_id = $1 ORDER BY last_observed_at_unix_seconds DESC, message_id ASC LIMIT $2")
+        let rows = sqlx::query("SELECT message_id, conversation_id, source_cursor_sha256, canonical_body_state AS body_state, direction, lifecycle_state, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id FROM hermes_data.communications_messages WHERE conversation_id = $1 ORDER BY last_observed_at_unix_seconds DESC, message_id ASC LIMIT $2")
             .bind(conversation_id.bytes().as_slice())
             .bind(i64::from(limit.clamp(1, 100)))
             .fetch_all(&self.pool)
