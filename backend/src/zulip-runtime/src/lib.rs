@@ -3,14 +3,14 @@
 //! This crate composes provider-local HTTP, persistence and the public
 //! Communications ingress contract. It never reaches Communications storage.
 
-mod communications_outbox;
 pub mod blob;
 pub mod client_port;
+mod communications_outbox;
 pub mod managed;
 
 use hermes_communications_ingress::{
-    BodyAdmissionFailureV1, BodyAvailabilityV1, BodyBlobReceiptV1,
-    CommunicationObservationDraft, ObservationEnvelopeBuildErrorV1, ObservationEnvelopeContextV1,
+    BodyAdmissionFailureV1, BodyAvailabilityV1, BodyBlobReceiptV1, CommunicationObservationDraft,
+    ObservationEnvelopeBuildErrorV1, ObservationEnvelopeContextV1,
     build_observation_outbox_record_v1, with_admitted_body_blob, with_body_admission_failure,
 };
 use hermes_runtime_protocol::v1::BlobDataOperationV1;
@@ -20,8 +20,8 @@ use hermes_zulip_api::{
 };
 use hermes_zulip_core::{ZulipCoreError, observation_drafts};
 use hermes_zulip_http::{
-    ZulipHttpConfigV1, ZulipHttpErrorV1, execute_command as execute_http_command,
-    download_user_upload, poll_event_queue, register_event_queue, upload_file,
+    ZulipHttpConfigV1, ZulipHttpErrorV1, download_user_upload,
+    execute_command as execute_http_command, poll_event_queue, register_event_queue, upload_file,
 };
 use hermes_zulip_persistence::{
     ZulipCommandOperationStateV1, ZulipDurablePersistence, ZulipDurablePersistenceError,
@@ -87,7 +87,10 @@ pub async fn submit_command(
     {
         return Err(ZulipRuntimeErrorV1::OperationAlreadyKnown);
     }
-    Ok(ZulipCommandReceiptV1 { operation_id: operation_id.to_owned(), account_id: command_account_id(command).to_owned() })
+    Ok(ZulipCommandReceiptV1 {
+        operation_id: operation_id.to_owned(),
+        account_id: command_account_id(command).to_owned(),
+    })
 }
 
 /// Claims and executes at most one previously persisted command. A command is
@@ -113,13 +116,24 @@ pub async fn execute_next_command(
 pub async fn execute_next_command_with_blob(
     durable: &ZulipDurablePersistence,
     config: &ZulipHttpConfigV1,
-    blob_materializer: Option<&Mutex<Option<blob::ZulipBlobMaterializer<hermes_blob_client::BlobDataClient>>>>,
-    blob_write_materializer: Option<&Mutex<Option<blob::ZulipBlobWriteMaterializer<hermes_blob_client::BlobDataClient>>>>,
-    mut authorize_blob: impl FnMut(&ZulipCommandV1, BlobDataOperationV1) -> Result<(), ZulipRuntimeErrorV1>,
+    blob_materializer: Option<
+        &Mutex<Option<blob::ZulipBlobMaterializer<hermes_blob_client::BlobDataClient>>>,
+    >,
+    blob_write_materializer: Option<
+        &Mutex<Option<blob::ZulipBlobWriteMaterializer<hermes_blob_client::BlobDataClient>>>,
+    >,
+    mut authorize_blob: impl FnMut(
+        &ZulipCommandV1,
+        BlobDataOperationV1,
+    ) -> Result<(), ZulipRuntimeErrorV1>,
     dispatched_at_unix_seconds: i64,
     completed_at_unix_seconds: i64,
 ) -> Result<bool, ZulipRuntimeErrorV1> {
-    let Some(queued) = durable.claim_next_command(dispatched_at_unix_seconds).await.map_err(ZulipRuntimeErrorV1::Persistence)? else {
+    let Some(queued) = durable
+        .claim_next_command(dispatched_at_unix_seconds)
+        .await
+        .map_err(ZulipRuntimeErrorV1::Persistence)?
+    else {
         return Ok(false);
     };
     let command = hermes_zulip_api::client_wire::decode_command(&queued.exact_command_bytes)
@@ -129,34 +143,70 @@ pub async fn execute_next_command_with_blob(
         || queued.account_id != command_account_id(&command)
         || queued.command_sha256 != command_sha256
     {
-        return Err(ZulipRuntimeErrorV1::Persistence(ZulipDurablePersistenceError::InvalidRow));
+        return Err(ZulipRuntimeErrorV1::Persistence(
+            ZulipDurablePersistenceError::InvalidRow,
+        ));
     }
     let (execution, provider_upload_started, completed_blob_ref) = match &command {
-        ZulipCommandV1::SendStreamWithUpload { stream, topic, content, blob, filename, .. } => {
+        ZulipCommandV1::SendStreamWithUpload {
+            stream,
+            topic,
+            content,
+            blob,
+            filename,
+            ..
+        } => {
             authorize_blob(&command, BlobDataOperationV1::BlobDataOperationReadRangeV1)?;
             let bytes = take_blob_bytes(blob_materializer, &blob.blob_ref)?;
-            let uri = upload_file(config, filename, &bytes).await.map_err(ZulipRuntimeErrorV1::Http)?;
+            let uri = upload_file(config, filename, &bytes)
+                .await
+                .map_err(ZulipRuntimeErrorV1::Http)?;
             let send = ZulipCommandV1::SendStream {
-                operation_id: command_operation_id(&command).to_owned(), account_id: command_account_id(&command).to_owned(),
-                stream: stream.clone(), topic: topic.clone(), content: content_with_upload_uri(content, &uri),
+                operation_id: command_operation_id(&command).to_owned(),
+                account_id: command_account_id(&command).to_owned(),
+                stream: stream.clone(),
+                topic: topic.clone(),
+                content: content_with_upload_uri(content, &uri),
             };
             (execute_http_command(config, &send).await, true, None)
         }
-        ZulipCommandV1::SendDirectWithUpload { recipients, content, blob, filename, .. } => {
+        ZulipCommandV1::SendDirectWithUpload {
+            recipients,
+            content,
+            blob,
+            filename,
+            ..
+        } => {
             authorize_blob(&command, BlobDataOperationV1::BlobDataOperationReadRangeV1)?;
             let bytes = take_blob_bytes(blob_materializer, &blob.blob_ref)?;
-            let uri = upload_file(config, filename, &bytes).await.map_err(ZulipRuntimeErrorV1::Http)?;
+            let uri = upload_file(config, filename, &bytes)
+                .await
+                .map_err(ZulipRuntimeErrorV1::Http)?;
             let send = ZulipCommandV1::SendDirect {
-                operation_id: command_operation_id(&command).to_owned(), account_id: command_account_id(&command).to_owned(),
-                recipients: recipients.clone(), content: content_with_upload_uri(content, &uri),
+                operation_id: command_operation_id(&command).to_owned(),
+                account_id: command_account_id(&command).to_owned(),
+                recipients: recipients.clone(),
+                content: content_with_upload_uri(content, &uri),
             };
             (execute_http_command(config, &send).await, true, None)
         }
-        ZulipCommandV1::DownloadAttachment { upload_path, blob, .. } => {
+        ZulipCommandV1::DownloadAttachment {
+            upload_path, blob, ..
+        } => {
             authorize_blob(&command, BlobDataOperationV1::BlobDataOperationWriteV1)?;
-            let bytes = download_user_upload(config, upload_path).await.map(|(bytes, _)| bytes).map_err(ZulipRuntimeErrorV1::Http)?;
+            let bytes = download_user_upload(config, upload_path)
+                .await
+                .map(|(bytes, _)| bytes)
+                .map_err(ZulipRuntimeErrorV1::Http)?;
             write_downloaded_blob(blob_write_materializer, &blob.blob_ref, bytes)?;
-            (Ok(hermes_zulip_http::ZulipHttpResponseV1 { status: 200, provider_message_id: None }), true, Some(blob.blob_ref.as_str()))
+            (
+                Ok(hermes_zulip_http::ZulipHttpResponseV1 {
+                    status: 200,
+                    provider_message_id: None,
+                }),
+                true,
+                Some(blob.blob_ref.as_str()),
+            )
         }
         _ => (execute_http_command(config, &command).await, false, None),
     };
@@ -175,7 +225,9 @@ pub async fn execute_next_command_with_blob(
                 .map_err(ZulipRuntimeErrorV1::Persistence)?;
             Ok(true)
         }
-        Err(error @ (ZulipHttpErrorV1::InvalidCommand | ZulipHttpErrorV1::Rejected)) if !provider_upload_started => {
+        Err(error @ (ZulipHttpErrorV1::InvalidCommand | ZulipHttpErrorV1::Rejected))
+            if !provider_upload_started =>
+        {
             durable
                 .complete_command_operation(
                     &queued.operation_id,
@@ -194,21 +246,33 @@ pub async fn execute_next_command_with_blob(
 }
 
 fn write_downloaded_blob(
-    materializer: Option<&Mutex<Option<blob::ZulipBlobWriteMaterializer<hermes_blob_client::BlobDataClient>>>>,
+    materializer: Option<
+        &Mutex<Option<blob::ZulipBlobWriteMaterializer<hermes_blob_client::BlobDataClient>>>,
+    >,
     blob_ref: &str,
     bytes: Vec<u8>,
 ) -> Result<(), ZulipRuntimeErrorV1> {
     let materializer = materializer.ok_or(ZulipRuntimeErrorV1::Credential)?;
-    materializer.lock().map_err(|_| ZulipRuntimeErrorV1::Credential)?.as_mut().ok_or(ZulipRuntimeErrorV1::Credential)?.write_download(blob_ref, bytes)
+    materializer
+        .lock()
+        .map_err(|_| ZulipRuntimeErrorV1::Credential)?
+        .as_mut()
+        .ok_or(ZulipRuntimeErrorV1::Credential)?
+        .write_download(blob_ref, bytes)
 }
 
 fn take_blob_bytes(
-    materializer: Option<&Mutex<Option<blob::ZulipBlobMaterializer<hermes_blob_client::BlobDataClient>>>>,
+    materializer: Option<
+        &Mutex<Option<blob::ZulipBlobMaterializer<hermes_blob_client::BlobDataClient>>>,
+    >,
     blob_ref: &str,
 ) -> Result<Vec<u8>, ZulipRuntimeErrorV1> {
     let materializer = materializer.ok_or(ZulipRuntimeErrorV1::Credential)?;
-    materializer.lock().map_err(|_| ZulipRuntimeErrorV1::Credential)?
-        .as_mut().ok_or(ZulipRuntimeErrorV1::Credential)?
+    materializer
+        .lock()
+        .map_err(|_| ZulipRuntimeErrorV1::Credential)?
+        .as_mut()
+        .ok_or(ZulipRuntimeErrorV1::Credential)?
         .take_bytes(blob_ref)
 }
 
@@ -246,7 +310,9 @@ impl ZulipRuntimeIdentityV1 {
 pub fn api_key_revision(admission: &ZulipRuntimeAdmissionV1) -> Result<u64, ZulipRuntimeErrorV1> {
     (admission.api_key_revision != 0)
         .then_some(admission.api_key_revision)
-        .ok_or(ZulipRuntimeErrorV1::Core(ZulipCoreError::CredentialLeaseRejected))
+        .ok_or(ZulipRuntimeErrorV1::Core(
+            ZulipCoreError::CredentialLeaseRejected,
+        ))
 }
 
 pub async fn acquire_event_queue(
@@ -288,11 +354,13 @@ where
         if accept_polled_event(
             durable,
             identity,
-            &config.account.account_id,
-            &queue.queue_id,
-            &event,
-            recorded_at_unix_seconds,
-            recorded_at_nanos,
+            ZulipPolledEventContextV1 {
+                account_id: &config.account.account_id,
+                queue_id: &queue.queue_id,
+                event: &event,
+                recorded_at_unix_seconds,
+                recorded_at_nanos,
+            },
             body_admitter,
         )
         .await?
@@ -304,41 +372,52 @@ where
     Ok(accepted)
 }
 
+pub struct ZulipPolledEventContextV1<'a> {
+    pub account_id: &'a str,
+    pub queue_id: &'a str,
+    pub event: &'a ZulipPolledEventV1,
+    pub recorded_at_unix_seconds: i64,
+    pub recorded_at_nanos: i32,
+}
+
 pub async fn accept_polled_event<F>(
     durable: &ZulipDurablePersistence,
     identity: &ZulipRuntimeIdentityV1,
-    account_id: &str,
-    queue_id: &str,
-    event: &ZulipPolledEventV1,
-    recorded_at_unix_seconds: i64,
-    recorded_at_nanos: i32,
+    context: ZulipPolledEventContextV1<'_>,
     body_admitter: &mut F,
 ) -> Result<bool, ZulipRuntimeErrorV1>
 where
     F: FnMut(&[u8]) -> Result<BodyBlobReceiptV1, BodyAdmissionFailureV1>,
 {
     let cursor = ZulipQueueCursorV1 {
-        account_id: account_id.to_owned(),
-        queue_id: queue_id.to_owned(),
-        last_event_id: event.event_id,
+        account_id: context.account_id.to_owned(),
+        queue_id: context.queue_id.to_owned(),
+        last_event_id: context.event.event_id,
     };
-    if event.observations.is_empty() {
+    if context.event.observations.is_empty() {
         return durable
             .advance_cursor(&cursor)
             .await
             .map_err(ZulipRuntimeErrorV1::Persistence);
     }
     let mut records = Vec::new();
-    for observation in &event.observations {
+    for observation in &context.event.observations {
         for draft in observation_drafts(observation).map_err(ZulipRuntimeErrorV1::Core)? {
             let draft = admit_message_body(draft, observation, body_admitter)?;
-            records.push(build_observation_outbox_record_v1(
-                &draft, &identity.observation_context(recorded_at_unix_seconds, recorded_at_nanos),
-            ).map_err(ZulipRuntimeErrorV1::Envelope)?);
+            records.push(
+                build_observation_outbox_record_v1(
+                    &draft,
+                    &identity.observation_context(
+                        context.recorded_at_unix_seconds,
+                        context.recorded_at_nanos,
+                    ),
+                )
+                .map_err(ZulipRuntimeErrorV1::Envelope)?,
+            );
         }
     }
     durable
-        .advance_cursor_and_enqueue_many(&cursor, &records, recorded_at_unix_seconds)
+        .advance_cursor_and_enqueue_many(&cursor, &records, context.recorded_at_unix_seconds)
         .await
         .map_err(ZulipRuntimeErrorV1::Persistence)
 }
@@ -351,10 +430,16 @@ fn admit_message_body<F>(
 where
     F: FnMut(&[u8]) -> Result<BodyBlobReceiptV1, BodyAdmissionFailureV1>,
 {
-    let hermes_zulip_api::ZulipEventV1::Message { content: Some(content), .. } = event else {
+    let hermes_zulip_api::ZulipEventV1::Message {
+        content: Some(content),
+        ..
+    } = event
+    else {
         return Ok(draft);
     };
-    if draft.body != BodyAvailabilityV1::Unavailable { return Ok(draft); }
+    if draft.body != BodyAvailabilityV1::Unavailable {
+        return Ok(draft);
+    }
     if content.trim().is_empty() || content.len() > 256 * 1024 {
         return with_body_admission_failure(draft, BodyAdmissionFailureV1::SizeLimitExceeded)
             .map_err(|_| ZulipRuntimeErrorV1::Core(ZulipCoreError::InvalidEvent));
