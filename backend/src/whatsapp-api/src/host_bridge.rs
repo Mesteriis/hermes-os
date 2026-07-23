@@ -156,9 +156,7 @@ pub fn encode_host_bridge_handshake_accepted() -> Vec<u8> {
     .encode_to_vec()
 }
 
-pub fn decode_host_bridge_handshake_accepted(
-    bytes: &[u8],
-) -> Result<(), WhatsAppHostBridgeError> {
+pub fn decode_host_bridge_handshake_accepted(bytes: &[u8]) -> Result<(), WhatsAppHostBridgeError> {
     let accepted = wire::WhatsAppHostBridgeHandshakeAcceptedV1::decode(bytes)
         .map_err(|_| WhatsAppHostBridgeError::InvalidProtocol)?;
     (accepted.protocol_major == HOST_BRIDGE_PROTOCOL_MAJOR
@@ -176,24 +174,6 @@ pub fn validate_host_bridge_handshake(
         return Err(WhatsAppHostBridgeError::InvalidProtocol);
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn handshake_round_trips_only_the_exact_protocol_and_route_binding() {
-        let handshake = WhatsAppHostBridgeHandshakeV1 {
-            protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
-            protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
-            route_binding_sha256: [7; 32],
-        };
-
-        let encoded = encode_host_bridge_handshake(&handshake).expect("encoded handshake");
-
-        assert_eq!(decode_host_bridge_handshake(&encoded), Ok(handshake));
-    }
 }
 
 pub fn validate_host_bridge_envelope(
@@ -597,7 +577,11 @@ fn validate_observation(
         }
         WhatsAppHostObservationV1::SessionLinked { secret_ref, .. } => vec![secret_ref.as_str()],
         WhatsAppHostObservationV1::SessionRevoked => Vec::new(),
-        WhatsAppHostObservationV1::CommandResult { operation_id, host_claim_id, .. } => {
+        WhatsAppHostObservationV1::CommandResult {
+            operation_id,
+            host_claim_id,
+            ..
+        } => {
             vec![operation_id.as_str(), host_claim_id.as_str()]
         }
     };
@@ -609,11 +593,33 @@ fn validate_observation(
     {
         return Err(WhatsAppHostBridgeError::ForbiddenContent);
     }
-    if let WhatsAppHostObservationV1::MediaMetadata { filename, content_type, .. } = observation
+    if let WhatsAppHostObservationV1::MediaMetadata {
+        filename,
+        content_type,
+        ..
+    } = observation
         && (filename.as_deref().is_some_and(str::is_empty)
             || content_type.as_deref().is_some_and(str::is_empty))
     {
         return Err(WhatsAppHostBridgeError::ForbiddenContent);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn handshake_round_trips_only_the_exact_protocol_and_route_binding() {
+        let handshake = WhatsAppHostBridgeHandshakeV1 {
+            protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+            protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+            route_binding_sha256: [7; 32],
+        };
+
+        let encoded = encode_host_bridge_handshake(&handshake).expect("encoded handshake");
+
+        assert_eq!(decode_host_bridge_handshake(&encoded), Ok(handshake));
+    }
 }
