@@ -66,6 +66,9 @@ use scheduler_events::*;
 #[path = "managed_storage_vault_docker/communications_setup.rs"]
 mod communications_setup;
 use communications_setup::*;
+#[path = "managed_storage_vault_docker/communications_backup.rs"]
+mod communications_backup;
+use communications_backup::*;
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault and Storage binaries"]
