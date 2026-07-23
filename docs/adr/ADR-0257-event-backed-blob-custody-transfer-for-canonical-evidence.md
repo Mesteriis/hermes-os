@@ -2,15 +2,16 @@
 
 Статус: Принято
 Дата: 2026-07-23
-Состояние реализации: Реализован source slice, runtime conformance ещё
-требуется. Mail/Zulip/Telegram integration admission writes a Blob reference
-under the producer registration and publishes only a typed opaque receipt.
-Communications persists the receipt in a private leased work queue, asks Kernel
-for an evidence-bound target custody grant, and commits the target-owned receipt
-only after Blob Platform completes its internal rewrap. Communications derived
-search may read only that Communications-owned Blob reference. A direct
-cross-owner Blob read is rejected by the current registration/capability fence
-and must remain rejected.
+Состояние реализации: Реализованы source slice и managed runtime conformance.
+The fixture integration writes a Blob reference under its own producer
+registration and publishes only a typed opaque receipt. Communications persists
+the receipt in a private leased work queue, asks Kernel for an evidence-bound
+target custody grant, and commits the target-owned receipt only after Blob
+Platform completes its internal rewrap. Communications derived search may read
+only that Communications-owned Blob reference. A direct cross-owner Blob read
+is rejected by the current registration/capability fence and must remain
+rejected. Negative degraded-path scenarios remain separate required evidence;
+a nominal managed conformance pass does not replace them.
 
 Зависит от:
 
