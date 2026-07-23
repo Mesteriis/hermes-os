@@ -24,7 +24,7 @@ use prost::Message;
 
 use crate::{
     canonical_outbox::{CanonicalEventContextV1, build_evidence_recorded_outbox_v1},
-    search_job::{CommunicationsDerivedIndexWorkV1, derived_index_work_from_decision_v1},
+    search_job::derived_index_work_from_decision_v1,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -89,11 +89,8 @@ pub async fn consume_communication_observation_durable_v1(
         decide_search_index_v1(&projection, COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1),
         canonical_event_context.recorded_at_unix_seconds,
     );
-    let (derived_index_job, derived_index_failure) = match derived_index_work.as_ref() {
-        Some(CommunicationsDerivedIndexWorkV1::Job(job)) => (Some(job), None),
-        Some(CommunicationsDerivedIndexWorkV1::Failure(failure)) => (None, Some(failure)),
-        None => (None, None),
-    };
+    let derived_index_job = derived_index_work.as_ref().and_then(|work| work.job.as_ref());
+    let derived_index_failure = derived_index_work.as_ref().and_then(|work| work.failure.as_ref());
     persistence
         .persist_consumed_observation(
             record,

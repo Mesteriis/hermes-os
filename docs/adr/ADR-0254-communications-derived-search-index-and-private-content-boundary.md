@@ -76,7 +76,8 @@ The first search profile is deliberately bounded:
 An unavailable Blob, denied lease, invalid content, exhausted limit or stale
 fence records a typed owner-local projection failure. It does not retry through
 a provider, expose content in telemetry or turn missing content into a false
-empty result.
+empty result. An exhausted limit also removes any prior digest projection for
+that message, so obsolete content cannot remain searchable.
 
 ## Boundary rules
 

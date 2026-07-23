@@ -122,6 +122,20 @@ impl CommunicationsDurablePersistence {
                             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
                         reconciled += usize::try_from(result.rows_affected()).map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
                     }
+                    if is_stale(current_tombstone, projection_revision, observed_at_unix_seconds) {
+                        let job = CommunicationsDerivedIndexJobV1 {
+                            job_id: communications_derived_index_job_id_v1(evidence_id.bytes(), message_id.bytes(), projection_revision),
+                            operation: CommunicationsDerivedIndexJobOperationV1::Remove,
+                            evidence_id,
+                            message_id,
+                            conversation_id: None,
+                            blob: None,
+                            projection_revision,
+                            observed_at_unix_seconds,
+                            created_at_unix_seconds,
+                        };
+                        reconciled += enqueue_reconciled_job(&mut transaction, &job).await?;
+                    }
                 } else if is_stale(current_projection, projection_revision, observed_at_unix_seconds) {
                     let job = CommunicationsDerivedIndexJobV1 {
                         job_id: communications_derived_index_job_id_v1(evidence_id.bytes(), message_id.bytes(), projection_revision),
