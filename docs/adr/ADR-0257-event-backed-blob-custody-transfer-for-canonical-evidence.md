@@ -115,8 +115,8 @@ nor an index job.
 
 ## Consequences
 
-The current synthetic admitted-body fixture proves receipt metadata only. It
-does not prove search indexing and must not be used to claim complete
-Communications Blob conformance. The existing `communications.blob.v1`
+The managed fixture now proves source receipt admission, target custody transfer
+and a canonical-ID-only derived search hit. It does not replace the remaining
+negative degraded-path evidence. The existing `communications.blob.v1`
 capability remains read/derived-index authority only after successful custody
 transfer; producer write authority remains integration-owned.

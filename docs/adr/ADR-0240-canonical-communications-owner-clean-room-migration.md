@@ -26,8 +26,9 @@ canonical attachment anchor while the public anchor response does not expose
 the provider-local media locator. A typed participant, reply and forward scope
 reaches canonical relationship projections without exposing provider-local
 identifiers through the public query contract. The Blob child starts as a
-separately signed managed platform process; an integration-owned physical body
-admission and its resulting search hit remain separate conformance evidence.
+separately signed managed platform process; the same managed conformance now
+proves integration-owned physical body admission, custody transfer, owner-local
+derived indexing and a canonical-ID-only search hit.
 
 Depends on:
 
