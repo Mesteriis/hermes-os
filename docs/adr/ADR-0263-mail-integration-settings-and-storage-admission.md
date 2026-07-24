@@ -2,9 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Реализованы versioned hidden settings schema и immutable
-Mail-owned Storage bundle. Отдельный signed Mail descriptor, approved grant set
-и production managed launch ещё не admitted.
+Состояние реализации: Реализованы versioned hidden settings schema, immutable
+Mail-owned Storage bundle и exact unsigned descriptor artifact. Approved grant
+set, signed distribution binding и production managed launch ещё не admitted.
 
 Зависит от:
 
@@ -30,9 +30,14 @@ It does not contain Communications tables, foreign keys, SQL reads, or grants.
 
 ## Consequences
 
-The future signed Mail descriptor must reference this exact settings schema and
-request the Mail Storage namespace plus only its typed ingress publish/consume
-routes. Storage bundle, descriptor, owner approval, distribution digest and
+The exact descriptor artifact references this settings schema and requests only
+the Mail Storage namespace, bounded Blob quota, three configuration-instance
+Vault resolve purposes, and three typed ingress routes: two publishes
+(`communication_observed`, attachment Blob-admission observation) and one
+`communication_attachment_anchor_recorded` subscription. It provides no
+Communications API, store, runtime or provider-neutral business surface.
+
+Storage bundle, descriptor, owner approval, signed distribution digest and
 runtime fencing are admitted atomically in a dedicated integration phase. This
 ADR neither adds Mail to `first_owner_v1` nor changes the Communications owner
 inventory.
