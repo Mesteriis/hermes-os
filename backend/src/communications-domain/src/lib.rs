@@ -38,6 +38,7 @@ pub struct CanonicalCommunication {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationsDomainError {
     InvalidObservedTime,
+    InvalidRecordedTime,
     MissingMessageScope,
     InvalidAttachmentScope,
     InvalidAttachmentSafetyTransition,
@@ -61,28 +62,42 @@ pub fn accept_command(
     {
         return Err(CommunicationsDomainError::MissingMessageScope);
     }
-    (-62_135_596_800..=253_402_300_799)
-        .contains(&command.observed_at_unix_seconds)
-        .then_some(CommunicationSummary {
-            evidence_id: command.observation_id,
-            observation_id: command.observation_id,
-            source_cursor: command.source_cursor,
-            provider: command.provider,
-            direction: command.direction,
-            kind: command.kind,
-            account_cursor: command.account_cursor,
-            conversation_cursor: command.conversation_cursor,
-            participant_cursor: command.participant_cursor,
-            media_cursor: command.media_cursor,
-            reply_to_source_cursor: command.reply_to_source_cursor,
-            forward_origin_source_cursor: command.forward_origin_source_cursor,
-            body: command.body,
-            body_blob: command.body_blob,
-            body_admission_failure: command.body_admission_failure,
-            attachment_descriptor: command.attachment_descriptor,
-            observed_at_unix_seconds: command.observed_at_unix_seconds,
-        })
-        .ok_or(CommunicationsDomainError::InvalidObservedTime)
+    (valid_timestamp(command.observed_at_unix_seconds, 0)
+        && valid_timestamp(command.recorded_at_unix_seconds, command.recorded_at_nanos))
+    .then_some(CommunicationSummary {
+        evidence_id: command.observation_id,
+        observation_id: command.observation_id,
+        causation_message_id: command.causation_message_id,
+        correlation_id: command.correlation_id,
+        source_cursor: command.source_cursor,
+        provider: command.provider,
+        direction: command.direction,
+        kind: command.kind,
+        account_cursor: command.account_cursor,
+        conversation_cursor: command.conversation_cursor,
+        participant_cursor: command.participant_cursor,
+        media_cursor: command.media_cursor,
+        reply_to_source_cursor: command.reply_to_source_cursor,
+        forward_origin_source_cursor: command.forward_origin_source_cursor,
+        body: command.body,
+        body_blob: command.body_blob,
+        body_admission_failure: command.body_admission_failure,
+        attachment_descriptor: command.attachment_descriptor,
+        observed_at_unix_seconds: command.observed_at_unix_seconds,
+        recorded_at_unix_seconds: command.recorded_at_unix_seconds,
+        recorded_at_nanos: command.recorded_at_nanos,
+    })
+    .ok_or_else(|| {
+        if valid_timestamp(command.observed_at_unix_seconds, 0) {
+            CommunicationsDomainError::InvalidRecordedTime
+        } else {
+            CommunicationsDomainError::InvalidObservedTime
+        }
+    })
+}
+
+const fn valid_timestamp(seconds: i64, nanos: i32) -> bool {
+    seconds >= -62_135_596_800 && seconds <= 253_402_300_799 && nanos >= 0 && nanos < 1_000_000_000
 }
 
 fn validate_body_admission(
@@ -295,6 +310,7 @@ fn identifier(domain: &[u8], values: &[&[u8]]) -> [u8; 16] {
 pub fn convert_client_query_error(error: CommunicationsDomainError) -> CommunicationsClientError {
     match error {
         CommunicationsDomainError::InvalidObservedTime
+        | CommunicationsDomainError::InvalidRecordedTime
         | CommunicationsDomainError::MissingMessageScope => {
             CommunicationsClientError::DraftValidationFailed
         }
@@ -323,6 +339,8 @@ mod tests {
     fn message_projection_uses_stable_source_and_conversation_identities() {
         let summary = accept_command(RecordCommunicationEvidenceV1 {
             observation_id: CommunicationObservationIdV1::new([1; 16]),
+            causation_message_id: None,
+            correlation_id: CommunicationObservationIdV1::new([6; 16]),
             source_cursor: cursor(2),
             account_cursor: Some(cursor(3)),
             conversation_cursor: Some(cursor(4)),
@@ -338,6 +356,8 @@ mod tests {
             body_admission_failure: None,
             attachment_descriptor: None,
             observed_at_unix_seconds: 1,
+            recorded_at_unix_seconds: 2,
+            recorded_at_nanos: 3,
         })
         .expect("valid message evidence");
 
@@ -349,12 +369,21 @@ mod tests {
             first.message.as_ref().map(|value| value.mutation),
             Some(CanonicalMessageMutationV1::Create)
         ));
+        assert_eq!(first.summary.causation_message_id, None);
+        assert_eq!(
+            first.summary.correlation_id,
+            CommunicationObservationIdV1::new([6; 16])
+        );
+        assert_eq!(first.summary.recorded_at_unix_seconds, 2);
+        assert_eq!(first.summary.recorded_at_nanos, 3);
     }
 
     #[test]
     fn deleted_message_is_a_typed_transition_not_a_new_message() {
         let summary = accept_command(RecordCommunicationEvidenceV1 {
             observation_id: CommunicationObservationIdV1::new([1; 16]),
+            causation_message_id: None,
+            correlation_id: CommunicationObservationIdV1::new([6; 16]),
             source_cursor: cursor(2),
             account_cursor: Some(cursor(3)),
             conversation_cursor: Some(cursor(4)),
@@ -370,6 +399,8 @@ mod tests {
             body_admission_failure: None,
             attachment_descriptor: None,
             observed_at_unix_seconds: 1,
+            recorded_at_unix_seconds: 2,
+            recorded_at_nanos: 3,
         })
         .expect("valid deletion evidence");
 
@@ -385,6 +416,8 @@ mod tests {
     fn message_references_are_typed_and_immutable_projection_inputs() {
         let summary = accept_command(RecordCommunicationEvidenceV1 {
             observation_id: CommunicationObservationIdV1::new([1; 16]),
+            causation_message_id: None,
+            correlation_id: CommunicationObservationIdV1::new([6; 16]),
             source_cursor: cursor(2),
             account_cursor: Some(cursor(3)),
             conversation_cursor: Some(cursor(4)),
@@ -400,6 +433,8 @@ mod tests {
             body_admission_failure: None,
             attachment_descriptor: None,
             observed_at_unix_seconds: 1,
+            recorded_at_unix_seconds: 2,
+            recorded_at_nanos: 3,
         })
         .expect("valid message evidence");
 

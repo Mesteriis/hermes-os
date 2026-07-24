@@ -19,6 +19,12 @@ impl From<&crate::CommunicationSummary> for query_wire::EvidenceSummaryV1 {
             body_state: body_state_value(value.body),
             body_admission_failure: body_admission_failure_value(value.body_admission_failure),
             observed_at_unix_seconds: value.observed_at_unix_seconds,
+            causation_message_id: value
+                .causation_message_id
+                .map_or_else(Vec::new, |id| id.bytes().to_vec()),
+            correlation_id: value.correlation_id.bytes().to_vec(),
+            recorded_at_unix_seconds: value.recorded_at_unix_seconds,
+            recorded_at_nanos: value.recorded_at_nanos,
         }
     }
 }
@@ -238,6 +244,8 @@ mod tests {
         let summary = CommunicationSummary {
             evidence_id: CommunicationObservationIdV1::new([1; 16]),
             observation_id: CommunicationObservationIdV1::new([2; 16]),
+            causation_message_id: Some(CommunicationObservationIdV1::new([3; 16])),
+            correlation_id: CommunicationObservationIdV1::new([4; 16]),
             source_cursor: CommunicationSourceCursorV1::new([3; 32]),
             account_cursor: Some(CommunicationSourceCursorV1::new([4; 32])),
             conversation_cursor: Some(CommunicationSourceCursorV1::new([5; 32])),
@@ -258,6 +266,8 @@ mod tests {
             body_admission_failure: Some(CommunicationBodyAdmissionFailureV1::PolicyRejected),
             attachment_descriptor: None,
             observed_at_unix_seconds: 8,
+            recorded_at_unix_seconds: 9,
+            recorded_at_nanos: 10,
         };
 
         let wire: query_wire::EvidenceSummaryV1 = (&summary).into();
@@ -269,5 +279,9 @@ mod tests {
         assert_eq!(wire.body_state, 4);
         assert_eq!(wire.body_admission_failure, 4);
         assert_eq!(wire.observed_at_unix_seconds, 8);
+        assert_eq!(wire.causation_message_id, vec![3; 16]);
+        assert_eq!(wire.correlation_id, vec![4; 16]);
+        assert_eq!(wire.recorded_at_unix_seconds, 9);
+        assert_eq!(wire.recorded_at_nanos, 10);
     }
 }

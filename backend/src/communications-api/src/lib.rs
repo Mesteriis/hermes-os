@@ -177,6 +177,8 @@ pub struct CommunicationBodyBlobReferenceV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecordCommunicationEvidenceV1 {
     pub observation_id: CommunicationObservationIdV1,
+    pub causation_message_id: Option<CommunicationObservationIdV1>,
+    pub correlation_id: CommunicationObservationIdV1,
     pub source_cursor: CommunicationSourceCursorV1,
     pub account_cursor: Option<CommunicationSourceCursorV1>,
     pub conversation_cursor: Option<CommunicationSourceCursorV1>,
@@ -192,12 +194,16 @@ pub struct RecordCommunicationEvidenceV1 {
     pub body_admission_failure: Option<CommunicationBodyAdmissionFailureV1>,
     pub attachment_descriptor: Option<AttachmentDescriptorV1>,
     pub observed_at_unix_seconds: i64,
+    pub recorded_at_unix_seconds: i64,
+    pub recorded_at_nanos: i32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommunicationSummary {
     pub evidence_id: CommunicationObservationIdV1,
     pub observation_id: CommunicationObservationIdV1,
+    pub causation_message_id: Option<CommunicationObservationIdV1>,
+    pub correlation_id: CommunicationObservationIdV1,
     pub source_cursor: CommunicationSourceCursorV1,
     pub account_cursor: Option<CommunicationSourceCursorV1>,
     pub conversation_cursor: Option<CommunicationSourceCursorV1>,
@@ -213,6 +219,8 @@ pub struct CommunicationSummary {
     pub body_admission_failure: Option<CommunicationBodyAdmissionFailureV1>,
     pub attachment_descriptor: Option<AttachmentDescriptorV1>,
     pub observed_at_unix_seconds: i64,
+    pub recorded_at_unix_seconds: i64,
+    pub recorded_at_nanos: i32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

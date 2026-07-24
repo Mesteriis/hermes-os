@@ -36,7 +36,9 @@ client. The first clean-room client use case is an owner-local canonical search
 adapter: it accepts transient search text and returns only generated canonical
 search hits. The same generated metadata-query contract now provides canonical
 evidence lookup without a provider cursor, content, Blob locator or custody
-proof.
+proof. Canonical evidence now persists ingress causation/correlation and exact
+recorded timestamp in its owner-local audit row; the metadata lookup exposes
+only these opaque audit identifiers and timestamps.
 
 Depends on:
 

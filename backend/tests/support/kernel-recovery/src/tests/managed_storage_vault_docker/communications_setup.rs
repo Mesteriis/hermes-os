@@ -212,10 +212,15 @@ pub(super) fn assert_communications_query_delivery(
     }
     .encode_to_vec();
     let evidence = route_communications_query(store, supervisor, 17, &payload);
-    assert!(matches!(
-        evidence.result,
-        Some(QueryResult::GetEvidence(response)) if response.evidence.is_some()
-    ));
+    let Some(QueryResult::GetEvidence(response)) = evidence.result else {
+        panic!("Communications evidence query result");
+    };
+    let evidence = response.evidence.expect("Communications evidence metadata");
+    assert_eq!(evidence.evidence_id.len(), 16);
+    assert_eq!(evidence.correlation_id.len(), 16);
+    assert!(evidence.causation_message_id.is_empty());
+    assert!(evidence.recorded_at_unix_seconds > 0);
+    assert!((0..1_000_000_000).contains(&evidence.recorded_at_nanos));
 }
 
 pub(super) fn assert_communications_search_query_delivery(

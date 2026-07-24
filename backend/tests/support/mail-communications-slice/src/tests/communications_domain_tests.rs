@@ -11,6 +11,8 @@ use hermes_communications_domain::{
 fn command(observed_at_unix_seconds: i64) -> RecordCommunicationEvidenceV1 {
     RecordCommunicationEvidenceV1 {
         observation_id: CommunicationObservationIdV1::new([1; 16]),
+        causation_message_id: None,
+        correlation_id: CommunicationObservationIdV1::new([3; 16]),
         source_cursor: CommunicationSourceCursorV1::new([2; 32]),
         account_cursor: Some(CommunicationSourceCursorV1::new([3; 32])),
         conversation_cursor: Some(CommunicationSourceCursorV1::new([4; 32])),
@@ -26,6 +28,8 @@ fn command(observed_at_unix_seconds: i64) -> RecordCommunicationEvidenceV1 {
         body_admission_failure: None,
         attachment_descriptor: None,
         observed_at_unix_seconds,
+        recorded_at_unix_seconds: observed_at_unix_seconds,
+        recorded_at_nanos: 0,
     }
 }
 

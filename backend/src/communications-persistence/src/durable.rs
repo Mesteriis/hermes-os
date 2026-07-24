@@ -126,7 +126,7 @@ impl CommunicationsDurablePersistence {
 
     pub async fn verify_storage_ready(&self) -> Result<(), CommunicationsPersistenceError> {
         sqlx::query(
-            "SELECT 1 FROM hermes_data.communications_event_inbox, hermes_data.communications_evidence_summaries, hermes_data.communications_domain_outbox, hermes_data.communications_conversations, hermes_data.communications_accounts, hermes_data.communications_messages, hermes_data.communications_observed_participants, hermes_data.communications_attachment_anchors, hermes_data.communications_message_references, hermes_data.communications_derived_index_projections, hermes_data.communications_derived_index_token_digests, hermes_data.communications_derived_index_tombstones, hermes_data.communications_derived_index_jobs, hermes_data.communications_derived_index_failures, hermes_data.communications_body_custody_transfers, hermes_data.communications_body_custody_transfer_lifecycle LIMIT 0",
+            "SELECT 1 FROM hermes_data.communications_event_inbox, hermes_data.communications_evidence_summaries, hermes_data.communications_evidence_audit_lineage, hermes_data.communications_domain_outbox, hermes_data.communications_conversations, hermes_data.communications_accounts, hermes_data.communications_messages, hermes_data.communications_observed_participants, hermes_data.communications_attachment_anchors, hermes_data.communications_message_references, hermes_data.communications_derived_index_projections, hermes_data.communications_derived_index_token_digests, hermes_data.communications_derived_index_tombstones, hermes_data.communications_derived_index_jobs, hermes_data.communications_derived_index_failures, hermes_data.communications_body_custody_transfers, hermes_data.communications_body_custody_transfer_lifecycle LIMIT 0",
         )
             .execute(&self.pool)
             .await
@@ -207,6 +207,17 @@ impl CommunicationsDurablePersistence {
         if inserted_summary.rows_affected() != 1 {
             return Err(CommunicationsPersistenceError::DuplicateOperation);
         }
+        sqlx::query(
+            "INSERT INTO hermes_data.communications_evidence_audit_lineage (evidence_id, causation_message_id, correlation_id, recorded_at_unix_seconds, recorded_at_nanos) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(summary.evidence_id.bytes().as_slice())
+        .bind(summary.causation_message_id.map(|value| value.bytes().to_vec()))
+        .bind(summary.correlation_id.bytes().as_slice())
+        .bind(summary.recorded_at_unix_seconds)
+        .bind(summary.recorded_at_nanos)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         if let Some(transfer) = observation.pending_custody_transfer {
             if transfer.evidence_id != summary.evidence_id
                 || transfer.envelope_sha256.as_slice() != record.envelope_sha256()
@@ -475,7 +486,7 @@ impl CommunicationsDurablePersistence {
         evidence_id: CommunicationObservationIdV1,
     ) -> Result<Option<CommunicationSummary>, CommunicationsPersistenceError> {
         let row = sqlx::query(
-            "SELECT observation_id, source_cursor_sha256, account_cursor_sha256, conversation_cursor_sha256, participant_cursor_sha256, media_cursor_sha256, reply_to_source_cursor_sha256, forward_origin_source_cursor_sha256, provider, direction, evidence_kind, body_state, body_blob_ref, body_blob_reference_id, body_blob_declared_bytes, body_blob_sha256, body_admission_failure, observed_at_unix_seconds FROM hermes_data.communications_evidence_summaries WHERE observation_id = $1",
+            "SELECT summary.observation_id, lineage.causation_message_id, COALESCE(lineage.correlation_id, summary.observation_id) AS correlation_id, summary.source_cursor_sha256, summary.account_cursor_sha256, summary.conversation_cursor_sha256, summary.participant_cursor_sha256, summary.media_cursor_sha256, summary.reply_to_source_cursor_sha256, summary.forward_origin_source_cursor_sha256, summary.provider, summary.direction, summary.evidence_kind, summary.body_state, summary.body_blob_ref, summary.body_blob_reference_id, summary.body_blob_declared_bytes, summary.body_blob_sha256, summary.body_admission_failure, summary.observed_at_unix_seconds, COALESCE(lineage.recorded_at_unix_seconds, summary.observed_at_unix_seconds) AS recorded_at_unix_seconds, COALESCE(lineage.recorded_at_nanos, 0) AS recorded_at_nanos FROM hermes_data.communications_evidence_summaries summary LEFT JOIN hermes_data.communications_evidence_audit_lineage lineage ON lineage.evidence_id = summary.observation_id WHERE summary.observation_id = $1",
         )
         .bind(evidence_id.bytes().as_slice())
         .fetch_optional(&self.pool)
@@ -484,6 +495,12 @@ impl CommunicationsDurablePersistence {
         row.map(|row| {
             let observation_id: Vec<u8> = row
                 .try_get("observation_id")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let causation_message_id: Option<Vec<u8>> = row
+                .try_get("causation_message_id")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let correlation_id: Vec<u8> = row
+                .try_get("correlation_id")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let source_cursor: Vec<u8> = row
                 .try_get("source_cursor_sha256")
@@ -536,11 +553,30 @@ impl CommunicationsDurablePersistence {
             let observed_at_unix_seconds: i64 = row
                 .try_get("observed_at_unix_seconds")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let recorded_at_unix_seconds: i64 = row
+                .try_get("recorded_at_unix_seconds")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let recorded_at_nanos: i32 = row
+                .try_get("recorded_at_nanos")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let observation_id: [u8; 16] = observation_id
                 .as_slice()
                 .try_into()
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let source_cursor: [u8; 32] = source_cursor
+                .as_slice()
+                .try_into()
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let causation_message_id = causation_message_id
+                .map(|value| {
+                    value
+                        .as_slice()
+                        .try_into()
+                        .map(CommunicationObservationIdV1::new)
+                })
+                .transpose()
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let correlation_id: [u8; 16] = correlation_id
                 .as_slice()
                 .try_into()
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
@@ -625,6 +661,8 @@ impl CommunicationsDurablePersistence {
             Ok(CommunicationSummary {
                 evidence_id: CommunicationObservationIdV1::new(observation_id),
                 observation_id: CommunicationObservationIdV1::new(observation_id),
+                causation_message_id,
+                correlation_id: CommunicationObservationIdV1::new(correlation_id),
                 source_cursor: CommunicationSourceCursorV1::new(source_cursor),
                 account_cursor,
                 conversation_cursor,
@@ -642,6 +680,8 @@ impl CommunicationsDurablePersistence {
                     .transpose()?,
                 attachment_descriptor: None,
                 observed_at_unix_seconds,
+                recorded_at_unix_seconds,
+                recorded_at_nanos,
             })
         })
         .transpose()

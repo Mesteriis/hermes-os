@@ -199,6 +199,8 @@ fn command_from_envelope(
     Ok(DecodedCommunicationObservationV1 {
         command: RecordCommunicationEvidenceV1 {
             observation_id: CommunicationObservationIdV1::new(id16(&metadata.observation_id)?),
+            causation_message_id: optional_id16(&envelope.causation_message_id)?,
+            correlation_id: CommunicationObservationIdV1::new(id16(&envelope.correlation_id)?),
             source_cursor: CommunicationSourceCursorV1::new(id32(&metadata.source_cursor_sha256)?),
             account_cursor: optional_cursor(&payload.account_cursor_sha256)?,
             conversation_cursor: optional_cursor(&payload.conversation_cursor_sha256)?,
@@ -220,9 +222,29 @@ fn command_from_envelope(
                 .as_ref()
                 .ok_or(CommunicationsEventConsumeErrorV1::WrongContract)?
                 .seconds,
+            recorded_at_unix_seconds: envelope
+                .recorded_at
+                .as_ref()
+                .ok_or(CommunicationsEventConsumeErrorV1::WrongContract)?
+                .seconds,
+            recorded_at_nanos: envelope
+                .recorded_at
+                .as_ref()
+                .ok_or(CommunicationsEventConsumeErrorV1::WrongContract)?
+                .nanos,
         },
         source_body,
     })
+}
+
+fn optional_id16(
+    value: &[u8],
+) -> Result<Option<CommunicationObservationIdV1>, CommunicationsEventConsumeErrorV1> {
+    if value.is_empty() {
+        Ok(None)
+    } else {
+        id16(value).map(CommunicationObservationIdV1::new).map(Some)
+    }
 }
 fn provider_from_wire(
     value: i32,

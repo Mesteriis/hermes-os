@@ -102,6 +102,10 @@ message EvidenceSummaryV1 {
   uint32 body_state = 5;
   uint32 body_admission_failure = 6;
   int64 observed_at_unix_seconds = 7;
+  bytes causation_message_id = 8;
+  bytes correlation_id = 9;
+  int64 recorded_at_unix_seconds = 10;
+  int32 recorded_at_nanos = 11;
 }
 
 message AccountSummaryV1 {
