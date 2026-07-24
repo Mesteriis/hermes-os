@@ -69,6 +69,7 @@ policy через ссылки из новых документов.
 - [ADR-0258: Correlated duplex managed-control transport](ADR-0258-correlated-duplex-managed-control-transport.md)
 - [ADR-0259: Separate typed platform-control path](ADR-0259-separate-typed-platform-control-path.md)
 - [ADR-0260: Communications attachment lifecycle event authority](ADR-0260-communications-attachment-lifecycle-event-authority.md)
+- [ADR-0261: Communications attachment-anchor handoff](ADR-0261-communications-attachment-anchor-handoff.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
