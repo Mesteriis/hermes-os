@@ -238,12 +238,6 @@ impl ManagedRuntimeSupervisor {
             contracts,
             cleanup,
         } = request;
-        if control_transport != ManagedControlTransportMajorV1::LegacyV1 {
-            remove_staged_launch(staged_executable, contracts, cleanup);
-            return Err(
-                "correlated managed control requires its atomic V2 endpoint cut".to_owned(),
-            );
-        }
         self.reap_finished();
         if self.inner.shutdown_requested.load(Ordering::Acquire) {
             remove_staged_launch(staged_executable, contracts, cleanup);

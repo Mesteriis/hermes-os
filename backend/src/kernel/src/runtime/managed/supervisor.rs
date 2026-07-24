@@ -24,6 +24,7 @@ use hermes_runtime_protocol::v1::{
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
+use prost::Message;
 
 pub fn run(
     staged_executable: &StagedNativeArtifact,
@@ -61,16 +62,22 @@ pub struct ManagedChildRunInput<'a> {
 pub fn run_until_shutdown(
     input: ManagedChildRunInput<'_>,
 ) -> Result<ManagedChildExecutionResult, String> {
-    if input.control_transport != ManagedControlTransportMajorV1::LegacyV1 {
-        return Err("correlated managed control requires its atomic V2 endpoint cut".to_owned());
+    match input.control_transport {
+        ManagedControlTransportMajorV1::LegacyV1 => run_with_wait(
+            input.staged_executable,
+            input.arguments,
+            input.expectation,
+            input.policy,
+            |child, channel| wait_until_shutdown_with_relay(child, channel, &input),
+        ),
+        ManagedControlTransportMajorV1::CorrelatedV2 => run_with_wait_v2(
+            input.staged_executable,
+            input.arguments,
+            input.expectation,
+            input.policy,
+            |child, channel| wait_until_shutdown_with_correlated_relay(child, channel, &input),
+        ),
     }
-    run_with_wait(
-        input.staged_executable,
-        input.arguments,
-        input.expectation,
-        input.policy,
-        |child, channel| wait_until_shutdown_with_relay(child, channel, &input),
-    )
 }
 
 fn run_with_wait<F>(
@@ -89,6 +96,45 @@ where
             bounded_managed_child_execution::spawn(staged_executable, arguments, child_stdin)?;
         let mut control_channel =
             match managed_runtime_control::establish_channel(kernel_end, expectation) {
+                Ok(channel) => channel,
+                Err(error) => {
+                    let _ = bounded_managed_child_execution::terminate(&mut child);
+                    if attempt == policy.max_attempts() {
+                        return Err(error);
+                    }
+                    continue;
+                }
+            };
+        let status = wait(&mut child, &mut control_channel)?;
+        if status.success() {
+            return Ok(ManagedChildExecutionResult::succeeded(
+                attempt,
+                status.code().unwrap_or(0),
+            ));
+        }
+    }
+    Err("managed child exhausted its bounded restart attempts".to_owned())
+}
+
+fn run_with_wait_v2<F>(
+    staged_executable: &StagedNativeArtifact,
+    arguments: &[String],
+    expectation: &ManagedRuntimeExpectation,
+    policy: &ManagedChildExecutionPolicy,
+    mut wait: F,
+) -> Result<ManagedChildExecutionResult, String>
+where
+    F: FnMut(
+        &mut Child,
+        &mut ManagedControlChannelV2<std::os::unix::net::UnixStream>,
+    ) -> Result<ExitStatus, String>,
+{
+    for attempt in 1..=policy.max_attempts() {
+        let (kernel_end, child_stdin) = managed_runtime_control::create_inherited_channel()?;
+        let mut child =
+            bounded_managed_child_execution::spawn(staged_executable, arguments, child_stdin)?;
+        let mut control_channel =
+            match managed_runtime_control::establish_correlated_channel(kernel_end, expectation) {
                 Ok(channel) => channel,
                 Err(error) => {
                     let _ = bounded_managed_child_execution::terminate(&mut child);
@@ -171,6 +217,88 @@ fn wait_until_shutdown_with_relay(
             }
         }
     }
+}
+
+fn wait_until_shutdown_with_correlated_relay(
+    child: &mut Child,
+    channel: &mut ManagedControlChannelV2<std::os::unix::net::UnixStream>,
+    input: &ManagedChildRunInput<'_>,
+) -> Result<ExitStatus, String> {
+    channel
+        .inner_mut()
+        .set_nonblocking(true)
+        .map_err(|error| error.to_string())?;
+    loop {
+        if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+            return Ok(status);
+        }
+        if input
+            .shutdown_requested
+            .load(std::sync::atomic::Ordering::Acquire)
+            || input
+                .stop_requested
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
+            bounded_managed_child_execution::terminate(child)?;
+            return Err("managed child stopped by Kernel shutdown".to_owned());
+        }
+        match channel.try_receive_request() {
+            Ok(Some((correlation_id, request))) => {
+                dispatch_v2_typed_request(channel, correlation_id, request, input)?;
+                continue;
+            }
+            Ok(None) => {}
+            Err(_) => return terminal_status_after_control_close(child),
+        }
+        match input.relay_requests.recv_timeout(Duration::from_millis(25)) {
+            Ok(request) => dispatch_correlated_relay(channel, request, input),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => {
+                bounded_managed_child_execution::terminate(child)?;
+                return Err("managed runtime relay was disconnected".to_owned());
+            }
+        }
+    }
+}
+
+fn dispatch_correlated_relay(
+    channel: &mut ManagedControlChannelV2<std::os::unix::net::UnixStream>,
+    relay: managed_runtime_control::ManagedRuntimeRelayRequest,
+    input: &ManagedChildRunInput<'_>,
+) {
+    let (payload, response_sender) = relay.into_parts();
+    let response = (|| {
+        let request = ManagedRuntimeControlRequestV1::decode(payload.as_slice())
+            .map_err(|_| "managed runtime V2 relay request is invalid".to_owned())?;
+        if !matches!(
+            request.operation,
+            Some(
+                hermes_runtime_protocol::v1::managed_runtime_control_request_v1::Operation::ClientDelivery(_)
+            )
+        ) {
+            return Err("managed runtime V2 relay is not an owner client delivery".to_owned());
+        }
+        channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|error| error.to_string())?;
+        let response = channel.request_next(request, |channel, correlation_id, request| {
+            dispatch_v2_typed_request(channel, correlation_id, request, input).map_err(|_| {
+                hermes_runtime_protocol::managed_control::ManagedControlTransportErrorV2::InvalidFrame
+            })
+        });
+        let restore = channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|error| error.to_string());
+        restore?;
+        let response =
+            response.map_err(|_| "managed runtime V2 relay response is invalid".to_owned())?;
+        matches!(response.result, Some(ControlResult::ClientDelivery(_)))
+            .then_some(response.encode_to_vec())
+            .ok_or_else(|| "managed runtime V2 client delivery response is invalid".to_owned())
+    })();
+    let _ = response_sender.send(response);
 }
 
 fn dispatch_v2_typed_request(

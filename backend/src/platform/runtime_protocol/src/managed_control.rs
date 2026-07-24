@@ -92,6 +92,10 @@ impl<S> ManagedControlChannelV2<S> {
     pub fn into_inner(self) -> S {
         self.stream
     }
+
+    pub fn inner_mut(&mut self) -> &mut S {
+        &mut self.stream
+    }
 }
 
 impl<S: Read + Write> ManagedControlChannelV2<S> {
