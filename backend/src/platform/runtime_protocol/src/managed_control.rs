@@ -91,7 +91,10 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
         ) -> Result<(), ManagedControlTransportErrorV2>,
     {
         self.begin_pending(correlation_id)?;
-        self.write_request(correlation_id, request)?;
+        if let Err(error) = self.write_request(correlation_id, request) {
+            self.pending_request_ids.remove(&correlation_id);
+            return Err(error);
+        }
         let result = (|| loop {
             let frame = self.read_frame()?;
             let received_id = correlation_id_from_slice(&frame.correlation_id)?;
@@ -306,5 +309,19 @@ mod tests {
         assert_eq!(correlation_id, [9; MANAGED_CONTROL_CORRELATION_ID_BYTES]);
         assert!(request.operation.is_some());
         writer.join().expect("writer join");
+    }
+
+    #[test]
+    fn releases_correlation_when_initial_write_fails() {
+        let (stream, peer) = UnixStream::pair().expect("control pair");
+        drop(peer);
+        let mut channel = ManagedControlChannelV2::new(stream);
+        let correlation_id = [3; MANAGED_CONTROL_CORRELATION_ID_BYTES];
+
+        assert!(matches!(
+            channel.request(correlation_id, ready_request(), |_, _, _| Ok(())),
+            Err(ManagedControlTransportErrorV2::Io(_))
+        ));
+        assert!(channel.begin_pending(correlation_id).is_ok());
     }
 }
