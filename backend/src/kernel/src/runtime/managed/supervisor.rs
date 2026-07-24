@@ -16,13 +16,14 @@ use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 use std::time::{Duration, Instant};
 
-use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
-use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
+use hermes_runtime_protocol::managed_control::{
+    ManagedControlChannelV2, ManagedControlTransportMajorV1,
+};
 use hermes_runtime_protocol::v1::{
-    ManagedRuntimeControlAckV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1,
+    ManagedRuntimeControlAckV1, ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
+use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
 
 pub fn run(
     staged_executable: &StagedNativeArtifact,
@@ -44,6 +45,7 @@ pub struct ManagedChildRunInput<'a> {
     pub arguments: &'a [String],
     pub expectation: &'a ManagedRuntimeExpectation,
     pub policy: &'a ManagedChildExecutionPolicy,
+    pub control_transport: ManagedControlTransportMajorV1,
     pub shutdown_requested: &'a AtomicBool,
     pub stop_requested: &'a AtomicBool,
     pub relay_requests: &'a Receiver<managed_runtime_control::ManagedRuntimeRelayRequest>,
@@ -59,6 +61,9 @@ pub struct ManagedChildRunInput<'a> {
 pub fn run_until_shutdown(
     input: ManagedChildRunInput<'_>,
 ) -> Result<ManagedChildExecutionResult, String> {
+    if input.control_transport != ManagedControlTransportMajorV1::LegacyV1 {
+        return Err("correlated managed control requires its atomic V2 endpoint cut".to_owned());
+    }
     run_with_wait(
         input.staged_executable,
         input.arguments,

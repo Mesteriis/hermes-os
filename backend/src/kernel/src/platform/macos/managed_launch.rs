@@ -6,11 +6,13 @@ use std::time::Duration;
 use hermes_kernel_control_store::{ManagedLaunchRecord, PlatformStorageBindingStateV1};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
+    managed_control::select_managed_control_transport,
     v1::{
         ManagedDomainRuntimeConfigurationV1, ManagedIntegrationHostBridgeConfigurationV1,
         ManagedIntegrationRuntimeConfigurationV1, ManagedStorageRuntimeConfigurationV1,
     },
     validation::{
+        descriptor::decode_descriptor_v1,
         integration_host_bridge::validate_managed_integration_host_bridge_configuration,
         managed_domain_runtime::validate_managed_domain_runtime_configuration,
         managed_integration_runtime::validate_managed_integration_runtime_configuration,
@@ -284,6 +286,12 @@ fn start_staged_with_configuration_bytes(
             .join("managed")
             .join(format!("launch-{}", reservation.runtime_generation())),
     )?;
+    let control_transport = decode_descriptor_v1(prepared.descriptor_bytes())
+        .map_err(|_| "managed runtime descriptor is invalid".to_owned())
+        .and_then(|descriptor| {
+            select_managed_control_transport(&descriptor)
+                .map_err(|_| "managed runtime control transport is not exact".to_owned())
+        })?;
     let host_bridge_configuration_bytes = host_bridge_configuration
         .as_ref()
         .map(prost::Message::encode_to_vec);
@@ -366,28 +374,18 @@ fn start_staged_with_configuration_bytes(
     }
     let runtime_generation = reservation.runtime_generation();
     let (registration_id, expectation, policy) = reservation.into_launch_parts();
-    if let Some(cleanup) = cleanup {
-        supervisor.start_with_arguments_contracts_and_cleanup(
-            crate::runtime::lifecycle::supervisor::ManagedRuntimeLaunchRequest {
-                registration_id,
-                staged_executable: prepared.into_staged_executable(),
-                arguments,
-                expectation,
-                policy,
-                contracts: Some(contracts),
-                cleanup: Some(cleanup),
-            },
-        )?;
-    } else {
-        supervisor.start_with_arguments_and_contracts(
+    supervisor.start_with_arguments_contracts_and_cleanup(
+        crate::runtime::lifecycle::supervisor::ManagedRuntimeLaunchRequest {
             registration_id,
-            prepared.into_staged_executable(),
+            staged_executable: prepared.into_staged_executable(),
             arguments,
             expectation,
             policy,
-            contracts,
-        )?;
-    }
+            control_transport,
+            contracts: Some(contracts),
+            cleanup,
+        },
+    )?;
     Ok(runtime_generation)
 }
 

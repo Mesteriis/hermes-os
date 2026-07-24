@@ -15,6 +15,7 @@ use crate::runtime::lifecycle::control::{
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 use crate::runtime::managed::supervisor as managed_child_supervisor;
+use hermes_runtime_protocol::managed_control::ManagedControlTransportMajorV1;
 
 use super::Inner;
 
@@ -33,6 +34,7 @@ pub(super) struct ActiveWorkerInput {
     pub(super) arguments: Vec<String>,
     pub(super) expectation: ManagedRuntimeExpectation,
     pub(super) policy: ManagedChildExecutionPolicy,
+    pub(super) control_transport: ManagedControlTransportMajorV1,
     pub(super) contracts: Option<StagedRuntimeContracts>,
     pub(super) cleanup: Option<Box<dyn FnOnce() + Send>>,
     pub(super) vault_route_handler: Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>,
@@ -51,6 +53,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
         arguments,
         expectation,
         policy,
+        control_transport,
         contracts,
         cleanup,
         vault_route_handler,
@@ -76,6 +79,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
                     arguments: &arguments,
                     expectation: &expectation,
                     policy: &policy,
+                    control_transport,
                     shutdown_requested: &shutdown_requested,
                     stop_requested: &worker_stop_requested,
                     relay_requests: &relay_requests,

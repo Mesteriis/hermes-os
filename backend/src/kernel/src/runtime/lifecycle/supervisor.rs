@@ -15,6 +15,7 @@ use crate::runtime::lifecycle::control::{
     ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
+use hermes_runtime_protocol::managed_control::ManagedControlTransportMajorV1;
 
 #[path = "supervisor/worker.rs"]
 mod worker;
@@ -59,6 +60,7 @@ pub(crate) struct ManagedRuntimeLaunchRequest {
     pub arguments: Vec<String>,
     pub expectation: ManagedRuntimeExpectation,
     pub policy: ManagedChildExecutionPolicy,
+    pub control_transport: ManagedControlTransportMajorV1,
     pub contracts: Option<StagedRuntimeContracts>,
     pub cleanup: Option<Box<dyn FnOnce() + Send>>,
 }
@@ -188,6 +190,7 @@ impl ManagedRuntimeSupervisor {
             arguments,
             expectation,
             policy,
+            control_transport: ManagedControlTransportMajorV1::LegacyV1,
             contracts: None,
             cleanup: None,
         })
@@ -208,6 +211,7 @@ impl ManagedRuntimeSupervisor {
             arguments,
             expectation,
             policy,
+            control_transport: ManagedControlTransportMajorV1::LegacyV1,
             contracts: Some(contracts),
             cleanup: None,
         })
@@ -230,9 +234,16 @@ impl ManagedRuntimeSupervisor {
             arguments,
             expectation,
             policy,
+            control_transport,
             contracts,
             cleanup,
         } = request;
+        if control_transport != ManagedControlTransportMajorV1::LegacyV1 {
+            remove_staged_launch(staged_executable, contracts, cleanup);
+            return Err(
+                "correlated managed control requires its atomic V2 endpoint cut".to_owned(),
+            );
+        }
         self.reap_finished();
         if self.inner.shutdown_requested.load(Ordering::Acquire) {
             remove_staged_launch(staged_executable, contracts, cleanup);
@@ -276,6 +287,7 @@ impl ManagedRuntimeSupervisor {
             arguments,
             expectation,
             policy,
+            control_transport,
             contracts,
             cleanup,
             vault_route_handler,
