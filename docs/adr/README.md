@@ -74,6 +74,8 @@ policy через ссылки из новых документов.
 - [ADR-0263: Mail integration settings and Storage admission artifacts](ADR-0263-mail-integration-settings-and-storage-admission.md)
 - [ADR-0264: Communications message evidence history query](ADR-0264-communications-message-evidence-history-query.md)
 - [ADR-0265: Provider operational client transport admission](ADR-0265-provider-operational-client-transport-admission.md)
+- [ADR-0266: Telegram Kernel admission and event-only Communications handoff](ADR-0266-telegram-kernel-admission-and-event-only-communications-handoff.md)
+- [ADR-0267: Kernel-staged runtime artifacts and integration state roots](ADR-0267-kernel-staged-runtime-artifacts-and-integration-state-roots.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -206,3 +208,6 @@ ADR-0265 запрещает считать legacy Communications REST provider t
 ADR-0266 задаёт первый exact Telegram phase gate: Kernel владеет только
 admission/routing/fencing control plane, а Telegram → Communications handoff
 остаётся event-only через integration outbox, NATS и Communications inbox.
+ADR-0267 убирает native artifact path и provider session-store directory из
+settings: exact runtime dependency приходит из verified managed binding, а
+private state root stage-ит Kernel без знания provider semantics.
