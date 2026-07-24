@@ -41,6 +41,19 @@ pub(crate) struct ManagedLaunchReservation {
     policy: ManagedChildExecutionPolicy,
 }
 
+pub(crate) struct ManagedIntegrationLaunchConfiguration<'a> {
+    pub runtime: ManagedIntegrationRuntimeConfigurationV1,
+    pub settings_snapshot_bytes: Vec<u8>,
+    pub granted_capability_ids: &'a [String],
+}
+
+struct PreparedRuntimeContractInput {
+    runtime_configuration_bytes: Vec<u8>,
+    settings_snapshot_bytes: Option<Vec<u8>>,
+    host_bridge_configuration: Option<ManagedIntegrationHostBridgeConfigurationV1>,
+    cleanup: Option<Box<dyn FnOnce() + Send>>,
+}
+
 impl ManagedLaunchReservation {
     #[must_use]
     pub(crate) fn registration_id(&self) -> &str {
@@ -166,10 +179,13 @@ pub(crate) fn start_reserved_integration(
     data_dir: &Path,
     runtime_dir: &Path,
     reservation: ManagedLaunchReservation,
-    mut configuration: ManagedIntegrationRuntimeConfigurationV1,
-    settings_snapshot_bytes: Vec<u8>,
-    granted_capability_ids: &[String],
+    launch: ManagedIntegrationLaunchConfiguration<'_>,
 ) -> Result<u64, String> {
+    let ManagedIntegrationLaunchConfiguration {
+        runtime: mut configuration,
+        settings_snapshot_bytes,
+        granted_capability_ids,
+    } = launch;
     if configuration.registration_id != reservation.registration_id()
         || configuration.runtime_instance_id != reservation.runtime_instance_id()
         || configuration.runtime_generation != reservation.runtime_generation()
@@ -188,16 +204,18 @@ pub(crate) fn start_reserved_integration(
         prepared.remove();
         return Err("managed integration runtime configuration is invalid".to_owned());
     }
-    let (runtime, staged_runtime_artifacts) = prepared.into_launch_parts();
+    let (prepared_runtime, staged_runtime_artifacts) = prepared.into_launch_parts();
     start_prepared_with_configuration_bytes(
         supervisor,
         runtime_dir,
         reservation,
-        runtime,
-        configuration.encode_to_vec(),
-        Some(settings_snapshot_bytes),
-        None,
-        staged_runtime_artifact_cleanup(staged_runtime_artifacts),
+        prepared_runtime,
+        PreparedRuntimeContractInput {
+            runtime_configuration_bytes: configuration.encode_to_vec(),
+            settings_snapshot_bytes: Some(settings_snapshot_bytes),
+            host_bridge_configuration: None,
+            cleanup: staged_runtime_artifact_cleanup(staged_runtime_artifacts),
+        },
     )
 }
 
@@ -223,10 +241,12 @@ pub(crate) fn start_reserved_domain(
         supervisor,
         runtime_dir,
         reservation,
-        configuration.encode_to_vec(),
-        None,
-        None,
-        None,
+        PreparedRuntimeContractInput {
+            runtime_configuration_bytes: configuration.encode_to_vec(),
+            settings_snapshot_bytes: None,
+            host_bridge_configuration: None,
+            cleanup: None,
+        },
     )
 }
 
@@ -235,11 +255,14 @@ pub(crate) fn start_staged_with_host_bridge_configuration(
     data_dir: &Path,
     runtime_dir: &Path,
     reservation: ManagedLaunchReservation,
-    mut configuration: ManagedIntegrationRuntimeConfigurationV1,
-    settings_snapshot_bytes: Vec<u8>,
+    launch: ManagedIntegrationLaunchConfiguration<'_>,
     host_bridge_configuration: ManagedIntegrationHostBridgeConfigurationV1,
-    granted_capability_ids: &[String],
 ) -> Result<u64, String> {
+    let ManagedIntegrationLaunchConfiguration {
+        runtime: mut configuration,
+        settings_snapshot_bytes,
+        granted_capability_ids,
+    } = launch;
     validate_managed_integration_host_bridge_configuration(&host_bridge_configuration)
         .map_err(|_| "managed integration host bridge configuration is invalid".to_owned())?;
     if configuration.registration_id != reservation.registration_id()
@@ -272,7 +295,7 @@ pub(crate) fn start_staged_with_host_bridge_configuration(
             return Err(error);
         }
     };
-    let (runtime, staged_runtime_artifacts) = prepared.into_launch_parts();
+    let (prepared_runtime, staged_runtime_artifacts) = prepared.into_launch_parts();
     let cleanup = combine_cleanup(
         staged_runtime_artifact_cleanup(staged_runtime_artifacts),
         Some(Box::new(move || descriptor.remove())),
@@ -281,11 +304,13 @@ pub(crate) fn start_staged_with_host_bridge_configuration(
         supervisor,
         runtime_dir,
         reservation,
-        runtime,
-        configuration.encode_to_vec(),
-        Some(settings_snapshot_bytes),
-        Some(host_bridge_configuration),
-        cleanup,
+        prepared_runtime,
+        PreparedRuntimeContractInput {
+            runtime_configuration_bytes: configuration.encode_to_vec(),
+            settings_snapshot_bytes: Some(settings_snapshot_bytes),
+            host_bridge_configuration: Some(host_bridge_configuration),
+            cleanup,
+        },
     )
 }
 
@@ -300,10 +325,12 @@ fn start_staged_with_configurations(
         supervisor,
         runtime_dir,
         reservation,
-        configuration.encode_to_vec(),
-        None,
-        host_bridge_configuration,
-        None,
+        PreparedRuntimeContractInput {
+            runtime_configuration_bytes: configuration.encode_to_vec(),
+            settings_snapshot_bytes: None,
+            host_bridge_configuration,
+            cleanup: None,
+        },
     )
 }
 
@@ -311,10 +338,7 @@ fn start_staged_with_configuration_bytes(
     supervisor: &ManagedRuntimeSupervisor,
     runtime_dir: &Path,
     reservation: ManagedLaunchReservation,
-    runtime_configuration_bytes: Vec<u8>,
-    settings_snapshot_bytes: Option<Vec<u8>>,
-    host_bridge_configuration: Option<ManagedIntegrationHostBridgeConfigurationV1>,
-    cleanup: Option<Box<dyn FnOnce() + Send>>,
+    contracts: PreparedRuntimeContractInput,
 ) -> Result<u64, String> {
     let kernel_executable = selected_kernel_executable()?;
     let prepared = native_launch::prepare_bound_managed_runtime(
@@ -329,10 +353,7 @@ fn start_staged_with_configuration_bytes(
         runtime_dir,
         reservation,
         prepared,
-        runtime_configuration_bytes,
-        settings_snapshot_bytes,
-        host_bridge_configuration,
-        cleanup,
+        contracts,
     )
 }
 
@@ -341,11 +362,14 @@ fn start_prepared_with_configuration_bytes(
     runtime_dir: &Path,
     reservation: ManagedLaunchReservation,
     prepared: native_launch::PreparedBundledManagedRuntime,
-    runtime_configuration_bytes: Vec<u8>,
-    settings_snapshot_bytes: Option<Vec<u8>>,
-    host_bridge_configuration: Option<ManagedIntegrationHostBridgeConfigurationV1>,
-    cleanup: Option<Box<dyn FnOnce() + Send>>,
+    input: PreparedRuntimeContractInput,
 ) -> Result<u64, String> {
+    let PreparedRuntimeContractInput {
+        runtime_configuration_bytes,
+        settings_snapshot_bytes,
+        host_bridge_configuration,
+        cleanup,
+    } = input;
     let preflight = (|| {
         let control_transport = decode_descriptor_v1(prepared.descriptor_bytes())
             .map_err(|_| "managed runtime descriptor is invalid".to_owned())

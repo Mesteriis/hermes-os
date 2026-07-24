@@ -267,6 +267,12 @@ fn start_reserved_integration_runtime(
         let host_bridge_socket_path = host_bridge_configuration
             .as_ref()
             .map(|configuration| configuration.socket_path.clone());
+        let launch_configuration =
+            macos_managed_runtime_launch::ManagedIntegrationLaunchConfiguration {
+                runtime: configuration,
+                settings_snapshot_bytes,
+                granted_capability_ids: &granted_capability_ids,
+            };
         let runtime_generation = match host_bridge_configuration {
             Some(host_bridge_configuration) => {
                 macos_managed_runtime_launch::start_staged_with_host_bridge_configuration(
@@ -274,10 +280,8 @@ fn start_reserved_integration_runtime(
                     data_dir,
                     runtime_dir,
                     reservation,
-                    configuration,
-                    settings_snapshot_bytes,
+                    launch_configuration,
                     host_bridge_configuration,
-                    &granted_capability_ids,
                 )?
             }
             None => macos_managed_runtime_launch::start_reserved_integration(
@@ -285,9 +289,7 @@ fn start_reserved_integration_runtime(
                 data_dir,
                 runtime_dir,
                 reservation,
-                configuration,
-                settings_snapshot_bytes,
-                &granted_capability_ids,
+                launch_configuration,
             )?,
         };
         Ok((runtime_generation, host_bridge_socket_path))
