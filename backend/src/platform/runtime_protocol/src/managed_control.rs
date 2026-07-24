@@ -4,6 +4,7 @@
 //! routing. Operation authorization remains with Kernel and operation meaning
 //! remains in the typed protocol messages.
 
+use std::collections::BTreeSet;
 use std::io::{Read, Write};
 
 use prost::Message;
@@ -18,6 +19,7 @@ use crate::validation::managed_control::{
 };
 
 pub const MAX_MANAGED_CONTROL_FRAME_BYTES_V2: usize = 512 * 1024;
+pub const MAX_MANAGED_CONTROL_PENDING_REQUESTS_V2: usize = 64;
 
 #[derive(Debug)]
 pub enum ManagedControlTransportErrorV2 {
@@ -27,6 +29,8 @@ pub enum ManagedControlTransportErrorV2 {
     Io(std::io::Error),
     UnexpectedResponse,
     UnexpectedRequest,
+    DuplicateCorrelationId,
+    PendingRequestLimit,
     PeerClosed,
 }
 
@@ -38,11 +42,15 @@ impl From<std::io::Error> for ManagedControlTransportErrorV2 {
 
 pub struct ManagedControlChannelV2<S> {
     stream: S,
+    pending_request_ids: BTreeSet<[u8; MANAGED_CONTROL_CORRELATION_ID_BYTES]>,
 }
 
 impl<S> ManagedControlChannelV2<S> {
     pub fn new(stream: S) -> Self {
-        Self { stream }
+        Self {
+            stream,
+            pending_request_ids: BTreeSet::new(),
+        }
     }
 
     pub fn into_inner(self) -> S {
@@ -64,21 +72,24 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
             ManagedRuntimeControlRequestV1,
         ) -> Result<(), ManagedControlTransportErrorV2>,
     {
+        self.begin_pending(correlation_id)?;
         self.write_request(correlation_id, request)?;
-        loop {
+        let result = (|| loop {
             let frame = self.read_frame()?;
             let received_id = correlation_id_from_slice(&frame.correlation_id)?;
             match frame.frame {
                 Some(Frame::Response(response)) if received_id == correlation_id => {
-                    return Ok(response);
+                    break Ok(response);
                 }
                 Some(Frame::Response(_)) => {
-                    return Err(ManagedControlTransportErrorV2::UnexpectedResponse);
+                    break Err(ManagedControlTransportErrorV2::UnexpectedResponse);
                 }
                 Some(Frame::Request(request)) => dispatch_request(self, received_id, request)?,
-                None => return Err(ManagedControlTransportErrorV2::InvalidFrame),
+                None => break Err(ManagedControlTransportErrorV2::InvalidFrame),
             }
-        }
+        })();
+        self.pending_request_ids.remove(&correlation_id);
+        result
     }
 
     pub fn write_request(
@@ -127,6 +138,19 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
             return Err(ManagedControlTransportErrorV2::FrameTooLarge);
         }
         write_length_delimited(&mut self.stream, &bytes)?;
+        Ok(())
+    }
+
+    fn begin_pending(
+        &mut self,
+        correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+    ) -> Result<(), ManagedControlTransportErrorV2> {
+        if self.pending_request_ids.len() >= MAX_MANAGED_CONTROL_PENDING_REQUESTS_V2 {
+            return Err(ManagedControlTransportErrorV2::PendingRequestLimit);
+        }
+        if !self.pending_request_ids.insert(correlation_id) {
+            return Err(ManagedControlTransportErrorV2::DuplicateCorrelationId);
+        }
         Ok(())
     }
 }
@@ -233,5 +257,19 @@ mod tests {
                 .error_code,
             "REJECTED"
         );
+    }
+
+    #[test]
+    fn rejects_a_duplicate_pending_correlation_id() {
+        let (stream, _peer) = UnixStream::pair().expect("control pair");
+        let mut channel = ManagedControlChannelV2::new(stream);
+        channel
+            .begin_pending([7; MANAGED_CONTROL_CORRELATION_ID_BYTES])
+            .expect("first pending request");
+
+        assert!(matches!(
+            channel.begin_pending([7; MANAGED_CONTROL_CORRELATION_ID_BYTES]),
+            Err(ManagedControlTransportErrorV2::DuplicateCorrelationId)
+        ));
     }
 }
