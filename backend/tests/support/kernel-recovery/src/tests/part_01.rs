@@ -32,6 +32,7 @@ fn distribution_manifest_requires_exact_ordered_artifact_bindings() {
             descriptor_size_bytes: 1,
             settings_schema_relative_path: String::new(),
             settings_schema_size_bytes: 0,
+            bound_module_id: String::new(),
         }],
     };
     assert_eq!(
@@ -162,6 +163,7 @@ fn distribution_manifest_verifier_requires_pinned_key_and_exact_signed_bytes() {
             descriptor_size_bytes: 1,
             settings_schema_relative_path: String::new(),
             settings_schema_size_bytes: 0,
+            bound_module_id: String::new(),
         }],
     };
     let raw_manifest_bytes = manifest.encode_to_vec();

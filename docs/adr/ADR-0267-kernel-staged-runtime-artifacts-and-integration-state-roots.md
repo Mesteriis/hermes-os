@@ -2,9 +2,12 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: не реализовано. Решение является обязательным
-prerequisite для `telegram_integration_v1`, но само не открывает этот gate и не
-расширяет production inventory.
+Состояние реализации: owner-neutral wire foundation реализован в
+`hermes-runtime-protocol`: typed descriptor requests, manifest module binding,
+managed artifact/state-root bindings и strict structural validation. Kernel
+staging, Telegram migration и native-loader conformance ещё не реализованы.
+Решение является обязательным prerequisite для `telegram_integration_v1`, но
+само не открывает этот gate и не расширяет production inventory.
 
 Уточняет:
 
@@ -153,6 +156,7 @@ capability, запросившей private provider state, и stage-ит:
 ```text
 root_path
 state_generation
+state_layout_revision
 ```
 
 Root детерминированно scoped по Hermes instance, logical owner, module

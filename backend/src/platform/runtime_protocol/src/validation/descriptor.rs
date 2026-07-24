@@ -3,10 +3,10 @@ use prost::Message;
 use crate::v1::{
     CapabilityCriticalityV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
     EventSubscriptionRequirementV1, InitialOwnerEnrollmentChallengeV1, InitialOwnerEnrollmentV1,
-    ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, SettingApplyModeV1,
-    SettingClientVisibilityV1, SettingMutationAuthorityV1, SettingTargetScopeV1,
-    SettingValueTypeV1, SettingsSchemaV1, SettingsSnapshotV1, VaultActionV1, VaultSecretClassV1,
-    VaultTargetScopeV1, capability_request_v1, setting_value_v1,
+    ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, RuntimeArtifactUseV1,
+    SettingApplyModeV1, SettingClientVisibilityV1, SettingMutationAuthorityV1,
+    SettingTargetScopeV1, SettingValueTypeV1, SettingsSchemaV1, SettingsSnapshotV1, VaultActionV1,
+    VaultSecretClassV1, VaultTargetScopeV1, capability_request_v1, setting_value_v1,
 };
 
 pub const MAX_DESCRIPTOR_BYTES: usize = 256 * 1024;
@@ -228,6 +228,15 @@ fn valid_capability_request(request: &crate::v1::CapabilityRequestV1) -> bool {
             validate_identifier(&host.capability_id).is_ok()
         }
         Some(capability_request_v1::Request::EventRoute(route)) => valid_event_route_request(route),
+        Some(capability_request_v1::Request::RuntimeArtifact(artifact)) => {
+            validate_identifier(&artifact.artifact_id).is_ok()
+                && RuntimeArtifactUseV1::try_from(artifact.r#use)
+                    .ok()
+                    .is_some_and(|value| value == RuntimeArtifactUseV1::NativeDynamicLibrary)
+        }
+        Some(capability_request_v1::Request::IntegrationState(state)) => {
+            state.state_layout_revision != 0
+        }
         None => false,
     }
 }
@@ -508,9 +517,11 @@ fn value_matches_setting_type(value: &setting_value_v1::Value, value_type: i32) 
 mod tests {
     use super::{valid_vault_purpose_request, validate_descriptor_v1};
     use crate::v1::{
-        CapabilityCriticalityV1, CapabilityDescriptorV1, ClientRpcRouteV1, ContractReferenceV1,
-        ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, VaultActionV1,
-        VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1,
+        CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1, ClientRpcRouteV1,
+        ContractReferenceV1, IntegrationStateRequestV1, ModuleDescriptorV1, ModuleKindV1,
+        ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeArtifactRequestV1, RuntimeArtifactUseV1,
+        VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1,
+        capability_request_v1,
     };
 
     fn owner_derived_key_purpose() -> VaultPurposeRequestV1 {
@@ -556,6 +567,47 @@ mod tests {
 
         let mut descriptor = client_rpc_descriptor();
         descriptor.capabilities[0].provides[0].kind = ProvidedSurfaceKindV1::QueryRpc as i32;
+        assert!(validate_descriptor_v1(&descriptor).is_err());
+    }
+
+    #[test]
+    fn runtime_artifact_and_integration_state_requests_are_typed() {
+        let mut descriptor = client_rpc_descriptor();
+        descriptor.capabilities[0].requests = vec![
+            CapabilityRequestV1 {
+                request: Some(capability_request_v1::Request::RuntimeArtifact(
+                    RuntimeArtifactRequestV1 {
+                        artifact_id: "telegram.tdjson.v1".to_owned(),
+                        r#use: RuntimeArtifactUseV1::NativeDynamicLibrary as i32,
+                    },
+                )),
+            },
+            CapabilityRequestV1 {
+                request: Some(capability_request_v1::Request::IntegrationState(
+                    IntegrationStateRequestV1 {
+                        state_layout_revision: 1,
+                    },
+                )),
+            },
+        ];
+        assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
+
+        let Some(capability_request_v1::Request::RuntimeArtifact(artifact)) =
+            descriptor.capabilities[0].requests[0].request.as_mut()
+        else {
+            panic!("runtime artifact request");
+        };
+        artifact.r#use = RuntimeArtifactUseV1::Unspecified as i32;
+        assert!(validate_descriptor_v1(&descriptor).is_err());
+
+        let mut descriptor = client_rpc_descriptor();
+        descriptor.capabilities[0].requests = vec![CapabilityRequestV1 {
+            request: Some(capability_request_v1::Request::IntegrationState(
+                IntegrationStateRequestV1 {
+                    state_layout_revision: 0,
+                },
+            )),
+        }];
         assert!(validate_descriptor_v1(&descriptor).is_err());
     }
 

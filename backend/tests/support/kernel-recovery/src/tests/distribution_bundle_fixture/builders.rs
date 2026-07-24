@@ -59,6 +59,7 @@ pub(super) fn bundle_manifest(
             descriptor_size_bytes: descriptor_size as u64,
             settings_schema_relative_path: identity.settings_schema_relative_path.to_owned(),
             settings_schema_size_bytes: settings_schema_size as u64,
+            bound_module_id: String::new(),
         }],
     }
 }

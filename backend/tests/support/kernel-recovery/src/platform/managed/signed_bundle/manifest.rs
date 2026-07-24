@@ -138,6 +138,7 @@ fn install_artifact(
         descriptor_size_bytes: artifact.descriptor.len() as u64,
         settings_schema_relative_path,
         settings_schema_size_bytes,
+        bound_module_id: String::new(),
     })
 }
 

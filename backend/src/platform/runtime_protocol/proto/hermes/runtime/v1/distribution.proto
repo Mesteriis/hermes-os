@@ -14,6 +14,9 @@ enum DistributionArtifactKindV1 {
   // signed release-relative `browser/assets/` path; Gateway never serves a
   // directory or accepts an arbitrary URL from the client.
   DISTRIBUTION_ARTIFACT_KIND_V1_BROWSER_CLIENT_ASSET = 5;
+  // A native library required by one exact managed module. It is a separate
+  // assembly artifact and never carries a descriptor or settings schema.
+  DISTRIBUTION_ARTIFACT_KIND_V1_MODULE_RUNTIME_NATIVE_DEPENDENCY = 6;
 }
 message DistributionManifestArtifactV1 {
   DistributionArtifactKindV1 artifact_kind = 1;
@@ -28,6 +31,7 @@ message DistributionManifestArtifactV1 {
   uint64 descriptor_size_bytes = 10;
   string settings_schema_relative_path = 11;
   uint64 settings_schema_size_bytes = 12;
+  string bound_module_id = 13;
 }
 message DistributionManifestV1 {
   uint32 major = 1;

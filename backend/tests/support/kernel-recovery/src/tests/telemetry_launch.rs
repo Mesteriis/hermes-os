@@ -341,6 +341,7 @@ fn telemetry_manifest(
             descriptor_size_bytes: contracts.descriptor.len() as u64,
             settings_schema_relative_path: "contracts/telemetry-settings.pb".to_owned(),
             settings_schema_size_bytes: contracts.schema.len() as u64,
+            bound_module_id: String::new(),
         }],
     }
 }

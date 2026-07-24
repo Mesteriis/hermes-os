@@ -235,6 +235,8 @@ fn start_reserved_integration_runtime(
             event_hub_endpoint: event_topology.nats_endpoint().to_owned(),
             event_credential_revision: event_topology.credential_revision(),
             configuration_instance_id: request.configuration_instance_id.clone(),
+            runtime_artifacts: Vec::new(),
+            integration_state_root: None,
         };
         validate_managed_integration_runtime_configuration(&configuration)
             .map_err(|_| "managed integration runtime configuration is invalid".to_owned())?;

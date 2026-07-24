@@ -95,6 +95,15 @@ pub fn validate_distribution_manifest_v1(
             return Err(DistributionManifestValidationError::InvalidArtifact);
         }
         let module = artifact.artifact_kind == DistributionArtifactKindV1::ModuleRuntime as i32;
+        let native_dependency = artifact.artifact_kind
+            == DistributionArtifactKindV1::ModuleRuntimeNativeDependency as i32;
+        if native_dependency {
+            if !valid_module_id(&artifact.bound_module_id) {
+                return Err(DistributionManifestValidationError::InvalidArtifact);
+            }
+        } else if !artifact.bound_module_id.is_empty() {
+            return Err(DistributionManifestValidationError::InvalidArtifact);
+        }
         validate_module_contract_artifacts(artifact, module)?;
     }
     Ok(())
@@ -212,6 +221,14 @@ fn valid_id(value: &str) -> Result<(), DistributionManifestValidationError> {
     }
 }
 
+fn valid_module_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_IDENTIFIER_BYTES
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
+        })
+}
+
 fn valid_target(value: &str) -> bool {
     value.len() <= MAX_IDENTIFIER_BYTES
         && value.is_ascii()
@@ -225,4 +242,46 @@ fn valid_relative_path(value: &str) -> bool {
         && !value
             .split('/')
             .any(|part| part.is_empty() || part == "." || part == "..")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_distribution_manifest_v1;
+    use crate::v1::{
+        DistributionArtifactKindV1, DistributionManifestArtifactV1, DistributionManifestV1,
+    };
+
+    #[test]
+    fn native_dependency_requires_one_exact_bound_module() {
+        let mut manifest = DistributionManifestV1 {
+            major: 1,
+            revision: 1,
+            distribution_id: "hermes-desktop".to_owned(),
+            release_version: "1.0.0".to_owned(),
+            build_id: "build-1".to_owned(),
+            target_triple: "aarch64-apple-darwin".to_owned(),
+            generation: 1,
+            artifacts: vec![DistributionManifestArtifactV1 {
+                artifact_kind: DistributionArtifactKindV1::ModuleRuntimeNativeDependency as i32,
+                artifact_id: "telegram.tdjson.v1".to_owned(),
+                relative_path: "lib/libtdjson.dylib".to_owned(),
+                size_bytes: 1,
+                sha256: vec![7; 32],
+                required: true,
+                bound_module_id: "hermes-telegram-runtime".to_owned(),
+                ..Default::default()
+            }],
+        };
+        assert_eq!(validate_distribution_manifest_v1(&manifest), Ok(()));
+
+        manifest.artifacts[0].bound_module_id.clear();
+        assert!(validate_distribution_manifest_v1(&manifest).is_err());
+
+        manifest.artifacts[0].bound_module_id = "Hermes Telegram".to_owned();
+        assert!(validate_distribution_manifest_v1(&manifest).is_err());
+
+        manifest.artifacts[0].artifact_kind = DistributionArtifactKindV1::BrowserClientAsset as i32;
+        manifest.artifacts[0].bound_module_id = "hermes-telegram-runtime".to_owned();
+        assert!(validate_distribution_manifest_v1(&manifest).is_err());
+    }
 }
