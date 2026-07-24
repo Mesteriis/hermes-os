@@ -418,6 +418,33 @@ mod tests {
     }
 
     #[test]
+    fn evidence_event_declares_gmail_provenance_in_the_public_schema() {
+        let context = CanonicalEventContextV1 {
+            runtime_instance_id: "communications-runtime-test".to_owned(),
+            runtime_generation: 3,
+            recorded_at_unix_seconds: 1_700_000_002,
+            recorded_at_nanos: 3,
+        };
+        let mut summary = evidence_summary();
+        summary.provider = CommunicationProviderProvenanceV1::MailGmail;
+
+        let record = build_evidence_recorded_outbox_v1(&summary, [7; 16], &context)
+            .expect("canonical Gmail evidence event");
+        let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");
+        let payload = hermes_communications_api::wire::CommunicationEvidenceRecordedV1::decode(
+            envelope.payload.as_slice(),
+        )
+        .expect("canonical evidence payload");
+
+        assert_eq!(
+            hermes_communications_api::wire::CommunicationProviderProvenanceV1::try_from(
+                payload.provider,
+            ),
+            Ok(hermes_communications_api::wire::CommunicationProviderProvenanceV1::MailGmail,),
+        );
+    }
+
+    #[test]
     fn attachment_safety_event_is_schema_bound_and_anchor_partitioned() {
         let decision = AttachmentSafetyTransitionDecisionV1 {
             attachment_anchor_id: CommunicationAttachmentAnchorIdV1::new([7; 16]),
