@@ -10,7 +10,7 @@ import {
   removeTelegramBusinessReaction,
   searchTelegramBusinessTopics,
   sendTelegramBusinessMessage,
-} from './telegramBusinessApi'
+} from './telegramBusiness'
 
 describe('telegram business API', () => {
   beforeEach(() => {

@@ -1,11 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import {
-  addTelegramBusinessReaction,
   closeTelegramBusinessTopic,
   createTelegramBusinessTopic,
-  deleteTelegramBusinessMessage,
-  editTelegramBusinessMessage,
   fetchTelegramBusinessChatDetail,
   fetchTelegramBusinessChatFolders,
   fetchTelegramBusinessChatMembers,
@@ -20,22 +17,15 @@ import {
   fetchTelegramBusinessReplyChain,
   fetchTelegramBusinessTopicMessages,
   fetchTelegramBusinessTopics,
-  forwardTelegramBusinessMessage,
-  markTelegramBusinessMessageRead,
-  pinTelegramBusinessMessage,
   previewTelegramBusinessAttachment,
-  removeTelegramBusinessReaction,
-  replyToTelegramBusinessMessage,
-  restoreTelegramBusinessMessageVisibility,
   searchTelegramBusinessChats,
   searchTelegramBusinessMedia,
   searchTelegramBusinessMessages,
   searchTelegramBusinessTopics,
-  sendTelegramBusinessMessage,
   updateTelegramBusinessChatHistoryPolicy,
   updateTelegramBusinessChatReadReceiptPolicy,
   updateTelegramBusinessChatUnreadCounterPolicy,
-} from '../api/telegramBusinessApi'
+} from '../api/telegramBusiness'
 import type {
   TelegramChat,
   TelegramChatDetailResponse,
@@ -45,7 +35,6 @@ import type {
   TelegramChatMemberListResponse,
   TelegramChatSearchResponse,
   TelegramForwardChainResponse,
-  TelegramLifecycleResponse,
   TelegramMediaSearchResponse,
   TelegramMessage,
   TelegramMessageListResponse,
@@ -54,28 +43,16 @@ import type {
   TelegramMessageTombstoneListResponse,
   TelegramMessageVersionListResponse,
   TelegramReactionListResponse,
-  TelegramReactionRequest,
-  TelegramReactionResponse,
   TelegramReplyChainResponse,
   TelegramTopicListResponse,
 } from '../../../shared/communications/types/telegram'
 import type { TelegramRawMessageResponse } from '../../../shared/communications/types/telegramRawEvidence'
-import type { AttachmentPreviewResponse } from '../types/attachments'
-import type {
-  CommunicationProviderMessageCommandResponse,
-  MessagePinToggleResponse,
-} from '../types/communications'
-import type { TelegramTopicCloseRequest, TelegramTopicCreateRequest, TelegramTopicLifecycleResponse } from '../../../shared/communications/types/telegramTopics'
+import type { TelegramBusinessAttachmentPreviewResponse } from '../types/business'
+import { telegramBusinessQueryKeys } from './telegramBusinessQueryKeys'
 
-export const telegramBusinessQueryKeys = {
-  chats: ['communications', 'telegram', 'chats'] as const,
-  chatDetail: ['communications', 'telegram', 'chat-detail'] as const,
-  chatMembers: ['communications', 'telegram', 'chat-members'] as const,
-  messages: ['communications', 'telegram', 'messages'] as const,
-  topics: ['communications', 'telegram', 'topics'] as const,
-  topicMessages: ['communications', 'telegram', 'topic-messages'] as const,
-  search: ['communications', 'telegram', 'search'] as const,
-}
+export { telegramBusinessQueryKeys } from './telegramBusinessQueryKeys'
+export * from './useTelegramBusinessMutations'
+import type { TelegramTopicCloseRequest, TelegramTopicCreateRequest, TelegramTopicLifecycleResponse } from '../../../shared/communications/types/telegramTopics'
 
 // SSE is the primary realtime path. Polling keeps the list current while a
 // local runtime reconnects or the browser briefly loses its event stream.
@@ -543,7 +520,7 @@ export function useTelegramAttachmentPreviewQuery(
   attachmentId: MaybeRefOrGetter<string | null | undefined>,
   enabled: MaybeRefOrGetter<boolean> = true
 ) {
-  return useQuery<AttachmentPreviewResponse>({
+  return useQuery<TelegramBusinessAttachmentPreviewResponse>({
     queryKey: computed(() => [
       'communications',
       'messages',
@@ -552,112 +529,6 @@ export function useTelegramAttachmentPreviewQuery(
     ]),
     queryFn: () => previewTelegramBusinessAttachment(toValue(attachmentId) as string),
     enabled: computed(() => Boolean(toValue(attachmentId)) && Boolean(toValue(enabled))),
-  })
-}
-
-function useInvalidateTelegramBusinessState() {
-  const queryClient = useQueryClient()
-  return () => {
-    queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.messages })
-    queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.chats })
-    queryClient.invalidateQueries({ queryKey: ['communications', 'messages'] })
-  }
-}
-
-export function useSendTelegramMessageMutation() {
-  const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<CommunicationProviderMessageCommandResponse, Error, { account_id: string; provider_chat_id: string; text: string }>({
-    mutationFn: (request: { account_id: string; provider_chat_id: string; text: string }) =>
-      sendTelegramBusinessMessage(request),
-    onSuccess: invalidate,
-  })
-}
-
-export function useReplyTelegramMessageMutation() {
-  const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<CommunicationProviderMessageCommandResponse, Error, {
-    message_id: string
-    account_id?: string
-    provider_chat_id?: string
-    reply_to_provider_message_id?: string
-    text: string
-  }>({
-    mutationFn: (request) => replyToTelegramBusinessMessage({ message_id: request.message_id, text: request.text }),
-    onSuccess: invalidate,
-  })
-}
-
-export function useForwardTelegramMessageMutation() {
-  const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<CommunicationProviderMessageCommandResponse, Error, {
-      message_id: string
-      account_id?: string
-      provider_chat_id: string
-      from_provider_chat_id?: string
-      from_provider_message_id?: string
-    }>({
-    mutationFn: (request) =>
-      forwardTelegramBusinessMessage({
-        message_id: request.message_id,
-        provider_chat_id: request.provider_chat_id,
-      }),
-    onSuccess: invalidate,
-  })
-}
-
-export function useEditTelegramMessageMutation() {
-  const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<TelegramLifecycleResponse, Error, Parameters<typeof editTelegramBusinessMessage>[0]>({
-    mutationFn: editTelegramBusinessMessage,
-    onSuccess: invalidate,
-  })
-}
-
-export function useDeleteTelegramMessageMutation() {
-  const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<TelegramLifecycleResponse, Error, Parameters<typeof deleteTelegramBusinessMessage>[0]>({
-    mutationFn: deleteTelegramBusinessMessage,
-    onSuccess: invalidate,
-  })
-}
-
-export function useRestoreTelegramMessageMutation() {
-  const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<TelegramLifecycleResponse, Error, Parameters<typeof restoreTelegramBusinessMessageVisibility>[0]>({
-    mutationFn: restoreTelegramBusinessMessageVisibility,
-    onSuccess: invalidate,
-  })
-}
-
-export function usePinTelegramMessageMutation() {
-  const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<MessagePinToggleResponse, Error, { message_id: string }>({
-    mutationFn: pinTelegramBusinessMessage,
-    onSuccess: invalidate,
-  })
-}
-
-export function useMarkReadTelegramMessageMutation() {
-  const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation({
-    mutationFn: markTelegramBusinessMessageRead,
-    onSuccess: invalidate,
-  })
-}
-
-export function useAddTelegramReactionMutation() {
-  const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<TelegramReactionResponse, Error, { messageId: string; request: TelegramReactionRequest }>({
-    mutationFn: ({ messageId, request }) => addTelegramBusinessReaction(messageId, request),
-    onSuccess: invalidate,
-  })
-}
-
-export function useRemoveTelegramReactionMutation() {
-  const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<TelegramReactionResponse, Error, { messageId: string; request: TelegramReactionRequest }>({
-    mutationFn: ({ messageId, request }) => removeTelegramBusinessReaction(messageId, request),
-    onSuccess: invalidate,
   })
 }
 

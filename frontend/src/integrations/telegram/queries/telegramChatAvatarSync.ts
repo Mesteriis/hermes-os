@@ -4,7 +4,7 @@ import { isRecord } from '@/shared/communications/queries/realtimePatchShared'
 import {
   fetchTelegramBusinessChatAvatar,
   syncTelegramBusinessChatAvatar,
-} from '../api/telegramBusinessApi'
+} from '../api/telegramBusiness'
 
 const AVATAR_SYNC_CONCURRENCY = 3
 

@@ -30,7 +30,7 @@ import {
   useUpdateTelegramChatHistoryPolicyMutation,
   useUpdateTelegramChatReadReceiptPolicyMutation,
   useUpdateTelegramChatUnreadCounterPolicyMutation,
-} from './telegramBusinessQueries'
+} from '../../../integrations/telegram/queries/useTelegramBusinessQuery'
 
 export function useTelegramConversationInspectorController(
   telegramChat: Ref<TelegramChat>,

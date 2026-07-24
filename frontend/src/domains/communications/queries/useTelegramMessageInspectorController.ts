@@ -30,7 +30,7 @@ import {
   useTelegramMessageVersionsQuery,
   useTelegramRawMessageEvidenceQuery,
   useTelegramReplyChainQuery,
-} from './telegramBusinessQueries'
+} from '../../../integrations/telegram/queries/useTelegramBusinessQuery'
 
 export function useTelegramMessageInspectorController(telegramMessage: Ref<TelegramMessage>) {
   const editText = ref(telegramMessage.value.text)

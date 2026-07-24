@@ -33,13 +33,13 @@ import type {
   TelegramTopicCloseRequest,
   TelegramTopicLifecycleResponse,
 } from '../../../shared/communications/types/telegramTopics'
-import type { AttachmentPreviewResponse } from '../types/attachments'
 import type {
-  CommunicationProviderMessageCommandResponse,
-  CommunicationMessageSummary,
-  CommunicationMessagesResponse,
-  MessagePinToggleResponse,
-} from '../types/communications'
+  TelegramBusinessAttachmentPreviewResponse,
+  TelegramBusinessMessageCommandResponse,
+  TelegramBusinessMessagePinResponse,
+  TelegramBusinessMessageSummary,
+  TelegramBusinessMessagesResponse,
+} from '../types/business'
 
 export async function fetchTelegramBusinessChats(accountId?: string, limit = 50): Promise<TelegramChatListResponse> {
   const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
@@ -144,7 +144,7 @@ export async function fetchTelegramBusinessMessages(
   if (accountId?.trim()) params.set('account_id', accountId.trim())
   if (providerChatId?.trim()) params.set('conversation_id', providerChatId.trim())
   if (cursor?.trim()) params.set('cursor', cursor.trim())
-  const response = await ApiClient.instance.get<CommunicationMessagesResponse>(
+  const response = await ApiClient.instance.get<TelegramBusinessMessagesResponse>(
     `/api/v1/communications/messages?${params.toString()}`,
     'Communication messages request failed'
   )
@@ -220,8 +220,8 @@ export async function sendTelegramBusinessMessage(request: {
   account_id: string
   provider_chat_id: string
   text: string
-}): Promise<CommunicationProviderMessageCommandResponse> {
-  return ApiClient.instance.post<CommunicationProviderMessageCommandResponse>(
+}): Promise<TelegramBusinessMessageCommandResponse> {
+  return ApiClient.instance.post<TelegramBusinessMessageCommandResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(request.provider_chat_id)}/messages`,
     { account_id: request.account_id, text: request.text },
     'Communication message send failed'
@@ -231,8 +231,8 @@ export async function sendTelegramBusinessMessage(request: {
 export async function replyToTelegramBusinessMessage(params: {
   message_id: string
   text: string
-}): Promise<CommunicationProviderMessageCommandResponse> {
-  return ApiClient.instance.post<CommunicationProviderMessageCommandResponse>(
+}): Promise<TelegramBusinessMessageCommandResponse> {
+  return ApiClient.instance.post<TelegramBusinessMessageCommandResponse>(
     `/api/v1/communications/messages/${encodeURIComponent(params.message_id)}/reply`,
     { text: params.text },
     'Communication reply failed'
@@ -242,8 +242,8 @@ export async function replyToTelegramBusinessMessage(params: {
 export async function forwardTelegramBusinessMessage(params: {
   message_id: string
   provider_chat_id: string
-}): Promise<CommunicationProviderMessageCommandResponse> {
-  return ApiClient.instance.post<CommunicationProviderMessageCommandResponse>(
+}): Promise<TelegramBusinessMessageCommandResponse> {
+  return ApiClient.instance.post<TelegramBusinessMessageCommandResponse>(
     `/api/v1/communications/messages/${encodeURIComponent(params.message_id)}/forward`,
     { conversation_id: params.provider_chat_id },
     'Communication forward failed'
@@ -299,8 +299,8 @@ export async function restoreTelegramBusinessMessageVisibility(params: {
 
 export async function pinTelegramBusinessMessage(params: {
   message_id: string
-}): Promise<MessagePinToggleResponse> {
-  return ApiClient.instance.post<MessagePinToggleResponse>(
+}): Promise<TelegramBusinessMessagePinResponse> {
+  return ApiClient.instance.post<TelegramBusinessMessagePinResponse>(
     `/api/v1/communications/messages/${encodeURIComponent(params.message_id)}/pin`,
     {},
     'Communication message pin failed'
@@ -385,8 +385,8 @@ export async function fetchTelegramBusinessRawEvidence(messageId: string): Promi
   )
 }
 
-export async function previewTelegramBusinessAttachment(attachmentId: string): Promise<AttachmentPreviewResponse> {
-  return ApiClient.instance.get<AttachmentPreviewResponse>(
+export async function previewTelegramBusinessAttachment(attachmentId: string): Promise<TelegramBusinessAttachmentPreviewResponse> {
+  return ApiClient.instance.get<TelegramBusinessAttachmentPreviewResponse>(
     `/api/v1/communications/attachments/${encodeURIComponent(attachmentId)}/preview`,
     'Communication attachment preview failed'
   )
@@ -444,7 +444,7 @@ export async function closeTelegramBusinessTopic(
   )
 }
 
-function communicationMessageToTelegramMessage(message: CommunicationMessageSummary): TelegramMessage {
+function communicationMessageToTelegramMessage(message: TelegramBusinessMessageSummary): TelegramMessage {
   return {
     message_id: message.message_id,
     raw_record_id: message.raw_record_id,
