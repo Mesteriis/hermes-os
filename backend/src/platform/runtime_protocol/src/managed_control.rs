@@ -11,8 +11,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use prost::Message;
 
 use crate::v1::{
-    ManagedRuntimeControlFrameV2, ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
+    DescribeManagedRuntimeRequestV1, DescribeManagedRuntimeResponseV1,
+    ManagedRuntimeControlAckV1, ManagedRuntimeControlFrameV2, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
     managed_runtime_control_frame_v2::Frame,
+    managed_runtime_control_request_v1::Operation,
+    managed_runtime_control_response_v1::Result as ControlResult,
 };
 use crate::validation::managed_control::{
     MANAGED_CONTROL_CORRELATION_ID_BYTES, MANAGED_CONTROL_TRANSPORT_MAJOR_V2,
@@ -61,6 +65,53 @@ impl<S> ManagedControlChannelV2<S> {
 }
 
 impl<S: Read + Write> ManagedControlChannelV2<S> {
+    pub fn describe_managed_runtime(
+        &mut self,
+        descriptor_bytes: Vec<u8>,
+        settings_schema_bytes: Vec<u8>,
+    ) -> Result<DescribeManagedRuntimeResponseV1, ManagedControlTransportErrorV2> {
+        let response = self.request_next(
+            ManagedRuntimeControlRequestV1 {
+                operation: Some(Operation::Describe(DescribeManagedRuntimeRequestV1 {
+                    descriptor_bytes,
+                    settings_schema_bytes,
+                })),
+            },
+            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+        )?;
+        match response.result {
+            Some(ControlResult::Describe(identity))
+                if response.error_code.is_empty()
+                    && !identity.registration_id.is_empty()
+                    && identity.runtime_generation != 0
+                    && identity.grant_epoch != 0 =>
+            {
+                Ok(identity)
+            }
+            _ => Err(ManagedControlTransportErrorV2::InvalidFrame),
+        }
+    }
+
+    pub fn signal_ready(
+        &mut self,
+        ready: ManagedRuntimeReadyRequestV1,
+    ) -> Result<(), ManagedControlTransportErrorV2> {
+        let response = self.request_next(
+            ManagedRuntimeControlRequestV1 {
+                operation: Some(Operation::Ready(ready)),
+            },
+            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+        )?;
+        match response.result {
+            Some(ControlResult::Ack(ManagedRuntimeControlAckV1 {}))
+                if response.error_code.is_empty() =>
+            {
+                Ok(())
+            }
+            _ => Err(ManagedControlTransportErrorV2::InvalidFrame),
+        }
+    }
+
     pub fn request_next<F>(
         &mut self,
         request: ManagedRuntimeControlRequestV1,
@@ -358,5 +409,53 @@ mod tests {
         assert_ne!(first, second);
         assert!(first.iter().any(|byte| *byte != 0));
         assert!(second.iter().any(|byte| *byte != 0));
+    }
+
+    #[test]
+    fn completes_descriptor_and_ready_handshake_with_typed_responses() {
+        let (client, server) = UnixStream::pair().expect("control pair");
+        let server = thread::spawn(move || {
+            let mut channel = ManagedControlChannelV2::new(server);
+            let (describe_id, describe) = channel.receive_request().expect("describe request");
+            assert!(matches!(describe.operation, Some(Operation::Describe(_))));
+            channel
+                .write_response(
+                    describe_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::Describe(DescribeManagedRuntimeResponseV1 {
+                            registration_id: "communications".to_owned(),
+                            runtime_generation: 1,
+                            grant_epoch: 1,
+                        })),
+                        error_code: String::new(),
+                    },
+                )
+                .expect("describe response");
+            let (ready_id, ready) = channel.receive_request().expect("ready request");
+            assert!(matches!(ready.operation, Some(Operation::Ready(_))));
+            channel
+                .write_response(
+                    ready_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::Ack(ManagedRuntimeControlAckV1 {})),
+                        error_code: String::new(),
+                    },
+                )
+                .expect("ready response");
+        });
+
+        let mut channel = ManagedControlChannelV2::new(client);
+        let identity = channel
+            .describe_managed_runtime(vec![1], vec![])
+            .expect("descriptor identity");
+        assert_eq!(identity.registration_id, "communications");
+        channel
+            .signal_ready(ManagedRuntimeReadyRequestV1 {
+                registration_id: identity.registration_id,
+                runtime_generation: identity.runtime_generation,
+                grant_epoch: identity.grant_epoch,
+            })
+            .expect("ready acknowledgement");
+        server.join().expect("server join");
     }
 }
