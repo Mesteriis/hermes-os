@@ -252,6 +252,14 @@ mod tests {
 
         assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
         assert_eq!(
+            descriptor.runtime_protocol_range,
+            Some(ProtocolRangeV1 {
+                minimum_major: 2,
+                maximum_major: 2,
+                minimum_revision: 1,
+            })
+        );
+        assert_eq!(
             descriptor
                 .capabilities
                 .iter()
