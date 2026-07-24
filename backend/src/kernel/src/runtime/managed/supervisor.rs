@@ -16,6 +16,14 @@ use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 use std::time::{Duration, Instant};
 
+use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
+use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
+use hermes_runtime_protocol::v1::{
+    ManagedRuntimeControlAckV1, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeControlResponseV1,
+    managed_runtime_control_response_v1::Result as ControlResult,
+};
+
 pub fn run(
     staged_executable: &StagedNativeArtifact,
     arguments: &[String],
@@ -158,6 +166,45 @@ fn wait_until_shutdown_with_relay(
             }
         }
     }
+}
+
+fn dispatch_v2_typed_request(
+    channel: &mut ManagedControlChannelV2<std::os::unix::net::UnixStream>,
+    correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+    request: ManagedRuntimeControlRequestV1,
+    input: &ManagedChildRunInput<'_>,
+) -> Result<(), String> {
+    let request = managed_runtime_control::inbound::decode_typed_request(request)?;
+    let response = match request {
+        managed_runtime_control::inbound::ManagedRuntimeInboundRequestV1::Ready(ready) => {
+            if !input.expectation.matches_ready(&ready) {
+                let _ = input
+                    .ready_sender
+                    .try_send(Err("managed runtime ready signal is stale".to_owned()));
+                return Err("managed runtime ready signal is stale".to_owned());
+            }
+            input
+                .ready_state
+                .store(true, std::sync::atomic::Ordering::Release);
+            let _ = input.ready_sender.try_send(Ok(()));
+            ManagedRuntimeControlResponseV1 {
+                result: Some(ControlResult::Ack(ManagedRuntimeControlAckV1 {})),
+                error_code: String::new(),
+            }
+        }
+        request => managed_runtime_control::dispatch_typed_request(
+            request,
+            input.expectation,
+            input.vault_route_handler,
+            input.event_credential_handler,
+            input.provider_credential_handler,
+            input.owner_derived_key_handler,
+            input.blob_session_handler,
+        )?,
+    };
+    channel
+        .write_response(correlation_id, response)
+        .map_err(|_| "managed runtime correlated control response is invalid".to_owned())
 }
 
 fn process_typed_requests(
