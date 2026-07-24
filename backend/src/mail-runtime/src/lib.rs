@@ -1,5 +1,6 @@
 //! Typed Mail managed-runtime admission contract.
 
+pub mod attachment_anchor_mapping;
 pub mod client_port;
 pub mod communications_outbox;
 pub mod managed;

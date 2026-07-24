@@ -6,6 +6,7 @@ use hermes_runtime_protocol::v1::{
 };
 
 use crate::{
+    COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256,
     COMMUNICATION_ATTACHMENT_BLOB_ADMISSION_OBSERVATION_SCHEMA_SHA256,
     COMMUNICATION_ATTACHMENT_SAFETY_VERDICT_OBSERVATION_SCHEMA_SHA256,
     COMMUNICATION_OBSERVATION_SCHEMA_SHA256,
@@ -20,6 +21,8 @@ pub const COMMUNICATION_ATTACHMENT_BLOB_ADMISSION_OBSERVED_CONTRACT_NAME: &str =
     "communication_attachment_blob_admission_observed";
 pub const COMMUNICATION_ATTACHMENT_SAFETY_VERDICT_OBSERVED_CONTRACT_NAME: &str =
     "communication_attachment_safety_verdict_observed";
+pub const COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_CONTRACT_NAME: &str =
+    "communication_attachment_anchor_recorded";
 
 #[must_use]
 pub fn communication_observed_contract_reference_v1() -> ContractReferenceV1 {
@@ -53,6 +56,17 @@ pub fn communication_attachment_safety_verdict_observed_contract_reference_v1()
         major: COMMUNICATION_OBSERVED_CONTRACT_MAJOR,
         revision: COMMUNICATION_OBSERVED_CONTRACT_REVISION,
         schema_sha256: COMMUNICATION_ATTACHMENT_SAFETY_VERDICT_OBSERVATION_SCHEMA_SHA256.to_vec(),
+    }
+}
+
+#[must_use]
+pub fn communication_attachment_anchor_recorded_contract_reference_v1() -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: COMMUNICATION_OBSERVED_CONTRACT_OWNER.to_owned(),
+        name: COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_CONTRACT_NAME.to_owned(),
+        major: COMMUNICATION_OBSERVED_CONTRACT_MAJOR,
+        revision: COMMUNICATION_OBSERVED_CONTRACT_REVISION,
+        schema_sha256: COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256.to_vec(),
     }
 }
 
@@ -95,10 +109,12 @@ mod tests {
     fn attachment_observations_are_distinct_schema_bound_contracts() {
         let blob = communication_attachment_blob_admission_observed_contract_reference_v1();
         let safety = communication_attachment_safety_verdict_observed_contract_reference_v1();
+        let anchor = communication_attachment_anchor_recorded_contract_reference_v1();
 
         assert_eq!(blob.owner, COMMUNICATION_OBSERVED_CONTRACT_OWNER);
         assert_eq!(safety.owner, COMMUNICATION_OBSERVED_CONTRACT_OWNER);
         assert_ne!(blob.name, safety.name);
+        assert_ne!(anchor.name, safety.name);
         assert_eq!(
             blob.schema_sha256,
             COMMUNICATION_ATTACHMENT_BLOB_ADMISSION_OBSERVATION_SCHEMA_SHA256,
@@ -106,6 +122,10 @@ mod tests {
         assert_eq!(
             safety.schema_sha256,
             COMMUNICATION_ATTACHMENT_SAFETY_VERDICT_OBSERVATION_SCHEMA_SHA256,
+        );
+        assert_eq!(
+            anchor.schema_sha256,
+            COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256,
         );
     }
 }

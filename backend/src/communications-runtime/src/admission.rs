@@ -4,9 +4,9 @@ use hermes_communications_api::{
     COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
     COMMUNICATIONS_QUERY_SCHEMA_SHA256,
 };
-use hermes_communications_ingress::COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256;
 use hermes_communications_ingress::admission::{
     COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+    communication_attachment_anchor_recorded_contract_reference_v1,
     communication_attachment_blob_admission_observed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
     communication_observed_contract_reference_v1,
@@ -295,17 +295,6 @@ pub fn communication_attachment_safety_state_changed_contract_reference_v1() -> 
         major: 1,
         revision: 1,
         schema_sha256: COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256.to_vec(),
-    }
-}
-
-#[must_use]
-pub fn communication_attachment_anchor_recorded_contract_reference_v1() -> ContractReferenceV1 {
-    ContractReferenceV1 {
-        owner: COMMUNICATIONS_OWNER_ID.to_owned(),
-        name: "communication_attachment_anchor_recorded".to_owned(),
-        major: 1,
-        revision: 1,
-        schema_sha256: COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256.to_vec(),
     }
 }
 

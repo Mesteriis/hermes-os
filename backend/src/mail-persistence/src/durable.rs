@@ -18,6 +18,22 @@ CREATE TABLE IF NOT EXISTS mail_communications_outbox (
 CREATE INDEX IF NOT EXISTS mail_communications_outbox_pending_idx
     ON mail_communications_outbox (created_at_unix_seconds, message_id)
     WHERE published_at_unix_seconds IS NULL;
+CREATE TABLE IF NOT EXISTS mail_communications_event_inbox (
+    message_id BYTEA PRIMARY KEY,
+    envelope_sha256 BYTEA NOT NULL,
+    consumed_at_unix_seconds BIGINT NOT NULL,
+    CHECK (octet_length(message_id) = 16),
+    CHECK (octet_length(envelope_sha256) = 32)
+);
+CREATE TABLE IF NOT EXISTS mail_attachment_anchor_mappings (
+    source_observation_id BYTEA PRIMARY KEY,
+    attachment_anchor_id BYTEA NOT NULL UNIQUE,
+    media_cursor_sha256 BYTEA NOT NULL,
+    observed_at_unix_seconds BIGINT NOT NULL,
+    CHECK (octet_length(source_observation_id) = 16),
+    CHECK (octet_length(attachment_anchor_id) = 16),
+    CHECK (octet_length(media_cursor_sha256) = 32)
+);
 CREATE TABLE IF NOT EXISTS mail_delivery_attempts (
     operation_id TEXT PRIMARY KEY,
     connection_id TEXT NOT NULL,
@@ -81,6 +97,9 @@ pub struct MailDurablePersistence {
 pub enum MailDurablePersistenceError {
     Database,
     InvalidRow,
+    MissingSourceObservation,
+    ConflictingAnchorMapping,
+    ConflictingEventInbox,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -89,6 +108,12 @@ pub struct GmailOAuthCredentialBindingV1 {
     pub access_token_revision: u64,
     pub refresh_credential_record_id: [u8; 16],
     pub refresh_credential_revision: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailAttachmentAnchorMappingOutcomeV1 {
+    Applied,
+    AlreadyApplied,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -156,6 +181,110 @@ impl MailDurablePersistence {
             .await
             .map(|_| ())
             .map_err(|_| MailDurablePersistenceError::Database)
+    }
+
+    pub async fn communications_outbox_record(
+        &self,
+        message_id: [u8; 16],
+    ) -> Result<Option<OutboxRecordV1>, MailDurablePersistenceError> {
+        sqlx::query(
+            "SELECT exact_envelope_bytes FROM mail_communications_outbox WHERE message_id = $1",
+        )
+        .bind(message_id.as_slice())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| MailDurablePersistenceError::Database)?
+        .map(|row| {
+            let bytes: Vec<u8> = row
+                .try_get("exact_envelope_bytes")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            OutboxRecordV1::accept(bytes).map_err(|_| MailDurablePersistenceError::InvalidRow)
+        })
+        .transpose()
+    }
+
+    pub async fn persist_attachment_anchor_mapping(
+        &self,
+        handoff_record: &OutboxRecordV1,
+        source_observation_id: [u8; 16],
+        attachment_anchor_id: [u8; 16],
+        media_cursor_sha256: [u8; 32],
+        observed_at_unix_seconds: i64,
+        consumed_at_unix_seconds: i64,
+    ) -> Result<MailAttachmentAnchorMappingOutcomeV1, MailDurablePersistenceError> {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        let existing = sqlx::query(
+            "SELECT envelope_sha256 FROM mail_communications_event_inbox WHERE message_id = $1",
+        )
+        .bind(handoff_record.message_id().as_slice())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| MailDurablePersistenceError::Database)?;
+        if let Some(row) = existing {
+            let digest: Vec<u8> = row
+                .try_get("envelope_sha256")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            if digest.as_slice() != handoff_record.envelope_sha256().as_slice() {
+                return Err(MailDurablePersistenceError::ConflictingEventInbox);
+            }
+            transaction
+                .commit()
+                .await
+                .map_err(|_| MailDurablePersistenceError::Database)?;
+            return Ok(MailAttachmentAnchorMappingOutcomeV1::AlreadyApplied);
+        }
+        let source_exists =
+            sqlx::query("SELECT 1 FROM mail_communications_outbox WHERE message_id = $1")
+                .bind(source_observation_id.as_slice())
+                .fetch_optional(&mut *transaction)
+                .await
+                .map_err(|_| MailDurablePersistenceError::Database)?;
+        if source_exists.is_none() {
+            return Err(MailDurablePersistenceError::MissingSourceObservation);
+        }
+        let mapping = sqlx::query("SELECT attachment_anchor_id, media_cursor_sha256 FROM mail_attachment_anchor_mappings WHERE source_observation_id = $1")
+            .bind(source_observation_id.as_slice())
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        if let Some(row) = mapping {
+            let anchor: Vec<u8> = row
+                .try_get("attachment_anchor_id")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            let cursor: Vec<u8> = row
+                .try_get("media_cursor_sha256")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            if anchor.as_slice() != attachment_anchor_id.as_slice()
+                || cursor.as_slice() != media_cursor_sha256.as_slice()
+            {
+                return Err(MailDurablePersistenceError::ConflictingAnchorMapping);
+            }
+        } else {
+            sqlx::query("INSERT INTO mail_attachment_anchor_mappings (source_observation_id, attachment_anchor_id, media_cursor_sha256, observed_at_unix_seconds) VALUES ($1, $2, $3, $4)")
+                .bind(source_observation_id.as_slice())
+                .bind(attachment_anchor_id.as_slice())
+                .bind(media_cursor_sha256.as_slice())
+                .bind(observed_at_unix_seconds)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| MailDurablePersistenceError::Database)?;
+        }
+        sqlx::query("INSERT INTO mail_communications_event_inbox (message_id, envelope_sha256, consumed_at_unix_seconds) VALUES ($1, $2, $3)")
+            .bind(handoff_record.message_id().as_slice())
+            .bind(handoff_record.envelope_sha256().as_slice())
+            .bind(consumed_at_unix_seconds)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        Ok(MailAttachmentAnchorMappingOutcomeV1::Applied)
     }
 
     pub async fn gmail_sync_progress(

@@ -9,7 +9,7 @@ use hermes_communications_api::{
     wire::CommunicationEvidenceRecordedV1,
 };
 use hermes_communications_ingress::{
-    COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256,
+    admission::communication_attachment_anchor_recorded_contract_reference_v1,
     attachment_anchor_v1::AttachmentAnchorRecordedV1,
 };
 use hermes_events_protocol::{
@@ -226,13 +226,9 @@ pub fn build_attachment_anchor_recorded_outbox_v1(
         envelope_major: 1,
         envelope_revision: 1,
         message_id: message_id.to_vec(),
-        contract: Some(ContractRefV1 {
-            owner: "communications".to_owned(),
-            name: "communication_attachment_anchor_recorded".to_owned(),
-            major: 1,
-            revision: 1,
-            schema_sha256: COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256.to_vec(),
-        }),
+        contract: Some(wire_contract(
+            communication_attachment_anchor_recorded_contract_reference_v1(),
+        )),
         source: Some(SourceRefV1 {
             module_id: "communications-runtime".to_owned(),
             runtime_instance_id: runtime_source_reference(&context.runtime_instance_id).to_vec(),
@@ -282,6 +278,16 @@ fn valid_context(context: &CanonicalEventContextV1) -> bool {
         })
         && (-62_135_596_800..=253_402_300_799).contains(&context.recorded_at_unix_seconds)
         && (0..1_000_000_000).contains(&context.recorded_at_nanos)
+}
+
+fn wire_contract(reference: hermes_runtime_protocol::v1::ContractReferenceV1) -> ContractRefV1 {
+    ContractRefV1 {
+        owner: reference.owner,
+        name: reference.name,
+        major: reference.major,
+        revision: reference.revision,
+        schema_sha256: reference.schema_sha256,
+    }
 }
 
 fn identifier(domain: &[u8], evidence_id: [u8; 16]) -> [u8; 16] {
