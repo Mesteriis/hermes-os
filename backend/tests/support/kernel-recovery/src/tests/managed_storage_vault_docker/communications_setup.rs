@@ -1096,6 +1096,10 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                 anchor_event.payload.as_ref(),
             )
             .expect("attachment-anchor handoff envelope");
+            let ingress = hermes_events_protocol::validation::envelope::decode_envelope_v1(
+                record.exact_bytes(),
+            )
+            .expect("attachment ingress envelope");
             assert!(matches!(
                 envelope.contract.as_ref(),
                 Some(contract)
@@ -1105,6 +1109,7 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                         && contract.revision == 1
             ));
             assert_eq!(envelope.causation_message_id, record.message_id().to_vec());
+            assert_eq!(envelope.correlation_id, ingress.correlation_id);
             let payload = hermes_communications_ingress::attachment_anchor_v1::AttachmentAnchorRecordedV1::decode(
                 envelope.payload.as_slice(),
             )

@@ -50,6 +50,9 @@ The event is inserted into the Communications canonical outbox in the same
 transaction as the inbox record, evidence projection and attachment anchor.
 It uses the source observation envelope as causation. A duplicate observation
 does not publish another handoff event.
+It also retains the source observation correlation ID, so the handoff remains
+in the same durable process rather than introducing an anchor-specific
+correlation.
 
 An integration that opts into attachment Blob admission keeps the mapping from
 its own outbox observation ID to this anchor in its own storage. After a

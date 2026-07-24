@@ -107,6 +107,7 @@ pub async fn consume_communication_observation_durable_v1(
                 anchor,
                 summary.observation_id.bytes(),
                 causation_message_id,
+                summary.correlation_id.bytes(),
                 canonical_event_context,
             )
         })

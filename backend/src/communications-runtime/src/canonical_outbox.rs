@@ -203,6 +203,7 @@ pub fn build_attachment_anchor_recorded_outbox_v1(
     anchor: &CanonicalAttachmentAnchorProjectionV1,
     source_observation_id: [u8; 16],
     causation_message_id: [u8; 16],
+    correlation_id: [u8; 16],
     context: &CanonicalEventContextV1,
 ) -> Result<OutboxRecordV1, CanonicalOutboxBuildErrorV1> {
     if !valid_context(context) {
@@ -235,11 +236,7 @@ pub fn build_attachment_anchor_recorded_outbox_v1(
         recorded_at: Some(recorded_at),
         partition_key: anchor.attachment_anchor_id.bytes().to_vec(),
         causation_message_id: causation_message_id.to_vec(),
-        correlation_id: identifier(
-            b"hermes.communications.attachment-anchor-correlation.v1\0",
-            anchor.attachment_anchor_id.bytes(),
-        )
-        .to_vec(),
+        correlation_id: correlation_id.to_vec(),
         actor: Some(ActorRefV1 {
             kind: ActorKindV1::Module as i32,
             actor_id: b"communications-runtime".to_vec(),
@@ -476,17 +473,20 @@ mod tests {
             recorded_at_unix_seconds: 1_700_000_001,
             recorded_at_nanos: 0,
         };
-        let record =
-            build_attachment_anchor_recorded_outbox_v1(&anchor, [4; 16], [5; 16], &context)
-                .expect("canonical anchor handoff");
+        let record = build_attachment_anchor_recorded_outbox_v1(
+            &anchor, [4; 16], [5; 16], [6; 16], &context,
+        )
+        .expect("canonical anchor handoff");
         let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");
         let payload = hermes_communications_ingress::attachment_anchor_v1::AttachmentAnchorRecordedV1::decode(envelope.payload.as_slice()).expect("payload");
 
         assert_eq!(
-            envelope.contract.expect("contract").name,
+            envelope.contract.as_ref().expect("contract").name,
             "communication_attachment_anchor_recorded"
         );
         assert_eq!(payload.source_observation_id, [4; 16]);
         assert_eq!(payload.media_cursor_sha256, [9; 32]);
+        assert_eq!(envelope.causation_message_id, [5; 16]);
+        assert_eq!(envelope.correlation_id, [6; 16]);
     }
 }
