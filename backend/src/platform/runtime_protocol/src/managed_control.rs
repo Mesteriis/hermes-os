@@ -13,7 +13,7 @@ use prost::Message;
 use crate::v1::{
     DescribeManagedRuntimeRequestV1, DescribeManagedRuntimeResponseV1, ManagedRuntimeControlAckV1,
     ManagedRuntimeControlFrameV2, ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
-    ManagedRuntimeReadyRequestV1, managed_runtime_control_frame_v2::Frame,
+    ManagedRuntimeReadyRequestV1, ModuleDescriptorV1, managed_runtime_control_frame_v2::Frame,
     managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
@@ -26,8 +26,37 @@ pub const MAX_MANAGED_CONTROL_FRAME_BYTES_V2: usize = 512 * 1024;
 pub const MAX_MANAGED_CONTROL_PENDING_REQUESTS_V2: usize = 64;
 static NEXT_CORRELATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ManagedControlTransportMajorV1 {
+    LegacyV1,
+    CorrelatedV2,
+}
+
+/// Selects one control transport major from the signed module descriptor.
+///
+/// The inherited FD never negotiates its version: Kernel chooses exactly one
+/// declared major before spawn, then both endpoints use only that framing for
+/// the lifetime of the managed session.
+pub fn select_managed_control_transport(
+    descriptor: &ModuleDescriptorV1,
+) -> Result<ManagedControlTransportMajorV1, ManagedControlTransportErrorV2> {
+    let range = descriptor
+        .runtime_protocol_range
+        .as_ref()
+        .ok_or(ManagedControlTransportErrorV2::InvalidTransportSelection)?;
+    if range.minimum_major != range.maximum_major || range.minimum_revision != 1 {
+        return Err(ManagedControlTransportErrorV2::InvalidTransportSelection);
+    }
+    match range.minimum_major {
+        1 => Ok(ManagedControlTransportMajorV1::LegacyV1),
+        2 => Ok(ManagedControlTransportMajorV1::CorrelatedV2),
+        _ => Err(ManagedControlTransportErrorV2::InvalidTransportSelection),
+    }
+}
+
 #[derive(Debug)]
 pub enum ManagedControlTransportErrorV2 {
+    InvalidTransportSelection,
     InvalidCorrelationId,
     InvalidFrame,
     FrameTooLarge,
@@ -389,7 +418,7 @@ mod tests {
 
     use super::*;
     use crate::v1::{
-        ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
+        ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1, ProtocolRangeV1,
         managed_runtime_control_request_v1::Operation,
     };
 
@@ -397,6 +426,30 @@ mod tests {
         ManagedRuntimeControlRequestV1 {
             operation: Some(Operation::Ready(Default::default())),
         }
+    }
+
+    #[test]
+    fn selects_only_an_exact_signed_control_transport_major() {
+        let mut descriptor = ModuleDescriptorV1::default();
+        descriptor.runtime_protocol_range = Some(ProtocolRangeV1 {
+            minimum_major: 2,
+            maximum_major: 2,
+            minimum_revision: 1,
+        });
+        assert!(matches!(
+            select_managed_control_transport(&descriptor),
+            Ok(ManagedControlTransportMajorV1::CorrelatedV2)
+        ));
+
+        descriptor.runtime_protocol_range = Some(ProtocolRangeV1 {
+            minimum_major: 1,
+            maximum_major: 2,
+            minimum_revision: 1,
+        });
+        assert!(matches!(
+            select_managed_control_transport(&descriptor),
+            Err(ManagedControlTransportErrorV2::InvalidTransportSelection)
+        ));
     }
 
     fn rejected_response() -> ManagedRuntimeControlResponseV1 {
