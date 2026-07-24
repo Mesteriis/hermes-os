@@ -467,4 +467,21 @@ mod tests {
             Ok(CommunicationBodyStateV1::Unavailable),
         );
     }
+
+    #[test]
+    fn message_evidence_history_wire_is_metadata_only() {
+        let request = super::query_wire::ListMessageEvidenceRequestV1 {
+            message_id: vec![7; 16],
+            limit: 25,
+        };
+        let decoded = super::query_wire::ListMessageEvidenceRequestV1::decode(
+            request.encode_to_vec().as_slice(),
+        )
+        .expect("message evidence request must decode");
+        assert_eq!(decoded.message_id, vec![7; 16]);
+        assert_eq!(decoded.limit, 25);
+
+        let response = super::query_wire::ListMessageEvidenceResponseV1::default();
+        assert!(response.evidence.is_empty());
+    }
 }

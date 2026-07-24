@@ -2,9 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Запланировано этим ADR. Контракт, owner-local port и
-runtime route должны быть реализованы одним срезом; legacy REST history/raw
-routes не являются переходным API.
+Состояние реализации: Реализовано: generated contract, owner-local persistence
+port и managed runtime route. Legacy REST history/raw routes не являются
+переходным API.
 
 Зависит от:
 
