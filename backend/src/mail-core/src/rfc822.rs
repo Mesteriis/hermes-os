@@ -325,9 +325,7 @@ fn attachment_metadata_from_part(
     next_part_id: &mut u16,
 ) -> Option<(AttachmentMetadataV1, Option<String>)> {
     let content_type = header_value(headers, "content-type").unwrap_or_default();
-    let Some(disposition) = header_value(headers, "content-disposition") else {
-        return None;
-    };
+    let disposition = header_value(headers, "content-disposition")?;
     let disposition = match disposition
         .split(';')
         .next()
@@ -340,25 +338,18 @@ fn attachment_metadata_from_part(
         "inline" => AttachmentDispositionV1::Inline,
         _ => return None,
     };
-    let Some(media_type) = content_type
+    let media_type = content_type
         .split(';')
         .next()
         .map(str::trim)
-        .filter(valid_media_type)
-    else {
-        return None;
-    };
+        .filter(valid_media_type)?;
     let transfer_encoding = header_value(headers, "content-transfer-encoding");
-    let Some(declared_bytes) = decoded_part_size(body, transfer_encoding.clone()) else {
-        return None;
-    };
+    let declared_bytes = decoded_part_size(body, transfer_encoding.clone())?;
     let filename = header_parameter(headers, "content-disposition", "filename")
         .or_else(|| header_parameter(headers, "content-type", "name"))
         .filter(|value| !value.is_empty() && value.len() <= 512 && value.is_ascii());
     let part_id = *next_part_id;
-    let Some(next) = next_part_id.checked_add(1) else {
-        return None;
-    };
+    let next = next_part_id.checked_add(1)?;
     *next_part_id = next;
     Some((
         AttachmentMetadataV1 {

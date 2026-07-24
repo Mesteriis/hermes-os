@@ -76,7 +76,7 @@ impl CommunicationsSearchAccessV1 {
         control_channel: &mut ManagedControlChannelV2<UnixStream>,
         dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     ) -> Result<Zeroizing<Vec<u8>>, CommunicationsSearchAccessErrorV1> {
-        let result = ensure_managed_owner_derived_key_v2(
+        ensure_managed_owner_derived_key_v2(
             control_channel,
             dispatcher,
             &self.key_context,
@@ -85,8 +85,7 @@ impl CommunicationsSearchAccessV1 {
             COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION,
             COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS,
         )
-        .map_err(|_| CommunicationsSearchAccessErrorV1::Denied);
-        result
+        .map_err(|_| CommunicationsSearchAccessErrorV1::Denied)
     }
 
     pub fn read_admitted_body(
@@ -96,7 +95,7 @@ impl CommunicationsSearchAccessV1 {
         blob: &CommunicationBodyBlobReferenceV1,
     ) -> Result<Vec<u8>, CommunicationsSearchAccessErrorV1> {
         let read_end = bounded_read_end(blob.declared_bytes)?;
-        let result = (|| {
+        (|| {
             let session = request_managed_blob_session_v2(
                 control_channel,
                 dispatcher,
@@ -115,8 +114,7 @@ impl CommunicationsSearchAccessV1 {
                     client.read_range(session.grant, session.channel_binding, 0, read_end)
                 })
                 .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)
-        })();
-        result
+        })()
     }
 }
 
