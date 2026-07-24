@@ -7,6 +7,9 @@ use hermes_communications_ingress::{
     },
     attachment_anchor_v1::AttachmentAnchorRecordedV1,
 };
+use hermes_events_jetstream::{
+    RuntimeJetStreamConnection, RuntimeSubscribePermitV1, receive_runtime_pull_delivery,
+};
 use hermes_events_protocol::{
     delivery::OutboxRecordV1,
     v1::{ContractRefV1, DurableEnvelopeV1, durable_envelope_v1::Semantics},
@@ -59,6 +62,34 @@ pub async fn map_attachment_anchor_recorded_v1(
         .map_err(MailAttachmentAnchorMappingErrorV1::Persistence)
 }
 
+pub async fn consume_next_attachment_anchor_recorded_v1(
+    durable: &MailDurablePersistence,
+    connection: &RuntimeJetStreamConnection,
+    permit: &RuntimeSubscribePermitV1,
+    consumed_at_unix_seconds: i64,
+) -> Result<MailAttachmentAnchorMappingOutcomeV1, MailAttachmentAnchorMappingErrorV1> {
+    if !exact_permit_contract(
+        permit.contract(),
+        &communication_attachment_anchor_recorded_contract_reference_v1(),
+    ) {
+        return Err(MailAttachmentAnchorMappingErrorV1::InvalidEnvelope);
+    }
+    let delivery = receive_runtime_pull_delivery(connection, permit)
+        .await
+        .map_err(|_| MailAttachmentAnchorMappingErrorV1::InvalidEnvelope)?;
+    let outcome = map_attachment_anchor_recorded_v1(
+        durable,
+        delivery.exact_bytes(),
+        consumed_at_unix_seconds,
+    )
+    .await?;
+    delivery
+        .acknowledge()
+        .await
+        .map_err(|_| MailAttachmentAnchorMappingErrorV1::InvalidEnvelope)?;
+    Ok(outcome)
+}
+
 fn decode_handoff(
     envelope: &DurableEnvelopeV1,
 ) -> Result<AttachmentAnchorRecordedV1, MailAttachmentAnchorMappingErrorV1> {
@@ -106,6 +137,19 @@ fn validate_mail_source_observation(
 }
 
 fn exact_contract(value: Option<&ContractRefV1>, expected: &ContractReferenceV1) -> bool {
+    value.is_some_and(|value| {
+        value.owner == expected.owner
+            && value.name == expected.name
+            && value.major == expected.major
+            && value.revision == expected.revision
+            && value.schema_sha256 == expected.schema_sha256
+    })
+}
+
+fn exact_permit_contract(
+    value: Option<&ContractReferenceV1>,
+    expected: &ContractReferenceV1,
+) -> bool {
     value.is_some_and(|value| {
         value.owner == expected.owner
             && value.name == expected.name

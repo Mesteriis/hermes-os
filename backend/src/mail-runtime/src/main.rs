@@ -100,6 +100,9 @@ where
         let now = i64::try_from(now.as_secs())
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
         runtime
+            .block_on(admitted.try_consume_attachment_anchor_handoff(now))
+            .map_err(|_| "Mail runtime attachment-anchor handoff failed".to_owned())?;
+        runtime
             .block_on(admitted.relay_communications_outbox(now))
             .map_err(|_| "Mail runtime outbox relay failed".to_owned())?;
         std::thread::sleep(Duration::from_secs(1));

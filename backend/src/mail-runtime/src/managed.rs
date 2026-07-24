@@ -12,7 +12,7 @@ use hermes_communications_ingress::{
 };
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
-    request_managed_runtime_event_access,
+    RuntimeSubscribePermitV1, request_managed_runtime_event_access,
 };
 use hermes_managed_vault_client::{
     ManagedProviderCredentialClientV1, ManagedProviderCredentialContextV1,
@@ -41,6 +41,9 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::MailRuntimeAdmission;
+use crate::attachment_anchor_mapping::{
+    MailAttachmentAnchorMappingErrorV1, consume_next_attachment_anchor_recorded_v1,
+};
 use crate::communications_outbox::{
     MailCommunicationsOutboxRelayError, relay_communications_outbox_once,
 };
@@ -77,6 +80,7 @@ pub struct MailAdmittedRuntime {
     smtp_password: Option<Zeroizing<Vec<u8>>>,
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
+    attachment_anchor_subscribe_permit: Option<RuntimeSubscribePermitV1>,
     account: hermes_mail_api::MailAccountConfigurationV1,
     runtime_instance_id: String,
     runtime_generation: u64,
@@ -122,6 +126,7 @@ pub enum MailBootstrapError {
     Persistence,
     Provider,
     EventHub,
+    AttachmentAnchorMapping,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -318,6 +323,16 @@ pub async fn open_admitted_runtime(
             admission.grant_epoch,
         )
         .map_err(|_| MailBootstrapError::EventHub)?;
+    let attachment_anchor_subscribe_permit = bind_attachment_anchor_subscribe_permit(
+        event_access
+            .subscribe_permits(
+                &admission.module_registration_id,
+                &admission.runtime_instance_id,
+                admission.runtime_generation,
+                admission.grant_epoch,
+            )
+            .map_err(|_| MailBootstrapError::EventHub)?,
+    )?;
     let event_connection = JetStreamClient::connect_runtime_with_jwt(
         event_hub_endpoint,
         identity,
@@ -335,6 +350,7 @@ pub async fn open_admitted_runtime(
         smtp_password,
         event_connection,
         event_publish_permit,
+        attachment_anchor_subscribe_permit,
         account: admission.account.clone(),
         runtime_instance_id: admission.runtime_instance_id.clone(),
         runtime_generation: admission.runtime_generation,
@@ -342,6 +358,30 @@ pub async fn open_admitted_runtime(
 }
 
 impl MailAdmittedRuntime {
+    pub async fn try_consume_attachment_anchor_handoff(
+        &self,
+        consumed_at_unix_seconds: i64,
+    ) -> Result<bool, MailBootstrapError> {
+        let Some(permit) = &self.attachment_anchor_subscribe_permit else {
+            return Ok(false);
+        };
+        match tokio::time::timeout(
+            Duration::from_millis(25),
+            consume_next_attachment_anchor_recorded_v1(
+                &self.durable,
+                &self.event_connection,
+                permit,
+                consumed_at_unix_seconds,
+            ),
+        )
+        .await
+        {
+            Ok(Ok(_)) => Ok(true),
+            Ok(Err(error)) => Err(map_attachment_anchor_mapping_error(error)),
+            Err(_) => Ok(false),
+        }
+    }
+
     pub async fn try_handle_client_delivery(&mut self) -> Result<bool, MailBootstrapError> {
         let Some(frame) = peek_complete_frame(&self.control_channel)? else {
             return Ok(false);
@@ -1064,6 +1104,38 @@ impl MailAdmittedRuntime {
             custody_transfer_source_proof,
         })
     }
+}
+
+fn bind_attachment_anchor_subscribe_permit(
+    permits: Vec<RuntimeSubscribePermitV1>,
+) -> Result<Option<RuntimeSubscribePermitV1>, MailBootstrapError> {
+    let expected = hermes_communications_ingress::admission::communication_attachment_anchor_recorded_contract_reference_v1();
+    let mut anchor = None;
+    for permit in permits {
+        let Some(contract) = permit.contract() else {
+            return Err(MailBootstrapError::EventHub);
+        };
+        if contract.owner == expected.owner
+            && contract.name == expected.name
+            && contract.major == expected.major
+            && contract.revision == expected.revision
+            && contract.schema_sha256 == expected.schema_sha256
+        {
+            if anchor.replace(permit).is_some() {
+                return Err(MailBootstrapError::EventHub);
+            }
+        } else {
+            return Err(MailBootstrapError::EventHub);
+        }
+    }
+    Ok(anchor)
+}
+
+fn map_attachment_anchor_mapping_error(
+    error: MailAttachmentAnchorMappingErrorV1,
+) -> MailBootstrapError {
+    let _ = error;
+    MailBootstrapError::AttachmentAnchorMapping
 }
 
 fn valid_gmail_history_id(value: Option<&str>) -> Option<&str> {

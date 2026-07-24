@@ -5,7 +5,8 @@
 Состояние реализации: Частично реализовано. Communications publisher,
 schema-bound handoff через единственный integration boundary
 `hermes-communications-ingress`, atomic outbox insert и Mail-owned durable
-mapping реализованы. Mail runtime subscriber admission и Blob-result producer
+mapping реализованы. Mail runtime subscriber реализован и требует exact Kernel
+subscription permit; его production descriptor admission и Blob-result producer
 admission ещё не реализованы. Без этого handoff
 integration не может законно адресовать canonical attachment anchor: anchor ID
 является Communications-owned derived identity, а не provider- или
