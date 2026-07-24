@@ -16,6 +16,8 @@ use hermes_runtime_protocol::v1::{
 };
 use prost::Message;
 
+use hermes_runtime_protocol::validation::vault::validate_vault_ciphertext_route_v1;
+
 use super::{MAX_FRAME_BYTES, read_frame, write_frame};
 
 const VAULT_ROUTE_FIELD_TAG: u8 = 0x2a;
@@ -24,6 +26,47 @@ const EVENT_CREDENTIAL_FIELD_TAG: u8 = 0x1a;
 const PROVIDER_CREDENTIAL_FIELD_TAG: u8 = 0x22;
 const BLOB_SESSION_FIELD_TAG: u8 = 0x32;
 const OWNER_DERIVED_KEY_FIELD_TAG: u8 = 0x3a;
+
+pub(crate) enum ManagedRuntimeInboundRequestV1 {
+    Ready(ManagedRuntimeReadyRequestV1),
+    VaultRoute(VaultCiphertextRouteV1),
+    EventCredential(ManagedRuntimeEventCredentialRequestV1),
+    ProviderCredential(ManagedRuntimeProviderCredentialRequestV1),
+    OwnerDerivedKey(ManagedRuntimeOwnerDerivedKeyRequestV1),
+    BlobSession(ManagedRuntimeBlobSessionRequestV1),
+}
+
+pub(crate) fn decode_typed_request(
+    request: ManagedRuntimeControlRequestV1,
+) -> Result<ManagedRuntimeInboundRequestV1, String> {
+    match request.operation {
+        Some(Operation::Ready(value)) => Ok(ManagedRuntimeInboundRequestV1::Ready(value)),
+        Some(Operation::RouteVaultCiphertext(value)) => {
+            let route = value
+                .route
+                .filter(|route| validate_vault_ciphertext_route_v1(route).is_ok())
+                .ok_or_else(|| "managed runtime Vault route is invalid".to_owned())?;
+            Ok(ManagedRuntimeInboundRequestV1::VaultRoute(route))
+        }
+        Some(Operation::IssueEventCredential(value)) if valid_event_credential_request(&value) => {
+            Ok(ManagedRuntimeInboundRequestV1::EventCredential(value))
+        }
+        Some(Operation::IssueProviderCredential(value))
+            if valid_provider_credential_request(&value) =>
+        {
+            Ok(ManagedRuntimeInboundRequestV1::ProviderCredential(value))
+        }
+        Some(Operation::IssueOwnerDerivedKey(value)) if valid_owner_derived_key_request(&value) => {
+            Ok(ManagedRuntimeInboundRequestV1::OwnerDerivedKey(value))
+        }
+        Some(Operation::IssueBlobSession(value))
+            if crate::platform::blob::session::valid_request(&value) =>
+        {
+            Ok(ManagedRuntimeInboundRequestV1::BlobSession(value))
+        }
+        _ => Err("managed runtime control request is invalid".to_owned()),
+    }
+}
 
 pub(crate) fn try_receive_vault_route(
     channel: &mut UnixStream,
@@ -425,9 +468,13 @@ fn valid_configuration_instance_id(value: &str) -> bool {
 
 #[cfg(test)]
 mod blob_session_error_code_tests {
-    use super::{VAULT_ROUTE_FIELD_TAG, blob_session_error_code};
+    use super::{
+        ManagedRuntimeInboundRequestV1, VAULT_ROUTE_FIELD_TAG, blob_session_error_code,
+        decode_typed_request,
+    };
     use hermes_runtime_protocol::v1::{
-        ManagedRuntimeControlRequestV1, ManagedRuntimeVaultRouteRequestV1,
+        ManagedRuntimeControlRequestV1, ManagedRuntimeReadyRequestV1,
+        ManagedRuntimeVaultRouteRequestV1,
         managed_runtime_control_request_v1::Operation,
     };
     use prost::Message;
@@ -455,5 +502,21 @@ mod blob_session_error_code_tests {
 
         assert_eq!(frame.first(), Some(&VAULT_ROUTE_FIELD_TAG));
         assert_ne!(frame.first(), Some(&0x0a));
+    }
+
+    #[test]
+    fn decodes_typed_ready_without_socket_or_field_tag_peeking() {
+        let request = ManagedRuntimeControlRequestV1 {
+            operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1 {
+                registration_id: "communications".to_owned(),
+                runtime_generation: 1,
+                grant_epoch: 1,
+            })),
+        };
+
+        assert!(matches!(
+            decode_typed_request(request),
+            Ok(ManagedRuntimeInboundRequestV1::Ready(_))
+        ));
     }
 }
