@@ -58,7 +58,7 @@ pub async fn handle_query_request_v1(
                 accounts: list_communication_accounts(
                     persistence,
                     ListCommunicationAccountsV1 {
-                        limit: limit(request.limit)?,
+                        limit: message_evidence_limit(request.limit)?,
                     },
                 )
                 .await
@@ -252,6 +252,29 @@ fn search_limit(value: u32) -> Result<u16, CommunicationsQueryPortErrorV1> {
             .then_some(value)
             .ok_or(CommunicationsQueryPortErrorV1::Protocol)
     })
+}
+
+fn message_evidence_limit(value: u32) -> Result<u16, CommunicationsQueryPortErrorV1> {
+    limit(value).and_then(|value| {
+        (value <= 100)
+            .then_some(value)
+            .ok_or(CommunicationsQueryPortErrorV1::Protocol)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CommunicationsQueryPortErrorV1, message_evidence_limit};
+
+    #[test]
+    fn message_evidence_history_limit_is_bounded() {
+        assert_eq!(message_evidence_limit(1), Ok(1));
+        assert_eq!(message_evidence_limit(100), Ok(100));
+        assert_eq!(
+            message_evidence_limit(101),
+            Err(CommunicationsQueryPortErrorV1::Protocol),
+        );
+    }
 }
 
 const fn map_search_error(
