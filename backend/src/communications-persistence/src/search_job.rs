@@ -299,6 +299,22 @@ impl CommunicationsDurablePersistence {
         )
         .await
     }
+
+    pub async fn release_derived_index_job(
+        &self,
+        job_id: [u8; 16],
+        worker_id: &str,
+    ) -> Result<bool, CommunicationsPersistenceError> {
+        let result = sqlx::query(
+            "UPDATE hermes_data.communications_derived_index_jobs SET claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE job_id = $1 AND claimed_by = $2 AND completed_at_unix_seconds IS NULL",
+        )
+        .bind(job_id.as_slice())
+        .bind(worker_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        Ok(result.rows_affected() == 1)
+    }
 }
 
 pub fn communications_derived_index_job_id_v1(
@@ -333,7 +349,7 @@ async fn enqueue_reconciled_job(
 ) -> Result<usize, CommunicationsPersistenceError> {
     job.validate()
         .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let result = sqlx::query("INSERT INTO hermes_data.communications_derived_index_jobs (job_id, operation, evidence_id, message_id, conversation_id, blob_ref, blob_reference_id, blob_declared_bytes, blob_sha256, projection_revision, observed_at_unix_seconds, created_at_unix_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (job_id) DO UPDATE SET completed_at_unix_seconds = NULL, outcome = NULL, failure_code = NULL, claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE hermes_data.communications_derived_index_jobs.completed_at_unix_seconds IS NOT NULL AND hermes_data.communications_derived_index_jobs.outcome = 1")
+    let result = sqlx::query("INSERT INTO hermes_data.communications_derived_index_jobs (job_id, operation, evidence_id, message_id, conversation_id, blob_ref, blob_reference_id, blob_declared_bytes, blob_sha256, projection_revision, observed_at_unix_seconds, created_at_unix_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (job_id) DO UPDATE SET operation = EXCLUDED.operation, evidence_id = EXCLUDED.evidence_id, message_id = EXCLUDED.message_id, conversation_id = EXCLUDED.conversation_id, blob_ref = EXCLUDED.blob_ref, blob_reference_id = EXCLUDED.blob_reference_id, blob_declared_bytes = EXCLUDED.blob_declared_bytes, blob_sha256 = EXCLUDED.blob_sha256, projection_revision = EXCLUDED.projection_revision, observed_at_unix_seconds = EXCLUDED.observed_at_unix_seconds, created_at_unix_seconds = EXCLUDED.created_at_unix_seconds, completed_at_unix_seconds = NULL, outcome = NULL, failure_code = NULL, claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE hermes_data.communications_derived_index_jobs.completed_at_unix_seconds IS NOT NULL AND hermes_data.communications_derived_index_jobs.outcome = 1")
         .bind(job.job_id.as_slice())
         .bind(match job.operation { CommunicationsDerivedIndexJobOperationV1::Index => 1_i16, CommunicationsDerivedIndexJobOperationV1::Remove => 2_i16 })
         .bind(job.evidence_id.bytes().as_slice())

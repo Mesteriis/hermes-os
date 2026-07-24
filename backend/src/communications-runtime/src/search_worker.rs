@@ -71,6 +71,13 @@ pub async fn process_next_derived_index_job_v1(
                 .await
                 .map_err(storage_error)?;
         }
+        Err(ExecutionErrorV1::RetryPending) => {
+            persistence
+                .release_derived_index_job(claimed.job.job_id, &claimed.worker_id)
+                .await
+                .map_err(storage_error)?;
+            return Ok(false);
+        }
         Err(ExecutionErrorV1::StorageUnavailable) => {
             return Err(CommunicationsSearchWorkerErrorV1::StorageUnavailable);
         }
@@ -112,10 +119,10 @@ async fn execute_claimed_job(
             };
             let key = access
                 .ensure_index_key(control_channel, dispatcher)
-                .map_err(|error| ExecutionErrorV1::Failure(vault_failure(error)))?;
+                .map_err(vault_execution_error)?;
             let body = access
                 .read_admitted_body(control_channel, dispatcher, &search_job.blob)
-                .map_err(|error| ExecutionErrorV1::Failure(blob_failure(error)))?;
+                .map_err(blob_execution_error)?;
             let document = std::str::from_utf8(&body).map_err(|_| {
                 ExecutionErrorV1::Failure(CommunicationsDerivedIndexFailureV1::InvalidContent)
             })?;
@@ -138,30 +145,27 @@ async fn execute_claimed_job(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExecutionErrorV1 {
     Failure(CommunicationsDerivedIndexFailureV1),
+    RetryPending,
     StorageUnavailable,
 }
 
-fn vault_failure(error: CommunicationsSearchAccessErrorV1) -> CommunicationsDerivedIndexFailureV1 {
+fn vault_execution_error(error: CommunicationsSearchAccessErrorV1) -> ExecutionErrorV1 {
     match error {
         CommunicationsSearchAccessErrorV1::Admission
         | CommunicationsSearchAccessErrorV1::Denied => {
-            CommunicationsDerivedIndexFailureV1::VaultDenied
+            ExecutionErrorV1::Failure(CommunicationsDerivedIndexFailureV1::VaultDenied)
         }
-        CommunicationsSearchAccessErrorV1::Unavailable => {
-            CommunicationsDerivedIndexFailureV1::VaultUnavailable
-        }
+        CommunicationsSearchAccessErrorV1::Unavailable => ExecutionErrorV1::RetryPending,
     }
 }
 
-fn blob_failure(error: CommunicationsSearchAccessErrorV1) -> CommunicationsDerivedIndexFailureV1 {
+fn blob_execution_error(error: CommunicationsSearchAccessErrorV1) -> ExecutionErrorV1 {
     match error {
         CommunicationsSearchAccessErrorV1::Admission
         | CommunicationsSearchAccessErrorV1::Denied => {
-            CommunicationsDerivedIndexFailureV1::BlobDenied
+            ExecutionErrorV1::Failure(CommunicationsDerivedIndexFailureV1::BlobDenied)
         }
-        CommunicationsSearchAccessErrorV1::Unavailable => {
-            CommunicationsDerivedIndexFailureV1::BlobUnavailable
-        }
+        CommunicationsSearchAccessErrorV1::Unavailable => ExecutionErrorV1::RetryPending,
     }
 }
 

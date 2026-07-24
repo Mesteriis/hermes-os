@@ -17,15 +17,19 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
     COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
     COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
-    COMMUNICATIONS_STORAGE_CAPABILITY_ID, communication_evidence_recorded_contract_reference_v1,
-    communications_module_descriptor_v1, communications_settings_schema_bytes_v1,
+    COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION, COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS,
+    COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID, COMMUNICATIONS_STORAGE_CAPABILITY_ID,
+    communication_evidence_recorded_contract_reference_v1, communications_module_descriptor_v1,
+    communications_settings_schema_bytes_v1,
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
 use hermes_kernel_control_store::{
-    ModuleBlobQuotaRequestV1, ModuleRegistrationState, PlatformStorageBindingStateV1,
+    ModuleBlobQuotaRequestV1, ModuleDescriptorRegistrationRequestsV1, ModuleRegistrationState,
+    ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1, PlatformStorageBindingStateV1,
 };
 use hermes_runtime_protocol::v1::{
-    BlobDataOperationV1, ManagedRuntimeBlobSessionRequestV1, ModuleClientResponseV1,
+    BlobDataOperationV1, ManagedRuntimeBlobSessionRequestV1, ModuleClientResponseV1, VaultActionV1,
+    VaultSecretClassV1, VaultTargetScopeV1,
 };
 
 pub(super) const COMMUNICATIONS_REGISTRATION: &str = "communications-runtime";
@@ -1469,6 +1473,19 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_OWNER_ID,
         COMMUNICATIONS_BLOB_QUOTA_BYTES,
     );
+    let vault_purpose = ModuleVaultPurposeRequestV1::new_with_key_schema_revision(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
+        COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
+        u16::try_from(COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS)
+            .expect("Communications search key lease TTL fits u16"),
+        ModuleVaultPurposePolicyV1 {
+            secret_class: VaultSecretClassV1::OwnerDerivedKey as u8,
+            action: VaultActionV1::IssueOwnerDerivedKey as u8,
+            target_scope: VaultTargetScopeV1::OwnerDerivedProjectionKey as u8,
+            key_schema_revision: COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION,
+        },
+    );
     let recorded = communication_evidence_recorded_contract_reference_v1();
     let observed =
         hermes_communications_ingress::admission::communication_observed_contract_reference_v1();
@@ -1487,12 +1504,17 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         ),
     ];
     store
-        .create_pending_registration_with_requests(
+        .create_pending_registration_with_all_descriptor_requests(
             &registration,
             &capabilities,
-            std::slice::from_ref(&storage),
-            &routes,
-            std::slice::from_ref(&blob),
+            ModuleDescriptorRegistrationRequestsV1 {
+                storage: std::slice::from_ref(&storage),
+                events: &routes,
+                blobs: std::slice::from_ref(&blob),
+                scheduler: &[],
+                vault_purposes: std::slice::from_ref(&vault_purpose),
+                client_rpc_routes: &[],
+            },
         )
         .expect("record Communications registration");
     store

@@ -30,6 +30,7 @@ pub enum CommunicationsSearchAccessErrorV1 {
     Unavailable,
 }
 
+#[derive(Clone)]
 pub struct CommunicationsSearchAccessV1 {
     key_context: ManagedOwnerDerivedKeyContextV1,
 }

@@ -341,12 +341,16 @@ impl CommunicationsEventRuntimeV1 {
                 .map_err(|_| unavailable_at("client_rejected_write"))?;
             return Ok(true);
         }
-        let mut reject_nested_request = RejectManagedControlRequestsV2;
+        let mut nested_search_access = self.search_access.clone();
+        let mut nested_dispatcher = CommunicationsNestedRequestDispatcher {
+            persistence: &self.persistence,
+            search_access: &mut nested_search_access,
+        };
         let payload = crate::query_client_port::handle_module_query_request_v1(
             &self.persistence,
             &mut self.search_access,
             &mut self.control_channel,
-            &mut reject_nested_request,
+            &mut nested_dispatcher,
             &request.encode_to_vec(),
         )
         .await;
@@ -427,12 +431,16 @@ impl CommunicationsEventRuntimeV1 {
         let context = self
             .canonical_event_context()
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-        let mut reject_nested_request = RejectManagedControlRequestsV2;
+        let mut nested_search_access = self.search_access.clone();
+        let mut nested_dispatcher = CommunicationsNestedRequestDispatcher {
+            persistence: &self.persistence,
+            search_access: &mut nested_search_access,
+        };
         process_next_derived_index_job_v1(
             &self.persistence,
             &mut self.search_access,
             &mut self.control_channel,
-            &mut reject_nested_request,
+            &mut nested_dispatcher,
             &format!("{}:{}", self.runtime_instance_id, self.runtime_generation),
             context.recorded_at_unix_seconds,
         )
