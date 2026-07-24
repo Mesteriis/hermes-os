@@ -2,8 +2,10 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: В работе. ADR-0246 определил owner-local attachment
-state machine, но не зафиксировал exact producer authority и contracts для её
+Состояние реализации: В работе. Owner-local CAS и canonical outbox event для
+успешного transition реализованы; exact inbound contracts, permits и producer
+admission ещё не реализованы. ADR-0246 определил owner-local attachment state
+machine, но не зафиксировал exact producer authority и contracts для её
 terminal external facts. До реализации ни один producer не получает право
 изменять attachment safety state через generic observation или direct storage.
 

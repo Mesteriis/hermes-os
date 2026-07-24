@@ -1,7 +1,8 @@
 //! Exact descriptor and capability admission for the Communications owner runtime.
 
 use hermes_communications_api::{
-    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_QUERY_SCHEMA_SHA256,
+    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
+    COMMUNICATIONS_QUERY_SCHEMA_SHA256,
 };
 use hermes_communications_ingress::admission::{
     COMMUNICATION_OBSERVED_MAX_IN_FLIGHT, communication_observed_contract_reference_v1,
@@ -64,26 +65,48 @@ pub fn communications_blob_capability_v1() -> CapabilityDescriptorV1 {
 #[must_use]
 pub fn communications_events_capability_v1() -> CapabilityDescriptorV1 {
     let recorded = communication_evidence_recorded_contract_reference_v1();
+    let attachment_state_changed =
+        communication_attachment_safety_state_changed_contract_reference_v1();
     CapabilityDescriptorV1 {
         capability_id: COMMUNICATIONS_EVENTS_CAPABILITY_ID.to_owned(),
         capability_revision: 1,
         criticality: CapabilityCriticalityV1::Required as i32,
-        provides: vec![ProvidedSurfaceV1 {
-            kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
-            contract: Some(recorded.clone()),
-            client_rpc_route: None,
-        }],
-        requests: vec![CapabilityRequestV1 {
-            request: Some(Request::EventRoute(EventRouteRequestV1 {
-                envelope_kind: DurableEnvelopeKindV1::Event as i32,
-                contract: Some(recorded),
-                direction: EventRouteDirectionV1::Publish as i32,
-                max_in_flight: COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
-                subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
-                max_deliver: 0,
-                ack_wait_millis: 0,
-            })),
-        }],
+        provides: vec![
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(recorded.clone()),
+                client_rpc_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(attachment_state_changed.clone()),
+                client_rpc_route: None,
+            },
+        ],
+        requests: vec![
+            CapabilityRequestV1 {
+                request: Some(Request::EventRoute(EventRouteRequestV1 {
+                    envelope_kind: DurableEnvelopeKindV1::Event as i32,
+                    contract: Some(recorded),
+                    direction: EventRouteDirectionV1::Publish as i32,
+                    max_in_flight: COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+                    subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
+                    max_deliver: 0,
+                    ack_wait_millis: 0,
+                })),
+            },
+            CapabilityRequestV1 {
+                request: Some(Request::EventRoute(EventRouteRequestV1 {
+                    envelope_kind: DurableEnvelopeKindV1::Event as i32,
+                    contract: Some(attachment_state_changed),
+                    direction: EventRouteDirectionV1::Publish as i32,
+                    max_in_flight: COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+                    subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
+                    max_deliver: 0,
+                    ack_wait_millis: 0,
+                })),
+            },
+        ],
         ..Default::default()
     }
 }
@@ -188,6 +211,18 @@ pub fn communication_evidence_recorded_contract_reference_v1() -> ContractRefere
         major: 1,
         revision: 1,
         schema_sha256: COMMUNICATION_EVIDENCE_SCHEMA_SHA256.to_vec(),
+    }
+}
+
+#[must_use]
+pub fn communication_attachment_safety_state_changed_contract_reference_v1() -> ContractReferenceV1
+{
+    ContractReferenceV1 {
+        owner: COMMUNICATIONS_OWNER_ID.to_owned(),
+        name: "communication_attachment_safety_state_changed".to_owned(),
+        major: 1,
+        revision: 1,
+        schema_sha256: COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256.to_vec(),
     }
 }
 

@@ -42,14 +42,21 @@ pub struct PersistedCommunicationsObservationV1<'a> {
 }
 
 impl CommunicationsDurablePersistence {
-    pub async fn compare_and_set_attachment_safety_state(
+    pub async fn compare_and_set_attachment_safety_state_with_outbox(
         &self,
         attachment_anchor_id: CommunicationAttachmentAnchorIdV1,
         expected_state: AttachmentSafetyStateV1,
         next_state: AttachmentSafetyStateV1,
         evidence_id: CommunicationObservationIdV1,
         observed_at_unix_seconds: i64,
+        canonical_outbox_record: &OutboxRecordV1,
+        created_at_unix_seconds: i64,
     ) -> Result<bool, CommunicationsPersistenceError> {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         let result = sqlx::query(
             "UPDATE hermes_data.communications_attachment_anchors SET anchor_state = $2, last_observed_at_unix_seconds = GREATEST(last_observed_at_unix_seconds, $3), last_evidence_id = CASE WHEN $3 >= last_observed_at_unix_seconds THEN $4 ELSE last_evidence_id END WHERE attachment_anchor_id = $1 AND anchor_state = $5",
         )
@@ -58,10 +65,29 @@ impl CommunicationsDurablePersistence {
         .bind(observed_at_unix_seconds)
         .bind(evidence_id.bytes().as_slice())
         .bind(attachment_safety_state_value(expected_state))
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await
         .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
-        Ok(result.rows_affected() == 1)
+        if result.rows_affected() != 1 {
+            transaction
+                .rollback()
+                .await
+                .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+            return Ok(false);
+        }
+        sqlx::query("INSERT INTO hermes_data.communications_domain_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
+            .bind(canonical_outbox_record.message_id().as_slice())
+            .bind(canonical_outbox_record.envelope_sha256().as_slice())
+            .bind(canonical_outbox_record.exact_bytes())
+            .bind(created_at_unix_seconds)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        Ok(true)
     }
 
     pub async fn connect_runtime(

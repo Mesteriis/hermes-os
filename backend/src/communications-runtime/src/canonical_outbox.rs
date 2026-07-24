@@ -1,9 +1,11 @@
 //! Exact canonical Communications event records for downstream owner consumers.
 
 use hermes_communications_api::{
-    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, CanonicalCommunicationEvidenceKindV1,
-    CommunicationBodyStateV1, CommunicationDirectionV1, CommunicationProviderProvenanceV1,
-    CommunicationSummary, wire::CommunicationEvidenceRecordedV1,
+    AttachmentSafetyStateV1, AttachmentSafetyTransitionDecisionV1,
+    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
+    CanonicalCommunicationEvidenceKindV1, CommunicationBodyStateV1, CommunicationDirectionV1,
+    CommunicationProviderProvenanceV1, CommunicationSummary,
+    attachment_wire::AttachmentSafetyStateChangedV1, wire::CommunicationEvidenceRecordedV1,
 };
 use hermes_events_protocol::{
     delivery::OutboxRecordV1,
@@ -123,6 +125,77 @@ pub fn build_evidence_recorded_outbox_v1(
         .map_err(|_| CanonicalOutboxBuildErrorV1::InvalidEnvelope)
 }
 
+pub fn build_attachment_safety_state_changed_outbox_v1(
+    decision: AttachmentSafetyTransitionDecisionV1,
+    causation_message_id: [u8; 16],
+    context: &CanonicalEventContextV1,
+) -> Result<OutboxRecordV1, CanonicalOutboxBuildErrorV1> {
+    if !valid_context(context) {
+        return Err(CanonicalOutboxBuildErrorV1::InvalidContext);
+    }
+    let message_id = identifier(
+        b"hermes.communications.attachment-safety-state-changed.v1\0",
+        decision.evidence_id.bytes(),
+    );
+    let recorded_at = Timestamp {
+        seconds: context.recorded_at_unix_seconds,
+        nanos: context.recorded_at_nanos,
+    };
+    let occurred_at = Timestamp {
+        seconds: decision.observed_at_unix_seconds,
+        nanos: 0,
+    };
+    let envelope = DurableEnvelopeV1 {
+        envelope_major: 1,
+        envelope_revision: 1,
+        message_id: message_id.to_vec(),
+        contract: Some(ContractRefV1 {
+            owner: "communications".to_owned(),
+            name: "communication_attachment_safety_state_changed".to_owned(),
+            major: 1,
+            revision: 1,
+            schema_sha256: COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256.to_vec(),
+        }),
+        source: Some(SourceRefV1 {
+            module_id: "communications-runtime".to_owned(),
+            runtime_instance_id: runtime_source_reference(&context.runtime_instance_id).to_vec(),
+            runtime_generation: context.runtime_generation,
+        }),
+        recorded_at: Some(recorded_at),
+        partition_key: decision.attachment_anchor_id.bytes().to_vec(),
+        causation_message_id: causation_message_id.to_vec(),
+        correlation_id: identifier(
+            b"hermes.communications.attachment-safety-correlation.v1\0",
+            decision.attachment_anchor_id.bytes(),
+        )
+        .to_vec(),
+        actor: Some(ActorRefV1 {
+            kind: ActorKindV1::Module as i32,
+            actor_id: b"communications-runtime".to_vec(),
+        }),
+        trace: None,
+        source_fence: Some(SourceFenceV1 {
+            kind: FenceKindV1::RuntimeLease as i32,
+            scope_id: b"communications-runtime".to_vec(),
+            epoch: context.runtime_generation,
+        }),
+        semantics: Some(Semantics::Event(EventMetadataV1 {
+            occurred_at: Some(occurred_at),
+        })),
+        payload: AttachmentSafetyStateChangedV1 {
+            attachment_anchor_id: decision.attachment_anchor_id.bytes().to_vec(),
+            expected_state: attachment_safety_state_value(decision.expected_state),
+            next_state: attachment_safety_state_value(decision.next_state),
+            evidence_id: decision.evidence_id.bytes().to_vec(),
+            observed_at_unix_seconds: decision.observed_at_unix_seconds,
+        }
+        .encode_to_vec(),
+    };
+    validate_envelope_v1(&envelope).map_err(|_| CanonicalOutboxBuildErrorV1::InvalidEnvelope)?;
+    OutboxRecordV1::accept(envelope.encode_to_vec())
+        .map_err(|_| CanonicalOutboxBuildErrorV1::InvalidEnvelope)
+}
+
 fn valid_context(context: &CanonicalEventContextV1) -> bool {
     context.runtime_generation != 0
         && !context.runtime_instance_id.is_empty()
@@ -195,5 +268,65 @@ const fn body_value(value: CommunicationBodyStateV1) -> i32 {
         CommunicationBodyStateV1::PendingBlob => 2,
         CommunicationBodyStateV1::Unavailable => 3,
         CommunicationBodyStateV1::AdmittedBlob => 4,
+    }
+}
+
+const fn attachment_safety_state_value(value: AttachmentSafetyStateV1) -> i32 {
+    match value {
+        AttachmentSafetyStateV1::DescriptorOnly => 1,
+        AttachmentSafetyStateV1::BlobPending => 2,
+        AttachmentSafetyStateV1::BlobAdmitted => 3,
+        AttachmentSafetyStateV1::Quarantined => 4,
+        AttachmentSafetyStateV1::SafeForDelivery => 5,
+        AttachmentSafetyStateV1::Rejected => 6,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_communications_api::{
+        CommunicationAttachmentAnchorIdV1, CommunicationObservationIdV1,
+        attachment_wire::AttachmentSafetyStateChangedV1,
+    };
+    use hermes_events_protocol::v1::DurableEnvelopeV1;
+
+    use super::*;
+
+    #[test]
+    fn attachment_safety_event_is_schema_bound_and_anchor_partitioned() {
+        let decision = AttachmentSafetyTransitionDecisionV1 {
+            attachment_anchor_id: CommunicationAttachmentAnchorIdV1::new([7; 16]),
+            expected_state: AttachmentSafetyStateV1::BlobPending,
+            next_state: AttachmentSafetyStateV1::BlobAdmitted,
+            evidence_id: CommunicationObservationIdV1::new([9; 16]),
+            observed_at_unix_seconds: 1_700_000_000,
+        };
+        let context = CanonicalEventContextV1 {
+            runtime_instance_id: "communications-runtime-test".to_owned(),
+            runtime_generation: 3,
+            recorded_at_unix_seconds: 1_700_000_001,
+            recorded_at_nanos: 0,
+        };
+
+        let record = build_attachment_safety_state_changed_outbox_v1(decision, [5; 16], &context)
+            .expect("canonical attachment event");
+        let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");
+        let contract = envelope.contract.expect("contract");
+        let payload = AttachmentSafetyStateChangedV1::decode(envelope.payload.as_slice())
+            .expect("attachment lifecycle payload");
+
+        assert_eq!(contract.owner, "communications");
+        assert_eq!(
+            contract.name,
+            "communication_attachment_safety_state_changed"
+        );
+        assert_eq!(
+            contract.schema_sha256,
+            COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
+        );
+        assert_eq!(envelope.partition_key, [7; 16]);
+        assert_eq!(payload.expected_state, 2);
+        assert_eq!(payload.next_state, 3);
+        assert_eq!(payload.evidence_id, [9; 16]);
     }
 }

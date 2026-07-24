@@ -39,4 +39,25 @@ fn main() {
         format!("pub const COMMUNICATIONS_QUERY_SCHEMA_SHA256: [u8; 32] = {query_digest:?};\n"),
     )
     .expect("communications query schema digest must be written");
+
+    let attachment_lifecycle_descriptor = output.join("communications-attachment-lifecycle-v1.bin");
+    prost_build::Config::new()
+        .file_descriptor_set_path(&attachment_lifecycle_descriptor)
+        .compile_protos(
+            &["proto/hermes/communications/attachment/v1/lifecycle.proto"],
+            &["proto"],
+        )
+        .expect("communications attachment lifecycle protocol must compile");
+    let attachment_lifecycle_digest: [u8; 32] = Sha256::digest(
+        std::fs::read(&attachment_lifecycle_descriptor)
+            .expect("communications attachment lifecycle descriptor must exist"),
+    )
+    .into();
+    std::fs::write(
+        output.join("communications_attachment_lifecycle_schema.rs"),
+        format!(
+            "pub const COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256: [u8; 32] = {attachment_lifecycle_digest:?};\n"
+        ),
+    )
+    .expect("communications attachment lifecycle schema digest must be written");
 }
