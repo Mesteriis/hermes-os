@@ -96,14 +96,20 @@ pub trait ManagedControlRequestDispatcherV2<S> {
 /// request contract (for example startup-only credential acquisition).
 pub struct RejectManagedControlRequestsV2;
 
-impl<S> ManagedControlRequestDispatcherV2<S> for RejectManagedControlRequestsV2 {
+impl<S: Read + Write> ManagedControlRequestDispatcherV2<S> for RejectManagedControlRequestsV2 {
     fn dispatch_request(
         &mut self,
-        _: &mut ManagedControlChannelV2<S>,
-        _: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+        channel: &mut ManagedControlChannelV2<S>,
+        correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
         _: ManagedRuntimeControlRequestV1,
     ) -> Result<(), ManagedControlTransportErrorV2> {
-        Err(ManagedControlTransportErrorV2::UnexpectedRequest)
+        channel.write_response(
+            correlation_id,
+            ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: "managed_runtime_control_unexpected_request".to_owned(),
+            },
+        )
     }
 }
 

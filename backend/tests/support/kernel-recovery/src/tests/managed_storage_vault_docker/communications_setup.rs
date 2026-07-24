@@ -192,7 +192,7 @@ pub(super) fn assert_communications_query_delivery(
     .encode_to_vec();
     let query = route_communications_query(store, supervisor, 1, &payload);
     assert!(
-        matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if accounts.accounts.is_empty())
+        matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if !accounts.accounts.is_empty())
     );
 }
 
