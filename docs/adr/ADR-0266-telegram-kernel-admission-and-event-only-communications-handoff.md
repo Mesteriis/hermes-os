@@ -15,8 +15,10 @@ units не входят в Communications inventory и не дают runtime п�
 себе. Telegram runtime теперь использует один correlated V2 control frame pump
 для descriptor/ready, Storage/Vault, provider credential, Event, Blob и
 client-delivery operations, совместимый с подписанным protocol-major `2`.
-Managed-launch generation/revoke и live end-to-end conformance ещё не
-реализованы.
+Owner transition в `suspended` или `revoked` теперь сначала фиксирует durable
+registration/grant-epoch fence, затем идемпотентно останавливает exact managed
+worker. Полная managed-launch generation/stale-fence, route/lease invalidation
+и live end-to-end conformance ещё не реализованы.
 
 Уточняет:
 

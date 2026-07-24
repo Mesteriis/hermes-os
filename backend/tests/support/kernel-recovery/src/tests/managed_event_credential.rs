@@ -72,6 +72,47 @@ fn managed_runtime_supervisor_dispatches_event_credential_after_descriptor_hands
     std::fs::remove_dir_all(root).expect("remove event credential fixture");
 }
 
+#[test]
+fn managed_runtime_supervisor_stops_an_active_registration_idempotently() {
+    let (root, staged, expectation) = credential_child_fixture();
+    let calls = Arc::new(AtomicU64::new(0));
+    let supervisor = ManagedRuntimeSupervisor::new(Arc::new(AtomicBool::new(false)));
+    supervisor
+        .configure_event_credential_handler(Arc::new(RecordingCredentialHandler {
+            calls: Arc::clone(&calls),
+        }))
+        .expect("configure event credential handler");
+    supervisor
+        .start(
+            "registration-events".to_owned(),
+            staged,
+            expectation,
+            ManagedChildExecutionPolicy::new(1, Duration::from_secs(30))
+                .expect("managed execution policy"),
+        )
+        .expect("start managed runtime");
+    assert!(wait_for_handler(&calls), "managed runtime becomes active");
+
+    assert!(
+        supervisor
+            .stop_if_active("registration-events")
+            .expect("first stop"),
+        "the active registration was stopped"
+    );
+    assert!(
+        !supervisor
+            .stop_if_active("registration-events")
+            .expect("idempotent stop"),
+        "an already inactive registration remains inactive"
+    );
+    assert!(
+        !supervisor
+            .is_active("registration-events")
+            .expect("inactive state")
+    );
+    std::fs::remove_dir_all(root).expect("remove event credential fixture");
+}
+
 struct RecordingCredentialHandler {
     calls: Arc<AtomicU64>,
 }

@@ -107,7 +107,9 @@ fn route_operation(
     match operation {
         Operation::GetModuleRegistrationStatus(request) => status(store, request),
         Operation::ApproveModuleRegistration(request) => approve(store, sessions, request),
-        Operation::TransitionModuleRegistration(request) => transition(store, sessions, request),
+        Operation::TransitionModuleRegistration(request) => {
+            transition(store, supervisor, sessions, request)
+        }
         Operation::BeginOwnerSession(_) => begin(store, sessions),
         Operation::CompleteOwnerSession(request) => complete(store, sessions, request),
         Operation::BeginBrowserPairing(request) => {
@@ -505,25 +507,25 @@ fn approve(
 
 fn transition(
     store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
     sessions: &mut OwnerControlSessions,
     request: TransitionModuleRegistrationRequestV1,
 ) -> Result<OwnerResult, String> {
-    transition_target(&request.target_state)
-        .and_then(|next| {
-            sessions.authorize(store, &request.owner_session_id)?;
-            module_registry::transition_after_owner_authorization(
-                store,
-                &request.registration_id,
-                next,
-            )
-        })
-        .map(|registration| {
-            OwnerResult::TransitionModuleRegistration(TransitionModuleRegistrationResponseV1 {
-                registration_id: registration.registration_id().to_owned(),
-                registration_state: registration.state().as_str().to_owned(),
-                grant_epoch: registration.grant_epoch(),
-            })
-        })
+    let next = transition_target(&request.target_state)?;
+    sessions.authorize(store, &request.owner_session_id)?;
+    let registration = module_registry::transition_after_owner_authorization(
+        store,
+        &request.registration_id,
+        next,
+    )?;
+    supervisor.stop_if_active(registration.registration_id())?;
+    Ok(OwnerResult::TransitionModuleRegistration(
+        TransitionModuleRegistrationResponseV1 {
+            registration_id: registration.registration_id().to_owned(),
+            registration_state: registration.state().as_str().to_owned(),
+            grant_epoch: registration.grant_epoch(),
+        },
+    ))
 }
 
 fn begin(

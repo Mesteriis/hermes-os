@@ -471,18 +471,30 @@ impl ManagedRuntimeSupervisor {
     }
 
     pub fn stop(&self, registration_id: &str) -> Result<(), String> {
+        self.stop_if_active(registration_id)?
+            .then_some(())
+            .ok_or_else(|| "managed runtime is unavailable".to_owned())
+    }
+
+    /// Stops the exact managed registration when present and treats an already
+    /// inactive registration as a successful no-op.
+    pub fn stop_if_active(&self, registration_id: &str) -> Result<bool, String> {
+        self.reap_finished();
         let worker = self
             .inner
             .workers
             .lock()
             .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?
-            .remove(registration_id)
-            .ok_or_else(|| "managed runtime is unavailable".to_owned())?;
+            .remove(registration_id);
+        let Some(worker) = worker else {
+            return Ok(false);
+        };
         worker.stop_requested.store(true, Ordering::Release);
         worker
             .join
             .join()
-            .map_err(|_| "managed runtime supervisor worker panicked".to_owned())
+            .map_err(|_| "managed runtime supervisor worker panicked".to_owned())?;
+        Ok(true)
     }
 
     pub fn reap_finished(&self) {
