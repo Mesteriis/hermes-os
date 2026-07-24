@@ -128,6 +128,12 @@ impl RuntimePublishPermitV1 {
             && self.grant_epoch == identity.grant_epoch
             && self.subjects.contains(subject)
     }
+
+    /// Returns whether this fenced permit includes one exact durable subject.
+    #[must_use]
+    pub fn permits_subject(&self, subject: &DurableSubjectV1) -> bool {
+        self.subjects.contains(&subject.as_str())
+    }
 }
 
 impl RuntimeSubscribePermitV1 {

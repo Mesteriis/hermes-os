@@ -5,8 +5,10 @@
 Состояние реализации: Частично реализовано. Mail core extracts bounded MIME
 parts, Mail keeps an owner-local source-to-anchor mapping and durable
 `requested -> admitted/rejected` outbox state, and IMAP runtime writes through
-a one-use Blob lease. ADR всё ещё не расширяет `first_owner_v1`, не допускает
-Mail production descriptor и не доказывает live Blob-result delivery.
+a one-use Blob lease. Mail also requires the exact Blob-admission publish
+subject before it begins an owner-local admission. ADR всё ещё не расширяет
+`first_owner_v1`, не допускает Mail production descriptor и не доказывает live
+Blob-result delivery.
 
 Зависит от:
 

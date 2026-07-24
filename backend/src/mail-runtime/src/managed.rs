@@ -13,8 +13,9 @@ use hermes_communications_ingress::{
     build_attachment_blob_admission_outbox_record_v1, build_observation_outbox_record_v1,
 };
 use hermes_events_jetstream::{
-    JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
-    RuntimeSubscribePermitV1, request_managed_runtime_event_access,
+    DurableSubjectV1, JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity,
+    RuntimePublishPermitV1, RuntimeSubscribePermitV1, StreamKindV1,
+    request_managed_runtime_event_access,
 };
 use hermes_managed_vault_client::{
     ManagedProviderCredentialClientV1, ManagedProviderCredentialContextV1,
@@ -83,6 +84,7 @@ pub struct MailAdmittedRuntime {
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
     attachment_anchor_subscribe_permit: Option<RuntimeSubscribePermitV1>,
+    attachment_blob_admission_publish_permitted: bool,
     account: hermes_mail_api::MailAccountConfigurationV1,
     runtime_instance_id: String,
     runtime_generation: u64,
@@ -335,6 +337,8 @@ pub async fn open_admitted_runtime(
             )
             .map_err(|_| MailBootstrapError::EventHub)?,
     )?;
+    let attachment_blob_admission_publish_permitted =
+        attachment_blob_admission_publish_permitted(&event_publish_permit)?;
     let event_connection = JetStreamClient::connect_runtime_with_jwt(
         event_hub_endpoint,
         identity,
@@ -353,6 +357,7 @@ pub async fn open_admitted_runtime(
         event_connection,
         event_publish_permit,
         attachment_anchor_subscribe_permit,
+        attachment_blob_admission_publish_permitted,
         account: admission.account.clone(),
         runtime_instance_id: admission.runtime_instance_id.clone(),
         runtime_generation: admission.runtime_generation,
@@ -1121,6 +1126,9 @@ impl MailAdmittedRuntime {
         observed_at_unix_seconds: i64,
         observed_at_nanos: i32,
     ) -> Result<(), MailBootstrapError> {
+        if !self.attachment_blob_admission_publish_permitted {
+            return Ok(());
+        }
         let Some(mapping) = self
             .durable
             .attachment_anchor_mapping(source_observation_id)
@@ -1232,6 +1240,20 @@ impl MailAdmittedRuntime {
             .map_err(|_| MailBootstrapError::Control)?;
         Ok(Sha256::digest(session.custody_transfer_source_proof).into())
     }
+}
+
+fn attachment_blob_admission_publish_permitted(
+    permit: &RuntimePublishPermitV1,
+) -> Result<bool, MailBootstrapError> {
+    let contract = hermes_communications_ingress::admission::communication_attachment_blob_admission_observed_contract_reference_v1();
+    let subject = DurableSubjectV1::new(
+        StreamKindV1::Observation,
+        contract.owner,
+        contract.name,
+        contract.major,
+    )
+    .map_err(|_| MailBootstrapError::EventHub)?;
+    Ok(permit.permits_subject(&subject))
 }
 
 fn bind_attachment_anchor_subscribe_permit(
@@ -1354,6 +1376,41 @@ fn hex_digest(value: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attachment_blob_admission_requires_its_exact_publish_subject() {
+        let expected = DurableSubjectV1::new(
+            StreamKindV1::Observation,
+            "communications",
+            "communication_attachment_blob_admission_observed",
+            1,
+        )
+        .expect("subject");
+        let permit =
+            RuntimePublishPermitV1::new("mail-runtime", "mail-runtime-1", 1, 1, vec![expected])
+                .expect("permit");
+        assert!(attachment_blob_admission_publish_permitted(&permit).is_ok_and(|value| value));
+
+        let observed_only = RuntimePublishPermitV1::new(
+            "mail-runtime",
+            "mail-runtime-1",
+            1,
+            1,
+            vec![
+                DurableSubjectV1::new(
+                    StreamKindV1::Observation,
+                    "communications",
+                    "communication_observed",
+                    1,
+                )
+                .expect("subject"),
+            ],
+        )
+        .expect("permit");
+        assert!(
+            attachment_blob_admission_publish_permitted(&observed_only).is_ok_and(|value| !value)
+        );
+    }
 
     #[test]
     fn inbound_identity_is_stable_across_sync_operations_and_distinguishes_parts() {
