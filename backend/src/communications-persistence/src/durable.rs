@@ -1,12 +1,13 @@
 //! PostgreSQL inbox and canonical summary storage owned only by Communications.
 
 use hermes_communications_api::{
-    AttachmentDispositionV1, AttachmentSafetyStateV1, CanonicalCommunicationEvidenceKindV1,
-    CanonicalCommunicationProjectionV1, CanonicalMessageMutationV1, CommunicationAccountIdV1,
-    CommunicationAccountSummaryV1, CommunicationAttachmentAnchorIdV1,
-    CommunicationAttachmentAnchorStateV1, CommunicationAttachmentAnchorSummaryV1,
-    CommunicationBodyStateV1, CommunicationConversationIdV1, CommunicationConversationSummaryV1,
-    CommunicationDirectionV1, CommunicationMessageIdV1, CommunicationMessageLifecycleStateV1,
+    AttachmentDispositionV1, AttachmentSafetyStateV1, AttachmentSafetyTransitionDecisionV1,
+    CanonicalCommunicationEvidenceKindV1, CanonicalCommunicationProjectionV1,
+    CanonicalMessageMutationV1, CommunicationAccountIdV1, CommunicationAccountSummaryV1,
+    CommunicationAttachmentAnchorIdV1, CommunicationAttachmentAnchorStateV1,
+    CommunicationAttachmentAnchorSummaryV1, CommunicationBodyStateV1,
+    CommunicationConversationIdV1, CommunicationConversationSummaryV1, CommunicationDirectionV1,
+    CommunicationMessageIdV1, CommunicationMessageLifecycleStateV1,
     CommunicationMessageReferenceKindV1, CommunicationMessageReferenceSummaryV1,
     CommunicationMessageSummaryV1, CommunicationObservationIdV1,
     CommunicationObservedParticipantSummaryV1, CommunicationParticipantIdV1,
@@ -45,11 +46,7 @@ pub struct PersistedCommunicationsObservationV1<'a> {
 impl CommunicationsDurablePersistence {
     pub async fn compare_and_set_attachment_safety_state_with_outbox(
         &self,
-        attachment_anchor_id: CommunicationAttachmentAnchorIdV1,
-        expected_state: AttachmentSafetyStateV1,
-        next_state: AttachmentSafetyStateV1,
-        evidence_id: CommunicationObservationIdV1,
-        observed_at_unix_seconds: i64,
+        decision: AttachmentSafetyTransitionDecisionV1,
         canonical_outbox_record: &OutboxRecordV1,
         created_at_unix_seconds: i64,
     ) -> Result<bool, CommunicationsPersistenceError> {
@@ -61,11 +58,11 @@ impl CommunicationsDurablePersistence {
         let result = sqlx::query(
             "UPDATE hermes_data.communications_attachment_anchors SET anchor_state = $2, last_observed_at_unix_seconds = GREATEST(last_observed_at_unix_seconds, $3), last_evidence_id = CASE WHEN $3 >= last_observed_at_unix_seconds THEN $4 ELSE last_evidence_id END WHERE attachment_anchor_id = $1 AND anchor_state = $5",
         )
-        .bind(attachment_anchor_id.bytes().as_slice())
-        .bind(attachment_safety_state_value(next_state))
-        .bind(observed_at_unix_seconds)
-        .bind(evidence_id.bytes().as_slice())
-        .bind(attachment_safety_state_value(expected_state))
+        .bind(decision.attachment_anchor_id.bytes().as_slice())
+        .bind(attachment_safety_state_value(decision.next_state))
+        .bind(decision.observed_at_unix_seconds)
+        .bind(decision.evidence_id.bytes().as_slice())
+        .bind(attachment_safety_state_value(decision.expected_state))
         .execute(&mut *transaction)
         .await
         .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;

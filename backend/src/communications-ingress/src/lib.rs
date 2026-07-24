@@ -507,7 +507,7 @@ pub fn build_attachment_blob_admission_outbox_record_v1(
             runtime_instance_id: runtime_source_reference(&context.runtime_instance_id).to_vec(),
             runtime_generation: context.runtime_generation,
         }),
-        recorded_at: Some(timestamp.clone()),
+        recorded_at: Some(timestamp),
         partition_key: fact.attachment_anchor_id.to_vec(),
         causation_message_id: fact.source_observation_id.to_vec(),
         correlation_id: fact.correlation_id.to_vec(),

@@ -35,11 +35,7 @@ pub async fn apply_attachment_safety_transition(
     .map_err(|_| AttachmentSafetyTransitionApplyErrorV1::InvalidTransition)?;
     let applied = persistence
         .compare_and_set_attachment_safety_state_with_outbox(
-            decision.attachment_anchor_id,
-            decision.expected_state,
-            decision.next_state,
-            decision.evidence_id,
-            decision.observed_at_unix_seconds,
+            decision,
             &canonical_outbox_record,
             canonical_event_context.recorded_at_unix_seconds,
         )
