@@ -67,6 +67,7 @@ policy через ссылки из новых документов.
 - [ADR-0256: Owner-declared client RPC route admission](ADR-0256-owner-declared-client-rpc-route-admission.md)
 - [ADR-0257: Event-backed Blob custody transfer](ADR-0257-event-backed-blob-custody-transfer-for-canonical-evidence.md)
 - [ADR-0258: Correlated duplex managed-control transport](ADR-0258-correlated-duplex-managed-control-transport.md)
+- [ADR-0259: Separate typed platform-control path](ADR-0259-separate-typed-platform-control-path.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
