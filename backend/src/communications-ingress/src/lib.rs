@@ -236,6 +236,8 @@ pub enum AttachmentBlobAdmissionTransitionV1 {
 pub struct AttachmentBlobAdmissionFactV1 {
     pub attachment_anchor_id: [u8; 16],
     pub source_observation_id: [u8; 16],
+    /// Correlation retained from the canonical attachment-anchor handoff.
+    pub correlation_id: [u8; 16],
     pub media_cursor_sha256: [u8; 32],
     pub expected_state: AttachmentBlobExpectedStateV1,
     pub transition: AttachmentBlobAdmissionTransitionV1,
@@ -465,6 +467,7 @@ pub fn build_attachment_blob_admission_outbox_record_v1(
     validate_context(context)?;
     if !valid_identifier(&fact.attachment_anchor_id)
         || !valid_identifier(&fact.source_observation_id)
+        || !valid_identifier(&fact.correlation_id)
         || !valid_sha256(&fact.media_cursor_sha256)
         || !valid_timestamp(fact.observed_at_unix_seconds, 0)
         || !valid_blob_admission_fact(fact)
@@ -507,7 +510,7 @@ pub fn build_attachment_blob_admission_outbox_record_v1(
         recorded_at: Some(timestamp.clone()),
         partition_key: fact.attachment_anchor_id.to_vec(),
         causation_message_id: fact.source_observation_id.to_vec(),
-        correlation_id: fact.attachment_anchor_id.to_vec(),
+        correlation_id: fact.correlation_id.to_vec(),
         actor: Some(ActorRefV1 {
             kind: ActorKindV1::Module as i32,
             actor_id: context.module_id.as_bytes().to_vec(),
@@ -964,6 +967,7 @@ mod body_admission_tests {
             &AttachmentBlobAdmissionFactV1 {
                 attachment_anchor_id: [1; 16],
                 source_observation_id: [2; 16],
+                correlation_id: [5; 16],
                 media_cursor_sha256: [3; 32],
                 expected_state: AttachmentBlobExpectedStateV1::BlobPending,
                 transition: AttachmentBlobAdmissionTransitionV1::Admitted,
@@ -990,6 +994,7 @@ mod body_admission_tests {
             "communication_attachment_blob_admission_observed"
         );
         assert_eq!(envelope.partition_key, [1; 16]);
+        assert_eq!(envelope.correlation_id, [5; 16]);
         assert_eq!(payload.expected_state, 2);
         assert_eq!(payload.transition, 2);
         assert_eq!(payload.evidence_id, [2; 16]);

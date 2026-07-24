@@ -1148,6 +1148,7 @@ impl MailAdmittedRuntime {
             &AttachmentBlobAdmissionFactV1 {
                 attachment_anchor_id: mapping.attachment_anchor_id,
                 source_observation_id,
+                correlation_id: mapping.correlation_id,
                 media_cursor_sha256: mapping.media_cursor_sha256,
                 expected_state: AttachmentBlobExpectedStateV1::DescriptorOnly,
                 transition: AttachmentBlobAdmissionTransitionV1::Requested,
@@ -1185,6 +1186,7 @@ impl MailAdmittedRuntime {
             &AttachmentBlobAdmissionFactV1 {
                 attachment_anchor_id: mapping.attachment_anchor_id,
                 source_observation_id,
+                correlation_id: mapping.correlation_id,
                 media_cursor_sha256: mapping.media_cursor_sha256,
                 expected_state: AttachmentBlobExpectedStateV1::BlobPending,
                 transition: terminal.1,

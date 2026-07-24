@@ -64,6 +64,12 @@ producer inbox/outbox and retries in Mail storage. Blob owns bytes and Blob
 metadata. Communications only projects its typed terminal event through the
 CAS lifecycle already defined by ADR-0260.
 
+The Mail mapping also stores the non-zero correlation ID from the public
+anchor handoff. Every requested or terminal Blob-admission observation reuses
+that correlation ID while causation remains the immediately preceding
+Mail-owned source observation. Mail must reject a malformed handoff before it
+persists this mapping.
+
 ## Admission gate
 
 The capability needs a separate atomic production gate before it is active:

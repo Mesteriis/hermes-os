@@ -28,10 +28,12 @@ CREATE TABLE IF NOT EXISTS mail_communications_event_inbox (
 CREATE TABLE IF NOT EXISTS mail_attachment_anchor_mappings (
     source_observation_id BYTEA PRIMARY KEY,
     attachment_anchor_id BYTEA NOT NULL UNIQUE,
+    correlation_id BYTEA NOT NULL,
     media_cursor_sha256 BYTEA NOT NULL,
     observed_at_unix_seconds BIGINT NOT NULL,
     CHECK (octet_length(source_observation_id) = 16),
     CHECK (octet_length(attachment_anchor_id) = 16),
+    CHECK (octet_length(correlation_id) = 16),
     CHECK (octet_length(media_cursor_sha256) = 32)
 );
 CREATE TABLE IF NOT EXISTS mail_attachment_blob_admissions (
@@ -134,6 +136,7 @@ pub enum MailAttachmentAnchorMappingOutcomeV1 {
 pub struct MailAttachmentAnchorMappingV1 {
     pub source_observation_id: [u8; 16],
     pub attachment_anchor_id: [u8; 16],
+    pub correlation_id: [u8; 16],
     pub media_cursor_sha256: [u8; 32],
     pub observed_at_unix_seconds: i64,
 }
@@ -237,6 +240,7 @@ impl MailDurablePersistence {
         handoff_record: &OutboxRecordV1,
         source_observation_id: [u8; 16],
         attachment_anchor_id: [u8; 16],
+        correlation_id: [u8; 16],
         media_cursor_sha256: [u8; 32],
         observed_at_unix_seconds: i64,
         consumed_at_unix_seconds: i64,
@@ -275,7 +279,7 @@ impl MailDurablePersistence {
         if source_exists.is_none() {
             return Err(MailDurablePersistenceError::MissingSourceObservation);
         }
-        let mapping = sqlx::query("SELECT attachment_anchor_id, media_cursor_sha256 FROM mail_attachment_anchor_mappings WHERE source_observation_id = $1")
+        let mapping = sqlx::query("SELECT attachment_anchor_id, correlation_id, media_cursor_sha256 FROM mail_attachment_anchor_mappings WHERE source_observation_id = $1")
             .bind(source_observation_id.as_slice())
             .fetch_optional(&mut *transaction)
             .await
@@ -287,15 +291,20 @@ impl MailDurablePersistence {
             let cursor: Vec<u8> = row
                 .try_get("media_cursor_sha256")
                 .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            let persisted_correlation: Vec<u8> = row
+                .try_get("correlation_id")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
             if anchor.as_slice() != attachment_anchor_id.as_slice()
+                || persisted_correlation.as_slice() != correlation_id.as_slice()
                 || cursor.as_slice() != media_cursor_sha256.as_slice()
             {
                 return Err(MailDurablePersistenceError::ConflictingAnchorMapping);
             }
         } else {
-            sqlx::query("INSERT INTO mail_attachment_anchor_mappings (source_observation_id, attachment_anchor_id, media_cursor_sha256, observed_at_unix_seconds) VALUES ($1, $2, $3, $4)")
+            sqlx::query("INSERT INTO mail_attachment_anchor_mappings (source_observation_id, attachment_anchor_id, correlation_id, media_cursor_sha256, observed_at_unix_seconds) VALUES ($1, $2, $3, $4, $5)")
                 .bind(source_observation_id.as_slice())
                 .bind(attachment_anchor_id.as_slice())
+                .bind(correlation_id.as_slice())
                 .bind(media_cursor_sha256.as_slice())
                 .bind(observed_at_unix_seconds)
                 .execute(&mut *transaction)
@@ -320,18 +329,21 @@ impl MailDurablePersistence {
         &self,
         source_observation_id: [u8; 16],
     ) -> Result<Option<MailAttachmentAnchorMappingV1>, MailDurablePersistenceError> {
-        sqlx::query("SELECT attachment_anchor_id, media_cursor_sha256, observed_at_unix_seconds FROM mail_attachment_anchor_mappings WHERE source_observation_id = $1")
+        sqlx::query("SELECT attachment_anchor_id, correlation_id, media_cursor_sha256, observed_at_unix_seconds FROM mail_attachment_anchor_mappings WHERE source_observation_id = $1")
             .bind(source_observation_id.as_slice())
             .fetch_optional(&self.pool)
             .await
             .map_err(|_| MailDurablePersistenceError::Database)?
             .map(|row| {
                 let attachment_anchor_id: Vec<u8> = row.try_get("attachment_anchor_id").map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+                let correlation_id: Vec<u8> = row.try_get("correlation_id").map_err(|_| MailDurablePersistenceError::InvalidRow)?;
                 let media_cursor_sha256: Vec<u8> = row.try_get("media_cursor_sha256").map_err(|_| MailDurablePersistenceError::InvalidRow)?;
                 let observed_at_unix_seconds: i64 = row.try_get("observed_at_unix_seconds").map_err(|_| MailDurablePersistenceError::InvalidRow)?;
                 let attachment_anchor_id: [u8; 16] = attachment_anchor_id.as_slice().try_into().map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+                let correlation_id: [u8; 16] = correlation_id.as_slice().try_into().map_err(|_| MailDurablePersistenceError::InvalidRow)?;
                 let media_cursor_sha256: [u8; 32] = media_cursor_sha256.as_slice().try_into().map_err(|_| MailDurablePersistenceError::InvalidRow)?;
                 if attachment_anchor_id.iter().all(|byte| *byte == 0)
+                    || correlation_id.iter().all(|byte| *byte == 0)
                     || media_cursor_sha256.iter().all(|byte| *byte == 0)
                 {
                     return Err(MailDurablePersistenceError::InvalidRow);
@@ -339,6 +351,7 @@ impl MailDurablePersistence {
                 Ok(MailAttachmentAnchorMappingV1 {
                     source_observation_id,
                     attachment_anchor_id,
+                    correlation_id,
                     media_cursor_sha256,
                     observed_at_unix_seconds,
                 })

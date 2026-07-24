@@ -55,10 +55,13 @@ in the same durable process rather than introducing an anchor-specific
 correlation.
 
 An integration that opts into attachment Blob admission keeps the mapping from
-its own outbox observation ID to this anchor in its own storage. After a
-provider-local download and a separately granted Blob write, it persists its
-own `communication_attachment_blob_admission_observed.v1` envelope and only
-then relays it through its separately granted Event Hub publish route.
+its own outbox observation ID to this anchor **and the received correlation
+ID** in its own storage. After a provider-local download and a separately
+granted Blob write, it persists its own
+`communication_attachment_blob_admission_observed.v1` envelope with the
+stored correlation ID and only then relays it through its separately granted
+Event Hub publish route. Its causation remains the Mail-owned source
+observation ID.
 
 The handoff is a public owner event, not a domain-to-integration call:
 
@@ -85,7 +88,8 @@ The handoff is a public owner event, not a domain-to-integration call:
    atomic owner outbox insert.
 2. Add an integration-local typed anchor mapping consumer/store in the Mail
    assembly unit; it must validate causation against the Mail-owned original
-   outbox record.
+   outbox record and durably retain the non-zero handoff correlation ID for
+   each future Blob-admission continuation.
 3. Admit Mail's Blob-result publisher in a separate exact phase slice, then
    prove replay, grant revoke, stale runtime generation and CAS conflict.
 4. Admit the scanner verdict producer separately. `safe_for_delivery` remains

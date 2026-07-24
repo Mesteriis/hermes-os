@@ -40,6 +40,7 @@ pub async fn map_attachment_anchor_recorded_v1(
         .map_err(|_| MailAttachmentAnchorMappingErrorV1::InvalidEnvelope)?;
     let payload = decode_handoff(&envelope)?;
     let source_observation_id = id16(&payload.source_observation_id)?;
+    let correlation_id = id16(&envelope.correlation_id)?;
     if envelope.causation_message_id.as_slice() != source_observation_id.as_slice() {
         return Err(MailAttachmentAnchorMappingErrorV1::SourceObservationMismatch);
     }
@@ -54,6 +55,7 @@ pub async fn map_attachment_anchor_recorded_v1(
             &handoff_record,
             source_observation_id,
             id16(&payload.attachment_anchor_id)?,
+            correlation_id,
             sha256(&payload.media_cursor_sha256)?,
             payload.observed_at_unix_seconds,
             consumed_at_unix_seconds,
@@ -98,6 +100,7 @@ fn decode_handoff(
         &communication_attachment_anchor_recorded_contract_reference_v1(),
     ) || !matches!(envelope.semantics, Some(Semantics::Event(_)))
         || id16(&envelope.message_id).is_err()
+        || id16(&envelope.correlation_id).is_err()
     {
         return Err(MailAttachmentAnchorMappingErrorV1::InvalidEnvelope);
     }
@@ -186,6 +189,7 @@ mod tests {
         DurableEnvelopeV1 {
             message_id: vec![1; 16],
             causation_message_id: vec![2; 16],
+            correlation_id: vec![5; 16],
             contract: Some(wire_contract(
                 communication_attachment_anchor_recorded_contract_reference_v1(),
             )),
@@ -221,6 +225,23 @@ mod tests {
             observed_at_unix_seconds: 1_700_000_000,
         });
         envelope.contract = Some(wire_contract(communication_observed_contract_reference_v1()));
+
+        assert_eq!(
+            decode_handoff(&envelope),
+            Err(MailAttachmentAnchorMappingErrorV1::InvalidEnvelope)
+        );
+    }
+
+    #[test]
+    fn handoff_requires_a_non_zero_correlation_id() {
+        let mut envelope = handoff(AttachmentAnchorRecordedV1 {
+            attachment_anchor_id: vec![3; 16],
+            source_observation_id: vec![2; 16],
+            media_cursor_sha256: vec![4; 32],
+            initial_state: 1,
+            observed_at_unix_seconds: 1_700_000_000,
+        });
+        envelope.correlation_id = vec![0; 16];
 
         assert_eq!(
             decode_handoff(&envelope),
