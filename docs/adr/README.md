@@ -65,6 +65,8 @@ policy через ссылки из новых документов.
 - [ADR-0254: Communications derived search index](ADR-0254-communications-derived-search-index-and-private-content-boundary.md)
 - [ADR-0255: Managed owner-key leases](ADR-0255-managed-owner-key-leases-for-derived-projections.md)
 - [ADR-0256: Owner-declared client RPC route admission](ADR-0256-owner-declared-client-rpc-route-admission.md)
+- [ADR-0257: Event-backed Blob custody transfer](ADR-0257-event-backed-blob-custody-transfer-for-canonical-evidence.md)
+- [ADR-0258: Correlated duplex managed-control transport](ADR-0258-correlated-duplex-managed-control-transport.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
