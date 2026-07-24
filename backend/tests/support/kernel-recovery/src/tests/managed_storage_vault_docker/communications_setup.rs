@@ -1037,11 +1037,17 @@ pub(super) fn assert_communications_attachment_anchor_projection(
     tokio::runtime::Runtime::new()
         .expect("Tokio runtime")
         .block_on(async move {
-            let context = async_nats::jetstream::new(
-                async_nats::connect(endpoint)
-                    .await
-                    .expect("connect disposable JetStream"),
-            );
+            use futures_util::StreamExt as _;
+            use prost::Message as _;
+
+            let client = async_nats::connect(endpoint)
+                .await
+                .expect("connect disposable JetStream");
+            let mut anchor_events = client
+                .subscribe("hermes.event.v1.communications.communication_attachment_anchor_recorded.v1")
+                .await
+                .expect("subscribe to exact attachment-anchor handoff subject");
+            let context = async_nats::jetstream::new(client);
             context
                 .publish(
                     "hermes.observation.v1.communications.communication_observed.v1",
@@ -1051,6 +1057,40 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                 .expect("publish attachment typed ingress envelope")
                 .await
                 .expect("acknowledge attachment typed ingress envelope");
+            let anchor_event = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                anchor_events.next(),
+            )
+            .await
+            .expect("attachment-anchor handoff timeout")
+            .expect("attachment-anchor handoff missing");
+            let envelope = hermes_events_protocol::validation::envelope::decode_envelope_v1(
+                anchor_event.payload.as_ref(),
+            )
+            .expect("attachment-anchor handoff envelope");
+            assert!(matches!(
+                envelope.contract.as_ref(),
+                Some(contract)
+                    if contract.owner == "communications"
+                        && contract.name == "communication_attachment_anchor_recorded"
+                        && contract.major == 1
+                        && contract.revision == 1
+            ));
+            assert_eq!(envelope.causation_message_id, record.message_id().to_vec());
+            let payload = hermes_communications_ingress::attachment_anchor_v1::AttachmentAnchorRecordedV1::decode(
+                envelope.payload.as_slice(),
+            )
+            .expect("attachment-anchor handoff payload");
+            assert_eq!(payload.source_observation_id, record.message_id().to_vec());
+            assert_eq!(payload.media_cursor_sha256.len(), 32);
+            assert_eq!(payload.initial_state, 1);
+            assert!(
+                !anchor_event
+                    .payload
+                    .windows(PROVIDER_MEDIA_LOCATOR.len())
+                    .any(|window| window == PROVIDER_MEDIA_LOCATOR.as_bytes()),
+                "attachment-anchor handoff must not reveal a provider-local media locator",
+            );
         });
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
