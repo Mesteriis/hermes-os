@@ -10,7 +10,7 @@ mod session;
 
 pub use context::{StorageVaultRouteContextErrorV1, StorageVaultRouteContextV1};
 pub use credentials::StorageCredentialLeaseErrorV1;
-pub use inherited_kernel::InheritedKernelVaultRouteV1;
+pub use inherited_kernel::{InheritedKernelVaultRouteV1, InheritedKernelVaultRouteV2};
 pub use kernel_credential::{
     KernelCredentialLeaseErrorV1, KernelVaultLeaseContextV1, resolve_kernel_credential_lease,
 };

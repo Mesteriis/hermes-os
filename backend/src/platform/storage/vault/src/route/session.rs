@@ -25,6 +25,10 @@ impl<T> StorageVaultLeaseAdapterV1<T> {
             context,
         }
     }
+
+    pub fn into_route_port(self) -> T {
+        self.route_port
+    }
 }
 
 impl<T> StorageVaultLeaseAdapterV1<T>

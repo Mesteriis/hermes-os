@@ -15,7 +15,7 @@ pub use identity::{
 };
 pub use managed_runtime::{
     ManagedRuntimeEventAccessErrorV1, ManagedRuntimeEventAccessV1,
-    request_managed_runtime_event_access,
+    request_managed_runtime_event_access, request_managed_runtime_event_access_v2,
 };
 pub use pull_delivery::{
     RuntimePullDeliveryErrorV1, RuntimePullDeliveryV1, receive_runtime_pull_delivery,

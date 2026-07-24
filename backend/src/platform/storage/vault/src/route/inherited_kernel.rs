@@ -3,6 +3,9 @@
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 
+use hermes_runtime_protocol::managed_control::{
+    ManagedControlChannelV2, ManagedControlTransportErrorV2,
+};
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeVaultRouteRequestV1, VaultCiphertextResponseV1, VaultCiphertextRouteV1,
@@ -17,6 +20,51 @@ const MAX_FRAME_BYTES: usize = 512 * 1024;
 
 pub struct InheritedKernelVaultRouteV1 {
     channel: UnixStream,
+}
+
+/// The V2 counterpart owns the correlated inherited control channel and keeps
+/// Vault ciphertext routing typed; it cannot transport an opaque relay frame.
+pub struct InheritedKernelVaultRouteV2 {
+    channel: ManagedControlChannelV2<UnixStream>,
+}
+
+impl InheritedKernelVaultRouteV2 {
+    #[must_use]
+    pub fn new(channel: ManagedControlChannelV2<UnixStream>) -> Self {
+        Self { channel }
+    }
+
+    pub fn into_channel(self) -> ManagedControlChannelV2<UnixStream> {
+        self.channel
+    }
+
+    pub fn route(
+        &mut self,
+        route: VaultCiphertextRouteV1,
+    ) -> Result<VaultCiphertextResponseV1, StorageVaultRouteFailureV1> {
+        let response = self
+            .channel
+            .request_next(
+                ManagedRuntimeControlRequestV1 {
+                    operation: Some(Operation::RouteVaultCiphertext(
+                        ManagedRuntimeVaultRouteRequestV1 { route: Some(route) },
+                    )),
+                },
+                |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+            )
+            .map_err(|_| StorageVaultRouteFailureV1::Unavailable)?;
+        let response = response
+            .result
+            .and_then(|result| match result {
+                ControlResult::VaultRoute(response) => Some(response),
+                _ => None,
+            })
+            .ok_or(StorageVaultRouteFailureV1::Rejected)?;
+        response
+            .response
+            .filter(|_| response.error_code.is_empty())
+            .ok_or(StorageVaultRouteFailureV1::Rejected)
+    }
 }
 
 impl InheritedKernelVaultRouteV1 {
@@ -55,6 +103,18 @@ impl InheritedKernelVaultRouteV1 {
 }
 
 impl StorageVaultRoutePortV1 for InheritedKernelVaultRouteV1 {
+    #[allow(clippy::manual_async_fn)]
+    fn route_vault_ciphertext(
+        &mut self,
+        route: VaultCiphertextRouteV1,
+    ) -> impl std::future::Future<
+        Output = Result<VaultCiphertextResponseV1, StorageVaultRouteFailureV1>,
+    > + Send {
+        async move { self.route(route) }
+    }
+}
+
+impl StorageVaultRoutePortV1 for InheritedKernelVaultRouteV2 {
     #[allow(clippy::manual_async_fn)]
     fn route_vault_ciphertext(
         &mut self,

@@ -10,6 +10,9 @@ use hermes_events_protocol::{
     NatsRuntimeCredentialDeliveryBindingInputV1, NatsRuntimeCredentialDeliveryBindingV1,
     NatsRuntimeCredentialDeliveryV1, NatsRuntimeCredentialRecipientV1, RuntimeNatsJwtCredentialV1,
 };
+use hermes_runtime_protocol::managed_control::{
+    ManagedControlChannelV2, ManagedControlTransportErrorV2,
+};
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeEventConsumerBindingV1, ManagedRuntimeEventCredentialRequestV1,
@@ -122,6 +125,57 @@ pub fn request_managed_runtime_event_access(
     write_frame(channel, &request.encode_to_vec())?;
     let response = ManagedRuntimeControlResponseV1::decode(read_frame(channel)?.as_slice())
         .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
+    let (delivery, consumer_bindings, publish_subjects) = delivery(response)?;
+    let binding =
+        NatsRuntimeCredentialDeliveryBindingV1::new(NatsRuntimeCredentialDeliveryBindingInputV1 {
+            logical_owner_id: logical_owner_id.to_owned(),
+            registration_id: registration_id.to_owned(),
+            runtime_instance_id: runtime_instance_id.to_owned(),
+            runtime_generation,
+            grant_epoch,
+            credential_revision,
+            request_id,
+            recipient_public_key: recipient.public_key().clone(),
+        })
+        .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
+    let credential = recipient
+        .open(&binding, &delivery)
+        .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
+    Ok(ManagedRuntimeEventAccessV1 {
+        credential,
+        consumer_bindings,
+        publish_subjects,
+    })
+}
+
+/// V2 correlated counterpart for a managed domain selected by its signed
+/// descriptor. The event credential remains the same exact typed operation.
+pub fn request_managed_runtime_event_access_v2(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    logical_owner_id: &str,
+    registration_id: &str,
+    runtime_instance_id: &str,
+    runtime_generation: u64,
+    grant_epoch: u64,
+    credential_revision: u64,
+) -> Result<ManagedRuntimeEventAccessV1, ManagedRuntimeEventAccessErrorV1> {
+    let request_id = request_id()?;
+    let recipient = NatsRuntimeCredentialRecipientV1::generate();
+    let response = channel
+        .request_next(
+            ManagedRuntimeControlRequestV1 {
+                operation: Some(Operation::IssueEventCredential(
+                    ManagedRuntimeEventCredentialRequestV1 {
+                        request_id: request_id.to_vec(),
+                        credential_revision,
+                        ttl_seconds: 300,
+                        recipient_public_key_x25519: recipient.public_key().as_bytes().to_vec(),
+                    },
+                )),
+            },
+            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+        )
+        .map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)?;
     let (delivery, consumer_bindings, publish_subjects) = delivery(response)?;
     let binding =
         NatsRuntimeCredentialDeliveryBindingV1::new(NatsRuntimeCredentialDeliveryBindingInputV1 {
