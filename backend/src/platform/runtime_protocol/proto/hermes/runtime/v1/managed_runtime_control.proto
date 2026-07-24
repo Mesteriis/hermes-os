@@ -132,6 +132,19 @@ message ManagedRuntimeControlResponseV1 {
   string error_code = 15;
 }
 
+// Versioned private transport envelope for a Kernel-managed runtime. The
+// requester creates a fresh correlation ID; responses repeat it exactly. The
+// nested V1 messages remain the exhaustive typed operation vocabulary, so this
+// envelope does not create an untyped business-payload channel.
+message ManagedRuntimeControlFrameV2 {
+  uint32 transport_major = 1;
+  bytes correlation_id = 2;
+  oneof frame {
+    ManagedRuntimeControlRequestV1 request = 3;
+    ManagedRuntimeControlResponseV1 response = 4;
+  }
+}
+
 // Kernel-to-managed-runtime capability delivery. This is carried only in the
 // `client_delivery` control oneof; it never shares an untyped frame with
 // runtime-initiated Vault, Event, or Blob operations.

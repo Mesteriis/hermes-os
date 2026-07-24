@@ -7,6 +7,7 @@ pub mod integration_host_bridge;
 pub mod managed_domain_runtime;
 pub mod managed_integration_runtime;
 pub mod module_client;
+pub mod managed_control;
 pub mod scheduler;
 pub mod telemetry;
 pub mod vault;
