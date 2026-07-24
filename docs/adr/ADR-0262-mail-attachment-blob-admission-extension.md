@@ -2,9 +2,11 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Не реализовано. ADR разрешает только следующий
-integration-owned implementation slice; он не расширяет `first_owner_v1`, не
-допускает Mail production descriptor и не доказывает Blob-result delivery.
+Состояние реализации: Частично реализовано. Mail core extracts bounded MIME
+parts, Mail keeps an owner-local source-to-anchor mapping and durable
+`requested -> admitted/rejected` outbox state, and IMAP runtime writes through
+a one-use Blob lease. ADR всё ещё не расширяет `first_owner_v1`, не допускает
+Mail production descriptor и не доказывает live Blob-result delivery.
 
 Зависит от:
 
