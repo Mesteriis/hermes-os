@@ -87,6 +87,26 @@ pub fn communication_observed_publish_request_v1() -> CapabilityRequestV1 {
     }
 }
 
+/// Exact publish route for an integration that owns an admitted attachment
+/// Blob write. It does not grant a Communications query, store, or runtime.
+#[must_use]
+pub fn communication_attachment_blob_admission_observed_publish_request_v1() -> CapabilityRequestV1
+{
+    CapabilityRequestV1 {
+        request: Some(Request::EventRoute(EventRouteRequestV1 {
+            envelope_kind: DurableEnvelopeKindV1::Observation as i32,
+            contract: Some(
+                communication_attachment_blob_admission_observed_contract_reference_v1(),
+            ),
+            direction: EventRouteDirectionV1::Publish as i32,
+            max_in_flight: COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+            subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
+            max_deliver: 0,
+            ack_wait_millis: 0,
+        })),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,6 +146,24 @@ mod tests {
         assert_eq!(
             anchor.schema_sha256,
             COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256,
+        );
+    }
+
+    #[test]
+    fn blob_admission_route_is_publish_only_and_schema_bound() {
+        let request = communication_attachment_blob_admission_observed_publish_request_v1();
+        let Some(Request::EventRoute(route)) = request.request else {
+            panic!("event route");
+        };
+
+        assert_eq!(
+            route.envelope_kind,
+            DurableEnvelopeKindV1::Observation as i32
+        );
+        assert_eq!(route.direction, EventRouteDirectionV1::Publish as i32);
+        assert_eq!(
+            route.contract.expect("contract").name,
+            COMMUNICATION_ATTACHMENT_BLOB_ADMISSION_OBSERVED_CONTRACT_NAME
         );
     }
 }
