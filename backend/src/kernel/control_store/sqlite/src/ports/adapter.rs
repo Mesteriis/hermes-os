@@ -345,6 +345,13 @@ impl StorageBindingStore for SqliteControlStore {
         )
     }
 
+    fn begin_registration_storage_bindings_revocation(
+        &self,
+        registration_id: &str,
+    ) -> Result<Vec<hermes_kernel_control_store::PlatformStorageBindingV1>, Self::Error> {
+        SqliteControlStore::begin_registration_storage_bindings_revocation(self, registration_id)
+    }
+
     fn platform_storage_bindings(
         &self,
     ) -> Result<Vec<hermes_kernel_control_store::PlatformStorageBindingV1>, Self::Error> {

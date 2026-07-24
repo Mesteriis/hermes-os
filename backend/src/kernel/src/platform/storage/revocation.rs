@@ -15,6 +15,26 @@ use prost::Message;
 use super::{binding::STORAGE_PROCESS_ID, topology};
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
+pub(crate) fn fence_registration_bindings(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    registration_id: &str,
+) -> Result<(), String> {
+    let bindings = store
+        .begin_registration_storage_bindings_revocation(registration_id)
+        .map_err(|_| "managed Storage revocation cannot be reserved".to_owned())?;
+    if !bindings.is_empty() && !supervisor.is_active(STORAGE_PROCESS_ID)? {
+        return Err("managed Storage revocation is incomplete".to_owned());
+    }
+    for binding in bindings {
+        if fence_reserved_binding(supervisor, store, &binding).is_err() {
+            supervisor.stop_if_active(STORAGE_PROCESS_ID)?;
+            return Err("managed Storage revocation is incomplete".to_owned());
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn fence_reserved_binding(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,

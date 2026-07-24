@@ -22,8 +22,13 @@ high-watermark, старые reservation/grant epoch и managed client route
 отклоняются до relay. Замена signed runtime binding сначала durable фиксирует
 новую revision, затем останавливает старый worker; client, Blob, Event и Vault
 issuance/relay routes дополнительно требуют exact current binding revision.
-Conformance уже выданных внешних leases и live end-to-end flow ещё не
-реализованы.
+Suspend/revoke после grant-epoch fence атомарно переводит все active Storage
+bindings integration registration в `revoking`, запускает существующий Storage
+Control physical fence и независимо пытается остановить integration worker;
+недоступный Storage оставляет durable incomplete revocation вместо ложного
+успеха, а exact retry той же Storage binding revision повторно использует
+revocation reservation. Conformance уже выданных Event/provider leases и live
+end-to-end flow ещё не реализованы.
 
 Уточняет:
 

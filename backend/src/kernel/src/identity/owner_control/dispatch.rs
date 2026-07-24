@@ -518,7 +518,14 @@ fn transition(
         &request.registration_id,
         next,
     )?;
-    supervisor.stop_if_active(registration.registration_id())?;
+    let storage_revocation = crate::platform::storage::revocation::fence_registration_bindings(
+        supervisor,
+        store,
+        registration.registration_id(),
+    );
+    let runtime_stop = supervisor.stop_if_active(registration.registration_id());
+    storage_revocation?;
+    runtime_stop?;
     Ok(OwnerResult::TransitionModuleRegistration(
         TransitionModuleRegistrationResponseV1 {
             registration_id: registration.registration_id().to_owned(),

@@ -39,6 +39,31 @@ test('owner suspend or revoke durably fences grants before stopping a managed ru
   );
 });
 
+test('owner suspend or revoke reserves Storage fencing before stopping the affected runtime', async () => {
+  const source = await readFile(OWNER_CONTROL_DISPATCH, 'utf8');
+  const transitionStart = source.indexOf('fn transition(');
+  const transitionEnd = source.indexOf('\nfn begin(', transitionStart);
+  const transition = source.slice(transitionStart, transitionEnd);
+
+  assert.match(transition, /fence_registration_bindings/);
+  assert.match(transition, /supervisor\.stop_if_active\(registration\.registration_id\(\)\)/);
+  assert.ok(
+    transition.indexOf('transition_after_owner_authorization')
+      < transition.indexOf('fence_registration_bindings'),
+    'grant epoch must be fenced before Storage revocation is reserved',
+  );
+  assert.ok(
+    transition.indexOf('fence_registration_bindings')
+      < transition.indexOf('supervisor.stop_if_active'),
+    'Storage revocation must be started before the affected runtime is stopped',
+  );
+  assert.ok(
+    transition.indexOf('supervisor.stop_if_active')
+      < transition.indexOf('storage_revocation?'),
+    'the affected runtime must still be stopped when physical Storage fencing fails',
+  );
+});
+
 test('managed runtime generation advances from the persisted high-watermark', async () => {
   const source = await readFile(MANAGED_LAUNCH, 'utf8');
   const generationStart = source.indexOf('fn next_runtime_generation(');

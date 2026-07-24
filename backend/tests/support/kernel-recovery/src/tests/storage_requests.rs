@@ -111,6 +111,12 @@ fn control_store_keeps_only_the_next_durable_storage_binding_revision() {
         revoking.state(),
         hermes_kernel_control_store::PlatformStorageBindingStateV1::Revoking
     ));
+    assert_eq!(
+        store
+            .begin_platform_storage_binding_revocation("registration_notes", "storage.access", 1,)
+            .expect("retry exact reserved binding"),
+        revoking,
+    );
     store
         .record_platform_storage_binding(&storage_binding(2, "runtime_notes_2"))
         .expect("record next binding revision");
@@ -122,6 +128,109 @@ fn control_store_keeps_only_the_next_durable_storage_binding_revision() {
             .runtime_instance_id(),
         "runtime_notes_2",
     );
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn control_store_atomically_reserves_all_active_storage_bindings_for_a_registration() {
+    let root = unique_target_root("hermes-registration-storage-revoke");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
+        .expect("create Control Store");
+    for binding in [
+        storage_binding_for(
+            1,
+            "registration_notes",
+            "storage.primary",
+            "owner_notes",
+            "runtime_notes",
+            "runtime_notes_primary",
+        ),
+        storage_binding_for(
+            1,
+            "registration_notes",
+            "storage.archive",
+            "owner_notes",
+            "runtime_notes",
+            "runtime_notes_archive",
+        ),
+        storage_binding_for(
+            1,
+            "registration_other",
+            "storage.primary",
+            "owner_other",
+            "runtime_other",
+            "runtime_other_primary",
+        ),
+    ] {
+        store
+            .record_platform_storage_binding(&binding)
+            .expect("record active Storage binding");
+    }
+
+    let reserved = store
+        .begin_registration_storage_bindings_revocation("registration_notes")
+        .expect("reserve registration Storage bindings");
+    assert_eq!(
+        reserved
+            .iter()
+            .map(|binding| binding.capability_id())
+            .collect::<Vec<_>>(),
+        vec!["storage.archive", "storage.primary"],
+    );
+    assert!(reserved.iter().all(|binding| matches!(
+        binding.state(),
+        hermes_kernel_control_store::PlatformStorageBindingStateV1::Revoking
+    )));
+    assert_eq!(
+        store
+            .begin_registration_storage_bindings_revocation("registration_notes")
+            .expect("retry registration Storage reservations"),
+        reserved,
+    );
+    assert!(matches!(
+        store
+            .platform_storage_binding("registration_other", "storage.primary")
+            .expect("read unrelated Storage binding")
+            .expect("unrelated Storage binding")
+            .state(),
+        hermes_kernel_control_store::PlatformStorageBindingStateV1::Active
+    ));
+
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn registration_storage_fence_remains_durable_when_storage_runtime_is_unavailable() {
+    let root = unique_target_root("hermes-registration-storage-fence");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
+        .expect("create Control Store");
+    store
+        .record_platform_storage_binding(&storage_binding(1, "runtime_notes"))
+        .expect("record active Storage binding");
+    let supervisor = crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor::new(
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
+
+    assert_eq!(
+        crate::platform::storage::revocation::fence_registration_bindings(
+            &supervisor,
+            &store,
+            "registration_notes",
+        )
+        .expect_err("inactive Storage runtime cannot prove physical fencing"),
+        "managed Storage revocation is incomplete"
+    );
+    assert!(matches!(
+        store
+            .platform_storage_binding("registration_notes", "storage.access")
+            .expect("read reserved Storage binding")
+            .expect("reserved Storage binding")
+            .state(),
+        hermes_kernel_control_store::PlatformStorageBindingStateV1::Revoking
+    ));
+
     std::fs::remove_dir_all(root).expect("remove fixture directory");
 }
 
@@ -165,10 +274,28 @@ fn storage_request(capability_id: &str, owner_id: &str) -> ModuleStorageRequestV
 }
 
 fn storage_binding(revision: u64, runtime_instance_id: &str) -> PlatformStorageBindingV1 {
+    storage_binding_for(
+        revision,
+        "registration_notes",
+        "storage.access",
+        "owner_notes",
+        runtime_instance_id,
+        "runtime_notes",
+    )
+}
+
+fn storage_binding_for(
+    revision: u64,
+    registration_id: &str,
+    capability_id: &str,
+    owner_id: &str,
+    runtime_instance_id: &str,
+    runtime_principal: &str,
+) -> PlatformStorageBindingV1 {
     PlatformStorageBindingV1::new(PlatformStorageBindingInputV1 {
-        registration_id: "registration_notes".to_owned(),
-        capability_id: "storage.access".to_owned(),
-        owner_id: "owner_notes".to_owned(),
+        registration_id: registration_id.to_owned(),
+        capability_id: capability_id.to_owned(),
+        owner_id: owner_id.to_owned(),
         binding_revision: revision,
         topology_revision: 1,
         storage_generation: 1,
@@ -176,7 +303,7 @@ fn storage_binding(revision: u64, runtime_instance_id: &str) -> PlatformStorageB
         runtime_generation: 7,
         grant_epoch: 3,
         role_epoch: revision,
-        runtime_principal: "runtime_notes".to_owned(),
+        runtime_principal: runtime_principal.to_owned(),
         connection_budget: 4,
         statement_timeout_millis: 5_000,
         credential_lease_revision: revision,

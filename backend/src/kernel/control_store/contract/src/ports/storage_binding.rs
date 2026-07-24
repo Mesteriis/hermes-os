@@ -20,5 +20,9 @@ pub trait StorageBindingStore {
         capability_id: &str,
         binding_revision: u64,
     ) -> Result<PlatformStorageBindingV1, Self::Error>;
+    fn begin_registration_storage_bindings_revocation(
+        &self,
+        registration_id: &str,
+    ) -> Result<Vec<PlatformStorageBindingV1>, Self::Error>;
     fn platform_storage_bindings(&self) -> Result<Vec<PlatformStorageBindingV1>, Self::Error>;
 }

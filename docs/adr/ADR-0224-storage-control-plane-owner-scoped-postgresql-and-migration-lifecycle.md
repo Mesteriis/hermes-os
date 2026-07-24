@@ -121,7 +121,13 @@ PostgreSQL/PgBouncer. Managed
 binding revoke уже резервируется в Control Store как `active → revoking` до
 live side effects; Storage child принимает только exact staged binding и
 выполняет Vault, PgBouncer и PostgreSQL fence. Failure оставляет reservation и
-останавливает child. Это ещё не является end-to-end live conformance evidence.
+останавливает child. Module owner transition теперь атомарно резервирует revoke
+всех active Storage bindings registration после grant-epoch fence, вызывает
+тот же Storage child path и всё равно останавливает affected module runtime при
+ошибке. Недоступный Storage child оставляет durable `revoking` и не считается
+успешным physical fence; exact повтор операции над той же binding revision
+идемпотентно возвращает reservation и может повторить side-effect fence. Это
+ещё не является end-to-end live conformance evidence owner transition.
 Совокупность этих conformance открывает `storage_control_v1`; она не заявляет
 physical same-UID sandbox isolation сверх задокументированного evidence.
 

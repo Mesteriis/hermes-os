@@ -96,19 +96,78 @@ impl SqliteControlStore {
                  WHERE registration_id = ?1 AND capability_id = ?2 AND binding_revision = ?3 AND state = 1",
                 params![registration_id, capability_id, as_sql(binding_revision)?],
             )?;
-            if changed != 1 {
-                return Err(StoreError::PlatformStorageBindingStateConflict);
-            }
-            connection.query_row(
-                "SELECT owner_id, binding_revision, topology_revision, storage_generation,
+            let binding = connection
+                .query_row(
+                    "SELECT owner_id, binding_revision, topology_revision, storage_generation,
                         runtime_instance_id, runtime_generation, grant_epoch, role_epoch,
                         runtime_principal, connection_budget, statement_timeout_millis,
                         credential_lease_revision, storage_bundle_revision, storage_bundle_digest, state
                  FROM hermes_kernel_platform_storage_binding
                  WHERE registration_id = ?1 AND capability_id = ?2",
-                params![registration_id, capability_id],
-                |row| decode_binding(row, &registration_id, &capability_id),
-            ).map_err(StoreError::from)
+                    params![registration_id, capability_id],
+                    |row| decode_binding(row, &registration_id, &capability_id),
+                )
+                .optional()?
+                .ok_or(StoreError::PlatformStorageBindingStateConflict)?;
+            if changed == 1
+                || (binding.binding_revision() == binding_revision
+                    && binding.state() == PlatformStorageBindingStateV1::Revoking)
+            {
+                Ok(binding)
+            } else {
+                Err(StoreError::PlatformStorageBindingStateConflict)
+            }
+        })
+    }
+
+    pub fn begin_registration_storage_bindings_revocation(
+        &self,
+        registration_id: &str,
+    ) -> Result<Vec<PlatformStorageBindingV1>, StoreError> {
+        let registration_id = registration_id.to_owned();
+        self.with_connection(move |connection| {
+            let transaction = connection.transaction()?;
+            let active_capability_ids = {
+                let mut statement = transaction.prepare(
+                    "SELECT capability_id
+                     FROM hermes_kernel_platform_storage_binding
+                     WHERE registration_id = ?1 AND state = 1
+                     ORDER BY capability_id",
+                )?;
+                statement
+                    .query_map(params![registration_id], |row| row.get::<_, String>(0))?
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+            let changed = transaction.execute(
+                "UPDATE hermes_kernel_platform_storage_binding
+                 SET state = 2
+                 WHERE registration_id = ?1 AND state = 1",
+                params![registration_id],
+            )?;
+            if changed != active_capability_ids.len() {
+                return Err(StoreError::PlatformStorageBindingStateConflict);
+            }
+            let reserved = {
+                let mut statement = transaction.prepare(
+                    "SELECT registration_id, capability_id, owner_id, binding_revision,
+                            topology_revision, storage_generation, runtime_instance_id,
+                            runtime_generation, grant_epoch, role_epoch, runtime_principal,
+                            connection_budget, statement_timeout_millis,
+                            credential_lease_revision, storage_bundle_revision,
+                            storage_bundle_digest, state
+                     FROM hermes_kernel_platform_storage_binding
+                     WHERE registration_id = ?1 AND state = 2
+                     ORDER BY capability_id",
+                )?;
+                statement
+                    .query_map(params![registration_id], decode_listed_binding)?
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+            if reserved.len() < active_capability_ids.len() {
+                return Err(StoreError::PlatformStorageBindingStateConflict);
+            }
+            transaction.commit()?;
+            Ok(reserved)
         })
     }
 

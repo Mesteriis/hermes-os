@@ -30,9 +30,17 @@ attestation; stale generation, epoch или другой digest отклоняю
 grant epoch. Это owner-isolated `0600` local production IPC; session является
 короткоживущим local bearer credential и не даёт PID, container name или Docker
 identity authority.
-Эти части проверяются lifecycle-тестами, но не открывают
-следующие platform/data-plane gates: public Gateway, Vault, Storage, NATS и
-business owner по-прежнему не реализованы.
+Owner transition в `suspended` или `revoked` сначала durable повышает
+registration/grant epoch, затем одной Control Store transaction переводит все
+active Storage bindings этой registration в `revoking`. Kernel запрашивает
+существующий Storage Control physical fence и в любом случае пытается
+остановить affected managed runtime. Недоступный или отклонивший revoke Storage
+оставляет bindings в `revoking` и возвращает incomplete result; active binding
+и ложный successful revoke не восстанавливаются.
+Эти части проверяются lifecycle и architecture-тестами. Наличие owner-control,
+Gateway, Vault, Storage, Event Hub или business-owner кода само по себе не
+открывает новый production inventory: каждый owner и data-plane gate требует
+своего exact admission evidence по текущей policy.
 
 Зависит от:
 
