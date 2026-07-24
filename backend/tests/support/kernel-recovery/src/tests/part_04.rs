@@ -1,4 +1,5 @@
 use super::common::*;
+use crate::platform::macos::managed_launch;
 use hermes_runtime_protocol::v1::{
     CapabilityRequestV1, VaultPurposeRequestV1, capability_request_v1,
 };
@@ -278,6 +279,64 @@ fn managed_runtime_expectation_rejects_a_stale_persisted_launch_fence() {
             .expect_err("stale grant epoch"),
         "managed launch fence does not match its approved registration"
     );
+}
+
+#[test]
+fn managed_launch_generation_advances_across_grant_epoch_changes() {
+    let root = unique_target_root("hermes-managed-generation-fence");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
+        .expect("create Control Store");
+    let registration_id = "registration-generation";
+    let descriptor_sha256 = [7; 32];
+    store
+        .create_pending_registration(
+            &ModuleRegistration::new(
+                registration_id,
+                "module-generation",
+                "owner-generation",
+                descriptor_sha256,
+                ModuleRegistrationState::Pending,
+                1,
+            ),
+            &["read".to_owned()],
+        )
+        .expect("create managed registration");
+    store
+        .approve_module_registration(registration_id, &["read".to_owned()])
+        .expect("approve managed registration");
+    store
+        .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
+            registration_id,
+            1,
+            "distribution-generation",
+            "runtime-generation",
+            [8; 32],
+            descriptor_sha256,
+            None,
+        ))
+        .expect("record managed launch binding");
+    let supervisor = ManagedRuntimeSupervisor::new(Arc::new(AtomicBool::new(false)));
+
+    let first = managed_launch::reserve(&supervisor, &store, registration_id)
+        .expect("reserve first managed generation");
+    assert_eq!(first.runtime_generation(), 1);
+    store
+        .transition_module_registration(registration_id, ModuleRegistrationState::Suspended)
+        .expect("suspend managed registration");
+    let reapproved = store
+        .approve_module_registration(registration_id, &["read".to_owned()])
+        .expect("reapprove managed registration");
+    assert!(
+        managed_launch::load(&supervisor, &store, registration_id).is_err(),
+        "the reservation from the previous grant epoch stays fenced"
+    );
+
+    let second = managed_launch::reserve(&supervisor, &store, registration_id)
+        .expect("reserve successor managed generation");
+    assert_eq!(second.runtime_generation(), 2);
+    assert_eq!(second.grant_epoch(), reapproved.grant_epoch());
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
 }
 
 #[test]

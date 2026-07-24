@@ -44,6 +44,10 @@ pub trait RuntimeTrustStore {
         &self,
         registration_id: &str,
     ) -> Result<Option<ManagedLaunchRecord>, Self::Error>;
+    fn managed_launch_generation_high_watermark(
+        &self,
+        registration_id: &str,
+    ) -> Result<Option<u64>, Self::Error>;
     fn record_platform_managed_process_binding(
         &self,
         binding: &PlatformManagedProcessBinding,

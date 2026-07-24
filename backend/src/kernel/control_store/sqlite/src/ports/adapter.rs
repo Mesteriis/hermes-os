@@ -431,6 +431,12 @@ impl RuntimeTrustStore for SqliteControlStore {
     ) -> Result<Option<ManagedLaunchRecord>, Self::Error> {
         SqliteControlStore::effective_managed_launch_record(self, id)
     }
+    fn managed_launch_generation_high_watermark(
+        &self,
+        id: &str,
+    ) -> Result<Option<u64>, Self::Error> {
+        SqliteControlStore::managed_launch_generation_high_watermark(self, id)
+    }
     fn record_platform_managed_process_binding(
         &self,
         value: &PlatformManagedProcessBinding,

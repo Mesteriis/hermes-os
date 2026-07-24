@@ -12,7 +12,10 @@ Kernel. Installed bundle проверяется по target triple, stable size/
 process adapter принимает только typed staged artifact, выполняет bounded
 timeout/retry и не наследует environment. SQLite Control Store хранит bundled
 binding и launch record, fenced by binding, Kernel/runtime generation и current
-grant epoch. Managed supervisor создаёт fresh inherited Unix FD на каждую
+grant epoch. Runtime generation выделяется из persisted per-registration
+high-watermark, поэтому suspend/reapprove с новым grant epoch не переиспользует
+generation и не блокирует последующий launch. Managed supervisor создаёт fresh
+inherited Unix FD на каждую
 попытку и требует exact `Describe` descriptor/settings bytes до допуска
 process; mismatched digest, module identity или stale fence fail closed.
 Production macOS owner-control принимает только artifact ID и bind/start-ит

@@ -130,6 +130,24 @@ impl SqliteControlStore {
             Ok(record)
         })
     }
+
+    pub fn managed_launch_generation_high_watermark(
+        &self,
+        registration_id: &str,
+    ) -> Result<Option<u64>, StoreError> {
+        let registration_id = registration_id.to_owned();
+        self.with_connection(move |connection| {
+            connection
+                .query_row(
+                    "SELECT runtime_generation FROM hermes_kernel_managed_launch_record
+                     WHERE registration_id = ?1",
+                    [&registration_id],
+                    |row| as_u64(row.get(0)?, 0),
+                )
+                .optional()
+                .map_err(StoreError::from)
+        })
+    }
 }
 
 fn decode_binding(

@@ -17,8 +17,10 @@ units не входят в Communications inventory и не дают runtime п�
 client-delivery operations, совместимый с подписанным protocol-major `2`.
 Owner transition в `suspended` или `revoked` теперь сначала фиксирует durable
 registration/grant-epoch fence, затем идемпотентно останавливает exact managed
-worker. Полная managed-launch generation/stale-fence, route/lease invalidation
-и live end-to-end conformance ещё не реализованы.
+worker. Managed launch использует monotonic per-registration generation
+high-watermark, старые reservation/grant epoch и managed client route
+отклоняются до relay. Полная route/lease invalidation при restart и descriptor
+replacement, а также live end-to-end conformance ещё не реализованы.
 
 Уточняет:
 

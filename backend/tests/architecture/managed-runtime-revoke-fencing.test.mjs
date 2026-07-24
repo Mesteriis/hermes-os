@@ -7,6 +7,10 @@ const OWNER_CONTROL_DISPATCH = new URL(
   'src/kernel/src/identity/owner_control/dispatch.rs',
   BACKEND_ROOT,
 );
+const MANAGED_LAUNCH = new URL(
+  'src/kernel/src/platform/macos/managed_launch.rs',
+  BACKEND_ROOT,
+);
 
 test('owner suspend or revoke durably fences grants before stopping a managed runtime', async () => {
   const source = await readFile(OWNER_CONTROL_DISPATCH, 'utf8');
@@ -25,4 +29,13 @@ test('owner suspend or revoke durably fences grants before stopping a managed ru
       < transition.indexOf('stop_if_active'),
     'the durable grant-epoch fence must precede process stop',
   );
+});
+
+test('managed runtime generation advances from the persisted high-watermark', async () => {
+  const source = await readFile(MANAGED_LAUNCH, 'utf8');
+  const generationStart = source.indexOf('fn next_runtime_generation(');
+  const generation = source.slice(generationStart);
+
+  assert.match(generation, /managed_launch_generation_high_watermark/);
+  assert.doesNotMatch(generation, /effective_managed_launch_record/);
 });

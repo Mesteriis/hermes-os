@@ -1,13 +1,18 @@
 use hermes_kernel_control_store::{
-    InitialOwnerIdentity, ModuleClientRpcRouteV1, ModuleRegistration, ModuleRegistrationState,
+    BundledManagedLaunchBinding, InitialOwnerIdentity, ManagedLaunchRecord, ModuleClientRpcRouteV1,
+    ModuleRegistration, ModuleRegistrationState,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::{
     CapabilityCriticalityV1, CapabilityDescriptorV1, ClientRpcRouteV1, ContractReferenceV1,
-    ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
+    ModuleClientRequestV1, ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1,
+    ProvidedSurfaceV1,
 };
 use prost::Message;
 
+use crate::modules::capability::router::{
+    ManagedCapabilityRouteRequest, ManagedRuntimeRelay, route_managed_client_request,
+};
 use crate::modules::registration::registry;
 
 use super::common::unique_target_root;
@@ -92,6 +97,86 @@ fn control_store_rejects_foreign_or_duplicate_client_rpc_routes_atomically() {
             .is_none()
     );
     std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn managed_client_route_rejects_a_stale_runtime_generation_before_relay() {
+    let root = unique_target_root("hermes-client-rpc-stale-generation");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
+        .expect("create Control Store");
+    store
+        .claim_initial_owner(&InitialOwnerIdentity::new(
+            "owner_notes",
+            "device_notes",
+            [4; 65],
+        ))
+        .expect("claim initial owner");
+    let descriptor_bytes = descriptor().encode_to_vec();
+    let registration =
+        registry::register(&store, &descriptor_bytes).expect("register managed client route");
+    let grants = store
+        .approve_module_registration(registration.registration_id(), &["notes.query".to_owned()])
+        .expect("approve managed client route");
+    store
+        .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
+            registration.registration_id(),
+            1,
+            "distribution-notes",
+            "runtime-notes",
+            [8; 32],
+            *registration.descriptor_sha256(),
+            None,
+        ))
+        .expect("record managed launch binding");
+    store
+        .record_managed_launch(&ManagedLaunchRecord::new(
+            registration.registration_id(),
+            "runtime-current",
+            1,
+            1,
+            2,
+            grants.grant_epoch(),
+        ))
+        .expect("record current managed generation");
+    let request = ModuleClientRequestV1 {
+        protocol_major: 1,
+        module_id: "module_notes".to_owned(),
+        owner_id: "owner_notes".to_owned(),
+        contract: Some(ContractReferenceV1 {
+            owner: "owner_notes".to_owned(),
+            name: "notes.query".to_owned(),
+            major: 1,
+            revision: 1,
+            schema_sha256: vec![7; 32],
+        }),
+        request_id: 1,
+        request_payload: vec![1],
+    }
+    .encode_to_vec();
+    let route = ManagedCapabilityRouteRequest::new(
+        registration.registration_id(),
+        "runtime-current",
+        1,
+        grants.grant_epoch(),
+        "notes.query",
+        &request,
+    );
+
+    assert_eq!(
+        route_managed_client_request(&store, &UnreachableRelay, &route)
+            .expect_err("stale runtime generation"),
+        "managed runtime fence is stale"
+    );
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+struct UnreachableRelay;
+
+impl ManagedRuntimeRelay for UnreachableRelay {
+    fn relay(&self, _: &str, _: Vec<u8>) -> Result<Vec<u8>, String> {
+        panic!("stale managed client route reached the runtime relay")
+    }
 }
 
 fn registration() -> ModuleRegistration {

@@ -614,11 +614,10 @@ fn next_runtime_generation(
     registration_id: &str,
 ) -> Result<u64, String> {
     store
-        .effective_managed_launch_record(registration_id)
+        .managed_launch_generation_high_watermark(registration_id)
         .map_err(|error| format!("{error:?}"))?
-        .map_or(Ok(1), |record| {
-            record
-                .runtime_generation()
+        .map_or(Ok(1), |runtime_generation| {
+            runtime_generation
                 .checked_add(1)
                 .ok_or_else(|| "managed runtime generation overflowed".to_owned())
         })
