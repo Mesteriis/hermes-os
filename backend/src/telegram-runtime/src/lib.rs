@@ -640,6 +640,48 @@ mod tests {
             Some(BodyAdmissionFailureV1::PolicyRejected)
         );
     }
+
+    #[test]
+    fn communications_observation_uses_exact_admitted_module_identity() {
+        let mut runtime = TelegramRuntime::new(PollingTransport { events: Vec::new() });
+        runtime.set_admission(Some(TelegramRuntimeAdmission {
+            logical_owner_id: "owner".to_owned(),
+            configuration_instance_id: "configuration".to_owned(),
+            module_registration_id: "telegram-registration".to_owned(),
+            runtime_instance_id: "telegram-runtime-1".to_owned(),
+            runtime_generation: 7,
+            grant_epoch: 11,
+            vault_runtime_generation: 3,
+            api_hash_revision: 5,
+            session_encryption_key_revision: 6,
+        }));
+        let draft = hermes_telegram_core::observation_draft(TelegramMessageObservation {
+            account_id: "account".to_owned(),
+            provider_chat_id: "chat".to_owned(),
+            provider_message_id: "message".to_owned(),
+            provider_topic_id: None,
+            sender_id: "sender".to_owned(),
+            sender_display_name: None,
+            is_outgoing: false,
+            text: None,
+            media: None,
+            references: TelegramMessageReferences::default(),
+            observed_at_unix_seconds: 1,
+        })
+        .expect("Telegram observation draft");
+
+        let (record, _) = runtime
+            .communication_observation_record(&draft)
+            .expect("Telegram outbox record");
+        let envelope =
+            hermes_events_protocol::validation::envelope::decode_envelope_v1(record.exact_bytes())
+                .expect("durable observation envelope");
+        let source = envelope.source.expect("durable observation source");
+
+        assert_eq!(source.module_id, PACKAGE);
+        assert_eq!(source.runtime_instance_id.len(), 16);
+        assert_eq!(source.runtime_generation, 7);
+    }
 }
 
 pub struct TelegramBlobMaterializer<R> {
@@ -3029,7 +3071,7 @@ where
             &ObservationEnvelopeContextV1 {
                 runtime_instance_id: admission.runtime_instance_id.clone(),
                 runtime_generation: admission.runtime_generation,
-                module_id: "telegram-runtime".to_owned(),
+                module_id: PACKAGE.to_owned(),
                 recorded_at_unix_seconds,
                 recorded_at_nanos: i32::try_from(recorded_at.subsec_nanos())
                     .map_err(|_| TelegramContractError::RuntimeBlocked)?,
