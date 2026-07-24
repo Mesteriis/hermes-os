@@ -16,6 +16,7 @@ message CommunicationsQueryRequestV1 {
     ListMessageReferencesRequestV1 list_message_references = 8;
     SearchCommunicationsRequestV1 search_communications = 9;
     GetEvidenceRequestV1 get_evidence = 10;
+    ListMessageEvidenceRequestV1 list_message_evidence = 11;
   }
 }
 
@@ -30,6 +31,7 @@ message CommunicationsQueryResponseV1 {
     ListMessageReferencesResponseV1 list_message_references = 7;
     SearchCommunicationsResponseV1 search_communications = 8;
     GetEvidenceResponseV1 get_evidence = 9;
+    ListMessageEvidenceResponseV1 list_message_evidence = 10;
   }
   string error_code = 15;
 }
@@ -78,6 +80,9 @@ message ListMessageReferencesResponseV1 { repeated MessageReferenceSummaryV1 ref
 // content, Blob references and admission proofs remain owner-private.
 message GetEvidenceRequestV1 { bytes evidence_id = 1; }
 message GetEvidenceResponseV1 { EvidenceSummaryV1 evidence = 1; }
+
+message ListMessageEvidenceRequestV1 { bytes message_id = 1; uint32 limit = 2; }
+message ListMessageEvidenceResponseV1 { repeated EvidenceSummaryV1 evidence = 1; }
 
 // Exact-token owner-local derived search. Query text is transient at the
 // owner boundary and never appears in results, events or persistence rows.

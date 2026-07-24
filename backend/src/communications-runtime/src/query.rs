@@ -6,7 +6,8 @@ use hermes_communications_api::{
     CommunicationMessageSummaryV1, CommunicationObservedParticipantSummaryV1, CommunicationSummary,
     CommunicationsClientError, GetCommunicationConversationV1, GetCommunicationEvidenceV1,
     ListCommunicationAccountsV1, ListCommunicationConversationsV1, ListConversationMessagesV1,
-    ListConversationParticipantsV1, ListMessageAttachmentAnchorsV1, ListMessageReferencesV1,
+    ListConversationParticipantsV1, ListMessageAttachmentAnchorsV1, ListMessageEvidenceV1,
+    ListMessageReferencesV1,
 };
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 
@@ -19,6 +20,24 @@ pub async fn get_communication_evidence(
         .await
         .map_err(|_| CommunicationsClientError::Unavailable)?
         .ok_or(CommunicationsClientError::UnknownCommunication)
+}
+
+pub async fn list_message_evidence(
+    persistence: &CommunicationsDurablePersistence,
+    request: ListMessageEvidenceV1,
+) -> Result<Vec<CommunicationSummary>, CommunicationsClientError> {
+    let ids = persistence
+        .message_evidence_ids(request.message_id, request.limit)
+        .await
+        .map_err(|_| CommunicationsClientError::Unavailable)?;
+    let mut result = Vec::with_capacity(ids.len());
+    for evidence_id in ids {
+        result.push(
+            get_communication_evidence(persistence, GetCommunicationEvidenceV1 { evidence_id })
+                .await?,
+        );
+    }
+    Ok(result)
 }
 
 pub async fn get_communication_conversation(

@@ -4,7 +4,8 @@ use hermes_communications_api::{
     CommunicationConversationIdV1, CommunicationMessageIdV1, CommunicationObservationIdV1,
     CommunicationSourceCursorV1, GetCommunicationConversationV1, GetCommunicationEvidenceV1,
     ListCommunicationAccountsV1, ListCommunicationConversationsV1, ListConversationMessagesV1,
-    ListConversationParticipantsV1, ListMessageAttachmentAnchorsV1, ListMessageReferencesV1,
+    ListConversationParticipantsV1, ListMessageAttachmentAnchorsV1, ListMessageEvidenceV1,
+    ListMessageReferencesV1,
     query_wire::{
         CommunicationsQueryRequestV1, CommunicationsQueryResponseV1,
         communications_query_request_v1::Operation,
@@ -21,7 +22,7 @@ use std::os::unix::net::UnixStream;
 use crate::query::{
     get_communication_conversation, get_communication_evidence, list_communication_accounts,
     list_communication_conversations, list_conversation_messages, list_conversation_participants,
-    list_message_attachment_anchors, list_message_references,
+    list_message_attachment_anchors, list_message_evidence, list_message_references,
 };
 use crate::{
     search_access::CommunicationsSearchAccessV1,
@@ -161,6 +162,22 @@ pub async fn handle_query_request_v1(
                 references: list_message_references(
                     persistence,
                     ListMessageReferencesV1 {
+                        message_id: CommunicationMessageIdV1::new(id16(&request.message_id)?),
+                        limit: limit(request.limit)?,
+                    },
+                )
+                .await
+                .map_err(|_| CommunicationsQueryPortErrorV1::Unavailable)?
+                .iter()
+                .map(Into::into)
+                .collect(),
+            },
+        ),
+        Operation::ListMessageEvidence(request) => QueryResult::ListMessageEvidence(
+            hermes_communications_api::query_wire::ListMessageEvidenceResponseV1 {
+                evidence: list_message_evidence(
+                    persistence,
+                    ListMessageEvidenceV1 {
                         message_id: CommunicationMessageIdV1::new(id16(&request.message_id)?),
                         limit: limit(request.limit)?,
                     },

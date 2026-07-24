@@ -699,6 +699,24 @@ impl CommunicationsDurablePersistence {
         row.map(conversation_from_row).transpose()
     }
 
+    pub async fn message_evidence_ids(
+        &self,
+        message_id: CommunicationMessageIdV1,
+        limit: u16,
+    ) -> Result<Vec<CommunicationObservationIdV1>, CommunicationsPersistenceError> {
+        let rows = sqlx::query("SELECT summary.observation_id FROM hermes_data.communications_evidence_summaries summary INNER JOIN hermes_data.communications_messages message ON message.source_cursor_sha256 = summary.source_cursor_sha256 WHERE message.message_id = $1 ORDER BY summary.observed_at_unix_seconds DESC, summary.observation_id ASC LIMIT $2")
+            .bind(message_id.bytes().as_slice()).bind(i64::from(limit)).fetch_all(&self.pool).await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        rows.into_iter()
+            .map(|row| {
+                let value: Vec<u8> = row
+                    .try_get("observation_id")
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+                id16(&value).map(CommunicationObservationIdV1::new)
+            })
+            .collect()
+    }
+
     pub async fn conversations(
         &self,
         account_cursor: Option<CommunicationSourceCursorV1>,

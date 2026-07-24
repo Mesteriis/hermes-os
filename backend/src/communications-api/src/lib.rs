@@ -414,6 +414,11 @@ pub struct ListMessageReferencesV1 {
     pub limit: u16,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ListMessageEvidenceV1 {
+    pub message_id: CommunicationMessageIdV1,
+    pub limit: u16,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SearchCommunicationsV1 {
     pub query: String,
     pub limit: u16,
