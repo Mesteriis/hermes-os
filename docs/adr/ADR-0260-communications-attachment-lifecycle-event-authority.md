@@ -2,9 +2,14 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: В работе. Owner-local CAS/canonical outbox, оба exact
-inbound contract, отдельные consumer capability и fail-closed typed permit set
-реализованы. Реальный producer admission и live conformance ещё не выполнены.
+Состояние реализации: Частично реализовано. Owner-local CAS/canonical outbox,
+оба exact inbound contract, отдельные consumer capability и fail-closed typed
+permit set реализованы. Managed conformance публикует schema-bound requested и
+admitted observations в Event Hub, доказывает owner-local CAS, canonical
+outbox causation/correlation и публичное `blob_admitted` состояние без
+provider locator. Это consumer conformance, а не producer admission: реальный
+producer, его signed descriptor/grant и producer-specific conformance ещё не
+выполнены.
 ADR-0246 определил owner-local attachment state machine, но не зафиксировал
 exact producer authority и contracts для её terminal external facts. До
 отдельного admission ни один producer не получает право изменять attachment

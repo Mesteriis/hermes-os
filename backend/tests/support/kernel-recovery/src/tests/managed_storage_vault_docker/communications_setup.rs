@@ -1075,6 +1075,10 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                 .subscribe("hermes.event.v1.communications.communication_attachment_anchor_recorded.v1")
                 .await
                 .expect("subscribe to exact attachment-anchor handoff subject");
+            let mut safety_events = client
+                .subscribe("hermes.event.v1.communications.communication_attachment_safety_state_changed.v1")
+                .await
+                .expect("subscribe to exact attachment lifecycle subject");
             let context = async_nats::jetstream::new(client);
             context
                 .publish(
@@ -1117,6 +1121,94 @@ pub(super) fn assert_communications_attachment_anchor_projection(
             assert_eq!(payload.source_observation_id, record.message_id().to_vec());
             assert_eq!(payload.media_cursor_sha256.len(), 32);
             assert_eq!(payload.initial_state, 1);
+            let attachment_anchor_id: [u8; 16] = payload
+                .attachment_anchor_id
+                .as_slice()
+                .try_into()
+                .expect("attachment anchor identifier");
+            let media_cursor_sha256: [u8; 32] = payload
+                .media_cursor_sha256
+                .as_slice()
+                .try_into()
+                .expect("attachment media cursor");
+            let correlation_id: [u8; 16] = ingress
+                .correlation_id
+                .as_slice()
+                .try_into()
+                .expect("attachment correlation identifier");
+            let requested = hermes_communications_ingress::build_attachment_blob_admission_outbox_record_v1(
+                &hermes_communications_ingress::AttachmentBlobAdmissionFactV1 {
+                    attachment_anchor_id,
+                    source_observation_id: *record.message_id(),
+                    correlation_id,
+                    media_cursor_sha256,
+                    expected_state: hermes_communications_ingress::AttachmentBlobExpectedStateV1::DescriptorOnly,
+                    transition: hermes_communications_ingress::AttachmentBlobAdmissionTransitionV1::Requested,
+                    observed_at_unix_seconds: 1_783_024_003,
+                    blob_reference_binding_sha256: None,
+                },
+                &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+                    runtime_instance_id: "attachment-integration-test-runtime-1".to_owned(),
+                    runtime_generation: 1,
+                    module_id: "attachment-integration-test-runtime".to_owned(),
+                    recorded_at_unix_seconds: 1_783_024_003,
+                    recorded_at_nanos: 0,
+                },
+            )
+            .expect("build requested attachment admission envelope");
+            context
+                .publish(
+                    "hermes.observation.v1.communications.communication_attachment_blob_admission_observed.v1",
+                    requested.exact_bytes().to_vec().into(),
+                )
+                .await
+                .expect("publish requested attachment admission envelope")
+                .await
+                .expect("acknowledge requested attachment admission envelope");
+            let admitted = hermes_communications_ingress::build_attachment_blob_admission_outbox_record_v1(
+                &hermes_communications_ingress::AttachmentBlobAdmissionFactV1 {
+                    attachment_anchor_id,
+                    source_observation_id: *record.message_id(),
+                    correlation_id,
+                    media_cursor_sha256,
+                    expected_state: hermes_communications_ingress::AttachmentBlobExpectedStateV1::BlobPending,
+                    transition: hermes_communications_ingress::AttachmentBlobAdmissionTransitionV1::Admitted,
+                    observed_at_unix_seconds: 1_783_024_004,
+                    blob_reference_binding_sha256: Some([11; 32]),
+                },
+                &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+                    runtime_instance_id: "attachment-integration-test-runtime-1".to_owned(),
+                    runtime_generation: 1,
+                    module_id: "attachment-integration-test-runtime".to_owned(),
+                    recorded_at_unix_seconds: 1_783_024_004,
+                    recorded_at_nanos: 0,
+                },
+            )
+            .expect("build admitted attachment admission envelope");
+            context
+                .publish(
+                    "hermes.observation.v1.communications.communication_attachment_blob_admission_observed.v1",
+                    admitted.exact_bytes().to_vec().into(),
+                )
+                .await
+                .expect("publish admitted attachment admission envelope")
+                .await
+                .expect("acknowledge admitted attachment admission envelope");
+            for causation_message_id in [requested.message_id(), admitted.message_id()] {
+                let state_event = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    safety_events.next(),
+                )
+                .await
+                .expect("attachment lifecycle event timeout")
+                .expect("attachment lifecycle event missing");
+                let state_envelope = hermes_events_protocol::validation::envelope::decode_envelope_v1(
+                    state_event.payload.as_ref(),
+                )
+                .expect("attachment lifecycle envelope");
+                assert_eq!(state_envelope.causation_message_id, causation_message_id.to_vec());
+                assert_eq!(state_envelope.correlation_id, ingress.correlation_id);
+            }
             assert!(
                 !anchor_event
                     .payload
@@ -1223,6 +1315,7 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                     && anchor.declared_bytes == 32
                     && anchor.sha256 == vec![10; 32]
                     && anchor.disposition == 1
+                    && anchor.state == 3
             }) {
                 let public_payload = CommunicationsQueryResponseV1 {
                     result: Some(QueryResult::ListMessageAttachmentAnchors(
