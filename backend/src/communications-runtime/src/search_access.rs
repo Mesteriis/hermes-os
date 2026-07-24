@@ -9,7 +9,7 @@ use hermes_managed_vault_client::owner_derived_key::{
     ManagedOwnerDerivedKeyContextV1, ensure_managed_owner_derived_key_v2,
 };
 use hermes_runtime_protocol::{
-    managed_control::ManagedControlChannelV2,
+    managed_control::{ManagedControlChannelV2, ManagedControlRequestDispatcherV2},
     v1::{BlobDataOperationV1, ManagedStorageRuntimeConfigurationV1},
 };
 use zeroize::Zeroizing;
@@ -71,6 +71,7 @@ impl CommunicationsSearchAccessV1 {
     pub fn ensure_index_key(
         &mut self,
         control_channel: &mut ManagedControlChannelV2<UnixStream>,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     ) -> Result<Zeroizing<Vec<u8>>, CommunicationsSearchAccessErrorV1> {
         control_channel
             .inner_mut()
@@ -78,6 +79,7 @@ impl CommunicationsSearchAccessV1 {
             .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)?;
         let result = ensure_managed_owner_derived_key_v2(
             control_channel,
+            dispatcher,
             &self.key_context,
             COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
             COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
@@ -95,6 +97,7 @@ impl CommunicationsSearchAccessV1 {
     pub fn read_admitted_body(
         &mut self,
         control_channel: &mut ManagedControlChannelV2<UnixStream>,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
         blob: &CommunicationBodyBlobReferenceV1,
     ) -> Result<Vec<u8>, CommunicationsSearchAccessErrorV1> {
         let read_end = bounded_read_end(blob.declared_bytes)?;
@@ -105,6 +108,7 @@ impl CommunicationsSearchAccessV1 {
         let result = (|| {
             let session = request_managed_blob_session_v2(
                 control_channel,
+                dispatcher,
                 COMMUNICATIONS_BLOB_CAPABILITY_ID,
                 BlobDataOperationV1::BlobDataOperationReadRangeV1,
                 &blob.reference_id,

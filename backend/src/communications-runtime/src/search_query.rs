@@ -3,7 +3,9 @@
 use hermes_communications_api::CommunicationSearchHitV1;
 use hermes_communications_domain::normalize_search_query_v1;
 use hermes_communications_persistence::CommunicationsDurablePersistence;
-use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
+use hermes_runtime_protocol::managed_control::{
+    ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
+};
 use std::os::unix::net::UnixStream;
 
 use crate::{
@@ -21,6 +23,7 @@ pub async fn search_communications_v1(
     persistence: &CommunicationsDurablePersistence,
     access: &mut CommunicationsSearchAccessV1,
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     query: &str,
     limit: u16,
 ) -> Result<Vec<CommunicationSearchHitV1>, CommunicationsSearchQueryErrorV1> {
@@ -28,7 +31,7 @@ pub async fn search_communications_v1(
         return Err(CommunicationsSearchQueryErrorV1::InvalidQuery);
     }
     let key = access
-        .ensure_index_key(control_channel)
+        .ensure_index_key(control_channel, dispatcher)
         .map_err(access_error)?;
     let digests = query_token_digests_v1(query, &key)?;
     persistence

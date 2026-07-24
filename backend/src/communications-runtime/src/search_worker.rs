@@ -5,7 +5,9 @@ use hermes_communications_persistence::{
     CommunicationsDerivedIndexFailureV1, CommunicationsDerivedIndexJobOperationV1,
     CommunicationsDurablePersistence, CommunicationsPersistenceError,
 };
-use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
+use hermes_runtime_protocol::managed_control::{
+    ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
+};
 use std::os::unix::net::UnixStream;
 
 use crate::{
@@ -24,6 +26,7 @@ pub async fn process_next_derived_index_job_v1(
     persistence: &CommunicationsDurablePersistence,
     access: &mut CommunicationsSearchAccessV1,
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     worker_id: &str,
     now_unix_seconds: i64,
 ) -> Result<bool, CommunicationsSearchWorkerErrorV1> {
@@ -41,6 +44,7 @@ pub async fn process_next_derived_index_job_v1(
         persistence,
         access,
         control_channel,
+        dispatcher,
         &claimed.job,
         now_unix_seconds,
     )
@@ -78,6 +82,7 @@ async fn execute_claimed_job(
     persistence: &CommunicationsDurablePersistence,
     access: &mut CommunicationsSearchAccessV1,
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     job: &hermes_communications_persistence::CommunicationsDerivedIndexJobV1,
     now_unix_seconds: i64,
 ) -> Result<(), ExecutionErrorV1> {
@@ -106,10 +111,10 @@ async fn execute_claimed_job(
                 projection_revision: job.projection_revision,
             };
             let key = access
-                .ensure_index_key(control_channel)
+                .ensure_index_key(control_channel, dispatcher)
                 .map_err(|error| ExecutionErrorV1::Failure(vault_failure(error)))?;
             let body = access
-                .read_admitted_body(control_channel, &search_job.blob)
+                .read_admitted_body(control_channel, dispatcher, &search_job.blob)
                 .map_err(|error| ExecutionErrorV1::Failure(blob_failure(error)))?;
             let document = std::str::from_utf8(&body).map_err(|_| {
                 ExecutionErrorV1::Failure(CommunicationsDerivedIndexFailureV1::InvalidContent)

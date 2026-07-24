@@ -10,7 +10,9 @@ use hermes_communications_api::CommunicationBodyBlobReferenceV1;
 use hermes_communications_persistence::{
     CommunicationsBodyCustodyTransferErrorV1, CommunicationsDurablePersistence,
 };
-use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
+use hermes_runtime_protocol::managed_control::{
+    ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
+};
 
 use crate::admission::COMMUNICATIONS_BLOB_CAPABILITY_ID;
 
@@ -30,6 +32,7 @@ enum BlobCustodyTransferFailureV1 {
 
 pub async fn process_next_body_custody_transfer_v1(
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     persistence: &CommunicationsDurablePersistence,
     worker_id: &str,
     now_unix_seconds: i64,
@@ -56,6 +59,7 @@ pub async fn process_next_body_custody_transfer_v1(
     let transfer = (|| {
         let session = request_managed_blob_custody_transfer_v2(
             control_channel,
+            dispatcher,
             ManagedBlobCustodyTransferRequestV1 {
                 capability_id: COMMUNICATIONS_BLOB_CAPABILITY_ID,
                 source_reference_id: &claimed.source_reference_id,

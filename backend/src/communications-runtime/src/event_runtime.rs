@@ -12,12 +12,17 @@ use hermes_events_jetstream::{
     RuntimeSubscribePermitV1, request_managed_runtime_event_access_v2,
 };
 use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
+use hermes_runtime_protocol::managed_control::{
+    ManagedControlRequestDispatcherV2, ManagedControlTransportErrorV2,
+    RejectManagedControlRequestsV2,
+};
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeReadyRequestV1, ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
     managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
+use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
 use hermes_runtime_protocol::validation::module_client::{
     validate_module_client_request_v1, validate_module_client_response_v1,
 };
@@ -62,6 +67,79 @@ pub struct CommunicationsEventRuntimeV1 {
 pub enum CommunicationsEventRuntimeErrorV1 {
     Admission,
     Unavailable,
+}
+
+struct CommunicationsNestedRequestDispatcher<'a> {
+    persistence: &'a CommunicationsDurablePersistence,
+    search_access: &'a mut CommunicationsSearchAccessV1,
+}
+
+impl ManagedControlRequestDispatcherV2<UnixStream> for CommunicationsNestedRequestDispatcher<'_> {
+    fn dispatch_request(
+        &mut self,
+        channel: &mut ManagedControlChannelV2<UnixStream>,
+        correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+        request: hermes_runtime_protocol::v1::ManagedRuntimeControlRequestV1,
+    ) -> Result<(), ManagedControlTransportErrorV2> {
+        let response = match request.operation {
+            Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+                Some(request) if validate_module_client_request_v1(&request).is_ok() => {
+                    let mut reject_nested_request = RejectManagedControlRequestsV2;
+                    let result = tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(
+                            crate::query_client_port::handle_module_query_request_v1(
+                                self.persistence,
+                                self.search_access,
+                                channel,
+                                &mut reject_nested_request,
+                                &request.encode_to_vec(),
+                            ),
+                        )
+                    });
+                    let response = result
+                        .ok()
+                        .and_then(|payload| ModuleClientResponseV1::decode(payload.as_slice()).ok())
+                        .filter(|response| response.request_id == request.request_id)
+                        .unwrap_or(ModuleClientResponseV1 {
+                            protocol_major: 1,
+                            request_id: request.request_id,
+                            response_payload: Vec::new(),
+                            error_code: "UNAVAILABLE".to_owned(),
+                        });
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::ClientDelivery(
+                            ManagedRuntimeClientDeliveryResponseV1 {
+                                response: Some(response),
+                            },
+                        )),
+                        error_code: String::new(),
+                    }
+                }
+                Some(request) => ManagedRuntimeControlResponseV1 {
+                    result: Some(ControlResult::ClientDelivery(
+                        ManagedRuntimeClientDeliveryResponseV1 {
+                            response: Some(ModuleClientResponseV1 {
+                                protocol_major: 1,
+                                request_id: request.request_id,
+                                response_payload: Vec::new(),
+                                error_code: "REJECTED".to_owned(),
+                            }),
+                        },
+                    )),
+                    error_code: String::new(),
+                },
+                None => ManagedRuntimeControlResponseV1 {
+                    result: None,
+                    error_code: "managed_runtime_control_invalid_client_delivery".to_owned(),
+                },
+            },
+            _ => ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: "managed_runtime_control_unexpected_request".to_owned(),
+            },
+        };
+        channel.write_response(correlation_id, response)
+    }
 }
 
 impl CommunicationsEventRuntimeV1 {
@@ -263,10 +341,12 @@ impl CommunicationsEventRuntimeV1 {
                 .map_err(|_| unavailable_at("client_rejected_write"))?;
             return Ok(true);
         }
+        let mut reject_nested_request = RejectManagedControlRequestsV2;
         let payload = crate::query_client_port::handle_module_query_request_v1(
             &self.persistence,
             &mut self.search_access,
             &mut self.control_channel,
+            &mut reject_nested_request,
             &request.encode_to_vec(),
         )
         .await;
@@ -320,8 +400,13 @@ impl CommunicationsEventRuntimeV1 {
         let context = self
             .canonical_event_context()
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        let mut dispatcher = CommunicationsNestedRequestDispatcher {
+            persistence: &self.persistence,
+            search_access: &mut self.search_access,
+        };
         match process_next_body_custody_transfer_v1(
             &mut self.control_channel,
+            &mut dispatcher,
             &self.persistence,
             &format!("{}:{}", self.runtime_instance_id, self.runtime_generation),
             context.recorded_at_unix_seconds,
@@ -342,10 +427,12 @@ impl CommunicationsEventRuntimeV1 {
         let context = self
             .canonical_event_context()
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        let mut reject_nested_request = RejectManagedControlRequestsV2;
         process_next_derived_index_job_v1(
             &self.persistence,
             &mut self.search_access,
             &mut self.control_channel,
+            &mut reject_nested_request,
             &format!("{}:{}", self.runtime_instance_id, self.runtime_generation),
             context.recorded_at_unix_seconds,
         )
