@@ -5,6 +5,7 @@ pub(crate) mod control_plane;
 pub(crate) mod development;
 pub(crate) mod events;
 pub(crate) mod gateway;
+pub(crate) mod integration_state;
 pub(crate) mod macos;
 pub(crate) mod managed;
 pub(crate) mod scheduler;

@@ -6,8 +6,10 @@ use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 use hermes_kernel_control_store::{BundledManagedLaunchBinding, PlatformManagedProcessBinding};
+use hermes_runtime_protocol::v1::{ManagedRuntimeArtifactBindingV1, RuntimeArtifactUseV1};
 
 use crate::distribution::bundle_verifier::{self, VerifiedDistributionBundle};
+use crate::distribution::runtime_dependencies;
 use crate::distribution::staged_artifact::{self, StagedNativeArtifact};
 use crate::distribution::trust_root::ReleaseTrustRoot;
 use crate::platform::macos::release_resources;
@@ -25,6 +27,37 @@ pub struct PreparedBundledManagedRuntime {
     staged_executable: StagedNativeArtifact,
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Option<Vec<u8>>,
+}
+
+pub struct PreparedBundledManagedIntegrationRuntime {
+    runtime: PreparedBundledManagedRuntime,
+    runtime_artifact_bindings: Vec<ManagedRuntimeArtifactBindingV1>,
+    staged_runtime_artifacts: Vec<StagedNativeArtifact>,
+    state_layout_revision: Option<u32>,
+}
+
+impl PreparedBundledManagedIntegrationRuntime {
+    #[must_use]
+    pub fn runtime_artifact_bindings(&self) -> &[ManagedRuntimeArtifactBindingV1] {
+        &self.runtime_artifact_bindings
+    }
+
+    #[must_use]
+    pub fn state_layout_revision(&self) -> Option<u32> {
+        self.state_layout_revision
+    }
+
+    pub fn into_launch_parts(self) -> (PreparedBundledManagedRuntime, Vec<StagedNativeArtifact>) {
+        (self.runtime, self.staged_runtime_artifacts)
+    }
+
+    pub fn remove(self) {
+        let (runtime, artifacts) = self.into_launch_parts();
+        let _ = runtime.remove();
+        for artifact in artifacts {
+            let _ = artifact.remove();
+        }
+    }
 }
 
 impl PreparedBundledManagedRuntime {
@@ -105,6 +138,47 @@ pub fn prepare_bound_managed_runtime(
     })
 }
 
+pub fn prepare_bound_managed_integration_runtime(
+    kernel_executable: &Path,
+    binding: &BundledManagedLaunchBinding,
+    launch_directory: &Path,
+    granted_capability_ids: &[String],
+) -> Result<PreparedBundledManagedIntegrationRuntime, String> {
+    let bundle = verify_selected_installed_bundle(kernel_executable, "aarch64-apple-darwin")?;
+    let executable = bound_artifact(&bundle, binding)?;
+    let descriptor = executable
+        .module_descriptor()
+        .ok_or_else(|| "managed launch artifact lacks a module descriptor".to_owned())?;
+    let requirements =
+        runtime_dependencies::select(descriptor, granted_capability_ids, bundle.manifest())?;
+    let runtime = PreparedBundledManagedRuntime {
+        staged_executable: stage_artifact(executable, launch_directory)?,
+        descriptor_bytes: executable
+            .module_descriptor_bytes()
+            .ok_or_else(|| "managed launch artifact lacks a module descriptor".to_owned())?
+            .to_vec(),
+        settings_schema_bytes: executable.settings_schema_bytes().map(ToOwned::to_owned),
+    };
+    let result = stage_runtime_dependencies(
+        &bundle,
+        requirements.runtime_artifacts(),
+        &launch_directory.join("runtime-artifacts"),
+    );
+    let (runtime_artifact_bindings, staged_runtime_artifacts) = match result {
+        Ok(staged) => staged,
+        Err(error) => {
+            let _ = runtime.remove();
+            return Err(error);
+        }
+    };
+    Ok(PreparedBundledManagedIntegrationRuntime {
+        runtime,
+        runtime_artifact_bindings,
+        staged_runtime_artifacts,
+        state_layout_revision: requirements.state_layout_revision(),
+    })
+}
+
 pub fn prepare_bound_platform_process(
     kernel_executable: &Path,
     binding: &PlatformManagedProcessBinding,
@@ -167,6 +241,77 @@ fn stage_verified_artifact(
         .find(|artifact| artifact.artifact_id() == artifact_id)
         .ok_or_else(|| "managed launch artifact is absent from distribution manifest".to_owned())?;
     stage_artifact(artifact, launch_directory)
+}
+
+fn stage_runtime_dependencies(
+    bundle: &VerifiedDistributionBundle,
+    requested: &[hermes_runtime_protocol::v1::DistributionManifestArtifactV1],
+    launch_directory: &Path,
+) -> Result<
+    (
+        Vec<ManagedRuntimeArtifactBindingV1>,
+        Vec<StagedNativeArtifact>,
+    ),
+    String,
+> {
+    let mut bindings = Vec::with_capacity(requested.len());
+    let mut staged_artifacts = Vec::with_capacity(requested.len());
+    for request in requested {
+        let artifact = match bundle
+            .artifacts()
+            .binary_search_by(|candidate| candidate.artifact_id().cmp(&request.artifact_id))
+            .ok()
+            .map(|index| &bundle.artifacts()[index])
+        {
+            Some(artifact) => artifact,
+            None => {
+                cleanup_staged_artifacts(staged_artifacts);
+                return Err(
+                    "verified managed integration runtime artifact is unavailable".to_owned(),
+                );
+            }
+        };
+        if artifact.size_bytes() != request.size_bytes
+            || artifact.expected_sha256().as_slice() != request.sha256.as_slice()
+        {
+            cleanup_staged_artifacts(staged_artifacts);
+            return Err(
+                "verified managed integration runtime artifact does not match manifest".to_owned(),
+            );
+        }
+        let staged = match stage_artifact(artifact, launch_directory) {
+            Ok(staged) => staged,
+            Err(error) => {
+                cleanup_staged_artifacts(staged_artifacts);
+                return Err(error);
+            }
+        };
+        let Some(staged_path) = staged
+            .path()
+            .to_str()
+            .filter(|value| !value.contains(['\0', '\n', '\r']))
+            .map(ToOwned::to_owned)
+        else {
+            cleanup_staged_artifacts(staged_artifacts);
+            let _ = staged.remove();
+            return Err("managed integration staged artifact path is invalid".to_owned());
+        };
+        bindings.push(ManagedRuntimeArtifactBindingV1 {
+            artifact_id: request.artifact_id.clone(),
+            r#use: RuntimeArtifactUseV1::NativeDynamicLibrary as i32,
+            staged_path,
+            size_bytes: request.size_bytes,
+            sha256: request.sha256.clone(),
+        });
+        staged_artifacts.push(staged);
+    }
+    Ok((bindings, staged_artifacts))
+}
+
+fn cleanup_staged_artifacts(artifacts: Vec<StagedNativeArtifact>) {
+    for artifact in artifacts {
+        let _ = artifact.remove();
+    }
 }
 
 fn bound_artifact<'a>(

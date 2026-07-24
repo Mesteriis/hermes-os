@@ -50,6 +50,11 @@ impl VerifiedDistributionArtifact {
         &self.expected_sha256
     }
 
+    #[must_use]
+    pub fn size_bytes(&self) -> u64 {
+        self.size_bytes
+    }
+
     /// Re-reads exact bytes with the same non-symlink, inode/metadata and
     /// digest checks used during bundle verification. Consumers retain the
     /// returned bytes in memory instead of serving a mutable bundle path.

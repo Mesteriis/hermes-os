@@ -6,6 +6,7 @@ pub(crate) mod bundle_verifier;
 pub(crate) mod bundled_launch;
 #[allow(dead_code)]
 pub(crate) mod manifest_verifier;
+pub(crate) mod runtime_dependencies;
 pub(crate) mod staged_artifact;
 pub(crate) mod staged_contracts;
 #[allow(dead_code)]

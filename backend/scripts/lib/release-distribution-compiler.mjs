@@ -33,6 +33,7 @@ const artifactKinds = new Map([
   ['storage_bundle', 3],
   ['browser_bootstrap_bundle', 4],
   ['browser_client_asset', 5],
+  ['module_runtime_native_dependency', 6],
 ]);
 
 function exactKeys(value, keys) {
@@ -46,6 +47,13 @@ function exactKeys(value, keys) {
 function validIdentifier(value) {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_IDENTIFIER_BYTES
     && /^[\x00-\x7f]+$/.test(value);
+}
+
+function validModuleIdentifier(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= MAX_IDENTIFIER_BYTES
+    && /^[a-z0-9_.-]+$/.test(value);
 }
 
 function validTarget(value) {
@@ -117,6 +125,7 @@ function encodeArtifact(artifact) {
     );
   }
   if (artifact.required) fields.push(fieldVarint(8, 1));
+  if (artifact.boundModuleId) fields.push(fieldString(13, artifact.boundModuleId));
   return Buffer.concat(fields);
 }
 
@@ -282,8 +291,9 @@ function validateAdditionalVerificationKeys(keys, activeKeyId) {
 function validateArtifactInput(artifact, previousArtifactId) {
   const commonKeys = ['artifact_kind', 'artifact_id', 'relative_path', 'source_path', 'required'];
   const moduleKeys = [...commonKeys, 'descriptor', 'settings_schema'];
+  const nativeDependencyKeys = [...commonKeys, 'bound_module_id'];
   const kind = artifactKinds.get(artifact?.artifact_kind);
-  const keys = kind === 1 ? moduleKeys : commonKeys;
+  const keys = kind === 1 ? moduleKeys : kind === 6 ? nativeDependencyKeys : commonKeys;
   if (!kind || !exactKeys(artifact, keys)
     || !validIdentifier(artifact.artifact_id)
     || artifact.artifact_id <= previousArtifactId
@@ -295,6 +305,9 @@ function validateArtifactInput(artifact, previousArtifactId) {
   if (kind === 1) {
     validateContractInput(artifact.descriptor, 'descriptor');
     if (artifact.settings_schema !== null) validateContractInput(artifact.settings_schema, 'settings schema');
+  }
+  if (kind === 6 && !validModuleIdentifier(artifact.bound_module_id)) {
+    throw new Error('release compiler native dependency binding is invalid');
   }
   return kind;
 }
@@ -428,6 +441,7 @@ export async function compileUnsignedReleaseContent(input) {
         relativePath: artifact.settings_schema.relative_path,
         sourcePath: artifact.settings_schema.source_path,
       },
+      boundModuleId: kind === 6 ? artifact.bound_module_id : null,
     });
     previousArtifactId = artifact.artifact_id;
   }

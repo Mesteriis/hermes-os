@@ -126,9 +126,14 @@ fn route_operation(
         Operation::ReserveBundledManagedRuntime(request) => {
             reserve_managed_runtime(store, supervisor, sessions, request)
         }
-        Operation::StartReservedIntegrationRuntime(request) => {
-            start_reserved_integration_runtime(store, runtime_dir, supervisor, sessions, request)
-        }
+        Operation::StartReservedIntegrationRuntime(request) => start_reserved_integration_runtime(
+            store,
+            data_dir,
+            runtime_dir,
+            supervisor,
+            sessions,
+            request,
+        ),
         Operation::StartReservedDomainRuntime(request) => {
             start_reserved_domain_runtime(store, runtime_dir, supervisor, sessions, request)
         }
@@ -192,6 +197,7 @@ fn reserve_managed_runtime(
 
 fn start_reserved_integration_runtime(
     store: &SqliteControlStore,
+    data_dir: &Path,
     runtime_dir: &Path,
     supervisor: &ManagedRuntimeSupervisor,
     sessions: &mut OwnerControlSessions,
@@ -205,6 +211,15 @@ fn start_reserved_integration_runtime(
             .module_registration(&request.registration_id)
             .map_err(|_| "managed integration registration is unavailable".to_owned())?
             .ok_or_else(|| "managed integration registration is unavailable".to_owned())?;
+        let granted_capability_ids = store
+            .module_grant_snapshot(&request.registration_id)
+            .map_err(|_| "managed integration grants are unavailable".to_owned())?
+            .and_then(|snapshot| {
+                snapshot
+                    .effective_grants()
+                    .map(|grants| grants.capability_ids().to_vec())
+            })
+            .ok_or_else(|| "managed integration grants are unavailable".to_owned())?;
         let binding = store
             .platform_storage_binding(&request.registration_id, &request.storage_capability_id)
             .map_err(|_| "managed integration Storage binding is unavailable".to_owned())?
@@ -254,19 +269,23 @@ fn start_reserved_integration_runtime(
             Some(host_bridge_configuration) => {
                 macos_managed_runtime_launch::start_staged_with_host_bridge_configuration(
                     supervisor,
+                    data_dir,
                     runtime_dir,
                     reservation,
                     configuration,
                     settings_snapshot_bytes,
                     host_bridge_configuration,
+                    &granted_capability_ids,
                 )?
             }
             None => macos_managed_runtime_launch::start_reserved_integration(
                 supervisor,
+                data_dir,
                 runtime_dir,
                 reservation,
                 configuration,
                 settings_snapshot_bytes,
+                &granted_capability_ids,
             )?,
         };
         Ok((runtime_generation, host_bridge_socket_path))

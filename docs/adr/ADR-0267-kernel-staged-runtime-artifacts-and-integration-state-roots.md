@@ -3,11 +3,12 @@
 Статус: Принято
 Дата: 2026-07-24
 Состояние реализации: owner-neutral wire foundation реализован в
-`hermes-runtime-protocol`: typed descriptor requests, manifest module binding,
-managed artifact/state-root bindings и strict structural validation. Kernel
-staging, Telegram migration и native-loader conformance ещё не реализованы.
-Решение является обязательным prerequisite для `telegram_integration_v1`, но
-само не открывает этот gate и не расширяет production inventory.
+`hermes-runtime-protocol`, а Kernel реализует exact intersection verified
+descriptor/effective grants/signed manifest, launch-scoped staging native
+dependencies и owner-private integration state root. Telegram migration и
+native-loader conformance ещё не реализованы. Решение является обязательным
+prerequisite для `telegram_integration_v1`, но само не открывает этот gate и не
+расширяет production inventory.
 
 Уточняет:
 

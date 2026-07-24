@@ -237,6 +237,67 @@ test('binds a browser bootstrap document as a non-module signed release artifact
   }
 });
 
+test('binds a native runtime dependency to one exact managed module', async () => {
+  const root = canonicalTemporaryDirectory('hermes-native-dependency-release-');
+  try {
+    const library = join(root, 'libtdjson.dylib');
+    writeFileSync(library, 'native library bytes', { mode: 0o700 });
+    const release = await compileUnsignedReleaseContent({
+      verification_key_id: 'release-2026',
+      trust_root_revision: 1,
+      revision: 1,
+      distribution_id: 'hermes-desktop',
+      release_version: '1.0.0',
+      build_id: 'build-native-dependency',
+      target_triple: 'aarch64-apple-darwin',
+      generation: 1,
+      ...releaseProvenance,
+      additional_verification_keys: [],
+      artifacts: [{
+        artifact_kind: 'module_runtime_native_dependency',
+        artifact_id: 'telegram.tdjson.v1',
+        relative_path: 'lib/libtdjson.dylib',
+        source_path: library,
+        required: true,
+        bound_module_id: 'hermes-telegram-runtime',
+      }],
+    });
+    const manifest = decodeFields(release.rawManifest);
+    const artifact = decodeFields(manifest.get(8)[0]);
+    assert.equal(artifact.get(1)[0], 6n);
+    assert.equal(fieldString(artifact, 2), 'telegram.tdjson.v1');
+    assert.equal(fieldString(artifact, 13), 'hermes-telegram-runtime');
+    assert.equal(artifact.get(6), undefined);
+
+    const invalid = {
+      verification_key_id: 'release-2026',
+      trust_root_revision: 1,
+      revision: 1,
+      distribution_id: 'hermes-desktop',
+      release_version: '1.0.0',
+      build_id: 'build-invalid-native-dependency',
+      target_triple: 'aarch64-apple-darwin',
+      generation: 1,
+      ...releaseProvenance,
+      additional_verification_keys: [],
+      artifacts: [{
+        artifact_kind: 'module_runtime_native_dependency',
+        artifact_id: 'telegram.tdjson.v1',
+        relative_path: 'lib/libtdjson.dylib',
+        source_path: library,
+        required: true,
+        bound_module_id: 'Telegram Runtime',
+      }],
+    };
+    await assert.rejects(
+      compileUnsignedReleaseContent(invalid),
+      /native dependency binding is invalid/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('rejects unordered artifacts and an exposed release signing key', async () => {
   const root = canonicalTemporaryDirectory('hermes-release-compiler-invalid-');
   try {

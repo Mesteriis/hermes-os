@@ -13,6 +13,8 @@ mod distribution {
     pub(crate) mod bundled_launch;
     #[path = "../../../../../src/kernel/src/distribution/manifest_verifier.rs"]
     pub(crate) mod manifest_verifier;
+    #[path = "../../../../../src/kernel/src/distribution/runtime_dependencies.rs"]
+    pub(crate) mod runtime_dependencies;
     #[path = "../../../../../src/kernel/src/distribution/staged_artifact.rs"]
     pub(crate) mod staged_artifact;
     #[path = "../../../../../src/kernel/src/distribution/staged_contracts.rs"]
@@ -49,6 +51,9 @@ mod platform {
 
     #[path = "../../../../../src/kernel/src/platform/gateway.rs"]
     pub(crate) mod gateway;
+
+    #[path = "../../../../../src/kernel/src/platform/integration_state.rs"]
+    pub(crate) mod integration_state;
 
     pub(crate) mod managed;
     #[path = "../../../../../src/kernel/src/platform/scheduler/mod.rs"]
