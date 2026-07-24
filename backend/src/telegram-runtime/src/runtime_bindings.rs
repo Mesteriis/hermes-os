@@ -22,6 +22,7 @@ impl TelegramRuntimeBindingsV1 {
         &self.tdjson_artifact_path
     }
 
+    #[cfg(test)]
     pub(crate) fn database_directory(&self) -> &Path {
         &self.database_directory
     }

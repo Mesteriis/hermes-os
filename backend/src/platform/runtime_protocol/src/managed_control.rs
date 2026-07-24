@@ -493,12 +493,14 @@ mod tests {
 
     #[test]
     fn selects_only_an_exact_signed_control_transport_major() {
-        let mut descriptor = ModuleDescriptorV1::default();
-        descriptor.runtime_protocol_range = Some(ProtocolRangeV1 {
-            minimum_major: 2,
-            maximum_major: 2,
-            minimum_revision: 1,
-        });
+        let mut descriptor = ModuleDescriptorV1 {
+            runtime_protocol_range: Some(ProtocolRangeV1 {
+                minimum_major: 2,
+                maximum_major: 2,
+                minimum_revision: 1,
+            }),
+            ..ModuleDescriptorV1::default()
+        };
         assert!(matches!(
             select_managed_control_transport(&descriptor),
             Ok(ManagedControlTransportMajorV1::CorrelatedV2)

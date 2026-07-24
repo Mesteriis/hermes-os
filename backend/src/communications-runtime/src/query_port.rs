@@ -262,21 +262,6 @@ fn message_evidence_limit(value: u32) -> Result<u16, CommunicationsQueryPortErro
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{CommunicationsQueryPortErrorV1, message_evidence_limit};
-
-    #[test]
-    fn message_evidence_history_limit_is_bounded() {
-        assert_eq!(message_evidence_limit(1), Ok(1));
-        assert_eq!(message_evidence_limit(100), Ok(100));
-        assert_eq!(
-            message_evidence_limit(101),
-            Err(CommunicationsQueryPortErrorV1::Protocol),
-        );
-    }
-}
-
 const fn map_search_error(
     error: CommunicationsSearchQueryErrorV1,
 ) -> CommunicationsQueryPortErrorV1 {
@@ -304,4 +289,19 @@ fn optional_cursor(
         .try_into()
         .map_err(|_| CommunicationsQueryPortErrorV1::Protocol)?;
     Ok(Some(CommunicationSourceCursorV1::new(cursor)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CommunicationsQueryPortErrorV1, message_evidence_limit};
+
+    #[test]
+    fn message_evidence_history_limit_is_bounded() {
+        assert_eq!(message_evidence_limit(1), Ok(1));
+        assert_eq!(message_evidence_limit(100), Ok(100));
+        assert_eq!(
+            message_evidence_limit(101),
+            Err(CommunicationsQueryPortErrorV1::Protocol),
+        );
+    }
 }

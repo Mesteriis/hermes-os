@@ -339,59 +339,6 @@ fn credential_revisions(
     }
 }
 
-#[cfg(test)]
-mod credential_binding_tests {
-    use hermes_telegram_api::{TelegramCredentialBinding, TelegramCredentialPurpose};
-
-    use super::credential_revisions;
-
-    #[test]
-    fn selects_one_exact_revision_for_each_admitted_user_purpose() {
-        let revisions = credential_revisions(&[
-            TelegramCredentialBinding {
-                purpose: TelegramCredentialPurpose::ApiHash,
-                revision: 7,
-            },
-            TelegramCredentialBinding {
-                purpose: TelegramCredentialPurpose::SessionEncryptionKey,
-                revision: 9,
-            },
-        ])
-        .expect("select exact credential revisions");
-        assert_eq!(revisions, (7, 9));
-    }
-
-    #[test]
-    fn rejects_duplicate_or_bot_credential_bindings() {
-        assert!(
-            credential_revisions(&[
-                TelegramCredentialBinding {
-                    purpose: TelegramCredentialPurpose::ApiHash,
-                    revision: 1,
-                },
-                TelegramCredentialBinding {
-                    purpose: TelegramCredentialPurpose::ApiHash,
-                    revision: 2,
-                },
-            ])
-            .is_err()
-        );
-        assert!(
-            credential_revisions(&[
-                TelegramCredentialBinding {
-                    purpose: TelegramCredentialPurpose::ApiHash,
-                    revision: 1,
-                },
-                TelegramCredentialBinding {
-                    purpose: TelegramCredentialPurpose::BotToken,
-                    revision: 1,
-                },
-            ])
-            .is_err()
-        );
-    }
-}
-
 fn provider_credential_context(
     admission: &TelegramManagedLaunchAdmissionV1,
     configuration: &ManagedStorageRuntimeConfigurationV1,
@@ -519,4 +466,57 @@ fn storage_binding_from_configuration(
     .map_err(|_| TelegramBootstrapError::InvalidStorageTopology)?;
     StorageBindingV1::new(identity_value, fences, access)
         .map_err(|_| TelegramBootstrapError::InvalidStorageTopology)
+}
+
+#[cfg(test)]
+mod credential_binding_tests {
+    use hermes_telegram_api::{TelegramCredentialBinding, TelegramCredentialPurpose};
+
+    use super::credential_revisions;
+
+    #[test]
+    fn selects_one_exact_revision_for_each_admitted_user_purpose() {
+        let revisions = credential_revisions(&[
+            TelegramCredentialBinding {
+                purpose: TelegramCredentialPurpose::ApiHash,
+                revision: 7,
+            },
+            TelegramCredentialBinding {
+                purpose: TelegramCredentialPurpose::SessionEncryptionKey,
+                revision: 9,
+            },
+        ])
+        .expect("select exact credential revisions");
+        assert_eq!(revisions, (7, 9));
+    }
+
+    #[test]
+    fn rejects_duplicate_or_bot_credential_bindings() {
+        assert!(
+            credential_revisions(&[
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::ApiHash,
+                    revision: 1,
+                },
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::ApiHash,
+                    revision: 2,
+                },
+            ])
+            .is_err()
+        );
+        assert!(
+            credential_revisions(&[
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::ApiHash,
+                    revision: 1,
+                },
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::BotToken,
+                    revision: 1,
+                },
+            ])
+            .is_err()
+        );
+    }
 }
