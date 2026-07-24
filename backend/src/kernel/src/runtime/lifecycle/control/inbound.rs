@@ -241,7 +241,10 @@ pub(crate) fn respond_provider_credential(
     channel: &mut UnixStream,
     result: Result<ManagedRuntimeProviderCredentialDeliveryV1, String>,
 ) -> Result<(), String> {
-    write_frame(channel, &provider_credential_response(result).encode_to_vec())
+    write_frame(
+        channel,
+        &provider_credential_response(result).encode_to_vec(),
+    )
 }
 
 pub(crate) fn provider_credential_response(
@@ -499,8 +502,7 @@ mod blob_session_error_code_tests {
     };
     use hermes_runtime_protocol::v1::{
         ManagedRuntimeControlRequestV1, ManagedRuntimeReadyRequestV1,
-        ManagedRuntimeVaultRouteRequestV1,
-        managed_runtime_control_request_v1::Operation,
+        ManagedRuntimeVaultRouteRequestV1, managed_runtime_control_request_v1::Operation,
     };
     use prost::Message;
 

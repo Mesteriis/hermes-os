@@ -233,9 +233,7 @@ fn valid_owner_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'_' | b'-' | b'.')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
         })
 }
 
@@ -243,8 +241,6 @@ fn valid_opaque_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'_' | b'-' | b'.')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
         })
 }

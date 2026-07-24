@@ -342,10 +342,9 @@ impl SchedulerRecoveryFixture {
         let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
         configure_route_handler(&supervisor, &store, &data);
         supervisor
-            .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
-                Arc::clone(&store),
-                "scheduler",
-            )))
+            .configure_event_credential_handler(Arc::new(
+                UnauthenticatedNatsCredentialHandler::new(Arc::clone(&store), "scheduler"),
+            ))
             .expect("configure Scheduler Event credential handler");
         start_vault(&supervisor, &store, &data, release.kernel());
         start_storage(
