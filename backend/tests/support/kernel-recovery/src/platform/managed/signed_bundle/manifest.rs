@@ -22,6 +22,12 @@ pub(crate) struct SignedRuntimeArtifact {
     settings_schema: Option<Vec<u8>>,
 }
 
+pub(crate) struct SignedNativeDependency {
+    artifact_id: &'static str,
+    binary: PathBuf,
+    bound_module_id: &'static str,
+}
+
 impl SignedRuntimeArtifact {
     pub(crate) fn new(artifact_id: &'static str, binary: PathBuf, descriptor: Vec<u8>) -> Self {
         Self {
@@ -38,6 +44,20 @@ impl SignedRuntimeArtifact {
     }
 }
 
+impl SignedNativeDependency {
+    pub(crate) fn new(
+        artifact_id: &'static str,
+        binary: PathBuf,
+        bound_module_id: &'static str,
+    ) -> Self {
+        Self {
+            artifact_id,
+            binary,
+            bound_module_id,
+        }
+    }
+}
+
 pub(crate) struct InstalledSignedBundle {
     kernel: PathBuf,
 }
@@ -46,6 +66,14 @@ impl InstalledSignedBundle {
     pub(crate) fn install(
         root: &Path,
         artifacts: &[SignedRuntimeArtifact],
+    ) -> Result<Self, String> {
+        Self::install_with_native_dependencies(root, artifacts, &[])
+    }
+
+    pub(crate) fn install_with_native_dependencies(
+        root: &Path,
+        artifacts: &[SignedRuntimeArtifact],
+        native_dependencies: &[SignedNativeDependency],
     ) -> Result<Self, String> {
         if artifacts.is_empty() {
             return Err("signed release must contain managed artifacts".to_owned());
@@ -61,7 +89,7 @@ impl InstalledSignedBundle {
         .map_err(|error| error.to_string())?;
         std::fs::create_dir_all(&distribution).map_err(|error| error.to_string())?;
         std::fs::write(&kernel, b"test-kernel").map_err(|error| error.to_string())?;
-        let manifest = install_artifacts(&distribution, artifacts)?;
+        let manifest = install_artifacts(&distribution, artifacts, native_dependencies)?;
         write_release_signature(&resources, &manifest)?;
         Ok(Self { kernel })
     }
@@ -75,11 +103,18 @@ impl InstalledSignedBundle {
 fn install_artifacts(
     distribution: &Path,
     artifacts: &[SignedRuntimeArtifact],
+    native_dependencies: &[SignedNativeDependency],
 ) -> Result<DistributionManifestV1, String> {
     let mut manifest_artifacts = artifacts
         .iter()
         .map(|artifact| install_artifact(distribution, artifact))
         .collect::<Result<Vec<_>, _>>()?;
+    manifest_artifacts.extend(
+        native_dependencies
+            .iter()
+            .map(|dependency| install_native_dependency(distribution, dependency))
+            .collect::<Result<Vec<_>, _>>()?,
+    );
     manifest_artifacts.sort_by(|left, right| left.artifact_id.cmp(&right.artifact_id));
     Ok(DistributionManifestV1 {
         major: 1,
@@ -90,6 +125,38 @@ fn install_artifacts(
         target_triple: TARGET_TRIPLE.to_owned(),
         generation: 1,
         artifacts: manifest_artifacts,
+    })
+}
+
+fn install_native_dependency(
+    distribution: &Path,
+    dependency: &SignedNativeDependency,
+) -> Result<DistributionManifestArtifactV1, String> {
+    let relative_path = format!("lib/{}", dependency.artifact_id);
+    let path = distribution.join(&relative_path);
+    std::fs::create_dir_all(
+        path.parent()
+            .ok_or_else(|| "signed native dependency path is invalid".to_owned())?,
+    )
+    .map_err(|error| error.to_string())?;
+    std::fs::copy(&dependency.binary, &path).map_err(|error| error.to_string())?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))
+        .map_err(|error| error.to_string())?;
+    let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
+    Ok(DistributionManifestArtifactV1 {
+        artifact_kind: DistributionArtifactKindV1::ModuleRuntimeNativeDependency as i32,
+        artifact_id: dependency.artifact_id.to_owned(),
+        relative_path,
+        size_bytes: bytes.len() as u64,
+        sha256: Sha256::digest(&bytes).to_vec(),
+        descriptor_sha256: Vec::new(),
+        settings_schema_sha256: Vec::new(),
+        required: true,
+        descriptor_relative_path: String::new(),
+        descriptor_size_bytes: 0,
+        settings_schema_relative_path: String::new(),
+        settings_schema_size_bytes: 0,
+        bound_module_id: dependency.bound_module_id.to_owned(),
     })
 }
 
@@ -194,4 +261,81 @@ fn write_release_signature(
         trust_root.encode_to_vec(),
     )
     .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use hermes_runtime_protocol::validation::distribution::decode_distribution_manifest_v1;
+
+    use super::*;
+
+    #[test]
+    fn signs_native_dependency_as_an_exact_module_bound_release_artifact() {
+        let root = std::env::temp_dir().join(format!(
+            "hermes-signed-native-dependency-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock after epoch")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).expect("test root");
+        let runtime = root.join("runtime");
+        let dependency = root.join("libtdjson.dylib");
+        std::fs::write(&runtime, b"runtime").expect("runtime fixture");
+        std::fs::write(&dependency, b"dependency").expect("dependency fixture");
+        let descriptor = ModuleDescriptorV1 {
+            descriptor_major: 1,
+            descriptor_revision: 1,
+            module_id: "hermes-telegram-runtime".to_owned(),
+            owner_id: "telegram".to_owned(),
+            ..Default::default()
+        }
+        .encode_to_vec();
+
+        InstalledSignedBundle::install_with_native_dependencies(
+            &root,
+            &[SignedRuntimeArtifact::new(
+                "hermes-telegram-runtime",
+                runtime,
+                descriptor,
+            )],
+            &[SignedNativeDependency::new(
+                "telegram-tdjson-v1",
+                dependency,
+                "hermes-telegram-runtime",
+            )],
+        )
+        .expect("signed bundle");
+
+        let signed = SignedDistributionManifestV1::decode(
+            std::fs::read(
+                root.join(
+                    "Hermes.app/Contents/Resources/hermes-kernel-release/hermes-signed-distribution-manifest.pb",
+                ),
+            )
+            .expect("signed manifest")
+            .as_slice(),
+        )
+        .expect("signed manifest encoding");
+        let manifest =
+            decode_distribution_manifest_v1(&signed.raw_manifest_bytes).expect("valid manifest");
+        let native = manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.artifact_id == "telegram-tdjson-v1")
+            .expect("native dependency artifact");
+        assert_eq!(
+            native.artifact_kind,
+            DistributionArtifactKindV1::ModuleRuntimeNativeDependency as i32
+        );
+        assert_eq!(native.bound_module_id, "hermes-telegram-runtime");
+        assert_eq!(native.relative_path, "lib/telegram-tdjson-v1");
+        assert!(native.descriptor_relative_path.is_empty());
+        assert!(native.settings_schema_relative_path.is_empty());
+
+        std::fs::remove_dir_all(root).expect("remove test root");
+    }
 }
