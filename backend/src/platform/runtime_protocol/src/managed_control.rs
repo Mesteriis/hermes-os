@@ -6,6 +6,7 @@
 
 use std::collections::BTreeSet;
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use prost::Message;
 
@@ -20,6 +21,7 @@ use crate::validation::managed_control::{
 
 pub const MAX_MANAGED_CONTROL_FRAME_BYTES_V2: usize = 512 * 1024;
 pub const MAX_MANAGED_CONTROL_PENDING_REQUESTS_V2: usize = 64;
+static NEXT_CORRELATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug)]
 pub enum ManagedControlTransportErrorV2 {
@@ -59,6 +61,21 @@ impl<S> ManagedControlChannelV2<S> {
 }
 
 impl<S: Read + Write> ManagedControlChannelV2<S> {
+    pub fn request_next<F>(
+        &mut self,
+        request: ManagedRuntimeControlRequestV1,
+        dispatch_request: F,
+    ) -> Result<ManagedRuntimeControlResponseV1, ManagedControlTransportErrorV2>
+    where
+        F: FnMut(
+            &mut Self,
+            [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+            ManagedRuntimeControlRequestV1,
+        ) -> Result<(), ManagedControlTransportErrorV2>,
+    {
+        self.request(next_correlation_id(), request, dispatch_request)
+    }
+
     pub fn receive_request(
         &mut self,
     ) -> Result<
@@ -174,6 +191,14 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
         }
         Ok(())
     }
+}
+
+fn next_correlation_id() -> [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES] {
+    let sequence = NEXT_CORRELATION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let mut correlation_id = [0_u8; MANAGED_CONTROL_CORRELATION_ID_BYTES];
+    correlation_id[..8].copy_from_slice(b"HMC2REQ\0");
+    correlation_id[8..].copy_from_slice(&sequence.to_be_bytes());
+    correlation_id
 }
 
 fn correlation_id_from_slice(
@@ -323,5 +348,15 @@ mod tests {
             Err(ManagedControlTransportErrorV2::Io(_))
         ));
         assert!(channel.begin_pending(correlation_id).is_ok());
+    }
+
+    #[test]
+    fn generates_distinct_non_zero_private_control_correlation_ids() {
+        let first = next_correlation_id();
+        let second = next_correlation_id();
+
+        assert_ne!(first, second);
+        assert!(first.iter().any(|byte| *byte != 0));
+        assert!(second.iter().any(|byte| *byte != 0));
     }
 }
