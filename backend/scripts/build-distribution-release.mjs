@@ -4,8 +4,10 @@ import {
   assertReleaseArtifactAbsent,
   assertReleaseDistributionAbsent,
   compileReleaseDistribution,
+  composeReleaseCompilerInput,
   loadReleaseSigningKey,
   materializeReleaseDistribution,
+  readReleaseArtifactFragment,
   readReleaseCompilerInput,
   removeReleaseArtifact,
   removeReleaseDistribution,
@@ -13,22 +15,28 @@ import {
 } from './lib/release-distribution-compiler.mjs';
 
 function usage() {
-  process.stderr.write('usage: build-distribution-release.mjs --input <release.json> --signing-key <p256-pem> --trust-root <output.pb> --signed-manifest <output.pb> --distribution-root <output-directory>\n');
+  process.stderr.write('usage: build-distribution-release.mjs --input <release.json> [--artifact-fragment <module-artifacts.json> ...] --signing-key <p256-pem> --trust-root <output.pb> --signed-manifest <output.pb> --distribution-root <output-directory>\n');
 }
 
 function parseArguments(argv) {
-  if (argv.length !== 10) return null;
+  if (argv.length < 10 || argv.length % 2 !== 0) return null;
   const values = new Map();
+  const artifactFragments = [];
   for (let index = 0; index < argv.length; index += 2) {
     const option = argv[index];
     const value = argv[index + 1];
+    if (option === '--artifact-fragment') {
+      if (typeof value !== 'string' || value.length === 0) return null;
+      artifactFragments.push(value);
+      continue;
+    }
     if (!['--input', '--signing-key', '--trust-root', '--signed-manifest', '--distribution-root'].includes(option)
       || typeof value !== 'string' || value.length === 0 || values.has(option)) {
       return null;
     }
     values.set(option, value);
   }
-  return values.size === 5 ? values : null;
+  return values.size === 5 ? { values, artifactFragments } : null;
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -38,9 +46,9 @@ export async function main(argv = process.argv.slice(2)) {
     process.exitCode = 2;
     return;
   }
-  const trustRootPath = options.get('--trust-root');
-  const signedManifestPath = options.get('--signed-manifest');
-  const distributionRoot = options.get('--distribution-root');
+  const trustRootPath = options.values.get('--trust-root');
+  const signedManifestPath = options.values.get('--signed-manifest');
+  const distributionRoot = options.values.get('--distribution-root');
   let distributionMaterialized = false;
   try {
     if (trustRootPath === signedManifestPath
@@ -51,8 +59,14 @@ export async function main(argv = process.argv.slice(2)) {
     assertReleaseArtifactAbsent(trustRootPath);
     assertReleaseArtifactAbsent(signedManifestPath);
     assertReleaseDistributionAbsent(distributionRoot);
-    const input = readReleaseCompilerInput(options.get('--input'));
-    const privateKey = loadReleaseSigningKey(options.get('--signing-key'));
+    const baseInput = readReleaseCompilerInput(options.values.get('--input'));
+    const input = options.artifactFragments.length === 0
+      ? baseInput
+      : composeReleaseCompilerInput(
+        baseInput,
+        options.artifactFragments.map(readReleaseArtifactFragment),
+      );
+    const privateKey = loadReleaseSigningKey(options.values.get('--signing-key'));
     const artifacts = await compileReleaseDistribution(input, privateKey);
     await materializeReleaseDistribution(artifacts.artifacts, distributionRoot);
     distributionMaterialized = true;

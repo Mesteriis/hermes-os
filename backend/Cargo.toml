@@ -58,6 +58,7 @@ members = [
   "src/telegram-tdlib",
   "src/telegram-persistence",
   "src/telegram-runtime",
+  "src/telegram-assembly",
   "src/whatsapp-api",
   "src/whatsapp-core",
   "src/whatsapp-persistence",

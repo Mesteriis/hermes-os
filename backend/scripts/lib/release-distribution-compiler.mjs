@@ -448,12 +448,74 @@ export async function compileUnsignedReleaseContent(input) {
   return { artifacts, rawManifest: encodeManifest(input, artifacts) };
 }
 
+export function composeReleaseCompilerInput(input, fragments) {
+  validateInput(input);
+  validateArtifactSet(input.artifacts);
+  if (!Array.isArray(fragments) || fragments.length === 0 || fragments.length > 64) {
+    throw new Error('release compiler artifact fragments are invalid');
+  }
+  const moduleIds = new Set();
+  const fragmentArtifacts = [];
+  for (const fragment of fragments) {
+    if (!exactKeys(fragment, ['version', 'owner_id', 'module_id', 'artifacts'])
+      || fragment.version !== 1
+      || !validModuleIdentifier(fragment.owner_id)
+      || !validModuleIdentifier(fragment.module_id)
+      || moduleIds.has(fragment.module_id)
+      || !Array.isArray(fragment.artifacts)
+      || fragment.artifacts.length === 0
+      || fragment.artifacts.length > 64) {
+      throw new Error('release compiler artifact fragment is invalid');
+    }
+    moduleIds.add(fragment.module_id);
+    validateArtifactSet(fragment.artifacts);
+    const moduleRuntimeCount = fragment.artifacts.filter(
+      (artifact) => artifact.artifact_kind === 'module_runtime',
+    ).length;
+    if (moduleRuntimeCount !== 1
+      || fragment.artifacts.some((artifact) => (
+        artifact.artifact_kind === 'module_runtime_native_dependency'
+        && artifact.bound_module_id !== fragment.module_id
+      ))) {
+      throw new Error('release compiler artifact fragment binding is invalid');
+    }
+    fragmentArtifacts.push(...fragment.artifacts);
+  }
+  const artifacts = [...input.artifacts, ...fragmentArtifacts]
+    .sort((left, right) => left.artifact_id.localeCompare(right.artifact_id));
+  const composed = { ...input, artifacts };
+  validateInput(composed);
+  validateArtifactSet(artifacts);
+  return composed;
+}
+
+function validateArtifactSet(artifacts) {
+  let previousArtifactId = '';
+  for (const artifact of artifacts) {
+    validateArtifactInput(artifact, previousArtifactId);
+    previousArtifactId = artifact.artifact_id;
+  }
+}
+
 export function readReleaseCompilerInput(path) {
   const bytes = readStableRegularFile(path, 'release compiler input', MAX_RELEASE_INPUT_BYTES);
   try {
     return JSON.parse(bytes.toString('utf8'));
   } catch {
     throw new Error('release compiler input is not valid JSON');
+  }
+}
+
+export function readReleaseArtifactFragment(path) {
+  const bytes = readStableRegularFile(
+    path,
+    'release artifact fragment',
+    MAX_RELEASE_INPUT_BYTES,
+  );
+  try {
+    return JSON.parse(bytes.toString('utf8'));
+  } catch {
+    throw new Error('release artifact fragment is not valid JSON');
   }
 }
 

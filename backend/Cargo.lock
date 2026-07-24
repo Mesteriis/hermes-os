@@ -2303,6 +2303,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-telegram-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-telegram-persistence",
+ "hermes-telegram-runtime",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-telegram-core"
 version = "0.1.0"
 dependencies = [

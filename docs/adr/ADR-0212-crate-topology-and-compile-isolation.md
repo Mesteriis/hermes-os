@@ -181,6 +181,14 @@ owner может не иметь persistence; pure library не получает
 Runtime зависит от packages своего владельца и platform protocols, но не от
 runtime другого владельца.
 
+Если owner имеет отдельную release-composition ответственность, phase-specific
+ADR может добавить optional `assembly` package. Это build-time leaf, а не
+process runtime: assembly может зависеть вниз от exact owner runtime и
+persistence artifact builders, но ни один runtime/implementation/persistence,
+Kernel, Gateway или другой owner не может импортировать assembly. Первый такой
+exact package — `hermes-telegram-assembly` ADR-0268; он не входит в
+Communications inventory.
+
 ### Communications
 
 Communications имеет два разных публичных контракта и поэтому получает отдельный

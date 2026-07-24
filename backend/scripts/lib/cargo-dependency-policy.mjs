@@ -11,6 +11,8 @@ function isAllowedSameOwnerDependency(source, target) {
       return ['implementation', 'persistence'].includes(target.surface);
     case 'runtime':
       return ['implementation', 'persistence'].includes(target.surface);
+    case 'assembly':
+      return ['implementation', 'persistence', 'runtime'].includes(target.surface);
     default:
       return false;
   }

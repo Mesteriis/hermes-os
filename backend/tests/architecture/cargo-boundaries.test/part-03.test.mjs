@@ -318,6 +318,45 @@ test('keeps domain implementation independent from persistence while runtime com
   assert.deepEqual(validateCargoMetadata(canonicalPolicyForTests(), metadata(allowed)), []);
 });
 
+test('allows an owner assembly unit to compose runtime and persistence only downstream', () => {
+  const runtime = workspacePackage('hermes-telegram-runtime', {
+    role: 'integration',
+    owner: 'telegram',
+    surface: 'runtime',
+  });
+  const persistence = workspacePackage('hermes-telegram-persistence', {
+    role: 'integration',
+    owner: 'telegram',
+    surface: 'persistence',
+  });
+  const assembly = workspacePackage(
+    'hermes-telegram-assembly',
+    { role: 'integration', owner: 'telegram', surface: 'assembly' },
+    [
+      dependency('hermes-telegram-persistence'),
+      dependency('hermes-telegram-runtime'),
+    ],
+  );
+
+  assert.deepEqual(
+    validateCargoMetadata(
+      canonicalPolicyForTests(),
+      metadata([kernel(), runtime, persistence, assembly]),
+    ),
+    [],
+  );
+
+  const reversedRuntime = workspacePackage(
+    'hermes-telegram-runtime',
+    { role: 'integration', owner: 'telegram', surface: 'runtime' },
+    [dependency('hermes-telegram-assembly')],
+  );
+  assert.ok(codes(validateCargoMetadata(
+    canonicalPolicyForTests(),
+    metadata([kernel(), reversedRuntime, persistence, assembly]),
+  )).has('forbidden_dependency'));
+});
+
 
 
 for (const sqlClient of ['sqlx']) {

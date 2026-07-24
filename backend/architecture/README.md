@@ -258,7 +258,12 @@ components = ["telemetry_collector"]
 - contract не зависит от runtime, implementation или persistence своего
   владельца;
 - implementation не зависит от persistence; runtime своего владельца является
-  единственной surface, которая собирает implementation и persistence вместе;
+  единственной process surface, которая собирает implementation и persistence
+  вместе;
+- optional `assembly` является build-time leaf своего owner: она может читать
+  exact runtime/persistence artifact builders для release composition, но
+  runtime/implementation/persistence не могут зависеть от assembly, а Kernel,
+  Gateway и другие owners не могут её импортировать;
 - core использует только platform/API contracts и не линкует module или
   Telemetry Collector implementations;
 - Kernel/Gateway не линкуют даже owner-specific module contracts; module

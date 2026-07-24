@@ -211,3 +211,7 @@ admission/routing/fencing control plane, а Telegram → Communications handoff
 ADR-0267 убирает native artifact path и provider session-store directory из
 settings: exact runtime dependency приходит из verified managed binding, а
 private state root stage-ит Kernel без знания provider semantics.
+ADR-0268 выделяет Telegram release composition в отдельную integration-owned
+assembly unit: она материализует canonical descriptor/settings/storage bytes и
+неподписанный exact artifact fragment, а generic distribution compiler
+подписывает только полный release без передачи signing authority integration.

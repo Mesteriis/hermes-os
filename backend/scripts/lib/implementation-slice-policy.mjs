@@ -261,6 +261,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-telegram-tdlib', role: 'integration', owner: 'telegram', surface: 'implementation' },
   { name: 'hermes-telegram-persistence', role: 'integration', owner: 'telegram', surface: 'persistence' },
   { name: 'hermes-telegram-runtime', role: 'integration', owner: 'telegram', surface: 'runtime' },
+  { name: 'hermes-telegram-assembly', role: 'integration', owner: 'telegram', surface: 'assembly' },
   { name: 'hermes-whatsapp-api', role: 'integration', owner: 'whatsapp', surface: 'contract' },
   { name: 'hermes-whatsapp-core', role: 'integration', owner: 'whatsapp', surface: 'implementation' },
   { name: 'hermes-whatsapp-persistence', role: 'integration', owner: 'whatsapp', surface: 'persistence' },
@@ -460,6 +461,12 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-telegram-tdlib', kind: 'normal' },
     { name: 'hermes-vault-protocol', kind: 'normal' },
     { name: 'hermes-blob-client', kind: 'normal' },
+  ],
+  'hermes-telegram-assembly': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-telegram-persistence', kind: 'normal' },
+    { name: 'hermes-telegram-runtime', kind: 'normal' },
   ],
   'hermes-whatsapp-api': [],
   'hermes-whatsapp-core': [
@@ -930,6 +937,11 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.10.9', defaultFeatures: false, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt', 'rt-multi-thread', 'time'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-telegram-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
   'hermes-whatsapp-api': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
