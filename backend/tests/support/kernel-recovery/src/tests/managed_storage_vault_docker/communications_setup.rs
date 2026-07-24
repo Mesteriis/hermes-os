@@ -435,6 +435,10 @@ pub(super) fn assert_communications_ingress_delivery(
                 canonical.payload.as_ref(),
             )
             .expect("canonical Communications envelope");
+            let ingress = hermes_events_protocol::validation::envelope::decode_envelope_v1(
+                record.exact_bytes(),
+            )
+            .expect("typed integration envelope");
             assert!(matches!(
                 envelope.contract.as_ref(),
                 Some(contract)
@@ -443,6 +447,8 @@ pub(super) fn assert_communications_ingress_delivery(
                         && contract.major == 1
                         && contract.revision == 1
             ));
+            assert_eq!(envelope.causation_message_id, record.message_id().to_vec());
+            assert_eq!(envelope.correlation_id, ingress.correlation_id);
             context
                 .publish(
                     "hermes.observation.v1.communications.communication_observed.v1",

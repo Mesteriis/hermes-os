@@ -39,6 +39,9 @@ evidence lookup without a provider cursor, content, Blob locator or custody
 proof. Canonical evidence now persists ingress causation/correlation and exact
 recorded timestamp in its owner-local audit row; the metadata lookup exposes
 only these opaque audit identifiers and timestamps.
+The canonical evidence event retains the ingress correlation ID and names the
+direct ingress message as its causation; it never creates a replacement
+cross-owner correlation.
 
 Depends on:
 

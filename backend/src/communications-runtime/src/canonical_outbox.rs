@@ -50,10 +50,6 @@ pub fn build_evidence_recorded_outbox_v1(
         b"hermes.communications.evidence-recorded.v1\0",
         summary.evidence_id.bytes(),
     );
-    let correlation_id = identifier(
-        b"hermes.communications.evidence-correlation.v1\0",
-        summary.evidence_id.bytes(),
-    );
     let recorded_at = Timestamp {
         seconds: context.recorded_at_unix_seconds,
         nanos: context.recorded_at_nanos,
@@ -109,7 +105,9 @@ pub fn build_evidence_recorded_outbox_v1(
         recorded_at: Some(recorded_at),
         partition_key: summary.source_cursor.bytes().to_vec(),
         causation_message_id: causation_message_id.to_vec(),
-        correlation_id: correlation_id.to_vec(),
+        // A canonical event continues the ingress process; it must not start a
+        // fresh correlation merely because Communications is its first owner.
+        correlation_id: summary.correlation_id.bytes().to_vec(),
         actor: Some(ActorRefV1 {
             kind: ActorKindV1::Module as i32,
             actor_id: b"communications-runtime".to_vec(),
@@ -368,13 +366,62 @@ const fn attachment_safety_state_value(value: AttachmentSafetyStateV1) -> i32 {
 #[cfg(test)]
 mod tests {
     use hermes_communications_api::{
-        CanonicalAttachmentAnchorProjectionV1, CommunicationAttachmentAnchorIdV1,
-        CommunicationMessageIdV1, CommunicationObservationIdV1, CommunicationSourceCursorV1,
+        CanonicalAttachmentAnchorProjectionV1, CanonicalCommunicationEvidenceKindV1,
+        CommunicationAttachmentAnchorIdV1, CommunicationBodyStateV1, CommunicationDirectionV1,
+        CommunicationMessageIdV1, CommunicationObservationIdV1, CommunicationProviderProvenanceV1,
+        CommunicationSourceCursorV1, CommunicationSummary,
         attachment_wire::AttachmentSafetyStateChangedV1,
     };
     use hermes_events_protocol::v1::DurableEnvelopeV1;
 
     use super::*;
+
+    fn evidence_summary() -> CommunicationSummary {
+        CommunicationSummary {
+            evidence_id: CommunicationObservationIdV1::new([1; 16]),
+            observation_id: CommunicationObservationIdV1::new([1; 16]),
+            causation_message_id: Some(CommunicationObservationIdV1::new([2; 16])),
+            correlation_id: CommunicationObservationIdV1::new([3; 16]),
+            source_cursor: CommunicationSourceCursorV1::new([4; 32]),
+            account_cursor: Some(CommunicationSourceCursorV1::new([5; 32])),
+            conversation_cursor: Some(CommunicationSourceCursorV1::new([6; 32])),
+            participant_cursor: None,
+            media_cursor: None,
+            reply_to_source_cursor: None,
+            forward_origin_source_cursor: None,
+            provider: CommunicationProviderProvenanceV1::MailImap,
+            direction: CommunicationDirectionV1::Incoming,
+            kind: CanonicalCommunicationEvidenceKindV1::EmailMessage,
+            body: CommunicationBodyStateV1::MetadataOnly,
+            body_blob: None,
+            body_admission_failure: None,
+            attachment_descriptor: None,
+            observed_at_unix_seconds: 1_700_000_000,
+            recorded_at_unix_seconds: 1_700_000_001,
+            recorded_at_nanos: 2,
+        }
+    }
+
+    #[test]
+    fn evidence_event_continues_ingress_correlation() {
+        let context = CanonicalEventContextV1 {
+            runtime_instance_id: "communications-runtime-test".to_owned(),
+            runtime_generation: 3,
+            recorded_at_unix_seconds: 1_700_000_002,
+            recorded_at_nanos: 3,
+        };
+
+        let record = build_evidence_recorded_outbox_v1(&evidence_summary(), [7; 16], &context)
+            .expect("canonical evidence event");
+        let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");
+
+        assert_eq!(envelope.causation_message_id, [7; 16]);
+        assert_eq!(envelope.correlation_id, [3; 16]);
+        assert_eq!(
+            envelope.recorded_at.expect("recorded at").seconds,
+            1_700_000_002
+        );
+    }
 
     #[test]
     fn attachment_safety_event_is_schema_bound_and_anchor_partitioned() {
