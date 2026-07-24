@@ -214,7 +214,7 @@ CREATE INDEX IF NOT EXISTS telegram_communications_outbox_pending_idx
 "#;
 
 pub struct TelegramDurablePersistence {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

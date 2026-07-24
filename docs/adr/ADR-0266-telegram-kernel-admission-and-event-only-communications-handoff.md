@@ -27,8 +27,13 @@ bindings integration registration в `revoking`, запускает сущест
 Control physical fence и независимо пытается остановить integration worker;
 недоступный Storage оставляет durable incomplete revocation вместо ложного
 успеха, а exact retry той же Storage binding revision повторно использует
-revocation reservation. Conformance уже выданных Event/provider leases и live
-end-to-end flow ещё не реализованы.
+revocation reservation. Live conformance теперь доказывает путь provider frame
+→ Telegram-owned PostgreSQL outbox → exact bytes в JetStream → Communications
+inbox/canonical event. Недоступный publisher оставляет exact envelope pending,
+а повторная публикация после simulated publish-before-mark crash подтверждает
+JetStream duplicate и не создаёт второе Communications event. Полный managed
+Telegram runtime с Kernel-issued Event/provider leases и broker-process outage
+replay ещё не доказаны, поэтому phase gate остаётся закрытым.
 
 Уточняет:
 

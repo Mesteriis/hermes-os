@@ -69,6 +69,9 @@ use communications_setup::*;
 #[path = "managed_storage_vault_docker/communications_backup.rs"]
 mod communications_backup;
 use communications_backup::*;
+#[path = "managed_storage_vault_docker/telegram_event_flow.rs"]
+mod telegram_event_flow;
+use telegram_event_flow::*;
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault and Storage binaries"]
@@ -225,6 +228,7 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     assert_communications_query_delivery(&store, &supervisor);
     assert_communications_search_query_delivery(&store, &supervisor);
     assert_communications_gateway_query_delivery(&store, &supervisor, &root);
+    assert_telegram_outbox_delivery(&store, &supervisor);
     assert_fenced_communications_target_cannot_issue_blob_custody_grant(&store, &supervisor, &data);
 
     supervisor.shutdown().expect("stop managed processes");
