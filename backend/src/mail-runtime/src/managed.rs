@@ -8,7 +8,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use hermes_blob_client::{BlobDataClient, request_managed_blob_session};
 use hermes_communications_ingress::{
-    ObservationEnvelopeContextV1, build_observation_outbox_record_v1,
+    AttachmentBlobAdmissionFactV1, AttachmentBlobAdmissionTransitionV1,
+    AttachmentBlobExpectedStateV1, ObservationEnvelopeContextV1,
+    build_attachment_blob_admission_outbox_record_v1, build_observation_outbox_record_v1,
 };
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
@@ -732,6 +734,13 @@ impl MailAdmittedRuntime {
                     .enqueue_communications_outbox(&record, observed_at_unix_seconds)
                     .await
                     .map_err(|_| MailBootstrapError::Persistence)?;
+                self.try_admit_imap_attachment_blob(
+                    *record.message_id(),
+                    attachment.bytes(),
+                    observed_at_unix_seconds,
+                    observed_at_nanos,
+                )
+                .await?;
             }
         }
         Ok(messages.len())
@@ -1103,6 +1112,125 @@ impl MailAdmittedRuntime {
             sha256,
             custody_transfer_source_proof,
         })
+    }
+
+    async fn try_admit_imap_attachment_blob(
+        &mut self,
+        source_observation_id: [u8; 16],
+        bytes: &[u8],
+        observed_at_unix_seconds: i64,
+        observed_at_nanos: i32,
+    ) -> Result<(), MailBootstrapError> {
+        let Some(mapping) = self
+            .durable
+            .attachment_anchor_mapping(source_observation_id)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?
+        else {
+            return Ok(());
+        };
+        let context = ObservationEnvelopeContextV1 {
+            runtime_instance_id: self.runtime_instance_id.clone(),
+            runtime_generation: self.runtime_generation,
+            module_id: "mail-runtime".to_owned(),
+            recorded_at_unix_seconds: observed_at_unix_seconds,
+            recorded_at_nanos: observed_at_nanos,
+        };
+        let requested = build_attachment_blob_admission_outbox_record_v1(
+            &AttachmentBlobAdmissionFactV1 {
+                attachment_anchor_id: mapping.attachment_anchor_id,
+                source_observation_id,
+                media_cursor_sha256: mapping.media_cursor_sha256,
+                expected_state: AttachmentBlobExpectedStateV1::DescriptorOnly,
+                transition: AttachmentBlobAdmissionTransitionV1::Requested,
+                observed_at_unix_seconds,
+                blob_reference_binding_sha256: None,
+            },
+            &context,
+        )
+        .map_err(|_| MailBootstrapError::Admission)?;
+        let outcome = self
+            .durable
+            .begin_attachment_blob_admission(
+                source_observation_id,
+                mapping.attachment_anchor_id,
+                &requested,
+                observed_at_unix_seconds,
+            )
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?;
+        if !matches!(
+            outcome,
+            hermes_mail_persistence::MailAttachmentBlobAdmissionStartOutcomeV1::Started
+        ) {
+            return Ok(());
+        }
+        let terminal = match self.write_attachment_blob(bytes) {
+            Ok(binding) => (
+                2,
+                AttachmentBlobAdmissionTransitionV1::Admitted,
+                Some(binding),
+            ),
+            Err(_) => (3, AttachmentBlobAdmissionTransitionV1::Rejected, None),
+        };
+        let terminal_record = build_attachment_blob_admission_outbox_record_v1(
+            &AttachmentBlobAdmissionFactV1 {
+                attachment_anchor_id: mapping.attachment_anchor_id,
+                source_observation_id,
+                media_cursor_sha256: mapping.media_cursor_sha256,
+                expected_state: AttachmentBlobExpectedStateV1::BlobPending,
+                transition: terminal.1,
+                observed_at_unix_seconds,
+                blob_reference_binding_sha256: terminal.2,
+            },
+            &context,
+        )
+        .map_err(|_| MailBootstrapError::Admission)?;
+        self.durable
+            .complete_attachment_blob_admission(
+                source_observation_id,
+                mapping.attachment_anchor_id,
+                terminal.0,
+                &terminal_record,
+                observed_at_unix_seconds,
+            )
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?;
+        Ok(())
+    }
+
+    fn write_attachment_blob(&mut self, bytes: &[u8]) -> Result<[u8; 32], MailBootstrapError> {
+        if bytes.is_empty() || bytes.len() > 16 * 1024 * 1024 {
+            return Err(MailBootstrapError::Admission);
+        }
+        let mut reference_id = [0_u8; 16];
+        getrandom::fill(&mut reference_id).map_err(|_| MailBootstrapError::Control)?;
+        if reference_id.iter().all(|byte| *byte == 0) {
+            return Err(MailBootstrapError::Control);
+        }
+        let receipt_sha256: [u8; 32] = Sha256::digest(bytes).into();
+        self.control_channel
+            .set_nonblocking(false)
+            .map_err(|_| MailBootstrapError::Control)?;
+        let session = request_managed_blob_session(
+            &mut self.control_channel,
+            "blob.content",
+            BlobDataOperationV1::BlobDataOperationWriteV1,
+            &reference_id,
+            u64::try_from(bytes.len()).map_err(|_| MailBootstrapError::Admission)?,
+            1,
+            Some(&receipt_sha256),
+        );
+        let restored = self.control_channel.set_nonblocking(true);
+        let session = session.map_err(|_| MailBootstrapError::Control)?;
+        restored.map_err(|_| MailBootstrapError::Control)?;
+        if session.custody_transfer_source_proof.is_empty() {
+            return Err(MailBootstrapError::Control);
+        }
+        BlobDataClient::new(session.data_socket_path)
+            .and_then(|client| client.write(session.grant, session.channel_binding, bytes.to_vec()))
+            .map_err(|_| MailBootstrapError::Control)?;
+        Ok(Sha256::digest(session.custody_transfer_source_proof).into())
     }
 }
 
