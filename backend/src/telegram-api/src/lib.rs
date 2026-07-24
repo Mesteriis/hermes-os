@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod client_contract;
 pub mod client_wire;
 #[allow(clippy::large_enum_variant)]
 pub mod wire {

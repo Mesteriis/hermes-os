@@ -2638,6 +2638,18 @@ pub fn encode_lifecycle_response(response: &TelegramClientResponse) -> Option<Ve
     )
 }
 
+pub fn encode_command_response(operation: &TelegramOperation) -> Vec<u8> {
+    operation_to_wire(operation).encode_to_vec()
+}
+
+pub fn decode_command_response(
+    bytes: &[u8],
+) -> Result<TelegramOperation, TelegramAuthorizationWireError> {
+    let response = wire::TelegramOperationResponse::decode(bytes)
+        .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
+    parse_operation(response)
+}
+
 fn parse_account(
     value: wire::TelegramAccountResponse,
 ) -> Result<TelegramAccount, TelegramAuthorizationWireError> {

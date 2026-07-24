@@ -21,8 +21,17 @@ pub fn serve_authorization_connection(
             Err(TelegramClientTransportError::Io(error)) if error == "eof" => return Ok(()),
             Err(error) => return Err(error),
         };
-        let (request_id, payload) = crate::client_port::decode_module_request_payload(&request)
-            .map_err(TelegramClientTransportError::Port)?;
+        let (request_id, contract, payload) =
+            crate::client_port::decode_module_request_payload(&request)
+                .map_err(TelegramClientTransportError::Port)?;
+        if contract != hermes_telegram_api::client_contract::TelegramClientContractV1::Authorization
+        {
+            return Err(TelegramClientTransportError::Port(
+                TelegramClientPortError::Protocol(
+                    "Telegram authorization transport received another contract".to_owned(),
+                ),
+            ));
+        }
         let request = hermes_telegram_api::client_wire::decode_request(&payload).map_err(|_| {
             TelegramClientTransportError::Port(TelegramClientPortError::Protocol(
                 "Telegram authorization payload is invalid".to_owned(),

@@ -3,11 +3,19 @@
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
-use hermes_telegram_api::{MAX_PAGE_SIZE, TelegramClientRequest, TelegramClientResponse};
+use hermes_telegram_api::{
+    MAX_PAGE_SIZE, TelegramClientRequest, TelegramClientResponse,
+    client_contract::{
+        TELEGRAM_CLIENT_CONTRACT_MAJOR, TELEGRAM_CLIENT_CONTRACT_REVISION,
+        TELEGRAM_CLIENT_DESCRIPTOR_SET_V1, TELEGRAM_MODULE_ID, TELEGRAM_OWNER_ID,
+        TelegramClientContractV1,
+    },
+};
 use hermes_telegram_core::project_message;
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{TdlibError, TdlibTransport};
 use prost::Message;
+use sha2::{Digest, Sha256};
 
 use crate::TelegramRuntime;
 
@@ -20,30 +28,55 @@ pub enum TelegramClientPortError {
 }
 
 const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
-const TELEGRAM_MODULE_ID: &str = "hermes-telegram-runtime";
-const TELEGRAM_OWNER_ID: &str = "telegram";
-const TELEGRAM_CLIENT_CONTRACT_NAME: &str = "telegram.client";
-const TELEGRAM_CLIENT_CONTRACT_MAJOR: u32 = 1;
-const TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 1;
 
-fn telegram_client_contract() -> ContractReferenceV1 {
+fn telegram_client_contract(contract: TelegramClientContractV1) -> ContractReferenceV1 {
     ContractReferenceV1 {
         owner: TELEGRAM_OWNER_ID.to_owned(),
-        name: TELEGRAM_CLIENT_CONTRACT_NAME.to_owned(),
+        name: contract.contract_name().to_owned(),
         major: TELEGRAM_CLIENT_CONTRACT_MAJOR,
         revision: TELEGRAM_CLIENT_CONTRACT_REVISION,
-        schema_sha256: Vec::new(),
+        schema_sha256: Sha256::digest(TELEGRAM_CLIENT_DESCRIPTOR_SET_V1).to_vec(),
     }
 }
 
-fn validate_contract(contract: &ContractReferenceV1) -> Result<(), TelegramClientPortError> {
-    let expected = telegram_client_contract();
+fn validate_contract(
+    contract: &ContractReferenceV1,
+) -> Result<TelegramClientContractV1, TelegramClientPortError> {
+    let route = TelegramClientContractV1::from_contract_name(&contract.name).ok_or_else(|| {
+        TelegramClientPortError::Protocol(
+            "Telegram client contract reference is not admitted".to_owned(),
+        )
+    })?;
+    let expected = telegram_client_contract(route);
     if contract != &expected {
         return Err(TelegramClientPortError::Protocol(
             "Telegram client contract reference is not admitted".to_owned(),
         ));
     }
-    Ok(())
+    Ok(route)
+}
+
+fn request_contract(
+    request: &TelegramClientRequest,
+) -> Result<TelegramClientContractV1, TelegramClientPortError> {
+    match request {
+        TelegramClientRequest::AuthorizationStatus
+        | TelegramClientRequest::SubmitAuthorizationPassword { .. } => {
+            Ok(TelegramClientContractV1::Authorization)
+        }
+        TelegramClientRequest::ProvisionAccount { .. }
+        | TelegramClientRequest::RetryCommand { .. }
+        | TelegramClientRequest::ListAccounts
+        | TelegramClientRequest::GetAccount { .. }
+        | TelegramClientRequest::RetireAccount { .. }
+        | TelegramClientRequest::StartAccount { .. }
+        | TelegramClientRequest::StopAccount { .. } => Ok(TelegramClientContractV1::Lifecycle),
+        TelegramClientRequest::Command(_) => Ok(TelegramClientContractV1::Command),
+        TelegramClientRequest::Query(_) => Ok(TelegramClientContractV1::Query),
+        TelegramClientRequest::Replay { .. } => Err(TelegramClientPortError::Protocol(
+            "Telegram replay requires the separately admitted realtime contract".to_owned(),
+        )),
+    }
 }
 
 fn lifecycle_wire_request(
@@ -92,15 +125,6 @@ fn lifecycle_wire_request(
                 account_id: account_id.clone(),
             })
         }
-        TelegramClientRequest::Replay {
-            account_id,
-            after_sequence,
-            limit,
-        } => Some(TelegramLifecycleRequest::Replay {
-            account_id: account_id.clone(),
-            after_sequence: *after_sequence,
-            limit: *limit,
-        }),
         _ => None,
     }
 }
@@ -166,32 +190,60 @@ pub fn encode_module_request(
             "Telegram client request id must be non-zero".to_owned(),
         ));
     }
-    let request_payload = if let Some(lifecycle) = lifecycle_wire_request(request) {
-        hermes_telegram_api::client_wire::encode_lifecycle_request(&lifecycle)
-    } else if let TelegramClientRequest::Command(command) = request {
-        hermes_telegram_api::client_wire::encode_command(command)
-    } else if let TelegramClientRequest::Query(query) = request {
-        hermes_telegram_api::client_wire::encode_query(query)
-    } else if let TelegramClientRequest::AuthorizationStatus = request {
-        hermes_telegram_api::client_wire::encode_request(
-            &hermes_telegram_api::client_wire::TelegramAuthorizationRequest::Status,
-        )
-    } else if let TelegramClientRequest::SubmitAuthorizationPassword { password } = request {
-        hermes_telegram_api::client_wire::encode_request(
-            &hermes_telegram_api::client_wire::TelegramAuthorizationRequest::SubmitPassword(
-                password.clone(),
-            ),
-        )
-    } else {
-        return Err(TelegramClientPortError::Protocol(
-            "Telegram client request variant has no generated wire mapping".to_owned(),
-        ));
+    let contract = request_contract(request)?;
+    let request_payload = match contract {
+        TelegramClientContractV1::Authorization => {
+            let request = match request {
+                TelegramClientRequest::AuthorizationStatus => {
+                    hermes_telegram_api::client_wire::TelegramAuthorizationRequest::Status
+                }
+                TelegramClientRequest::SubmitAuthorizationPassword { password } => {
+                    hermes_telegram_api::client_wire::TelegramAuthorizationRequest::SubmitPassword(
+                        password.clone(),
+                    )
+                }
+                _ => {
+                    return Err(TelegramClientPortError::Protocol(
+                        "Telegram authorization route received another request family".to_owned(),
+                    ));
+                }
+            };
+            hermes_telegram_api::client_wire::encode_request(&request)
+        }
+        TelegramClientContractV1::Lifecycle => {
+            let lifecycle = lifecycle_wire_request(request).ok_or_else(|| {
+                TelegramClientPortError::Protocol(
+                    "Telegram lifecycle request has no generated wire mapping".to_owned(),
+                )
+            })?;
+            hermes_telegram_api::client_wire::encode_lifecycle_request(&lifecycle)
+        }
+        TelegramClientContractV1::Command => match request {
+            TelegramClientRequest::Command(command) => {
+                hermes_telegram_api::client_wire::encode_command(command)
+            }
+            _ => {
+                return Err(TelegramClientPortError::Protocol(
+                    "Telegram command route received another request family".to_owned(),
+                ));
+            }
+        },
+        TelegramClientContractV1::Query => match request {
+            TelegramClientRequest::Query(query) => {
+                hermes_telegram_api::client_wire::encode_query(query)
+            }
+            _ => {
+                return Err(TelegramClientPortError::Protocol(
+                    "Telegram query route received another request family".to_owned(),
+                ));
+            }
+        },
     };
     let envelope = ModuleClientRequestV1 {
         protocol_major: MODULE_CLIENT_PROTOCOL_MAJOR,
         module_id: TELEGRAM_MODULE_ID.to_owned(),
         owner_id: TELEGRAM_OWNER_ID.to_owned(),
-        contract: Some(telegram_client_contract()),
+        contract: Some(telegram_client_contract(contract)),
         request_id,
         request_payload,
     };
@@ -200,36 +252,66 @@ pub fn encode_module_request(
 
 pub fn decode_module_request(
     bytes: &[u8],
-) -> Result<(u64, TelegramClientRequest), TelegramClientPortError> {
-    let (request_id, request_payload) = decode_module_request_payload(bytes)?;
-    let request = if let Ok(lifecycle) =
-        hermes_telegram_api::client_wire::decode_lifecycle_request(&request_payload)
-    {
-        client_request_from_lifecycle(lifecycle)
-    } else if let Ok(command) = hermes_telegram_api::client_wire::decode_command(&request_payload) {
-        TelegramClientRequest::Command(command)
-    } else if let Ok(query) = hermes_telegram_api::client_wire::decode_query(&request_payload) {
-        TelegramClientRequest::Query(query)
-    } else if let Ok(auth) = hermes_telegram_api::client_wire::decode_request(&request_payload) {
-        match auth {
-            hermes_telegram_api::client_wire::TelegramAuthorizationRequest::Status => {
-                TelegramClientRequest::AuthorizationStatus
+) -> Result<(u64, TelegramClientContractV1, TelegramClientRequest), TelegramClientPortError> {
+    let (request_id, contract, request_payload) = decode_module_request_payload(bytes)?;
+    let request = match contract {
+        TelegramClientContractV1::Authorization => {
+            match hermes_telegram_api::client_wire::decode_request(&request_payload).map_err(
+                |_| {
+                    TelegramClientPortError::Protocol(
+                        "Telegram authorization request payload is invalid".to_owned(),
+                    )
+                },
+            )? {
+                hermes_telegram_api::client_wire::TelegramAuthorizationRequest::Status => {
+                    TelegramClientRequest::AuthorizationStatus
+                }
+                hermes_telegram_api::client_wire::TelegramAuthorizationRequest::SubmitPassword(
+                    password,
+                ) => TelegramClientRequest::SubmitAuthorizationPassword { password },
             }
-            hermes_telegram_api::client_wire::TelegramAuthorizationRequest::SubmitPassword(
-                password,
-            ) => TelegramClientRequest::SubmitAuthorizationPassword { password },
         }
-    } else {
-        return Err(TelegramClientPortError::Protocol(
-            "Telegram client request payload has no generated wire mapping".to_owned(),
-        ));
+        TelegramClientContractV1::Lifecycle => {
+            let request =
+                hermes_telegram_api::client_wire::decode_lifecycle_request(&request_payload)
+                    .map(client_request_from_lifecycle)
+                    .map_err(|_| {
+                        TelegramClientPortError::Protocol(
+                            "Telegram lifecycle request payload is invalid".to_owned(),
+                        )
+                    })?;
+            if matches!(request, TelegramClientRequest::Replay { .. }) {
+                return Err(TelegramClientPortError::Protocol(
+                    "Telegram replay requires the separately admitted realtime contract".to_owned(),
+                ));
+            }
+            request
+        }
+        TelegramClientContractV1::Command => {
+            hermes_telegram_api::client_wire::decode_command(&request_payload)
+                .map(TelegramClientRequest::Command)
+                .map_err(|_| {
+                    TelegramClientPortError::Protocol(
+                        "Telegram command request payload is invalid".to_owned(),
+                    )
+                })?
+        }
+        TelegramClientContractV1::Query => {
+            hermes_telegram_api::client_wire::decode_query(&request_payload)
+                .map(TelegramClientRequest::Query)
+                .map_err(|_| {
+                    TelegramClientPortError::Protocol(
+                        "Telegram query request payload is invalid".to_owned(),
+                    )
+                })?
+        }
     };
-    Ok((request_id, request))
+    Ok((request_id, contract, request))
 }
 
 pub fn decode_module_request_payload(
     bytes: &[u8],
-) -> Result<(u64, Vec<u8>), TelegramClientPortError> {
+) -> Result<(u64, TelegramClientContractV1, Vec<u8>), TelegramClientPortError> {
     let envelope = ModuleClientRequestV1::decode(bytes)
         .map_err(|error| TelegramClientPortError::Codec(error.to_string()))?;
     if envelope.protocol_major != MODULE_CLIENT_PROTOCOL_MAJOR
@@ -241,7 +323,7 @@ pub fn decode_module_request_payload(
             "Telegram client request routing metadata is not admitted".to_owned(),
         ));
     }
-    validate_contract(envelope.contract.as_ref().ok_or_else(|| {
+    let contract = validate_contract(envelope.contract.as_ref().ok_or_else(|| {
         TelegramClientPortError::Protocol("Telegram client contract is missing".to_owned())
     })?)?;
     if envelope.request_payload.is_empty() {
@@ -249,7 +331,7 @@ pub fn decode_module_request_payload(
             "Telegram client request payload is empty".to_owned(),
         ));
     }
-    Ok((envelope.request_id, envelope.request_payload))
+    Ok((envelope.request_id, contract, envelope.request_payload))
 }
 
 pub fn encode_module_response_payload(
@@ -271,6 +353,7 @@ pub fn encode_module_response_payload(
 }
 
 pub fn encode_module_response(
+    contract: TelegramClientContractV1,
     request_id: u64,
     response: &TelegramClientResponse,
 ) -> Result<Vec<u8>, TelegramClientPortError> {
@@ -279,46 +362,66 @@ pub fn encode_module_response(
             "Telegram client response id must be non-zero".to_owned(),
         ));
     }
-    let response_payload = if let Some(payload) =
-        hermes_telegram_api::client_wire::encode_lifecycle_response(response)
-    {
-        payload
-    } else if let TelegramClientResponse::Query(query_response) = response {
-        if let Some(payload) =
-            hermes_telegram_api::client_wire::encode_query_response(query_response)
-        {
-            payload
-        } else {
-            serde_json::to_vec(response)
-                .map_err(|error| TelegramClientPortError::Codec(error.to_string()))?
+    let response_payload = match contract {
+        TelegramClientContractV1::Authorization => {
+            let response = match response {
+                TelegramClientResponse::AuthorizationStatus(status) => {
+                    hermes_telegram_api::client_wire::TelegramAuthorizationResponse::Status(
+                        status.clone(),
+                    )
+                }
+                TelegramClientResponse::AuthorizationPasswordAccepted => {
+                    hermes_telegram_api::client_wire::TelegramAuthorizationResponse::PasswordAccepted
+                }
+                _ => {
+                    return Err(TelegramClientPortError::Protocol(
+                        "Telegram authorization response has another response family".to_owned(),
+                    ));
+                }
+            };
+            hermes_telegram_api::client_wire::encode_response(&response)
         }
-    } else if let TelegramClientResponse::Realtime(frames) = response {
-        hermes_telegram_api::client_wire::encode_realtime_response(frames)
-    } else if let TelegramClientResponse::AuthorizationStatus(status) = response {
-        hermes_telegram_api::client_wire::encode_response(
-            &hermes_telegram_api::client_wire::TelegramAuthorizationResponse::Status(
-                status.clone(),
-            ),
-        )
-    } else if let TelegramClientResponse::AuthorizationPasswordAccepted = response {
-        hermes_telegram_api::client_wire::encode_response(
-            &hermes_telegram_api::client_wire::TelegramAuthorizationResponse::PasswordAccepted,
-        )
-    } else {
-        return Err(TelegramClientPortError::Protocol(
-            "Telegram client response variant has no generated wire mapping".to_owned(),
-        ));
+        TelegramClientContractV1::Lifecycle => {
+            hermes_telegram_api::client_wire::encode_lifecycle_response(response).ok_or_else(
+                || {
+                    TelegramClientPortError::Protocol(
+                        "Telegram lifecycle response has another response family".to_owned(),
+                    )
+                },
+            )?
+        }
+        TelegramClientContractV1::Command => match response {
+            TelegramClientResponse::Operation(operation) => {
+                hermes_telegram_api::client_wire::encode_command_response(operation)
+            }
+            _ => {
+                return Err(TelegramClientPortError::Protocol(
+                    "Telegram command response has another response family".to_owned(),
+                ));
+            }
+        },
+        TelegramClientContractV1::Query => match response {
+            TelegramClientResponse::Query(query_response) => {
+                hermes_telegram_api::client_wire::encode_query_response(query_response).ok_or_else(
+                    || {
+                        TelegramClientPortError::Protocol(
+                            "Telegram query response has no generated wire mapping".to_owned(),
+                        )
+                    },
+                )?
+            }
+            _ => {
+                return Err(TelegramClientPortError::Protocol(
+                    "Telegram query response has another response family".to_owned(),
+                ));
+            }
+        },
     };
-    Ok(ModuleClientResponseV1 {
-        protocol_major: MODULE_CLIENT_PROTOCOL_MAJOR,
-        request_id,
-        response_payload,
-        error_code: String::new(),
-    }
-    .encode_to_vec())
+    encode_module_response_payload(request_id, response_payload)
 }
 
 pub fn decode_module_response(
+    contract: TelegramClientContractV1,
     bytes: &[u8],
 ) -> Result<(u64, TelegramClientResponse), TelegramClientPortError> {
     let envelope = ModuleClientResponseV1::decode(bytes)
@@ -336,33 +439,48 @@ pub fn decode_module_response(
             "Telegram client response payload is empty".to_owned(),
         ));
     }
-    let response = if let Ok(response) =
-        hermes_telegram_api::client_wire::decode_lifecycle_response(&envelope.response_payload)
-    {
-        response
-    } else if let Ok(response) =
-        hermes_telegram_api::client_wire::decode_query_response(&envelope.response_payload)
-    {
-        TelegramClientResponse::Query(response)
-    } else if let Ok(response) =
-        hermes_telegram_api::client_wire::decode_realtime_response(&envelope.response_payload)
-    {
-        TelegramClientResponse::Realtime(response)
-    } else if let Ok(response) =
-        hermes_telegram_api::client_wire::decode_response(&envelope.response_payload)
-    {
-        match response {
-            hermes_telegram_api::client_wire::TelegramAuthorizationResponse::Status(status) => {
-                TelegramClientResponse::AuthorizationStatus(status)
-            }
-            hermes_telegram_api::client_wire::TelegramAuthorizationResponse::PasswordAccepted => {
-                TelegramClientResponse::AuthorizationPasswordAccepted
+    let response = match contract {
+        TelegramClientContractV1::Authorization => {
+            match hermes_telegram_api::client_wire::decode_response(&envelope.response_payload)
+                .map_err(|_| {
+                    TelegramClientPortError::Protocol(
+                        "Telegram authorization response payload is invalid".to_owned(),
+                    )
+                })? {
+                hermes_telegram_api::client_wire::TelegramAuthorizationResponse::Status(
+                    status,
+                ) => TelegramClientResponse::AuthorizationStatus(status),
+                hermes_telegram_api::client_wire::TelegramAuthorizationResponse::PasswordAccepted => {
+                    TelegramClientResponse::AuthorizationPasswordAccepted
+                }
             }
         }
-    } else {
-        return Err(TelegramClientPortError::Protocol(
-            "Telegram client response payload has no generated wire mapping".to_owned(),
-        ));
+        TelegramClientContractV1::Lifecycle => {
+            hermes_telegram_api::client_wire::decode_lifecycle_response(&envelope.response_payload)
+                .map_err(|_| {
+                    TelegramClientPortError::Protocol(
+                        "Telegram lifecycle response payload is invalid".to_owned(),
+                    )
+                })?
+        }
+        TelegramClientContractV1::Command => {
+            hermes_telegram_api::client_wire::decode_command_response(&envelope.response_payload)
+                .map(TelegramClientResponse::Operation)
+                .map_err(|_| {
+                    TelegramClientPortError::Protocol(
+                        "Telegram command response payload is invalid".to_owned(),
+                    )
+                })?
+        }
+        TelegramClientContractV1::Query => {
+            hermes_telegram_api::client_wire::decode_query_response(&envelope.response_payload)
+                .map(TelegramClientResponse::Query)
+                .map_err(|_| {
+                    TelegramClientPortError::Protocol(
+                        "Telegram query response payload is invalid".to_owned(),
+                    )
+                })?
+        }
     };
     Ok((envelope.request_id, response))
 }
@@ -381,7 +499,7 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
         bytes: &[u8],
         durable: &TelegramDurablePersistence,
     ) -> Result<Vec<u8>, TelegramClientPortError> {
-        let (request_id, request) = decode_module_request(bytes)?;
+        let (request_id, contract, request) = decode_module_request(bytes)?;
         let response = match request {
             TelegramClientRequest::ProvisionAccount { setup } => self
                 .runtime
@@ -415,9 +533,7 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                 .runtime
                 .execute_provider_command_durable(durable, command)
                 .await
-                .map(|operation| TelegramClientResponse::Accepted {
-                    operation_id: operation.operation_id,
-                })
+                .map(TelegramClientResponse::Operation)
                 .map_err(|error| TelegramClientPortError::Protocol(format!("{error:?}")))?,
             TelegramClientRequest::RetryCommand {
                 operation_id,
@@ -685,7 +801,7 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                 ));
             }
         };
-        encode_module_response(request_id, &response)
+        encode_module_response(contract, request_id, &response)
     }
 
     pub async fn replay_durable(
@@ -705,5 +821,89 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
             .await
             .map(TelegramClientResponse::Realtime)
             .map_err(TelegramClientPortError::Persistence)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hermes_telegram_api::TelegramProviderQuery;
+
+    fn load_chats_request() -> TelegramClientRequest {
+        TelegramClientRequest::Query(TelegramProviderQuery::LoadChats {
+            account_id: "account-1".to_owned(),
+            limit: 25,
+        })
+    }
+
+    #[test]
+    fn query_request_uses_exact_route_contract_and_schema_digest() {
+        let encoded = encode_module_request(41, &load_chats_request()).expect("encode query");
+        let envelope = ModuleClientRequestV1::decode(encoded.as_slice()).expect("decode envelope");
+        let contract = envelope.contract.expect("contract");
+
+        assert_eq!(contract.owner, "telegram");
+        assert_eq!(contract.name, "telegram.query.v1");
+        assert_eq!(contract.major, 1);
+        assert_eq!(contract.revision, 1);
+        assert_eq!(contract.schema_sha256.len(), 32);
+    }
+
+    #[test]
+    fn query_request_decodes_only_as_query() {
+        let request = load_chats_request();
+        let encoded = encode_module_request(42, &request).expect("encode query");
+
+        assert_eq!(
+            decode_module_request(&encoded).expect("decode exact route"),
+            (42, TelegramClientContractV1::Query, request)
+        );
+    }
+
+    #[test]
+    fn query_payload_is_rejected_under_lifecycle_contract() {
+        let encoded = encode_module_request(43, &load_chats_request()).expect("encode query");
+        let mut envelope =
+            ModuleClientRequestV1::decode(encoded.as_slice()).expect("decode envelope");
+        envelope.contract.as_mut().expect("contract").name = TelegramClientContractV1::Lifecycle
+            .contract_name()
+            .to_owned();
+
+        assert!(matches!(
+            decode_module_request(&envelope.encode_to_vec()),
+            Err(TelegramClientPortError::Protocol(_))
+        ));
+    }
+
+    #[test]
+    fn umbrella_client_contract_is_not_admitted() {
+        let encoded = encode_module_request(44, &load_chats_request()).expect("encode query");
+        let mut envelope =
+            ModuleClientRequestV1::decode(encoded.as_slice()).expect("decode envelope");
+        envelope.contract.as_mut().expect("contract").name = "telegram.client".to_owned();
+
+        assert!(matches!(
+            decode_module_request(&envelope.encode_to_vec()),
+            Err(TelegramClientPortError::Protocol(_))
+        ));
+    }
+
+    #[test]
+    fn query_response_decodes_only_with_query_contract() {
+        let response = TelegramClientResponse::Query(
+            hermes_telegram_api::TelegramProviderQueryResponse::Chats(Vec::new()),
+        );
+        let encoded =
+            encode_module_response(TelegramClientContractV1::Query, 45, &response).expect("encode");
+
+        assert_eq!(
+            decode_module_response(TelegramClientContractV1::Query, &encoded)
+                .expect("decode query response"),
+            (45, response)
+        );
+        assert!(matches!(
+            decode_module_response(TelegramClientContractV1::Lifecycle, &encoded),
+            Err(TelegramClientPortError::Protocol(_))
+        ));
     }
 }
