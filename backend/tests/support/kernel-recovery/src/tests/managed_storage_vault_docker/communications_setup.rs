@@ -10,16 +10,24 @@ use hermes_communications_api::query_wire::{
     communications_query_request_v1::Operation,
     communications_query_response_v1::Result as QueryResult,
 };
+use hermes_communications_ingress::admission::{
+    communication_attachment_anchor_recorded_contract_reference_v1,
+    communication_attachment_blob_admission_observed_contract_reference_v1,
+    communication_attachment_safety_verdict_observed_contract_reference_v1,
+};
 use hermes_communications_persistence::{
     COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1, communications_storage_bundle_v1,
 };
 use hermes_communications_runtime::admission::{
+    COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
+    COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_BLOB_CAPABILITY_ID, COMMUNICATIONS_BLOB_QUOTA_BYTES,
     COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
     COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
     COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
     COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION, COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS,
     COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID, COMMUNICATIONS_STORAGE_CAPABILITY_ID,
+    communication_attachment_safety_state_changed_contract_reference_v1,
     communication_evidence_recorded_contract_reference_v1, communications_module_descriptor_v1,
     communications_settings_schema_bytes_v1,
 };
@@ -1194,13 +1202,21 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                 .expect("publish admitted attachment admission envelope")
                 .await
                 .expect("acknowledge admitted attachment admission envelope");
-            for causation_message_id in [requested.message_id(), admitted.message_id()] {
+            for (transition_index, causation_message_id) in
+                [requested.message_id(), admitted.message_id()]
+                    .into_iter()
+                    .enumerate()
+            {
                 let state_event = tokio::time::timeout(
                     std::time::Duration::from_secs(5),
                     safety_events.next(),
                 )
                 .await
-                .expect("attachment lifecycle event timeout")
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "attachment lifecycle event {transition_index} timeout: {error:?}",
+                    )
+                })
                 .expect("attachment lifecycle event missing");
                 let state_envelope = hermes_events_protocol::validation::envelope::decode_envelope_v1(
                     state_event.payload.as_ref(),
@@ -1624,6 +1640,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         1,
     );
     let capabilities = [
+        COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID.to_owned(),
         "communications.blob.v1".to_owned(),
         COMMUNICATIONS_EVENTS_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_OBSERVE_CAPABILITY_ID.to_owned(),
@@ -1658,13 +1676,45 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         },
     );
     let recorded = communication_evidence_recorded_contract_reference_v1();
+    let attachment_anchor_recorded =
+        communication_attachment_anchor_recorded_contract_reference_v1();
+    let attachment_safety_state_changed =
+        communication_attachment_safety_state_changed_contract_reference_v1();
     let observed =
         hermes_communications_ingress::admission::communication_observed_contract_reference_v1();
+    let attachment_blob_admission =
+        communication_attachment_blob_admission_observed_contract_reference_v1();
+    let attachment_safety_verdict =
+        communication_attachment_safety_verdict_observed_contract_reference_v1();
     let routes = [
+        communications_event_route(
+            COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Observation,
+            &attachment_blob_admission,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Observation,
+            &attachment_safety_verdict,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
         communications_event_route(
             COMMUNICATIONS_EVENTS_CAPABILITY_ID,
             ModuleEventEnvelopeKindV1::Event,
             &recorded,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_EVENTS_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Event,
+            &attachment_anchor_recorded,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_EVENTS_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Event,
+            &attachment_safety_state_changed,
             ModuleEventRouteDirectionV1::Publish,
         ),
         communications_event_route(

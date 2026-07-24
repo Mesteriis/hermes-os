@@ -139,7 +139,7 @@ pub fn build_attachment_safety_state_changed_outbox_v1(
     }
     let message_id = identifier(
         b"hermes.communications.attachment-safety-state-changed.v1\0",
-        decision.evidence_id.bytes(),
+        causation_message_id,
     );
     let recorded_at = Timestamp {
         seconds: context.recorded_at_unix_seconds,
@@ -463,6 +463,9 @@ mod tests {
         let record =
             build_attachment_safety_state_changed_outbox_v1(decision, [5; 16], [6; 16], &context)
                 .expect("canonical attachment event");
+        let next_record =
+            build_attachment_safety_state_changed_outbox_v1(decision, [8; 16], [6; 16], &context)
+                .expect("next canonical attachment event");
         let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");
         let contract = envelope.contract.as_ref().expect("contract");
         let payload = AttachmentSafetyStateChangedV1::decode(envelope.payload.as_slice())
@@ -483,6 +486,11 @@ mod tests {
         assert_eq!(payload.evidence_id, [9; 16]);
         assert_eq!(envelope.causation_message_id, [5; 16]);
         assert_eq!(envelope.correlation_id, [6; 16]);
+        assert_ne!(
+            record.message_id(),
+            next_record.message_id(),
+            "distinct attachment transitions over the same evidence need distinct event identities",
+        );
     }
 
     #[test]

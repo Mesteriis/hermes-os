@@ -66,6 +66,7 @@ pub struct CommunicationsEventRuntimeV1 {
     control_channel: ManagedControlChannelV2<UnixStream>,
     connection: RuntimeJetStreamConnection,
     permits: CommunicationsSubscribePermitsV1,
+    next_consumer: CommunicationsConsumerV1,
     domain_publish_permit: RuntimePublishPermitV1,
     persistence: CommunicationsDurablePersistence,
     search_access: CommunicationsSearchAccessV1,
@@ -83,6 +84,23 @@ struct CommunicationsSubscribePermitsV1 {
     observation: RuntimeSubscribePermitV1,
     attachment_blob_admission: RuntimeSubscribePermitV1,
     attachment_safety_verdict: RuntimeSubscribePermitV1,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CommunicationsConsumerV1 {
+    Observation,
+    AttachmentBlobAdmission,
+    AttachmentSafetyVerdict,
+}
+
+impl CommunicationsConsumerV1 {
+    const fn successor(self) -> Self {
+        match self {
+            Self::Observation => Self::AttachmentBlobAdmission,
+            Self::AttachmentBlobAdmission => Self::AttachmentSafetyVerdict,
+            Self::AttachmentSafetyVerdict => Self::Observation,
+        }
+    }
 }
 
 impl CommunicationsSubscribePermitsV1 {
@@ -337,6 +355,7 @@ impl CommunicationsEventRuntimeV1 {
             control_channel,
             connection,
             permits,
+            next_consumer: CommunicationsConsumerV1::Observation,
             domain_publish_permit,
             persistence,
             search_access,
@@ -460,27 +479,38 @@ impl CommunicationsEventRuntimeV1 {
 
     pub async fn consume_next(&mut self) -> Result<(), CommunicationsDeliveryErrorV1> {
         let canonical_event_context = self.canonical_event_context()?;
-        tokio::select! {
-            result = consume_next_observation_v1(
+        let consumer = self.next_consumer;
+        self.next_consumer = consumer.successor();
+        match consumer {
+            CommunicationsConsumerV1::Observation => consume_next_observation_v1(
                 &self.persistence,
                 &self.connection,
                 &self.permits.observation,
                 &canonical_event_context,
-            ) => result.map(|_| ())?,
-            result = consume_next_attachment_blob_admission_observation_v1(
-                &self.persistence,
-                &self.connection,
-                &self.permits.attachment_blob_admission,
-                &canonical_event_context,
-            ) => result.map(|_| ())?,
-            result = consume_next_attachment_safety_verdict_observation_v1(
-                &self.persistence,
-                &self.connection,
-                &self.permits.attachment_safety_verdict,
-                &canonical_event_context,
-            ) => result.map(|_| ())?,
+            )
+            .await
+            .map(|_| ()),
+            CommunicationsConsumerV1::AttachmentBlobAdmission => {
+                consume_next_attachment_blob_admission_observation_v1(
+                    &self.persistence,
+                    &self.connection,
+                    &self.permits.attachment_blob_admission,
+                    &canonical_event_context,
+                )
+                .await
+                .map(|_| ())
+            }
+            CommunicationsConsumerV1::AttachmentSafetyVerdict => {
+                consume_next_attachment_safety_verdict_observation_v1(
+                    &self.persistence,
+                    &self.connection,
+                    &self.permits.attachment_safety_verdict,
+                    &canonical_event_context,
+                )
+                .await
+                .map(|_| ())
+            }
         }
-        Ok(())
     }
 
     pub async fn process_next_body_custody_transfer(
@@ -710,4 +740,26 @@ fn storage_binding(
     .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
     StorageBindingV1::new(identity, fences, access)
         .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CommunicationsConsumerV1;
+
+    #[test]
+    fn event_consumers_advance_without_empty_consumer_starvation() {
+        let first = CommunicationsConsumerV1::Observation;
+        let second = first.successor();
+        let third = second.successor();
+
+        assert_eq!(
+            [first, second, third, third.successor(),],
+            [
+                CommunicationsConsumerV1::Observation,
+                CommunicationsConsumerV1::AttachmentBlobAdmission,
+                CommunicationsConsumerV1::AttachmentSafetyVerdict,
+                CommunicationsConsumerV1::Observation,
+            ]
+        );
+    }
 }
