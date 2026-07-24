@@ -8,7 +8,9 @@ integration-owned runtime client port и integration-owned Communications
 outbox уже существуют. Exact Telegram `ModuleDescriptorV1`, четыре
 route-specific client capabilities, отдельные platform capability units и
 canonical non-secret settings schema реализованы. Signed managed admission и
-live end-to-end conformance ещё не реализованы.
+live end-to-end conformance ещё не реализованы. Telegram persistence теперь
+публикует immutable owner-local `StorageBundleV1`; он не входит в
+Communications inventory и не даёт runtime права на Storage сам по себе.
 
 Уточняет:
 

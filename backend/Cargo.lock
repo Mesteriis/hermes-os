@@ -2322,6 +2322,7 @@ dependencies = [
  "hermes-storage-protocol",
  "hermes-telegram-api",
  "serde_json",
+ "sha2 0.10.9",
  "sqlx",
 ]
 

@@ -14,6 +14,11 @@ settings. Native-loader conformance ещё не реализован. Решен
 обязательным prerequisite для `telegram_integration_v1`, но само не открывает
 этот gate и не расширяет production inventory.
 
+Telegram-owned PostgreSQL schema также оформлена как immutable
+`telegram_state` `StorageBundleV1`. Bundle является отдельным integration
+assembly artifact: его digest и revision допускаются Storage Control
+независимо от module executable, descriptor и settings schema.
+
 Уточняет:
 
 - [ADR-0204: integration plugins and provider-neutral context boundary](ADR-0204-bundled-integration-plugins-and-provider-neutral-context-boundary.md);
