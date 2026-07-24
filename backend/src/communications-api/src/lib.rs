@@ -20,13 +20,6 @@ pub mod attachment_wire {
     ));
 }
 
-pub mod anchor_wire {
-    include!(concat!(
-        env!("OUT_DIR"),
-        "/hermes.communications.anchor.v1.rs"
-    ));
-}
-
 mod attachment;
 mod query_projection;
 
@@ -40,10 +33,6 @@ pub use attachment::{
 include!(concat!(
     env!("OUT_DIR"),
     "/communications_evidence_schema.rs"
-));
-include!(concat!(
-    env!("OUT_DIR"),
-    "/communications_attachment_anchor_schema.rs"
 ));
 include!(concat!(env!("OUT_DIR"), "/communications_query_schema.rs"));
 include!(concat!(

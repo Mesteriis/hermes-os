@@ -3,7 +3,8 @@
 Статус: Принято
 Дата: 2026-07-24
 Состояние реализации: Частично реализовано. Communications publisher,
-schema-bound handoff и atomic outbox insert реализованы; Mail consumer mapping
+schema-bound handoff через единственный integration boundary
+`hermes-communications-ingress` и atomic outbox insert реализованы; Mail consumer mapping
 и Blob-result producer admission ещё не реализованы. Без этого handoff
 integration не может законно адресовать canonical attachment anchor: anchor ID
 является Communications-owned derived identity, а не provider- или

@@ -1,9 +1,10 @@
 //! Exact descriptor and capability admission for the Communications owner runtime.
 
 use hermes_communications_api::{
-    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_ANCHOR_SCHEMA_SHA256,
-    COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256, COMMUNICATIONS_QUERY_SCHEMA_SHA256,
+    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
+    COMMUNICATIONS_QUERY_SCHEMA_SHA256,
 };
+use hermes_communications_ingress::COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256;
 use hermes_communications_ingress::admission::{
     COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
     communication_attachment_blob_admission_observed_contract_reference_v1,
@@ -304,7 +305,7 @@ pub fn communication_attachment_anchor_recorded_contract_reference_v1() -> Contr
         name: "communication_attachment_anchor_recorded".to_owned(),
         major: 1,
         revision: 1,
-        schema_sha256: COMMUNICATIONS_ATTACHMENT_ANCHOR_SCHEMA_SHA256.to_vec(),
+        schema_sha256: COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256.to_vec(),
     }
 }
 

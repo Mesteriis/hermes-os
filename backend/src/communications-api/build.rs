@@ -60,25 +60,4 @@ fn main() {
         ),
     )
     .expect("communications attachment lifecycle schema digest must be written");
-
-    let attachment_anchor_descriptor = output.join("communications-attachment-anchor-v1.bin");
-    prost_build::Config::new()
-        .file_descriptor_set_path(&attachment_anchor_descriptor)
-        .compile_protos(
-            &["proto/hermes/communications/anchor/v1/anchor.proto"],
-            &["proto"],
-        )
-        .expect("communications attachment anchor protocol must compile");
-    let attachment_anchor_digest: [u8; 32] = Sha256::digest(
-        std::fs::read(&attachment_anchor_descriptor)
-            .expect("communications attachment anchor descriptor must exist"),
-    )
-    .into();
-    std::fs::write(
-        output.join("communications_attachment_anchor_schema.rs"),
-        format!(
-            "pub const COMMUNICATIONS_ATTACHMENT_ANCHOR_SCHEMA_SHA256: [u8; 32] = {attachment_anchor_digest:?};\n"
-        ),
-    )
-    .expect("communications attachment anchor schema digest must be written");
 }

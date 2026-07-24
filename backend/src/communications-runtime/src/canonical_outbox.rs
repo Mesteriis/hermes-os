@@ -2,12 +2,15 @@
 
 use hermes_communications_api::{
     AttachmentSafetyStateV1, AttachmentSafetyTransitionDecisionV1,
-    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_ANCHOR_SCHEMA_SHA256,
-    COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256, CanonicalAttachmentAnchorProjectionV1,
-    CanonicalCommunicationEvidenceKindV1, CommunicationBodyStateV1, CommunicationDirectionV1,
-    CommunicationProviderProvenanceV1, CommunicationSummary,
-    anchor_wire::CommunicationAttachmentAnchorRecordedV1,
-    attachment_wire::AttachmentSafetyStateChangedV1, wire::CommunicationEvidenceRecordedV1,
+    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
+    CanonicalAttachmentAnchorProjectionV1, CanonicalCommunicationEvidenceKindV1,
+    CommunicationBodyStateV1, CommunicationDirectionV1, CommunicationProviderProvenanceV1,
+    CommunicationSummary, attachment_wire::AttachmentSafetyStateChangedV1,
+    wire::CommunicationEvidenceRecordedV1,
+};
+use hermes_communications_ingress::{
+    COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256,
+    attachment_anchor_v1::AttachmentAnchorRecordedV1,
 };
 use hermes_events_protocol::{
     delivery::OutboxRecordV1,
@@ -228,7 +231,7 @@ pub fn build_attachment_anchor_recorded_outbox_v1(
             name: "communication_attachment_anchor_recorded".to_owned(),
             major: 1,
             revision: 1,
-            schema_sha256: COMMUNICATIONS_ATTACHMENT_ANCHOR_SCHEMA_SHA256.to_vec(),
+            schema_sha256: COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256.to_vec(),
         }),
         source: Some(SourceRefV1 {
             module_id: "communications-runtime".to_owned(),
@@ -256,7 +259,7 @@ pub fn build_attachment_anchor_recorded_outbox_v1(
         semantics: Some(Semantics::Event(EventMetadataV1 {
             occurred_at: Some(occurred_at),
         })),
-        payload: CommunicationAttachmentAnchorRecordedV1 {
+        payload: AttachmentAnchorRecordedV1 {
             attachment_anchor_id: anchor.attachment_anchor_id.bytes().to_vec(),
             source_observation_id: source_observation_id.to_vec(),
             media_cursor_sha256: anchor.media_cursor.bytes().to_vec(),
@@ -424,7 +427,7 @@ mod tests {
             build_attachment_anchor_recorded_outbox_v1(&anchor, [4; 16], [5; 16], &context)
                 .expect("canonical anchor handoff");
         let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");
-        let payload = hermes_communications_api::anchor_wire::CommunicationAttachmentAnchorRecordedV1::decode(envelope.payload.as_slice()).expect("payload");
+        let payload = hermes_communications_ingress::attachment_anchor_v1::AttachmentAnchorRecordedV1::decode(envelope.payload.as_slice()).expect("payload");
 
         assert_eq!(
             envelope.contract.expect("contract").name,

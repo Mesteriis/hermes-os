@@ -35,6 +35,13 @@ pub mod attachment_safety_v1 {
     ));
 }
 
+pub mod attachment_anchor_v1 {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.communications.ingress.attachment.anchor.v1.rs"
+    ));
+}
+
 include!(concat!(
     env!("OUT_DIR"),
     "/communications_observation_schema.rs"
@@ -46,6 +53,10 @@ include!(concat!(
 include!(concat!(
     env!("OUT_DIR"),
     "/communications_attachment_safety_verdict_observation_schema.rs"
+));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/communications_attachment_anchor_recorded_schema.rs"
 ));
 
 pub const PACKAGE: &str = "hermes-communications-ingress";

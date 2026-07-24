@@ -36,6 +36,13 @@ fn main() {
         "COMMUNICATION_ATTACHMENT_SAFETY_VERDICT_OBSERVATION_SCHEMA_SHA256",
         "proto/hermes/communications/ingress/attachment/safety/v1/observation.proto",
     );
+    compile_schema(
+        &output,
+        "communications-attachment-anchor-recorded-v1.bin",
+        "communications_attachment_anchor_recorded_schema.rs",
+        "COMMUNICATION_ATTACHMENT_ANCHOR_RECORDED_SCHEMA_SHA256",
+        "proto/hermes/communications/ingress/attachment/anchor/v1/recorded.proto",
+    );
 }
 
 fn compile_schema(
