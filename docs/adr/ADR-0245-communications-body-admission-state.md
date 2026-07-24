@@ -2,8 +2,13 @@
 
 Status: Accepted
 Date: 2026-07-22
-Implementation state: Partial. `Unavailable` is implemented; Blob-backed body
-admission remains a separate platform-gated slice.
+Implementation state: Partially implemented. `Unavailable` and the admitted
+Blob-backed canonical-evidence path are implemented through the event-backed
+custody transfer in ADR-0257: an integration emits only a typed opaque source
+receipt, Communications records `PendingBlob`, and the owner-local worker
+commits `AdmittedBlob` only after Blob Platform rebinds it to Communications.
+This does not admit a generic provider-body fetch, a direct cross-owner Blob
+read, or every future integration body producer.
 
 ## Decision
 
@@ -20,8 +25,8 @@ perform a legacy fallback fetch, or treat provider readability as Blob success.
 
 ## Consequences
 
-Mail and Telegram currently publish `Unavailable` for readable provider text.
-WhatsApp host observations remain metadata-only. A future Blob slice may move a
-specific evidence record from `PendingBlob` to an admitted body anchor through
-an explicit typed event; it must not mutate provider storage or bypass the Blob
-boundary.
+An admitted integration body producer may move a specific evidence record from
+`PendingBlob` to `AdmittedBlob` only through the ADR-0257 custody-transfer
+workflow. Mail and Telegram paths not separately admitted for body write still
+publish `Unavailable`; WhatsApp host observations remain metadata-only. No path
+may mutate provider storage or bypass the Blob boundary.

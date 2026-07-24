@@ -2,12 +2,15 @@
 
 Status: Accepted
 Date: 2026-07-22
-Implementation state: Partial. Canonical attachment anchors persist immutable
-provider-observed descriptors in the `descriptor_only` state. Mail, Telegram
-and WhatsApp publish bounded descriptor observations through Communications
-ingress. Blob admission commands/results and scanner verdict events are not
-implemented yet; no anchor can reach `blob_admitted`, `safe_for_delivery`,
-`quarantined` or `rejected` in the current runtime.
+Implementation state: Partially implemented. Canonical attachment anchors
+persist immutable provider-observed descriptors in the `descriptor_only` state.
+Communications consumes typed Blob-admission and safety-state events through
+owner-local CAS and durable outbox transitions; it never touches attachment
+bytes. The Mail assembly also has an unadmitted implementation of the
+descriptor-to-anchor handoff and Blob-admission producer contract. No signed
+Mail production descriptor/grant or scanner producer is admitted, so current
+production runtime must not claim a live path to `blob_admitted`,
+`safe_for_delivery`, `quarantined` or `rejected`.
 
 ## Decision
 
