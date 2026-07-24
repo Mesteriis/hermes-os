@@ -2337,6 +2337,7 @@ dependencies = [
  "hermes-events-protocol",
  "hermes-managed-vault-client",
  "hermes-runtime-protocol",
+ "hermes-secure-file",
  "hermes-storage-protocol",
  "hermes-storage-vault",
  "hermes-telegram-api",

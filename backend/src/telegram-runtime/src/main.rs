@@ -18,6 +18,8 @@ use hermes_telegram_runtime::{TelegramRuntimeAdmission, bootstrap, process, sett
 use hermes_telegram_tdlib::TdJsonLibrary;
 use prost::Message;
 
+mod runtime_bindings;
+
 struct InheritedPaths {
     descriptor: PathBuf,
     settings_schema: PathBuf,
@@ -60,7 +62,8 @@ where
         return Err("Telegram runtime configuration is stale".to_owned());
     }
     let settings = settings::decode(&snapshot)?;
-    let library = TdJsonLibrary::load_exact(&settings.tdjson_artifact_path)
+    let runtime_bindings = runtime_bindings::resolve(&configuration)?;
+    let library = TdJsonLibrary::load_exact(runtime_bindings.tdjson_artifact_path())
         .map_err(|_| "Telegram runtime TDLib artifact is unavailable".to_owned())?;
     let storage = configuration
         .storage
@@ -88,7 +91,7 @@ where
             settings.api_id,
             &settings.account_id,
             TelegramProviderKind::User,
-            settings.database_directory,
+            runtime_bindings.into_database_directory(),
             &admission,
             storage,
             &configuration.event_hub_endpoint,

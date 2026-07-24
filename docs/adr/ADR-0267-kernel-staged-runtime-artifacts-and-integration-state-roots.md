@@ -5,10 +5,13 @@
 Состояние реализации: owner-neutral wire foundation реализован в
 `hermes-runtime-protocol`, а Kernel реализует exact intersection verified
 descriptor/effective grants/signed manifest, launch-scoped staging native
-dependencies и owner-private integration state root. Telegram migration и
-native-loader conformance ещё не реализованы. Решение является обязательным
-prerequisite для `telegram_integration_v1`, но само не открывает этот gate и не
-расширяет production inventory.
+dependencies и owner-private integration state root. Telegram runtime больше
+не принимает artifact/database paths через settings: он проверяет exact staged
+binding и создаёт provider-owned TDLib layout только внутри state root.
+Canonical Telegram schema/credential migration и native-loader conformance ещё
+не реализованы. Решение является обязательным prerequisite для
+`telegram_integration_v1`, но само не открывает этот gate и не расширяет
+production inventory.
 
 Уточняет:
 

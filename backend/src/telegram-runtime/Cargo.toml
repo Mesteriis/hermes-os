@@ -25,6 +25,7 @@ hermes-events-protocol = { path = "../platform/events" }
 hermes-events-jetstream = { path = "../platform/events/jetstream" }
 hermes-managed-vault-client = { path = "../platform/vault/managed_client" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-secure-file = { path = "../platform/secure_file" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-storage-vault = { path = "../platform/storage/vault" }
 hermes-telegram-core = { path = "../telegram-core" }
