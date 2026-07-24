@@ -71,6 +71,7 @@ policy через ссылки из новых документов.
 - [ADR-0260: Communications attachment lifecycle event authority](ADR-0260-communications-attachment-lifecycle-event-authority.md)
 - [ADR-0261: Communications attachment-anchor handoff](ADR-0261-communications-attachment-anchor-handoff.md)
 - [ADR-0262: Mail attachment Blob-admission extension](ADR-0262-mail-attachment-blob-admission-extension.md)
+- [ADR-0263: Mail integration settings and Storage admission artifacts](ADR-0263-mail-integration-settings-and-storage-admission.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также

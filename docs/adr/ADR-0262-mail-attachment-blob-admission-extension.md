@@ -9,7 +9,8 @@ a one-use Blob lease. Mail also requires the exact Blob-admission publish
 subject before it begins an owner-local admission. Mail now also exposes an
 immutable owner-local Storage bundle for a future separate admission. ADR всё
 ещё не расширяет `first_owner_v1`, не допускает Mail production descriptor и
-не доказывает live Blob-result delivery.
+не доказывает live Blob-result delivery. Versioned Mail settings schema and
+Storage bundle admission artifacts are defined by ADR-0263.
 
 Зависит от:
 

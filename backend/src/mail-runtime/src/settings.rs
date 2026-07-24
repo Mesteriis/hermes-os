@@ -4,7 +4,12 @@ use hermes_mail_api::{
     MailAccountConfigurationV1, MailGmailConfigurationV1, MailImapConfigurationV1,
     MailInboundTransportV1, SmtpEndpointV1, valid_account_configuration,
 };
-use hermes_runtime_protocol::v1::{SettingsSnapshotV1, setting_value_v1::Value};
+use hermes_runtime_protocol::v1::{
+    SettingApplyModeV1, SettingClientVisibilityV1, SettingDefinitionV1, SettingMutationAuthorityV1,
+    SettingTargetScopeV1, SettingValueTypeV1, SettingsSchemaV1, SettingsSnapshotV1,
+    setting_value_v1::Value,
+};
+use prost::Message;
 
 use crate::MailCredentialRevisionsV1;
 
@@ -25,6 +30,95 @@ const INBOUND_KIND: &str = "mail.inbound.kind";
 const GMAIL_USER_ID: &str = "mail.gmail.user_id";
 const GMAIL_FROM_ADDRESS: &str = "mail.gmail.from_address";
 const GMAIL_ACCESS_TOKEN_REVISION: &str = "mail.gmail.access_token_revision";
+
+pub const MAIL_SETTINGS_SCHEMA_MAJOR_V1: u32 = 1;
+pub const MAIL_SETTINGS_SCHEMA_REVISION_V1: u32 = 1;
+
+/// The Mail integration owns these configuration-instance settings. They are
+/// deliberately hidden from generic client reads: endpoint details and
+/// credential revisions are runtime configuration, not Communications state.
+#[must_use]
+pub fn mail_settings_schema_v1() -> SettingsSchemaV1 {
+    SettingsSchemaV1 {
+        major: MAIL_SETTINGS_SCHEMA_MAJOR_V1,
+        revision: MAIL_SETTINGS_SCHEMA_REVISION_V1,
+        definitions: vec![
+            definition(CONNECTION_ID, SettingValueTypeV1::String, "Connection ID"),
+            definition(
+                GMAIL_ACCESS_TOKEN_REVISION,
+                SettingValueTypeV1::UnsignedInteger,
+                "Gmail access-token revision",
+            ),
+            definition(
+                GMAIL_FROM_ADDRESS,
+                SettingValueTypeV1::String,
+                "Gmail from address",
+            ),
+            definition(GMAIL_USER_ID, SettingValueTypeV1::String, "Gmail user ID"),
+            definition(IMAP_HOST, SettingValueTypeV1::String, "IMAP host"),
+            definition(
+                IMAP_PASSWORD_REVISION,
+                SettingValueTypeV1::UnsignedInteger,
+                "IMAP password revision",
+            ),
+            definition(IMAP_PORT, SettingValueTypeV1::UnsignedInteger, "IMAP port"),
+            definition(IMAP_USERNAME, SettingValueTypeV1::String, "IMAP username"),
+            definition(
+                INBOUND_KIND,
+                SettingValueTypeV1::String,
+                "Inbound transport",
+            ),
+            definition(SMTP_ENABLED, SettingValueTypeV1::Boolean, "SMTP enabled"),
+            definition(
+                SMTP_FROM_ADDRESS,
+                SettingValueTypeV1::String,
+                "SMTP from address",
+            ),
+            definition(SMTP_HOST, SettingValueTypeV1::String, "SMTP host"),
+            definition(
+                SMTP_PASSWORD_REVISION,
+                SettingValueTypeV1::UnsignedInteger,
+                "SMTP password revision",
+            ),
+            definition(SMTP_PORT, SettingValueTypeV1::UnsignedInteger, "SMTP port"),
+            definition(SMTP_USERNAME, SettingValueTypeV1::String, "SMTP username"),
+            definition(
+                SYNC_WINDOW,
+                SettingValueTypeV1::UnsignedInteger,
+                "Sync window",
+            ),
+            definition(
+                SYNC_WINDOWS,
+                SettingValueTypeV1::UnsignedInteger,
+                "Sync windows",
+            ),
+        ],
+    }
+}
+
+#[must_use]
+pub fn mail_settings_schema_bytes_v1() -> Vec<u8> {
+    mail_settings_schema_v1().encode_to_vec()
+}
+
+fn definition(
+    setting_id: &str,
+    value_type: SettingValueTypeV1,
+    display_name: &str,
+) -> SettingDefinitionV1 {
+    SettingDefinitionV1 {
+        setting_id: setting_id.to_owned(),
+        capability_id: String::new(),
+        value_type: value_type as i32,
+        mutation_authority: SettingMutationAuthorityV1::OperatorManaged as i32,
+        target_scope: SettingTargetScopeV1::ConfigurationInstance as i32,
+        apply_mode: SettingApplyModeV1::RestartModule as i32,
+        client_visibility: SettingClientVisibilityV1::Hidden as i32,
+        fresh_owner_proof_required: true,
+        kernel_controller_id: String::new(),
+        display_name: display_name.to_owned(),
+    }
+}
 
 pub struct MailRuntimeSettingsV1 {
     pub account: MailAccountConfigurationV1,
@@ -160,4 +254,25 @@ fn value<'a>(snapshot: &'a SettingsSnapshotV1, setting_id: &str) -> Result<&'a V
 
 fn invalid_settings() -> String {
     "Mail runtime settings are invalid".to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_runtime_protocol::validation::descriptor::validate_settings_schema_v1;
+
+    use super::*;
+
+    #[test]
+    fn schema_is_versioned_hidden_and_configuration_scoped() {
+        let schema = mail_settings_schema_v1();
+
+        assert_eq!(validate_settings_schema_v1(&schema), Ok(()));
+        assert!(schema.definitions.iter().all(|definition| {
+            definition.target_scope == SettingTargetScopeV1::ConfigurationInstance as i32
+                && definition.apply_mode == SettingApplyModeV1::RestartModule as i32
+                && definition.client_visibility == SettingClientVisibilityV1::Hidden as i32
+                && definition.fresh_owner_proof_required
+        }));
+        assert_eq!(schema.definitions.len(), 17);
+    }
 }
