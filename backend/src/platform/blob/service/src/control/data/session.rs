@@ -201,34 +201,34 @@ fn validate_signed_grant(
     now: u64,
 ) -> Result<(), ()> {
     if grant.major != 1 {
-        return Err(denied("major"));
+        return reject("major");
     }
     if grant.kernel_instance_id != instance_id {
-        return Err(denied("kernel_instance"));
+        return reject("kernel_instance");
     }
     if grant.blob_runtime_generation != blob_runtime_generation {
-        return Err(denied("runtime_generation"));
+        return reject("runtime_generation");
     }
     if grant.session_id.len() != 16 || grant.session_id.iter().all(|byte| *byte == 0) {
-        return Err(denied("session_id"));
+        return reject("session_id");
     }
     if grant.channel_binding_sha256.len() != 32 || binding.len() != 32 {
-        return Err(denied("binding_shape"));
+        return reject("binding_shape");
     }
     if grant.expires_at_unix_ms <= now {
-        return Err(denied("expired"));
+        return reject("expired");
     }
     if grant.expires_at_unix_ms > now.checked_add(SESSION_TTL_LIMIT_MS).ok_or(())? {
-        return Err(denied("ttl"));
+        return reject("ttl");
     }
     if BlobDataOperationV1::try_from(grant.operation).ok() != Some(expected) {
-        return Err(denied("operation"));
+        return reject("operation");
     }
     if grant.kernel_authorization_signature_raw.len() != 64 {
-        return Err(denied("signature_shape"));
+        return reject("signature_shape");
     }
     if Sha256::digest(binding).as_slice() != grant.channel_binding_sha256.as_slice() {
-        return Err(denied("binding"));
+        return reject("binding");
     }
     let signature = Signature::from_slice(&grant.kernel_authorization_signature_raw)
         .map_err(|_| denied("signature_encoding"))?;
@@ -246,6 +246,11 @@ fn denied(stage: &str) {
     }
 }
 
+fn reject<T>(stage: &str) -> Result<T, ()> {
+    denied(stage);
+    Err(())
+}
+
 fn decode_grant(grant: &BlobDataSessionGrantV1) -> Result<VerifiedBlobDataSessionV1, ()> {
     let reference_id = grant
         .reference_id
@@ -257,7 +262,7 @@ fn decode_grant(grant: &BlobDataSessionGrantV1) -> Result<VerifiedBlobDataSessio
             WireBackupClass::BlobBackupClassRequiredV1 => BlobBackupClassV1::Required,
             WireBackupClass::BlobBackupClassRebuildableV1 => BlobBackupClassV1::Rebuildable,
             WireBackupClass::BlobBackupClassExcludedV1 => BlobBackupClassV1::Excluded,
-            WireBackupClass::BlobBackupClassUnspecifiedV1 => return Err(denied("backup_class")),
+            WireBackupClass::BlobBackupClassUnspecifiedV1 => return reject("backup_class"),
         };
     let reference = BlobRefV1::new(
         reference_id,
@@ -285,7 +290,7 @@ fn decode_grant(grant: &BlobDataSessionGrantV1) -> Result<VerifiedBlobDataSessio
     )
     .map_err(|_| denied("quota"))?;
     if !quota.matches(&access) || grant.key_revision == 0 {
-        return Err(denied("quota_match"));
+        return reject("quota_match");
     }
     Ok(VerifiedBlobDataSessionV1 {
         reference,
