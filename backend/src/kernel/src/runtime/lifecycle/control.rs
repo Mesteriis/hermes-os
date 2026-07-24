@@ -17,8 +17,7 @@ use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlResponseV1, ManagedRuntimeEventCredentialDeliveryV1,
     ManagedRuntimeEventCredentialRequestV1, ManagedRuntimeOwnerDerivedKeyDeliveryV1,
     ManagedRuntimeOwnerDerivedKeyRequestV1, ManagedRuntimeProviderCredentialDeliveryV1,
-    ManagedRuntimeProviderCredentialRequestV1, ManagedRuntimeVaultRouteRequestV1,
-    VaultCiphertextResponseV1, VaultCiphertextRouteV1,
+    ManagedRuntimeProviderCredentialRequestV1, VaultCiphertextResponseV1, VaultCiphertextRouteV1,
 };
 use hermes_runtime_protocol::validation::descriptor::{
     decode_descriptor_v1, decode_settings_schema_v1,
@@ -285,7 +284,16 @@ pub(crate) fn relay_with_vault_routes(
     expectation: &ManagedRuntimeExpectation,
     vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
 ) -> Result<Vec<u8>, String> {
-    relay_with_control_routes(channel, payload, expectation, vault_route_handler, None, None, None, None)
+    relay_with_control_routes(
+        channel,
+        payload,
+        expectation,
+        vault_route_handler,
+        None,
+        None,
+        None,
+        None,
+    )
 }
 
 pub(crate) fn relay_with_control_routes(
@@ -313,21 +321,27 @@ pub(crate) fn relay_with_control_routes(
         }
         if let Ok(Some(request)) = inbound::event_credential_request(&frame) {
             let result = event_credential_handler
-                .ok_or_else(|| "managed runtime Event credential handler is not available".to_owned())?
+                .ok_or_else(|| {
+                    "managed runtime Event credential handler is not available".to_owned()
+                })?
                 .issue_event_credential(expectation, request);
             inbound::respond_event_credential(channel, result)?;
             continue;
         }
         if let Ok(Some(request)) = inbound::provider_credential_request(&frame) {
             let result = provider_credential_handler
-                .ok_or_else(|| "managed runtime provider credential handler is not available".to_owned())?
+                .ok_or_else(|| {
+                    "managed runtime provider credential handler is not available".to_owned()
+                })?
                 .issue_provider_credential(expectation, request);
             inbound::respond_provider_credential(channel, result)?;
             continue;
         }
         if let Ok(Some(request)) = inbound::owner_derived_key_request(&frame) {
             let result = owner_derived_key_handler
-                .ok_or_else(|| "managed runtime owner-derived key handler is not available".to_owned())?
+                .ok_or_else(|| {
+                    "managed runtime owner-derived key handler is not available".to_owned()
+                })?
                 .issue_owner_derived_key(expectation, request);
             inbound::respond_owner_derived_key(channel, result)?;
             continue;
@@ -344,9 +358,13 @@ pub(crate) fn relay_with_control_routes(
 }
 
 fn vault_route(frame: &[u8]) -> Option<VaultCiphertextRouteV1> {
-    let route = ManagedRuntimeVaultRouteRequestV1::decode(frame)
+    let route = ManagedRuntimeControlRequestV1::decode(frame)
         .ok()?
-        .route?;
+        .operation
+        .and_then(|operation| match operation {
+            hermes_runtime_protocol::v1::managed_runtime_control_request_v1::Operation::RouteVaultCiphertext(request) => request.route,
+            _ => None,
+        })?;
     validate_vault_ciphertext_route_v1(&route).ok()?;
     Some(route)
 }

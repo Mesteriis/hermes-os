@@ -5,8 +5,10 @@ use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
 use hermes_runtime_protocol::v1::{
-    ManagedRuntimeVaultRouteRequestV1, ManagedRuntimeVaultRouteResponseV1,
-    VaultCiphertextResponseV1, VaultCiphertextRouteV1,
+    ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
+    ManagedRuntimeVaultRouteRequestV1, VaultCiphertextResponseV1, VaultCiphertextRouteV1,
+    managed_runtime_control_request_v1::Operation,
+    managed_runtime_control_response_v1::Result as ControlResult,
 };
 use hermes_storage_vault::{StorageVaultRouteFailureV1, StorageVaultRoutePortV1};
 use prost::Message;
@@ -44,15 +46,26 @@ fn route_once(
 ) -> Result<VaultCiphertextResponseV1, StorageVaultRouteFailureV1> {
     write_frame(
         channel,
-        &ManagedRuntimeVaultRouteRequestV1 { route: Some(route) }.encode_to_vec(),
+        &ManagedRuntimeControlRequestV1 {
+            operation: Some(Operation::RouteVaultCiphertext(
+                ManagedRuntimeVaultRouteRequestV1 { route: Some(route) },
+            )),
+        }
+        .encode_to_vec(),
     )
     .map_err(|_| StorageVaultRouteFailureV1::Unavailable)?;
-    let response = ManagedRuntimeVaultRouteResponseV1::decode(
+    let response = ManagedRuntimeControlResponseV1::decode(
         read_frame(channel)
             .map_err(|_| StorageVaultRouteFailureV1::Unavailable)?
             .as_slice(),
     )
-    .map_err(|_| StorageVaultRouteFailureV1::Rejected)?;
+    .map_err(|_| StorageVaultRouteFailureV1::Rejected)?
+    .result
+    .and_then(|result| match result {
+        ControlResult::VaultRoute(response) => Some(response),
+        _ => None,
+    })
+    .ok_or(StorageVaultRouteFailureV1::Rejected)?;
     if !response.error_code.is_empty() {
         return Err(StorageVaultRouteFailureV1::Rejected);
     }

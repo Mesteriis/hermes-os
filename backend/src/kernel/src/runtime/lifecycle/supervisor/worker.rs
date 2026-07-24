@@ -22,6 +22,7 @@ pub(super) struct ActiveWorker {
     pub(super) join: JoinHandle<()>,
     pub(super) relay: SyncSender<ManagedRuntimeRelayRequest>,
     pub(super) ready: Mutex<Option<Receiver<Result<(), String>>>>,
+    pub(super) ready_state: Arc<AtomicBool>,
     pub(super) stop_requested: Arc<AtomicBool>,
 }
 
@@ -61,6 +62,8 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
     let shutdown_requested = Arc::clone(&inner.shutdown_requested);
     let stop_requested = Arc::new(AtomicBool::new(false));
     let worker_stop_requested = Arc::clone(&stop_requested);
+    let ready_state = Arc::new(AtomicBool::new(false));
+    let worker_ready_state = Arc::clone(&ready_state);
     let (relay, relay_requests) = mpsc::sync_channel(64);
     let (ready_sender, ready) = mpsc::sync_channel(1);
     let join = std::thread::spawn(move || {
@@ -82,6 +85,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
                     owner_derived_key_handler: owner_derived_key_handler.as_deref(),
                     blob_session_handler: blob_session_handler.as_deref(),
                     ready_sender: &ready_sender,
+                    ready_state: &worker_ready_state,
                 },
             )
             .map(|_| ()),
@@ -92,6 +96,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
         join,
         relay,
         ready: Mutex::new(Some(ready)),
+        ready_state,
         stop_requested,
     }
 }

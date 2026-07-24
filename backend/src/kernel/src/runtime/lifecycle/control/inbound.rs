@@ -10,16 +10,15 @@ use hermes_runtime_protocol::v1::{
     ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
     ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedRuntimeOwnerDerivedKeyRequestV1,
     ManagedRuntimeProviderCredentialDeliveryV1, ManagedRuntimeProviderCredentialRequestV1,
-    ManagedRuntimeReadyRequestV1, ManagedRuntimeVaultRouteRequestV1,
-    ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1, VaultCiphertextRouteV1,
-    managed_runtime_control_request_v1::Operation,
+    ManagedRuntimeReadyRequestV1, ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1,
+    VaultCiphertextRouteV1, managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use prost::Message;
 
 use super::{MAX_FRAME_BYTES, read_frame, write_frame};
 
-const VAULT_ROUTE_FIELD_TAG: u8 = 0x0a;
+const VAULT_ROUTE_FIELD_TAG: u8 = 0x2a;
 const READY_FIELD_TAG: u8 = 0x12;
 const EVENT_CREDENTIAL_FIELD_TAG: u8 = 0x1a;
 const PROVIDER_CREDENTIAL_FIELD_TAG: u8 = 0x22;
@@ -35,10 +34,13 @@ pub(crate) fn try_receive_vault_route(
     if frame.first() != Some(&VAULT_ROUTE_FIELD_TAG) {
         return Ok(None);
     }
-    let request = ManagedRuntimeVaultRouteRequestV1::decode(frame.as_slice())
+    let request = ManagedRuntimeControlRequestV1::decode(frame.as_slice())
         .map_err(|_| "managed runtime Vault route is invalid".to_owned())?;
+    let Some(Operation::RouteVaultCiphertext(request)) = request.operation else {
+        return Err("managed runtime Vault route is invalid".to_owned());
+    };
     let Some(route) = request.route else {
-        return Ok(None);
+        return Err("managed runtime Vault route is invalid".to_owned());
     };
     read_frame(channel)?;
     Ok(Some(route))
@@ -105,12 +107,22 @@ pub(crate) fn respond_vault_route(
     result: Result<VaultCiphertextResponseV1, String>,
 ) -> Result<(), String> {
     let response = match result {
-        Ok(response) => ManagedRuntimeVaultRouteResponseV1 {
-            response: Some(response),
+        Ok(response) => ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::VaultRoute(
+                ManagedRuntimeVaultRouteResponseV1 {
+                    response: Some(response),
+                    error_code: String::new(),
+                },
+            )),
             error_code: String::new(),
         },
-        Err(_) => ManagedRuntimeVaultRouteResponseV1 {
-            response: None,
+        Err(_) => ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::VaultRoute(
+                ManagedRuntimeVaultRouteResponseV1 {
+                    response: None,
+                    error_code: "managed_vault_route_denied".to_owned(),
+                },
+            )),
             error_code: "managed_vault_route_denied".to_owned(),
         },
     };
@@ -413,7 +425,12 @@ fn valid_configuration_instance_id(value: &str) -> bool {
 
 #[cfg(test)]
 mod blob_session_error_code_tests {
-    use super::blob_session_error_code;
+    use super::{VAULT_ROUTE_FIELD_TAG, blob_session_error_code};
+    use hermes_runtime_protocol::v1::{
+        ManagedRuntimeControlRequestV1, ManagedRuntimeVaultRouteRequestV1,
+        managed_runtime_control_request_v1::Operation,
+    };
+    use prost::Message;
 
     #[test]
     fn exposes_only_the_retryable_blob_availability_code() {
@@ -425,5 +442,18 @@ mod blob_session_error_code_tests {
             blob_session_error_code("managed runtime Blob custody transfer is denied"),
             "managed_blob_session_denied",
         );
+    }
+
+    #[test]
+    fn vault_route_uses_its_typed_control_oneof_tag() {
+        let frame = ManagedRuntimeControlRequestV1 {
+            operation: Some(Operation::RouteVaultCiphertext(
+                ManagedRuntimeVaultRouteRequestV1 { route: None },
+            )),
+        }
+        .encode_to_vec();
+
+        assert_eq!(frame.first(), Some(&VAULT_ROUTE_FIELD_TAG));
+        assert_ne!(frame.first(), Some(&0x0a));
     }
 }

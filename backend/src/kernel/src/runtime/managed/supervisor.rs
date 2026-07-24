@@ -45,6 +45,7 @@ pub struct ManagedChildRunInput<'a> {
     pub owner_derived_key_handler: Option<&'a dyn ManagedRuntimeOwnerDerivedKeyHandler>,
     pub blob_session_handler: Option<&'a dyn ManagedRuntimeBlobSessionHandler>,
     pub ready_sender: &'a SyncSender<Result<(), String>>,
+    pub ready_state: &'a AtomicBool,
 }
 
 pub fn run_until_shutdown(
@@ -121,6 +122,9 @@ fn wait_until_shutdown_with_relay(
                     .try_send(Err("managed runtime ready signal is stale".to_owned()));
                 return Err("managed runtime ready signal is stale".to_owned());
             }
+            input
+                .ready_state
+                .store(true, std::sync::atomic::Ordering::Release);
             let _ = input.ready_sender.try_send(Ok(()));
             continue;
         }

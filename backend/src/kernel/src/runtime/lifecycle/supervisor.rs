@@ -518,6 +518,20 @@ impl ManagedRuntimeSupervisor {
 }
 
 impl ManagedRuntimeRelayPort {
+    pub(crate) fn is_ready(&self, registration_id: &str) -> Result<bool, String> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or_else(|| "managed runtime supervisor is unavailable".to_owned())?;
+        inner
+            .workers
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?
+            .get(registration_id)
+            .map(|worker| worker.ready_state.load(Ordering::Acquire))
+            .ok_or_else(|| "managed runtime is unavailable".to_owned())
+    }
+
     pub fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         self.relay_with_timeout(registration_id, payload, MANAGED_RUNTIME_RELAY_TIMEOUT)
     }

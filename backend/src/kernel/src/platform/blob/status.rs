@@ -30,6 +30,9 @@ pub(crate) fn read_current(
     store: &SqliteControlStore,
     relay: &ManagedRuntimeRelayPort,
 ) -> Result<ManagedBlobStatus, String> {
+    if !relay.is_ready(BLOB_PROCESS_ID)? {
+        return Err("managed Blob is unavailable".to_owned());
+    }
     let launch = launch::current_launch(store)?;
     let vault = vault_status::read_current(store, relay)?;
     let request = BlobRuntimeControlRequestV1 {

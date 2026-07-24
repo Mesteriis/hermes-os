@@ -461,6 +461,10 @@ pub(super) fn assert_communications_transferred_body_projection(
     runtime_dir: &Path,
 ) {
     const OPAQUE_BLOB_REFERENCE: &str = "blob://fixture-source/admitted-body-1";
+    let body_account_cursor = fixture_account_cursor(
+        hermes_communications_ingress::ProviderProvenanceV1::Telegram,
+        "integration-private-body-account-1",
+    );
     let source_grant_epoch = record_fixture_source_integration(store);
     let plaintext = b"fixture source body for custody transfer";
     let plaintext_sha256: [u8; 32] = Sha256::digest(plaintext).into();
@@ -671,7 +675,7 @@ pub(super) fn assert_communications_transferred_body_projection(
         let Some(account) = accounts
             .accounts
             .iter()
-            .find(|account| account.provider == 2)
+            .find(|account| account.account_cursor_sha256 == body_account_cursor)
         else {
             assert!(
                 std::time::Instant::now() < deadline,
@@ -957,6 +961,18 @@ pub(super) fn assert_communications_transferred_body_projection(
         );
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
+}
+
+fn fixture_account_cursor(
+    provider: hermes_communications_ingress::ProviderProvenanceV1,
+    external_account_id: &str,
+) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(b"hermes.communications.account-cursor.v1\0");
+    hasher.update(provider.as_str().as_bytes());
+    hasher.update(b"\0");
+    hasher.update(external_account_id.as_bytes());
+    hasher.finalize().to_vec()
 }
 
 pub(super) fn assert_communications_attachment_anchor_projection(

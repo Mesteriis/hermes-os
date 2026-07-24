@@ -5,8 +5,7 @@ use std::os::unix::net::UnixStream;
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedRuntimeOwnerDerivedKeyRequestV1,
-    ManagedRuntimeVaultRouteRequestV1, ManagedRuntimeVaultRouteResponseV1,
-    VaultCiphertextRouteDirectionV1, VaultCiphertextRouteV1,
+    ManagedRuntimeVaultRouteRequestV1, VaultCiphertextRouteDirectionV1, VaultCiphertextRouteV1,
     managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
@@ -241,18 +240,28 @@ impl ManagedOwnerDerivedKeyClientV1 {
         };
         write_frame(
             &mut self.channel,
-            &ManagedRuntimeVaultRouteRequestV1 {
-                route: Some(route.clone()),
+            &ManagedRuntimeControlRequestV1 {
+                operation: Some(Operation::RouteVaultCiphertext(
+                    ManagedRuntimeVaultRouteRequestV1 {
+                        route: Some(route.clone()),
+                    },
+                )),
             }
             .encode_to_vec(),
         )
         .map_err(map_transport_error)?;
-        let response = ManagedRuntimeVaultRouteResponseV1::decode(
+        let response = ManagedRuntimeControlResponseV1::decode(
             read_frame(&mut self.channel)
                 .map_err(map_transport_error)?
                 .as_slice(),
         )
-        .map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)?;
+        .map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)?
+        .result
+        .and_then(|result| match result {
+            ControlResult::VaultRoute(response) => Some(response),
+            _ => None,
+        })
+        .ok_or(ManagedOwnerDerivedKeyErrorV1::Rejected)?;
         let response = response
             .response
             .filter(|_| response.error_code.is_empty())
