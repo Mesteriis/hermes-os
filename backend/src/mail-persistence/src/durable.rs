@@ -34,6 +34,18 @@ CREATE TABLE IF NOT EXISTS mail_attachment_anchor_mappings (
     CHECK (octet_length(attachment_anchor_id) = 16),
     CHECK (octet_length(media_cursor_sha256) = 32)
 );
+CREATE TABLE IF NOT EXISTS mail_attachment_blob_admissions (
+    source_observation_id BYTEA PRIMARY KEY,
+    attachment_anchor_id BYTEA NOT NULL,
+    state SMALLINT NOT NULL,
+    started_at_unix_seconds BIGINT NOT NULL,
+    completed_at_unix_seconds BIGINT,
+    CHECK (octet_length(source_observation_id) = 16),
+    CHECK (octet_length(attachment_anchor_id) = 16),
+    CHECK (state IN (1, 2, 3)),
+    CHECK ((state = 1 AND completed_at_unix_seconds IS NULL)
+        OR (state IN (2, 3) AND completed_at_unix_seconds IS NOT NULL))
+);
 CREATE TABLE IF NOT EXISTS mail_delivery_attempts (
     operation_id TEXT PRIMARY KEY,
     connection_id TEXT NOT NULL,
@@ -100,6 +112,8 @@ pub enum MailDurablePersistenceError {
     MissingSourceObservation,
     ConflictingAnchorMapping,
     ConflictingEventInbox,
+    MissingAttachmentAdmission,
+    InvalidAttachmentAdmissionState,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -122,6 +136,13 @@ pub struct MailAttachmentAnchorMappingV1 {
     pub attachment_anchor_id: [u8; 16],
     pub media_cursor_sha256: [u8; 32],
     pub observed_at_unix_seconds: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailAttachmentBlobAdmissionStartOutcomeV1 {
+    Started,
+    AlreadyStarted,
+    AlreadyTerminal,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -323,6 +344,130 @@ impl MailDurablePersistence {
                 })
             })
             .transpose()
+    }
+
+    pub async fn begin_attachment_blob_admission(
+        &self,
+        source_observation_id: [u8; 16],
+        attachment_anchor_id: [u8; 16],
+        requested_record: &OutboxRecordV1,
+        started_at_unix_seconds: i64,
+    ) -> Result<MailAttachmentBlobAdmissionStartOutcomeV1, MailDurablePersistenceError> {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        let mapping = sqlx::query("SELECT attachment_anchor_id FROM mail_attachment_anchor_mappings WHERE source_observation_id = $1")
+            .bind(source_observation_id.as_slice())
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?
+            .ok_or(MailDurablePersistenceError::MissingSourceObservation)?;
+        let mapped_anchor: Vec<u8> = mapping
+            .try_get("attachment_anchor_id")
+            .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+        if mapped_anchor.as_slice() != attachment_anchor_id.as_slice() {
+            return Err(MailDurablePersistenceError::ConflictingAnchorMapping);
+        }
+        let existing = sqlx::query("SELECT attachment_anchor_id, state FROM mail_attachment_blob_admissions WHERE source_observation_id = $1")
+            .bind(source_observation_id.as_slice())
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        if let Some(row) = existing {
+            let anchor: Vec<u8> = row
+                .try_get("attachment_anchor_id")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            let state: i16 = row
+                .try_get("state")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            if anchor.as_slice() != attachment_anchor_id.as_slice() {
+                return Err(MailDurablePersistenceError::ConflictingAnchorMapping);
+            }
+            let outcome = match state {
+                1 => MailAttachmentBlobAdmissionStartOutcomeV1::AlreadyStarted,
+                2 | 3 => MailAttachmentBlobAdmissionStartOutcomeV1::AlreadyTerminal,
+                _ => return Err(MailDurablePersistenceError::InvalidAttachmentAdmissionState),
+            };
+            transaction
+                .commit()
+                .await
+                .map_err(|_| MailDurablePersistenceError::Database)?;
+            return Ok(outcome);
+        }
+        sqlx::query("INSERT INTO mail_attachment_blob_admissions (source_observation_id, attachment_anchor_id, state, started_at_unix_seconds) VALUES ($1, $2, 1, $3)")
+            .bind(source_observation_id.as_slice())
+            .bind(attachment_anchor_id.as_slice())
+            .bind(started_at_unix_seconds)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        insert_communications_outbox(&mut transaction, requested_record, started_at_unix_seconds)
+            .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        Ok(MailAttachmentBlobAdmissionStartOutcomeV1::Started)
+    }
+
+    pub async fn complete_attachment_blob_admission(
+        &self,
+        source_observation_id: [u8; 16],
+        attachment_anchor_id: [u8; 16],
+        terminal_state: i16,
+        terminal_record: &OutboxRecordV1,
+        completed_at_unix_seconds: i64,
+    ) -> Result<bool, MailDurablePersistenceError> {
+        if !matches!(terminal_state, 2 | 3) {
+            return Err(MailDurablePersistenceError::InvalidAttachmentAdmissionState);
+        }
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        let outcome = sqlx::query("UPDATE mail_attachment_blob_admissions SET state = $3, completed_at_unix_seconds = $4 WHERE source_observation_id = $1 AND attachment_anchor_id = $2 AND state = 1")
+            .bind(source_observation_id.as_slice())
+            .bind(attachment_anchor_id.as_slice())
+            .bind(terminal_state)
+            .bind(completed_at_unix_seconds)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        if outcome.rows_affected() == 0 {
+            let existing = sqlx::query("SELECT attachment_anchor_id, state FROM mail_attachment_blob_admissions WHERE source_observation_id = $1")
+                .bind(source_observation_id.as_slice())
+                .fetch_optional(&mut *transaction)
+                .await
+                .map_err(|_| MailDurablePersistenceError::Database)?
+                .ok_or(MailDurablePersistenceError::MissingAttachmentAdmission)?;
+            let anchor: Vec<u8> = existing
+                .try_get("attachment_anchor_id")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            let state: i16 = existing
+                .try_get("state")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            if anchor.as_slice() != attachment_anchor_id.as_slice() {
+                return Err(MailDurablePersistenceError::ConflictingAnchorMapping);
+            }
+            if !matches!(state, 2 | 3) {
+                return Err(MailDurablePersistenceError::InvalidAttachmentAdmissionState);
+            }
+            transaction
+                .commit()
+                .await
+                .map_err(|_| MailDurablePersistenceError::Database)?;
+            return Ok(false);
+        }
+        insert_communications_outbox(&mut transaction, terminal_record, completed_at_unix_seconds)
+            .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        Ok(true)
     }
 
     pub async fn gmail_sync_progress(
@@ -667,4 +812,20 @@ impl MailDurablePersistence {
             .map(|result| result.rows_affected() == 1)
             .map_err(|_| MailDurablePersistenceError::Database)
     }
+}
+
+async fn insert_communications_outbox(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    record: &OutboxRecordV1,
+    created_at_unix_seconds: i64,
+) -> Result<(), MailDurablePersistenceError> {
+    sqlx::query("INSERT INTO mail_communications_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
+        .bind(record.message_id().as_slice())
+        .bind(record.envelope_sha256().as_slice())
+        .bind(record.exact_bytes())
+        .bind(created_at_unix_seconds)
+        .execute(&mut **transaction)
+        .await
+        .map(|_| ())
+        .map_err(|_| MailDurablePersistenceError::Database)
 }
