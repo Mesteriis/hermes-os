@@ -72,6 +72,65 @@ pub trait ManagedRuntimeBlobSessionHandler: Send + Sync {
     ) -> Result<ManagedRuntimeBlobSessionDeliveryV1, String>;
 }
 
+pub(crate) fn dispatch_typed_request(
+    request: inbound::ManagedRuntimeInboundRequestV1,
+    expectation: &ManagedRuntimeExpectation,
+    vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
+    event_credential_handler: Option<&dyn ManagedRuntimeEventCredentialHandler>,
+    provider_credential_handler: Option<&dyn ManagedRuntimeProviderCredentialHandler>,
+    owner_derived_key_handler: Option<&dyn ManagedRuntimeOwnerDerivedKeyHandler>,
+    blob_session_handler: Option<&dyn ManagedRuntimeBlobSessionHandler>,
+) -> Result<ManagedRuntimeControlResponseV1, String> {
+    match request {
+        inbound::ManagedRuntimeInboundRequestV1::Ready(_) => {
+            Err("managed runtime ready requires lifecycle dispatch".to_owned())
+        }
+        inbound::ManagedRuntimeInboundRequestV1::VaultRoute(route) => Ok(
+            inbound::vault_route_response(
+                vault_route_handler
+                    .ok_or_else(|| "managed runtime Vault route is not available".to_owned())
+                    .and_then(|handler| handler.route_vault_ciphertext(expectation, route)),
+            ),
+        ),
+        inbound::ManagedRuntimeInboundRequestV1::EventCredential(request) => Ok(
+            inbound::event_credential_response(
+                event_credential_handler
+                    .ok_or_else(|| {
+                        "managed runtime Event credential handler is not available".to_owned()
+                    })
+                    .and_then(|handler| handler.issue_event_credential(expectation, request)),
+            ),
+        ),
+        inbound::ManagedRuntimeInboundRequestV1::ProviderCredential(request) => Ok(
+            inbound::provider_credential_response(
+                provider_credential_handler
+                    .ok_or_else(|| {
+                        "managed runtime provider credential handler is not available".to_owned()
+                    })
+                    .and_then(|handler| handler.issue_provider_credential(expectation, request)),
+            ),
+        ),
+        inbound::ManagedRuntimeInboundRequestV1::OwnerDerivedKey(request) => Ok(
+            inbound::owner_derived_key_response(
+                owner_derived_key_handler
+                    .ok_or_else(|| {
+                        "managed runtime owner-derived key handler is not available".to_owned()
+                    })
+                    .and_then(|handler| handler.issue_owner_derived_key(expectation, request)),
+            ),
+        ),
+        inbound::ManagedRuntimeInboundRequestV1::BlobSession(request) => Ok(
+            inbound::blob_session_response(
+                blob_session_handler
+                    .ok_or_else(|| {
+                        "managed runtime Blob session handler is not available".to_owned()
+                    })
+                    .and_then(|handler| handler.issue_blob_session(expectation, request)),
+            ),
+        ),
+    }
+}
+
 pub struct ManagedRuntimeRelayRequest {
     payload: Vec<u8>,
     response: SyncSender<Result<Vec<u8>, String>>,
