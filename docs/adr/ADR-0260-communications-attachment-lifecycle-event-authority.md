@@ -43,6 +43,9 @@ transition against its current anchor state, performs compare-and-set in its
 own PostgreSQL transaction, and publishes a canonical owner event through its
 existing outbox. It does not open a Blob data session, invoke a scanner, or
 import an integration or engine package while consuming either observation.
+The canonical event uses the consumed observation message as causation and
+retains its correlation ID; a lifecycle transition does not start a parallel
+durable process.
 
 The current exact first-owner package inventory remains unchanged; the
 Communications descriptor adds only its two consumer capabilities. Adding a producer

@@ -21,6 +21,7 @@ pub async fn apply_attachment_safety_transition(
     persistence: &CommunicationsDurablePersistence,
     command: AttachmentSafetyTransitionCommandV1,
     causation_message_id: [u8; 16],
+    correlation_id: [u8; 16],
     canonical_event_context: &CanonicalEventContextV1,
 ) -> Result<AttachmentSafetyTransitionDecisionV1, AttachmentSafetyTransitionApplyErrorV1> {
     let decision = decide_attachment_safety_transition(command)
@@ -28,6 +29,7 @@ pub async fn apply_attachment_safety_transition(
     let canonical_outbox_record = build_attachment_safety_state_changed_outbox_v1(
         decision,
         causation_message_id,
+        correlation_id,
         canonical_event_context,
     )
     .map_err(|_| AttachmentSafetyTransitionApplyErrorV1::InvalidTransition)?;

@@ -100,10 +100,13 @@ async fn consume_next_attachment_observation_v1(
     let causation_message_id = envelope.message_id.as_slice().try_into().map_err(|_| {
         CommunicationsDeliveryErrorV1::Consume(CommunicationsEventConsumeErrorV1::WrongContract)
     })?;
+    let correlation_id =
+        id16(&envelope.correlation_id).map_err(CommunicationsDeliveryErrorV1::Consume)?;
     let outcome = match apply_attachment_safety_transition(
         persistence,
         command,
         causation_message_id,
+        correlation_id,
         context,
     )
     .await

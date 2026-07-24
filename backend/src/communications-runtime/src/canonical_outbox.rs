@@ -131,6 +131,7 @@ pub fn build_evidence_recorded_outbox_v1(
 pub fn build_attachment_safety_state_changed_outbox_v1(
     decision: AttachmentSafetyTransitionDecisionV1,
     causation_message_id: [u8; 16],
+    correlation_id: [u8; 16],
     context: &CanonicalEventContextV1,
 ) -> Result<OutboxRecordV1, CanonicalOutboxBuildErrorV1> {
     if !valid_context(context) {
@@ -167,11 +168,7 @@ pub fn build_attachment_safety_state_changed_outbox_v1(
         recorded_at: Some(recorded_at),
         partition_key: decision.attachment_anchor_id.bytes().to_vec(),
         causation_message_id: causation_message_id.to_vec(),
-        correlation_id: identifier(
-            b"hermes.communications.attachment-safety-correlation.v1\0",
-            decision.attachment_anchor_id.bytes(),
-        )
-        .to_vec(),
+        correlation_id: correlation_id.to_vec(),
         actor: Some(ActorRefV1 {
             kind: ActorKindV1::Module as i32,
             actor_id: b"communications-runtime".to_vec(),
@@ -436,10 +433,11 @@ mod tests {
             recorded_at_nanos: 0,
         };
 
-        let record = build_attachment_safety_state_changed_outbox_v1(decision, [5; 16], &context)
-            .expect("canonical attachment event");
+        let record =
+            build_attachment_safety_state_changed_outbox_v1(decision, [5; 16], [6; 16], &context)
+                .expect("canonical attachment event");
         let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");
-        let contract = envelope.contract.expect("contract");
+        let contract = envelope.contract.as_ref().expect("contract");
         let payload = AttachmentSafetyStateChangedV1::decode(envelope.payload.as_slice())
             .expect("attachment lifecycle payload");
 
@@ -456,6 +454,8 @@ mod tests {
         assert_eq!(payload.expected_state, 2);
         assert_eq!(payload.next_state, 3);
         assert_eq!(payload.evidence_id, [9; 16]);
+        assert_eq!(envelope.causation_message_id, [5; 16]);
+        assert_eq!(envelope.correlation_id, [6; 16]);
     }
 
     #[test]
