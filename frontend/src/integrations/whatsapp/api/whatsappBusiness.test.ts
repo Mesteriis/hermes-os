@@ -25,7 +25,7 @@ import {
   unarchiveWhatsappBusinessConversation,
   unmuteWhatsappBusinessConversation,
   unpinWhatsappBusinessConversation,
-} from './whatsappBusinessApi'
+} from './whatsappBusiness'
 
 describe('WhatsApp business API', () => {
   beforeEach(() => {

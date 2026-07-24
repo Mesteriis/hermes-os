@@ -25,7 +25,7 @@ import {
   unarchiveWhatsappBusinessConversation,
   unmuteWhatsappBusinessConversation,
   unpinWhatsappBusinessConversation,
-} from '../api/whatsappBusinessApi'
+} from '../api/whatsappBusiness'
 import type {
   WhatsAppLifecycleResponse,
   WhatsappWebMediaSearchResponse,
@@ -41,15 +41,13 @@ import type {
   TelegramReactionRequest,
   TelegramReactionResponse,
 } from '../../../shared/communications/types/telegram'
-import type { CommunicationProviderConversation } from '../types/providerChannels'
 import type {
-  CommunicationProviderMessageListResponse,
-} from '../types/providerChannels'
-import type {
-  CommunicationProviderMessageCommandResponse,
-  ConversationPinToggleResponse,
-  MessagePinToggleResponse,
-} from '../types/communications'
+  WhatsappBusinessConversation,
+  WhatsappBusinessConversationActionResponse,
+  WhatsappBusinessMessageCommandResponse,
+  WhatsappBusinessMessagePinResponse,
+  WhatsappBusinessProviderMessageListResponse,
+} from '../types/business'
 
 export const whatsappBusinessQueryKeys = {
   conversations: ['communications', 'whatsapp', 'conversations'] as const,
@@ -63,7 +61,7 @@ export function useWhatsappBusinessConversationsQuery(
   accountId?: MaybeRefOrGetter<string | null | undefined>,
   limit: MaybeRefOrGetter<number> = 100
 ) {
-  return useQuery<CommunicationProviderConversation[]>({
+  return useQuery<WhatsappBusinessConversation[]>({
     queryKey: computed(() => [
       ...whatsappBusinessQueryKeys.conversations,
       toValue(accountId) ?? 'all',
@@ -110,7 +108,7 @@ export function useWhatsappBusinessMessagesQuery(
 export function useWhatsappConversationDetailQuery(
   conversationId: MaybeRefOrGetter<string | null | undefined>
 ) {
-  return useQuery<CommunicationProviderConversation | null>({
+  return useQuery<WhatsappBusinessConversation | null>({
     queryKey: computed(() => [
       ...whatsappBusinessQueryKeys.conversationDetail,
       toValue(conversationId) ?? 'none',
@@ -222,7 +220,7 @@ export function useWhatsappPinnedMessagesQuery(params: {
   conversationId?: MaybeRefOrGetter<string | null | undefined>
   limit?: MaybeRefOrGetter<number>
 }) {
-  return useQuery<CommunicationProviderMessageListResponse>({
+  return useQuery<WhatsappBusinessProviderMessageListResponse>({
     queryKey: computed(() => [
       ...whatsappBusinessQueryKeys.conversations,
       toValue(params.conversationId) ?? 'none',
@@ -266,7 +264,7 @@ function useInvalidateWhatsappBusinessState() {
 export function useSendWhatsappMessageMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
   return useMutation<
-    CommunicationProviderMessageCommandResponse,
+    WhatsappBusinessMessageCommandResponse,
     Error,
     { account_id: string; provider_chat_id: string; text: string }
   >({
@@ -278,7 +276,7 @@ export function useSendWhatsappMessageMutation() {
 export function useReplyWhatsappMessageMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
   return useMutation<
-    CommunicationProviderMessageCommandResponse,
+    WhatsappBusinessMessageCommandResponse,
     Error,
     {
       message_id: string
@@ -297,7 +295,7 @@ export function useReplyWhatsappMessageMutation() {
 export function useForwardWhatsappMessageMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
   return useMutation<
-    CommunicationProviderMessageCommandResponse,
+    WhatsappBusinessMessageCommandResponse,
     Error,
     {
       message_id: string
@@ -342,7 +340,7 @@ export function useDeleteWhatsappMessageMutation() {
 
 export function usePinWhatsappMessageMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
-  return useMutation<MessagePinToggleResponse, Error, { message_id: string }>({
+  return useMutation<WhatsappBusinessMessagePinResponse, Error, { message_id: string }>({
     mutationFn: pinWhatsappBusinessMessage,
     onSuccess: invalidate,
   })
@@ -375,7 +373,7 @@ export function useRemoveWhatsappReactionMutation() {
 export function usePinWhatsappConversationMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
   return useMutation<
-    ConversationPinToggleResponse,
+    WhatsappBusinessConversationActionResponse,
     Error,
     { conversation_id: string }
   >({
@@ -387,7 +385,7 @@ export function usePinWhatsappConversationMutation() {
 export function useUnpinWhatsappConversationMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
   return useMutation<
-    ConversationPinToggleResponse,
+    WhatsappBusinessConversationActionResponse,
     Error,
     { conversation_id: string }
   >({
@@ -398,7 +396,7 @@ export function useUnpinWhatsappConversationMutation() {
 
 export function useArchiveWhatsappConversationMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
-  return useMutation<ConversationPinToggleResponse, Error, { conversation_id: string }>({
+  return useMutation<WhatsappBusinessConversationActionResponse, Error, { conversation_id: string }>({
     mutationFn: archiveWhatsappBusinessConversation,
     onSuccess: invalidate,
   })
@@ -406,7 +404,7 @@ export function useArchiveWhatsappConversationMutation() {
 
 export function useUnarchiveWhatsappConversationMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
-  return useMutation<ConversationPinToggleResponse, Error, { conversation_id: string }>({
+  return useMutation<WhatsappBusinessConversationActionResponse, Error, { conversation_id: string }>({
     mutationFn: unarchiveWhatsappBusinessConversation,
     onSuccess: invalidate,
   })
@@ -414,7 +412,7 @@ export function useUnarchiveWhatsappConversationMutation() {
 
 export function useMuteWhatsappConversationMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
-  return useMutation<ConversationPinToggleResponse, Error, { conversation_id: string }>({
+  return useMutation<WhatsappBusinessConversationActionResponse, Error, { conversation_id: string }>({
     mutationFn: muteWhatsappBusinessConversation,
     onSuccess: invalidate,
   })
@@ -422,7 +420,7 @@ export function useMuteWhatsappConversationMutation() {
 
 export function useUnmuteWhatsappConversationMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
-  return useMutation<ConversationPinToggleResponse, Error, { conversation_id: string }>({
+  return useMutation<WhatsappBusinessConversationActionResponse, Error, { conversation_id: string }>({
     mutationFn: unmuteWhatsappBusinessConversation,
     onSuccess: invalidate,
   })
@@ -430,7 +428,7 @@ export function useUnmuteWhatsappConversationMutation() {
 
 export function useMarkWhatsappConversationReadMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
-  return useMutation<ConversationPinToggleResponse, Error, { conversation_id: string }>({
+  return useMutation<WhatsappBusinessConversationActionResponse, Error, { conversation_id: string }>({
     mutationFn: markWhatsappBusinessConversationRead,
     onSuccess: invalidate,
   })
@@ -438,7 +436,7 @@ export function useMarkWhatsappConversationReadMutation() {
 
 export function useMarkWhatsappConversationUnreadMutation() {
   const invalidate = useInvalidateWhatsappBusinessState()
-  return useMutation<ConversationPinToggleResponse, Error, { conversation_id: string }>({
+  return useMutation<WhatsappBusinessConversationActionResponse, Error, { conversation_id: string }>({
     mutationFn: markWhatsappBusinessConversationUnread,
     onSuccess: invalidate,
   })

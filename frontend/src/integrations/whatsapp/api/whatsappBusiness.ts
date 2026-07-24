@@ -8,28 +8,26 @@ import type {
 } from '../../../shared/communications/types/whatsapp'
 import type { TelegramChatMemberListResponse } from '../../../shared/communications/types/telegramMembers'
 import type {
-  CommunicationMessageSummary,
-  CommunicationMessagesResponse,
-  CommunicationProviderMessageCommandResponse,
-  ConversationPinToggleResponse,
-  MessagePinToggleResponse,
-} from '../types/communications'
-import type {
   TelegramReactionListResponse,
   TelegramReactionRequest,
   TelegramReactionResponse,
 } from '../../../shared/communications/types/telegram'
 import type {
-  CommunicationProviderConversation,
-  CommunicationProviderConversationDetailResponse,
-  CommunicationProviderConversationListResponse,
-  CommunicationProviderMessageListResponse,
-} from '../types/providerChannels'
+  WhatsappBusinessConversation,
+  WhatsappBusinessConversationActionResponse,
+  WhatsappBusinessConversationDetailResponse,
+  WhatsappBusinessConversationListResponse,
+  WhatsappBusinessMessage,
+  WhatsappBusinessMessageCommandResponse,
+  WhatsappBusinessMessagePinResponse,
+  WhatsappBusinessMessagesResponse,
+  WhatsappBusinessProviderMessageListResponse,
+} from '../types/business'
 
 export async function fetchWhatsappWebBusinessConversations(
   accountId?: string,
   limit = 50
-): Promise<CommunicationProviderConversationListResponse> {
+): Promise<WhatsappBusinessConversationListResponse> {
   const params = new URLSearchParams({
     limit: String(Math.trunc(limit)),
     channel_kind: 'whatsapp_web',
@@ -37,7 +35,7 @@ export async function fetchWhatsappWebBusinessConversations(
   if (accountId?.trim()) {
     params.set('account_id', accountId.trim())
   }
-  const response = await ApiClient.instance.get<CommunicationProviderConversationListResponse>(
+  const response = await ApiClient.instance.get<WhatsappBusinessConversationListResponse>(
     `/api/v1/communications/conversations?${params.toString()}`,
     'Communication WhatsApp conversations request failed'
   )
@@ -48,8 +46,8 @@ export async function fetchWhatsappWebBusinessConversations(
 
 export async function fetchWhatsappWebBusinessConversationDetail(
   conversationId: string
-): Promise<CommunicationProviderConversationDetailResponse> {
-  return ApiClient.instance.get<CommunicationProviderConversationDetailResponse>(
+): Promise<WhatsappBusinessConversationDetailResponse> {
+  return ApiClient.instance.get<WhatsappBusinessConversationDetailResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(conversationId)}`,
     'Communication WhatsApp conversation detail request failed'
   )
@@ -87,7 +85,7 @@ export async function fetchWhatsappWebBusinessMessages(
   if (providerChatId?.trim()) {
     params.set('conversation_id', providerChatId.trim())
   }
-  const response = await ApiClient.instance.get<CommunicationMessagesResponse>(
+  const response = await ApiClient.instance.get<WhatsappBusinessMessagesResponse>(
     `/api/v1/communications/messages?${params.toString()}`,
     'Communication WhatsApp messages request failed'
   )
@@ -151,12 +149,12 @@ export async function searchWhatsappWebBusinessMedia(params: {
 export async function fetchWhatsappWebBusinessPinnedMessages(params: {
   conversation_id: string
   limit?: number
-}): Promise<CommunicationProviderMessageListResponse> {
+}): Promise<WhatsappBusinessProviderMessageListResponse> {
   const query = new URLSearchParams()
   if (params.limit != null) {
     query.set('limit', String(Math.trunc(params.limit)))
   }
-  return ApiClient.instance.get<CommunicationProviderMessageListResponse>(
+  return ApiClient.instance.get<WhatsappBusinessProviderMessageListResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(params.conversation_id)}/pinned-messages?${query.toString()}`,
     'Communication WhatsApp pinned messages request failed'
   )
@@ -166,8 +164,8 @@ export async function sendWhatsappBusinessMessage(request: {
   account_id: string
   provider_chat_id: string
   text: string
-}): Promise<CommunicationProviderMessageCommandResponse> {
-  return ApiClient.instance.post<CommunicationProviderMessageCommandResponse>(
+}): Promise<WhatsappBusinessMessageCommandResponse> {
+  return ApiClient.instance.post<WhatsappBusinessMessageCommandResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(request.provider_chat_id)}/messages`,
     { account_id: request.account_id, text: request.text },
     'Communication WhatsApp message send failed'
@@ -177,8 +175,8 @@ export async function sendWhatsappBusinessMessage(request: {
 export async function replyToWhatsappBusinessMessage(params: {
   message_id: string
   text: string
-}): Promise<CommunicationProviderMessageCommandResponse> {
-  return ApiClient.instance.post<CommunicationProviderMessageCommandResponse>(
+}): Promise<WhatsappBusinessMessageCommandResponse> {
+  return ApiClient.instance.post<WhatsappBusinessMessageCommandResponse>(
     `/api/v1/communications/messages/${encodeURIComponent(params.message_id)}/reply`,
     { text: params.text },
     'Communication WhatsApp reply failed'
@@ -188,8 +186,8 @@ export async function replyToWhatsappBusinessMessage(params: {
 export async function forwardWhatsappBusinessMessage(params: {
   message_id: string
   provider_chat_id: string
-}): Promise<CommunicationProviderMessageCommandResponse> {
-  return ApiClient.instance.post<CommunicationProviderMessageCommandResponse>(
+}): Promise<WhatsappBusinessMessageCommandResponse> {
+  return ApiClient.instance.post<WhatsappBusinessMessageCommandResponse>(
     `/api/v1/communications/messages/${encodeURIComponent(params.message_id)}/forward`,
     { conversation_id: params.provider_chat_id },
     'Communication WhatsApp forward failed'
@@ -230,8 +228,8 @@ export async function deleteWhatsappBusinessMessage(params: {
 
 export async function pinWhatsappBusinessMessage(params: {
   message_id: string
-}): Promise<MessagePinToggleResponse> {
-  return ApiClient.instance.post<MessagePinToggleResponse>(
+}): Promise<WhatsappBusinessMessagePinResponse> {
+  return ApiClient.instance.post<WhatsappBusinessMessagePinResponse>(
     `/api/v1/communications/messages/${encodeURIComponent(params.message_id)}/pin`,
     {},
     'Communication WhatsApp message pin failed'
@@ -240,8 +238,8 @@ export async function pinWhatsappBusinessMessage(params: {
 
 export async function pinWhatsappBusinessConversation(params: {
   conversation_id: string
-}): Promise<ConversationPinToggleResponse> {
-  return ApiClient.instance.post<ConversationPinToggleResponse>(
+}): Promise<WhatsappBusinessConversationActionResponse> {
+  return ApiClient.instance.post<WhatsappBusinessConversationActionResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(params.conversation_id)}/pin`,
     {},
     'Communication WhatsApp conversation pin failed'
@@ -250,8 +248,8 @@ export async function pinWhatsappBusinessConversation(params: {
 
 export async function unpinWhatsappBusinessConversation(params: {
   conversation_id: string
-}): Promise<ConversationPinToggleResponse> {
-  return ApiClient.instance.post<ConversationPinToggleResponse>(
+}): Promise<WhatsappBusinessConversationActionResponse> {
+  return ApiClient.instance.post<WhatsappBusinessConversationActionResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(params.conversation_id)}/unpin`,
     {},
     'Communication WhatsApp conversation unpin failed'
@@ -260,8 +258,8 @@ export async function unpinWhatsappBusinessConversation(params: {
 
 export async function archiveWhatsappBusinessConversation(params: {
   conversation_id: string
-}): Promise<ConversationPinToggleResponse> {
-  return ApiClient.instance.post<ConversationPinToggleResponse>(
+}): Promise<WhatsappBusinessConversationActionResponse> {
+  return ApiClient.instance.post<WhatsappBusinessConversationActionResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(params.conversation_id)}/archive`,
     {},
     'Communication WhatsApp conversation archive failed'
@@ -270,8 +268,8 @@ export async function archiveWhatsappBusinessConversation(params: {
 
 export async function unarchiveWhatsappBusinessConversation(params: {
   conversation_id: string
-}): Promise<ConversationPinToggleResponse> {
-  return ApiClient.instance.post<ConversationPinToggleResponse>(
+}): Promise<WhatsappBusinessConversationActionResponse> {
+  return ApiClient.instance.post<WhatsappBusinessConversationActionResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(params.conversation_id)}/unarchive`,
     {},
     'Communication WhatsApp conversation unarchive failed'
@@ -280,8 +278,8 @@ export async function unarchiveWhatsappBusinessConversation(params: {
 
 export async function muteWhatsappBusinessConversation(params: {
   conversation_id: string
-}): Promise<ConversationPinToggleResponse> {
-  return ApiClient.instance.post<ConversationPinToggleResponse>(
+}): Promise<WhatsappBusinessConversationActionResponse> {
+  return ApiClient.instance.post<WhatsappBusinessConversationActionResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(params.conversation_id)}/mute`,
     {},
     'Communication WhatsApp conversation mute failed'
@@ -290,8 +288,8 @@ export async function muteWhatsappBusinessConversation(params: {
 
 export async function unmuteWhatsappBusinessConversation(params: {
   conversation_id: string
-}): Promise<ConversationPinToggleResponse> {
-  return ApiClient.instance.post<ConversationPinToggleResponse>(
+}): Promise<WhatsappBusinessConversationActionResponse> {
+  return ApiClient.instance.post<WhatsappBusinessConversationActionResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(params.conversation_id)}/unmute`,
     {},
     'Communication WhatsApp conversation unmute failed'
@@ -300,8 +298,8 @@ export async function unmuteWhatsappBusinessConversation(params: {
 
 export async function markWhatsappBusinessConversationRead(params: {
   conversation_id: string
-}): Promise<ConversationPinToggleResponse> {
-  return ApiClient.instance.post<ConversationPinToggleResponse>(
+}): Promise<WhatsappBusinessConversationActionResponse> {
+  return ApiClient.instance.post<WhatsappBusinessConversationActionResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(params.conversation_id)}/read`,
     {},
     'Communication WhatsApp conversation mark-read failed'
@@ -310,8 +308,8 @@ export async function markWhatsappBusinessConversationRead(params: {
 
 export async function markWhatsappBusinessConversationUnread(params: {
   conversation_id: string
-}): Promise<ConversationPinToggleResponse> {
-  return ApiClient.instance.post<ConversationPinToggleResponse>(
+}): Promise<WhatsappBusinessConversationActionResponse> {
+  return ApiClient.instance.post<WhatsappBusinessConversationActionResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(params.conversation_id)}/unread`,
     {},
     'Communication WhatsApp conversation mark-unread failed'
@@ -357,7 +355,7 @@ export async function removeWhatsappBusinessReaction(
   )
 }
 
-function communicationMessageToWhatsappWebMessage(message: CommunicationMessageSummary): WhatsappWebMessage {
+function communicationMessageToWhatsappWebMessage(message: WhatsappBusinessMessage): WhatsappWebMessage {
   return {
     message_id: message.message_id,
     raw_record_id: message.raw_record_id,
@@ -376,7 +374,7 @@ function communicationMessageToWhatsappWebMessage(message: CommunicationMessageS
   }
 }
 
-function isWhatsappConversation(conversation: CommunicationProviderConversation): boolean {
+function isWhatsappConversation(conversation: WhatsappBusinessConversation): boolean {
   const channelKind =
     typeof conversation.metadata?.channel_kind === 'string'
       ? conversation.metadata.channel_kind
