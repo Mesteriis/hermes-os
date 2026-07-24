@@ -1,6 +1,8 @@
 //! Runs one preflighted staged executable with bounded failure retries.
 
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -10,6 +12,8 @@ use crate::distribution::staged_artifact::StagedNativeArtifact;
 
 const MAX_ATTEMPTS: u8 = 8;
 const MAX_RUNTIME_SECONDS: u64 = 300;
+pub const PLATFORM_CONTROL_INHERITED_FD: i32 = 3;
+pub const PLATFORM_CONTROL_INHERITED_FD_ENV: &str = "HERMES_PLATFORM_CONTROL_FD";
 
 pub struct ManagedChildExecutionPolicy {
     max_attempts: u8,
@@ -102,6 +106,15 @@ pub fn spawn(
     arguments: &[String],
     stdin: Stdio,
 ) -> Result<Child, String> {
+    spawn_with_platform_control(staged_executable, arguments, stdin, None)
+}
+
+pub fn spawn_with_platform_control(
+    staged_executable: &StagedNativeArtifact,
+    arguments: &[String],
+    stdin: Stdio,
+    platform_control: Option<std::os::unix::net::UnixStream>,
+) -> Result<Child, String> {
     ensure_staged_executable(staged_executable.path())?;
     let stderr = if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
         Stdio::inherit()
@@ -115,6 +128,23 @@ pub fn spawn(
         .stdout(Stdio::null())
         .stderr(stderr)
         .env_clear();
+    if let Some(platform_control) = platform_control {
+        let child_fd = platform_control.as_raw_fd();
+        unsafe {
+            command.pre_exec(move || {
+                if child_fd != PLATFORM_CONTROL_INHERITED_FD
+                    && libc::dup2(child_fd, PLATFORM_CONTROL_INHERITED_FD) < 0
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        command.env(
+            PLATFORM_CONTROL_INHERITED_FD_ENV,
+            PLATFORM_CONTROL_INHERITED_FD.to_string(),
+        );
+    }
     if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
         command.env("HERMES_DEVELOPER_VERBOSE", "1");
     }
