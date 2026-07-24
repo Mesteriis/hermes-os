@@ -12,6 +12,7 @@ use hermes_communications_api::{
     },
 };
 use hermes_communications_persistence::CommunicationsDurablePersistence;
+use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use prost::Message;
 use std::os::unix::net::UnixStream;
 
@@ -36,7 +37,7 @@ pub enum CommunicationsQueryPortErrorV1 {
 pub async fn handle_query_request_v1(
     persistence: &CommunicationsDurablePersistence,
     search_access: &mut CommunicationsSearchAccessV1,
-    control_channel: &mut UnixStream,
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
     bytes: &[u8],
 ) -> Result<Vec<u8>, CommunicationsQueryPortErrorV1> {
     let request = CommunicationsQueryRequestV1::decode(bytes)

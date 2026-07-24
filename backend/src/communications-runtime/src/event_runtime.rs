@@ -1,8 +1,7 @@
 //! Kernel-fenced Event Hub consumer for the Communications domain.
 
 use std::{
-    io,
-    os::{fd::AsRawFd, unix::net::UnixStream},
+    os::unix::net::UnixStream,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -10,13 +9,12 @@ use hermes_communications_domain::COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1;
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
-    RuntimeSubscribePermitV1, request_managed_runtime_event_access,
+    RuntimeSubscribePermitV1, request_managed_runtime_event_access_v2,
 };
+use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeRequestV1, ManagedRuntimeClientDeliveryResponseV1,
-    ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
-    ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
+    ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlResponseV1,
+    ManagedRuntimeReadyRequestV1, ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
     managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
@@ -28,7 +26,7 @@ use hermes_storage_protocol::{
     StorageEffectiveBudgetsV1,
 };
 use hermes_storage_vault::{
-    InheritedKernelVaultRouteV1, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
+    InheritedKernelVaultRouteV2, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
 };
 use prost::Message;
 
@@ -41,8 +39,6 @@ use crate::{
     search_worker::process_next_derived_index_job_v1,
 };
 
-const MAX_FRAME_BYTES: usize = 512 * 1024;
-
 pub struct CommunicationsRuntimeAdmissionV1 {
     pub logical_owner_id: String,
     pub registration_id: String,
@@ -52,7 +48,7 @@ pub struct CommunicationsRuntimeAdmissionV1 {
 }
 
 pub struct CommunicationsEventRuntimeV1 {
-    control_channel: UnixStream,
+    control_channel: ManagedControlChannelV2<UnixStream>,
     connection: RuntimeJetStreamConnection,
     observation_permit: RuntimeSubscribePermitV1,
     domain_publish_permit: RuntimePublishPermitV1,
@@ -70,7 +66,7 @@ pub enum CommunicationsEventRuntimeErrorV1 {
 
 impl CommunicationsEventRuntimeV1 {
     pub async fn open(
-        control_channel: &mut UnixStream,
+        control_channel: UnixStream,
         descriptor_bytes: Vec<u8>,
         settings_schema_bytes: Vec<u8>,
         admission: &CommunicationsRuntimeAdmissionV1,
@@ -90,14 +86,15 @@ impl CommunicationsEventRuntimeV1 {
         {
             return Err(CommunicationsEventRuntimeErrorV1::Admission);
         }
-        authenticate_managed_runtime(
-            control_channel,
+        let mut control_channel = ManagedControlChannelV2::new(control_channel);
+        authenticate_managed_runtime_v2(
+            &mut control_channel,
             descriptor_bytes,
             settings_schema_bytes,
             admission,
         )?;
-        let access = request_managed_runtime_event_access(
-            control_channel,
+        let access = request_managed_runtime_event_access_v2(
+            &mut control_channel,
             &admission.logical_owner_id,
             &admission.registration_id,
             &admission.runtime_instance_id,
@@ -154,11 +151,7 @@ impl CommunicationsEventRuntimeV1 {
         )
         .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
         let mut leases = StorageVaultLeaseAdapterV1::new(
-            InheritedKernelVaultRouteV1::new(
-                control_channel
-                    .try_clone()
-                    .map_err(|_| unavailable_at("vault_route"))?,
-            ),
+            InheritedKernelVaultRouteV2::new(control_channel),
             vault_context,
         );
         let password = resolve_storage_runtime_credential(&mut leases, &binding)
@@ -179,6 +172,7 @@ impl CommunicationsEventRuntimeV1 {
             .verify_storage_ready()
             .await
             .map_err(|_| unavailable_at("storage_readiness"))?;
+        let mut control_channel = leases.into_route_port().into_channel();
         let started_at_unix_seconds = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
@@ -191,14 +185,13 @@ impl CommunicationsEventRuntimeV1 {
             .await
             .map_err(|_| unavailable_at("search_projection"))?;
         let search_access = CommunicationsSearchAccessV1::open(admission, &storage_configuration)
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
+            .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
         control_channel
+            .inner_mut()
             .set_nonblocking(true)
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
         Ok(Self {
-            control_channel: control_channel
-                .try_clone()
-                .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?,
+            control_channel,
             connection,
             observation_permit,
             domain_publish_permit,
@@ -212,54 +205,63 @@ impl CommunicationsEventRuntimeV1 {
     pub async fn try_handle_client_delivery(
         &mut self,
     ) -> Result<bool, CommunicationsEventRuntimeErrorV1> {
-        let Some(frame) = peek_complete_frame(&self.control_channel)
-            .map_err(|_| unavailable_at("client_peek"))?
+        let Some((correlation_id, request)) = self
+            .control_channel
+            .try_receive_request()
+            .map_err(|_| unavailable_at("client_receive"))?
         else {
             return Ok(false);
         };
-        if frame.first() != Some(&0x42) {
-            return Ok(false);
-        }
-        let request = ManagedRuntimeControlRequestV1::decode(frame.as_slice())
-            .map_err(|_| admission_at("client_request_decode"))?
-            .operation
-            .and_then(|operation| match operation {
-                Operation::ClientDelivery(delivery) => delivery.request,
-                _ => None,
-            })
-            .ok_or_else(|| admission_at("client_request_missing"))?;
-        if validate_module_client_request_v1(&request).is_err() {
-            if read_frame(&mut self.control_channel)
-                .map_err(|_| unavailable_at("client_rejected_read"))?
-                != frame
-            {
-                return Err(admission_at("client_rejected_frame_changed"));
-            }
-            write_frame(
-                &mut self.control_channel,
-                &ManagedRuntimeControlResponseV1 {
-                    result: Some(ControlResult::ClientDelivery(
-                        ManagedRuntimeClientDeliveryResponseV1 {
-                            response: Some(ModuleClientResponseV1 {
-                                protocol_major: 1,
-                                request_id: request.request_id,
-                                response_payload: Vec::new(),
-                                error_code: "REJECTED".to_owned(),
-                            }),
-                        },
-                    )),
-                    error_code: String::new(),
+        let request = match request.operation {
+            Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+                Some(request) => request,
+                None => {
+                    self.control_channel
+                        .write_response(
+                            correlation_id,
+                            ManagedRuntimeControlResponseV1 {
+                                result: None,
+                                error_code: "managed_runtime_control_invalid_client_delivery"
+                                    .to_owned(),
+                            },
+                        )
+                        .map_err(|_| unavailable_at("client_invalid_write"))?;
+                    return Ok(true);
                 }
-                .encode_to_vec(),
-            )
-            .map_err(|_| unavailable_at("client_rejected_write"))?;
+            },
+            _ => {
+                self.control_channel
+                    .write_response(
+                        correlation_id,
+                        ManagedRuntimeControlResponseV1 {
+                            result: None,
+                            error_code: "managed_runtime_control_unexpected_request".to_owned(),
+                        },
+                    )
+                    .map_err(|_| unavailable_at("client_unexpected_write"))?;
+                return Ok(true);
+            }
+        };
+        if validate_module_client_request_v1(&request).is_err() {
+            self.control_channel
+                .write_response(
+                    correlation_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::ClientDelivery(
+                            ManagedRuntimeClientDeliveryResponseV1 {
+                                response: Some(ModuleClientResponseV1 {
+                                    protocol_major: 1,
+                                    request_id: request.request_id,
+                                    response_payload: Vec::new(),
+                                    error_code: "REJECTED".to_owned(),
+                                }),
+                            },
+                        )),
+                        error_code: String::new(),
+                    },
+                )
+                .map_err(|_| unavailable_at("client_rejected_write"))?;
             return Ok(true);
-        }
-        if read_frame(&mut self.control_channel)
-            .map_err(|_| unavailable_at("client_read"))?
-            != frame
-        {
-            return Err(admission_at("client_frame_changed"));
         }
         let payload = crate::query_client_port::handle_module_query_request_v1(
             &self.persistence,
@@ -283,19 +285,19 @@ impl CommunicationsEventRuntimeV1 {
         if response.request_id != request.request_id {
             return Err(admission_at("client_response_request_id"));
         }
-        write_frame(
-            &mut self.control_channel,
-            &ManagedRuntimeControlResponseV1 {
-                result: Some(ControlResult::ClientDelivery(
-                    ManagedRuntimeClientDeliveryResponseV1 {
-                        response: Some(response),
-                    },
-                )),
-                error_code: String::new(),
-            }
-            .encode_to_vec(),
-        )
-        .map_err(|_| unavailable_at("client_write"))?;
+        self.control_channel
+            .write_response(
+                correlation_id,
+                ManagedRuntimeControlResponseV1 {
+                    result: Some(ControlResult::ClientDelivery(
+                        ManagedRuntimeClientDeliveryResponseV1 {
+                            response: Some(response),
+                        },
+                    )),
+                    error_code: String::new(),
+                },
+            )
+            .map_err(|_| unavailable_at("client_write"))?;
         Ok(true)
     }
 
@@ -411,7 +413,7 @@ fn admission_at(stage: &str) -> CommunicationsEventRuntimeErrorV1 {
 }
 
 async fn resolve_storage_runtime_credential(
-    leases: &mut StorageVaultLeaseAdapterV1<InheritedKernelVaultRouteV1>,
+    leases: &mut StorageVaultLeaseAdapterV1<InheritedKernelVaultRouteV2>,
     binding: &StorageBindingV1,
 ) -> Result<zeroize::Zeroizing<Vec<u8>>, CommunicationsEventRuntimeErrorV1> {
     const MAX_ATTEMPTS: usize = 20;
@@ -428,181 +430,45 @@ async fn resolve_storage_runtime_credential(
     Err(CommunicationsEventRuntimeErrorV1::Unavailable)
 }
 
-fn authenticate_managed_runtime(
-    control_channel: &mut UnixStream,
+fn authenticate_managed_runtime_v2(
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
     admission: &CommunicationsRuntimeAdmissionV1,
 ) -> Result<(), CommunicationsEventRuntimeErrorV1> {
-    const CONTROL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
     control_channel
-        .set_read_timeout(Some(CONTROL_TIMEOUT))
-        .and_then(|_| control_channel.set_write_timeout(Some(CONTROL_TIMEOUT)))
+        .inner_mut()
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .and_then(|_| {
+            control_channel
+                .inner_mut()
+                .set_write_timeout(Some(Duration::from_secs(5)))
+        })
         .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-    write_frame(
-        control_channel,
-        &ManagedRuntimeControlRequestV1 {
-            operation: Some(Operation::Describe(DescribeManagedRuntimeRequestV1 {
-                descriptor_bytes,
-                settings_schema_bytes,
-            })),
-        }
-        .encode_to_vec(),
-    )?;
-    let response = ManagedRuntimeControlResponseV1::decode(read_frame(control_channel)?.as_slice())
+    let response = control_channel
+        .describe_managed_runtime(descriptor_bytes, settings_schema_bytes)
         .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-    let (registration_id, runtime_generation, grant_epoch) = match response.result {
-        Some(ControlResult::Describe(value))
-            if response.error_code.is_empty()
-                && !value.registration_id.is_empty()
-                && value.runtime_generation != 0
-                && value.grant_epoch != 0 =>
-        {
-            (
-                value.registration_id,
-                value.runtime_generation,
-                value.grant_epoch,
-            )
-        }
-        _ => return Err(CommunicationsEventRuntimeErrorV1::Admission),
-    };
+    let registration_id = response.registration_id;
+    let runtime_generation = response.runtime_generation;
+    let grant_epoch = response.grant_epoch;
     if registration_id != admission.registration_id
         || runtime_generation != admission.runtime_generation
         || grant_epoch != admission.grant_epoch
     {
         return Err(CommunicationsEventRuntimeErrorV1::Admission);
     }
-    write_frame(
-        control_channel,
-        &ManagedRuntimeControlRequestV1 {
-            operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1 {
-                registration_id,
-                runtime_generation,
-                grant_epoch,
-            })),
-        }
-        .encode_to_vec(),
-    )?;
     control_channel
+        .signal_ready(ManagedRuntimeReadyRequestV1 {
+            registration_id,
+            runtime_generation,
+            grant_epoch,
+        })
+        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+    control_channel
+        .inner_mut()
         .set_read_timeout(None)
-        .and_then(|_| control_channel.set_write_timeout(None))
+        .and_then(|_| control_channel.inner_mut().set_write_timeout(None))
         .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)
-}
-
-fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, CommunicationsEventRuntimeErrorV1> {
-    let length = usize::try_from(read_varint(channel)?)
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-    if length > MAX_FRAME_BYTES {
-        return Err(CommunicationsEventRuntimeErrorV1::Unavailable);
-    }
-    use std::io::Read;
-    let mut bytes = vec![0_u8; length];
-    channel
-        .read_exact(&mut bytes)
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-    Ok(bytes)
-}
-
-fn write_frame(
-    channel: &mut UnixStream,
-    bytes: &[u8],
-) -> Result<(), CommunicationsEventRuntimeErrorV1> {
-    use std::io::Write;
-    let mut length =
-        u32::try_from(bytes.len()).map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-    let mut prefix = [0_u8; 5];
-    let mut index = 0;
-    while length >= 0x80 {
-        prefix[index] = (length as u8) | 0x80;
-        length >>= 7;
-        index += 1;
-    }
-    prefix[index] = length as u8;
-    channel
-        .write_all(&prefix[..=index])
-        .and_then(|_| channel.write_all(bytes))
-        .and_then(|_| channel.flush())
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)
-}
-
-fn peek_complete_frame(
-    channel: &UnixStream,
-) -> Result<Option<Vec<u8>>, CommunicationsEventRuntimeErrorV1> {
-    let mut header = [0_u8; 5];
-    let length = unsafe {
-        libc::recv(
-            channel.as_raw_fd(),
-            header.as_mut_ptr().cast(),
-            header.len(),
-            libc::MSG_PEEK,
-        )
-    };
-    if length < 0 {
-        return if io::Error::last_os_error().kind() == io::ErrorKind::WouldBlock {
-            Ok(None)
-        } else {
-            Err(CommunicationsEventRuntimeErrorV1::Unavailable)
-        };
-    }
-    if length == 0 {
-        return Err(CommunicationsEventRuntimeErrorV1::Unavailable);
-    }
-    let Some((payload_length, prefix_length)) = decode_peeked_length(
-        &header[..usize::try_from(length)
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?],
-    )? else {
-        return Ok(None);
-    };
-    if payload_length == 0 || payload_length > MAX_FRAME_BYTES {
-        return Err(CommunicationsEventRuntimeErrorV1::Unavailable);
-    }
-    let mut framed = vec![0_u8; prefix_length + payload_length];
-    let received = unsafe {
-        libc::recv(
-            channel.as_raw_fd(),
-            framed.as_mut_ptr().cast(),
-            framed.len(),
-            libc::MSG_PEEK,
-        )
-    };
-    if received < 0 {
-        return Err(CommunicationsEventRuntimeErrorV1::Unavailable);
-    }
-    if usize::try_from(received).map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?
-        < framed.len()
-    {
-        return Ok(None);
-    }
-    Ok(Some(framed[prefix_length..].to_vec()))
-}
-
-fn decode_peeked_length(
-    bytes: &[u8],
-) -> Result<Option<(usize, usize)>, CommunicationsEventRuntimeErrorV1> {
-    let mut value = 0_usize;
-    for (index, byte) in bytes.iter().copied().enumerate() {
-        value |= usize::from(byte & 0x7f) << (index * 7);
-        if byte & 0x80 == 0 {
-            return Ok(Some((value, index + 1)));
-        }
-    }
-    Ok(None)
-}
-
-fn read_varint(channel: &mut UnixStream) -> Result<u64, CommunicationsEventRuntimeErrorV1> {
-    use std::io::Read;
-    let mut value = 0_u64;
-    for index in 0..5 {
-        let mut byte = [0_u8; 1];
-        channel
-            .read_exact(&mut byte)
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-        value |= u64::from(byte[0] & 0x7f) << (index * 7);
-        if byte[0] & 0x80 == 0 {
-            return Ok(value);
-        }
-    }
-    Err(CommunicationsEventRuntimeErrorV1::Unavailable)
 }
 
 fn storage_binding(

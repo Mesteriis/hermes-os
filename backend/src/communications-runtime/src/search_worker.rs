@@ -5,6 +5,7 @@ use hermes_communications_persistence::{
     CommunicationsDerivedIndexFailureV1, CommunicationsDerivedIndexJobOperationV1,
     CommunicationsDurablePersistence, CommunicationsPersistenceError,
 };
+use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use std::os::unix::net::UnixStream;
 
 use crate::{
@@ -22,7 +23,7 @@ pub enum CommunicationsSearchWorkerErrorV1 {
 pub async fn process_next_derived_index_job_v1(
     persistence: &CommunicationsDurablePersistence,
     access: &mut CommunicationsSearchAccessV1,
-    control_channel: &mut UnixStream,
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
     worker_id: &str,
     now_unix_seconds: i64,
 ) -> Result<bool, CommunicationsSearchWorkerErrorV1> {
@@ -36,7 +37,14 @@ pub async fn process_next_derived_index_job_v1(
     else {
         return Ok(false);
     };
-    let outcome = execute_claimed_job(persistence, access, control_channel, &claimed.job, now_unix_seconds).await;
+    let outcome = execute_claimed_job(
+        persistence,
+        access,
+        control_channel,
+        &claimed.job,
+        now_unix_seconds,
+    )
+    .await;
     match outcome {
         Ok(()) => {
             persistence
@@ -69,7 +77,7 @@ pub async fn process_next_derived_index_job_v1(
 async fn execute_claimed_job(
     persistence: &CommunicationsDurablePersistence,
     access: &mut CommunicationsSearchAccessV1,
-    control_channel: &mut UnixStream,
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
     job: &hermes_communications_persistence::CommunicationsDerivedIndexJobV1,
     now_unix_seconds: i64,
 ) -> Result<(), ExecutionErrorV1> {

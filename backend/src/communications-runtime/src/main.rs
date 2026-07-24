@@ -9,11 +9,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use hermes_communications_persistence::communications_storage_bundle_v1;
 use hermes_communications_runtime::{
     admission::{communications_module_descriptor_v1, communications_settings_schema_bytes_v1},
+    consumer::CommunicationsDeliveryErrorV1,
     event_runtime::{
         CommunicationsEventRuntimeErrorV1, CommunicationsEventRuntimeV1,
         CommunicationsRuntimeAdmissionV1,
     },
-    consumer::CommunicationsDeliveryErrorV1,
 };
 use hermes_runtime_protocol::{
     v1::ManagedDomainRuntimeConfigurationV1,
@@ -131,10 +131,10 @@ where
     };
     let executor = tokio::runtime::Runtime::new()
         .map_err(|_| "Communications runtime executor is unavailable".to_owned())?;
-    let mut control_channel = inherited_control_channel()?;
+    let control_channel = inherited_control_channel()?;
     let mut runtime = executor
         .block_on(CommunicationsEventRuntimeV1::open(
-            &mut control_channel,
+            control_channel,
             descriptor,
             schema_bytes,
             &admission,
@@ -148,7 +148,8 @@ where
                 runtime_startup_reason_code(error),
             )
         })?;
-    let mut maintenance = executor.block_on(async { tokio::time::interval(Duration::from_secs(1)) });
+    let mut maintenance =
+        executor.block_on(async { tokio::time::interval(Duration::from_secs(1)) });
     loop {
         executor.block_on(consume_or_tick(&mut runtime, &mut maintenance))?;
         let now = SystemTime::now()
@@ -173,12 +174,15 @@ async fn consume_or_tick(
     runtime: &mut CommunicationsEventRuntimeV1,
     maintenance: &mut tokio::time::Interval,
 ) -> Result<(), String> {
-    let client_delivery = runtime.try_handle_client_delivery().await.map_err(|error| {
+    let client_delivery = runtime
+        .try_handle_client_delivery()
+        .await
+        .map_err(|error| {
             if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
                 eprintln!("developer_communications_runtime_client_delivery_error={error:?}");
             }
             "Communications runtime client delivery failed".to_owned()
-    })?;
+        })?;
     if client_delivery {
         if tokio::time::timeout(Duration::ZERO, maintenance.tick())
             .await
@@ -226,7 +230,9 @@ async fn run_maintenance_tick(runtime: &mut CommunicationsEventRuntimeV1) -> Res
 
 fn maintenance_error(stage: &str, error: CommunicationsEventRuntimeErrorV1) -> String {
     if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
-        eprintln!("developer_communications_runtime_maintenance_error stage={stage} error={error:?}");
+        eprintln!(
+            "developer_communications_runtime_maintenance_error stage={stage} error={error:?}"
+        );
     }
     format!("Communications runtime {stage} maintenance failed")
 }

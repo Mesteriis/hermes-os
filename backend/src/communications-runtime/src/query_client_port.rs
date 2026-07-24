@@ -2,6 +2,7 @@
 
 use hermes_communications_api::COMMUNICATIONS_QUERY_SCHEMA_SHA256;
 use hermes_communications_persistence::CommunicationsDurablePersistence;
+use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
@@ -63,13 +64,14 @@ pub fn decode_module_query_request_v1(
 pub async fn handle_module_query_request_v1(
     persistence: &CommunicationsDurablePersistence,
     search_access: &mut CommunicationsSearchAccessV1,
-    control_channel: &mut UnixStream,
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
     bytes: &[u8],
 ) -> Result<Vec<u8>, CommunicationsQueryClientPortErrorV1> {
     let (request_id, query_payload) = decode_module_query_request_v1(bytes)?;
-    let response_payload = handle_query_request_v1(persistence, search_access, control_channel, &query_payload)
-        .await
-        .map_err(map_query_error)?;
+    let response_payload =
+        handle_query_request_v1(persistence, search_access, control_channel, &query_payload)
+            .await
+            .map_err(map_query_error)?;
     Ok(ModuleClientResponseV1 {
         protocol_major: MODULE_CLIENT_PROTOCOL_MAJOR,
         request_id,

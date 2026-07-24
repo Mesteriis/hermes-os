@@ -4,12 +4,13 @@ use std::os::unix::net::UnixStream;
 
 use hermes_blob_client::{
     BlobClientError, BlobDataClient, ManagedBlobCustodyTransferRequestV1,
-    request_managed_blob_custody_transfer,
+    request_managed_blob_custody_transfer_v2,
 };
 use hermes_communications_api::CommunicationBodyBlobReferenceV1;
 use hermes_communications_persistence::{
     CommunicationsBodyCustodyTransferErrorV1, CommunicationsDurablePersistence,
 };
+use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 
 use crate::admission::COMMUNICATIONS_BLOB_CAPABILITY_ID;
 
@@ -28,7 +29,7 @@ enum BlobCustodyTransferFailureV1 {
 }
 
 pub async fn process_next_body_custody_transfer_v1(
-    control_channel: &mut UnixStream,
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
     persistence: &CommunicationsDurablePersistence,
     worker_id: &str,
     now_unix_seconds: i64,
@@ -49,10 +50,11 @@ pub async fn process_next_body_custody_transfer_v1(
     };
 
     control_channel
+        .inner_mut()
         .set_nonblocking(false)
         .map_err(|_| CommunicationsCustodyWorkerErrorV1::StorageUnavailable)?;
     let transfer = (|| {
-        let session = request_managed_blob_custody_transfer(
+        let session = request_managed_blob_custody_transfer_v2(
             control_channel,
             ManagedBlobCustodyTransferRequestV1 {
                 capability_id: COMMUNICATIONS_BLOB_CAPABILITY_ID,
@@ -75,6 +77,7 @@ pub async fn process_next_body_custody_transfer_v1(
         Ok::<[u8; 16], BlobClientError>(target_reference_id)
     })();
     control_channel
+        .inner_mut()
         .set_nonblocking(true)
         .map_err(|_| CommunicationsCustodyWorkerErrorV1::StorageUnavailable)?;
 

@@ -2,13 +2,16 @@
 
 use std::os::unix::net::UnixStream;
 
-use hermes_blob_client::{BlobDataClient, request_managed_blob_session};
+use hermes_blob_client::{BlobDataClient, request_managed_blob_session_v2};
 use hermes_communications_api::CommunicationBodyBlobReferenceV1;
 use hermes_communications_domain::COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1;
 use hermes_managed_vault_client::owner_derived_key::{
-    ManagedOwnerDerivedKeyClientV1, ManagedOwnerDerivedKeyContextV1,
+    ManagedOwnerDerivedKeyContextV1, ensure_managed_owner_derived_key_v2,
 };
-use hermes_runtime_protocol::v1::{BlobDataOperationV1, ManagedStorageRuntimeConfigurationV1};
+use hermes_runtime_protocol::{
+    managed_control::ManagedControlChannelV2,
+    v1::{BlobDataOperationV1, ManagedStorageRuntimeConfigurationV1},
+};
 use zeroize::Zeroizing;
 
 use crate::{
@@ -67,17 +70,14 @@ impl CommunicationsSearchAccessV1 {
 
     pub fn ensure_index_key(
         &mut self,
-        control_channel: &mut UnixStream,
+        control_channel: &mut ManagedControlChannelV2<UnixStream>,
     ) -> Result<Zeroizing<Vec<u8>>, CommunicationsSearchAccessErrorV1> {
         control_channel
+            .inner_mut()
             .set_nonblocking(false)
             .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)?;
-        let result = ManagedOwnerDerivedKeyClientV1::new(
-            control_channel
-                .try_clone()
-                .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)?,
-        )
-        .ensure(
+        let result = ensure_managed_owner_derived_key_v2(
+            control_channel,
             &self.key_context,
             COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
             COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
@@ -86,6 +86,7 @@ impl CommunicationsSearchAccessV1 {
         )
         .map_err(|_| CommunicationsSearchAccessErrorV1::Denied);
         control_channel
+            .inner_mut()
             .set_nonblocking(true)
             .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)?;
         result
@@ -93,15 +94,16 @@ impl CommunicationsSearchAccessV1 {
 
     pub fn read_admitted_body(
         &mut self,
-        control_channel: &mut UnixStream,
+        control_channel: &mut ManagedControlChannelV2<UnixStream>,
         blob: &CommunicationBodyBlobReferenceV1,
     ) -> Result<Vec<u8>, CommunicationsSearchAccessErrorV1> {
         let read_end = bounded_read_end(blob.declared_bytes)?;
         control_channel
+            .inner_mut()
             .set_nonblocking(false)
             .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)?;
         let result = (|| {
-            let session = request_managed_blob_session(
+            let session = request_managed_blob_session_v2(
                 control_channel,
                 COMMUNICATIONS_BLOB_CAPABILITY_ID,
                 BlobDataOperationV1::BlobDataOperationReadRangeV1,
@@ -118,6 +120,7 @@ impl CommunicationsSearchAccessV1 {
                 .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)
         })();
         control_channel
+            .inner_mut()
             .set_nonblocking(true)
             .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)?;
         result

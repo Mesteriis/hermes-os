@@ -217,8 +217,8 @@ pub fn communications_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1
         module_version: "1".to_owned(),
         build_id: build_id.to_owned(),
         runtime_protocol_range: Some(ProtocolRangeV1 {
-            minimum_major: 1,
-            maximum_major: 1,
+            minimum_major: 2,
+            maximum_major: 2,
             minimum_revision: 1,
         }),
         capabilities: communications_admission_capabilities_v1(),
