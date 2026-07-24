@@ -11,7 +11,6 @@ use hermes_kernel_control_store::{
     BundledManagedLaunchBinding, ManagedLaunchRecord, ModuleRegistration,
     PlatformManagedProcessBinding, PlatformManagedProcessLaunch,
 };
-use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeResponseV1, ManagedRuntimeBlobSessionDeliveryV1,
     ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
@@ -86,49 +85,49 @@ pub(crate) fn dispatch_typed_request(
         inbound::ManagedRuntimeInboundRequestV1::Ready(_) => {
             Err("managed runtime ready requires lifecycle dispatch".to_owned())
         }
-        inbound::ManagedRuntimeInboundRequestV1::VaultRoute(route) => {
-            Ok(inbound::vault_route_response(
+        inbound::ManagedRuntimeInboundRequestV1::VaultRoute(route) => Ok(
+            inbound::vault_route_response(
                 vault_route_handler
                     .ok_or_else(|| "managed runtime Vault route is not available".to_owned())
                     .and_then(|handler| handler.route_vault_ciphertext(expectation, route)),
-            ))
-        }
-        inbound::ManagedRuntimeInboundRequestV1::EventCredential(request) => {
-            Ok(inbound::event_credential_response(
+            ),
+        ),
+        inbound::ManagedRuntimeInboundRequestV1::EventCredential(request) => Ok(
+            inbound::event_credential_response(
                 event_credential_handler
                     .ok_or_else(|| {
                         "managed runtime Event credential handler is not available".to_owned()
                     })
                     .and_then(|handler| handler.issue_event_credential(expectation, request)),
-            ))
-        }
-        inbound::ManagedRuntimeInboundRequestV1::ProviderCredential(request) => {
-            Ok(inbound::provider_credential_response(
+            ),
+        ),
+        inbound::ManagedRuntimeInboundRequestV1::ProviderCredential(request) => Ok(
+            inbound::provider_credential_response(
                 provider_credential_handler
                     .ok_or_else(|| {
                         "managed runtime provider credential handler is not available".to_owned()
                     })
                     .and_then(|handler| handler.issue_provider_credential(expectation, request)),
-            ))
-        }
-        inbound::ManagedRuntimeInboundRequestV1::OwnerDerivedKey(request) => {
-            Ok(inbound::owner_derived_key_response(
+            ),
+        ),
+        inbound::ManagedRuntimeInboundRequestV1::OwnerDerivedKey(request) => Ok(
+            inbound::owner_derived_key_response(
                 owner_derived_key_handler
                     .ok_or_else(|| {
                         "managed runtime owner-derived key handler is not available".to_owned()
                     })
                     .and_then(|handler| handler.issue_owner_derived_key(expectation, request)),
-            ))
-        }
-        inbound::ManagedRuntimeInboundRequestV1::BlobSession(request) => {
-            Ok(inbound::blob_session_response(
+            ),
+        ),
+        inbound::ManagedRuntimeInboundRequestV1::BlobSession(request) => Ok(
+            inbound::blob_session_response(
                 blob_session_handler
                     .ok_or_else(|| {
                         "managed runtime Blob session handler is not available".to_owned()
                     })
                     .and_then(|handler| handler.issue_blob_session(expectation, request)),
-            ))
-        }
+            ),
+        ),
     }
 }
 
@@ -285,42 +284,45 @@ pub fn create_inherited_channel() -> Result<(UnixStream, Stdio), String> {
 }
 
 pub fn establish_channel(
-    stream: UnixStream,
+    mut stream: UnixStream,
     expectation: &ManagedRuntimeExpectation,
 ) -> Result<UnixStream, String> {
     stream
         .set_read_timeout(Some(CONTROL_TIMEOUT))
         .and_then(|_| stream.set_write_timeout(Some(CONTROL_TIMEOUT)))
         .map_err(|error| error.to_string())?;
-    let mut channel = ManagedControlChannelV2::new(stream);
-    let result = channel
-        .receive_request()
-        .map_err(|_| "managed runtime correlated control request is invalid".to_owned())
-        .and_then(|(correlation_id, request)| {
-            validate_describe(request, expectation).map(|()| correlation_id)
-        });
-    let correlation_id = result?;
-    let response = ManagedRuntimeControlResponseV1 {
-        result: Some(
-            hermes_runtime_protocol::v1::managed_runtime_control_response_v1::Result::Describe(
-                DescribeManagedRuntimeResponseV1 {
-                    registration_id: expectation.registration_id.clone(),
-                    runtime_generation: expectation.runtime_generation,
-                    grant_epoch: expectation.grant_epoch,
-                },
+    let result = read_frame(&mut stream)
+        .and_then(|bytes| {
+            ManagedRuntimeControlRequestV1::decode(bytes.as_slice())
+                .map_err(|_| "managed runtime control request is invalid".to_owned())
+        })
+        .and_then(|request| validate_describe(request, expectation));
+    let response = match result {
+        Ok(()) => ManagedRuntimeControlResponseV1 {
+            result: Some(
+                hermes_runtime_protocol::v1::managed_runtime_control_response_v1::Result::Describe(
+                    DescribeManagedRuntimeResponseV1 {
+                        registration_id: expectation.registration_id.clone(),
+                        runtime_generation: expectation.runtime_generation,
+                        grant_epoch: expectation.grant_epoch,
+                    },
+                ),
             ),
-        ),
-        error_code: String::new(),
+            error_code: String::new(),
+        },
+        Err(_) => ManagedRuntimeControlResponseV1 {
+            result: None,
+            error_code: "managed_runtime_describe_rejected".to_owned(),
+        },
     };
-    channel
-        .write_response(correlation_id, response)
-        .map_err(|_| "managed runtime correlated control response is invalid".to_owned())?;
-    let stream = channel.into_inner();
-    stream
-        .set_read_timeout(None)
-        .and_then(|_| stream.set_write_timeout(None))
-        .map_err(|error| error.to_string())?;
-    Ok(stream)
+    write_frame(&mut stream, &response.encode_to_vec())?;
+    if result.is_ok() {
+        stream
+            .set_read_timeout(None)
+            .and_then(|_| stream.set_write_timeout(None))
+            .map_err(|error| error.to_string())?;
+    }
+    result.map(|()| stream)
 }
 
 pub fn relay(channel: &mut UnixStream, payload: &[u8]) -> Result<Vec<u8>, String> {

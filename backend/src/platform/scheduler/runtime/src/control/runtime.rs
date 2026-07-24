@@ -5,11 +5,11 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
 use hermes_runtime_protocol::{
-    managed_control::ManagedControlChannelV2,
     v1::{
-        ManagedRuntimeReadyRequestV1, SchedulerRuntimeConfigurationV1,
-        SchedulerRuntimeControlRequestV1, SchedulerRuntimeControlResponseV1,
-        SchedulerRuntimeStateV1, SchedulerRuntimeStatusV1,
+        ManagedRuntimeControlRequestV1, ManagedRuntimeReadyRequestV1,
+        SchedulerRuntimeConfigurationV1, SchedulerRuntimeControlRequestV1,
+        SchedulerRuntimeControlResponseV1, SchedulerRuntimeStateV1, SchedulerRuntimeStatusV1,
+        managed_runtime_control_request_v1::Operation as ManagedOperation,
         scheduler_runtime_control_request_v1::Operation as SchedulerOperation,
         scheduler_runtime_control_response_v1::Result as SchedulerResult,
     },
@@ -248,13 +248,14 @@ fn announce_ready(
     channel: &mut UnixStream,
     identity: &SchedulerRuntimeIdentity,
 ) -> Result<(), String> {
-    ManagedControlChannelV2::new(channel.try_clone().map_err(|error| error.to_string())?)
-        .signal_ready(ManagedRuntimeReadyRequestV1 {
+    let request = ManagedRuntimeControlRequestV1 {
+        operation: Some(ManagedOperation::Ready(ManagedRuntimeReadyRequestV1 {
             registration_id: identity.registration_id().to_owned(),
             runtime_generation: identity.runtime_generation(),
             grant_epoch: identity.grant_epoch(),
-        })
-        .map_err(|_| "Scheduler inherited control ready acknowledgement is invalid".to_owned())
+        })),
+    };
+    write_frame(channel, &request.encode_to_vec())
 }
 
 fn serve_control(

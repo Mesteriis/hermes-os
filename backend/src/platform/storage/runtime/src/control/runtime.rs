@@ -2,8 +2,9 @@
 
 use std::os::unix::net::UnixStream;
 
-use hermes_runtime_protocol::{
-    managed_control::ManagedControlChannelV2, v1::ManagedRuntimeReadyRequestV1,
+use hermes_runtime_protocol::v1::{
+    ManagedRuntimeControlRequestV1, ManagedRuntimeReadyRequestV1,
+    managed_runtime_control_request_v1::Operation as ManagedOperation,
 };
 use hermes_storage_control::{StorageEndpointPreflightV1, preflight_storage_endpoints};
 use hermes_storage_protocol::{
@@ -75,13 +76,14 @@ fn announce_ready(
     identity: &ManagedStorageRuntimeIdentityV1,
 ) -> Result<(), String> {
     let audience = identity.audience();
-    ManagedControlChannelV2::new(channel.try_clone().map_err(|error| error.to_string())?)
-        .signal_ready(ManagedRuntimeReadyRequestV1 {
+    let request = ManagedRuntimeControlRequestV1 {
+        operation: Some(ManagedOperation::Ready(ManagedRuntimeReadyRequestV1 {
             registration_id: audience.module_registration_id().to_owned(),
             runtime_generation: audience.runtime_generation(),
             grant_epoch: audience.grant_epoch(),
-        })
-        .map_err(|_| "Storage inherited control ready acknowledgement is invalid".to_owned())
+        })),
+    };
+    write_frame(channel, &request.encode_to_vec())
 }
 
 #[allow(dead_code)]

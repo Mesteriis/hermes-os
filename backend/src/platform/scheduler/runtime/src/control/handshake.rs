@@ -4,8 +4,14 @@ use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
-use hermes_runtime_protocol::v1::DescribeManagedRuntimeResponseV1;
+use hermes_runtime_protocol::v1::{
+    DescribeManagedRuntimeRequestV1, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeControlResponseV1, managed_runtime_control_request_v1::Operation,
+    managed_runtime_control_response_v1::Result as ControlResult,
+};
+use prost::Message;
+
+use super::framing::{read_frame, write_frame};
 
 pub(super) struct SchedulerRuntimeIdentity {
     registration_id: String,
@@ -26,7 +32,7 @@ pub(super) fn authenticate(
 }
 
 fn authenticate_on_channel(
-    stream: UnixStream,
+    mut stream: UnixStream,
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
 ) -> Result<(UnixStream, SchedulerRuntimeIdentity), String> {
@@ -34,24 +40,36 @@ fn authenticate_on_channel(
         .set_read_timeout(Some(Duration::from_secs(5)))
         .and_then(|_| stream.set_write_timeout(Some(Duration::from_secs(5))))
         .map_err(|_| "Scheduler inherited control channel is unavailable".to_owned())?;
-    let mut channel = ManagedControlChannelV2::new(stream);
-    let identity = channel
-        .describe_managed_runtime(descriptor_bytes, settings_schema_bytes)
-        .map_err(|_| "Scheduler managed-runtime descriptor was rejected".to_owned())?;
-    Ok((
-        channel.into_inner(),
-        SchedulerRuntimeIdentity::from_describe(identity),
-    ))
+    let request = ManagedRuntimeControlRequestV1 {
+        operation: Some(Operation::Describe(DescribeManagedRuntimeRequestV1 {
+            descriptor_bytes,
+            settings_schema_bytes,
+        })),
+    };
+    write_frame(&mut stream, &request.encode_to_vec())?;
+    let response = ManagedRuntimeControlResponseV1::decode(read_frame(&mut stream)?.as_slice())
+        .map_err(|_| "Scheduler inherited control response is invalid".to_owned())?;
+    match response.result {
+        Some(ControlResult::Describe(value))
+            if response.error_code.is_empty()
+                && !value.registration_id.is_empty()
+                && value.runtime_generation != 0
+                && value.grant_epoch != 0 =>
+        {
+            Ok((
+                stream,
+                SchedulerRuntimeIdentity {
+                    registration_id: value.registration_id,
+                    runtime_generation: value.runtime_generation,
+                    grant_epoch: value.grant_epoch,
+                },
+            ))
+        }
+        _ => Err("Scheduler managed-runtime descriptor was rejected".to_owned()),
+    }
 }
 
 impl SchedulerRuntimeIdentity {
-    fn from_describe(identity: DescribeManagedRuntimeResponseV1) -> Self {
-        Self {
-            registration_id: identity.registration_id,
-            runtime_generation: identity.runtime_generation,
-            grant_epoch: identity.grant_epoch,
-        }
-    }
     #[must_use]
     pub(super) fn registration_id(&self) -> &str {
         &self.registration_id

@@ -5,12 +5,13 @@ use hermes_blob_runtime::{
     vault::{BlobVaultKeyLeaseAdapterV1, BlobVaultRouteContextV1},
 };
 use hermes_runtime_protocol::{
-    managed_control::ManagedControlChannelV2,
     v1::{
         BlobRuntimeConfigurationV1, BlobRuntimeControlRequestV1, BlobRuntimeControlResponseV1,
         BlobRuntimeStateV1, BlobRuntimeStatusV1, GetBlobRuntimeStatusRequestV1,
-        ManagedRuntimeReadyRequestV1, blob_runtime_control_request_v1::Operation,
+        ManagedRuntimeControlRequestV1, ManagedRuntimeReadyRequestV1,
+        blob_runtime_control_request_v1::Operation,
         blob_runtime_control_response_v1::Result as ResponseResult,
+        managed_runtime_control_request_v1::Operation as ManagedOperation,
     },
     validation::blob::{
         validate_blob_runtime_configuration, validate_blob_runtime_control_request,
@@ -52,13 +53,14 @@ fn announce_ready(
     channel: &mut std::os::unix::net::UnixStream,
     identity: &BlobRuntimeIdentity,
 ) -> Result<(), String> {
-    ManagedControlChannelV2::new(channel.try_clone().map_err(|error| error.to_string())?)
-        .signal_ready(ManagedRuntimeReadyRequestV1 {
+    let request = ManagedRuntimeControlRequestV1 {
+        operation: Some(ManagedOperation::Ready(ManagedRuntimeReadyRequestV1 {
             registration_id: identity.registration_id().to_owned(),
             runtime_generation: identity.runtime_generation(),
             grant_epoch: identity.grant_epoch(),
-        })
-        .map_err(|_| "Blob inherited control ready acknowledgement is invalid".to_owned())
+        })),
+    };
+    write_frame(channel, &request.encode_to_vec())
 }
 
 fn data_service(
