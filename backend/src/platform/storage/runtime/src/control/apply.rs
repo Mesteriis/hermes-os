@@ -22,7 +22,7 @@ use crate::vault::StoragePlatformCredentialPurposeV1;
 pub(super) fn apply_active_binding(
     channel: &UnixStream,
     identity: &ManagedStorageRuntimeIdentityV1,
-    configuration: &StorageRuntimeConfigurationV1,
+    configuration: &mut StorageRuntimeConfigurationV1,
     active_bindings: &mut Vec<StorageBindingV1>,
     binding: StorageBindingV1,
     bundle: StorageBundleV1,
@@ -33,8 +33,17 @@ pub(super) fn apply_active_binding(
     validate_candidate(configuration, active_bindings, &binding, &bundle)?;
     let desired = configuration_for_apply(configuration, active_bindings, &binding, &bundle)?;
     provision(channel, identity, &desired)?;
-    active_bindings.push(binding.clone());
+    retain_applied_configuration(configuration, active_bindings, desired);
     Ok(binding)
+}
+
+fn retain_applied_configuration(
+    configuration: &mut StorageRuntimeConfigurationV1,
+    active_bindings: &mut Vec<StorageBindingV1>,
+    desired: StorageRuntimeConfigurationV1,
+) {
+    *active_bindings = desired.desired_bindings.clone();
+    *configuration = desired;
 }
 
 pub(super) fn error_code(error: &str) -> &'static str {
@@ -177,4 +186,58 @@ fn provision(
         &postgres_credential,
         &runtime_credentials,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::retain_applied_configuration;
+    use hermes_storage_protocol::v1::{
+        StorageBindingV1, StorageBundleV1, StorageRuntimeConfigurationV1,
+    };
+
+    #[test]
+    fn retains_prior_bundle_when_a_second_owner_binding_is_applied() {
+        let communications = bundle("communications");
+        let telegram = bundle("telegram");
+        let communications_binding = binding("communications");
+        let telegram_binding = binding("telegram");
+        let mut configuration = StorageRuntimeConfigurationV1 {
+            desired_bindings: vec![communications_binding.clone()],
+            desired_bundles: vec![communications.clone()],
+            ..Default::default()
+        };
+        let mut active_bindings = vec![communications_binding.clone()];
+        let desired = StorageRuntimeConfigurationV1 {
+            desired_bindings: vec![communications_binding, telegram_binding.clone()],
+            desired_bundles: vec![communications.clone(), telegram.clone()],
+            ..Default::default()
+        };
+
+        retain_applied_configuration(&mut configuration, &mut active_bindings, desired);
+
+        assert_eq!(
+            configuration.desired_bundles,
+            vec![communications, telegram]
+        );
+        assert_eq!(
+            configuration.desired_bindings,
+            vec![binding("communications"), telegram_binding]
+        );
+        assert_eq!(active_bindings, configuration.desired_bindings);
+    }
+
+    fn bundle(owner_id: &str) -> StorageBundleV1 {
+        StorageBundleV1 {
+            owner_id: owner_id.to_owned(),
+            revision: 1,
+            ..Default::default()
+        }
+    }
+
+    fn binding(owner: &str) -> StorageBindingV1 {
+        StorageBindingV1 {
+            owner: owner.to_owned(),
+            ..Default::default()
+        }
+    }
 }

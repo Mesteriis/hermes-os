@@ -118,7 +118,7 @@ pub fn serve_credential_bootstrapped_on_channel(
 fn serve_authenticated(
     mut channel: UnixStream,
     identity: ManagedStorageRuntimeIdentityV1,
-    configuration: StorageRuntimeConfigurationV1,
+    mut configuration: StorageRuntimeConfigurationV1,
     mut active_bindings: Vec<hermes_storage_protocol::v1::StorageBindingV1>,
 ) -> Result<(), String> {
     channel
@@ -136,7 +136,7 @@ fn serve_authenticated(
                     &mut channel,
                     request,
                     &identity,
-                    &configuration,
+                    &mut configuration,
                     &mut active_bindings,
                 )
             })
@@ -282,7 +282,7 @@ fn response_for(
     channel: &mut UnixStream,
     request: StorageRuntimeControlRequestV1,
     identity: &ManagedStorageRuntimeIdentityV1,
-    configuration: &StorageRuntimeConfigurationV1,
+    configuration: &mut StorageRuntimeConfigurationV1,
     active_bindings: &mut Vec<hermes_storage_protocol::v1::StorageBindingV1>,
 ) -> StorageRuntimeControlResponseV1 {
     if validate_storage_runtime_control_request(&request).is_err() {
@@ -291,14 +291,17 @@ fn response_for(
     match request.operation {
         Some(Operation::GetStatus(GetStorageRuntimeStatusRequestV1 {})) => status_response(
             identity.runtime_generation(),
-            configuration,
+            &*configuration,
             active_bindings,
         ),
         Some(Operation::RevokeBinding(request)) => request.binding.map_or_else(
             || error_response("operation_not_available"),
             |binding| {
-                revoke_active_binding(channel, identity, configuration, active_bindings, binding)
-                    .map(revoked_response)
+                revoke_active_binding(channel, identity, &*configuration, active_bindings, binding)
+                    .map(|binding| {
+                        configuration.desired_bindings = active_bindings.clone();
+                        revoked_response(binding)
+                    })
                     .unwrap_or_else(|error| error_response(revocation_error_code(&error)))
             },
         ),
