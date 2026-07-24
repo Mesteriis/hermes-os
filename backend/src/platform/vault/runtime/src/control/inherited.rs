@@ -5,13 +5,8 @@ use std::os::fd::{AsRawFd, FromRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeRequestV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
-    managed_runtime_control_request_v1::Operation,
-    managed_runtime_control_response_v1::Result as ControlResult,
-};
-use prost::Message;
+use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
+use hermes_runtime_protocol::v1::ManagedRuntimeReadyRequestV1;
 
 const MAX_FRAME_BYTES: usize = 512 * 1024;
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
@@ -26,7 +21,7 @@ pub fn open_and_describe(
 }
 
 pub fn describe(
-    mut stream: UnixStream,
+    stream: UnixStream,
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
 ) -> Result<UnixStream, String> {
@@ -34,38 +29,23 @@ pub fn describe(
         .set_read_timeout(Some(CONTROL_TIMEOUT))
         .and_then(|_| stream.set_write_timeout(Some(CONTROL_TIMEOUT)))
         .map_err(|_| "Vault inherited control channel is unavailable".to_owned())?;
-    let request = ManagedRuntimeControlRequestV1 {
-        operation: Some(Operation::Describe(DescribeManagedRuntimeRequestV1 {
-            descriptor_bytes,
-            settings_schema_bytes,
-        })),
-    };
-    write_frame(&mut stream, &request.encode_to_vec())?;
-    let response = ManagedRuntimeControlResponseV1::decode(read_frame(&mut stream)?.as_slice())
-        .map_err(|_| "Vault inherited control response is invalid".to_owned())?;
-    match response.result {
-        Some(ControlResult::Describe(describe))
-            if response.error_code.is_empty()
-                && !describe.registration_id.is_empty()
-                && describe.runtime_generation != 0
-                && describe.grant_epoch != 0 =>
-        {
-            let ready = ManagedRuntimeControlRequestV1 {
-                operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1 {
-                    registration_id: describe.registration_id,
-                    runtime_generation: describe.runtime_generation,
-                    grant_epoch: describe.grant_epoch,
-                })),
-            };
-            write_frame(&mut stream, &ready.encode_to_vec())?;
-            stream
-                .set_read_timeout(None)
-                .and_then(|_| stream.set_write_timeout(None))
-                .map_err(|_| "Vault inherited control channel is unavailable".to_owned())?;
-            Ok(stream)
-        }
-        _ => Err("Vault managed-runtime descriptor was rejected".to_owned()),
-    }
+    let mut channel = ManagedControlChannelV2::new(stream);
+    let identity = channel
+        .describe_managed_runtime(descriptor_bytes, settings_schema_bytes)
+        .map_err(|_| "Vault managed-runtime descriptor was rejected".to_owned())?;
+    channel
+        .signal_ready(ManagedRuntimeReadyRequestV1 {
+            registration_id: identity.registration_id,
+            runtime_generation: identity.runtime_generation,
+            grant_epoch: identity.grant_epoch,
+        })
+        .map_err(|_| "Vault managed-runtime descriptor was rejected".to_owned())?;
+    let stream = channel.into_inner();
+    stream
+        .set_read_timeout(None)
+        .and_then(|_| stream.set_write_timeout(None))
+        .map_err(|_| "Vault inherited control channel is unavailable".to_owned())?;
+    Ok(stream)
 }
 
 pub fn read_frame(stream: &mut UnixStream) -> Result<Vec<u8>, String> {

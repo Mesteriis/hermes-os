@@ -12,14 +12,14 @@ use hermes_events_jetstream::{
     NatsRuntimeCredentialRecipientPublicKeyV1,
 };
 use hermes_runtime_protocol::{
+    managed_control::ManagedControlChannelV2,
     v1::{
         EventsAuthorityRuntimeConfigurationV1, EventsAuthorityRuntimeControlRequestV1,
         EventsAuthorityRuntimeControlResponseV1, EventsAuthorityRuntimeStateV1,
         EventsAuthorityRuntimeStatusV1, EventsRuntimeCredentialDeliveryV1,
-        IssueEventsRuntimeCredentialRequestV1, ManagedRuntimeControlRequestV1,
-        ManagedRuntimeReadyRequestV1, events_authority_runtime_control_request_v1::Operation,
+        IssueEventsRuntimeCredentialRequestV1, ManagedRuntimeReadyRequestV1,
+        events_authority_runtime_control_request_v1::Operation,
         events_authority_runtime_control_response_v1::Result as ResponseResult,
-        managed_runtime_control_request_v1::Operation as ManagedOperation,
     },
     validation::events_authority::{
         validate_events_authority_runtime_configuration,
@@ -108,14 +108,13 @@ fn announce_ready(
     channel: &mut UnixStream,
     identity: &EventsAuthorityRuntimeIdentityV1,
 ) -> Result<(), String> {
-    let request = ManagedRuntimeControlRequestV1 {
-        operation: Some(ManagedOperation::Ready(ManagedRuntimeReadyRequestV1 {
+    ManagedControlChannelV2::new(channel.try_clone().map_err(|error| error.to_string())?)
+        .signal_ready(ManagedRuntimeReadyRequestV1 {
             registration_id: identity.registration_id().to_owned(),
             runtime_generation: identity.runtime_generation(),
             grant_epoch: identity.grant_epoch(),
-        })),
-    };
-    write_frame(channel, &request.encode_to_vec())
+        })
+        .map_err(|_| "Events authority ready acknowledgement is invalid".to_owned())
 }
 
 fn serve_control(

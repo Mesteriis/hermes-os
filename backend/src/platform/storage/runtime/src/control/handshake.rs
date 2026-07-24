@@ -4,15 +4,8 @@ use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeRequestV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, managed_runtime_control_request_v1::Operation,
-    managed_runtime_control_response_v1::Result as ControlResult,
-};
+use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use hermes_vault_protocol::LeaseAudienceV1;
-use prost::Message;
-
-use super::framing::{read_frame, write_frame};
 
 // Test composition exercises the descriptor handshake through the same
 // inherited-channel path as the managed runtime. Production uses `authenticate`.
@@ -53,7 +46,7 @@ pub(super) fn authenticate(
 }
 
 pub(super) fn authenticate_on_channel(
-    mut stream: UnixStream,
+    stream: UnixStream,
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
 ) -> Result<(UnixStream, ManagedStorageRuntimeIdentityV1), String> {
@@ -61,33 +54,21 @@ pub(super) fn authenticate_on_channel(
         .set_read_timeout(Some(Duration::from_secs(5)))
         .and_then(|_| stream.set_write_timeout(Some(Duration::from_secs(5))))
         .map_err(|_| "Storage inherited control channel is unavailable".to_owned())?;
-    let request = ManagedRuntimeControlRequestV1 {
-        operation: Some(Operation::Describe(DescribeManagedRuntimeRequestV1 {
-            descriptor_bytes,
-            settings_schema_bytes,
-        })),
-    };
-    write_frame(&mut stream, &request.encode_to_vec())?;
-    let response = ManagedRuntimeControlResponseV1::decode(read_frame(&mut stream)?.as_slice())
-        .map_err(|_| "Storage inherited control response is invalid".to_owned())?;
-    match response.result {
-        Some(ControlResult::Describe(value))
-            if response.error_code.is_empty()
-                && !value.registration_id.is_empty()
-                && value.runtime_generation != 0
-                && value.grant_epoch != 0 =>
-        {
-            let audience = LeaseAudienceV1::new(
-                value.registration_id,
-                "storage-runtime".to_owned(),
-                value.runtime_generation,
-                value.grant_epoch,
-            )
-            .map_err(|_| "Storage managed-runtime descriptor was rejected".to_owned())?;
-            Ok((stream, ManagedStorageRuntimeIdentityV1 { audience }))
-        }
-        _ => Err("Storage managed-runtime descriptor was rejected".to_owned()),
-    }
+    let mut channel = ManagedControlChannelV2::new(stream);
+    let identity = channel
+        .describe_managed_runtime(descriptor_bytes, settings_schema_bytes)
+        .map_err(|_| "Storage managed-runtime descriptor was rejected".to_owned())?;
+    let audience = LeaseAudienceV1::new(
+        identity.registration_id,
+        "storage-runtime".to_owned(),
+        identity.runtime_generation,
+        identity.grant_epoch,
+    )
+    .map_err(|_| "Storage managed-runtime descriptor was rejected".to_owned())?;
+    Ok((
+        channel.into_inner(),
+        ManagedStorageRuntimeIdentityV1 { audience },
+    ))
 }
 
 #[derive(Clone)]

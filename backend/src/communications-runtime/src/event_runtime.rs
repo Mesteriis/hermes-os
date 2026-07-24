@@ -12,11 +12,10 @@ use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
     RuntimeSubscribePermitV1, request_managed_runtime_event_access,
 };
+use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeRequestV1, ManagedRuntimeClientDeliveryResponseV1,
-    ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
-    ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
+    ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeControlResponseV1, ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
     managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
@@ -191,7 +190,7 @@ impl CommunicationsEventRuntimeV1 {
             .await
             .map_err(|_| unavailable_at("search_projection"))?;
         let search_access = CommunicationsSearchAccessV1::open(admission, &storage_configuration)
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
+            .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
         control_channel
             .set_nonblocking(true)
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
@@ -255,8 +254,7 @@ impl CommunicationsEventRuntimeV1 {
             .map_err(|_| unavailable_at("client_rejected_write"))?;
             return Ok(true);
         }
-        if read_frame(&mut self.control_channel)
-            .map_err(|_| unavailable_at("client_read"))?
+        if read_frame(&mut self.control_channel).map_err(|_| unavailable_at("client_read"))?
             != frame
         {
             return Err(admission_at("client_frame_changed"));
@@ -439,50 +437,32 @@ fn authenticate_managed_runtime(
         .set_read_timeout(Some(CONTROL_TIMEOUT))
         .and_then(|_| control_channel.set_write_timeout(Some(CONTROL_TIMEOUT)))
         .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-    write_frame(
-        control_channel,
-        &ManagedRuntimeControlRequestV1 {
-            operation: Some(Operation::Describe(DescribeManagedRuntimeRequestV1 {
-                descriptor_bytes,
-                settings_schema_bytes,
-            })),
-        }
-        .encode_to_vec(),
-    )?;
-    let response = ManagedRuntimeControlResponseV1::decode(read_frame(control_channel)?.as_slice())
+    let mut channel = ManagedControlChannelV2::new(
+        control_channel
+            .try_clone()
+            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?,
+    );
+    let identity = channel
+        .describe_managed_runtime(descriptor_bytes, settings_schema_bytes)
         .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-    let (registration_id, runtime_generation, grant_epoch) = match response.result {
-        Some(ControlResult::Describe(value))
-            if response.error_code.is_empty()
-                && !value.registration_id.is_empty()
-                && value.runtime_generation != 0
-                && value.grant_epoch != 0 =>
-        {
-            (
-                value.registration_id,
-                value.runtime_generation,
-                value.grant_epoch,
-            )
-        }
-        _ => return Err(CommunicationsEventRuntimeErrorV1::Admission),
-    };
+    let (registration_id, runtime_generation, grant_epoch) = (
+        identity.registration_id,
+        identity.runtime_generation,
+        identity.grant_epoch,
+    );
     if registration_id != admission.registration_id
         || runtime_generation != admission.runtime_generation
         || grant_epoch != admission.grant_epoch
     {
         return Err(CommunicationsEventRuntimeErrorV1::Admission);
     }
-    write_frame(
-        control_channel,
-        &ManagedRuntimeControlRequestV1 {
-            operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1 {
-                registration_id,
-                runtime_generation,
-                grant_epoch,
-            })),
-        }
-        .encode_to_vec(),
-    )?;
+    channel
+        .signal_ready(hermes_runtime_protocol::v1::ManagedRuntimeReadyRequestV1 {
+            registration_id,
+            runtime_generation,
+            grant_epoch,
+        })
+        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
     control_channel
         .set_read_timeout(None)
         .and_then(|_| control_channel.set_write_timeout(None))
@@ -550,7 +530,8 @@ fn peek_complete_frame(
     let Some((payload_length, prefix_length)) = decode_peeked_length(
         &header[..usize::try_from(length)
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?],
-    )? else {
+    )?
+    else {
         return Ok(None);
     };
     if payload_length == 0 || payload_length > MAX_FRAME_BYTES {

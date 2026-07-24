@@ -3,14 +3,8 @@
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeRequestV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, managed_runtime_control_request_v1::Operation,
-    managed_runtime_control_response_v1::Result as ControlResult,
-};
-use prost::Message;
-
-use super::framing::{read_frame, write_frame};
+use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
+use hermes_runtime_protocol::v1::DescribeManagedRuntimeResponseV1;
 
 pub(crate) struct EventsAuthorityRuntimeIdentityV1 {
     registration_id: String,
@@ -23,41 +17,32 @@ pub(crate) fn authenticate(
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
 ) -> Result<(UnixStream, EventsAuthorityRuntimeIdentityV1), String> {
-    let mut stream = stream;
+    let stream = stream;
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .and_then(|_| stream.set_write_timeout(Some(Duration::from_secs(5))))
         .map_err(|_| "Events authority inherited channel is unavailable".to_owned())?;
-    let request = ManagedRuntimeControlRequestV1 {
-        operation: Some(Operation::Describe(DescribeManagedRuntimeRequestV1 {
-            descriptor_bytes,
-            settings_schema_bytes,
-        })),
-    };
-    write_frame(&mut stream, &request.encode_to_vec())?;
-    let response = ManagedRuntimeControlResponseV1::decode(read_frame(&mut stream)?.as_slice())
-        .map_err(|_| "Events authority inherited response is invalid".to_owned())?;
-    match response.result {
-        Some(ControlResult::Describe(value))
-            if response.error_code.is_empty()
-                && valid_id(&value.registration_id)
-                && value.runtime_generation > 0
-                && value.grant_epoch > 0 =>
-        {
-            Ok((
-                stream,
-                EventsAuthorityRuntimeIdentityV1 {
-                    registration_id: value.registration_id,
-                    runtime_generation: value.runtime_generation,
-                    grant_epoch: value.grant_epoch,
-                },
-            ))
-        }
-        _ => Err("Events authority managed-runtime descriptor was rejected".to_owned()),
+    let mut channel = ManagedControlChannelV2::new(stream);
+    let identity = channel
+        .describe_managed_runtime(descriptor_bytes, settings_schema_bytes)
+        .map_err(|_| "Events authority managed-runtime descriptor was rejected".to_owned())?;
+    if !valid_id(&identity.registration_id) {
+        return Err("Events authority managed-runtime descriptor was rejected".to_owned());
     }
+    Ok((
+        channel.into_inner(),
+        EventsAuthorityRuntimeIdentityV1::from_describe(identity),
+    ))
 }
 
 impl EventsAuthorityRuntimeIdentityV1 {
+    fn from_describe(identity: DescribeManagedRuntimeResponseV1) -> Self {
+        Self {
+            registration_id: identity.registration_id,
+            runtime_generation: identity.runtime_generation,
+            grant_epoch: identity.grant_epoch,
+        }
+    }
     pub(crate) fn registration_id(&self) -> &str {
         &self.registration_id
     }
