@@ -15,6 +15,7 @@ message CommunicationsQueryRequestV1 {
     ListMessageAttachmentAnchorsRequestV1 list_message_attachment_anchors = 7;
     ListMessageReferencesRequestV1 list_message_references = 8;
     SearchCommunicationsRequestV1 search_communications = 9;
+    GetEvidenceRequestV1 get_evidence = 10;
   }
 }
 
@@ -28,6 +29,7 @@ message CommunicationsQueryResponseV1 {
     ListMessageAttachmentAnchorsResponseV1 list_message_attachment_anchors = 6;
     ListMessageReferencesResponseV1 list_message_references = 7;
     SearchCommunicationsResponseV1 search_communications = 8;
+    GetEvidenceResponseV1 get_evidence = 9;
   }
   string error_code = 15;
 }
@@ -72,6 +74,11 @@ message ListMessageReferencesRequestV1 {
 }
 message ListMessageReferencesResponseV1 { repeated MessageReferenceSummaryV1 references = 1; }
 
+// Canonical evidence metadata only. Provider-local source cursors, message
+// content, Blob references and admission proofs remain owner-private.
+message GetEvidenceRequestV1 { bytes evidence_id = 1; }
+message GetEvidenceResponseV1 { EvidenceSummaryV1 evidence = 1; }
+
 // Exact-token owner-local derived search. Query text is transient at the
 // owner boundary and never appears in results, events or persistence rows.
 message SearchCommunicationsRequestV1 {
@@ -85,6 +92,16 @@ message CommunicationSearchHitV1 {
   bytes conversation_id = 3;
   int64 observed_at_unix_seconds = 4;
   uint32 matched_token_count = 5;
+}
+
+message EvidenceSummaryV1 {
+  bytes evidence_id = 1;
+  uint32 provider = 2;
+  uint32 direction = 3;
+  uint32 kind = 4;
+  uint32 body_state = 5;
+  uint32 body_admission_failure = 6;
+  int64 observed_at_unix_seconds = 7;
 }
 
 message AccountSummaryV1 {

@@ -4,15 +4,15 @@ use hermes_communications_api::{
     CommunicationAccountSummaryV1, CommunicationAttachmentAnchorSummaryV1,
     CommunicationConversationSummaryV1, CommunicationMessageReferenceSummaryV1,
     CommunicationMessageSummaryV1, CommunicationObservedParticipantSummaryV1, CommunicationSummary,
-    CommunicationsClientError, GetCommunicationConversationV1, GetCommunicationSummary,
+    CommunicationsClientError, GetCommunicationConversationV1, GetCommunicationEvidenceV1,
     ListCommunicationAccountsV1, ListCommunicationConversationsV1, ListConversationMessagesV1,
     ListConversationParticipantsV1, ListMessageAttachmentAnchorsV1, ListMessageReferencesV1,
 };
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 
-pub async fn get_communication_summary(
+pub async fn get_communication_evidence(
     persistence: &CommunicationsDurablePersistence,
-    request: GetCommunicationSummary,
+    request: GetCommunicationEvidenceV1,
 ) -> Result<CommunicationSummary, CommunicationsClientError> {
     persistence
         .summary(request.evidence_id)

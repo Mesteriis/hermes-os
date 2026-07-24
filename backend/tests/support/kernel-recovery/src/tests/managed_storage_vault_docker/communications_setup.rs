@@ -5,8 +5,9 @@ use crate::runtime::lifecycle::control::{
 };
 use hermes_blob_client::BlobDataClient;
 use hermes_communications_api::query_wire::{
-    CommunicationsQueryRequestV1, CommunicationsQueryResponseV1, ListAccountsRequestV1,
-    SearchCommunicationsRequestV1, communications_query_request_v1::Operation,
+    CommunicationsQueryRequestV1, CommunicationsQueryResponseV1, GetEvidenceRequestV1,
+    ListAccountsRequestV1, SearchCommunicationsRequestV1,
+    communications_query_request_v1::Operation,
     communications_query_response_v1::Result as QueryResult,
 };
 use hermes_communications_persistence::{
@@ -196,9 +197,25 @@ pub(super) fn assert_communications_query_delivery(
     }
     .encode_to_vec();
     let query = route_communications_query(store, supervisor, 1, &payload);
-    assert!(
-        matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if !accounts.accounts.is_empty())
-    );
+    let Some(QueryResult::ListAccounts(accounts)) = query.result else {
+        panic!("Communications accounts query result");
+    };
+    let evidence_id = accounts
+        .accounts
+        .first()
+        .expect("Communications account projection")
+        .last_evidence_id
+        .clone();
+    let payload = CommunicationsQueryRequestV1 {
+        protocol_major: 1,
+        operation: Some(Operation::GetEvidence(GetEvidenceRequestV1 { evidence_id })),
+    }
+    .encode_to_vec();
+    let evidence = route_communications_query(store, supervisor, 17, &payload);
+    assert!(matches!(
+        evidence.result,
+        Some(QueryResult::GetEvidence(response)) if response.evidence.is_some()
+    ));
 }
 
 pub(super) fn assert_communications_search_query_delivery(

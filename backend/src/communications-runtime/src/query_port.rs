@@ -1,10 +1,10 @@
 //! Generated Communications metadata-query port.
 
 use hermes_communications_api::{
-    CommunicationConversationIdV1, CommunicationMessageIdV1, CommunicationSourceCursorV1,
-    GetCommunicationConversationV1, ListCommunicationAccountsV1, ListCommunicationConversationsV1,
-    ListConversationMessagesV1, ListConversationParticipantsV1, ListMessageAttachmentAnchorsV1,
-    ListMessageReferencesV1,
+    CommunicationConversationIdV1, CommunicationMessageIdV1, CommunicationObservationIdV1,
+    CommunicationSourceCursorV1, GetCommunicationConversationV1, GetCommunicationEvidenceV1,
+    ListCommunicationAccountsV1, ListCommunicationConversationsV1, ListConversationMessagesV1,
+    ListConversationParticipantsV1, ListMessageAttachmentAnchorsV1, ListMessageReferencesV1,
     query_wire::{
         CommunicationsQueryRequestV1, CommunicationsQueryResponseV1,
         communications_query_request_v1::Operation,
@@ -19,9 +19,9 @@ use prost::Message;
 use std::os::unix::net::UnixStream;
 
 use crate::query::{
-    get_communication_conversation, list_communication_accounts, list_communication_conversations,
-    list_conversation_messages, list_conversation_participants, list_message_attachment_anchors,
-    list_message_references,
+    get_communication_conversation, get_communication_evidence, list_communication_accounts,
+    list_communication_conversations, list_conversation_messages, list_conversation_participants,
+    list_message_attachment_anchors, list_message_references,
 };
 use crate::{
     search_access::CommunicationsSearchAccessV1,
@@ -195,6 +195,23 @@ pub async fn handle_query_request_v1(
                     },
                 )
                 .collect(),
+            },
+        ),
+        Operation::GetEvidence(request) => QueryResult::GetEvidence(
+            hermes_communications_api::query_wire::GetEvidenceResponseV1 {
+                evidence: Some(
+                    (&get_communication_evidence(
+                        persistence,
+                        GetCommunicationEvidenceV1 {
+                            evidence_id: CommunicationObservationIdV1::new(id16(
+                                &request.evidence_id,
+                            )?),
+                        },
+                    )
+                    .await
+                    .map_err(|_| CommunicationsQueryPortErrorV1::Unavailable)?)
+                        .into(),
+                ),
             },
         ),
     };

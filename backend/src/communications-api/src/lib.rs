@@ -419,7 +419,7 @@ pub struct CommunicationSearchHitV1 {
     pub matched_token_count: u16,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GetCommunicationSummary {
+pub struct GetCommunicationEvidenceV1 {
     pub evidence_id: CommunicationObservationIdV1,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -34,7 +34,9 @@ pipeline now includes the same versioned owner query descriptor, and its
 platform-level Connect client is distinct from the legacy provider operational
 client. The first clean-room client use case is an owner-local canonical search
 adapter: it accepts transient search text and returns only generated canonical
-search hits.
+search hits. The same generated metadata-query contract now provides canonical
+evidence lookup without a provider cursor, content, Blob locator or custody
+proof.
 
 Depends on:
 
