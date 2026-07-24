@@ -351,20 +351,9 @@ impl<'a> ManagedProviderCredentialClientV2<'a> {
         &mut self,
         dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
         context: &ManagedProviderCredentialContextV1,
-        configuration_instance_id: &str,
-        purpose_id: &str,
-        credential_revision: u64,
-        ttl_seconds: u32,
-        secret_class: SecretClassV1,
+        request: ManagedProviderCredentialRequestV1<'_>,
     ) -> Result<Zeroizing<Vec<u8>>, ManagedProviderCredentialErrorV1> {
         let audience = audience(context)?;
-        let request = ManagedProviderCredentialRequestV1 {
-            configuration_instance_id,
-            purpose_id,
-            credential_revision,
-            ttl_seconds,
-            secret_class,
-        };
         let lease_id = self.issue_action_lease(
             dispatcher,
             context,
@@ -378,7 +367,7 @@ impl<'a> ManagedProviderCredentialClientV2<'a> {
             audience,
             VaultTransportCommandV1::ResolveLease {
                 lease_id,
-                secret_class,
+                secret_class: request.secret_class,
             },
         )
     }

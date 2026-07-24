@@ -1,18 +1,23 @@
 //! Long-lived Telegram process orchestration around the provider runtime.
 
-use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_blob_client::BlobDataClient;
-use hermes_blob_client::request_managed_blob_session;
+use hermes_blob_client::request_managed_blob_session_v2;
 use hermes_communications_ingress::{BodyAdmissionFailureV1, BodyBlobReceiptV1};
 use hermes_runtime_protocol::v1::BlobDataOperationV1;
 use hermes_runtime_protocol::{
-    v1::{
-        ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeClientDeliveryResponseV1,
-        ModuleClientResponseV1,
+    managed_control::{
+        ManagedControlChannelV2, ManagedControlRequestDispatcherV2, ManagedControlTransportErrorV2,
     },
+    v1::{
+        ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlRequestV1,
+        ManagedRuntimeControlResponseV1, ModuleClientResponseV1,
+        managed_runtime_control_request_v1::Operation,
+        managed_runtime_control_response_v1::Result as ControlResult,
+    },
+    validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES,
     validation::module_client::{
         validate_module_client_request_v1, validate_module_client_response_v1,
     },
@@ -242,8 +247,10 @@ pub fn serve_admitted_provider_loop(admitted: TelegramAdmittedRuntime) -> Result
                     16,
                     "telegram-provider-runtime",
                     |intent| {
-                        request_managed_blob_session(
+                        let mut dispatcher = TelegramBusyControlDispatcher;
+                        request_managed_blob_session_v2(
                             &mut control_channel,
+                            &mut dispatcher,
                             "blob.content",
                             BlobDataOperationV1::BlobDataOperationReadRangeV1,
                             &intent.reference_id,
@@ -281,7 +288,7 @@ pub fn serve_admitted_provider_loop(admitted: TelegramAdmittedRuntime) -> Result
 }
 
 fn admit_telegram_plaintext(
-    control_channel: &mut UnixStream,
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
     plaintext: &[u8],
 ) -> Result<BodyBlobReceiptV1, BodyAdmissionFailureV1> {
     if plaintext.is_empty() || plaintext.len() > hermes_telegram_api::MAX_TEXT_BYTES {
@@ -294,10 +301,13 @@ fn admit_telegram_plaintext(
     }
     let sha256: [u8; 32] = Sha256::digest(plaintext).into();
     control_channel
+        .inner_mut()
         .set_nonblocking(false)
         .map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
-    let session = request_managed_blob_session(
+    let mut dispatcher = TelegramBusyControlDispatcher;
+    let session = request_managed_blob_session_v2(
         control_channel,
+        &mut dispatcher,
         "blob.content",
         BlobDataOperationV1::BlobDataOperationWriteV1,
         &reference_id,
@@ -305,7 +315,7 @@ fn admit_telegram_plaintext(
         1,
         Some(&sha256),
     );
-    let restored = control_channel.set_nonblocking(true);
+    let restored = control_channel.inner_mut().set_nonblocking(true);
     let session = session.map_err(|_| BodyAdmissionFailureV1::PolicyRejected)?;
     restored.map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
     let custody_transfer_source_proof = session.custody_transfer_source_proof;
@@ -330,22 +340,50 @@ fn hex_reference_id(reference_id: &[u8; 16]) -> String {
 }
 
 fn handle_client_delivery(
-    channel: &mut UnixStream,
+    channel: &mut ManagedControlChannelV2<UnixStream>,
     process: &mut TelegramProcessLoop,
     durable: &TelegramDurablePersistence,
     executor: &tokio::runtime::Runtime,
 ) -> Result<(), String> {
-    let Some(frame) = peek_complete_frame(channel)? else {
+    let Some((correlation_id, control_request)) = channel
+        .try_receive_request()
+        .map_err(|_| "Telegram runtime control channel is unavailable".to_owned())?
+    else {
         return Ok(());
     };
-    let request = ManagedRuntimeClientDeliveryRequestV1::decode(frame.as_slice())
-        .map_err(|_| "Telegram runtime client delivery is invalid".to_owned())?
-        .request
-        .ok_or_else(|| "Telegram runtime client delivery is invalid".to_owned())?;
-    validate_module_client_request_v1(&request)
-        .map_err(|_| "Telegram runtime client delivery is invalid".to_owned())?;
-    if read_frame(channel)? != frame {
-        return Err("Telegram runtime client delivery is invalid".to_owned());
+    let request = match control_request.operation {
+        Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+            Some(request) => request,
+            None => {
+                write_control_error(
+                    channel,
+                    correlation_id,
+                    "managed_runtime_control_invalid_client_delivery",
+                )?;
+                return Ok(());
+            }
+        },
+        _ => {
+            write_control_error(
+                channel,
+                correlation_id,
+                "managed_runtime_control_unexpected_request",
+            )?;
+            return Ok(());
+        }
+    };
+    if validate_module_client_request_v1(&request).is_err() {
+        write_client_delivery_response(
+            channel,
+            correlation_id,
+            ModuleClientResponseV1 {
+                protocol_major: 1,
+                request_id: request.request_id,
+                response_payload: Vec::new(),
+                error_code: "REJECTED".to_owned(),
+            },
+        )?;
+        return Ok(());
     }
     let response = if let Some(runtime) = process.composition_mut().runtime_mut() {
         authorize_media_for_request(channel, runtime, &request)?;
@@ -368,17 +406,11 @@ fn handle_client_delivery(
     };
     validate_module_client_response_v1(&response)
         .map_err(|_| "Telegram runtime client response is invalid".to_owned())?;
-    write_frame(
-        channel,
-        &ManagedRuntimeClientDeliveryResponseV1 {
-            response: Some(response),
-        }
-        .encode_to_vec(),
-    )
+    write_client_delivery_response(channel, correlation_id, response)
 }
 
 fn authorize_media_for_request<T: hermes_telegram_tdlib::TdlibTransport>(
-    channel: &mut UnixStream,
+    channel: &mut ManagedControlChannelV2<UnixStream>,
     runtime: &mut crate::TelegramRuntime<T>,
     request: &hermes_runtime_protocol::v1::ModuleClientRequestV1,
 ) -> Result<(), String> {
@@ -389,8 +421,10 @@ fn authorize_media_for_request<T: hermes_telegram_tdlib::TdlibTransport>(
     let hermes_telegram_api::TelegramProviderCommand::SendMedia(media) = command else {
         return Ok(());
     };
-    let session = request_managed_blob_session(
+    let mut dispatcher = TelegramBusyControlDispatcher;
+    let session = request_managed_blob_session_v2(
         channel,
+        &mut dispatcher,
         "blob.content",
         BlobDataOperationV1::BlobDataOperationReadRangeV1,
         &media.blob.reference_id,
@@ -404,111 +438,80 @@ fn authorize_media_for_request<T: hermes_telegram_tdlib::TdlibTransport>(
         .map_err(|_| "Telegram Blob session was rejected".to_owned())
 }
 
-fn peek_complete_frame(channel: &UnixStream) -> Result<Option<Vec<u8>>, String> {
-    let mut header = [0_u8; 5];
-    let length = unsafe {
-        libc::recv(
-            channel.as_raw_fd(),
-            header.as_mut_ptr().cast(),
-            header.len(),
-            libc::MSG_PEEK,
-        )
-    };
-    if length < 0 {
-        return if std::io::Error::last_os_error().kind() == std::io::ErrorKind::WouldBlock {
-            Ok(None)
-        } else {
-            Err("Telegram runtime channel is unavailable".to_owned())
+struct TelegramBusyControlDispatcher;
+
+impl ManagedControlRequestDispatcherV2<UnixStream> for TelegramBusyControlDispatcher {
+    fn dispatch_request(
+        &mut self,
+        channel: &mut ManagedControlChannelV2<UnixStream>,
+        correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+        request: ManagedRuntimeControlRequestV1,
+    ) -> Result<(), ManagedControlTransportErrorV2> {
+        let response = match request.operation {
+            Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+                Some(request) if validate_module_client_request_v1(&request).is_ok() => {
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::ClientDelivery(
+                            ManagedRuntimeClientDeliveryResponseV1 {
+                                response: Some(ModuleClientResponseV1 {
+                                    protocol_major: 1,
+                                    request_id: request.request_id,
+                                    response_payload: Vec::new(),
+                                    error_code: "RUNTIME_BUSY".to_owned(),
+                                }),
+                            },
+                        )),
+                        error_code: String::new(),
+                    }
+                }
+                _ => ManagedRuntimeControlResponseV1 {
+                    result: None,
+                    error_code: "managed_runtime_control_invalid_client_delivery".to_owned(),
+                },
+            },
+            _ => ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: "managed_runtime_control_unexpected_request".to_owned(),
+            },
         };
+        channel.write_response(correlation_id, response)
     }
-    if length == 0 {
-        return Err("Telegram runtime channel is unavailable".to_owned());
-    }
-    let (payload_length, prefix_length) = decode_peeked_length(
-        &header[..usize::try_from(length)
-            .map_err(|_| "Telegram runtime frame is invalid".to_owned())?],
-    )?;
-    if payload_length == 0 || payload_length > 512 * 1024 {
-        return Err("Telegram runtime frame is invalid".to_owned());
-    }
-    let mut framed = vec![0_u8; prefix_length + payload_length];
-    let received = unsafe {
-        libc::recv(
-            channel.as_raw_fd(),
-            framed.as_mut_ptr().cast(),
-            framed.len(),
-            libc::MSG_PEEK,
+}
+
+fn write_client_delivery_response(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+    response: ModuleClientResponseV1,
+) -> Result<(), String> {
+    channel
+        .write_response(
+            correlation_id,
+            ManagedRuntimeControlResponseV1 {
+                result: Some(ControlResult::ClientDelivery(
+                    ManagedRuntimeClientDeliveryResponseV1 {
+                        response: Some(response),
+                    },
+                )),
+                error_code: String::new(),
+            },
         )
-    };
-    if received < 0 {
-        return Err("Telegram runtime channel is unavailable".to_owned());
-    }
-    if usize::try_from(received).map_err(|_| "Telegram runtime frame is invalid".to_owned())?
-        < framed.len()
-    {
-        return Ok(None);
-    }
-    Ok(Some(framed[prefix_length..].to_vec()))
+        .map_err(|_| "Telegram runtime control response failed".to_owned())
 }
 
-fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, String> {
-    let (length, _) = read_length(channel)?;
-    if length == 0 || length > 512 * 1024 {
-        return Err("Telegram runtime frame is invalid".to_owned());
-    }
-    let mut bytes = vec![0_u8; length];
-    use std::io::Read;
+fn write_control_error(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+    error_code: &str,
+) -> Result<(), String> {
     channel
-        .read_exact(&mut bytes)
-        .map_err(|_| "Telegram runtime channel is unavailable".to_owned())?;
-    Ok(bytes)
-}
-
-fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), String> {
-    use std::io::Write;
-    if bytes.is_empty() || bytes.len() > 512 * 1024 {
-        return Err("Telegram runtime frame is invalid".to_owned());
-    }
-    let mut length =
-        u32::try_from(bytes.len()).map_err(|_| "Telegram runtime frame is invalid".to_owned())?;
-    let mut prefix = Vec::new();
-    while length >= 0x80 {
-        prefix.push((length as u8 & 0x7f) | 0x80);
-        length >>= 7;
-    }
-    prefix.push(length as u8);
-    channel
-        .write_all(&prefix)
-        .and_then(|_| channel.write_all(bytes))
-        .and_then(|_| channel.flush())
-        .map_err(|_| "Telegram runtime channel is unavailable".to_owned())
-}
-
-fn read_length(channel: &mut UnixStream) -> Result<(usize, usize), String> {
-    use std::io::Read;
-    let mut value = 0_usize;
-    for index in 0..5 {
-        let mut byte = [0_u8; 1];
-        channel
-            .read_exact(&mut byte)
-            .map_err(|_| "Telegram runtime channel is unavailable".to_owned())?;
-        value |= usize::from(byte[0] & 0x7f) << (index * 7);
-        if byte[0] & 0x80 == 0 {
-            return Ok((value, index + 1));
-        }
-    }
-    Err("Telegram runtime frame is invalid".to_owned())
-}
-
-fn decode_peeked_length(bytes: &[u8]) -> Result<(usize, usize), String> {
-    let mut value = 0_usize;
-    for (index, byte) in bytes.iter().copied().enumerate() {
-        value |= usize::from(byte & 0x7f) << (index * 7);
-        if byte & 0x80 == 0 {
-            return Ok((value, index + 1));
-        }
-    }
-    Err("Telegram runtime frame is invalid".to_owned())
+        .write_response(
+            correlation_id,
+            ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: error_code.to_owned(),
+            },
+        )
+        .map_err(|_| "Telegram runtime control response failed".to_owned())
 }
 
 fn authorization_status(
@@ -540,5 +543,94 @@ fn authorization_status(
                 password_hint,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod control_dispatch_tests {
+    use std::os::unix::net::UnixStream;
+    use std::thread;
+
+    use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
+    use hermes_runtime_protocol::v1::{
+        ContractReferenceV1, ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeControlAckV1,
+        ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
+        ManagedRuntimeReadyRequestV1, ModuleClientRequestV1,
+        managed_runtime_control_frame_v2::Frame, managed_runtime_control_request_v1::Operation,
+        managed_runtime_control_response_v1::Result as ControlResult,
+    };
+    use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
+
+    use super::TelegramBusyControlDispatcher;
+
+    #[test]
+    fn nested_client_delivery_gets_a_correlated_busy_response_without_stealing_platform_reply() {
+        let (runtime, kernel) = UnixStream::pair().expect("control pair");
+        let kernel = thread::spawn(move || {
+            let mut channel = ManagedControlChannelV2::new(kernel);
+            let (platform_id, _) = channel.receive_request().expect("platform request");
+            channel
+                .write_request(
+                    [7; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+                    ManagedRuntimeControlRequestV1 {
+                        operation: Some(Operation::ClientDelivery(
+                            ManagedRuntimeClientDeliveryRequestV1 {
+                                request: Some(ModuleClientRequestV1 {
+                                    protocol_major: 1,
+                                    module_id: "telegram".to_owned(),
+                                    owner_id: "telegram".to_owned(),
+                                    contract: Some(ContractReferenceV1 {
+                                        owner: "telegram".to_owned(),
+                                        name: "query".to_owned(),
+                                        major: 1,
+                                        revision: 1,
+                                        schema_sha256: vec![1; 32],
+                                    }),
+                                    request_id: 41,
+                                    request_payload: vec![1],
+                                }),
+                            },
+                        )),
+                    },
+                )
+                .expect("client delivery");
+            let nested = channel.read_frame().expect("busy response");
+            assert_eq!(
+                nested.correlation_id,
+                vec![7; MANAGED_CONTROL_CORRELATION_ID_BYTES]
+            );
+            let Some(Frame::Response(response)) = nested.frame else {
+                panic!("nested response");
+            };
+            let Some(ControlResult::ClientDelivery(delivery)) = response.result else {
+                panic!("client delivery response");
+            };
+            assert_eq!(
+                delivery.response.expect("module response").error_code,
+                "RUNTIME_BUSY"
+            );
+            channel
+                .write_response(
+                    platform_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::Ack(ManagedRuntimeControlAckV1 {})),
+                        error_code: String::new(),
+                    },
+                )
+                .expect("platform response");
+        });
+
+        let mut channel = ManagedControlChannelV2::new(runtime);
+        let mut dispatcher = TelegramBusyControlDispatcher;
+        let response = channel
+            .request_next_with_dispatch(
+                ManagedRuntimeControlRequestV1 {
+                    operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1::default())),
+                },
+                &mut dispatcher,
+            )
+            .expect("correlated platform response");
+        assert!(matches!(response.result, Some(ControlResult::Ack(_))));
+        kernel.join().expect("kernel join");
     }
 }

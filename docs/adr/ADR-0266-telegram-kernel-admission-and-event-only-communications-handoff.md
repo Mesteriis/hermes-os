@@ -12,7 +12,11 @@ canonical non-secret settings schema реализованы. Telegram persistenc
 `hermes-telegram-assembly` materializes exact descriptor/settings/storage
 artifacts и unsigned fragment для generic signed distribution compiler. Эти
 units не входят в Communications inventory и не дают runtime права сами по
-себе. Managed-launch и live end-to-end conformance ещё не реализованы.
+себе. Telegram runtime теперь использует один correlated V2 control frame pump
+для descriptor/ready, Storage/Vault, provider credential, Event, Blob и
+client-delivery operations, совместимый с подписанным protocol-major `2`.
+Managed-launch generation/revoke и live end-to-end conformance ещё не
+реализованы.
 
 Уточняет:
 
