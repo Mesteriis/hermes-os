@@ -15,7 +15,9 @@ use async_std::task;
 use futures_util::TryStreamExt;
 use futures_util::io::{AsyncRead, AsyncWrite};
 use hermes_mail_api::{MAX_PLAIN_TEXT_BYTES, MAX_WINDOW, MAX_WINDOWS, WINDOW_DEADLINE_SECONDS};
-use hermes_mail_core::rfc822::{AttachmentDispositionV1, attachment_metadata};
+use hermes_mail_core::rfc822::{
+    AttachmentDispositionV1, attachment_metadata, extract_attachment_part,
+};
 
 pub const PACKAGE: &str = "hermes-mail-imap";
 
@@ -58,13 +60,35 @@ pub enum ImapAttachmentDisposition {
     Inline,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ImapAttachment {
     pub part_id: u16,
     pub filename: Option<String>,
     pub media_type: String,
     pub declared_bytes: u64,
     pub disposition: ImapAttachmentDisposition,
+    bytes: Vec<u8>,
+}
+
+impl ImapAttachment {
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+impl Debug for ImapAttachment {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ImapAttachment")
+            .field("part_id", &self.part_id)
+            .field("filename", &self.filename)
+            .field("media_type", &self.media_type)
+            .field("declared_bytes", &self.declared_bytes)
+            .field("disposition", &self.disposition)
+            .field("byte_length", &self.bytes.len())
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -505,6 +529,7 @@ mod tests {
                 media_type: "application/pdf".to_owned(),
                 declared_bytes: 5,
                 disposition: ImapAttachmentDisposition::Attachment,
+                bytes: b"hello".to_vec(),
             }],
         );
     }
@@ -581,15 +606,23 @@ fn split_subject_and_body(raw_message: &str) -> (String, String) {
 fn decode_message_attachments(raw_message: &[u8]) -> Vec<ImapAttachment> {
     attachment_metadata(raw_message)
         .into_iter()
-        .map(|attachment| ImapAttachment {
-            part_id: attachment.part_id,
-            filename: attachment.filename,
-            media_type: attachment.media_type,
-            declared_bytes: attachment.declared_bytes,
-            disposition: match attachment.disposition {
-                AttachmentDispositionV1::Attachment => ImapAttachmentDisposition::Attachment,
-                AttachmentDispositionV1::Inline => ImapAttachmentDisposition::Inline,
-            },
+        .filter_map(|attachment| {
+            let bytes = extract_attachment_part(raw_message, attachment.part_id).ok()?;
+            (u64::try_from(bytes.len()).ok()? == attachment.declared_bytes).then_some(
+                ImapAttachment {
+                    part_id: attachment.part_id,
+                    filename: attachment.filename,
+                    media_type: attachment.media_type,
+                    declared_bytes: attachment.declared_bytes,
+                    disposition: match attachment.disposition {
+                        AttachmentDispositionV1::Attachment => {
+                            ImapAttachmentDisposition::Attachment
+                        }
+                        AttachmentDispositionV1::Inline => ImapAttachmentDisposition::Inline,
+                    },
+                    bytes,
+                },
+            )
         })
         .collect()
 }

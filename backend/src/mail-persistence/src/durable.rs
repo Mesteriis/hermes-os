@@ -117,6 +117,14 @@ pub enum MailAttachmentAnchorMappingOutcomeV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MailAttachmentAnchorMappingV1 {
+    pub source_observation_id: [u8; 16],
+    pub attachment_anchor_id: [u8; 16],
+    pub media_cursor_sha256: [u8; 32],
+    pub observed_at_unix_seconds: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(i16)]
 pub enum MailSmtpDeliveryAttemptStateV1 {
     OutcomeUnknown = 1,
@@ -285,6 +293,36 @@ impl MailDurablePersistence {
             .await
             .map_err(|_| MailDurablePersistenceError::Database)?;
         Ok(MailAttachmentAnchorMappingOutcomeV1::Applied)
+    }
+
+    pub async fn attachment_anchor_mapping(
+        &self,
+        source_observation_id: [u8; 16],
+    ) -> Result<Option<MailAttachmentAnchorMappingV1>, MailDurablePersistenceError> {
+        sqlx::query("SELECT attachment_anchor_id, media_cursor_sha256, observed_at_unix_seconds FROM mail_attachment_anchor_mappings WHERE source_observation_id = $1")
+            .bind(source_observation_id.as_slice())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?
+            .map(|row| {
+                let attachment_anchor_id: Vec<u8> = row.try_get("attachment_anchor_id").map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+                let media_cursor_sha256: Vec<u8> = row.try_get("media_cursor_sha256").map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+                let observed_at_unix_seconds: i64 = row.try_get("observed_at_unix_seconds").map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+                let attachment_anchor_id: [u8; 16] = attachment_anchor_id.as_slice().try_into().map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+                let media_cursor_sha256: [u8; 32] = media_cursor_sha256.as_slice().try_into().map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+                if attachment_anchor_id.iter().all(|byte| *byte == 0)
+                    || media_cursor_sha256.iter().all(|byte| *byte == 0)
+                {
+                    return Err(MailDurablePersistenceError::InvalidRow);
+                }
+                Ok(MailAttachmentAnchorMappingV1 {
+                    source_observation_id,
+                    attachment_anchor_id,
+                    media_cursor_sha256,
+                    observed_at_unix_seconds,
+                })
+            })
+            .transpose()
     }
 
     pub async fn gmail_sync_progress(
