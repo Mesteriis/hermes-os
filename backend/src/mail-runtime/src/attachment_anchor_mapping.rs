@@ -16,7 +16,8 @@ use hermes_events_protocol::{
     validation::envelope::decode_envelope_v1,
 };
 use hermes_mail_persistence::{
-    MailAttachmentAnchorMappingOutcomeV1, MailDurablePersistence, MailDurablePersistenceError,
+    MailAttachmentAnchorMappingOutcomeV1, MailAttachmentAnchorMappingV1, MailDurablePersistence,
+    MailDurablePersistenceError,
 };
 use hermes_runtime_protocol::v1::ContractReferenceV1;
 use prost::Message;
@@ -53,11 +54,13 @@ pub async fn map_attachment_anchor_recorded_v1(
     durable
         .persist_attachment_anchor_mapping(
             &handoff_record,
-            source_observation_id,
-            id16(&payload.attachment_anchor_id)?,
-            correlation_id,
-            sha256(&payload.media_cursor_sha256)?,
-            payload.observed_at_unix_seconds,
+            &MailAttachmentAnchorMappingV1 {
+                source_observation_id,
+                attachment_anchor_id: id16(&payload.attachment_anchor_id)?,
+                correlation_id,
+                media_cursor_sha256: sha256(&payload.media_cursor_sha256)?,
+                observed_at_unix_seconds: payload.observed_at_unix_seconds,
+            },
             consumed_at_unix_seconds,
         )
         .await
