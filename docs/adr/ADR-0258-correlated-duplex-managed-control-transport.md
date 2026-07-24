@@ -2,12 +2,12 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: В работе. Existing `ManagedRuntimeControl*V1` framing
-does not correlate simultaneous opposite-direction requests and must not be
-used as the final multiplexed runtime transport. The V1 Vault-route collision
-is corrected in the current slice; the correlated transport, its atomic
-managed-runtime migration and conformance remain required before this ADR may
-be considered implemented.
+Состояние реализации: В работе. Correlated frame/channel, Kernel V2 pump,
+Communications runtime, Blob/owner-key clients и provider-credential resolve
+client реализованы. Telegram, Mail, Zulip и остальные выбранные managed
+runtimes ещё должны быть переведены атомарно с их signed descriptors и пройти
+generation/revoke/concurrency conformance; до этого ADR не считается полностью
+реализованным.
 
 Зависит от:
 

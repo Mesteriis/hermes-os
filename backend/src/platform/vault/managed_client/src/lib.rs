@@ -5,6 +5,9 @@ pub mod owner_derived_key;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 
+use hermes_runtime_protocol::managed_control::{
+    ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
+};
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeProviderCredentialRequestV1, ManagedRuntimeVaultRouteRequestV1,
@@ -52,6 +55,15 @@ pub struct ManagedProviderCredentialRequestV1<'a> {
 
 pub struct ManagedProviderCredentialClientV1 {
     channel: UnixStream,
+}
+
+/// Provider-credential access over the correlated managed-control transport.
+///
+/// The caller retains the single control-channel frame pump and supplies the
+/// owner-local dispatcher used while a Vault operation is awaiting its
+/// correlated response.
+pub struct ManagedProviderCredentialClientV2<'a> {
+    channel: &'a mut ManagedControlChannelV2<UnixStream>,
 }
 
 impl ManagedProviderCredentialClientV1 {
@@ -329,6 +341,221 @@ impl ManagedProviderCredentialClientV1 {
     }
 }
 
+impl<'a> ManagedProviderCredentialClientV2<'a> {
+    #[must_use]
+    pub fn new(channel: &'a mut ManagedControlChannelV2<UnixStream>) -> Self {
+        Self { channel }
+    }
+
+    pub fn resolve(
+        &mut self,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+        context: &ManagedProviderCredentialContextV1,
+        configuration_instance_id: &str,
+        purpose_id: &str,
+        credential_revision: u64,
+        ttl_seconds: u32,
+        secret_class: SecretClassV1,
+    ) -> Result<Zeroizing<Vec<u8>>, ManagedProviderCredentialErrorV1> {
+        let audience = audience(context)?;
+        let request = ManagedProviderCredentialRequestV1 {
+            configuration_instance_id,
+            purpose_id,
+            credential_revision,
+            ttl_seconds,
+            secret_class,
+        };
+        let lease_id = self.issue_action_lease(
+            dispatcher,
+            context,
+            audience.clone(),
+            &request,
+            VaultActionV1::Resolve,
+        )?;
+        self.execute_command(
+            dispatcher,
+            context,
+            audience,
+            VaultTransportCommandV1::ResolveLease {
+                lease_id,
+                secret_class,
+            },
+        )
+    }
+
+    fn issue_action_lease(
+        &mut self,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+        context: &ManagedProviderCredentialContextV1,
+        audience: LeaseAudienceV1,
+        request: &ManagedProviderCredentialRequestV1<'_>,
+        action: VaultActionV1,
+    ) -> Result<LeaseIdV1, ManagedProviderCredentialErrorV1> {
+        if request.credential_revision == 0 || request.ttl_seconds == 0 || request.ttl_seconds > 600
+        {
+            return Err(ManagedProviderCredentialErrorV1::InvalidContext);
+        }
+        let recipient = VaultResponseRecipientV1::generate();
+        let request_id = random_request_id()?;
+        let delivery = self.issue_lease(
+            dispatcher,
+            request_id,
+            request,
+            action,
+            recipient.public_key().as_bytes(),
+        )?;
+        let issue = issue_request(context, audience.clone(), request, action)?;
+        let command = VaultTransportCommandV1::IssueLease { request: issue };
+        let binding = binding(
+            &audience,
+            context.vault_runtime_generation,
+            request_id,
+            &command,
+            &recipient,
+            VaultTransportDirectionV1::FromVault,
+        )?;
+        let frame = VaultCiphertextFrameV1::from_parts(
+            delivery.encapped_key,
+            delivery.ciphertext,
+            delivery.tag,
+        )
+        .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
+        let lease_id = recipient
+            .open(&binding, &frame)
+            .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
+        String::from_utf8(lease_id.to_vec())
+            .ok()
+            .and_then(|value| LeaseIdV1::new(value).ok())
+            .ok_or(ManagedProviderCredentialErrorV1::Rejected)
+    }
+
+    fn issue_lease(
+        &mut self,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+        request_id: [u8; 16],
+        request: &ManagedProviderCredentialRequestV1<'_>,
+        action: VaultActionV1,
+        recipient_public_key_x25519: &[u8; 32],
+    ) -> Result<
+        hermes_runtime_protocol::v1::ManagedRuntimeProviderCredentialDeliveryV1,
+        ManagedProviderCredentialErrorV1,
+    > {
+        let response = self
+            .channel
+            .request_next_with_dispatch(
+                ManagedRuntimeControlRequestV1 {
+                    operation: Some(Operation::IssueProviderCredential(
+                        ManagedRuntimeProviderCredentialRequestV1 {
+                            request_id: request_id.to_vec(),
+                            purpose_id: request.purpose_id.to_owned(),
+                            credential_revision: request.credential_revision,
+                            ttl_seconds: request.ttl_seconds,
+                            secret_class: request.secret_class.code() as u32,
+                            recipient_public_key_x25519: recipient_public_key_x25519.to_vec(),
+                            configuration_instance_id: request.configuration_instance_id.to_owned(),
+                            action: action.code() as u32,
+                        },
+                    )),
+                },
+                dispatcher,
+            )
+            .map_err(|_| ManagedProviderCredentialErrorV1::Unavailable)?;
+        match response.result {
+            Some(ControlResult::ProviderCredentialDelivery(delivery))
+                if response.error_code.is_empty() =>
+            {
+                Ok(delivery)
+            }
+            _ => Err(ManagedProviderCredentialErrorV1::Rejected),
+        }
+    }
+
+    fn execute_command(
+        &mut self,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+        context: &ManagedProviderCredentialContextV1,
+        audience: LeaseAudienceV1,
+        command: VaultTransportCommandV1,
+    ) -> Result<Zeroizing<Vec<u8>>, ManagedProviderCredentialErrorV1> {
+        let request_id = random_request_id()?;
+        let recipient = VaultResponseRecipientV1::generate();
+        let request_binding = binding(
+            &audience,
+            context.vault_runtime_generation,
+            request_id,
+            &command,
+            &recipient,
+            VaultTransportDirectionV1::ToVault,
+        )?;
+        let response_binding = binding(
+            &audience,
+            context.vault_runtime_generation,
+            request_id,
+            &command,
+            &recipient,
+            VaultTransportDirectionV1::FromVault,
+        )?;
+        let key = VaultTransportPublicKey::from_bytes(context.vault_public_key_x25519)
+            .map_err(|_| ManagedProviderCredentialErrorV1::InvalidContext)?;
+        let frame = seal(&key, &request_binding, &command.encode())
+            .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
+        let route = VaultCiphertextRouteV1 {
+            major: 1,
+            registration_id: audience.module_registration_id().to_owned(),
+            runtime_instance_id: audience.runtime_instance_id().to_owned(),
+            vault_runtime_generation: context.vault_runtime_generation,
+            grant_epoch: audience.grant_epoch(),
+            request_id: request_id.to_vec(),
+            operation_digest_sha256: command.operation_digest().to_vec(),
+            direction: VaultCiphertextRouteDirectionV1::ToVault as i32,
+            hpke_encapped_key: frame.encapped_key().to_vec(),
+            ciphertext: frame.ciphertext().to_vec(),
+            hpke_authentication_tag: frame.tag().to_vec(),
+            response_recipient_hpke_public_key_x25519: recipient.public_key().as_bytes().to_vec(),
+            kernel_instance_id: String::new(),
+            kernel_authorization_signature_raw: Vec::new(),
+            caller_runtime_generation: audience.runtime_generation(),
+            storage_role_epoch: 0,
+            storage_credential_lease_revision: 0,
+            storage_runtime_principal: String::new(),
+            storage_owner_id: String::new(),
+        };
+        let response = self.route(dispatcher, route.clone())?;
+        let frame = valid_response(&route, response)?;
+        recipient
+            .open(&response_binding, &frame)
+            .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
+    }
+
+    fn route(
+        &mut self,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+        route: VaultCiphertextRouteV1,
+    ) -> Result<VaultCiphertextResponseV1, ManagedProviderCredentialErrorV1> {
+        let response = self
+            .channel
+            .request_next_with_dispatch(
+                ManagedRuntimeControlRequestV1 {
+                    operation: Some(Operation::RouteVaultCiphertext(
+                        ManagedRuntimeVaultRouteRequestV1 { route: Some(route) },
+                    )),
+                },
+                dispatcher,
+            )
+            .map_err(|_| ManagedProviderCredentialErrorV1::Unavailable)?
+            .result
+            .and_then(|result| match result {
+                ControlResult::VaultRoute(response) => Some(response),
+                _ => None,
+            })
+            .ok_or(ManagedProviderCredentialErrorV1::Rejected)?;
+        response
+            .response
+            .filter(|_| response.error_code.is_empty())
+            .ok_or(ManagedProviderCredentialErrorV1::Rejected)
+    }
+}
+
 fn audience(
     context: &ManagedProviderCredentialContextV1,
 ) -> Result<LeaseAudienceV1, ManagedProviderCredentialErrorV1> {
@@ -464,4 +691,86 @@ pub(crate) fn random_request_id() -> Result<[u8; 16], ManagedProviderCredentialE
     let mut request_id = [0_u8; 16];
     getrandom::fill(&mut request_id).map_err(|_| ManagedProviderCredentialErrorV1::Unavailable)?;
     Ok(request_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::net::UnixStream;
+    use std::thread;
+
+    use hermes_runtime_protocol::managed_control::{
+        ManagedControlChannelV2, RejectManagedControlRequestsV2,
+    };
+    use hermes_runtime_protocol::v1::{
+        ManagedRuntimeControlResponseV1, ManagedRuntimeProviderCredentialDeliveryV1,
+        ManagedRuntimeReadyRequestV1, managed_runtime_control_frame_v2::Frame,
+        managed_runtime_control_request_v1::Operation,
+        managed_runtime_control_response_v1::Result as ControlResult,
+    };
+    use hermes_runtime_protocol::validation::managed_control::{
+        MANAGED_CONTROL_CORRELATION_ID_BYTES, MANAGED_CONTROL_TRANSPORT_MAJOR_V2,
+    };
+    use hermes_vault_protocol::{SecretClassV1, VaultActionV1};
+
+    use super::{ManagedProviderCredentialClientV2, ManagedProviderCredentialRequestV1};
+
+    #[test]
+    fn correlated_provider_credential_request_dispatches_an_opposite_direction_request() {
+        let (client, server) = UnixStream::pair().expect("control pair");
+        let server = thread::spawn(move || {
+            let mut channel = ManagedControlChannelV2::new(server);
+            let (provider_request_id, provider_request) =
+                channel.receive_request().expect("provider request");
+            assert!(matches!(
+                provider_request.operation,
+                Some(Operation::IssueProviderCredential(_))
+            ));
+            channel
+                .write_request(
+                    [9; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+                    hermes_runtime_protocol::v1::ManagedRuntimeControlRequestV1 {
+                        operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1::default())),
+                    },
+                )
+                .expect("opposite request");
+            let response = channel.read_frame().expect("opposite response");
+            assert_eq!(response.transport_major, MANAGED_CONTROL_TRANSPORT_MAJOR_V2);
+            assert_eq!(
+                response.correlation_id,
+                vec![9; MANAGED_CONTROL_CORRELATION_ID_BYTES]
+            );
+            assert!(matches!(response.frame, Some(Frame::Response(_))));
+            channel
+                .write_response(
+                    provider_request_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::ProviderCredentialDelivery(
+                            ManagedRuntimeProviderCredentialDeliveryV1::default(),
+                        )),
+                        error_code: String::new(),
+                    },
+                )
+                .expect("provider response");
+        });
+
+        let mut channel = ManagedControlChannelV2::new(client);
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let mut client = ManagedProviderCredentialClientV2::new(&mut channel);
+        client
+            .issue_lease(
+                &mut dispatcher,
+                [1; 16],
+                &ManagedProviderCredentialRequestV1 {
+                    configuration_instance_id: "telegram-account",
+                    purpose_id: "telegram.api_hash",
+                    credential_revision: 1,
+                    ttl_seconds: 60,
+                    secret_class: SecretClassV1::ProviderCredential,
+                },
+                VaultActionV1::Resolve,
+                &[7; 32],
+            )
+            .expect("correlated provider delivery");
+        server.join().expect("server join");
+    }
 }
