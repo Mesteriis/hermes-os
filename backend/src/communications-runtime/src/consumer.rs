@@ -30,7 +30,10 @@ use hermes_events_protocol::{
 use prost::Message;
 
 use crate::{
-    canonical_outbox::{CanonicalEventContextV1, build_evidence_recorded_outbox_v1},
+    canonical_outbox::{
+        CanonicalEventContextV1, build_attachment_anchor_recorded_outbox_v1,
+        build_evidence_recorded_outbox_v1,
+    },
     search_job::derived_index_work_from_decision_v1,
 };
 
@@ -96,6 +99,19 @@ pub async fn consume_communication_observation_durable_v1(
     let canonical_outbox_record =
         build_evidence_recorded_outbox_v1(&summary, causation_message_id, canonical_event_context)
             .map_err(|_| CommunicationsEventConsumeErrorV1::DomainRejected)?;
+    let attachment_anchor_outbox_record = projection
+        .attachment_anchor
+        .as_ref()
+        .map(|anchor| {
+            build_attachment_anchor_recorded_outbox_v1(
+                anchor,
+                summary.observation_id.bytes(),
+                causation_message_id,
+                canonical_event_context,
+            )
+        })
+        .transpose()
+        .map_err(|_| CommunicationsEventConsumeErrorV1::DomainRejected)?;
     let derived_index_work = derived_index_work_from_decision_v1(
         decide_search_index_v1(&projection, COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1),
         canonical_event_context.recorded_at_unix_seconds,
@@ -126,6 +142,7 @@ pub async fn consume_communication_observation_durable_v1(
                 derived_index_job,
                 derived_index_failure,
                 canonical_outbox_record: &canonical_outbox_record,
+                attachment_anchor_outbox_record: attachment_anchor_outbox_record.as_ref(),
                 created_at_unix_seconds: canonical_event_context.recorded_at_unix_seconds,
             },
         )

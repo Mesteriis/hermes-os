@@ -52,6 +52,7 @@ pub enum CommunicationsPersistenceError {
     InboxHashConflict,
     InvalidDerivedIndexJob,
     InvalidCustodyTransfer,
+    InvalidAttachmentAnchorOutbox,
     MissingCanonicalMessage,
     StorageUnavailable,
     InvalidRow,

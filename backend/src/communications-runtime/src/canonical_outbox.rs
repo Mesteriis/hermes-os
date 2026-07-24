@@ -2,9 +2,11 @@
 
 use hermes_communications_api::{
     AttachmentSafetyStateV1, AttachmentSafetyTransitionDecisionV1,
-    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
+    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_ANCHOR_SCHEMA_SHA256,
+    COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256, CanonicalAttachmentAnchorProjectionV1,
     CanonicalCommunicationEvidenceKindV1, CommunicationBodyStateV1, CommunicationDirectionV1,
     CommunicationProviderProvenanceV1, CommunicationSummary,
+    anchor_wire::CommunicationAttachmentAnchorRecordedV1,
     attachment_wire::AttachmentSafetyStateChangedV1, wire::CommunicationEvidenceRecordedV1,
 };
 use hermes_events_protocol::{
@@ -196,6 +198,78 @@ pub fn build_attachment_safety_state_changed_outbox_v1(
         .map_err(|_| CanonicalOutboxBuildErrorV1::InvalidEnvelope)
 }
 
+pub fn build_attachment_anchor_recorded_outbox_v1(
+    anchor: &CanonicalAttachmentAnchorProjectionV1,
+    source_observation_id: [u8; 16],
+    causation_message_id: [u8; 16],
+    context: &CanonicalEventContextV1,
+) -> Result<OutboxRecordV1, CanonicalOutboxBuildErrorV1> {
+    if !valid_context(context) {
+        return Err(CanonicalOutboxBuildErrorV1::InvalidContext);
+    }
+    let message_id = identifier(
+        b"hermes.communications.attachment-anchor-recorded.v1\0",
+        anchor.attachment_anchor_id.bytes(),
+    );
+    let recorded_at = Timestamp {
+        seconds: context.recorded_at_unix_seconds,
+        nanos: context.recorded_at_nanos,
+    };
+    let occurred_at = Timestamp {
+        seconds: anchor.observed_at_unix_seconds,
+        nanos: 0,
+    };
+    let envelope = DurableEnvelopeV1 {
+        envelope_major: 1,
+        envelope_revision: 1,
+        message_id: message_id.to_vec(),
+        contract: Some(ContractRefV1 {
+            owner: "communications".to_owned(),
+            name: "communication_attachment_anchor_recorded".to_owned(),
+            major: 1,
+            revision: 1,
+            schema_sha256: COMMUNICATIONS_ATTACHMENT_ANCHOR_SCHEMA_SHA256.to_vec(),
+        }),
+        source: Some(SourceRefV1 {
+            module_id: "communications-runtime".to_owned(),
+            runtime_instance_id: runtime_source_reference(&context.runtime_instance_id).to_vec(),
+            runtime_generation: context.runtime_generation,
+        }),
+        recorded_at: Some(recorded_at),
+        partition_key: anchor.attachment_anchor_id.bytes().to_vec(),
+        causation_message_id: causation_message_id.to_vec(),
+        correlation_id: identifier(
+            b"hermes.communications.attachment-anchor-correlation.v1\0",
+            anchor.attachment_anchor_id.bytes(),
+        )
+        .to_vec(),
+        actor: Some(ActorRefV1 {
+            kind: ActorKindV1::Module as i32,
+            actor_id: b"communications-runtime".to_vec(),
+        }),
+        trace: None,
+        source_fence: Some(SourceFenceV1 {
+            kind: FenceKindV1::RuntimeLease as i32,
+            scope_id: b"communications-runtime".to_vec(),
+            epoch: context.runtime_generation,
+        }),
+        semantics: Some(Semantics::Event(EventMetadataV1 {
+            occurred_at: Some(occurred_at),
+        })),
+        payload: CommunicationAttachmentAnchorRecordedV1 {
+            attachment_anchor_id: anchor.attachment_anchor_id.bytes().to_vec(),
+            source_observation_id: source_observation_id.to_vec(),
+            media_cursor_sha256: anchor.media_cursor.bytes().to_vec(),
+            initial_state: 1,
+            observed_at_unix_seconds: anchor.observed_at_unix_seconds,
+        }
+        .encode_to_vec(),
+    };
+    validate_envelope_v1(&envelope).map_err(|_| CanonicalOutboxBuildErrorV1::InvalidEnvelope)?;
+    OutboxRecordV1::accept(envelope.encode_to_vec())
+        .map_err(|_| CanonicalOutboxBuildErrorV1::InvalidEnvelope)
+}
+
 fn valid_context(context: &CanonicalEventContextV1) -> bool {
     context.runtime_generation != 0
         && !context.runtime_instance_id.is_empty()
@@ -285,7 +359,8 @@ const fn attachment_safety_state_value(value: AttachmentSafetyStateV1) -> i32 {
 #[cfg(test)]
 mod tests {
     use hermes_communications_api::{
-        CommunicationAttachmentAnchorIdV1, CommunicationObservationIdV1,
+        CanonicalAttachmentAnchorProjectionV1, CommunicationAttachmentAnchorIdV1,
+        CommunicationMessageIdV1, CommunicationObservationIdV1, CommunicationSourceCursorV1,
         attachment_wire::AttachmentSafetyStateChangedV1,
     };
     use hermes_events_protocol::v1::DurableEnvelopeV1;
@@ -328,5 +403,34 @@ mod tests {
         assert_eq!(payload.expected_state, 2);
         assert_eq!(payload.next_state, 3);
         assert_eq!(payload.evidence_id, [9; 16]);
+    }
+
+    #[test]
+    fn attachment_anchor_handoff_is_source_observation_bound() {
+        let anchor = CanonicalAttachmentAnchorProjectionV1 {
+            attachment_anchor_id: CommunicationAttachmentAnchorIdV1::new([7; 16]),
+            message_id: CommunicationMessageIdV1::new([8; 16]),
+            media_cursor: CommunicationSourceCursorV1::new([9; 32]),
+            descriptor: None,
+            observed_at_unix_seconds: 1_700_000_000,
+        };
+        let context = CanonicalEventContextV1 {
+            runtime_instance_id: "communications-runtime-test".to_owned(),
+            runtime_generation: 3,
+            recorded_at_unix_seconds: 1_700_000_001,
+            recorded_at_nanos: 0,
+        };
+        let record =
+            build_attachment_anchor_recorded_outbox_v1(&anchor, [4; 16], [5; 16], &context)
+                .expect("canonical anchor handoff");
+        let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");
+        let payload = hermes_communications_api::anchor_wire::CommunicationAttachmentAnchorRecordedV1::decode(envelope.payload.as_slice()).expect("payload");
+
+        assert_eq!(
+            envelope.contract.expect("contract").name,
+            "communication_attachment_anchor_recorded"
+        );
+        assert_eq!(payload.source_observation_id, [4; 16]);
+        assert_eq!(payload.media_cursor_sha256, [9; 32]);
     }
 }

@@ -38,6 +38,7 @@ pub struct PersistedCommunicationsObservationV1<'a> {
     pub derived_index_job: Option<&'a CommunicationsDerivedIndexJobV1>,
     pub derived_index_failure: Option<&'a CommunicationsDerivedIndexFailureRecordV1>,
     pub canonical_outbox_record: &'a OutboxRecordV1,
+    pub attachment_anchor_outbox_record: Option<&'a OutboxRecordV1>,
     pub created_at_unix_seconds: i64,
 }
 
@@ -326,9 +327,10 @@ impl CommunicationsDurablePersistence {
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         }
+        let mut attachment_anchor_created = false;
         if let Some(anchor) = &observation.projection.attachment_anchor {
-            sqlx::query(
-                "INSERT INTO hermes_data.communications_attachment_anchors (attachment_anchor_id, message_id, media_cursor_sha256, anchor_state, attachment_filename, attachment_media_type, attachment_declared_bytes, attachment_sha256, attachment_disposition, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id) VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $9, $10) ON CONFLICT (attachment_anchor_id) DO UPDATE SET last_observed_at_unix_seconds = GREATEST(communications_attachment_anchors.last_observed_at_unix_seconds, EXCLUDED.last_observed_at_unix_seconds), last_evidence_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds >= communications_attachment_anchors.last_observed_at_unix_seconds THEN EXCLUDED.last_evidence_id ELSE communications_attachment_anchors.last_evidence_id END, attachment_filename = COALESCE(communications_attachment_anchors.attachment_filename, EXCLUDED.attachment_filename), attachment_media_type = COALESCE(communications_attachment_anchors.attachment_media_type, EXCLUDED.attachment_media_type), attachment_declared_bytes = COALESCE(communications_attachment_anchors.attachment_declared_bytes, EXCLUDED.attachment_declared_bytes), attachment_sha256 = COALESCE(communications_attachment_anchors.attachment_sha256, EXCLUDED.attachment_sha256), attachment_disposition = COALESCE(communications_attachment_anchors.attachment_disposition, EXCLUDED.attachment_disposition)",
+            let row = sqlx::query(
+                "INSERT INTO hermes_data.communications_attachment_anchors (attachment_anchor_id, message_id, media_cursor_sha256, anchor_state, attachment_filename, attachment_media_type, attachment_declared_bytes, attachment_sha256, attachment_disposition, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id) VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $9, $10) ON CONFLICT (attachment_anchor_id) DO UPDATE SET last_observed_at_unix_seconds = GREATEST(communications_attachment_anchors.last_observed_at_unix_seconds, EXCLUDED.last_observed_at_unix_seconds), last_evidence_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds >= communications_attachment_anchors.last_observed_at_unix_seconds THEN EXCLUDED.last_evidence_id ELSE communications_attachment_anchors.last_evidence_id END, attachment_filename = COALESCE(communications_attachment_anchors.attachment_filename, EXCLUDED.attachment_filename), attachment_media_type = COALESCE(communications_attachment_anchors.attachment_media_type, EXCLUDED.attachment_media_type), attachment_declared_bytes = COALESCE(communications_attachment_anchors.attachment_declared_bytes, EXCLUDED.attachment_declared_bytes), attachment_sha256 = COALESCE(communications_attachment_anchors.attachment_sha256, EXCLUDED.attachment_sha256), attachment_disposition = COALESCE(communications_attachment_anchors.attachment_disposition, EXCLUDED.attachment_disposition) RETURNING (xmax = 0) AS inserted",
             )
             .bind(anchor.attachment_anchor_id.bytes().as_slice())
             .bind(anchor.message_id.bytes().as_slice())
@@ -340,9 +342,12 @@ impl CommunicationsDurablePersistence {
             .bind(anchor.descriptor.as_ref().map(|value| attachment_disposition_value(value.disposition())))
             .bind(anchor.observed_at_unix_seconds)
             .bind(summary.evidence_id.bytes().as_slice())
-            .execute(&mut *transaction)
+            .fetch_one(&mut *transaction)
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+            attachment_anchor_created = row
+                .try_get("inserted")
+                .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         }
         for reference in &observation.projection.message_references {
             let mut reference_id = Sha256::new();
@@ -407,6 +412,23 @@ impl CommunicationsDurablePersistence {
             .execute(&mut *transaction)
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        if attachment_anchor_created {
+            let record = observation
+                .attachment_anchor_outbox_record
+                .ok_or(CommunicationsPersistenceError::InvalidAttachmentAnchorOutbox)?;
+            sqlx::query("INSERT INTO hermes_data.communications_domain_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
+                .bind(record.message_id().as_slice())
+                .bind(record.envelope_sha256().as_slice())
+                .bind(record.exact_bytes())
+                .bind(observation.created_at_unix_seconds)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        } else if observation.attachment_anchor_outbox_record.is_some()
+            && observation.projection.attachment_anchor.is_none()
+        {
+            return Err(CommunicationsPersistenceError::InvalidAttachmentAnchorOutbox);
+        }
         transaction
             .commit()
             .await
