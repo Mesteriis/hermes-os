@@ -253,7 +253,7 @@ fn descriptor_rejects_missing_and_unknown_capability_request_variants() {
         Err(DescriptorValidationError::InvalidCapability)
     );
     let unknown =
-        CapabilityRequestV1::decode([0x4a, 0x00].as_slice()).expect("decode unknown field");
+        CapabilityRequestV1::decode([0x7a, 0x00].as_slice()).expect("decode unknown field");
     assert!(unknown.request.is_none());
     assert_eq!(
         validate_descriptor_v1(&descriptor(unknown)),

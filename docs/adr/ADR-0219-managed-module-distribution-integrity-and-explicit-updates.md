@@ -21,6 +21,9 @@ process; mismatched digest, module identity или stale fence fail closed.
 Замена bundled binding сначала durable фиксирует новую revision, затем
 останавливает старый managed worker; client, Blob, Event и Vault data-plane
 routes сверяют launch с current binding revision до relay или lease issuance.
+Vault routing различает module-registration binding и constitutional platform
+process binding: отсутствие module registration у Storage/Vault process не
+обходится fallback-авторизацией и не смешивает две независимые единицы сборки.
 Production macOS owner-control принимает только artifact ID и bind/start-ит
 selected installed release через durable binding; client не передаёт path или
 digest. Release compiler выпускает `ReleaseTrustRootV1` и

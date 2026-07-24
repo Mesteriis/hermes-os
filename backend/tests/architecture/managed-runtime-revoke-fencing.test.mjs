@@ -101,3 +101,14 @@ test('all managed module data-plane routes share the exact current binding fence
     assert.match(source, /current_managed_runtime_matches/);
   }
 });
+
+test('managed Vault routing also fences constitutional platform processes by current binding', async () => {
+  const source = await readFile(
+    new URL('src/kernel/src/platform/vault/managed_route.rs', BACKEND_ROOT),
+    'utf8',
+  );
+
+  assert.match(source, /current_platform_managed_runtime_matches/);
+  assert.match(source, /\.map_or_else\(/);
+  assert.match(source, /current_managed_runtime_matches/);
+});

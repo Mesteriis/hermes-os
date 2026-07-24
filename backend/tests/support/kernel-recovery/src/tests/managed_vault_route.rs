@@ -1,4 +1,6 @@
 use super::common::*;
+use hermes_kernel_control_store::{PlatformManagedProcessBinding, PlatformManagedProcessLaunch};
+use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::{ManagedRuntimeVaultRouteRequestV1, VaultCiphertextResponseV1};
 use hermes_runtime_protocol::validation::vault::STORAGE_REVOKE_AUDIENCE_OPERATION_DIGEST_V1;
 use hermes_vault_protocol::VaultTransportCommandV1;
@@ -7,6 +9,7 @@ use std::io::{Read, Write};
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeVaultRouteHandler, relay_with_vault_routes,
 };
+use crate::runtime::lifecycle::fence::current_platform_managed_runtime_matches;
 
 #[test]
 fn runtime_protocol_keeps_the_revoking_storage_route_fence_exact() {
@@ -14,6 +17,54 @@ fn runtime_protocol_keeps_the_revoking_storage_route_fence_exact() {
         STORAGE_REVOKE_AUDIENCE_OPERATION_DIGEST_V1,
         VaultTransportCommandV1::RevokeAudience.operation_digest()
     );
+}
+
+#[test]
+fn platform_managed_runtime_fence_rejects_a_replaced_binding() {
+    let root = unique_target_root("hermes-platform-runtime-fence");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
+        .expect("create Control Store");
+    store
+        .record_platform_managed_process_binding(&platform_binding(1))
+        .expect("record platform binding");
+    store
+        .record_platform_managed_process_launch(&PlatformManagedProcessLaunch::new(
+            "storage-control",
+            1,
+            1,
+            4,
+            3,
+        ))
+        .expect("record platform launch");
+    assert_eq!(
+        current_platform_managed_runtime_matches(
+            &store,
+            "storage-control",
+            "storage-control",
+            4,
+            3,
+        )
+        .expect("check current platform runtime"),
+        Some(true),
+    );
+
+    store
+        .record_platform_managed_process_binding(&platform_binding(2))
+        .expect("replace platform binding");
+    assert_eq!(
+        current_platform_managed_runtime_matches(
+            &store,
+            "storage-control",
+            "storage-control",
+            4,
+            3,
+        )
+        .expect("check replaced platform runtime"),
+        Some(false),
+    );
+
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
 }
 
 #[test]
@@ -74,6 +125,18 @@ fn relay_completes_a_request_after_a_nested_vault_route() {
 
 struct RecordingRouteHandler {
     calls: Arc<AtomicU64>,
+}
+
+fn platform_binding(binding_revision: u64) -> PlatformManagedProcessBinding {
+    PlatformManagedProcessBinding::new(
+        "storage-control",
+        binding_revision,
+        format!("distribution-{binding_revision}"),
+        format!("storage-runtime-{binding_revision}"),
+        [7; 32],
+        [3; 32],
+        None,
+    )
 }
 
 impl ManagedRuntimeVaultRouteHandler for RecordingRouteHandler {

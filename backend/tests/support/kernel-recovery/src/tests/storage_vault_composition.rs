@@ -8,8 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use hermes_kernel_control_store::{PlatformManagedProcessBinding, PlatformManagedProcessLaunch};
 use hermes_runtime_protocol::v1::{
-    ManagedRuntimeControlRequestV1, ManagedRuntimeVaultRouteRequestV1,
-    ManagedRuntimeVaultRouteResponseV1,
+    ManagedRuntimeControlRequestV1,
     managed_runtime_control_request_v1::Operation as ManagedOperation,
 };
 use hermes_vault_key_provider::WrappingKeyProvider;
@@ -22,7 +21,7 @@ use super::common::*;
 use crate::identity::device::signer::{DeviceSigner, FileDeviceSigner};
 use crate::platform::vault::managed_route::KernelManagedVaultRouteHandler;
 use crate::runtime::lifecycle::control::{
-    ManagedRuntimeExpectation, ManagedRuntimeVaultRouteHandler, establish_channel, relay,
+    ManagedRuntimeExpectation, ManagedRuntimeVaultRouteHandler, establish_channel, inbound, relay,
 };
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelay;
 use crate::service::runtime::VaultService;
@@ -111,6 +110,26 @@ fn configured_store(root: &std::path::Path) -> SqliteControlStore {
         ))
         .expect("Vault launch");
     store
+        .record_platform_managed_process_binding(&PlatformManagedProcessBinding::new(
+            "storage-control",
+            1,
+            "distribution",
+            "storage-runtime",
+            [4; 32],
+            [3; 32],
+            None,
+        ))
+        .expect("Storage release binding");
+    store
+        .record_platform_managed_process_launch(&PlatformManagedProcessLaunch::new(
+            "storage-control",
+            1,
+            1,
+            4,
+            1,
+        ))
+        .expect("Storage launch");
+    store
 }
 
 fn initialize_vault(vault_dir: &std::path::Path) {
@@ -196,7 +215,7 @@ fn bootstrap_storage_credential(channel: UnixStream, public_key: [u8; 32]) -> Ve
         .expect("Storage Vault context");
     let audience = LeaseAudienceV1::new(
         "storage-control".to_owned(),
-        "storage-runtime".to_owned(),
+        "storage-control".to_owned(),
         4,
         1,
     )
@@ -218,11 +237,14 @@ fn bootstrap_storage_credential(channel: UnixStream, public_key: [u8; 32]) -> Ve
 
 fn bridge_storage_routes(mut channel: UnixStream, handler: KernelManagedVaultRouteHandler) {
     while let Ok(frame) = read_frame(&mut channel) {
-        let request = ManagedRuntimeVaultRouteRequestV1::decode(frame.as_slice())
-            .expect("typed Storage Vault route");
-        let response = request
-            .route
-            .map(|route| handler.route_vault_ciphertext(&storage_expectation(), route));
+        let request = ManagedRuntimeControlRequestV1::decode(frame.as_slice())
+            .expect("typed Storage managed control request");
+        let route = match request.operation {
+            Some(ManagedOperation::RouteVaultCiphertext(request)) => request.route,
+            _ => None,
+        };
+        let response =
+            route.map(|route| handler.route_vault_ciphertext(&storage_expectation(), route));
         write_response(&mut channel, response);
     }
 }
@@ -230,7 +252,7 @@ fn bridge_storage_routes(mut channel: UnixStream, handler: KernelManagedVaultRou
 fn storage_expectation() -> ManagedRuntimeExpectation {
     ManagedRuntimeExpectation::new(
         "storage-control",
-        "storage-runtime",
+        "storage-control",
         "storage",
         4,
         1,
@@ -243,16 +265,13 @@ fn write_response(
     channel: &mut UnixStream,
     result: Option<Result<hermes_runtime_protocol::v1::VaultCiphertextResponseV1, String>>,
 ) {
-    let response = match result {
-        Some(Ok(response)) => ManagedRuntimeVaultRouteResponseV1 {
-            response: Some(response),
-            error_code: String::new(),
-        },
-        Some(Err(_)) | None => ManagedRuntimeVaultRouteResponseV1 {
-            response: None,
-            error_code: "managed_vault_route_denied".to_owned(),
-        },
-    };
+    let result = result.unwrap_or_else(|| Err("managed Vault route is unavailable".to_owned()));
+    if let Err(error) = &result
+        && std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some()
+    {
+        eprintln!("developer_storage_vault_route_error={error}");
+    }
+    let response = inbound::vault_route_response(result);
     write_frame(channel, &response.encode_to_vec());
 }
 
