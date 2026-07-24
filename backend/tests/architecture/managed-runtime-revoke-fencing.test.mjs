@@ -11,6 +11,14 @@ const MANAGED_LAUNCH = new URL(
   'src/kernel/src/platform/macos/managed_launch.rs',
   BACKEND_ROOT,
 );
+const MANAGED_FENCE_CONSUMERS = [
+  'src/kernel/src/modules/capability/router.rs',
+  'src/kernel/src/platform/blob/session.rs',
+  'src/kernel/src/platform/events/credential/handler.rs',
+  'src/kernel/src/platform/vault/managed_route.rs',
+  'src/kernel/src/platform/vault/owner_derived_key.rs',
+  'src/kernel/src/platform/vault/provider_credential.rs',
+].map((path) => new URL(path, BACKEND_ROOT));
 
 test('owner suspend or revoke durably fences grants before stopping a managed runtime', async () => {
   const source = await readFile(OWNER_CONTROL_DISPATCH, 'utf8');
@@ -38,4 +46,33 @@ test('managed runtime generation advances from the persisted high-watermark', as
 
   assert.match(generation, /managed_launch_generation_high_watermark/);
   assert.doesNotMatch(generation, /effective_managed_launch_record/);
+});
+
+test('managed release replacement durably changes binding before stopping the old runtime', async () => {
+  const source = await readFile(OWNER_CONTROL_DISPATCH, 'utf8');
+  const bindingStart = source.indexOf('fn bind_managed_release(');
+  const bindingEnd = source.indexOf('\nfn start_managed_runtime(', bindingStart);
+  const binding = source.slice(bindingStart, bindingEnd);
+
+  assert.match(
+    source,
+    /bind_managed_release\(store, supervisor, sessions, request\)/,
+  );
+  assert.match(binding, /bind_current_installed_release/);
+  assert.match(binding, /supervisor\.stop_if_active\(binding\.registration_id\(\)\)/);
+  assert.ok(
+    binding.indexOf('bind_current_installed_release')
+      < binding.indexOf('stop_if_active'),
+    'the durable binding replacement must precede process stop',
+  );
+});
+
+test('all managed module data-plane routes share the exact current binding fence', async () => {
+  const sources = await Promise.all(
+    MANAGED_FENCE_CONSUMERS.map((path) => readFile(path, 'utf8')),
+  );
+
+  for (const source of sources) {
+    assert.match(source, /current_managed_runtime_matches/);
+  }
 });

@@ -14,6 +14,7 @@ use hermes_runtime_protocol::{
 use prost::Message;
 
 use crate::modules::capability::policy::permits_external_route;
+use crate::runtime::lifecycle::fence::current_managed_runtime_matches;
 
 /// Delivers a capability request to the exact fenced managed runtime.
 pub trait ManagedRuntimeRelay: Send + Sync {
@@ -171,14 +172,15 @@ where
     {
         return Err("capability is not granted to this registration".to_owned());
     }
-    let launch = store
-        .effective_managed_launch_record(route.registration_id)
+    if route.grant_epoch != grants.grant_epoch()
+        || !current_managed_runtime_matches(
+            store,
+            route.registration_id,
+            route.runtime_instance_id,
+            route.runtime_generation,
+            route.grant_epoch,
+        )
         .map_err(|_| "managed runtime is unavailable".to_owned())?
-        .ok_or_else(|| "managed runtime is unavailable".to_owned())?;
-    if launch.runtime_instance_id() != route.runtime_instance_id
-        || launch.runtime_generation() != route.runtime_generation
-        || launch.grant_epoch() != route.grant_epoch
-        || launch.grant_epoch() != grants.grant_epoch()
     {
         return Err("managed runtime fence is stale".to_owned());
     }

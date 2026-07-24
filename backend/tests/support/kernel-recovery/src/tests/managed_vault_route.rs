@@ -57,10 +57,7 @@ fn relay_completes_a_request_after_a_nested_vault_route() {
     let route = valid_route();
     let worker = std::thread::spawn(move || {
         assert_eq!(read_frame(&mut child), b"revoke");
-        write_frame(
-            &mut child,
-            &ManagedRuntimeVaultRouteRequestV1 { route: Some(route) },
-        );
+        write_frame(&mut child, &managed_vault_route_request(route));
         let _ = read_frame(&mut child);
         write_bytes(&mut child, b"revoked");
     });
@@ -200,9 +197,28 @@ fn route_child_payload(
 ) -> Vec<u8> {
     [
         frame(&describe.encode_to_vec()),
-        frame(&route.encode_to_vec()),
+        frame(
+            &ManagedRuntimeControlRequestV1 {
+                operation: Some(
+                    hermes_runtime_protocol::v1::managed_runtime_control_request_v1::Operation::RouteVaultCiphertext(
+                        route,
+                    ),
+                ),
+            }
+            .encode_to_vec(),
+        ),
     ]
     .concat()
+}
+
+fn managed_vault_route_request(route: VaultCiphertextRouteV1) -> ManagedRuntimeControlRequestV1 {
+    ManagedRuntimeControlRequestV1 {
+        operation: Some(
+            hermes_runtime_protocol::v1::managed_runtime_control_request_v1::Operation::RouteVaultCiphertext(
+                ManagedRuntimeVaultRouteRequestV1 { route: Some(route) },
+            ),
+        ),
+    }
 }
 
 fn frame(bytes: &[u8]) -> Vec<u8> {

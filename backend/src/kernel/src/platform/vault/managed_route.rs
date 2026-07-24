@@ -22,6 +22,7 @@ use crate::platform::vault::{ciphertext_route, launch};
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeExpectation, ManagedRuntimeVaultRouteHandler,
 };
+use crate::runtime::lifecycle::fence::current_managed_runtime_matches;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelay;
 
 pub struct KernelManagedVaultRouteHandler {
@@ -56,6 +57,14 @@ impl ManagedRuntimeVaultRouteHandler for KernelManagedVaultRouteHandler {
         if route.registration_id == expectation.registration_id() {
             if route.caller_runtime_generation != expectation.runtime_generation()
                 || route.grant_epoch != expectation.grant_epoch()
+                || !current_managed_runtime_matches(
+                    &*self.store,
+                    expectation.registration_id(),
+                    expectation.runtime_instance_id(),
+                    expectation.runtime_generation(),
+                    expectation.grant_epoch(),
+                )
+                .map_err(|_| "managed Vault ciphertext route is unavailable".to_owned())?
             {
                 return Err("managed Vault ciphertext route is stale".to_owned());
             }
@@ -129,15 +138,15 @@ impl KernelManagedVaultRouteHandler {
         if binding.len() != 1 {
             return Err("managed Vault ciphertext route is stale".to_owned());
         }
-        let launch = self
-            .store
-            .effective_managed_launch_record(&route.registration_id)
-            .map_err(|_| "managed Vault ciphertext route is unavailable".to_owned())?
-            .ok_or_else(|| "managed Vault ciphertext route is stale".to_owned())?;
-        (launch.runtime_instance_id() == route.runtime_instance_id
-            && launch.runtime_generation() == route.caller_runtime_generation
-            && launch.grant_epoch() == route.grant_epoch)
-            .then_some(())
-            .ok_or_else(|| "managed Vault ciphertext route is stale".to_owned())
+        current_managed_runtime_matches(
+            &*self.store,
+            &route.registration_id,
+            &route.runtime_instance_id,
+            route.caller_runtime_generation,
+            route.grant_epoch,
+        )
+        .map_err(|_| "managed Vault ciphertext route is unavailable".to_owned())?
+        .then_some(())
+        .ok_or_else(|| "managed Vault ciphertext route is stale".to_owned())
     }
 }

@@ -120,7 +120,7 @@ fn route_operation(
             bind_external_identity(store, sessions, request)
         }
         Operation::BindBundledManagedRelease(request) => {
-            bind_managed_release(store, sessions, request)
+            bind_managed_release(store, supervisor, sessions, request)
         }
         Operation::StartBundledManagedRuntime(request) => {
             start_managed_runtime(store, runtime_dir, supervisor, sessions, request)
@@ -610,25 +610,25 @@ fn bind_external_identity(
 
 fn bind_managed_release(
     store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
     sessions: &mut OwnerControlSessions,
     request: BindBundledManagedReleaseRequestV1,
 ) -> Result<OwnerResult, String> {
-    (|| {
-        sessions.authorize(store, &request.owner_session_id)?;
-        macos_bundled_release_binding::bind_current_installed_release(
-            store,
-            &request.registration_id,
-            &request.artifact_id,
-        )
-    })()
-    .map(|binding| {
-        OwnerResult::BindBundledManagedRelease(BindBundledManagedReleaseResponseV1 {
+    sessions.authorize(store, &request.owner_session_id)?;
+    let binding = macos_bundled_release_binding::bind_current_installed_release(
+        store,
+        &request.registration_id,
+        &request.artifact_id,
+    )?;
+    supervisor.stop_if_active(binding.registration_id())?;
+    Ok(OwnerResult::BindBundledManagedRelease(
+        BindBundledManagedReleaseResponseV1 {
             registration_id: binding.registration_id().to_owned(),
             binding_revision: binding.binding_revision(),
             distribution_id: binding.distribution_id().to_owned(),
             artifact_id: binding.artifact_id().to_owned(),
-        })
-    })
+        },
+    ))
 }
 
 fn start_managed_runtime(

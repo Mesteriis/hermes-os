@@ -17,6 +17,7 @@ use crate::platform::events::{catalog, topology};
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
 };
+use crate::runtime::lifecycle::fence::current_managed_runtime_matches;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelay;
 
 /// Keeps approved event rights in the Kernel and returns ciphertext only.
@@ -48,6 +49,17 @@ where
         expectation: &ManagedRuntimeExpectation,
         request: ManagedRuntimeEventCredentialRequestV1,
     ) -> Result<ManagedRuntimeEventCredentialDeliveryV1, String> {
+        if !current_managed_runtime_matches(
+            &*self.store,
+            expectation.registration_id(),
+            expectation.runtime_instance_id(),
+            expectation.runtime_generation(),
+            expectation.grant_epoch(),
+        )
+        .map_err(|_| "managed runtime Events credential request is unavailable".to_owned())?
+        {
+            return Err("managed runtime Events credential fence is stale".to_owned());
+        }
         let registration = current_registration(&self.store, expectation.registration_id())?;
         if expectation.grant_epoch() != registration.grant_epoch() {
             return Err("managed runtime Events credential fence is stale".to_owned());

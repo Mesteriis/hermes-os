@@ -19,8 +19,11 @@ Owner transition в `suspended` или `revoked` теперь сначала ф�
 registration/grant-epoch fence, затем идемпотентно останавливает exact managed
 worker. Managed launch использует monotonic per-registration generation
 high-watermark, старые reservation/grant epoch и managed client route
-отклоняются до relay. Полная route/lease invalidation при restart и descriptor
-replacement, а также live end-to-end conformance ещё не реализованы.
+отклоняются до relay. Замена signed runtime binding сначала durable фиксирует
+новую revision, затем останавливает старый worker; client, Blob, Event и Vault
+issuance/relay routes дополнительно требуют exact current binding revision.
+Conformance уже выданных внешних leases и live end-to-end flow ещё не
+реализованы.
 
 Уточняет:
 

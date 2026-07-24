@@ -15,9 +15,12 @@ binding и launch record, fenced by binding, Kernel/runtime generation и curren
 grant epoch. Runtime generation выделяется из persisted per-registration
 high-watermark, поэтому suspend/reapprove с новым grant epoch не переиспользует
 generation и не блокирует последующий launch. Managed supervisor создаёт fresh
-inherited Unix FD на каждую
-попытку и требует exact `Describe` descriptor/settings bytes до допуска
+inherited Unix FD на каждую попытку и требует exact `Describe`
+descriptor/settings bytes до допуска
 process; mismatched digest, module identity или stale fence fail closed.
+Замена bundled binding сначала durable фиксирует новую revision, затем
+останавливает старый managed worker; client, Blob, Event и Vault data-plane
+routes сверяют launch с current binding revision до relay или lease issuance.
 Production macOS owner-control принимает только artifact ID и bind/start-ит
 selected installed release через durable binding; client не передаёт path или
 digest. Release compiler выпускает `ReleaseTrustRootV1` и

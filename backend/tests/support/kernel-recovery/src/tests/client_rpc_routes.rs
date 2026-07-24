@@ -101,7 +101,65 @@ fn control_store_rejects_foreign_or_duplicate_client_rpc_routes_atomically() {
 
 #[test]
 fn managed_client_route_rejects_a_stale_runtime_generation_before_relay() {
-    let root = unique_target_root("hermes-client-rpc-stale-generation");
+    let (root, store, registration, grant_epoch, request) =
+        managed_route_fixture("hermes-client-rpc-stale-generation");
+    let route = ManagedCapabilityRouteRequest::new(
+        &registration,
+        "runtime-current",
+        1,
+        grant_epoch,
+        "notes.query",
+        &request,
+    );
+
+    assert_eq!(
+        route_managed_client_request(&store, &UnreachableRelay, &route)
+            .expect_err("stale runtime generation"),
+        "managed runtime fence is stale"
+    );
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn managed_client_route_rejects_a_replaced_runtime_binding_before_relay() {
+    let (root, store, registration, grant_epoch, request) =
+        managed_route_fixture("hermes-client-rpc-replaced-binding");
+    store
+        .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
+            &registration,
+            2,
+            "distribution-notes-v2",
+            "runtime-notes-v2",
+            [9; 32],
+            *store
+                .module_registration(&registration)
+                .expect("read registration")
+                .expect("managed registration")
+                .descriptor_sha256(),
+            None,
+        ))
+        .expect("replace managed launch binding");
+    let route = ManagedCapabilityRouteRequest::new(
+        &registration,
+        "runtime-current",
+        2,
+        grant_epoch,
+        "notes.query",
+        &request,
+    );
+
+    assert_eq!(
+        route_managed_client_request(&store, &UnreachableRelay, &route)
+            .expect_err("replaced runtime binding"),
+        "managed runtime fence is stale"
+    );
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+fn managed_route_fixture(
+    prefix: &str,
+) -> (std::path::PathBuf, SqliteControlStore, String, u64, Vec<u8>) {
+    let root = unique_target_root(prefix);
     std::fs::create_dir_all(&root).expect("create fixture directory");
     let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
         .expect("create Control Store");
@@ -154,28 +212,20 @@ fn managed_client_route_rejects_a_stale_runtime_generation_before_relay() {
         request_payload: vec![1],
     }
     .encode_to_vec();
-    let route = ManagedCapabilityRouteRequest::new(
-        registration.registration_id(),
-        "runtime-current",
-        1,
+    (
+        root,
+        store,
+        registration.registration_id().to_owned(),
         grants.grant_epoch(),
-        "notes.query",
-        &request,
-    );
-
-    assert_eq!(
-        route_managed_client_request(&store, &UnreachableRelay, &route)
-            .expect_err("stale runtime generation"),
-        "managed runtime fence is stale"
-    );
-    std::fs::remove_dir_all(root).expect("remove fixture directory");
+        request,
+    )
 }
 
 struct UnreachableRelay;
 
 impl ManagedRuntimeRelay for UnreachableRelay {
     fn relay(&self, _: &str, _: Vec<u8>) -> Result<Vec<u8>, String> {
-        panic!("stale managed client route reached the runtime relay")
+        Err("managed runtime relay was reached".to_owned())
     }
 }
 

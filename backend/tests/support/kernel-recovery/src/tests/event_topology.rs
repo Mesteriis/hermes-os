@@ -1,7 +1,8 @@
 use hermes_kernel_control_store::{
-    ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
-    ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1, ModuleRegistration,
-    ModuleRegistrationState, PlatformEventHubTopologyV1, PlatformEventStreamBudgetV1,
+    BundledManagedLaunchBinding, ManagedLaunchRecord, ModuleEventDeliveryPolicyV1,
+    ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1, ModuleEventRouteRequestV1,
+    ModuleEventSubscriptionRequirementV1, ModuleRegistration, ModuleRegistrationState,
+    PlatformEventHubTopologyV1, PlatformEventStreamBudgetV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::ManagedRuntimeEventCredentialRequestV1;
@@ -221,6 +222,27 @@ fn kernel_relays_only_topology_derived_credential_request_to_the_authority_child
 #[test]
 fn managed_runtime_event_request_is_fenced_and_returns_only_authority_ciphertext() {
     let (root, store, _, _, _) = event_topology_fixture();
+    store
+        .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
+            "registration_notes",
+            1,
+            "distribution-notes",
+            "runtime-notes",
+            [2; 32],
+            [1; 32],
+            None,
+        ))
+        .expect("record current managed binding");
+    store
+        .record_managed_launch(&ManagedLaunchRecord::new(
+            "registration_notes",
+            "runtime_1",
+            1,
+            1,
+            3,
+            2,
+        ))
+        .expect("record current managed launch");
     let handler = credential::handler::EventCredentialHandlerV1::new(
         Arc::clone(&store),
         "events_authority".to_owned(),
@@ -256,7 +278,7 @@ fn managed_runtime_event_request_is_fenced_and_returns_only_authority_ciphertext
         handler
             .issue_event_credential(&expectation, request)
             .expect_err("revoked registration"),
-        "managed runtime Events credential registration is unavailable"
+        "managed runtime Events credential fence is stale"
     );
     std::fs::remove_dir_all(root).expect("remove fixture directory");
 }

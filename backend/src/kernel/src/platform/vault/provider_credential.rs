@@ -19,6 +19,7 @@ use crate::runtime::lifecycle::control::{
     ManagedRuntimeExpectation, ManagedRuntimeProviderCredentialHandler,
     ManagedRuntimeVaultRouteHandler,
 };
+use crate::runtime::lifecycle::fence::current_managed_runtime_matches;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelayPort;
 
 /// Kernel-only resolver for descriptor-declared, capability-approved provider secrets.
@@ -49,6 +50,17 @@ impl ManagedRuntimeProviderCredentialHandler for ProviderCredentialHandlerV1 {
         expectation: &ManagedRuntimeExpectation,
         request: ManagedRuntimeProviderCredentialRequestV1,
     ) -> Result<ManagedRuntimeProviderCredentialDeliveryV1, String> {
+        if !current_managed_runtime_matches(
+            &*self.store,
+            expectation.registration_id(),
+            expectation.runtime_instance_id(),
+            expectation.runtime_generation(),
+            expectation.grant_epoch(),
+        )
+        .map_err(|_| "managed runtime provider credential request is unavailable".to_owned())?
+        {
+            return Err("managed runtime provider credential fence is stale".to_owned());
+        }
         let secret_class = SecretClassV1::from_code(i64::from(request.secret_class))
             .ok_or_else(|| "managed runtime provider credential request is denied".to_owned())?;
         let action = VaultActionV1::from_code(i64::from(request.action))

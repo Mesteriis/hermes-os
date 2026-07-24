@@ -19,6 +19,7 @@ use crate::runtime::lifecycle::control::{
     ManagedRuntimeExpectation, ManagedRuntimeOwnerDerivedKeyHandler,
     ManagedRuntimeVaultRouteHandler,
 };
+use crate::runtime::lifecycle::fence::current_managed_runtime_matches;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelayPort;
 
 pub(crate) struct OwnerDerivedKeyHandlerV1 {
@@ -48,6 +49,17 @@ impl ManagedRuntimeOwnerDerivedKeyHandler for OwnerDerivedKeyHandlerV1 {
         expectation: &ManagedRuntimeExpectation,
         request: ManagedRuntimeOwnerDerivedKeyRequestV1,
     ) -> Result<ManagedRuntimeOwnerDerivedKeyDeliveryV1, String> {
+        if !current_managed_runtime_matches(
+            &*self.store,
+            expectation.registration_id(),
+            expectation.runtime_instance_id(),
+            expectation.runtime_generation(),
+            expectation.grant_epoch(),
+        )
+        .map_err(|_| "managed runtime owner-derived key request is unavailable".to_owned())?
+        {
+            return Err("managed runtime owner-derived key fence is stale".to_owned());
+        }
         let (owner_id, capability_id) = authorized_purpose(&self.store, expectation, &request)?;
         let vault = status::read_current(&self.store, &self.relay)?;
         let audience = LeaseAudienceV1::new(
