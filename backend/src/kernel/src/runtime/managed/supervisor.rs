@@ -5,7 +5,6 @@ use crate::runtime::lifecycle::control::{
     self as managed_runtime_control, ManagedRuntimeBlobSessionHandler,
     ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
     ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeProviderCredentialHandler,
-    ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::{
     self as bounded_managed_child_execution, ManagedChildExecutionPolicy,
@@ -50,11 +49,7 @@ pub struct ManagedChildRunInput<'a> {
     pub shutdown_requested: &'a AtomicBool,
     pub stop_requested: &'a AtomicBool,
     pub relay_requests: &'a Receiver<managed_runtime_control::ManagedRuntimeRelayRequest>,
-    pub vault_route_handler: Option<&'a dyn ManagedRuntimeVaultRouteHandler>,
-    pub event_credential_handler: Option<&'a dyn ManagedRuntimeEventCredentialHandler>,
-    pub provider_credential_handler: Option<&'a dyn ManagedRuntimeProviderCredentialHandler>,
-    pub owner_derived_key_handler: Option<&'a dyn ManagedRuntimeOwnerDerivedKeyHandler>,
-    pub blob_session_handler: Option<&'a dyn ManagedRuntimeBlobSessionHandler>,
+    pub control_handlers: managed_runtime_control::ManagedRuntimeControlHandlers<'a>,
     pub ready_sender: &'a SyncSender<Result<(), String>>,
     pub ready_state: &'a AtomicBool,
 }
@@ -187,29 +182,13 @@ fn wait_until_shutdown_with_relay(
             let _ = input.ready_sender.try_send(Ok(()));
             continue;
         }
-        match process_typed_requests(
-            channel,
-            input.expectation,
-            input.vault_route_handler,
-            input.event_credential_handler,
-            input.provider_credential_handler,
-            input.owner_derived_key_handler,
-            input.blob_session_handler,
-        ) {
+        match process_typed_requests(channel, input.expectation, input.control_handlers) {
             Ok(true) => continue,
             Ok(false) => {}
             Err(_) => return terminal_status_after_control_close(child),
         }
         match input.relay_requests.recv_timeout(Duration::from_millis(25)) {
-            Ok(request) => request.dispatch(
-                channel,
-                input.expectation,
-                input.vault_route_handler,
-                input.event_credential_handler,
-                input.provider_credential_handler,
-                input.owner_derived_key_handler,
-                input.blob_session_handler,
-            ),
+            Ok(request) => request.dispatch(channel, input.expectation, input.control_handlers),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
                 bounded_managed_child_execution::terminate(child)?;
@@ -328,11 +307,7 @@ fn dispatch_v2_typed_request(
         request => managed_runtime_control::dispatch_typed_request(
             request,
             input.expectation,
-            input.vault_route_handler,
-            input.event_credential_handler,
-            input.provider_credential_handler,
-            input.owner_derived_key_handler,
-            input.blob_session_handler,
+            input.control_handlers,
         )?,
     };
     channel
@@ -343,14 +318,11 @@ fn dispatch_v2_typed_request(
 fn process_typed_requests(
     channel: &mut std::os::unix::net::UnixStream,
     expectation: &ManagedRuntimeExpectation,
-    vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
-    event_credential_handler: Option<&dyn ManagedRuntimeEventCredentialHandler>,
-    provider_credential_handler: Option<&dyn ManagedRuntimeProviderCredentialHandler>,
-    owner_derived_key_handler: Option<&dyn ManagedRuntimeOwnerDerivedKeyHandler>,
-    blob_session_handler: Option<&dyn ManagedRuntimeBlobSessionHandler>,
+    handlers: managed_runtime_control::ManagedRuntimeControlHandlers<'_>,
 ) -> Result<bool, String> {
     if let Some(route) = managed_runtime_control::inbound::try_receive_vault_route(channel)? {
-        let result = vault_route_handler
+        let result = handlers
+            .vault_route
             .ok_or_else(|| "managed runtime Vault route is not available".to_owned())?
             .route_vault_ciphertext(expectation, route);
         managed_runtime_control::inbound::respond_vault_route(channel, result)?;
@@ -358,22 +330,22 @@ fn process_typed_requests(
     }
     if let Some(request) = managed_runtime_control::inbound::try_receive_event_credential(channel)?
     {
-        dispatch_event_credential(channel, expectation, event_credential_handler, request)?;
+        dispatch_event_credential(channel, expectation, handlers.event_credential, request)?;
         return Ok(true);
     }
     if let Some(request) =
         managed_runtime_control::inbound::try_receive_provider_credential(channel)?
     {
-        dispatch_provider_credential(channel, expectation, provider_credential_handler, request)?;
+        dispatch_provider_credential(channel, expectation, handlers.provider_credential, request)?;
         return Ok(true);
     }
     if let Some(request) = managed_runtime_control::inbound::try_receive_owner_derived_key(channel)?
     {
-        dispatch_owner_derived_key(channel, expectation, owner_derived_key_handler, request)?;
+        dispatch_owner_derived_key(channel, expectation, handlers.owner_derived_key, request)?;
         return Ok(true);
     }
     if let Some(request) = managed_runtime_control::inbound::try_receive_blob_session(channel)? {
-        dispatch_blob_session(channel, expectation, blob_session_handler, request)?;
+        dispatch_blob_session(channel, expectation, handlers.blob_session, request)?;
         return Ok(true);
     }
     Ok(false)
