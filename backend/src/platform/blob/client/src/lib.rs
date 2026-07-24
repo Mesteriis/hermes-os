@@ -14,12 +14,13 @@ use hermes_runtime_protocol::managed_control::{
     ManagedControlChannelV2, ManagedControlTransportErrorV2,
 };
 use hermes_runtime_protocol::v1::{
-    BlobCustodyTransferGrantV1, BlobDataCustodyTransferRequestV1, BlobDataOperationV1,
-    BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
-    BlobDataWriteRequestV1, ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, blob_data_request_v1::Operation,
+    blob_data_request_v1::Operation,
     managed_runtime_control_request_v1::Operation as ControlOperation,
-    managed_runtime_control_response_v1::Result as ControlResult,
+    managed_runtime_control_response_v1::Result as ControlResult, BlobCustodyTransferGrantV1,
+    BlobDataCustodyTransferRequestV1, BlobDataOperationV1, BlobDataReadRangeRequestV1,
+    BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1, BlobDataWriteRequestV1,
+    ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeControlResponseV1,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -113,6 +114,92 @@ pub fn request_managed_blob_custody_transfer(
         .set_read_timeout(None)
         .and_then(|_| channel.set_write_timeout(None))
         .map_err(|error| BlobClientError::Io(error.to_string()))?;
+    let delivery = match response.result {
+        Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => {
+            delivery
+        }
+        _ => {
+            return Err(managed_blob_session_error(
+                &response.error_code,
+                "managed_blob_custody_transfer_denied",
+            ));
+        }
+    };
+    let grant = delivery
+        .custody_transfer_grant
+        .ok_or(BlobClientError::InvalidResponse)?;
+    if delivery.grant.is_some()
+        || !delivery.custody_transfer_source_proof.is_empty()
+        || !Path::new(&delivery.data_socket_path).is_absolute()
+        || grant.evidence_id.as_slice() != request.evidence_id.as_slice()
+        || grant.evidence_envelope_sha256.as_slice() != request.evidence_envelope_sha256.as_slice()
+        || grant.channel_binding_sha256 != Sha256::digest(&channel_binding).as_slice()
+        || grant.target_reference_id.len() != 16
+        || grant.target_reference_id.iter().all(|byte| *byte == 0)
+    {
+        return Err(BlobClientError::InvalidResponse);
+    }
+    Ok(ManagedBlobCustodyTransferV1 {
+        data_socket_path: PathBuf::from(delivery.data_socket_path),
+        grant,
+        channel_binding,
+    })
+}
+
+/// Correlated V2 transport for the exact custody-transfer session operation.
+///
+/// The request stays evidence-bound and carries no source payload. The
+/// caller owns the one inherited control channel; this client only issues the
+/// typed Blob grant request over that channel.
+pub fn request_managed_blob_custody_transfer_v2(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    request: ManagedBlobCustodyTransferRequestV1<'_>,
+) -> Result<ManagedBlobCustodyTransferV1, BlobClientError> {
+    if request.capability_id.is_empty()
+        || request.capability_id.len() > 128
+        || request.source_reference_id.iter().all(|byte| *byte == 0)
+        || request.declared_size == 0
+        || request.receipt_sha256.iter().all(|byte| *byte == 0)
+        || request.custody_source_proof.is_empty()
+        || request.custody_source_proof.len() > 2_048
+        || request.evidence_id.iter().all(|byte| *byte == 0)
+        || request
+            .evidence_envelope_sha256
+            .iter()
+            .all(|byte| *byte == 0)
+    {
+        return Err(BlobClientError::InvalidSessionRequest);
+    }
+    let mut request_id = [0_u8; 16];
+    let mut channel_binding = vec![0_u8; 32];
+    getrandom::fill(&mut request_id).map_err(|_| BlobClientError::Unavailable)?;
+    getrandom::fill(&mut channel_binding).map_err(|_| BlobClientError::Unavailable)?;
+    if request_id.iter().all(|byte| *byte == 0) || channel_binding.iter().all(|byte| *byte == 0) {
+        return Err(BlobClientError::Unavailable);
+    }
+    let response = channel
+        .request_next(
+            ManagedRuntimeControlRequestV1 {
+                operation: Some(ControlOperation::IssueBlobSession(
+                    ManagedRuntimeBlobSessionRequestV1 {
+                        request_id: request_id.to_vec(),
+                        capability_id: request.capability_id.to_owned(),
+                        operation: BlobDataOperationV1::BlobDataOperationCustodyTransferV1 as u32,
+                        channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
+                        reference_id: request.source_reference_id.to_vec(),
+                        declared_size: request.declared_size,
+                        backup_class: 1,
+                        ttl_seconds: 30,
+                        receipt_sha256: request.receipt_sha256.to_vec(),
+                        custody_source_proof: request.custody_source_proof.to_vec(),
+                        evidence_id: request.evidence_id.to_vec(),
+                        evidence_envelope_sha256: request.evidence_envelope_sha256.to_vec(),
+                    },
+                )),
+            },
+            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+        )
+        .map_err(|_| BlobClientError::Unavailable)?;
     let delivery = match response.result {
         Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => {
             delivery
