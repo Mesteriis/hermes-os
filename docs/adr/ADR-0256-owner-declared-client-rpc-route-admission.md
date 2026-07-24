@@ -2,9 +2,11 @@
 
 Статус: Принято
 Дата: 2026-07-23
-Состояние реализации: Не реализовано. ADR заменяет временную
-Communications-specific route composition в Kernel Gateway; до перехода
-внешняя owner query delivery не считается clean-room evidence.
+Состояние реализации: Реализован owner-neutral foundation: descriptor
+validation, approved route records в private Control Store, generic Gateway
+composition и managed generation/grant fencing. Communications-specific route
+composition удалена. Admission конкретного integration owner остаётся
+отдельным phase gate; первый такой профиль определён ADR-0266 для Telegram.
 
 Уточняет:
 
@@ -12,7 +14,8 @@ Communications-specific route composition в Kernel Gateway; до переход
 - [ADR-0215: module admission](ADR-0215-open-module-registration-and-capability-grants.md);
 - [ADR-0221: ModuleDescriptorV1](ADR-0221-module-descriptor-and-capability-lifecycle-contract.md);
 - [ADR-0251: client_gateway_v1](ADR-0251-client-gateway-v1-opening-for-owner-contracts.md);
-- [ADR-0252: first_owner_v1 Communications admission](ADR-0252-first-owner-v1-communications-admission.md).
+- [ADR-0252: first_owner_v1 Communications admission](ADR-0252-first-owner-v1-communications-admission.md);
+- [ADR-0266: Telegram Kernel admission](ADR-0266-telegram-kernel-admission-and-event-only-communications-handoff.md).
 
 ## Контекст
 

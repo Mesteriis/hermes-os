@@ -198,3 +198,11 @@ admission prerequisite.
 ADR-0239 остаётся историей раннего Mail/IMAP slice. ADR-0252 заменяет временный
 owner exception exact admission домена Communications; provider integrations
 остаются отдельными units и не входят в owner inventory домена.
+ADR-0240 фиксирует Telegram как отдельного integration owner с собственными
+operational contracts/state и только typed evidence boundary в Communications.
+ADR-0256 реализован как owner-neutral descriptor-declared ClientRpc routing;
+Kernel/Gateway не импортируют owner implementations и не декодируют payload.
+ADR-0265 запрещает считать legacy Communications REST provider transport.
+ADR-0266 задаёт первый exact Telegram phase gate: Kernel владеет только
+admission/routing/fencing control plane, а Telegram → Communications handoff
+остаётся event-only через integration outbox, NATS и Communications inbox.

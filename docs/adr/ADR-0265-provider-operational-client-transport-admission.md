@@ -4,6 +4,9 @@
 Дата: 2026-07-24
 Состояние реализации: Phase gate; не admitted.
 
+Первый exact provider profile:
+[ADR-0266: Telegram Kernel admission and event-only Communications handoff](ADR-0266-telegram-kernel-admission-and-event-only-communications-handoff.md).
+
 ## Decision
 
 Legacy `/api/v1/communications/*` provider operational routes are not a
