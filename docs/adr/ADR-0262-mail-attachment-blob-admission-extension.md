@@ -6,9 +6,10 @@
 parts, Mail keeps an owner-local source-to-anchor mapping and durable
 `requested -> admitted/rejected` outbox state, and IMAP runtime writes through
 a one-use Blob lease. Mail also requires the exact Blob-admission publish
-subject before it begins an owner-local admission. ADR всё ещё не расширяет
-`first_owner_v1`, не допускает Mail production descriptor и не доказывает live
-Blob-result delivery.
+subject before it begins an owner-local admission. Mail now also exposes an
+immutable owner-local Storage bundle for a future separate admission. ADR всё
+ещё не расширяет `first_owner_v1`, не допускает Mail production descriptor и
+не доказывает live Blob-result delivery.
 
 Зависит от:
 
