@@ -11,16 +11,15 @@ use std::time::Duration;
 
 use hermes_blob_client_contract::{BlobReadError, BlobReadPort};
 use hermes_runtime_protocol::managed_control::{
-    ManagedControlChannelV2, ManagedControlTransportErrorV2,
+    ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
 };
 use hermes_runtime_protocol::v1::{
-    blob_data_request_v1::Operation,
+    BlobCustodyTransferGrantV1, BlobDataCustodyTransferRequestV1, BlobDataOperationV1,
+    BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
+    BlobDataWriteRequestV1, ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeControlResponseV1, blob_data_request_v1::Operation,
     managed_runtime_control_request_v1::Operation as ControlOperation,
-    managed_runtime_control_response_v1::Result as ControlResult, BlobCustodyTransferGrantV1,
-    BlobDataCustodyTransferRequestV1, BlobDataOperationV1, BlobDataReadRangeRequestV1,
-    BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1, BlobDataWriteRequestV1,
-    ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1,
+    managed_runtime_control_response_v1::Result as ControlResult,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -153,6 +152,7 @@ pub fn request_managed_blob_custody_transfer(
 /// typed Blob grant request over that channel.
 pub fn request_managed_blob_custody_transfer_v2(
     channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     request: ManagedBlobCustodyTransferRequestV1<'_>,
 ) -> Result<ManagedBlobCustodyTransferV1, BlobClientError> {
     if request.capability_id.is_empty()
@@ -178,7 +178,7 @@ pub fn request_managed_blob_custody_transfer_v2(
         return Err(BlobClientError::Unavailable);
     }
     let response = channel
-        .request_next(
+        .request_next_with_dispatch(
             ManagedRuntimeControlRequestV1 {
                 operation: Some(ControlOperation::IssueBlobSession(
                     ManagedRuntimeBlobSessionRequestV1 {
@@ -197,7 +197,7 @@ pub fn request_managed_blob_custody_transfer_v2(
                     },
                 )),
             },
-            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+            dispatcher,
         )
         .map_err(|_| BlobClientError::Unavailable)?;
     let delivery = match response.result {
@@ -323,6 +323,7 @@ pub fn request_managed_blob_session(
 /// Correlated V2 transport for the existing exact Blob-session operation.
 pub fn request_managed_blob_session_v2(
     channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     capability_id: &str,
     operation: BlobDataOperationV1,
     reference_id: &[u8],
@@ -345,7 +346,7 @@ pub fn request_managed_blob_session_v2(
     getrandom::fill(&mut request_id).map_err(|_| BlobClientError::Unavailable)?;
     getrandom::fill(&mut channel_binding).map_err(|_| BlobClientError::Unavailable)?;
     let response = channel
-        .request_next(
+        .request_next_with_dispatch(
             ManagedRuntimeControlRequestV1 {
                 operation: Some(ControlOperation::IssueBlobSession(
                     ManagedRuntimeBlobSessionRequestV1 {
@@ -365,7 +366,7 @@ pub fn request_managed_blob_session_v2(
                     },
                 )),
             },
-            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+            dispatcher,
         )
         .map_err(|_| BlobClientError::Unavailable)?;
     let delivery = match response.result {

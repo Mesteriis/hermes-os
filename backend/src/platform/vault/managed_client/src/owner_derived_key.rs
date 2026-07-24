@@ -3,26 +3,26 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::managed_control::{
-    ManagedControlChannelV2, ManagedControlTransportErrorV2,
+    ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
 };
 use hermes_runtime_protocol::v1::{
+    ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
+    ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedRuntimeOwnerDerivedKeyRequestV1,
+    ManagedRuntimeVaultRouteRequestV1, VaultCiphertextRouteDirectionV1, VaultCiphertextRouteV1,
     managed_runtime_control_request_v1::Operation,
-    managed_runtime_control_response_v1::Result as ControlResult, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, ManagedRuntimeOwnerDerivedKeyDeliveryV1,
-    ManagedRuntimeOwnerDerivedKeyRequestV1, ManagedRuntimeVaultRouteRequestV1,
-    VaultCiphertextRouteDirectionV1, VaultCiphertextRouteV1,
+    managed_runtime_control_response_v1::Result as ControlResult,
 };
 use hermes_vault_protocol::{
-    seal, LeaseAudienceV1, LeaseIdV1, SecretClassV1, VaultActionV1, VaultCiphertextFrameV1,
+    LeaseAudienceV1, LeaseIdV1, SecretClassV1, VaultActionV1, VaultCiphertextFrameV1,
     VaultLeaseIssueRequestV1, VaultPurposeRequestV1, VaultResponseRecipientV1,
-    VaultTransportCommandV1, VaultTransportDirectionV1, VaultTransportPublicKey,
+    VaultTransportCommandV1, VaultTransportDirectionV1, VaultTransportPublicKey, seal,
 };
 use prost::Message;
 use zeroize::Zeroizing;
 
 use crate::{
-    binding, random_request_id, read_frame, valid_response, write_frame,
-    ManagedProviderCredentialErrorV1,
+    ManagedProviderCredentialErrorV1, binding, random_request_id, read_frame, valid_response,
+    write_frame,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -281,6 +281,7 @@ impl ManagedOwnerDerivedKeyClientV1 {
 /// but never takes ownership of the domain runtime's channel.
 pub fn ensure_managed_owner_derived_key_v2(
     channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     context: &ManagedOwnerDerivedKeyContextV1,
     capability_id: &str,
     purpose_id: &str,
@@ -299,6 +300,7 @@ pub fn ensure_managed_owner_derived_key_v2(
     let request_id = random_request_id().map_err(map_transport_error)?;
     let delivery = request_owner_key_lease_v2(
         channel,
+        dispatcher,
         request_id,
         capability_id,
         purpose_id,
@@ -348,6 +350,7 @@ pub fn ensure_managed_owner_derived_key_v2(
         .ok_or(ManagedOwnerDerivedKeyErrorV1::Rejected)?;
     let key = execute_owner_key_command_v2(
         channel,
+        dispatcher,
         context,
         audience,
         VaultTransportCommandV1::EnsureOwnerDerivedKey { lease_id },
@@ -359,6 +362,7 @@ pub fn ensure_managed_owner_derived_key_v2(
 
 fn request_owner_key_lease_v2(
     channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     request_id: [u8; 16],
     capability_id: &str,
     purpose_id: &str,
@@ -367,7 +371,7 @@ fn request_owner_key_lease_v2(
     recipient_public_key_x25519: &[u8; 32],
 ) -> Result<ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedOwnerDerivedKeyErrorV1> {
     let response = channel
-        .request_next(
+        .request_next_with_dispatch(
             ManagedRuntimeControlRequestV1 {
                 operation: Some(Operation::IssueOwnerDerivedKey(owner_key_request(
                     request_id,
@@ -378,7 +382,7 @@ fn request_owner_key_lease_v2(
                     recipient_public_key_x25519,
                 ))),
             },
-            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+            dispatcher,
         )
         .map_err(|_| ManagedOwnerDerivedKeyErrorV1::Unavailable)?;
     match response.result {
@@ -393,6 +397,7 @@ fn request_owner_key_lease_v2(
 
 fn execute_owner_key_command_v2(
     channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     context: &ManagedOwnerDerivedKeyContextV1,
     audience: LeaseAudienceV1,
     command: VaultTransportCommandV1,
@@ -443,7 +448,7 @@ fn execute_owner_key_command_v2(
         storage_owner_id: String::new(),
     };
     let response = channel
-        .request_next(
+        .request_next_with_dispatch(
             ManagedRuntimeControlRequestV1 {
                 operation: Some(Operation::RouteVaultCiphertext(
                     ManagedRuntimeVaultRouteRequestV1 {
@@ -451,7 +456,7 @@ fn execute_owner_key_command_v2(
                     },
                 )),
             },
-            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+            dispatcher,
         )
         .map_err(|_| ManagedOwnerDerivedKeyErrorV1::Unavailable)?;
     let response = response

@@ -80,6 +80,33 @@ pub struct ManagedControlChannelV2<S> {
     read_buffer: Vec<u8>,
 }
 
+/// Typed owner request dispatch used while a platform call awaits its own
+/// correlated response. The frame pump remains platform-owned; a domain only
+/// supplies semantics for its declared inbound request.
+pub trait ManagedControlRequestDispatcherV2<S> {
+    fn dispatch_request(
+        &mut self,
+        channel: &mut ManagedControlChannelV2<S>,
+        correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+        request: ManagedRuntimeControlRequestV1,
+    ) -> Result<(), ManagedControlTransportErrorV2>;
+}
+
+/// Default dispatcher for platform calls made before an owner has an inbound
+/// request contract (for example startup-only credential acquisition).
+pub struct RejectManagedControlRequestsV2;
+
+impl<S> ManagedControlRequestDispatcherV2<S> for RejectManagedControlRequestsV2 {
+    fn dispatch_request(
+        &mut self,
+        _: &mut ManagedControlChannelV2<S>,
+        _: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+        _: ManagedRuntimeControlRequestV1,
+    ) -> Result<(), ManagedControlTransportErrorV2> {
+        Err(ManagedControlTransportErrorV2::UnexpectedRequest)
+    }
+}
+
 impl<S> ManagedControlChannelV2<S> {
     pub fn new(stream: S) -> Self {
         Self {
@@ -159,6 +186,20 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
         ) -> Result<(), ManagedControlTransportErrorV2>,
     {
         self.request(next_correlation_id(), request, dispatch_request)
+    }
+
+    pub fn request_next_with_dispatch(
+        &mut self,
+        request: ManagedRuntimeControlRequestV1,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<S>,
+    ) -> Result<ManagedRuntimeControlResponseV1, ManagedControlTransportErrorV2> {
+        self.request(
+            next_correlation_id(),
+            request,
+            |channel, correlation_id, request| {
+                dispatcher.dispatch_request(channel, correlation_id, request)
+            },
+        )
     }
 
     pub fn receive_request(
