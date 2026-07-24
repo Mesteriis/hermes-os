@@ -1,8 +1,10 @@
 //! Telegram-owned PostgreSQL persistence for operational projections and Communications outbox.
 
+mod communications_outbox;
 mod durable;
 mod schema;
 
+pub use communications_outbox::TelegramCommunicationsOutboxStoreV1;
 pub use durable::{
     TELEGRAM_SCHEMA_V1, TelegramDurablePersistence, TelegramDurablePersistenceError,
 };

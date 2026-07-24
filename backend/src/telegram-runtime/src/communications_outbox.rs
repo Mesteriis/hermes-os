@@ -1,7 +1,12 @@
 //! Telegram-owned exact-byte relay for Communications observations.
 
-use hermes_events_jetstream::{RuntimeJetStreamConnection, RuntimePublishPermitV1};
-use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
+use hermes_events_jetstream::{
+    RuntimeJetStreamConnection, RuntimeOutboxPublisherV1, RuntimePublishPermitV1,
+};
+use hermes_events_protocol::delivery::{OutboxRelayErrorV1, OutboxRelayOutcomeV1, relay_once};
+use hermes_telegram_persistence::{
+    TelegramCommunicationsOutboxStoreV1, TelegramDurablePersistence,
+};
 
 /// Publishes only records already committed in Telegram-owned PostgreSQL.
 /// The permit is derived by Kernel from approved Event Hub topology; this
@@ -12,27 +17,24 @@ pub async fn relay_communications_outbox_once(
     permit: &RuntimePublishPermitV1,
     published_at_unix_seconds: i64,
 ) -> Result<usize, TelegramCommunicationsOutboxRelayError> {
-    let records = durable
-        .pending_communications_outbox(64)
-        .await
-        .map_err(TelegramCommunicationsOutboxRelayError::Persistence)?;
+    let publisher = RuntimeOutboxPublisherV1::new(connection, permit);
+    let mut store = TelegramCommunicationsOutboxStoreV1::new(durable, published_at_unix_seconds);
     let mut published = 0;
-    for record in records {
-        connection
-            .publish_exact(permit, record.exact_bytes())
-            .await
-            .map_err(|_| TelegramCommunicationsOutboxRelayError::Unavailable)?;
-        durable
-            .mark_communications_outbox_published(record.message_id(), published_at_unix_seconds)
-            .await
-            .map_err(TelegramCommunicationsOutboxRelayError::Persistence)?;
-        published += 1;
+    for _ in 0..64 {
+        match relay_once(&mut store, &publisher).await {
+            Ok(OutboxRelayOutcomeV1::Idle) => break,
+            Ok(OutboxRelayOutcomeV1::Published { .. }) => published += 1,
+            Err(OutboxRelayErrorV1::Persistence) => {
+                return Err(TelegramCommunicationsOutboxRelayError::Persistence);
+            }
+            Err(_) => return Err(TelegramCommunicationsOutboxRelayError::Unavailable),
+        }
     }
     Ok(published)
 }
 
 #[derive(Debug)]
 pub enum TelegramCommunicationsOutboxRelayError {
-    Persistence(TelegramDurablePersistenceError),
+    Persistence,
     Unavailable,
 }
