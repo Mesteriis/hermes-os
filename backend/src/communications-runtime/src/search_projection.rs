@@ -21,9 +21,13 @@ pub fn assemble_search_projection_write_v1(
 ) -> Result<CommunicationsSearchProjectionWriteV1, CommunicationsSearchProjectionAssemblyErrorV1> {
     let document = normalize_search_document_tokens_v1(document)
         .map_err(|_| CommunicationsSearchProjectionAssemblyErrorV1::InvalidDocument)?;
-    let token_digests = document.tokens.iter()
-        .map(|token| keyed_search_token_digest_v1(key, token)
-            .map_err(|_| CommunicationsSearchProjectionAssemblyErrorV1::InvalidKey))
+    let token_digests = document
+        .tokens
+        .iter()
+        .map(|token| {
+            keyed_search_token_digest_v1(key, token)
+                .map_err(|_| CommunicationsSearchProjectionAssemblyErrorV1::InvalidKey)
+        })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(CommunicationsSearchProjectionWriteV1 {
         evidence_id: job.evidence_id,

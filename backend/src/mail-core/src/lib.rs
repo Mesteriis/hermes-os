@@ -307,7 +307,7 @@ pub fn draft_attachment_ingress_observation(
         operation_id,
         SourceEnvelope {
             provider: request.provider,
-            external_record_id: format!("{}:{}", request.message_source_id, request.media_id),
+            external_record_id: request.message_source_id.clone(),
             scope: Some(SourceScopeEnvelope {
                 external_account_id: request.account_id,
                 external_conversation_id: Some(request.message_source_id),

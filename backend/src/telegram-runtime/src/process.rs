@@ -4,17 +4,22 @@ use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use hermes_blob_client::BlobDataClient;
+use hermes_blob_client::request_managed_blob_session;
+use hermes_communications_ingress::{BodyAdmissionFailureV1, BodyBlobReceiptV1};
+use hermes_runtime_protocol::v1::BlobDataOperationV1;
+use hermes_runtime_protocol::{
+    v1::{
+        ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeClientDeliveryResponseV1,
+        ModuleClientResponseV1,
+    },
+    validation::module_client::{
+        validate_module_client_request_v1, validate_module_client_response_v1,
+    },
+};
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::TdlibAuthorizationUpdate;
 use hermes_telegram_tdlib::{TdlibAuthorizationEvent, TdlibError};
-use hermes_runtime_protocol::{
-    v1::{ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeClientDeliveryResponseV1, ModuleClientResponseV1},
-    validation::module_client::{validate_module_client_request_v1, validate_module_client_response_v1},
-};
-use hermes_blob_client::request_managed_blob_session;
-use hermes_blob_client::BlobDataClient;
-use hermes_communications_ingress::{BodyAdmissionFailureV1, BodyBlobReceiptV1};
-use hermes_runtime_protocol::v1::BlobDataOperationV1;
 use prost::Message;
 use sha2::{Digest, Sha256};
 
@@ -205,23 +210,22 @@ pub fn serve_admitted_provider_loop(admitted: TelegramAdmittedRuntime) -> Result
     loop {
         handle_client_delivery(&mut control_channel, &mut process, &durable, &executor)?;
         let poll = {
-            let mut body_admitter = |plaintext: &[u8]| admit_telegram_plaintext(&mut control_channel, plaintext);
-            executor
-            .block_on(process.poll_once_durable(Duration::from_millis(25), &durable, &mut body_admitter))
+            let mut body_admitter =
+                |plaintext: &[u8]| admit_telegram_plaintext(&mut control_channel, plaintext);
+            executor.block_on(process.poll_once_durable(
+                Duration::from_millis(25),
+                &durable,
+                &mut body_admitter,
+            ))
         };
-        poll
-            .map_err(|error| format!("Telegram runtime provider loop failed: {error:?}"))?;
+        poll.map_err(|error| format!("Telegram runtime provider loop failed: {error:?}"))?;
         if !restored && process.composition().has_runtime() {
             let runtime = process
                 .composition_mut()
                 .runtime_mut()
                 .ok_or_else(|| "Telegram runtime provider disappeared during restore".to_owned())?;
             executor
-                .block_on(runtime.restore_account_state_durable(
-                    &durable,
-                    &account_id,
-                    10_000,
-                ))
+                .block_on(runtime.restore_account_state_durable(&durable, &account_id, 10_000))
                 .map_err(|error| format!("Telegram durable state restore failed: {error:?}"))?;
             restored = true;
         }
@@ -264,12 +268,14 @@ pub fn serve_admitted_provider_loop(admitted: TelegramAdmittedRuntime) -> Result
                     .map_err(|_| "Telegram runtime clock is unavailable".to_owned())
             })?;
         executor
-            .block_on(crate::communications_outbox::relay_communications_outbox_once(
-                &durable,
-                &event_connection,
-                &event_publish_permit,
-                published_at_unix_seconds,
-            ))
+            .block_on(
+                crate::communications_outbox::relay_communications_outbox_once(
+                    &durable,
+                    &event_connection,
+                    &event_publish_permit,
+                    published_at_unix_seconds,
+                ),
+            )
             .map_err(|error| format!("Telegram runtime outbox relay failed: {error:?}"))?;
     }
 }
@@ -283,9 +289,13 @@ fn admit_telegram_plaintext(
     }
     let mut reference_id = [0_u8; 16];
     getrandom::fill(&mut reference_id).map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
-    if reference_id.iter().all(|byte| *byte == 0) { return Err(BodyAdmissionFailureV1::SourceUnavailable); }
+    if reference_id.iter().all(|byte| *byte == 0) {
+        return Err(BodyAdmissionFailureV1::SourceUnavailable);
+    }
     let sha256: [u8; 32] = Sha256::digest(plaintext).into();
-    control_channel.set_nonblocking(false).map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
+    control_channel
+        .set_nonblocking(false)
+        .map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
     let session = request_managed_blob_session(
         control_channel,
         "blob.content",
@@ -305,14 +315,18 @@ fn admit_telegram_plaintext(
     Ok(BodyBlobReceiptV1 {
         blob_ref: format!("blob-content:{}", hex_reference_id(&reference_id)),
         reference_id,
-        declared_bytes: u64::try_from(plaintext.len()).map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
+        declared_bytes: u64::try_from(plaintext.len())
+            .map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
         sha256,
         custody_transfer_source_proof,
     })
 }
 
 fn hex_reference_id(reference_id: &[u8; 16]) -> String {
-    reference_id.iter().map(|byte| format!("{byte:02x}")).collect()
+    reference_id
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn handle_client_delivery(
@@ -321,18 +335,26 @@ fn handle_client_delivery(
     durable: &TelegramDurablePersistence,
     executor: &tokio::runtime::Runtime,
 ) -> Result<(), String> {
-    let Some(frame) = peek_complete_frame(channel)? else { return Ok(()); };
+    let Some(frame) = peek_complete_frame(channel)? else {
+        return Ok(());
+    };
     let request = ManagedRuntimeClientDeliveryRequestV1::decode(frame.as_slice())
         .map_err(|_| "Telegram runtime client delivery is invalid".to_owned())?
         .request
         .ok_or_else(|| "Telegram runtime client delivery is invalid".to_owned())?;
     validate_module_client_request_v1(&request)
         .map_err(|_| "Telegram runtime client delivery is invalid".to_owned())?;
-    if read_frame(channel)? != frame { return Err("Telegram runtime client delivery is invalid".to_owned()); }
+    if read_frame(channel)? != frame {
+        return Err("Telegram runtime client delivery is invalid".to_owned());
+    }
     let response = if let Some(runtime) = process.composition_mut().runtime_mut() {
         authorize_media_for_request(channel, runtime, &request)?;
         let payload = executor
-            .block_on(client_transport::handle_durable_request(runtime, durable, &request.encode_to_vec()))
+            .block_on(client_transport::handle_durable_request(
+                runtime,
+                durable,
+                &request.encode_to_vec(),
+            ))
             .map_err(|_| "Telegram runtime client request failed".to_owned())?;
         ModuleClientResponseV1::decode(payload.as_slice())
             .map_err(|_| "Telegram runtime client response is invalid".to_owned())?
@@ -346,7 +368,13 @@ fn handle_client_delivery(
     };
     validate_module_client_response_v1(&response)
         .map_err(|_| "Telegram runtime client response is invalid".to_owned())?;
-    write_frame(channel, &ManagedRuntimeClientDeliveryResponseV1 { response: Some(response) }.encode_to_vec())
+    write_frame(
+        channel,
+        &ManagedRuntimeClientDeliveryResponseV1 {
+            response: Some(response),
+        }
+        .encode_to_vec(),
+    )
 }
 
 fn authorize_media_for_request<T: hermes_telegram_tdlib::TdlibTransport>(
@@ -354,7 +382,8 @@ fn authorize_media_for_request<T: hermes_telegram_tdlib::TdlibTransport>(
     runtime: &mut crate::TelegramRuntime<T>,
     request: &hermes_runtime_protocol::v1::ModuleClientRequestV1,
 ) -> Result<(), String> {
-    let Ok(command) = hermes_telegram_api::client_wire::decode_command(&request.request_payload) else {
+    let Ok(command) = hermes_telegram_api::client_wire::decode_command(&request.request_payload)
+    else {
         return Ok(());
     };
     let hermes_telegram_api::TelegramProviderCommand::SendMedia(media) = command else {
@@ -377,37 +406,82 @@ fn authorize_media_for_request<T: hermes_telegram_tdlib::TdlibTransport>(
 
 fn peek_complete_frame(channel: &UnixStream) -> Result<Option<Vec<u8>>, String> {
     let mut header = [0_u8; 5];
-    let length = unsafe { libc::recv(channel.as_raw_fd(), header.as_mut_ptr().cast(), header.len(), libc::MSG_PEEK) };
+    let length = unsafe {
+        libc::recv(
+            channel.as_raw_fd(),
+            header.as_mut_ptr().cast(),
+            header.len(),
+            libc::MSG_PEEK,
+        )
+    };
     if length < 0 {
-        return if std::io::Error::last_os_error().kind() == std::io::ErrorKind::WouldBlock { Ok(None) } else { Err("Telegram runtime channel is unavailable".to_owned()) };
+        return if std::io::Error::last_os_error().kind() == std::io::ErrorKind::WouldBlock {
+            Ok(None)
+        } else {
+            Err("Telegram runtime channel is unavailable".to_owned())
+        };
     }
-    if length == 0 { return Err("Telegram runtime channel is unavailable".to_owned()); }
-    let (payload_length, prefix_length) = decode_peeked_length(&header[..usize::try_from(length).map_err(|_| "Telegram runtime frame is invalid".to_owned())?])?;
-    if payload_length == 0 || payload_length > 512 * 1024 { return Err("Telegram runtime frame is invalid".to_owned()); }
+    if length == 0 {
+        return Err("Telegram runtime channel is unavailable".to_owned());
+    }
+    let (payload_length, prefix_length) = decode_peeked_length(
+        &header[..usize::try_from(length)
+            .map_err(|_| "Telegram runtime frame is invalid".to_owned())?],
+    )?;
+    if payload_length == 0 || payload_length > 512 * 1024 {
+        return Err("Telegram runtime frame is invalid".to_owned());
+    }
     let mut framed = vec![0_u8; prefix_length + payload_length];
-    let received = unsafe { libc::recv(channel.as_raw_fd(), framed.as_mut_ptr().cast(), framed.len(), libc::MSG_PEEK) };
-    if received < 0 { return Err("Telegram runtime channel is unavailable".to_owned()); }
-    if usize::try_from(received).map_err(|_| "Telegram runtime frame is invalid".to_owned())? < framed.len() { return Ok(None); }
+    let received = unsafe {
+        libc::recv(
+            channel.as_raw_fd(),
+            framed.as_mut_ptr().cast(),
+            framed.len(),
+            libc::MSG_PEEK,
+        )
+    };
+    if received < 0 {
+        return Err("Telegram runtime channel is unavailable".to_owned());
+    }
+    if usize::try_from(received).map_err(|_| "Telegram runtime frame is invalid".to_owned())?
+        < framed.len()
+    {
+        return Ok(None);
+    }
     Ok(Some(framed[prefix_length..].to_vec()))
 }
 
 fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, String> {
     let (length, _) = read_length(channel)?;
-    if length == 0 || length > 512 * 1024 { return Err("Telegram runtime frame is invalid".to_owned()); }
+    if length == 0 || length > 512 * 1024 {
+        return Err("Telegram runtime frame is invalid".to_owned());
+    }
     let mut bytes = vec![0_u8; length];
     use std::io::Read;
-    channel.read_exact(&mut bytes).map_err(|_| "Telegram runtime channel is unavailable".to_owned())?;
+    channel
+        .read_exact(&mut bytes)
+        .map_err(|_| "Telegram runtime channel is unavailable".to_owned())?;
     Ok(bytes)
 }
 
 fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), String> {
     use std::io::Write;
-    if bytes.is_empty() || bytes.len() > 512 * 1024 { return Err("Telegram runtime frame is invalid".to_owned()); }
-    let mut length = u32::try_from(bytes.len()).map_err(|_| "Telegram runtime frame is invalid".to_owned())?;
+    if bytes.is_empty() || bytes.len() > 512 * 1024 {
+        return Err("Telegram runtime frame is invalid".to_owned());
+    }
+    let mut length =
+        u32::try_from(bytes.len()).map_err(|_| "Telegram runtime frame is invalid".to_owned())?;
     let mut prefix = Vec::new();
-    while length >= 0x80 { prefix.push((length as u8 & 0x7f) | 0x80); length >>= 7; }
+    while length >= 0x80 {
+        prefix.push((length as u8 & 0x7f) | 0x80);
+        length >>= 7;
+    }
     prefix.push(length as u8);
-    channel.write_all(&prefix).and_then(|_| channel.write_all(bytes)).and_then(|_| channel.flush()).map_err(|_| "Telegram runtime channel is unavailable".to_owned())
+    channel
+        .write_all(&prefix)
+        .and_then(|_| channel.write_all(bytes))
+        .and_then(|_| channel.flush())
+        .map_err(|_| "Telegram runtime channel is unavailable".to_owned())
 }
 
 fn read_length(channel: &mut UnixStream) -> Result<(usize, usize), String> {
@@ -415,9 +489,13 @@ fn read_length(channel: &mut UnixStream) -> Result<(usize, usize), String> {
     let mut value = 0_usize;
     for index in 0..5 {
         let mut byte = [0_u8; 1];
-        channel.read_exact(&mut byte).map_err(|_| "Telegram runtime channel is unavailable".to_owned())?;
+        channel
+            .read_exact(&mut byte)
+            .map_err(|_| "Telegram runtime channel is unavailable".to_owned())?;
         value |= usize::from(byte[0] & 0x7f) << (index * 7);
-        if byte[0] & 0x80 == 0 { return Ok((value, index + 1)); }
+        if byte[0] & 0x80 == 0 {
+            return Ok((value, index + 1));
+        }
     }
     Err("Telegram runtime frame is invalid".to_owned())
 }
@@ -426,7 +504,9 @@ fn decode_peeked_length(bytes: &[u8]) -> Result<(usize, usize), String> {
     let mut value = 0_usize;
     for (index, byte) in bytes.iter().copied().enumerate() {
         value |= usize::from(byte & 0x7f) << (index * 7);
-        if byte & 0x80 == 0 { return Ok((value, index + 1)); }
+        if byte & 0x80 == 0 {
+            return Ok((value, index + 1));
+        }
     }
     Err("Telegram runtime frame is invalid".to_owned())
 }

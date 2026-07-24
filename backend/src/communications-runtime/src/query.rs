@@ -1,17 +1,12 @@
 //! Communications runtime composition for provider-neutral evidence reads.
 
 use hermes_communications_api::{
-    CommunicationConversationSummaryV1, CommunicationMessageSummaryV1,
-    CommunicationObservedParticipantSummaryV1,
-    CommunicationAttachmentAnchorSummaryV1,
-    CommunicationMessageReferenceSummaryV1,
-    CommunicationAccountSummaryV1,
-    CommunicationSummary, CommunicationsClientError, GetCommunicationConversationV1,
-    GetCommunicationSummary, ListConversationMessagesV1, ListConversationParticipantsV1,
-    ListMessageAttachmentAnchorsV1,
-    ListMessageReferencesV1,
-    ListCommunicationAccountsV1,
-    ListCommunicationConversationsV1,
+    CommunicationAccountSummaryV1, CommunicationAttachmentAnchorSummaryV1,
+    CommunicationConversationSummaryV1, CommunicationMessageReferenceSummaryV1,
+    CommunicationMessageSummaryV1, CommunicationObservedParticipantSummaryV1, CommunicationSummary,
+    CommunicationsClientError, GetCommunicationConversationV1, GetCommunicationSummary,
+    ListCommunicationAccountsV1, ListCommunicationConversationsV1, ListConversationMessagesV1,
+    ListConversationParticipantsV1, ListMessageAttachmentAnchorsV1, ListMessageReferencesV1,
 };
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 

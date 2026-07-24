@@ -61,7 +61,13 @@ mod tests {
 
     #[test]
     fn digest_rejects_unusable_inputs() {
-        assert_eq!(keyed_search_token_digest_v1(&[1; 31], "hello"), Err(CommunicationsSearchDigestErrorV1::InvalidKey));
-        assert_eq!(keyed_search_token_digest_v1(&[1; 32], ""), Err(CommunicationsSearchDigestErrorV1::InvalidToken));
+        assert_eq!(
+            keyed_search_token_digest_v1(&[1; 31], "hello"),
+            Err(CommunicationsSearchDigestErrorV1::InvalidKey)
+        );
+        assert_eq!(
+            keyed_search_token_digest_v1(&[1; 32], ""),
+            Err(CommunicationsSearchDigestErrorV1::InvalidToken)
+        );
     }
 }

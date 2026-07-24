@@ -13,8 +13,8 @@ use hermes_events_jetstream::{
     RuntimeSubscribePermitV1, request_managed_runtime_event_access,
 };
 use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeRequestV1, ManagedRuntimeClientDeliveryRequestV1,
-    ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlRequestV1,
+    DescribeManagedRuntimeRequestV1, ManagedRuntimeClientDeliveryResponseV1,
+    ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
     ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
     managed_runtime_control_request_v1::Operation,
@@ -105,7 +105,7 @@ impl CommunicationsEventRuntimeV1 {
             admission.grant_epoch,
             credential_revision,
         )
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        .map_err(|_| unavailable_at("event_access"))?;
         let mut permits = access
             .subscribe_permits(
                 &admission.registration_id,
@@ -140,7 +140,7 @@ impl CommunicationsEventRuntimeV1 {
             access.into_credential(),
         )
         .await
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        .map_err(|_| unavailable_at("event_connection"))?;
         let binding = storage_binding(&storage_configuration, admission)?;
         let vault_public_key = storage_configuration
             .vault_hpke_public_key_x25519
@@ -157,11 +157,13 @@ impl CommunicationsEventRuntimeV1 {
             InheritedKernelVaultRouteV1::new(
                 control_channel
                     .try_clone()
-                    .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?,
+                    .map_err(|_| unavailable_at("vault_route"))?,
             ),
             vault_context,
         );
-        let password = resolve_storage_runtime_credential(&mut leases, &binding).await?;
+        let password = resolve_storage_runtime_credential(&mut leases, &binding)
+            .await
+            .map_err(|_| unavailable_at("storage_credential"))?;
         let password = std::str::from_utf8(&password)
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
         let persistence = CommunicationsDurablePersistence::connect_runtime(
@@ -172,11 +174,11 @@ impl CommunicationsEventRuntimeV1 {
             password,
         )
         .await
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        .map_err(|_| unavailable_at("storage_connection"))?;
         persistence
             .verify_storage_ready()
             .await
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+            .map_err(|_| unavailable_at("storage_readiness"))?;
         let started_at_unix_seconds = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
@@ -187,14 +189,8 @@ impl CommunicationsEventRuntimeV1 {
                     .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?,
             )
             .await
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-        let search_access = CommunicationsSearchAccessV1::open(
-            control_channel
-                .try_clone()
-                .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?,
-            admission,
-            &storage_configuration,
-        )
+            .map_err(|_| unavailable_at("search_projection"))?;
+        let search_access = CommunicationsSearchAccessV1::open(admission, &storage_configuration)
         .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
         control_channel
             .set_nonblocking(true)
@@ -216,43 +212,65 @@ impl CommunicationsEventRuntimeV1 {
     pub async fn try_handle_client_delivery(
         &mut self,
     ) -> Result<bool, CommunicationsEventRuntimeErrorV1> {
-        let Some(frame) = peek_complete_frame(&self.control_channel)? else {
+        let Some(frame) = peek_complete_frame(&self.control_channel)
+            .map_err(|_| unavailable_at("client_peek"))?
+        else {
             return Ok(false);
         };
-        let request = ManagedRuntimeClientDeliveryRequestV1::decode(frame.as_slice())
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?
-            .request
-            .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?;
+        if frame.first() != Some(&0x42) {
+            return Ok(false);
+        }
+        let request = ManagedRuntimeControlRequestV1::decode(frame.as_slice())
+            .map_err(|_| admission_at("client_request_decode"))?
+            .operation
+            .and_then(|operation| match operation {
+                Operation::ClientDelivery(delivery) => delivery.request,
+                _ => None,
+            })
+            .ok_or_else(|| admission_at("client_request_missing"))?;
         if validate_module_client_request_v1(&request).is_err() {
-            if read_frame(&mut self.control_channel)? != frame {
-                return Err(CommunicationsEventRuntimeErrorV1::Admission);
+            if read_frame(&mut self.control_channel)
+                .map_err(|_| unavailable_at("client_rejected_read"))?
+                != frame
+            {
+                return Err(admission_at("client_rejected_frame_changed"));
             }
             write_frame(
                 &mut self.control_channel,
-                &ManagedRuntimeClientDeliveryResponseV1 {
-                    response: Some(ModuleClientResponseV1 {
-                        protocol_major: 1,
-                        request_id: request.request_id,
-                        response_payload: Vec::new(),
-                        error_code: "REJECTED".to_owned(),
-                    }),
+                &ManagedRuntimeControlResponseV1 {
+                    result: Some(ControlResult::ClientDelivery(
+                        ManagedRuntimeClientDeliveryResponseV1 {
+                            response: Some(ModuleClientResponseV1 {
+                                protocol_major: 1,
+                                request_id: request.request_id,
+                                response_payload: Vec::new(),
+                                error_code: "REJECTED".to_owned(),
+                            }),
+                        },
+                    )),
+                    error_code: String::new(),
                 }
                 .encode_to_vec(),
-            )?;
+            )
+            .map_err(|_| unavailable_at("client_rejected_write"))?;
             return Ok(true);
         }
-        if read_frame(&mut self.control_channel)? != frame {
-            return Err(CommunicationsEventRuntimeErrorV1::Admission);
+        if read_frame(&mut self.control_channel)
+            .map_err(|_| unavailable_at("client_read"))?
+            != frame
+        {
+            return Err(admission_at("client_frame_changed"));
         }
         let payload = crate::query_client_port::handle_module_query_request_v1(
             &self.persistence,
             &mut self.search_access,
+            &mut self.control_channel,
             &request.encode_to_vec(),
         )
         .await;
         let response = match payload {
             Ok(payload) => ModuleClientResponseV1::decode(payload.as_slice())
-                .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?,
+                .map_err(|_| unavailable_at("client_response_decode"))?,
             Err(_) => ModuleClientResponseV1 {
                 protocol_major: 1,
                 request_id: request.request_id,
@@ -261,17 +279,23 @@ impl CommunicationsEventRuntimeV1 {
             },
         };
         validate_module_client_response_v1(&response)
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+            .map_err(|_| unavailable_at("client_response_validate"))?;
         if response.request_id != request.request_id {
-            return Err(CommunicationsEventRuntimeErrorV1::Admission);
+            return Err(admission_at("client_response_request_id"));
         }
         write_frame(
             &mut self.control_channel,
-            &ManagedRuntimeClientDeliveryResponseV1 {
-                response: Some(response),
+            &ManagedRuntimeControlResponseV1 {
+                result: Some(ControlResult::ClientDelivery(
+                    ManagedRuntimeClientDeliveryResponseV1 {
+                        response: Some(response),
+                    },
+                )),
+                error_code: String::new(),
             }
             .encode_to_vec(),
-        )?;
+        )
+        .map_err(|_| unavailable_at("client_write"))?;
         Ok(true)
     }
 
@@ -319,6 +343,7 @@ impl CommunicationsEventRuntimeV1 {
         process_next_derived_index_job_v1(
             &self.persistence,
             &mut self.search_access,
+            &mut self.control_channel,
             &format!("{}:{}", self.runtime_instance_id, self.runtime_generation),
             context.recorded_at_unix_seconds,
         )
@@ -369,6 +394,20 @@ impl CommunicationsEventRuntimeV1 {
         )
         .await
     }
+}
+
+fn unavailable_at(stage: &str) -> CommunicationsEventRuntimeErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_communications_runtime_startup_unavailable stage={stage}");
+    }
+    CommunicationsEventRuntimeErrorV1::Unavailable
+}
+
+fn admission_at(stage: &str) -> CommunicationsEventRuntimeErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_communications_runtime_admission stage={stage}");
+    }
+    CommunicationsEventRuntimeErrorV1::Admission
 }
 
 async fn resolve_storage_runtime_credential(
@@ -508,10 +547,12 @@ fn peek_complete_frame(
     if length == 0 {
         return Err(CommunicationsEventRuntimeErrorV1::Unavailable);
     }
-    let (payload_length, prefix_length) = decode_peeked_length(
+    let Some((payload_length, prefix_length)) = decode_peeked_length(
         &header[..usize::try_from(length)
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?],
-    )?;
+    )? else {
+        return Ok(None);
+    };
     if payload_length == 0 || payload_length > MAX_FRAME_BYTES {
         return Err(CommunicationsEventRuntimeErrorV1::Unavailable);
     }
@@ -535,15 +576,17 @@ fn peek_complete_frame(
     Ok(Some(framed[prefix_length..].to_vec()))
 }
 
-fn decode_peeked_length(bytes: &[u8]) -> Result<(usize, usize), CommunicationsEventRuntimeErrorV1> {
+fn decode_peeked_length(
+    bytes: &[u8],
+) -> Result<Option<(usize, usize)>, CommunicationsEventRuntimeErrorV1> {
     let mut value = 0_usize;
     for (index, byte) in bytes.iter().copied().enumerate() {
         value |= usize::from(byte & 0x7f) << (index * 7);
         if byte & 0x80 == 0 {
-            return Ok((value, index + 1));
+            return Ok(Some((value, index + 1)));
         }
     }
-    Err(CommunicationsEventRuntimeErrorV1::Unavailable)
+    Ok(None)
 }
 
 fn read_varint(channel: &mut UnixStream) -> Result<u64, CommunicationsEventRuntimeErrorV1> {

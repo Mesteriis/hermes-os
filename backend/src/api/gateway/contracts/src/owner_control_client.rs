@@ -123,7 +123,10 @@ impl OwnerControlChallengeV1 {
             && valid_identifier(&response.owner_id)
             && valid_identifier(&response.device_id)
             && response.challenge_id.len() == 64
-            && response.challenge_id.bytes().all(|byte| byte.is_ascii_hexdigit())
+            && response
+                .challenge_id
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
             && response.control_store_generation > 0
             && response.expires_at_unix_millis > 0)
             .then_some(Self {
@@ -163,7 +166,9 @@ fn read_frame(stream: &mut impl Read) -> Result<Vec<u8>, String> {
         return Err("owner control frame is too large".to_owned());
     }
     let mut bytes = vec![0_u8; length];
-    stream.read_exact(&mut bytes).map_err(|error| error.to_string())?;
+    stream
+        .read_exact(&mut bytes)
+        .map_err(|error| error.to_string())?;
     Ok(bytes)
 }
 
@@ -171,7 +176,9 @@ fn read_varint(stream: &mut impl Read) -> Result<u64, String> {
     let mut value = 0_u64;
     for shift in (0..35).step_by(7) {
         let mut byte = [0_u8; 1];
-        stream.read_exact(&mut byte).map_err(|error| error.to_string())?;
+        stream
+            .read_exact(&mut byte)
+            .map_err(|error| error.to_string())?;
         value |= u64::from(byte[0] & 0x7f) << shift;
         if byte[0] & 0x80 == 0 {
             return Ok(value);

@@ -6,10 +6,7 @@ use std::os::unix::net::UnixStream;
 use hermes_telegram_persistence::TelegramDurablePersistence;
 use hermes_telegram_tdlib::TdlibTransport;
 
-use crate::{
-    TelegramRuntime, TelegramRuntimeComposition,
-    client_port::TelegramClientPortError,
-};
+use crate::{TelegramRuntime, TelegramRuntimeComposition, client_port::TelegramClientPortError};
 
 const MAX_CLIENT_FRAME_BYTES: usize = 512 * 1024;
 

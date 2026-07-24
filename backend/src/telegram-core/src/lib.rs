@@ -1,19 +1,20 @@
 //! Telegram integration policy and provider-neutral orchestration.
 
 use hermes_communications_ingress::{
-    AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1,
-    CommunicationDirectionV1, CommunicationEvidenceKindV1, ProviderProvenanceV1, SourceEnvelope, SourceScopeEnvelope,
+    AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1, CommunicationDirectionV1,
+    CommunicationEvidenceKindV1, ProviderProvenanceV1, SourceEnvelope, SourceScopeEnvelope,
     new_communication_observation_draft, new_scoped_communication_observation_draft,
     with_attachment_descriptor,
 };
 use hermes_telegram_api::{
-    TelegramAccount, TelegramAccountState, TelegramChatStateProjection, TelegramContractError,
-    TelegramCredentialBinding, TelegramDeliveryState, TelegramMessageMutation,
-    TelegramAttachmentProjection, TelegramMessageObservation, TelegramMessageProjection, TelegramOperation,
-    TelegramOperationState, TelegramProviderCommand, TelegramProviderEvent, TelegramQrLoginSession,
-    TelegramQrLoginState, TelegramReconciliationState, TelegramRuntimeLease,
-    TelegramRuntimeLeaseState, TelegramRuntimeState, provider_command_account_id,
-    provider_command_kind, provider_command_operation_id, validate_text,
+    TelegramAccount, TelegramAccountState, TelegramAttachmentProjection,
+    TelegramChatStateProjection, TelegramContractError, TelegramCredentialBinding,
+    TelegramDeliveryState, TelegramMessageMutation, TelegramMessageObservation,
+    TelegramMessageProjection, TelegramOperation, TelegramOperationState, TelegramProviderCommand,
+    TelegramProviderEvent, TelegramQrLoginSession, TelegramQrLoginState,
+    TelegramReconciliationState, TelegramRuntimeLease, TelegramRuntimeLeaseState,
+    TelegramRuntimeState, provider_command_account_id, provider_command_kind,
+    provider_command_operation_id, validate_text,
 };
 use hermes_vault_protocol::{DEFAULT_LEASE_TTL_SECONDS, SecretClassV1, VaultActionV1};
 use sha2::{Digest, Sha256};
@@ -67,7 +68,6 @@ pub fn credential_lease_purposes(
         .map(|binding| credential_lease_purpose(account_id, configuration_instance_id, binding))
         .collect()
 }
-
 
 pub fn qr_login_preparing(
     setup_id: impl Into<String>,
@@ -303,9 +303,33 @@ pub fn observation_draft(
                 external_account_id: observation.account_id.to_string(),
                 external_conversation_id: Some(observation.provider_chat_id.clone()),
                 external_participant_id: Some(observation.sender_id.clone()),
-                external_media_id: observation.media.as_ref().and_then(|media| media.provider_file_id.clone()),
-                external_reply_to_record_id: observation.references.reply_to.as_ref().map(|reference| telegram_record_id(&observation.account_id, &reference.provider_chat_id, &reference.provider_message_id)),
-                external_forward_origin_record_id: observation.references.forward_origin.as_ref().and_then(|origin| match (&origin.provider_chat_id, &origin.provider_message_id) { (Some(chat_id), Some(message_id)) => Some(telegram_record_id(&observation.account_id, chat_id, message_id)), _ => None }),
+                external_media_id: observation
+                    .media
+                    .as_ref()
+                    .and_then(|media| media.provider_file_id.clone()),
+                external_reply_to_record_id: observation.references.reply_to.as_ref().map(
+                    |reference| {
+                        telegram_record_id(
+                            &observation.account_id,
+                            &reference.provider_chat_id,
+                            &reference.provider_message_id,
+                        )
+                    },
+                ),
+                external_forward_origin_record_id: observation
+                    .references
+                    .forward_origin
+                    .as_ref()
+                    .and_then(|origin| {
+                        match (&origin.provider_chat_id, &origin.provider_message_id) {
+                            (Some(chat_id), Some(message_id)) => Some(telegram_record_id(
+                                &observation.account_id,
+                                chat_id,
+                                message_id,
+                            )),
+                            _ => None,
+                        }
+                    }),
             }),
         },
         CommunicationEvidenceKindV1::ChatMessage,
@@ -327,12 +351,16 @@ pub fn observation_draft(
 pub fn attachment_observation_draft(
     attachment: &TelegramAttachmentProjection,
 ) -> Result<Option<CommunicationObservationDraft>, TelegramContractError> {
-    let (Some(media_type), Some(declared_bytes)) = (&attachment.content_type, attachment.size_bytes) else {
+    let (Some(media_type), Some(declared_bytes)) =
+        (&attachment.content_type, attachment.size_bytes)
+    else {
         return Ok(None);
     };
     let source_id = format!(
         "telegram:{}:{}:{}:{}",
-        attachment.account_id, attachment.provider_chat_id, attachment.provider_message_id,
+        attachment.account_id,
+        attachment.provider_chat_id,
+        attachment.provider_message_id,
         attachment.provider_file_id,
     );
     let draft = new_scoped_communication_observation_draft(
@@ -355,13 +383,16 @@ pub fn attachment_observation_draft(
         None,
     )
     .map_err(|_| TelegramContractError::InvalidTransition)?;
-    with_attachment_descriptor(draft, AttachmentDescriptorV1 {
-        filename: attachment.filename.clone(),
-        media_type: media_type.clone(),
-        declared_bytes,
-        sha256: None,
-        disposition: AttachmentDispositionV1::Unknown,
-    })
+    with_attachment_descriptor(
+        draft,
+        AttachmentDescriptorV1 {
+            filename: attachment.filename.clone(),
+            media_type: media_type.clone(),
+            declared_bytes,
+            sha256: None,
+            disposition: AttachmentDispositionV1::Unknown,
+        },
+    )
     .map(Some)
     .map_err(|_| TelegramContractError::InvalidTransition)
 }
@@ -580,8 +611,8 @@ pub fn provider_event_draft(
 }
 
 fn provider_event_identity(event: &TelegramProviderEvent) -> Result<String, TelegramContractError> {
-    let canonical_event = serde_json::to_vec(event)
-        .map_err(|_| TelegramContractError::InvalidTransition)?;
+    let canonical_event =
+        serde_json::to_vec(event).map_err(|_| TelegramContractError::InvalidTransition)?;
     let mut hasher = Sha256::new();
     hasher.update(b"hermes.telegram.provider-event.v1\0");
     hasher.update(canonical_event);
@@ -685,17 +716,32 @@ mod attachment_observation_tests {
             .expect("complete metadata must publish");
 
         assert_eq!(draft.kind, CommunicationEvidenceKindV1::MediaChanged);
-        assert_eq!(draft.source.scope.as_ref().and_then(|scope| scope.external_media_id.as_deref()), Some("file"));
-        assert_eq!(draft.attachment_descriptor.as_ref().map(|value| value.media_type.as_str()), Some("application/pdf"));
+        assert_eq!(
+            draft
+                .source
+                .scope
+                .as_ref()
+                .and_then(|scope| scope.external_media_id.as_deref()),
+            Some("file")
+        );
+        assert_eq!(
+            draft
+                .attachment_descriptor
+                .as_ref()
+                .map(|value| value.media_type.as_str()),
+            Some("application/pdf")
+        );
     }
 
     #[test]
     fn incomplete_attachment_metadata_is_not_published() {
         let mut value = attachment();
         value.content_type = None;
-        assert!(attachment_observation_draft(&value)
-            .expect("incomplete attachment is not an error")
-            .is_none());
+        assert!(
+            attachment_observation_draft(&value)
+                .expect("incomplete attachment is not an error")
+                .is_none()
+        );
     }
 }
 
@@ -710,9 +756,33 @@ pub fn source_envelope(observation: &TelegramMessageObservation) -> SourceEnvelo
             external_account_id: observation.account_id.to_string(),
             external_conversation_id: Some(observation.provider_chat_id.clone()),
             external_participant_id: Some(observation.sender_id.clone()),
-            external_media_id: observation.media.as_ref().and_then(|media| media.provider_file_id.clone()),
-            external_reply_to_record_id: observation.references.reply_to.as_ref().map(|reference| telegram_record_id(&observation.account_id, &reference.provider_chat_id, &reference.provider_message_id)),
-            external_forward_origin_record_id: observation.references.forward_origin.as_ref().and_then(|origin| match (&origin.provider_chat_id, &origin.provider_message_id) { (Some(chat_id), Some(message_id)) => Some(telegram_record_id(&observation.account_id, chat_id, message_id)), _ => None }),
+            external_media_id: observation
+                .media
+                .as_ref()
+                .and_then(|media| media.provider_file_id.clone()),
+            external_reply_to_record_id: observation.references.reply_to.as_ref().map(
+                |reference| {
+                    telegram_record_id(
+                        &observation.account_id,
+                        &reference.provider_chat_id,
+                        &reference.provider_message_id,
+                    )
+                },
+            ),
+            external_forward_origin_record_id: observation
+                .references
+                .forward_origin
+                .as_ref()
+                .and_then(
+                    |origin| match (&origin.provider_chat_id, &origin.provider_message_id) {
+                        (Some(chat_id), Some(message_id)) => Some(telegram_record_id(
+                            &observation.account_id,
+                            chat_id,
+                            message_id,
+                        )),
+                        _ => None,
+                    },
+                ),
         }),
     }
 }
@@ -791,7 +861,10 @@ mod tests {
         assert_eq!(projection.message_id, "telegram:telegram-account:100:200");
         assert_eq!(draft.source.provider, ProviderProvenanceV1::Telegram);
         assert_eq!(draft.direction, CommunicationDirectionV1::Outgoing);
-        assert_eq!(draft.source.external_record_id, "telegram:telegram-account:100:200");
+        assert_eq!(
+            draft.source.external_record_id,
+            "telegram:telegram-account:100:200"
+        );
     }
 
     #[test]

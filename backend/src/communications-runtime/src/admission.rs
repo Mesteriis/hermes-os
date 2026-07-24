@@ -124,7 +124,9 @@ pub fn communications_query_capability_v1() -> CapabilityDescriptorV1 {
         provides: vec![ProvidedSurfaceV1 {
             kind: ProvidedSurfaceKindV1::ClientRpc as i32,
             contract: Some(communications_query_contract_reference_v1()),
-            client_rpc_route: Some(hermes_runtime_protocol::v1::ClientRpcRouteV1 { path: "/hermes.communications.query.v1.CommunicationsQueryService/Query".to_owned() }),
+            client_rpc_route: Some(hermes_runtime_protocol::v1::ClientRpcRouteV1 {
+                path: "/hermes.communications.query.v1.CommunicationsQueryService/Query".to_owned(),
+            }),
         }],
         ..Default::default()
     }
@@ -238,8 +240,8 @@ pub fn communications_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1
 
 #[cfg(test)]
 mod tests {
-    use hermes_runtime_protocol::{
-        validation::descriptor::{validate_descriptor_v1, validate_settings_schema_v1},
+    use hermes_runtime_protocol::validation::descriptor::{
+        validate_descriptor_v1, validate_settings_schema_v1,
     };
 
     use super::*;

@@ -3,10 +3,10 @@ use prost::Message;
 use crate::v1::{
     CapabilityCriticalityV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
     EventSubscriptionRequirementV1, InitialOwnerEnrollmentChallengeV1, InitialOwnerEnrollmentV1,
-    ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, SettingApplyModeV1, SettingClientVisibilityV1,
-    SettingMutationAuthorityV1, SettingTargetScopeV1, SettingValueTypeV1, SettingsSchemaV1,
-    SettingsSnapshotV1, VaultActionV1, VaultSecretClassV1, VaultTargetScopeV1,
-    capability_request_v1, setting_value_v1,
+    ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, SettingApplyModeV1,
+    SettingClientVisibilityV1, SettingMutationAuthorityV1, SettingTargetScopeV1,
+    SettingValueTypeV1, SettingsSchemaV1, SettingsSnapshotV1, VaultActionV1, VaultSecretClassV1,
+    VaultTargetScopeV1, capability_request_v1, setting_value_v1,
 };
 
 pub const MAX_DESCRIPTOR_BYTES: usize = 256 * 1024;
@@ -137,7 +137,10 @@ pub fn validate_descriptor_v1(
             .filter(|criticality| *criticality != CapabilityCriticalityV1::Unspecified)
             .is_none()
             || capability.provides.len() > MAX_REFERENCES_PER_CAPABILITY
-            || capability.provides.iter().any(|surface| !valid_provided_surface(surface))
+            || capability
+                .provides
+                .iter()
+                .any(|surface| !valid_provided_surface(surface))
             || capability.dependencies.len() > MAX_REFERENCES_PER_CAPABILITY
             || capability
                 .requests
@@ -151,12 +154,22 @@ pub fn validate_descriptor_v1(
 }
 
 fn valid_provided_surface(surface: &crate::v1::ProvidedSurfaceV1) -> bool {
-    let Some(kind) = ProvidedSurfaceKindV1::try_from(surface.kind).ok() else { return false; };
-    if kind == ProvidedSurfaceKindV1::Unspecified || !surface.contract.as_ref().is_some_and(valid_contract_reference) {
+    let Some(kind) = ProvidedSurfaceKindV1::try_from(surface.kind).ok() else {
+        return false;
+    };
+    if kind == ProvidedSurfaceKindV1::Unspecified
+        || !surface
+            .contract
+            .as_ref()
+            .is_some_and(valid_contract_reference)
+    {
         return false;
     }
     match kind {
-        ProvidedSurfaceKindV1::ClientRpc => surface.client_rpc_route.as_ref().is_some_and(|route| valid_client_rpc_path(&route.path)),
+        ProvidedSurfaceKindV1::ClientRpc => surface
+            .client_rpc_route
+            .as_ref()
+            .is_some_and(|route| valid_client_rpc_path(&route.path)),
         _ => surface.client_rpc_route.is_none(),
     }
 }
@@ -171,7 +184,10 @@ fn valid_client_rpc_path(path: &str) -> bool {
 }
 
 fn valid_connect_component(value: &str) -> bool {
-    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_'))
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_'))
 }
 
 fn valid_settings_schema_reference(descriptor: &ModuleDescriptorV1) -> bool {
@@ -285,8 +301,7 @@ fn valid_vault_target_scope(purpose: &crate::v1::VaultPurposeRequestV1) -> bool 
         Some(VaultTargetScopeV1::ConfigurationInstance) => purpose.key_schema_revision == 0,
         Some(VaultTargetScopeV1::OwnerDerivedProjectionKey) => {
             purpose.key_schema_revision != 0
-                && purpose.allowed_secret_classes
-                    == [VaultSecretClassV1::OwnerDerivedKey as i32]
+                && purpose.allowed_secret_classes == [VaultSecretClassV1::OwnerDerivedKey as i32]
                 && purpose.actions == [VaultActionV1::IssueOwnerDerivedKey as i32]
         }
         _ => false,
@@ -491,11 +506,11 @@ fn value_matches_setting_type(value: &setting_value_v1::Value, value_type: i32) 
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_descriptor_v1, valid_vault_purpose_request};
+    use super::{valid_vault_purpose_request, validate_descriptor_v1};
     use crate::v1::{
         CapabilityCriticalityV1, CapabilityDescriptorV1, ClientRpcRouteV1, ContractReferenceV1,
-        ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
-        VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1,
+        ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, VaultActionV1,
+        VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1,
     };
 
     fn owner_derived_key_purpose() -> VaultPurposeRequestV1 {
@@ -516,7 +531,9 @@ mod tests {
         missing_revision.key_schema_revision = 0;
         assert!(!valid_vault_purpose_request(&missing_revision));
         let mut mixed_class = owner_derived_key_purpose();
-        mixed_class.allowed_secret_classes.push(VaultSecretClassV1::PlatformCredential as i32);
+        mixed_class
+            .allowed_secret_classes
+            .push(VaultSecretClassV1::PlatformCredential as i32);
         assert!(!valid_vault_purpose_request(&mixed_class));
         let mut wrong_action = owner_derived_key_purpose();
         wrong_action.actions = vec![VaultActionV1::Resolve as i32];

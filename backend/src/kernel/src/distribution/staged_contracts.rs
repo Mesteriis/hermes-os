@@ -112,7 +112,8 @@ impl StagedRuntimeContracts {
             Some(bytes) if !bytes.is_empty() => {
                 let path = directory.join(format!("settings-snapshot-{suffix}.bin"));
                 if let Err(error) = write_private_file(&path, bytes) {
-                    let _ = remove_optional_files(&descriptor_path, settings_schema_path.as_deref());
+                    let _ =
+                        remove_optional_files(&descriptor_path, settings_schema_path.as_deref());
                     return Err(error);
                 }
                 Some(path)

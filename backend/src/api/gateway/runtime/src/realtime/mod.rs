@@ -1,14 +1,17 @@
 //! Authenticated, replayable SSE transport for client-safe Gateway frames.
 
-use std::convert::Infallible;
 use std::collections::{BTreeMap, VecDeque};
+use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use bytes::Bytes;
 use futures_util::{StreamExt, stream};
 use hermes_gateway_protocol::{
-    v1::{ClientRealtimeFrameV1, ClientRealtimeStreamStateKindV1, ClientReplayGapV1, client_realtime_frame_v1::Frame},
+    v1::{
+        ClientRealtimeFrameV1, ClientRealtimeStreamStateKindV1, ClientReplayGapV1,
+        client_realtime_frame_v1::Frame,
+    },
     validation::validate_client_realtime_frame,
 };
 use hermes_gateway_session::BrowserSession;
@@ -109,11 +112,7 @@ impl InMemoryBrowserRealtimeSource {
         Ok(true)
     }
 
-    fn publish(
-        &self,
-        owner_id: &str,
-        frame: ClientRealtimeFrameV1,
-    ) -> Result<(), String> {
+    fn publish(&self, owner_id: &str, frame: ClientRealtimeFrameV1) -> Result<(), String> {
         validate_client_realtime_frame(&frame)?;
         let Some(Frame::Event(event)) = frame.frame.as_ref() else {
             return Err("Gateway realtime publisher accepts only owner events".to_owned());
@@ -384,10 +383,7 @@ fn replay_gap_with_earliest(
     }
 }
 
-fn stream_state(
-    state: ClientRealtimeStreamStateKindV1,
-    cursor: &str,
-) -> ClientRealtimeFrameV1 {
+fn stream_state(state: ClientRealtimeStreamStateKindV1, cursor: &str) -> ClientRealtimeFrameV1 {
     ClientRealtimeFrameV1 {
         frame: Some(Frame::StreamState(
             hermes_gateway_protocol::v1::ClientRealtimeStreamStateV1 {

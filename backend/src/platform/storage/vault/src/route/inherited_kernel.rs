@@ -31,8 +31,9 @@ impl InheritedKernelVaultRouteV1 {
             &mut self.channel,
             &ManagedRuntimeVaultRouteRequestV1 { route: Some(route) }.encode_to_vec(),
         )?;
-        let response = ManagedRuntimeVaultRouteResponseV1::decode(read_frame(&mut self.channel)?.as_slice())
-            .map_err(|_| StorageVaultRouteFailureV1::Rejected)?;
+        let response =
+            ManagedRuntimeVaultRouteResponseV1::decode(read_frame(&mut self.channel)?.as_slice())
+                .map_err(|_| StorageVaultRouteFailureV1::Rejected)?;
         response
             .response
             .filter(|_| response.error_code.is_empty())
@@ -56,7 +57,8 @@ fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), StorageVaul
     if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES {
         return Err(StorageVaultRouteFailureV1::Rejected);
     }
-    let mut length = u32::try_from(bytes.len()).map_err(|_| StorageVaultRouteFailureV1::Rejected)?;
+    let mut length =
+        u32::try_from(bytes.len()).map_err(|_| StorageVaultRouteFailureV1::Rejected)?;
     let mut prefix = Vec::with_capacity(5);
     while length >= 0x80 {
         prefix.push((length as u8 & 0x7f) | 0x80);
@@ -71,7 +73,8 @@ fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), StorageVaul
 }
 
 fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, StorageVaultRouteFailureV1> {
-    let length = usize::try_from(read_varint(channel)?).map_err(|_| StorageVaultRouteFailureV1::Rejected)?;
+    let length =
+        usize::try_from(read_varint(channel)?).map_err(|_| StorageVaultRouteFailureV1::Rejected)?;
     if length == 0 || length > MAX_FRAME_BYTES {
         return Err(StorageVaultRouteFailureV1::Rejected);
     }

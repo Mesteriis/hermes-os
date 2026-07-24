@@ -22,7 +22,8 @@ pub async fn resolve_storage_credential(
     binding: &StorageBindingV1,
     context: StorageVaultRouteContextV1,
 ) -> Result<Zeroizing<Vec<u8>>, StorageCredentialLeaseErrorV1> {
-    let mut leases = StorageVaultLeaseAdapterV1::new(InheritedKernelVaultRouteV1::new(channel), context);
+    let mut leases =
+        StorageVaultLeaseAdapterV1::new(InheritedKernelVaultRouteV1::new(channel), context);
     let lease_id = leases.issue_runtime_credential(binding).await?;
     leases.resolve_runtime_credential(binding, lease_id).await
 }

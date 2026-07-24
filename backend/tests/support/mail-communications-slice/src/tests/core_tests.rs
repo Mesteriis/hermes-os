@@ -1,3 +1,4 @@
+use hermes_communications_ingress::ProviderProvenanceV1;
 use hermes_mail_api::{
     DEFAULT_WINDOW, IMAP_PORT, MAX_MESSAGE_BYTES, MAX_PLAIN_TEXT_BYTES, MAX_WINDOW, MAX_WINDOWS,
 };
@@ -5,7 +6,6 @@ use hermes_mail_core::{
     ConnectionTracker, MailConnection, MailConnectionState, MailOperation, MailStatePolicy,
     bounded_window, draft_ingress_observation, validate_sync_request,
 };
-use hermes_communications_ingress::ProviderProvenanceV1;
 
 #[test]
 fn sync_plan_bounds() {
@@ -73,11 +73,19 @@ fn sync_request_validation() {
 #[test]
 fn ingress_observation_validation() {
     let draft = draft_ingress_observation(
-        "op-1", ProviderProvenanceV1::MailImap, "account-1", "source", 200,
-    ).unwrap();
+        "op-1",
+        ProviderProvenanceV1::MailImap,
+        "account-1",
+        "source",
+        200,
+    )
+    .unwrap();
     assert_eq!(draft.observation_id, "op-1");
     assert_eq!(draft.source.external_record_id, "source");
-    assert_eq!(draft.body, hermes_communications_ingress::BodyAvailabilityV1::Unavailable);
+    assert_eq!(
+        draft.body,
+        hermes_communications_ingress::BodyAvailabilityV1::Unavailable
+    );
 
     assert!(
         draft_ingress_observation(

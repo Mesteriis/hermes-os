@@ -9,8 +9,7 @@ use sqlx::Row;
 
 use crate::{
     CommunicationsDerivedIndexJobOperationV1, CommunicationsDerivedIndexJobV1,
-    CommunicationsDurablePersistence,
-    communications_derived_index_job_id_v1,
+    CommunicationsDurablePersistence, communications_derived_index_job_id_v1,
 };
 
 const SEARCH_PROJECTION_REVISION_V1: u32 = 1;
@@ -40,11 +39,20 @@ impl CommunicationsDurablePersistence {
         worker_id: &str,
         now_unix_seconds: i64,
         lease_expires_at_unix_seconds: i64,
-    ) -> Result<Option<ClaimedCommunicationsBodyCustodyTransferV1>, CommunicationsBodyCustodyTransferErrorV1> {
-        if worker_id.is_empty() || worker_id.len() > 256 || lease_expires_at_unix_seconds <= now_unix_seconds {
+    ) -> Result<
+        Option<ClaimedCommunicationsBodyCustodyTransferV1>,
+        CommunicationsBodyCustodyTransferErrorV1,
+    > {
+        if worker_id.is_empty()
+            || worker_id.len() > 256
+            || lease_expires_at_unix_seconds <= now_unix_seconds
+        {
             return Err(CommunicationsBodyCustodyTransferErrorV1::InvalidRow);
         }
-        let mut transaction = self.pool.begin().await
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
             .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
         let row = sqlx::query(
             "SELECT transfer.evidence_id, transfer.envelope_sha256, transfer.source_reference_id, transfer.declared_bytes, transfer.plaintext_sha256, transfer.source_custody_proof FROM hermes_data.communications_body_custody_transfer_lifecycle AS lifecycle JOIN hermes_data.communications_body_custody_transfers AS transfer ON transfer.evidence_id = lifecycle.evidence_id WHERE lifecycle.state = 1 AND (lifecycle.lease_expires_at_unix_seconds IS NULL OR lifecycle.lease_expires_at_unix_seconds <= $1) ORDER BY lifecycle.evidence_id ASC LIMIT 1 FOR UPDATE OF lifecycle SKIP LOCKED",
@@ -54,7 +62,9 @@ impl CommunicationsDurablePersistence {
         .await
         .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
         let Some(row) = row else {
-            transaction.commit().await
+            transaction
+                .commit()
+                .await
                 .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
             return Ok(None);
         };
@@ -71,7 +81,9 @@ impl CommunicationsDurablePersistence {
         if lease.rows_affected() != 1 {
             return Err(CommunicationsBodyCustodyTransferErrorV1::ClaimLost);
         }
-        transaction.commit().await
+        transaction
+            .commit()
+            .await
             .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
         Ok(Some(claimed))
     }
@@ -82,10 +94,15 @@ impl CommunicationsDurablePersistence {
         target: CommunicationBodyBlobReferenceV1,
         completed_at_unix_seconds: i64,
     ) -> Result<(), CommunicationsBodyCustodyTransferErrorV1> {
-        if target.declared_bytes != claimed.declared_bytes || target.sha256 != claimed.plaintext_sha256 {
+        if target.declared_bytes != claimed.declared_bytes
+            || target.sha256 != claimed.plaintext_sha256
+        {
             return Err(CommunicationsBodyCustodyTransferErrorV1::InvalidRow);
         }
-        let mut transaction = self.pool.begin().await
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
             .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
         let evidence = sqlx::query(
             "SELECT message.message_id, message.conversation_id, evidence.observed_at_unix_seconds FROM hermes_data.communications_evidence_summaries AS evidence JOIN hermes_data.communications_messages AS message ON message.last_evidence_id = evidence.observation_id WHERE evidence.observation_id = $1 AND evidence.body_state = 2",
@@ -95,9 +112,18 @@ impl CommunicationsDurablePersistence {
         .await
         .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?
         .ok_or(CommunicationsBodyCustodyTransferErrorV1::ClaimLost)?;
-        let message_id = id16(&evidence.try_get::<Vec<u8>, _>("message_id").map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?)?;
-        let conversation_id = id16(&evidence.try_get::<Vec<u8>, _>("conversation_id").map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?)?;
-        let observed_at_unix_seconds: i64 = evidence.try_get("observed_at_unix_seconds")
+        let message_id = id16(
+            &evidence
+                .try_get::<Vec<u8>, _>("message_id")
+                .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
+        )?;
+        let conversation_id = id16(
+            &evidence
+                .try_get::<Vec<u8>, _>("conversation_id")
+                .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
+        )?;
+        let observed_at_unix_seconds: i64 = evidence
+            .try_get("observed_at_unix_seconds")
             .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?;
         let settled = sqlx::query(
             "UPDATE hermes_data.communications_body_custody_transfer_lifecycle SET state = 2, completed_at_unix_seconds = $3, claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE evidence_id = $1 AND state = 1 AND claimed_by = $2",
@@ -154,7 +180,9 @@ impl CommunicationsDurablePersistence {
             };
             enqueue_index_job(&mut transaction, &job).await?;
         }
-        transaction.commit().await
+        transaction
+            .commit()
+            .await
             .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)
     }
 
@@ -163,7 +191,10 @@ impl CommunicationsDurablePersistence {
         claimed: &ClaimedCommunicationsBodyCustodyTransferV1,
         completed_at_unix_seconds: i64,
     ) -> Result<bool, CommunicationsBodyCustodyTransferErrorV1> {
-        let mut transaction = self.pool.begin().await
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
             .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
         let result = sqlx::query(
             "UPDATE hermes_data.communications_body_custody_transfer_lifecycle SET state = 3, completed_at_unix_seconds = $3, claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE evidence_id = $1 AND state = 1 AND claimed_by = $2",
@@ -197,7 +228,9 @@ impl CommunicationsDurablePersistence {
         if message.rows_affected() != 1 {
             return Err(CommunicationsBodyCustodyTransferErrorV1::ClaimLost);
         }
-        transaction.commit().await
+        transaction
+            .commit()
+            .await
             .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
         Ok(true)
     }
@@ -247,20 +280,42 @@ fn claimed_from_row(
     worker_id: &str,
 ) -> Result<ClaimedCommunicationsBodyCustodyTransferV1, CommunicationsBodyCustodyTransferErrorV1> {
     Ok(ClaimedCommunicationsBodyCustodyTransferV1 {
-        evidence_id: CommunicationObservationIdV1::new(id16(&row.try_get::<Vec<u8>, _>("evidence_id").map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?)?),
-        envelope_sha256: id32(&row.try_get::<Vec<u8>, _>("envelope_sha256").map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?)?,
-        source_reference_id: id16(&row.try_get::<Vec<u8>, _>("source_reference_id").map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?)?,
-        declared_bytes: u64::try_from(row.try_get::<i64, _>("declared_bytes").map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?).map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
-        plaintext_sha256: id32(&row.try_get::<Vec<u8>, _>("plaintext_sha256").map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?)?,
-        source_custody_proof: row.try_get("source_custody_proof").map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
+        evidence_id: CommunicationObservationIdV1::new(id16(
+            &row.try_get::<Vec<u8>, _>("evidence_id")
+                .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
+        )?),
+        envelope_sha256: id32(
+            &row.try_get::<Vec<u8>, _>("envelope_sha256")
+                .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
+        )?,
+        source_reference_id: id16(
+            &row.try_get::<Vec<u8>, _>("source_reference_id")
+                .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
+        )?,
+        declared_bytes: u64::try_from(
+            row.try_get::<i64, _>("declared_bytes")
+                .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
+        )
+        .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
+        plaintext_sha256: id32(
+            &row.try_get::<Vec<u8>, _>("plaintext_sha256")
+                .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
+        )?,
+        source_custody_proof: row
+            .try_get("source_custody_proof")
+            .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?,
         worker_id: worker_id.to_owned(),
     })
 }
 
 fn id16(value: &[u8]) -> Result<[u8; 16], CommunicationsBodyCustodyTransferErrorV1> {
-    value.try_into().map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)
+    value
+        .try_into()
+        .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)
 }
 
 fn id32(value: &[u8]) -> Result<[u8; 32], CommunicationsBodyCustodyTransferErrorV1> {
-    value.try_into().map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)
+    value
+        .try_into()
+        .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)
 }

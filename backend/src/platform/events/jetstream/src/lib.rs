@@ -18,12 +18,12 @@ pub use authentication::{
     bind_runtime_credential_delivery,
 };
 pub use connection::{
-    EventHubJetStreamConnection, JetStreamClient, NatsPasswordCredentialV1, PublishReceipt,
+    EventHubJetStreamConnection, JetStreamClient, ManagedRuntimeEventAccessErrorV1,
+    ManagedRuntimeEventAccessV1, NatsPasswordCredentialV1, PublishReceipt,
     RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimeOutboxPublisherV1,
-    RuntimePublishPermitV1, RuntimeSchedulerReceiptDeliveryV1, RuntimeSchedulerReceiptPortV1,
-    RuntimeSubscribePermitV1, RuntimePullDeliveryErrorV1, RuntimePullDeliveryV1,
-    ManagedRuntimeEventAccessErrorV1, ManagedRuntimeEventAccessV1, canonical_message_id,
-    receive_runtime_pull_delivery, request_managed_runtime_event_access,
+    RuntimePublishPermitV1, RuntimePullDeliveryErrorV1, RuntimePullDeliveryV1,
+    RuntimeSchedulerReceiptDeliveryV1, RuntimeSchedulerReceiptPortV1, RuntimeSubscribePermitV1,
+    canonical_message_id, receive_runtime_pull_delivery, request_managed_runtime_event_access,
 };
 pub use resolver::{
     NatsAccountJwtUpdateV1, NatsResolverAccountJwtPublisherV1, NatsResolverSystemCredentialsV1,

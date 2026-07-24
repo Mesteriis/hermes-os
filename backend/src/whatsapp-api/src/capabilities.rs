@@ -380,7 +380,10 @@ fn apply_scope_overrides(capabilities: &mut [WhatsAppCapability], scope: &WhatsA
     for item in capabilities {
         match item.capability.as_str() {
             "runtime.hidden_webview" if runtime_kind != "webview_companion" => {
-                block(item, "This account does not use the hidden WebView runtime.");
+                block(
+                    item,
+                    "This account does not use the hidden WebView runtime.",
+                );
                 item.status = WhatsAppCapabilityState::Unsupported;
             }
             "sessions.restore" if matches!(lifecycle, "provisioning" | "link_required") => {
@@ -407,9 +410,7 @@ fn apply_scope_overrides(capabilities: &mut [WhatsAppCapability], scope: &WhatsA
             "media.download" if !scope.media_download_available => {
                 block(item, "This runtime is not live-enabled for media download.");
             }
-            "media.upload_send" | "media.voice_send"
-                if !scope.media_upload_available =>
-            {
+            "media.upload_send" | "media.voice_send" if !scope.media_upload_available => {
                 block(item, "This runtime is not live-enabled for media upload.");
             }
             name if is_provider_write(name) => {

@@ -62,7 +62,8 @@ fn validate_pool_alias(
     fences: StorageBindingFencesV1,
     access: &StorageBindingAccessV1,
 ) -> Result<(), StorageBindingErrorV1> {
-    let expected = storage_runtime_pool_alias(identity.registration_id(), fences.runtime_generation());
+    let expected =
+        storage_runtime_pool_alias(identity.registration_id(), fences.runtime_generation());
     if access.pool_alias() != expected || !valid_pool_alias(&expected) {
         return Err(StorageBindingErrorV1::PoolAlias);
     }

@@ -1,7 +1,11 @@
 use std::time::Duration;
 
 use async_native_tls::TlsConnector;
-use async_std::{future, io::{ReadExt, WriteExt}, net::TcpStream};
+use async_std::{
+    future,
+    io::{ReadExt, WriteExt},
+    net::TcpStream,
+};
 use serde_json::Value;
 
 use crate::{ZulipHttpConfigV1, command::ZulipHttpRequestV1};
@@ -49,15 +53,41 @@ pub(crate) async fn execute_binary(
     config: &ZulipHttpConfigV1,
     request: ZulipHttpRequestV1,
 ) -> Result<(Vec<u8>, Option<String>), ZulipHttpErrorV1> {
-    let bytes = future::timeout(REQUEST_TIMEOUT, execute_once(config, request)).await
+    let bytes = future::timeout(REQUEST_TIMEOUT, execute_once(config, request))
+        .await
         .map_err(|_| ZulipHttpErrorV1::Unavailable)??;
-    let split = bytes.windows(4).position(|window| window == b"\r\n\r\n").ok_or(ZulipHttpErrorV1::Protocol)?;
+    let split = bytes
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or(ZulipHttpErrorV1::Protocol)?;
     let header = std::str::from_utf8(&bytes[..split]).map_err(|_| ZulipHttpErrorV1::Protocol)?;
-    let status = header.lines().next().and_then(|line| line.split_whitespace().nth(1)).and_then(|value| value.parse::<u16>().ok()).ok_or(ZulipHttpErrorV1::Protocol)?;
-    (200..300).contains(&status).then_some(()).ok_or(ZulipHttpErrorV1::Rejected)?;
-    let content_type = header.lines().find_map(|line| line.split_once(':').filter(|(name, _)| name.eq_ignore_ascii_case("content-type")).map(|(_, value)| value.trim().to_owned())).filter(|value| !value.is_empty());
+    let status = header
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|value| value.parse::<u16>().ok())
+        .ok_or(ZulipHttpErrorV1::Protocol)?;
+    (200..300)
+        .contains(&status)
+        .then_some(())
+        .ok_or(ZulipHttpErrorV1::Rejected)?;
+    let content_type = header
+        .lines()
+        .find_map(|line| {
+            line.split_once(':')
+                .filter(|(name, _)| name.eq_ignore_ascii_case("content-type"))
+                .map(|(_, value)| value.trim().to_owned())
+        })
+        .filter(|value| !value.is_empty());
     let body = &bytes[split + 4..];
-    let body = if header.lines().any(|line| line.eq_ignore_ascii_case("transfer-encoding: chunked")) { decode_chunked(body)? } else { body.to_vec() };
+    let body = if header
+        .lines()
+        .any(|line| line.eq_ignore_ascii_case("transfer-encoding: chunked"))
+    {
+        decode_chunked(body)?
+    } else {
+        body.to_vec()
+    };
     Ok((body, content_type))
 }
 
@@ -84,10 +114,20 @@ async fn execute_once(
         request.body.len(),
     ).into_bytes();
     request_bytes.extend_from_slice(&request.body);
-    stream.write_all(&request_bytes).await.map_err(|_| ZulipHttpErrorV1::Unavailable)?;
-    stream.flush().await.map_err(|_| ZulipHttpErrorV1::Unavailable)?;
+    stream
+        .write_all(&request_bytes)
+        .await
+        .map_err(|_| ZulipHttpErrorV1::Unavailable)?;
+    stream
+        .flush()
+        .await
+        .map_err(|_| ZulipHttpErrorV1::Unavailable)?;
     let mut bytes = Vec::new();
-    stream.take(MAX_RESPONSE_BYTES).read_to_end(&mut bytes).await.map_err(|_| ZulipHttpErrorV1::Unavailable)?;
+    stream
+        .take(MAX_RESPONSE_BYTES)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|_| ZulipHttpErrorV1::Unavailable)?;
     (bytes.len() < usize::try_from(MAX_RESPONSE_BYTES).unwrap_or(usize::MAX))
         .then_some(())
         .ok_or(ZulipHttpErrorV1::Protocol)?;
@@ -109,23 +149,42 @@ fn endpoint(realm_url: &str) -> Result<Endpoint, ZulipHttpErrorV1> {
     let (host, port) = match authority.rsplit_once(':') {
         Some((host, port)) if !host.is_empty() && !port.is_empty() => (
             host.to_owned(),
-            port.parse().map_err(|_| ZulipHttpErrorV1::InvalidConfiguration)?,
+            port.parse()
+                .map_err(|_| ZulipHttpErrorV1::InvalidConfiguration)?,
         ),
         _ => (authority.to_owned(), 443),
     };
     (!host.contains(['[', ']', '@', ':']))
         .then_some(())
         .ok_or(ZulipHttpErrorV1::InvalidConfiguration)?;
-    Ok(Endpoint { authority: authority.to_owned(), host, port })
+    Ok(Endpoint {
+        authority: authority.to_owned(),
+        host,
+        port,
+    })
 }
 
 fn decode_response(bytes: &[u8]) -> Result<(u16, Value), ZulipHttpErrorV1> {
-    let split = bytes.windows(4).position(|window| window == b"\r\n\r\n").ok_or(ZulipHttpErrorV1::Protocol)?;
+    let split = bytes
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or(ZulipHttpErrorV1::Protocol)?;
     let header = std::str::from_utf8(&bytes[..split]).map_err(|_| ZulipHttpErrorV1::Protocol)?;
-    let status = header.lines().next().and_then(|line| line.split_whitespace().nth(1)).and_then(|value| value.parse().ok()).ok_or(ZulipHttpErrorV1::Protocol)?;
-    (200..300).contains(&status).then_some(()).ok_or(ZulipHttpErrorV1::Rejected)?;
+    let status = header
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|value| value.parse().ok())
+        .ok_or(ZulipHttpErrorV1::Protocol)?;
+    (200..300)
+        .contains(&status)
+        .then_some(())
+        .ok_or(ZulipHttpErrorV1::Rejected)?;
     let body = &bytes[split + 4..];
-    let body = if header.lines().any(|line| line.eq_ignore_ascii_case("transfer-encoding: chunked")) {
+    let body = if header
+        .lines()
+        .any(|line| line.eq_ignore_ascii_case("transfer-encoding: chunked"))
+    {
         decode_chunked(body)?
     } else {
         body.to_vec()
@@ -140,13 +199,19 @@ fn decode_response(bytes: &[u8]) -> Result<(u16, Value), ZulipHttpErrorV1> {
 fn decode_chunked(mut bytes: &[u8]) -> Result<Vec<u8>, ZulipHttpErrorV1> {
     let mut decoded = Vec::new();
     loop {
-        let line_end = bytes.windows(2).position(|window| window == b"\r\n").ok_or(ZulipHttpErrorV1::Protocol)?;
-        let size = std::str::from_utf8(&bytes[..line_end]).ok()
+        let line_end = bytes
+            .windows(2)
+            .position(|window| window == b"\r\n")
+            .ok_or(ZulipHttpErrorV1::Protocol)?;
+        let size = std::str::from_utf8(&bytes[..line_end])
+            .ok()
             .and_then(|line| line.split(';').next())
             .and_then(|value| usize::from_str_radix(value, 16).ok())
             .ok_or(ZulipHttpErrorV1::Protocol)?;
         bytes = &bytes[line_end + 2..];
-        if size == 0 { return Ok(decoded); }
+        if size == 0 {
+            return Ok(decoded);
+        }
         (bytes.len() >= size + 2 && &bytes[size..size + 2] == b"\r\n")
             .then_some(())
             .ok_or(ZulipHttpErrorV1::Protocol)?;
@@ -168,8 +233,16 @@ fn base64_encode(value: &[u8]) -> String {
             | u32::from(*chunk.get(2).unwrap_or(&0));
         encoded.push(char::from(ALPHABET[((packed >> 18) & 0x3f) as usize]));
         encoded.push(char::from(ALPHABET[((packed >> 12) & 0x3f) as usize]));
-        encoded.push(if chunk.len() > 1 { char::from(ALPHABET[((packed >> 6) & 0x3f) as usize]) } else { '=' });
-        encoded.push(if chunk.len() > 2 { char::from(ALPHABET[(packed & 0x3f) as usize]) } else { '=' });
+        encoded.push(if chunk.len() > 1 {
+            char::from(ALPHABET[((packed >> 6) & 0x3f) as usize])
+        } else {
+            '='
+        });
+        encoded.push(if chunk.len() > 2 {
+            char::from(ALPHABET[(packed & 0x3f) as usize])
+        } else {
+            '='
+        });
     }
     encoded
 }

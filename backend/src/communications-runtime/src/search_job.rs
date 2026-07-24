@@ -20,31 +20,60 @@ pub fn derived_index_work_from_decision_v1(
 ) -> Option<CommunicationsDerivedIndexWorkV1> {
     match decision {
         CommunicationsSearchIndexDecisionV1::Ignore => None,
-        CommunicationsSearchIndexDecisionV1::Index(job) => Some(CommunicationsDerivedIndexWorkV1 { job: Some(CommunicationsDerivedIndexJobV1 {
-            job_id: communications_derived_index_job_id_v1(job.evidence_id.bytes(), job.message_id.bytes(), job.projection_revision),
-            operation: CommunicationsDerivedIndexJobOperationV1::Index,
-            evidence_id: job.evidence_id,
-            message_id: job.message_id,
-            conversation_id: Some(job.conversation_id),
-            blob: Some(job.blob),
-            projection_revision: job.projection_revision,
-            observed_at_unix_seconds: job.observed_at_unix_seconds,
-            created_at_unix_seconds,
-        }), failure: None }),
-        CommunicationsSearchIndexDecisionV1::Remove { evidence_id, message_id, projection_revision, observed_at_unix_seconds } => Some(CommunicationsDerivedIndexWorkV1 { job: Some(CommunicationsDerivedIndexJobV1 {
-            job_id: communications_derived_index_job_id_v1(evidence_id.bytes(), message_id.bytes(), projection_revision),
-            operation: CommunicationsDerivedIndexJobOperationV1::Remove,
+        CommunicationsSearchIndexDecisionV1::Index(job) => Some(CommunicationsDerivedIndexWorkV1 {
+            job: Some(CommunicationsDerivedIndexJobV1 {
+                job_id: communications_derived_index_job_id_v1(
+                    job.evidence_id.bytes(),
+                    job.message_id.bytes(),
+                    job.projection_revision,
+                ),
+                operation: CommunicationsDerivedIndexJobOperationV1::Index,
+                evidence_id: job.evidence_id,
+                message_id: job.message_id,
+                conversation_id: Some(job.conversation_id),
+                blob: Some(job.blob),
+                projection_revision: job.projection_revision,
+                observed_at_unix_seconds: job.observed_at_unix_seconds,
+                created_at_unix_seconds,
+            }),
+            failure: None,
+        }),
+        CommunicationsSearchIndexDecisionV1::Remove {
             evidence_id,
             message_id,
-            conversation_id: None,
-            blob: None,
             projection_revision,
             observed_at_unix_seconds,
-            created_at_unix_seconds,
-        }), failure: None }),
-        CommunicationsSearchIndexDecisionV1::Reject { evidence_id, message_id, projection_revision, observed_at_unix_seconds, reason } => Some(CommunicationsDerivedIndexWorkV1 {
+        } => Some(CommunicationsDerivedIndexWorkV1 {
             job: Some(CommunicationsDerivedIndexJobV1 {
-                job_id: communications_derived_index_job_id_v1(evidence_id.bytes(), message_id.bytes(), projection_revision),
+                job_id: communications_derived_index_job_id_v1(
+                    evidence_id.bytes(),
+                    message_id.bytes(),
+                    projection_revision,
+                ),
+                operation: CommunicationsDerivedIndexJobOperationV1::Remove,
+                evidence_id,
+                message_id,
+                conversation_id: None,
+                blob: None,
+                projection_revision,
+                observed_at_unix_seconds,
+                created_at_unix_seconds,
+            }),
+            failure: None,
+        }),
+        CommunicationsSearchIndexDecisionV1::Reject {
+            evidence_id,
+            message_id,
+            projection_revision,
+            observed_at_unix_seconds,
+            reason,
+        } => Some(CommunicationsDerivedIndexWorkV1 {
+            job: Some(CommunicationsDerivedIndexJobV1 {
+                job_id: communications_derived_index_job_id_v1(
+                    evidence_id.bytes(),
+                    message_id.bytes(),
+                    projection_revision,
+                ),
                 operation: CommunicationsDerivedIndexJobOperationV1::Remove,
                 evidence_id,
                 message_id,
@@ -59,7 +88,11 @@ pub fn derived_index_work_from_decision_v1(
                 message_id,
                 projection_revision,
                 observed_at_unix_seconds,
-                failure: match reason { CommunicationsSearchIndexRejectionV1::DocumentLimit => CommunicationsDerivedIndexFailureV1::DocumentLimit },
+                failure: match reason {
+                    CommunicationsSearchIndexRejectionV1::DocumentLimit => {
+                        CommunicationsDerivedIndexFailureV1::DocumentLimit
+                    }
+                },
                 recorded_at_unix_seconds: created_at_unix_seconds,
             }),
         }),
@@ -85,7 +118,13 @@ mod tests {
             11,
         )
         .expect("work");
-        assert_eq!(work.job.as_ref().map(|job| job.operation), Some(CommunicationsDerivedIndexJobOperationV1::Remove));
-        assert_eq!(work.failure.as_ref().map(|failure| failure.failure), Some(CommunicationsDerivedIndexFailureV1::DocumentLimit));
+        assert_eq!(
+            work.job.as_ref().map(|job| job.operation),
+            Some(CommunicationsDerivedIndexJobOperationV1::Remove)
+        );
+        assert_eq!(
+            work.failure.as_ref().map(|failure| failure.failure),
+            Some(CommunicationsDerivedIndexFailureV1::DocumentLimit)
+        );
     }
 }

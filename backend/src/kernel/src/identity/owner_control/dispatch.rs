@@ -16,9 +16,9 @@ use hermes_gateway_protocol::v1::{
     CompleteOwnerControlSessionResponseV1, GetModuleRegistrationStatusRequestV1,
     GetModuleRegistrationStatusResponseV1, OwnerControlRequestV1, OwnerControlResponseV1,
     ReserveBundledManagedRuntimeRequestV1, ReserveBundledManagedRuntimeResponseV1,
+    StartBundledManagedRuntimeRequestV1, StartBundledManagedRuntimeResponseV1,
     StartReservedDomainRuntimeRequestV1, StartReservedDomainRuntimeResponseV1,
     StartReservedIntegrationRuntimeRequestV1, StartReservedIntegrationRuntimeResponseV1,
-    StartBundledManagedRuntimeRequestV1, StartBundledManagedRuntimeResponseV1,
     TransitionModuleRegistrationRequestV1, TransitionModuleRegistrationResponseV1,
     UpdateOperatorSettingsRequestV1, UpdateOperatorSettingsResponseV1,
 };
@@ -27,7 +27,10 @@ use hermes_kernel_control_store::{
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
-    v1::{ManagedDomainRuntimeConfigurationV1, ManagedIntegrationHostBridgeConfigurationV1, ManagedIntegrationRuntimeConfigurationV1},
+    v1::{
+        ManagedDomainRuntimeConfigurationV1, ManagedIntegrationHostBridgeConfigurationV1,
+        ManagedIntegrationRuntimeConfigurationV1,
+    },
     validation::{
         descriptor::decode_settings_snapshot_v1,
         integration_host_bridge::validate_managed_integration_host_bridge_configuration,
@@ -196,7 +199,8 @@ fn start_reserved_integration_runtime(
 ) -> Result<OwnerResult, String> {
     (|| {
         sessions.authorize(store, &request.owner_session_id)?;
-        let reservation = macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
+        let reservation =
+            macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
         let registration = store
             .module_registration(&request.registration_id)
             .map_err(|_| "managed integration registration is unavailable".to_owned())?
@@ -265,14 +269,14 @@ fn start_reserved_integration_runtime(
         };
         Ok((runtime_generation, host_bridge_socket_path))
     })()
-    .map(|(runtime_generation, host_bridge_socket_path)| OwnerResult::StartReservedIntegrationRuntime(
-        StartReservedIntegrationRuntimeResponseV1 {
+    .map(|(runtime_generation, host_bridge_socket_path)| {
+        OwnerResult::StartReservedIntegrationRuntime(StartReservedIntegrationRuntimeResponseV1 {
             registration_id: request.registration_id,
             runtime_generation,
             launch_state: "accepted".to_owned(),
             host_bridge_socket_path,
-        },
-    ))
+        })
+    })
 }
 
 fn start_reserved_domain_runtime(
@@ -284,7 +288,8 @@ fn start_reserved_domain_runtime(
 ) -> Result<OwnerResult, String> {
     (|| {
         sessions.authorize(store, &request.owner_session_id)?;
-        let reservation = macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
+        let reservation =
+            macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
         let registration = store
             .module_registration(&request.registration_id)
             .map_err(|_| "managed domain registration is unavailable".to_owned())?
@@ -327,13 +332,13 @@ fn start_reserved_domain_runtime(
             configuration,
         )
     })()
-    .map(|runtime_generation| OwnerResult::StartReservedDomainRuntime(
-        StartReservedDomainRuntimeResponseV1 {
+    .map(|runtime_generation| {
+        OwnerResult::StartReservedDomainRuntime(StartReservedDomainRuntimeResponseV1 {
             registration_id: request.registration_id,
             runtime_generation,
             launch_state: "accepted".to_owned(),
-        },
-    ))
+        })
+    })
 }
 
 fn host_bridge_configuration(

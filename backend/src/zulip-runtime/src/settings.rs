@@ -23,7 +23,10 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<ZulipRuntimeSettingsV1, S
     if !validate_account(&account) || api_key_revision == 0 {
         return Err(invalid_settings());
     }
-    Ok(ZulipRuntimeSettingsV1 { account, api_key_revision })
+    Ok(ZulipRuntimeSettingsV1 {
+        account,
+        api_key_revision,
+    })
 }
 
 fn required_string(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<String, String> {

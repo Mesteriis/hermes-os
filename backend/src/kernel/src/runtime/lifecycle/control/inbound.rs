@@ -83,6 +83,23 @@ pub(crate) fn try_receive_event_credential(
     Ok(Some(value))
 }
 
+pub(crate) fn event_credential_request(
+    frame: &[u8],
+) -> Result<Option<ManagedRuntimeEventCredentialRequestV1>, String> {
+    if frame.first() != Some(&EVENT_CREDENTIAL_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = ManagedRuntimeControlRequestV1::decode(frame)
+        .map_err(|_| "managed runtime event credential request is invalid".to_owned())?;
+    let Some(Operation::IssueEventCredential(value)) = request.operation else {
+        return Err("managed runtime event credential request is invalid".to_owned());
+    };
+    valid_event_credential_request(&value)
+        .then_some(value)
+        .map(Some)
+        .ok_or_else(|| "managed runtime event credential request is invalid".to_owned())
+}
+
 pub(crate) fn respond_vault_route(
     channel: &mut UnixStream,
     result: Result<VaultCiphertextResponseV1, String>,
@@ -138,6 +155,23 @@ pub(crate) fn try_receive_provider_credential(
     Ok(Some(value))
 }
 
+pub(crate) fn provider_credential_request(
+    frame: &[u8],
+) -> Result<Option<ManagedRuntimeProviderCredentialRequestV1>, String> {
+    if frame.first() != Some(&PROVIDER_CREDENTIAL_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = ManagedRuntimeControlRequestV1::decode(frame)
+        .map_err(|_| "managed runtime provider credential request is invalid".to_owned())?;
+    let Some(Operation::IssueProviderCredential(value)) = request.operation else {
+        return Err("managed runtime provider credential request is invalid".to_owned());
+    };
+    valid_provider_credential_request(&value)
+        .then_some(value)
+        .map(Some)
+        .ok_or_else(|| "managed runtime provider credential request is invalid".to_owned())
+}
+
 pub(crate) fn respond_provider_credential(
     channel: &mut UnixStream,
     result: Result<ManagedRuntimeProviderCredentialDeliveryV1, String>,
@@ -176,6 +210,23 @@ pub(crate) fn try_receive_owner_derived_key(
     Ok(Some(value))
 }
 
+pub(crate) fn owner_derived_key_request(
+    frame: &[u8],
+) -> Result<Option<ManagedRuntimeOwnerDerivedKeyRequestV1>, String> {
+    if frame.first() != Some(&OWNER_DERIVED_KEY_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = ManagedRuntimeControlRequestV1::decode(frame)
+        .map_err(|_| "managed runtime owner-derived key request is invalid".to_owned())?;
+    let Some(Operation::IssueOwnerDerivedKey(value)) = request.operation else {
+        return Err("managed runtime owner-derived key request is invalid".to_owned());
+    };
+    valid_owner_derived_key_request(&value)
+        .then_some(value)
+        .map(Some)
+        .ok_or_else(|| "managed runtime owner-derived key request is invalid".to_owned())
+}
+
 pub(crate) fn respond_owner_derived_key(
     channel: &mut UnixStream,
     result: Result<ManagedRuntimeOwnerDerivedKeyDeliveryV1, String>,
@@ -212,6 +263,23 @@ pub(crate) fn try_receive_blob_session(
         .ok_or_else(|| "managed runtime Blob session request is invalid".to_owned())?;
     read_frame(channel)?;
     Ok(Some(value))
+}
+
+pub(crate) fn blob_session_request(
+    frame: &[u8],
+) -> Result<Option<ManagedRuntimeBlobSessionRequestV1>, String> {
+    if frame.first() != Some(&BLOB_SESSION_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = ManagedRuntimeControlRequestV1::decode(frame)
+        .map_err(|_| "managed runtime Blob session request is invalid".to_owned())?;
+    let Some(Operation::IssueBlobSession(value)) = request.operation else {
+        return Err("managed runtime Blob session request is invalid".to_owned());
+    };
+    crate::platform::blob::session::valid_request(&value)
+        .then_some(value)
+        .map(Some)
+        .ok_or_else(|| "managed runtime Blob session request is invalid".to_owned())
 }
 
 pub(crate) fn respond_blob_session(

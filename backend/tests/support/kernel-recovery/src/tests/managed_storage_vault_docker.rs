@@ -19,10 +19,10 @@ use hermes_kernel_control_store::{
     StorageDeploymentProfileV1,
 };
 use hermes_runtime_protocol::v1::{
-    ManagedDomainRuntimeConfigurationV1, ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
-    SchedulerRuntimeControlRequestV1, SchedulerRuntimeControlResponseV1,
-    SchedulerScheduleUpsertOutcomeV1, SettingsSchemaRefV1, SettingsSchemaV1,
-    UpsertSchedulerScheduleRequestV1,
+    ManagedDomainRuntimeConfigurationV1, ManagedRuntimeEventCredentialDeliveryV1,
+    ManagedRuntimeEventCredentialRequestV1, SchedulerRuntimeControlRequestV1,
+    SchedulerRuntimeControlResponseV1, SchedulerScheduleUpsertOutcomeV1, SettingsSchemaRefV1,
+    SettingsSchemaV1, UpsertSchedulerScheduleRequestV1,
     scheduler_runtime_control_request_v1::Operation as SchedulerOperation,
     scheduler_runtime_control_response_v1::Result as SchedulerResult,
 };
@@ -169,12 +169,21 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
     configure_route_handler(&supervisor, &store, &data);
     supervisor
-        .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler))
+        .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
+            Arc::clone(&store),
+            "communications",
+        )))
         .expect("configure Communications Event credential handler");
     start_vault(&supervisor, &store, &data, release.kernel());
     assert_eq!(
-        blob_launch::start_from_kernel(&supervisor, &store, release.kernel(), &data, &root.join("runtime"))
-            .expect("start signed Blob runtime"),
+        blob_launch::start_from_kernel(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &data,
+            &root.join("runtime")
+        )
+        .expect("start signed Blob runtime"),
         1,
         "Blob starts as a separate managed platform process"
     );
@@ -216,11 +225,7 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     assert_communications_query_delivery(&store, &supervisor);
     assert_communications_search_query_delivery(&store, &supervisor);
     assert_communications_gateway_query_delivery(&store, &supervisor, &root);
-    assert_fenced_communications_target_cannot_issue_blob_custody_grant(
-        &store,
-        &supervisor,
-        &data,
-    );
+    assert_fenced_communications_target_cannot_issue_blob_custody_grant(&store, &supervisor, &data);
 
     supervisor.shutdown().expect("stop managed processes");
     assert_communications_storage_backup_restore(&root);
@@ -273,30 +278,40 @@ fn assert_communications_gateway_query_delivery(
             ),
         },
     );
-    let response = runtime.block_on(router.route(
-        hyper::Request::builder()
-            .method("POST")
-            .uri("/hermes.communications.query.v1.CommunicationsQueryService/Query")
-            .header("content-type", "application/connect+proto")
-            .header("cookie", cookie)
-            .body(http_body_util::Full::new(hyper::body::Bytes::from(payload)))
-            .expect("Gateway owner query request"),
-    ));
+    let response = runtime.block_on(
+        router.route(
+            hyper::Request::builder()
+                .method("POST")
+                .uri("/hermes.communications.query.v1.CommunicationsQueryService/Query")
+                .header("content-type", "application/connect+proto")
+                .header("cookie", cookie)
+                .body(http_body_util::Full::new(hyper::body::Bytes::from(payload)))
+                .expect("Gateway owner query request"),
+        ),
+    );
     assert_eq!(response.status(), hyper::StatusCode::OK);
     assert_eq!(
-        response.headers().get("content-type").and_then(|value| value.to_str().ok()),
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok()),
         Some("application/proto"),
     );
     assert_eq!(
-        response.headers().get("connect-protocol-version").and_then(|value| value.to_str().ok()),
+        response
+            .headers()
+            .get("connect-protocol-version")
+            .and_then(|value| value.to_str().ok()),
         Some("1"),
     );
     let bytes = runtime
         .block_on(response.into_body().collect())
         .expect("Gateway owner query response")
         .to_bytes();
-    let response = hermes_communications_api::query_wire::CommunicationsQueryResponseV1::decode(bytes.as_ref())
-        .expect("decode Gateway Communications query response");
+    let response = hermes_communications_api::query_wire::CommunicationsQueryResponseV1::decode(
+        bytes.as_ref(),
+    )
+    .expect("decode Gateway Communications query response");
     assert!(matches!(
         response.result,
         Some(hermes_communications_api::query_wire::communications_query_response_v1::Result::ListAccounts(accounts))
@@ -327,7 +342,10 @@ impl SchedulerRecoveryFixture {
         let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
         configure_route_handler(&supervisor, &store, &data);
         supervisor
-            .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler))
+            .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
+                Arc::clone(&store),
+                "scheduler",
+            )))
             .expect("configure Scheduler Event credential handler");
         start_vault(&supervisor, &store, &data, release.kernel());
         start_storage(
@@ -485,8 +503,9 @@ fn configure_route_handler(
         data,
         Arc::new(supervisor.relay_port()),
     ));
-    let vault_handler: Arc<dyn crate::runtime::lifecycle::control::ManagedRuntimeVaultRouteHandler> =
-        vault_route.clone();
+    let vault_handler: Arc<
+        dyn crate::runtime::lifecycle::control::ManagedRuntimeVaultRouteHandler,
+    > = vault_route.clone();
     supervisor
         .configure_vault_route_handler(vault_handler)
         .expect("Vault route handler");
@@ -624,7 +643,19 @@ fn wait_for_scheduler_generation(
     );
 }
 
-struct UnauthenticatedNatsCredentialHandler;
+struct UnauthenticatedNatsCredentialHandler {
+    store: Arc<SqliteControlStore>,
+    logical_owner_id: &'static str,
+}
+
+impl UnauthenticatedNatsCredentialHandler {
+    fn new(store: Arc<SqliteControlStore>, logical_owner_id: &'static str) -> Self {
+        Self {
+            store,
+            logical_owner_id,
+        }
+    }
+}
 
 impl ManagedRuntimeEventCredentialHandler for UnauthenticatedNatsCredentialHandler {
     fn issue_event_credential(
@@ -647,7 +678,7 @@ impl ManagedRuntimeEventCredentialHandler for UnauthenticatedNatsCredentialHandl
         .map_err(|_| "Scheduler Event request is invalid".to_owned())?;
         let binding = NatsRuntimeCredentialDeliveryBindingV1::new(
             NatsRuntimeCredentialDeliveryBindingInputV1 {
-                logical_owner_id: "scheduler".to_owned(),
+                logical_owner_id: self.logical_owner_id.to_owned(),
                 registration_id: expectation.registration_id().to_owned(),
                 runtime_instance_id: expectation.runtime_instance_id().to_owned(),
                 runtime_generation: expectation.runtime_generation(),
@@ -670,12 +701,32 @@ impl ManagedRuntimeEventCredentialHandler for UnauthenticatedNatsCredentialHandl
         let delivery = credential
             .seal_for(&binding)
             .map_err(|_| "Scheduler Event delivery is unavailable".to_owned())?;
+        let contracts = event_catalog::resolve_contracts(&*self.store)
+            .map_err(|_| "test Event topology is unavailable".to_owned())?;
+        let configuration = self
+            .store
+            .platform_event_hub_topology()
+            .map_err(|_| "test Event topology is unavailable".to_owned())?
+            .ok_or_else(|| "test Event topology is unavailable".to_owned())?;
+        let topology = event_topology::plan(&contracts, &configuration)
+            .map_err(|_| "test Event topology is unavailable".to_owned())?;
+        let consumer_bindings = event_topology::managed_runtime_consumer_bindings(
+            &topology,
+            expectation.registration_id(),
+            expectation.grant_epoch(),
+        )
+        .map_err(|_| "test Event consumer binding is unavailable".to_owned())?;
+        let publish_subjects = event_topology::managed_runtime_publish_subjects(
+            &topology,
+            expectation.registration_id(),
+            expectation.grant_epoch(),
+        );
         Ok(ManagedRuntimeEventCredentialDeliveryV1 {
             encapped_key: delivery.encapped_key().to_vec(),
             ciphertext: delivery.ciphertext().to_vec(),
             tag: delivery.tag().to_vec(),
-            consumer_bindings: Vec::new(),
-            publish_subjects: Vec::new(),
+            consumer_bindings,
+            publish_subjects,
         })
     }
 }

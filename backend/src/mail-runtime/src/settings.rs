@@ -1,6 +1,9 @@
 //! Mail-owned decoding of one admitted generic settings snapshot.
 
-use hermes_mail_api::{MailAccountConfigurationV1, MailGmailConfigurationV1, MailImapConfigurationV1, MailInboundTransportV1, SmtpEndpointV1, valid_account_configuration};
+use hermes_mail_api::{
+    MailAccountConfigurationV1, MailGmailConfigurationV1, MailImapConfigurationV1,
+    MailInboundTransportV1, SmtpEndpointV1, valid_account_configuration,
+};
 use hermes_runtime_protocol::v1::{SettingsSnapshotV1, setting_value_v1::Value};
 
 use crate::MailCredentialRevisionsV1;
@@ -57,20 +60,28 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, St
     let (imap_password, gmail_access_token) = match &account.inbound {
         MailInboundTransportV1::Imap(_) => {
             let revision = required_unsigned(snapshot, IMAP_PASSWORD_REVISION)?;
-            if revision == 0 { return Err(invalid_settings()); }
+            if revision == 0 {
+                return Err(invalid_settings());
+            }
             absent(snapshot, GMAIL_ACCESS_TOKEN_REVISION)?;
             (Some(revision), None)
         }
         MailInboundTransportV1::Gmail(_) => {
             let revision = required_unsigned(snapshot, GMAIL_ACCESS_TOKEN_REVISION)?;
-            if revision == 0 { return Err(invalid_settings()); }
+            if revision == 0 {
+                return Err(invalid_settings());
+            }
             absent(snapshot, IMAP_PASSWORD_REVISION)?;
             (None, Some(revision))
         }
     };
     let smtp_password = if account.smtp_endpoint.is_some() {
         let revision = required_unsigned(snapshot, SMTP_PASSWORD_REVISION)?;
-        Some((revision != 0).then_some(revision).ok_or_else(invalid_settings)?)
+        Some(
+            (revision != 0)
+                .then_some(revision)
+                .ok_or_else(invalid_settings)?,
+        )
     } else {
         absent(snapshot, SMTP_PASSWORD_REVISION)?;
         None
@@ -126,15 +137,15 @@ fn required_boolean(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<b
 }
 
 fn absent(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<(), String> {
-    (!snapshot.values.iter().any(|entry| entry.setting_id == setting_id))
-        .then_some(())
-        .ok_or_else(invalid_settings)
+    (!snapshot
+        .values
+        .iter()
+        .any(|entry| entry.setting_id == setting_id))
+    .then_some(())
+    .ok_or_else(invalid_settings)
 }
 
-fn value<'a>(
-    snapshot: &'a SettingsSnapshotV1,
-    setting_id: &str,
-) -> Result<&'a Value, String> {
+fn value<'a>(snapshot: &'a SettingsSnapshotV1, setting_id: &str) -> Result<&'a Value, String> {
     let mut selected = None;
     for entry in &snapshot.values {
         if entry.setting_id == setting_id {

@@ -60,11 +60,19 @@ pub fn resolve_kernel_credential_lease(
     let request_id = random_request_id().map_err(|_| KernelCredentialLeaseErrorV1::Rejected)?;
     let recipient = VaultResponseRecipientV1::generate();
     let request_binding = binding(
-        &audience, context.vault_runtime_generation, request_id, &command, &recipient,
+        &audience,
+        context.vault_runtime_generation,
+        request_id,
+        &command,
+        &recipient,
         VaultTransportDirectionV1::ToVault,
     )?;
     let response_binding = binding(
-        &audience, context.vault_runtime_generation, request_id, &command, &recipient,
+        &audience,
+        context.vault_runtime_generation,
+        request_id,
+        &command,
+        &recipient,
         VaultTransportDirectionV1::FromVault,
     )?;
     let frame = seal(&key, &request_binding, &command.encode())

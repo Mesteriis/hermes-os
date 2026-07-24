@@ -164,7 +164,8 @@ fn client_surface_availability(
 ) -> Result<Vec<ClientSurfaceAvailabilityProjectionV1>, String> {
     use ClientSurfaceAvailabilityStateV1::{Available, Blocked, NotAdmitted};
     use ClientSurfaceIdV1::{
-        Calendar, Communications, Dashboard, Documents, Knowledge, Personas, Review, Settings, Tasks,
+        Calendar, Communications, Dashboard, Documents, Knowledge, Personas, Review, Settings,
+        Tasks,
     };
 
     [

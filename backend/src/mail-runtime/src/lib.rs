@@ -1,8 +1,8 @@
 //! Typed Mail managed-runtime admission contract.
 
-pub mod managed;
-pub mod communications_outbox;
 pub mod client_port;
+pub mod communications_outbox;
+pub mod managed;
 pub mod settings;
 
 use hermes_mail_api::MailAccountConfigurationV1;

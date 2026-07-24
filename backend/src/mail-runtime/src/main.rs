@@ -10,7 +10,10 @@ use hermes_mail_runtime::{MailRuntimeAdmission, managed, settings};
 use hermes_runtime_protocol::{
     v1::ManagedIntegrationRuntimeConfigurationV1,
     validation::{
-        descriptor::{decode_settings_schema_v1, decode_settings_snapshot_v1, validate_settings_snapshot_against_schema_v1},
+        descriptor::{
+            decode_settings_schema_v1, decode_settings_snapshot_v1,
+            validate_settings_snapshot_against_schema_v1,
+        },
         managed_integration_runtime::validate_managed_integration_runtime_configuration,
     },
 };
@@ -58,7 +61,10 @@ where
         return Err("Mail runtime configuration is stale".to_owned());
     }
     let settings = settings::decode(&snapshot)?;
-    let storage = configuration.storage.clone().ok_or_else(|| "Mail runtime configuration is invalid".to_owned())?;
+    let storage = configuration
+        .storage
+        .clone()
+        .ok_or_else(|| "Mail runtime configuration is invalid".to_owned())?;
     let admission = MailRuntimeAdmission {
         logical_owner_id: configuration.logical_owner_id,
         configuration_instance_id: configuration.configuration_instance_id,
@@ -85,7 +91,8 @@ where
         ))
         .map_err(|_| "Mail runtime admission was rejected".to_owned())?;
     loop {
-        runtime.block_on(admitted.try_handle_client_delivery())
+        runtime
+            .block_on(admitted.try_handle_client_delivery())
             .map_err(|_| "Mail runtime client delivery failed".to_owned())?;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -152,7 +159,10 @@ fn read_contract(path: &Path) -> Result<Vec<u8>, String> {
     const MAX_CONTRACT_BYTES: u64 = 512 * 1024;
     let metadata = std::fs::symlink_metadata(path)
         .map_err(|_| "Mail runtime contract is unavailable".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > MAX_CONTRACT_BYTES {
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() > MAX_CONTRACT_BYTES
+    {
         return Err("Mail runtime contract is unavailable".to_owned());
     }
     std::fs::read(path).map_err(|_| "Mail runtime contract is unavailable".to_owned())

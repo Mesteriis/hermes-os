@@ -10,7 +10,10 @@ use sqlx::Row;
 use crate::{CommunicationsDurablePersistence, CommunicationsPersistenceError};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommunicationsDerivedIndexJobOperationV1 { Index, Remove }
+pub enum CommunicationsDerivedIndexJobOperationV1 {
+    Index,
+    Remove,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommunicationsDerivedIndexJobV1 {
@@ -26,7 +29,9 @@ pub struct CommunicationsDerivedIndexJobV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommunicationsDerivedIndexJobErrorV1 { InvalidShape }
+pub enum CommunicationsDerivedIndexJobErrorV1 {
+    InvalidShape,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationsDerivedIndexFailureV1 {
@@ -62,11 +67,18 @@ impl CommunicationsDerivedIndexJobV1 {
         match self.operation {
             CommunicationsDerivedIndexJobOperationV1::Index
                 if self.conversation_id.is_some()
-                    && self.blob.as_ref().is_some_and(|blob| (1..=256 * 1024).contains(&blob.declared_bytes)) =>
+                    && self
+                        .blob
+                        .as_ref()
+                        .is_some_and(|blob| (1..=256 * 1024).contains(&blob.declared_bytes)) =>
             {
                 Ok(())
             }
-            CommunicationsDerivedIndexJobOperationV1::Remove if self.conversation_id.is_none() && self.blob.is_none() => Ok(()),
+            CommunicationsDerivedIndexJobOperationV1::Remove
+                if self.conversation_id.is_none() && self.blob.is_none() =>
+            {
+                Ok(())
+            }
             _ => Err(CommunicationsDerivedIndexJobErrorV1::InvalidShape),
         }
     }
@@ -90,25 +102,54 @@ impl CommunicationsDurablePersistence {
         .fetch_all(&self.pool)
         .await
         .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
-        let mut transaction = self.pool.begin().await
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         let mut reconciled = 0_usize;
         for row in rows {
-            let message_id = CommunicationMessageIdV1::new(id16(&row.try_get::<Vec<u8>, _>("message_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?)?);
-            let conversation_id = CommunicationConversationIdV1::new(id16(&row.try_get::<Vec<u8>, _>("conversation_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?)?);
-            let evidence_id = CommunicationObservationIdV1::new(id16(&row.try_get::<Vec<u8>, _>("evidence_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?)?);
-            let observed_at_unix_seconds: i64 = row.try_get("observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let lifecycle_state: i16 = row.try_get("lifecycle_state").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let body_state: i16 = row.try_get("body_state").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let indexed_revision: Option<i32> = row.try_get("indexed_revision").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let indexed_observed_at: Option<i64> = row.try_get("indexed_observed_at").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let tombstone_revision: Option<i32> = row.try_get("tombstone_revision").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let tombstone_observed_at: Option<i64> = row.try_get("tombstone_observed_at").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let failure_exists: Option<Vec<u8>> = row.try_get("failure_evidence_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let message_id = CommunicationMessageIdV1::new(id16(
+                &row.try_get::<Vec<u8>, _>("message_id")
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+            )?);
+            let conversation_id = CommunicationConversationIdV1::new(id16(
+                &row.try_get::<Vec<u8>, _>("conversation_id")
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+            )?);
+            let evidence_id = CommunicationObservationIdV1::new(id16(
+                &row.try_get::<Vec<u8>, _>("evidence_id")
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+            )?);
+            let observed_at_unix_seconds: i64 = row
+                .try_get("observed_at_unix_seconds")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let lifecycle_state: i16 = row
+                .try_get("lifecycle_state")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let body_state: i16 = row
+                .try_get("body_state")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let indexed_revision: Option<i32> = row
+                .try_get("indexed_revision")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let indexed_observed_at: Option<i64> = row
+                .try_get("indexed_observed_at")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let tombstone_revision: Option<i32> = row
+                .try_get("tombstone_revision")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let tombstone_observed_at: Option<i64> = row
+                .try_get("tombstone_observed_at")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let failure_exists: Option<Vec<u8>> = row
+                .try_get("failure_evidence_id")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let current_projection = indexed_revision.zip(indexed_observed_at);
             let current_tombstone = tombstone_revision.zip(tombstone_observed_at);
             if lifecycle_state == 1 && body_state == 4 {
-                let blob = blob_from_row(&row)?.ok_or(CommunicationsPersistenceError::InvalidRow)?;
+                let blob =
+                    blob_from_row(&row)?.ok_or(CommunicationsPersistenceError::InvalidRow)?;
                 if blob.declared_bytes > 256 * 1024 {
                     if failure_exists.is_none() {
                         let result = sqlx::query("INSERT INTO hermes_data.communications_derived_index_failures (evidence_id, message_id, projection_revision, observed_at_unix_seconds, failure_code, recorded_at_unix_seconds) VALUES ($1, $2, $3, $4, 6, $5) ON CONFLICT (evidence_id) DO NOTHING")
@@ -120,11 +161,20 @@ impl CommunicationsDurablePersistence {
                             .execute(&mut *transaction)
                             .await
                             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
-                        reconciled += usize::try_from(result.rows_affected()).map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+                        reconciled += usize::try_from(result.rows_affected())
+                            .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
                     }
-                    if is_stale(current_tombstone, projection_revision, observed_at_unix_seconds) {
+                    if is_stale(
+                        current_tombstone,
+                        projection_revision,
+                        observed_at_unix_seconds,
+                    ) {
                         let job = CommunicationsDerivedIndexJobV1 {
-                            job_id: communications_derived_index_job_id_v1(evidence_id.bytes(), message_id.bytes(), projection_revision),
+                            job_id: communications_derived_index_job_id_v1(
+                                evidence_id.bytes(),
+                                message_id.bytes(),
+                                projection_revision,
+                            ),
                             operation: CommunicationsDerivedIndexJobOperationV1::Remove,
                             evidence_id,
                             message_id,
@@ -136,9 +186,17 @@ impl CommunicationsDurablePersistence {
                         };
                         reconciled += enqueue_reconciled_job(&mut transaction, &job).await?;
                     }
-                } else if is_stale(current_projection, projection_revision, observed_at_unix_seconds) {
+                } else if is_stale(
+                    current_projection,
+                    projection_revision,
+                    observed_at_unix_seconds,
+                ) {
                     let job = CommunicationsDerivedIndexJobV1 {
-                        job_id: communications_derived_index_job_id_v1(evidence_id.bytes(), message_id.bytes(), projection_revision),
+                        job_id: communications_derived_index_job_id_v1(
+                            evidence_id.bytes(),
+                            message_id.bytes(),
+                            projection_revision,
+                        ),
                         operation: CommunicationsDerivedIndexJobOperationV1::Index,
                         evidence_id,
                         message_id,
@@ -150,9 +208,17 @@ impl CommunicationsDurablePersistence {
                     };
                     reconciled += enqueue_reconciled_job(&mut transaction, &job).await?;
                 }
-            } else if is_stale(current_tombstone, projection_revision, observed_at_unix_seconds) {
+            } else if is_stale(
+                current_tombstone,
+                projection_revision,
+                observed_at_unix_seconds,
+            ) {
                 let job = CommunicationsDerivedIndexJobV1 {
-                    job_id: communications_derived_index_job_id_v1(evidence_id.bytes(), message_id.bytes(), projection_revision),
+                    job_id: communications_derived_index_job_id_v1(
+                        evidence_id.bytes(),
+                        message_id.bytes(),
+                        projection_revision,
+                    ),
                     operation: CommunicationsDerivedIndexJobOperationV1::Remove,
                     evidence_id,
                     message_id,
@@ -165,7 +231,10 @@ impl CommunicationsDurablePersistence {
                 reconciled += enqueue_reconciled_job(&mut transaction, &job).await?;
             }
         }
-        transaction.commit().await.map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         Ok(reconciled)
     }
 
@@ -174,7 +243,8 @@ impl CommunicationsDurablePersistence {
         worker_id: &str,
         claimed_at_unix_seconds: i64,
         lease_expires_at_unix_seconds: i64,
-    ) -> Result<Option<ClaimedCommunicationsDerivedIndexJobV1>, CommunicationsPersistenceError> {
+    ) -> Result<Option<ClaimedCommunicationsDerivedIndexJobV1>, CommunicationsPersistenceError>
+    {
         if worker_id.is_empty()
             || worker_id.len() > 256
             || !worker_id.is_ascii()
@@ -191,7 +261,8 @@ impl CommunicationsDurablePersistence {
         .fetch_optional(&self.pool)
         .await
         .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
-        row.map(|row| claimed_job_from_row(row, worker_id)).transpose()
+        row.map(|row| claimed_job_from_row(row, worker_id))
+            .transpose()
     }
 
     pub async fn complete_derived_index_job(
@@ -200,7 +271,15 @@ impl CommunicationsDurablePersistence {
         worker_id: &str,
         completed_at_unix_seconds: i64,
     ) -> Result<bool, CommunicationsPersistenceError> {
-        settle_derived_index_job(&self.pool, job_id, worker_id, 1, None, completed_at_unix_seconds).await
+        settle_derived_index_job(
+            &self.pool,
+            job_id,
+            worker_id,
+            1,
+            None,
+            completed_at_unix_seconds,
+        )
+        .await
     }
 
     pub async fn fail_derived_index_job(
@@ -210,7 +289,15 @@ impl CommunicationsDurablePersistence {
         failure: CommunicationsDerivedIndexFailureV1,
         completed_at_unix_seconds: i64,
     ) -> Result<bool, CommunicationsPersistenceError> {
-        settle_derived_index_job(&self.pool, job_id, worker_id, 2, Some(failure), completed_at_unix_seconds).await
+        settle_derived_index_job(
+            &self.pool,
+            job_id,
+            worker_id,
+            2,
+            Some(failure),
+            completed_at_unix_seconds,
+        )
+        .await
     }
 }
 
@@ -231,8 +318,12 @@ pub fn communications_derived_index_job_id_v1(
 fn is_stale(current: Option<(i32, i64)>, revision: u32, observed_at_unix_seconds: i64) -> bool {
     match current {
         None => true,
-        Some((current_revision, current_observed_at)) => current_revision < i32::try_from(revision).expect("u32 projection revision fits i32")
-            || (current_revision == i32::try_from(revision).expect("u32 projection revision fits i32") && current_observed_at < observed_at_unix_seconds),
+        Some((current_revision, current_observed_at)) => {
+            current_revision < i32::try_from(revision).expect("u32 projection revision fits i32")
+                || (current_revision
+                    == i32::try_from(revision).expect("u32 projection revision fits i32")
+                    && current_observed_at < observed_at_unix_seconds)
+        }
     }
 }
 
@@ -240,7 +331,8 @@ async fn enqueue_reconciled_job(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     job: &CommunicationsDerivedIndexJobV1,
 ) -> Result<usize, CommunicationsPersistenceError> {
-    job.validate().map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    job.validate()
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
     let result = sqlx::query("INSERT INTO hermes_data.communications_derived_index_jobs (job_id, operation, evidence_id, message_id, conversation_id, blob_ref, blob_reference_id, blob_declared_bytes, blob_sha256, projection_revision, observed_at_unix_seconds, created_at_unix_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (job_id) DO UPDATE SET completed_at_unix_seconds = NULL, outcome = NULL, failure_code = NULL, claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE hermes_data.communications_derived_index_jobs.completed_at_unix_seconds IS NOT NULL AND hermes_data.communications_derived_index_jobs.outcome = 1")
         .bind(job.job_id.as_slice())
         .bind(match job.operation { CommunicationsDerivedIndexJobOperationV1::Index => 1_i16, CommunicationsDerivedIndexJobOperationV1::Remove => 2_i16 })
@@ -286,39 +378,80 @@ fn claimed_job_from_row(
     row: sqlx::postgres::PgRow,
     worker_id: &str,
 ) -> Result<ClaimedCommunicationsDerivedIndexJobV1, CommunicationsPersistenceError> {
-    let operation = match row.try_get::<i16, _>("operation").map_err(|_| CommunicationsPersistenceError::InvalidRow)? {
+    let operation = match row
+        .try_get::<i16, _>("operation")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?
+    {
         1 => CommunicationsDerivedIndexJobOperationV1::Index,
         2 => CommunicationsDerivedIndexJobOperationV1::Remove,
         _ => return Err(CommunicationsPersistenceError::InvalidRow),
     };
     let job = CommunicationsDerivedIndexJobV1 {
-        job_id: id16(&row.try_get::<Vec<u8>, _>("job_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?)?,
+        job_id: id16(
+            &row.try_get::<Vec<u8>, _>("job_id")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+        )?,
         operation,
-        evidence_id: CommunicationObservationIdV1::new(id16(&row.try_get::<Vec<u8>, _>("evidence_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?)?),
-        message_id: CommunicationMessageIdV1::new(id16(&row.try_get::<Vec<u8>, _>("message_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?)?),
-        conversation_id: row.try_get::<Option<Vec<u8>>, _>("conversation_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?.map(|value| id16(&value).map(CommunicationConversationIdV1::new)).transpose()?,
+        evidence_id: CommunicationObservationIdV1::new(id16(
+            &row.try_get::<Vec<u8>, _>("evidence_id")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+        )?),
+        message_id: CommunicationMessageIdV1::new(id16(
+            &row.try_get::<Vec<u8>, _>("message_id")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+        )?),
+        conversation_id: row
+            .try_get::<Option<Vec<u8>>, _>("conversation_id")
+            .map_err(|_| CommunicationsPersistenceError::InvalidRow)?
+            .map(|value| id16(&value).map(CommunicationConversationIdV1::new))
+            .transpose()?,
         blob: blob_from_row(&row)?,
-        projection_revision: u32::try_from(row.try_get::<i32, _>("projection_revision").map_err(|_| CommunicationsPersistenceError::InvalidRow)?).map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
-        observed_at_unix_seconds: row.try_get("observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
-        created_at_unix_seconds: row.try_get("created_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+        projection_revision: u32::try_from(
+            row.try_get::<i32, _>("projection_revision")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+        )
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+        observed_at_unix_seconds: row
+            .try_get("observed_at_unix_seconds")
+            .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+        created_at_unix_seconds: row
+            .try_get("created_at_unix_seconds")
+            .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
     };
-    job.validate().map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    Ok(ClaimedCommunicationsDerivedIndexJobV1 { job, worker_id: worker_id.to_owned() })
+    job.validate()
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    Ok(ClaimedCommunicationsDerivedIndexJobV1 {
+        job,
+        worker_id: worker_id.to_owned(),
+    })
 }
 
-fn blob_from_row(row: &sqlx::postgres::PgRow) -> Result<Option<CommunicationBodyBlobReferenceV1>, CommunicationsPersistenceError> {
-    let blob_ref: Option<String> = row.try_get("blob_ref").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let reference_id: Option<Vec<u8>> = row.try_get("blob_reference_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let declared_bytes: Option<i64> = row.try_get("blob_declared_bytes").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let sha256: Option<Vec<u8>> = row.try_get("blob_sha256").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+fn blob_from_row(
+    row: &sqlx::postgres::PgRow,
+) -> Result<Option<CommunicationBodyBlobReferenceV1>, CommunicationsPersistenceError> {
+    let blob_ref: Option<String> = row
+        .try_get("blob_ref")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let reference_id: Option<Vec<u8>> = row
+        .try_get("blob_reference_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let declared_bytes: Option<i64> = row
+        .try_get("blob_declared_bytes")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let sha256: Option<Vec<u8>> = row
+        .try_get("blob_sha256")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
     match (blob_ref, reference_id, declared_bytes, sha256) {
         (None, None, None, None) => Ok(None),
-        (Some(blob_ref), Some(reference_id), Some(declared_bytes), Some(sha256)) => Ok(Some(CommunicationBodyBlobReferenceV1 {
-            blob_ref,
-            reference_id: id16(&reference_id)?,
-            declared_bytes: u64::try_from(declared_bytes).map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
-            sha256: id32(&sha256)?,
-        })),
+        (Some(blob_ref), Some(reference_id), Some(declared_bytes), Some(sha256)) => {
+            Ok(Some(CommunicationBodyBlobReferenceV1 {
+                blob_ref,
+                reference_id: id16(&reference_id)?,
+                declared_bytes: u64::try_from(declared_bytes)
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+                sha256: id32(&sha256)?,
+            }))
+        }
         _ => Err(CommunicationsPersistenceError::InvalidRow),
     }
 }
@@ -335,11 +468,15 @@ fn failure_value(value: CommunicationsDerivedIndexFailureV1) -> i16 {
 }
 
 fn id16(value: &[u8]) -> Result<[u8; 16], CommunicationsPersistenceError> {
-    value.try_into().map_err(|_| CommunicationsPersistenceError::InvalidRow)
+    value
+        .try_into()
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)
 }
 
 fn id32(value: &[u8]) -> Result<[u8; 32], CommunicationsPersistenceError> {
-    value.try_into().map_err(|_| CommunicationsPersistenceError::InvalidRow)
+    value
+        .try_into()
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)
 }
 
 #[cfg(test)]

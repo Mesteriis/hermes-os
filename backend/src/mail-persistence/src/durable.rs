@@ -115,7 +115,8 @@ impl MailDurablePersistence {
         {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
-        let port = u16::try_from(pgbouncer_port).map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+        let port =
+            u16::try_from(pgbouncer_port).map_err(|_| MailDurablePersistenceError::InvalidRow)?;
         let options = PgConnectOptions::new()
             .host(pgbouncer_host)
             .port(port)
@@ -229,7 +230,10 @@ impl MailDurablePersistence {
         if connection_id.trim().is_empty()
             || binding.access_token_record_id.iter().all(|byte| *byte == 0)
             || binding.access_token_revision == 0
-            || binding.refresh_credential_record_id.iter().all(|byte| *byte == 0)
+            || binding
+                .refresh_credential_record_id
+                .iter()
+                .all(|byte| *byte == 0)
             || binding.refresh_credential_revision == 0
             || updated_at_unix_seconds <= 0
         {
@@ -263,7 +267,11 @@ impl MailDurablePersistence {
         {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
-        let mut transaction = self.pool.begin().await.map_err(|_| MailDurablePersistenceError::Database)?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
         for record in records {
             sqlx::query("INSERT INTO mail_communications_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
                 .bind(record.message_id().as_slice())
@@ -303,7 +311,10 @@ impl MailDurablePersistence {
                 .await
                 .map_err(|_| MailDurablePersistenceError::Database)?;
         }
-        transaction.commit().await.map_err(|_| MailDurablePersistenceError::Database)
+        transaction
+            .commit()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)
     }
 
     pub async fn enqueue_communications_outbox_and_store_gmail_history_checkpoint(
@@ -321,7 +332,11 @@ impl MailDurablePersistence {
         {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
-        let mut transaction = self.pool.begin().await.map_err(|_| MailDurablePersistenceError::Database)?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
         for record in records {
             sqlx::query("INSERT INTO mail_communications_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
                 .bind(record.message_id().as_slice())
@@ -340,7 +355,10 @@ impl MailDurablePersistence {
             .execute(&mut *transaction)
             .await
             .map_err(|_| MailDurablePersistenceError::Database)?;
-        transaction.commit().await.map_err(|_| MailDurablePersistenceError::Database)
+        transaction
+            .commit()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)
     }
 
     pub async fn clear_gmail_history_checkpoint(
@@ -365,7 +383,10 @@ impl MailDurablePersistence {
         rfc822_sha256: &[u8; 32],
         attempted_at_unix_seconds: i64,
     ) -> Result<bool, MailDurablePersistenceError> {
-        if operation_id.trim().is_empty() || connection_id.trim().is_empty() || attempted_at_unix_seconds <= 0 {
+        if operation_id.trim().is_empty()
+            || connection_id.trim().is_empty()
+            || attempted_at_unix_seconds <= 0
+        {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
         sqlx::query("INSERT INTO mail_delivery_attempts (operation_id, connection_id, rfc822_sha256, state, attempted_at_unix_seconds) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (operation_id) DO NOTHING")
@@ -388,10 +409,17 @@ impl MailDurablePersistence {
         record: &OutboxRecordV1,
         completed_at_unix_seconds: i64,
     ) -> Result<(), MailDurablePersistenceError> {
-        if operation_id.trim().is_empty() || !(200..300).contains(&response_code) || completed_at_unix_seconds <= 0 {
+        if operation_id.trim().is_empty()
+            || !(200..300).contains(&response_code)
+            || completed_at_unix_seconds <= 0
+        {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
-        let mut transaction = self.pool.begin().await.map_err(|_| MailDurablePersistenceError::Database)?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
         let updated = sqlx::query("UPDATE mail_delivery_attempts SET state = $3, completed_at_unix_seconds = $4, response_code = $5 WHERE operation_id = $1 AND rfc822_sha256 = $2 AND state = $6")
             .bind(operation_id)
             .bind(rfc822_sha256.as_slice())
@@ -413,7 +441,10 @@ impl MailDurablePersistence {
             .execute(&mut *transaction)
             .await
             .map_err(|_| MailDurablePersistenceError::Database)?;
-        transaction.commit().await.map_err(|_| MailDurablePersistenceError::Database)
+        transaction
+            .commit()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)
     }
 
     pub async fn complete_delivery_rejected(
@@ -437,19 +468,30 @@ impl MailDurablePersistence {
             .map_err(|_| MailDurablePersistenceError::Database)
     }
 
-    pub async fn pending_communications_outbox(&self, limit: i64) -> Result<Vec<OutboxRecordV1>, MailDurablePersistenceError> {
+    pub async fn pending_communications_outbox(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<OutboxRecordV1>, MailDurablePersistenceError> {
         let rows = sqlx::query("SELECT exact_envelope_bytes FROM mail_communications_outbox WHERE published_at_unix_seconds IS NULL ORDER BY created_at_unix_seconds ASC, message_id ASC LIMIT $1")
             .bind(limit.clamp(1, 256))
             .fetch_all(&self.pool)
             .await
             .map_err(|_| MailDurablePersistenceError::Database)?;
-        rows.into_iter().map(|row| {
-            let bytes: Vec<u8> = row.try_get("exact_envelope_bytes").map_err(|_| MailDurablePersistenceError::InvalidRow)?;
-            OutboxRecordV1::accept(bytes).map_err(|_| MailDurablePersistenceError::InvalidRow)
-        }).collect()
+        rows.into_iter()
+            .map(|row| {
+                let bytes: Vec<u8> = row
+                    .try_get("exact_envelope_bytes")
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+                OutboxRecordV1::accept(bytes).map_err(|_| MailDurablePersistenceError::InvalidRow)
+            })
+            .collect()
     }
 
-    pub async fn mark_communications_outbox_published(&self, message_id: &[u8; 16], published_at_unix_seconds: i64) -> Result<bool, MailDurablePersistenceError> {
+    pub async fn mark_communications_outbox_published(
+        &self,
+        message_id: &[u8; 16],
+        published_at_unix_seconds: i64,
+    ) -> Result<bool, MailDurablePersistenceError> {
         sqlx::query("UPDATE mail_communications_outbox SET published_at_unix_seconds = $2 WHERE message_id = $1 AND published_at_unix_seconds IS NULL")
             .bind(message_id.as_slice())
             .bind(published_at_unix_seconds)

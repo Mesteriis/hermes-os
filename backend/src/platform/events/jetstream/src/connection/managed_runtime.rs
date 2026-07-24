@@ -1,6 +1,10 @@
 //! Kernel-fenced Event Hub access over one inherited managed-runtime channel.
 
-use std::{io::{Read, Write}, os::unix::net::UnixStream, time::Duration};
+use std::{
+    io::{Read, Write},
+    os::unix::net::UnixStream,
+    time::Duration,
+};
 
 use hermes_events_protocol::{
     NatsRuntimeCredentialDeliveryBindingInputV1, NatsRuntimeCredentialDeliveryBindingV1,
@@ -15,7 +19,10 @@ use hermes_runtime_protocol::v1::{
 use prost::Message;
 
 use super::{RuntimePublishPermitV1, RuntimeSubscribePermitV1};
-use crate::{subjects::DurableSubjectV1, topology::{ConsumerBudgetV1, ConsumerSpecV1, StreamKindV1}};
+use crate::{
+    subjects::DurableSubjectV1,
+    topology::{ConsumerBudgetV1, ConsumerSpecV1, StreamKindV1},
+};
 
 const MAX_FRAME_BYTES: usize = 512 * 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
@@ -28,10 +35,14 @@ pub struct ManagedRuntimeEventAccessV1 {
 
 impl ManagedRuntimeEventAccessV1 {
     #[must_use]
-    pub const fn credential(&self) -> &RuntimeNatsJwtCredentialV1 { &self.credential }
+    pub const fn credential(&self) -> &RuntimeNatsJwtCredentialV1 {
+        &self.credential
+    }
 
     #[must_use]
-    pub fn into_credential(self) -> RuntimeNatsJwtCredentialV1 { self.credential }
+    pub fn into_credential(self) -> RuntimeNatsJwtCredentialV1 {
+        self.credential
+    }
 
     pub fn subscribe_permits(
         &self,
@@ -40,11 +51,21 @@ impl ManagedRuntimeEventAccessV1 {
         runtime_generation: u64,
         grant_epoch: u64,
     ) -> Result<Vec<RuntimeSubscribePermitV1>, ManagedRuntimeEventAccessErrorV1> {
-        self.consumer_bindings.iter().cloned().map(|binding| {
-            let consumer = consumer_spec(binding)?;
-            RuntimeSubscribePermitV1::new(registration_id, runtime_id, runtime_generation, grant_epoch, consumer)
+        self.consumer_bindings
+            .iter()
+            .cloned()
+            .map(|binding| {
+                let consumer = consumer_spec(binding)?;
+                RuntimeSubscribePermitV1::new(
+                    registration_id,
+                    runtime_id,
+                    runtime_generation,
+                    grant_epoch,
+                    consumer,
+                )
                 .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)
-        }).collect()
+            })
+            .collect()
     }
 
     pub fn publish_permit(
@@ -54,12 +75,20 @@ impl ManagedRuntimeEventAccessV1 {
         runtime_generation: u64,
         grant_epoch: u64,
     ) -> Result<RuntimePublishPermitV1, ManagedRuntimeEventAccessErrorV1> {
-        let subjects = self.publish_subjects.iter()
+        let subjects = self
+            .publish_subjects
+            .iter()
             .map(|subject| DurableSubjectV1::parse(subject))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
-        RuntimePublishPermitV1::new(registration_id, runtime_id, runtime_generation, grant_epoch, subjects)
-            .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)
+        RuntimePublishPermitV1::new(
+            registration_id,
+            runtime_id,
+            runtime_generation,
+            grant_epoch,
+            subjects,
+        )
+        .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)
     }
 }
 
@@ -77,51 +106,142 @@ pub fn request_managed_runtime_event_access(
     let request_id = request_id()?;
     let recipient = NatsRuntimeCredentialRecipientV1::generate();
     let request = ManagedRuntimeControlRequestV1 {
-        operation: Some(Operation::IssueEventCredential(ManagedRuntimeEventCredentialRequestV1 {
-            request_id: request_id.to_vec(), credential_revision, ttl_seconds: 300,
-            recipient_public_key_x25519: recipient.public_key().as_bytes().to_vec(),
-        })),
+        operation: Some(Operation::IssueEventCredential(
+            ManagedRuntimeEventCredentialRequestV1 {
+                request_id: request_id.to_vec(),
+                credential_revision,
+                ttl_seconds: 300,
+                recipient_public_key_x25519: recipient.public_key().as_bytes().to_vec(),
+            },
+        )),
     };
-    channel.set_read_timeout(Some(REQUEST_TIMEOUT)).and_then(|_| channel.set_write_timeout(Some(REQUEST_TIMEOUT)))
+    channel
+        .set_read_timeout(Some(REQUEST_TIMEOUT))
+        .and_then(|_| channel.set_write_timeout(Some(REQUEST_TIMEOUT)))
         .map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)?;
     write_frame(channel, &request.encode_to_vec())?;
     let response = ManagedRuntimeControlResponseV1::decode(read_frame(channel)?.as_slice())
         .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
     let (delivery, consumer_bindings, publish_subjects) = delivery(response)?;
-    let binding = NatsRuntimeCredentialDeliveryBindingV1::new(NatsRuntimeCredentialDeliveryBindingInputV1 {
-        logical_owner_id: logical_owner_id.to_owned(), registration_id: registration_id.to_owned(),
-        runtime_instance_id: runtime_instance_id.to_owned(), runtime_generation, grant_epoch,
-        credential_revision, request_id, recipient_public_key: recipient.public_key().clone(),
-    }).map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
-    let credential = recipient.open(&binding, &delivery).map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
-    Ok(ManagedRuntimeEventAccessV1 { credential, consumer_bindings, publish_subjects })
+    let binding =
+        NatsRuntimeCredentialDeliveryBindingV1::new(NatsRuntimeCredentialDeliveryBindingInputV1 {
+            logical_owner_id: logical_owner_id.to_owned(),
+            registration_id: registration_id.to_owned(),
+            runtime_instance_id: runtime_instance_id.to_owned(),
+            runtime_generation,
+            grant_epoch,
+            credential_revision,
+            request_id,
+            recipient_public_key: recipient.public_key().clone(),
+        })
+        .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
+    let credential = recipient
+        .open(&binding, &delivery)
+        .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
+    Ok(ManagedRuntimeEventAccessV1 {
+        credential,
+        consumer_bindings,
+        publish_subjects,
+    })
 }
 
-fn delivery(response: ManagedRuntimeControlResponseV1) -> Result<(NatsRuntimeCredentialDeliveryV1, Vec<ManagedRuntimeEventConsumerBindingV1>, Vec<String>), ManagedRuntimeEventAccessErrorV1> {
-    let Some(ResponseResult::EventCredentialDelivery(value)) = response.result else { return Err(ManagedRuntimeEventAccessErrorV1::Rejected) };
-    if !response.error_code.is_empty() { return Err(ManagedRuntimeEventAccessErrorV1::Rejected) }
-    let delivery = NatsRuntimeCredentialDeliveryV1::from_parts(value.encapped_key, value.ciphertext, value.tag)
-        .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
+fn delivery(
+    response: ManagedRuntimeControlResponseV1,
+) -> Result<
+    (
+        NatsRuntimeCredentialDeliveryV1,
+        Vec<ManagedRuntimeEventConsumerBindingV1>,
+        Vec<String>,
+    ),
+    ManagedRuntimeEventAccessErrorV1,
+> {
+    let Some(ResponseResult::EventCredentialDelivery(value)) = response.result else {
+        return Err(ManagedRuntimeEventAccessErrorV1::Rejected);
+    };
+    if !response.error_code.is_empty() {
+        return Err(ManagedRuntimeEventAccessErrorV1::Rejected);
+    }
+    let delivery = NatsRuntimeCredentialDeliveryV1::from_parts(
+        value.encapped_key,
+        value.ciphertext,
+        value.tag,
+    )
+    .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
     Ok((delivery, value.consumer_bindings, value.publish_subjects))
 }
 
-fn consumer_spec(binding: ManagedRuntimeEventConsumerBindingV1) -> Result<ConsumerSpecV1, ManagedRuntimeEventAccessErrorV1> {
+fn consumer_spec(
+    binding: ManagedRuntimeEventConsumerBindingV1,
+) -> Result<ConsumerSpecV1, ManagedRuntimeEventAccessErrorV1> {
     let kind = match binding.stream_name.as_str() {
-        "HERMES_COMMAND_V1" => StreamKindV1::Command, "HERMES_EVENT_V1" => StreamKindV1::Event,
-        "HERMES_OBSERVATION_V1" => StreamKindV1::Observation, "HERMES_RESULT_V1" => StreamKindV1::Result,
-        "HERMES_ACK_V1" => StreamKindV1::Ack, _ => return Err(ManagedRuntimeEventAccessErrorV1::Rejected),
+        "HERMES_COMMAND_V1" => StreamKindV1::Command,
+        "HERMES_EVENT_V1" => StreamKindV1::Event,
+        "HERMES_OBSERVATION_V1" => StreamKindV1::Observation,
+        "HERMES_RESULT_V1" => StreamKindV1::Result,
+        "HERMES_ACK_V1" => StreamKindV1::Ack,
+        _ => return Err(ManagedRuntimeEventAccessErrorV1::Rejected),
     };
-    let budget = ConsumerBudgetV1::new(i64::from(binding.max_ack_pending), i64::from(binding.max_deliver), Duration::from_millis(u64::from(binding.ack_wait_millis)))
-        .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
+    let budget = ConsumerBudgetV1::new(
+        i64::from(binding.max_ack_pending),
+        i64::from(binding.max_deliver),
+        Duration::from_millis(u64::from(binding.ack_wait_millis)),
+    )
+    .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)?;
     ConsumerSpecV1::new(kind, binding.durable_name, binding.filter_subject, budget)
         .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)
 }
 
-fn request_id() -> Result<[u8; 16], ManagedRuntimeEventAccessErrorV1> { let mut value = [0_u8; 16]; getrandom::fill(&mut value).map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)?; Ok(value) }
-fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), ManagedRuntimeEventAccessErrorV1> { if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES { return Err(ManagedRuntimeEventAccessErrorV1::Rejected) }; let mut frame = Vec::with_capacity(bytes.len() + 5); encode_length(bytes.len(), &mut frame); frame.extend_from_slice(bytes); channel.write_all(&frame).map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable) }
-fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, ManagedRuntimeEventAccessErrorV1> { let length = read_length(channel)?; let mut bytes = vec![0_u8; length]; channel.read_exact(&mut bytes).map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)?; Ok(bytes) }
-fn read_length(channel: &mut UnixStream) -> Result<usize, ManagedRuntimeEventAccessErrorV1> { let mut value = 0_usize; for index in 0..5 { let mut byte = [0_u8; 1]; channel.read_exact(&mut byte).map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)?; value |= usize::from(byte[0] & 0x7f) << (index * 7); if byte[0] & 0x80 == 0 && (1..=MAX_FRAME_BYTES).contains(&value) { return Ok(value) } }; Err(ManagedRuntimeEventAccessErrorV1::Rejected) }
-fn encode_length(mut value: usize, output: &mut Vec<u8>) { while value >= 0x80 { output.push((value as u8 & 0x7f) | 0x80); value >>= 7; } output.push(value as u8) }
+fn request_id() -> Result<[u8; 16], ManagedRuntimeEventAccessErrorV1> {
+    let mut value = [0_u8; 16];
+    getrandom::fill(&mut value).map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)?;
+    Ok(value)
+}
+fn write_frame(
+    channel: &mut UnixStream,
+    bytes: &[u8],
+) -> Result<(), ManagedRuntimeEventAccessErrorV1> {
+    if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES {
+        return Err(ManagedRuntimeEventAccessErrorV1::Rejected);
+    };
+    let mut frame = Vec::with_capacity(bytes.len() + 5);
+    encode_length(bytes.len(), &mut frame);
+    frame.extend_from_slice(bytes);
+    channel
+        .write_all(&frame)
+        .map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)
+}
+fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, ManagedRuntimeEventAccessErrorV1> {
+    let length = read_length(channel)?;
+    let mut bytes = vec![0_u8; length];
+    channel
+        .read_exact(&mut bytes)
+        .map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)?;
+    Ok(bytes)
+}
+fn read_length(channel: &mut UnixStream) -> Result<usize, ManagedRuntimeEventAccessErrorV1> {
+    let mut value = 0_usize;
+    for index in 0..5 {
+        let mut byte = [0_u8; 1];
+        channel
+            .read_exact(&mut byte)
+            .map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)?;
+        value |= usize::from(byte[0] & 0x7f) << (index * 7);
+        if byte[0] & 0x80 == 0 && (1..=MAX_FRAME_BYTES).contains(&value) {
+            return Ok(value);
+        }
+    }
+    Err(ManagedRuntimeEventAccessErrorV1::Rejected)
+}
+fn encode_length(mut value: usize, output: &mut Vec<u8>) {
+    while value >= 0x80 {
+        output.push((value as u8 & 0x7f) | 0x80);
+        value >>= 7;
+    }
+    output.push(value as u8)
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ManagedRuntimeEventAccessErrorV1 { Rejected, Unavailable }
+pub enum ManagedRuntimeEventAccessErrorV1 {
+    Rejected,
+    Unavailable,
+}

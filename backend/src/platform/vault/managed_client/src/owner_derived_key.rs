@@ -48,7 +48,9 @@ pub struct ManagedOwnerDerivedKeyClientV1 {
 
 impl ManagedOwnerDerivedKeyClientV1 {
     #[must_use]
-    pub fn new(channel: UnixStream) -> Self { Self { channel } }
+    pub fn new(channel: UnixStream) -> Self {
+        Self { channel }
+    }
 
     pub fn ensure(
         &mut self,
@@ -59,20 +61,29 @@ impl ManagedOwnerDerivedKeyClientV1 {
         ttl_seconds: u32,
     ) -> Result<Zeroizing<Vec<u8>>, ManagedOwnerDerivedKeyErrorV1> {
         let audience = audience(context)?;
-        if !valid_identifier(capability_id) || !valid_identifier(purpose_id)
-            || key_schema_revision == 0 || !(1..=600).contains(&ttl_seconds)
+        if !valid_identifier(capability_id)
+            || !valid_identifier(purpose_id)
+            || key_schema_revision == 0
+            || !(1..=600).contains(&ttl_seconds)
         {
             return Err(ManagedOwnerDerivedKeyErrorV1::InvalidContext);
         }
         let lease_id = self.issue_lease(
-            context, audience.clone(), capability_id, purpose_id, key_schema_revision, ttl_seconds,
+            context,
+            audience.clone(),
+            capability_id,
+            purpose_id,
+            key_schema_revision,
+            ttl_seconds,
         )?;
         let key = self.execute_command(
             context,
             audience,
             VaultTransportCommandV1::EnsureOwnerDerivedKey { lease_id },
         )?;
-        (key.len() == 32).then_some(key).ok_or(ManagedOwnerDerivedKeyErrorV1::Rejected)
+        (key.len() == 32)
+            .then_some(key)
+            .ok_or(ManagedOwnerDerivedKeyErrorV1::Rejected)
     }
 
     fn issue_lease(
@@ -87,26 +98,52 @@ impl ManagedOwnerDerivedKeyClientV1 {
         let recipient = VaultResponseRecipientV1::generate();
         let request_id = random_request_id().map_err(map_transport_error)?;
         let delivery = self.request_owner_key_lease(
-            request_id, capability_id, purpose_id, key_schema_revision, ttl_seconds,
+            request_id,
+            capability_id,
+            purpose_id,
+            key_schema_revision,
+            ttl_seconds,
             recipient.public_key().as_bytes(),
         )?;
         let purpose = VaultPurposeRequestV1::new(
-            purpose_id.to_owned(), capability_id.to_owned(),
-            vec![SecretClassV1::OwnerDerivedKey], vec![VaultActionV1::IssueOwnerDerivedKey], ttl_seconds,
-        ).map_err(|_| ManagedOwnerDerivedKeyErrorV1::InvalidContext)?;
+            purpose_id.to_owned(),
+            capability_id.to_owned(),
+            vec![SecretClassV1::OwnerDerivedKey],
+            vec![VaultActionV1::IssueOwnerDerivedKey],
+            ttl_seconds,
+        )
+        .map_err(|_| ManagedOwnerDerivedKeyErrorV1::InvalidContext)?;
         let issue = VaultLeaseIssueRequestV1::new(
-            context.vault_instance_id.clone(), context.vault_runtime_generation,
-            u64::from(key_schema_revision), context.logical_owner_id.clone(), purpose, audience.clone(),
-        ).map_err(|_| ManagedOwnerDerivedKeyErrorV1::InvalidContext)?;
+            context.vault_instance_id.clone(),
+            context.vault_runtime_generation,
+            u64::from(key_schema_revision),
+            context.logical_owner_id.clone(),
+            purpose,
+            audience.clone(),
+        )
+        .map_err(|_| ManagedOwnerDerivedKeyErrorV1::InvalidContext)?;
         let command = VaultTransportCommandV1::IssueLease { request: issue };
         let binding = binding(
-            &audience, context.vault_runtime_generation, request_id, &command, &recipient,
+            &audience,
+            context.vault_runtime_generation,
+            request_id,
+            &command,
+            &recipient,
             VaultTransportDirectionV1::FromVault,
-        ).map_err(map_transport_error)?;
-        let frame = VaultCiphertextFrameV1::from_parts(delivery.encapped_key, delivery.ciphertext, delivery.tag)
+        )
+        .map_err(map_transport_error)?;
+        let frame = VaultCiphertextFrameV1::from_parts(
+            delivery.encapped_key,
+            delivery.ciphertext,
+            delivery.tag,
+        )
+        .map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)?;
+        let lease_id = recipient
+            .open(&binding, &frame)
             .map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)?;
-        let lease_id = recipient.open(&binding, &frame).map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)?;
-        String::from_utf8(lease_id.to_vec()).ok().and_then(|value| LeaseIdV1::new(value).ok())
+        String::from_utf8(lease_id.to_vec())
+            .ok()
+            .and_then(|value| LeaseIdV1::new(value).ok())
             .ok_or(ManagedOwnerDerivedKeyErrorV1::Rejected)
     }
 
@@ -120,17 +157,33 @@ impl ManagedOwnerDerivedKeyClientV1 {
         recipient_public_key_x25519: &[u8; 32],
     ) -> Result<ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedOwnerDerivedKeyErrorV1> {
         let request = owner_key_request(
-            request_id, capability_id, purpose_id, key_schema_revision, ttl_seconds,
+            request_id,
+            capability_id,
+            purpose_id,
+            key_schema_revision,
+            ttl_seconds,
             recipient_public_key_x25519,
         );
-        write_frame(&mut self.channel, &ManagedRuntimeControlRequestV1 {
-            operation: Some(Operation::IssueOwnerDerivedKey(request)),
-        }.encode_to_vec()).map_err(map_transport_error)?;
+        write_frame(
+            &mut self.channel,
+            &ManagedRuntimeControlRequestV1 {
+                operation: Some(Operation::IssueOwnerDerivedKey(request)),
+            }
+            .encode_to_vec(),
+        )
+        .map_err(map_transport_error)?;
         let response = ManagedRuntimeControlResponseV1::decode(
-            read_frame(&mut self.channel).map_err(map_transport_error)?.as_slice(),
-        ).map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)?;
+            read_frame(&mut self.channel)
+                .map_err(map_transport_error)?
+                .as_slice(),
+        )
+        .map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)?;
         match response.result {
-            Some(ControlResult::OwnerDerivedKeyDelivery(delivery)) if response.error_code.is_empty() => Ok(delivery),
+            Some(ControlResult::OwnerDerivedKeyDelivery(delivery))
+                if response.error_code.is_empty() =>
+            {
+                Ok(delivery)
+            }
             _ => Err(ManagedOwnerDerivedKeyErrorV1::Rejected),
         }
     }
@@ -144,13 +197,23 @@ impl ManagedOwnerDerivedKeyClientV1 {
         let request_id = random_request_id().map_err(map_transport_error)?;
         let recipient = VaultResponseRecipientV1::generate();
         let request_binding = binding(
-            &audience, context.vault_runtime_generation, request_id, &command, &recipient,
+            &audience,
+            context.vault_runtime_generation,
+            request_id,
+            &command,
+            &recipient,
             VaultTransportDirectionV1::ToVault,
-        ).map_err(map_transport_error)?;
+        )
+        .map_err(map_transport_error)?;
         let response_binding = binding(
-            &audience, context.vault_runtime_generation, request_id, &command, &recipient,
+            &audience,
+            context.vault_runtime_generation,
+            request_id,
+            &command,
+            &recipient,
             VaultTransportDirectionV1::FromVault,
-        ).map_err(map_transport_error)?;
+        )
+        .map_err(map_transport_error)?;
         let vault_key = VaultTransportPublicKey::from_bytes(context.vault_public_key_x25519)
             .map_err(|_| ManagedOwnerDerivedKeyErrorV1::InvalidContext)?;
         let frame = seal(&vault_key, &request_binding, &command.encode())
@@ -176,25 +239,47 @@ impl ManagedOwnerDerivedKeyClientV1 {
             storage_runtime_principal: String::new(),
             storage_owner_id: String::new(),
         };
-        write_frame(&mut self.channel, &ManagedRuntimeVaultRouteRequestV1 { route: Some(route.clone()) }.encode_to_vec())
-            .map_err(map_transport_error)?;
+        write_frame(
+            &mut self.channel,
+            &ManagedRuntimeVaultRouteRequestV1 {
+                route: Some(route.clone()),
+            }
+            .encode_to_vec(),
+        )
+        .map_err(map_transport_error)?;
         let response = ManagedRuntimeVaultRouteResponseV1::decode(
-            read_frame(&mut self.channel).map_err(map_transport_error)?.as_slice(),
-        ).map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)?;
-        let response = response.response.filter(|_| response.error_code.is_empty())
+            read_frame(&mut self.channel)
+                .map_err(map_transport_error)?
+                .as_slice(),
+        )
+        .map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)?;
+        let response = response
+            .response
+            .filter(|_| response.error_code.is_empty())
             .ok_or(ManagedOwnerDerivedKeyErrorV1::Rejected)?;
         let frame = valid_response(&route, response).map_err(map_transport_error)?;
-        recipient.open(&response_binding, &frame).map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)
+        recipient
+            .open(&response_binding, &frame)
+            .map_err(|_| ManagedOwnerDerivedKeyErrorV1::Rejected)
     }
 }
 
-fn audience(context: &ManagedOwnerDerivedKeyContextV1) -> Result<LeaseAudienceV1, ManagedOwnerDerivedKeyErrorV1> {
-    if context.vault_runtime_generation == 0 || context.runtime_generation == 0 || context.grant_epoch == 0 {
+fn audience(
+    context: &ManagedOwnerDerivedKeyContextV1,
+) -> Result<LeaseAudienceV1, ManagedOwnerDerivedKeyErrorV1> {
+    if context.vault_runtime_generation == 0
+        || context.runtime_generation == 0
+        || context.grant_epoch == 0
+    {
         return Err(ManagedOwnerDerivedKeyErrorV1::InvalidContext);
     }
     LeaseAudienceV1::new(
-        context.registration_id.clone(), context.runtime_instance_id.clone(), context.runtime_generation, context.grant_epoch,
-    ).map_err(|_| ManagedOwnerDerivedKeyErrorV1::InvalidContext)
+        context.registration_id.clone(),
+        context.runtime_instance_id.clone(),
+        context.runtime_generation,
+        context.grant_epoch,
+    )
+    .map_err(|_| ManagedOwnerDerivedKeyErrorV1::InvalidContext)
 }
 
 fn owner_key_request(
@@ -216,14 +301,18 @@ fn owner_key_request(
 }
 
 fn valid_identifier(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 128 && value.bytes().all(|byte| {
-        byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
-    })
+    !value.is_empty()
+        && value.len() <= 128
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
+        })
 }
 
 fn map_transport_error(value: ManagedProviderCredentialErrorV1) -> ManagedOwnerDerivedKeyErrorV1 {
     match value {
-        ManagedProviderCredentialErrorV1::InvalidContext => ManagedOwnerDerivedKeyErrorV1::InvalidContext,
+        ManagedProviderCredentialErrorV1::InvalidContext => {
+            ManagedOwnerDerivedKeyErrorV1::InvalidContext
+        }
         ManagedProviderCredentialErrorV1::Rejected => ManagedOwnerDerivedKeyErrorV1::Rejected,
         ManagedProviderCredentialErrorV1::Unavailable => ManagedOwnerDerivedKeyErrorV1::Unavailable,
     }
@@ -235,7 +324,14 @@ mod tests {
 
     #[test]
     fn lease_request_keeps_the_declared_capability_in_the_kernel_contract() {
-        let request = owner_key_request([1; 16], "search", "communications.search.index", 1, 60, &[2; 32]);
+        let request = owner_key_request(
+            [1; 16],
+            "search",
+            "communications.search.index",
+            1,
+            60,
+            &[2; 32],
+        );
         assert_eq!(request.capability_id, "search");
         assert_eq!(request.purpose_id, "communications.search.index");
     }

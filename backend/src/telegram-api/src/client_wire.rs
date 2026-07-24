@@ -4,16 +4,16 @@ use prost::Message;
 
 use crate::{
     TelegramAccount, TelegramAccountSetup, TelegramAttachmentDownloadState,
-    TelegramAttachmentProjection, TelegramAuthorizationStatus, TelegramChat, TelegramChatAvatar,
-    TelegramChatFolder, TelegramChatKind, TelegramChatOperationalState, TelegramChatPosition,
-    TelegramChatStateProjection, TelegramClientResponse, TelegramCommandRecord,
-    TelegramCredentialBinding, TelegramCredentialPurpose, TelegramDownloadFile,
-    TelegramFileSnapshot, TelegramHistoryPage, TelegramHistorySyncMode, TelegramMediaKind,
-    TelegramBlobIntentV1, TelegramMessageMedia, TelegramMessageMutation,
-    TelegramMessageObservation, TelegramMessageProjection, TelegramMessageReferences,
-    TelegramMessageTombstone, TelegramMessageVersion, TelegramMessageVersionSource,
-    TelegramOperation, TelegramParticipant, TelegramParticipantFilter, TelegramParticipantPage,
-    TelegramProviderCommand, TelegramProviderEvent, TelegramProviderKind, TelegramProviderQuery,
+    TelegramAttachmentProjection, TelegramAuthorizationStatus, TelegramBlobIntentV1, TelegramChat,
+    TelegramChatAvatar, TelegramChatFolder, TelegramChatKind, TelegramChatOperationalState,
+    TelegramChatPosition, TelegramChatStateProjection, TelegramClientResponse,
+    TelegramCommandRecord, TelegramCredentialBinding, TelegramCredentialPurpose,
+    TelegramDownloadFile, TelegramFileSnapshot, TelegramHistoryPage, TelegramHistorySyncMode,
+    TelegramMediaKind, TelegramMessageMedia, TelegramMessageMutation, TelegramMessageObservation,
+    TelegramMessageProjection, TelegramMessageReferences, TelegramMessageTombstone,
+    TelegramMessageVersion, TelegramMessageVersionSource, TelegramOperation, TelegramParticipant,
+    TelegramParticipantFilter, TelegramParticipantPage, TelegramProviderCommand,
+    TelegramProviderEvent, TelegramProviderKind, TelegramProviderQuery,
     TelegramProviderQueryResponse, TelegramReactionObservation, TelegramReactionSummary,
     TelegramRealtimeFrame, TelegramSendMedia, TelegramSendMessage, TelegramTombstoneReason,
     TelegramTopic, TelegramTypingState,
@@ -497,20 +497,22 @@ fn blob_message(value: &TelegramBlobIntentV1) -> wire::TelegramBlobIntentV1 {
     }
 }
 
-fn decode_blob(value: Option<wire::TelegramBlobIntentV1>) -> Result<TelegramBlobIntentV1, TelegramAuthorizationWireError> {
+fn decode_blob(
+    value: Option<wire::TelegramBlobIntentV1>,
+) -> Result<TelegramBlobIntentV1, TelegramAuthorizationWireError> {
     let value = value.ok_or(TelegramAuthorizationWireError::MissingVariant)?;
     (value.reference_id.len() == 16
         && value.reference_id.iter().any(|byte| *byte != 0)
         && value.declared_size > 0
         && (1..=3).contains(&value.backup_class)
         && !value.blob_ref.is_empty())
-        .then_some(TelegramBlobIntentV1 {
-            blob_ref: value.blob_ref,
-            reference_id: value.reference_id,
-            declared_size: value.declared_size,
-            backup_class: value.backup_class,
-        })
-        .ok_or(TelegramAuthorizationWireError::InvalidPayload)
+    .then_some(TelegramBlobIntentV1 {
+        blob_ref: value.blob_ref,
+        reference_id: value.reference_id,
+        declared_size: value.declared_size,
+        backup_class: value.backup_class,
+    })
+    .ok_or(TelegramAuthorizationWireError::InvalidPayload)
 }
 
 pub fn encode_query(query: &TelegramProviderQuery) -> Vec<u8> {

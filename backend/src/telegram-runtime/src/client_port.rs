@@ -3,9 +3,7 @@
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
-use hermes_telegram_api::{
-    MAX_PAGE_SIZE, TelegramClientRequest, TelegramClientResponse,
-};
+use hermes_telegram_api::{MAX_PAGE_SIZE, TelegramClientRequest, TelegramClientResponse};
 use hermes_telegram_core::project_message;
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{TdlibError, TdlibTransport};

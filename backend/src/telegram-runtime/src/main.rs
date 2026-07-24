@@ -6,7 +6,10 @@ use std::path::{Path, PathBuf};
 use hermes_runtime_protocol::{
     v1::ManagedIntegrationRuntimeConfigurationV1,
     validation::{
-        descriptor::{decode_settings_schema_v1, decode_settings_snapshot_v1, validate_settings_snapshot_against_schema_v1},
+        descriptor::{
+            decode_settings_schema_v1, decode_settings_snapshot_v1,
+            validate_settings_snapshot_against_schema_v1,
+        },
         managed_integration_runtime::validate_managed_integration_runtime_configuration,
     },
 };
@@ -141,7 +144,10 @@ fn read_contract(path: &Path) -> Result<Vec<u8>, String> {
     const MAX_CONTRACT_BYTES: u64 = 512 * 1024;
     let metadata = std::fs::symlink_metadata(path)
         .map_err(|_| "Telegram runtime contract is unavailable".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > MAX_CONTRACT_BYTES {
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() > MAX_CONTRACT_BYTES
+    {
         return Err("Telegram runtime contract is unavailable".to_owned());
     }
     std::fs::read(path).map_err(|_| "Telegram runtime contract is unavailable".to_owned())

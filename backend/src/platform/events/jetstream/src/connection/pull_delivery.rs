@@ -33,19 +33,26 @@ pub async fn receive_runtime_pull_delivery(
     let consumer = connection
         .open_pull_consumer(permit)
         .await
-        .map_err(|_| RuntimePullDeliveryErrorV1::Unavailable)?;
+        .map_err(|_| unavailable_at("open_consumer"))?;
     let mut messages = consumer
         .fetch()
         .max_messages(1)
         .messages()
         .await
-        .map_err(|_| RuntimePullDeliveryErrorV1::Unavailable)?;
+        .map_err(|_| unavailable_at("fetch"))?;
     messages
         .next()
         .await
-        .ok_or(RuntimePullDeliveryErrorV1::Unavailable)?
+        .ok_or_else(|| unavailable_at("empty"))?
         .map(|message| RuntimePullDeliveryV1 { message })
-        .map_err(|_| RuntimePullDeliveryErrorV1::Unavailable)
+        .map_err(|_| unavailable_at("delivery"))
+}
+
+fn unavailable_at(stage: &str) -> RuntimePullDeliveryErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_runtime_pull_delivery_unavailable stage={stage}");
+    }
+    RuntimePullDeliveryErrorV1::Unavailable
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

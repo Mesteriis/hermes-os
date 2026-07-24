@@ -13,9 +13,10 @@ pub enum ManagedDomainRuntimeValidationErrorV1 {
 pub fn validate_managed_domain_runtime_configuration(
     configuration: &ManagedDomainRuntimeConfigurationV1,
 ) -> Result<(), ManagedDomainRuntimeValidationErrorV1> {
-    let storage = configuration.storage.as_ref().ok_or(
-        ManagedDomainRuntimeValidationErrorV1::InvalidConfiguration,
-    )?;
+    let storage = configuration
+        .storage
+        .as_ref()
+        .ok_or(ManagedDomainRuntimeValidationErrorV1::InvalidConfiguration)?;
     if configuration.major != 1
         || !valid_identifier(&configuration.logical_owner_id)
         || !valid_identifier(&configuration.registration_id)
@@ -110,7 +111,10 @@ mod tests {
 
     #[test]
     fn accepts_exact_domain_runtime_fences() {
-        assert_eq!(validate_managed_domain_runtime_configuration(&configuration()), Ok(()));
+        assert_eq!(
+            validate_managed_domain_runtime_configuration(&configuration()),
+            Ok(())
+        );
     }
 
     #[test]

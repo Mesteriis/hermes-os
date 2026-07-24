@@ -1,6 +1,4 @@
-use hermes_zulip_api::{
-    ZulipCommandV1, ZulipReactionOperationV1, direct_recipient_user_ids,
-};
+use hermes_zulip_api::{ZulipCommandV1, ZulipReactionOperationV1, direct_recipient_user_ids};
 
 use crate::{ZulipHttpConfigV1, wire::ZulipHttpErrorV1};
 
@@ -39,12 +37,17 @@ pub fn request_for_command(
             ],
         ),
         ZulipCommandV1::SendDirect {
-            recipients, content, ..
+            recipients,
+            content,
+            ..
         } => {
             let recipient_json = match direct_recipient_user_ids(recipients) {
                 Some(ids) => format!(
                     "[{}]",
-                    ids.into_iter().map(|value| value.to_string()).collect::<Vec<_>>().join(",")
+                    ids.into_iter()
+                        .map(|value| value.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
                 ),
                 None => json_string_array(recipients)?,
             };
@@ -72,15 +75,24 @@ pub fn request_for_command(
             if let Some(topic) = topic {
                 fields.push(("topic", required(topic)?));
             }
-            (!fields.is_empty()).then_some(()).ok_or(ZulipHttpErrorV1::InvalidCommand)?;
-            request("PATCH", format!("{base_path}api/v1/messages/{message_id}"), &fields)
+            (!fields.is_empty())
+                .then_some(())
+                .ok_or(ZulipHttpErrorV1::InvalidCommand)?;
+            request(
+                "PATCH",
+                format!("{base_path}api/v1/messages/{message_id}"),
+                &fields,
+            )
         }
         ZulipCommandV1::DeleteMessage {
             provider_message_id,
             ..
         } => request(
             "DELETE",
-            format!("{base_path}api/v1/messages/{}", message_id(provider_message_id)?),
+            format!(
+                "{base_path}api/v1/messages/{}",
+                message_id(provider_message_id)?
+            ),
             &[],
         ),
         ZulipCommandV1::Reaction {
@@ -108,7 +120,9 @@ pub fn request_for_command(
                 &fields,
             )
         }
-        ZulipCommandV1::SendStreamWithUpload { .. } | ZulipCommandV1::SendDirectWithUpload { .. } | ZulipCommandV1::DownloadAttachment { .. } => Err(ZulipHttpErrorV1::InvalidCommand),
+        ZulipCommandV1::SendStreamWithUpload { .. }
+        | ZulipCommandV1::SendDirectWithUpload { .. }
+        | ZulipCommandV1::DownloadAttachment { .. } => Err(ZulipHttpErrorV1::InvalidCommand),
     }
 }
 
@@ -157,7 +171,7 @@ fn command_account_id(command: &ZulipCommandV1) -> &str {
         | ZulipCommandV1::Reaction { account_id, .. }
         | ZulipCommandV1::SendStreamWithUpload { account_id, .. }
         | ZulipCommandV1::SendDirectWithUpload { account_id, .. } => account_id,
-        | ZulipCommandV1::DownloadAttachment { account_id, .. } => account_id,
+        ZulipCommandV1::DownloadAttachment { account_id, .. } => account_id,
     }
 }
 
@@ -186,14 +200,19 @@ pub fn request_for_upload(
     bytes: &[u8],
 ) -> Result<ZulipHttpRequestV1, ZulipHttpErrorV1> {
     let filename = required(filename)?;
-    (!bytes.is_empty() && bytes.len() <= 64 * 1024 * 1024).then_some(()).ok_or(ZulipHttpErrorV1::InvalidCommand)?;
+    (!bytes.is_empty() && bytes.len() <= 64 * 1024 * 1024)
+        .then_some(())
+        .ok_or(ZulipHttpErrorV1::InvalidCommand)?;
     let boundary = "hermes-zulip-blob-v1";
     let mut body = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{}\"\r\nContent-Type: application/octet-stream\r\n\r\n", filename.replace(['\r', '\n', '"'], "_")).into_bytes();
     body.extend_from_slice(bytes);
     body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
     Ok(ZulipHttpRequestV1 {
         method: "POST",
-        path: format!("{}api/v1/user_uploads", realm_path(&config.account.realm_url)?),
+        path: format!(
+            "{}api/v1/user_uploads",
+            realm_path(&config.account.realm_url)?
+        ),
         form_body: String::new(),
         content_type: "multipart/form-data; boundary=hermes-zulip-blob-v1",
         body,
@@ -210,8 +229,11 @@ pub fn request_for_user_upload_download(
         .then_some(())
         .ok_or(ZulipHttpErrorV1::InvalidCommand)?;
     Ok(ZulipHttpRequestV1 {
-        method: "GET", path: format!("{}{}", realm_path(&config.account.realm_url)?, upload_path),
-        form_body: String::new(), content_type: "application/octet-stream", body: Vec::new(),
+        method: "GET",
+        path: format!("{}{}", realm_path(&config.account.realm_url)?, upload_path),
+        form_body: String::new(),
+        content_type: "application/octet-stream",
+        body: Vec::new(),
     })
 }
 
@@ -232,12 +254,21 @@ fn required(value: &str) -> Result<String, ZulipHttpErrorV1> {
 }
 
 fn message_id(value: &str) -> Result<i64, ZulipHttpErrorV1> {
-    value.parse::<i64>().ok().filter(|value| *value > 0).ok_or(ZulipHttpErrorV1::InvalidCommand)
+    value
+        .parse::<i64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .ok_or(ZulipHttpErrorV1::InvalidCommand)
 }
 
 fn json_string_array(values: &[String]) -> Result<String, ZulipHttpErrorV1> {
-    (!values.is_empty()).then_some(()).ok_or(ZulipHttpErrorV1::InvalidCommand)?;
-    let values = values.iter().map(|value| required(value)).collect::<Result<Vec<_>, _>>()?;
+    (!values.is_empty())
+        .then_some(())
+        .ok_or(ZulipHttpErrorV1::InvalidCommand)?;
+    let values = values
+        .iter()
+        .map(|value| required(value))
+        .collect::<Result<Vec<_>, _>>()?;
     serde_json::to_string(&values).map_err(|_| ZulipHttpErrorV1::InvalidCommand)
 }
 

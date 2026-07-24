@@ -1,10 +1,9 @@
 //! Zulip-specific anti-corruption mapper. No transport or domain implementation dependency.
 
 use hermes_communications_ingress::{
-    AttachmentDescriptorV1, AttachmentDispositionV1,
-    BodyAvailabilityV1, CommunicationDirectionV1, CommunicationEvidenceKindV1,
-    CommunicationObservationDraft, ProviderProvenanceV1, SourceEnvelope, SourceScopeEnvelope,
-    new_scoped_communication_observation_draft,
+    AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1, CommunicationDirectionV1,
+    CommunicationEvidenceKindV1, CommunicationObservationDraft, ProviderProvenanceV1,
+    SourceEnvelope, SourceScopeEnvelope, new_scoped_communication_observation_draft,
 };
 use hermes_vault_protocol::{
     DEFAULT_LEASE_TTL_SECONDS, SecretClassV1, VaultActionV1, VaultPurposeRequestV1,
@@ -30,13 +29,29 @@ mod attachment_tests {
     #[test]
     fn emits_separate_metadata_only_media_observation() {
         let drafts = observation_drafts(&ZulipEventV1::Message {
-            account_id: "account".into(), event_id: 1, provider_message_id: "message".into(),
-            provider_conversation_id: "stream:1:topic".into(), sender_id: "sender".into(), is_outgoing: false, content: None,
-            attachments: vec![ZulipAttachmentV1 { provider_attachment_id: "a/report.pdf".into(), filename: Some("report.pdf".into()) }],
-        }).expect("drafts");
+            account_id: "account".into(),
+            event_id: 1,
+            provider_message_id: "message".into(),
+            provider_conversation_id: "stream:1:topic".into(),
+            sender_id: "sender".into(),
+            is_outgoing: false,
+            content: None,
+            attachments: vec![ZulipAttachmentV1 {
+                provider_attachment_id: "a/report.pdf".into(),
+                filename: Some("report.pdf".into()),
+            }],
+        })
+        .expect("drafts");
         assert_eq!(drafts.len(), 2);
         assert_eq!(drafts[1].kind, CommunicationEvidenceKindV1::MediaChanged);
-        assert_eq!(drafts[1].attachment_descriptor.as_ref().expect("attachment").media_type, "application/octet-stream");
+        assert_eq!(
+            drafts[1]
+                .attachment_descriptor
+                .as_ref()
+                .expect("attachment")
+                .media_type,
+            "application/octet-stream"
+        );
     }
 }
 
@@ -45,9 +60,7 @@ pub fn credential_lease_purpose(
     configuration_instance_id: &str,
     revision: u64,
 ) -> Result<VaultPurposeRequestV1, ZulipCoreError> {
-    if account_id.trim().is_empty()
-        || configuration_instance_id.trim().is_empty()
-        || revision == 0
+    if account_id.trim().is_empty() || configuration_instance_id.trim().is_empty() || revision == 0
     {
         return Err(ZulipCoreError::CredentialLeaseRejected);
     }
@@ -61,11 +74,13 @@ pub fn credential_lease_purpose(
     .map_err(|_| ZulipCoreError::CredentialLeaseRejected)
 }
 
-
 pub fn observation_draft(
     event: &ZulipEventV1,
 ) -> Result<CommunicationObservationDraft, ZulipCoreError> {
-    observation_drafts(event)?.into_iter().next().ok_or(ZulipCoreError::InvalidEvent)
+    observation_drafts(event)?
+        .into_iter()
+        .next()
+        .ok_or(ZulipCoreError::InvalidEvent)
 }
 
 pub fn observation_drafts(
@@ -156,11 +171,25 @@ pub fn observation_drafts(
         body,
         observed.direction,
         None,
-    ).map_err(|_| ZulipCoreError::InvalidEvent)?;
+    )
+    .map_err(|_| ZulipCoreError::InvalidEvent)?;
     let mut drafts = vec![message];
-    if let ZulipEventV1::Message { account_id, event_id, provider_conversation_id, attachments, .. } = event {
+    if let ZulipEventV1::Message {
+        account_id,
+        event_id,
+        provider_conversation_id,
+        attachments,
+        ..
+    } = event
+    {
         for (index, attachment) in attachments.iter().enumerate() {
-            drafts.push(attachment_draft(account_id, *event_id, provider_conversation_id, index, attachment)?);
+            drafts.push(attachment_draft(
+                account_id,
+                *event_id,
+                provider_conversation_id,
+                index,
+                attachment,
+            )?);
         }
     }
     Ok(drafts)
@@ -173,26 +202,45 @@ fn attachment_draft(
     index: usize,
     attachment: &ZulipAttachmentV1,
 ) -> Result<CommunicationObservationDraft, ZulipCoreError> {
-    if attachment.provider_attachment_id.trim().is_empty() { return Err(ZulipCoreError::InvalidEvent); }
+    if attachment.provider_attachment_id.trim().is_empty() {
+        return Err(ZulipCoreError::InvalidEvent);
+    }
     let draft = new_scoped_communication_observation_draft(
         format!("zulip:{account_id}:{event_id}:attachment:{index}"),
         SourceEnvelope {
             provider: ProviderProvenanceV1::Zulip,
             external_record_id: attachment.provider_attachment_id.clone(),
             scope: Some(SourceScopeEnvelope {
-                external_account_id: account_id.to_owned(), external_conversation_id: Some(conversation_id.to_owned()),
-                external_participant_id: None, external_media_id: Some(attachment.provider_attachment_id.clone()),
-                external_reply_to_record_id: None, external_forward_origin_record_id: None,
+                external_account_id: account_id.to_owned(),
+                external_conversation_id: Some(conversation_id.to_owned()),
+                external_participant_id: None,
+                external_media_id: Some(attachment.provider_attachment_id.clone()),
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
             }),
         },
-        CommunicationEvidenceKindV1::MediaChanged, BodyAvailabilityV1::MetadataOnly,
-        CommunicationDirectionV1::Unknown, None,
-    ).map_err(|_| ZulipCoreError::InvalidEvent)?;
-    let filename = attachment.filename.as_ref().filter(|value| !value.is_empty() && value.is_ascii()).cloned();
-    hermes_communications_ingress::with_attachment_descriptor(draft, AttachmentDescriptorV1 {
-        filename, media_type: "application/octet-stream".to_owned(), declared_bytes: 0,
-        sha256: None, disposition: AttachmentDispositionV1::Unknown,
-    }).map_err(|_| ZulipCoreError::InvalidEvent)
+        CommunicationEvidenceKindV1::MediaChanged,
+        BodyAvailabilityV1::MetadataOnly,
+        CommunicationDirectionV1::Unknown,
+        None,
+    )
+    .map_err(|_| ZulipCoreError::InvalidEvent)?;
+    let filename = attachment
+        .filename
+        .as_ref()
+        .filter(|value| !value.is_empty() && value.is_ascii())
+        .cloned();
+    hermes_communications_ingress::with_attachment_descriptor(
+        draft,
+        AttachmentDescriptorV1 {
+            filename,
+            media_type: "application/octet-stream".to_owned(),
+            declared_bytes: 0,
+            sha256: None,
+            disposition: AttachmentDispositionV1::Unknown,
+        },
+    )
+    .map_err(|_| ZulipCoreError::InvalidEvent)
 }
 
 struct ObservedEvent<'a> {

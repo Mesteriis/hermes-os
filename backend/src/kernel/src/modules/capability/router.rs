@@ -4,8 +4,8 @@ use hermes_kernel_control_store::{ModuleRegistryStore, RuntimeTrustStore};
 use hermes_kernel_control_store_sqlite::StoreError;
 use hermes_runtime_protocol::{
     v1::{
-        ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeClientDeliveryResponseV1,
-        ModuleClientRequestV1,
+        ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeControlRequestV1,
+        ManagedRuntimeControlResponseV1, ModuleClientRequestV1,
     },
     validation::module_client::{
         validate_module_client_request_v1, validate_module_client_response_v1,
@@ -184,14 +184,26 @@ where
     }
     let response = relay.relay(
         route.registration_id,
-        ManagedRuntimeClientDeliveryRequestV1 {
-            request: Some(request.clone()),
+        ManagedRuntimeControlRequestV1 {
+            operation: Some(
+                hermes_runtime_protocol::v1::managed_runtime_control_request_v1::Operation::ClientDelivery(
+                    ManagedRuntimeClientDeliveryRequestV1 {
+                        request: Some(request.clone()),
+                    },
+                ),
+            ),
         }
         .encode_to_vec(),
     )?;
-    let response = ManagedRuntimeClientDeliveryResponseV1::decode(response.as_slice())
+    let response = ManagedRuntimeControlResponseV1::decode(response.as_slice())
         .map_err(|_| "managed client delivery response is invalid".to_owned())?
-        .response
+        .result
+        .and_then(|result| match result {
+            hermes_runtime_protocol::v1::managed_runtime_control_response_v1::Result::ClientDelivery(
+                delivery,
+            ) => delivery.response,
+            _ => None,
+        })
         .ok_or_else(|| "managed client delivery response is missing".to_owned())?;
     validate_module_client_response_v1(&response)
         .map_err(|_| "managed client response is rejected".to_owned())?;

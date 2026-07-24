@@ -61,7 +61,9 @@ fn binding(
     })
 }
 
-fn stream_name(kind: EventStreamKindV1) -> Result<&'static str, ManagedRuntimeConsumerBindingErrorV1> {
+fn stream_name(
+    kind: EventStreamKindV1,
+) -> Result<&'static str, ManagedRuntimeConsumerBindingErrorV1> {
     match kind {
         EventStreamKindV1::Command => Ok("HERMES_COMMAND_V1"),
         EventStreamKindV1::Event => Ok("HERMES_EVENT_V1"),
@@ -72,4 +74,6 @@ fn stream_name(kind: EventStreamKindV1) -> Result<&'static str, ManagedRuntimeCo
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ManagedRuntimeConsumerBindingErrorV1 { Duplicate }
+pub(crate) enum ManagedRuntimeConsumerBindingErrorV1 {
+    Duplicate,
+}

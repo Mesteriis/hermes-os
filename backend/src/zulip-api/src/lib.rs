@@ -126,13 +126,21 @@ pub enum ZulipCommandV1 {
         blob: ZulipBlobIntentV1,
         filename: String,
     },
-    DownloadAttachment { operation_id: String, account_id: String, upload_path: String, blob: ZulipBlobIntentV1 },
+    DownloadAttachment {
+        operation_id: String,
+        account_id: String,
+        upload_path: String,
+        blob: ZulipBlobIntentV1,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ZulipCommandOperationOutcomeV1 {
     OutcomeUnknown,
-    Accepted { provider_message_id: Option<i64>, blob_ref: Option<String> },
+    Accepted {
+        provider_message_id: Option<i64>,
+        blob_ref: Option<String>,
+    },
     Rejected,
 }
 
@@ -173,7 +181,7 @@ pub fn command_operation_id(command: &ZulipCommandV1) -> &str {
         | ZulipCommandV1::Reaction { operation_id, .. }
         | ZulipCommandV1::SendStreamWithUpload { operation_id, .. }
         | ZulipCommandV1::SendDirectWithUpload { operation_id, .. } => operation_id,
-        | ZulipCommandV1::DownloadAttachment { operation_id, .. } => operation_id,
+        ZulipCommandV1::DownloadAttachment { operation_id, .. } => operation_id,
     }
 }
 
@@ -187,7 +195,7 @@ pub fn command_account_id(command: &ZulipCommandV1) -> &str {
         | ZulipCommandV1::Reaction { account_id, .. }
         | ZulipCommandV1::SendStreamWithUpload { account_id, .. }
         | ZulipCommandV1::SendDirectWithUpload { account_id, .. } => account_id,
-        | ZulipCommandV1::DownloadAttachment { account_id, .. } => account_id,
+        ZulipCommandV1::DownloadAttachment { account_id, .. } => account_id,
     }
 }
 
@@ -197,7 +205,13 @@ pub fn command_account_id(command: &ZulipCommandV1) -> &str {
 pub fn command_fingerprint_bytes(command: &ZulipCommandV1) -> Vec<u8> {
     let mut bytes = vec![1];
     match command {
-        ZulipCommandV1::SendStream { operation_id, account_id, stream, topic, content } => {
+        ZulipCommandV1::SendStream {
+            operation_id,
+            account_id,
+            stream,
+            topic,
+            content,
+        } => {
             bytes.push(1);
             append_text(&mut bytes, operation_id);
             append_text(&mut bytes, account_id);
@@ -205,17 +219,30 @@ pub fn command_fingerprint_bytes(command: &ZulipCommandV1) -> Vec<u8> {
             append_text(&mut bytes, topic);
             append_text(&mut bytes, content);
         }
-        ZulipCommandV1::SendDirect { operation_id, account_id, recipients, content } => {
+        ZulipCommandV1::SendDirect {
+            operation_id,
+            account_id,
+            recipients,
+            content,
+        } => {
             bytes.push(2);
             append_text(&mut bytes, operation_id);
             append_text(&mut bytes, account_id);
-            bytes.extend_from_slice(&(u32::try_from(recipients.len()).unwrap_or(u32::MAX)).to_be_bytes());
+            bytes.extend_from_slice(
+                &(u32::try_from(recipients.len()).unwrap_or(u32::MAX)).to_be_bytes(),
+            );
             for recipient in recipients {
                 append_text(&mut bytes, recipient);
             }
             append_text(&mut bytes, content);
         }
-        ZulipCommandV1::UpdateMessage { operation_id, account_id, provider_message_id, content, topic } => {
+        ZulipCommandV1::UpdateMessage {
+            operation_id,
+            account_id,
+            provider_message_id,
+            content,
+            topic,
+        } => {
             bytes.push(3);
             append_text(&mut bytes, operation_id);
             append_text(&mut bytes, account_id);
@@ -223,13 +250,23 @@ pub fn command_fingerprint_bytes(command: &ZulipCommandV1) -> Vec<u8> {
             append_optional_text(&mut bytes, content.as_deref());
             append_optional_text(&mut bytes, topic.as_deref());
         }
-        ZulipCommandV1::DeleteMessage { operation_id, account_id, provider_message_id } => {
+        ZulipCommandV1::DeleteMessage {
+            operation_id,
+            account_id,
+            provider_message_id,
+        } => {
             bytes.push(4);
             append_text(&mut bytes, operation_id);
             append_text(&mut bytes, account_id);
             append_text(&mut bytes, provider_message_id);
         }
-        ZulipCommandV1::Reaction { operation_id, account_id, provider_message_id, reaction, operation } => {
+        ZulipCommandV1::Reaction {
+            operation_id,
+            account_id,
+            provider_message_id,
+            reaction,
+            operation,
+        } => {
             bytes.push(5);
             append_text(&mut bytes, operation_id);
             append_text(&mut bytes, account_id);
@@ -242,7 +279,15 @@ pub fn command_fingerprint_bytes(command: &ZulipCommandV1) -> Vec<u8> {
                 ZulipReactionOperationV1::Remove => 2,
             });
         }
-        ZulipCommandV1::SendStreamWithUpload { operation_id, account_id, stream, topic, content, blob, filename } => {
+        ZulipCommandV1::SendStreamWithUpload {
+            operation_id,
+            account_id,
+            stream,
+            topic,
+            content,
+            blob,
+            filename,
+        } => {
             bytes.push(6);
             append_text(&mut bytes, operation_id);
             append_text(&mut bytes, account_id);
@@ -252,18 +297,38 @@ pub fn command_fingerprint_bytes(command: &ZulipCommandV1) -> Vec<u8> {
             append_blob_intent(&mut bytes, blob);
             append_text(&mut bytes, filename);
         }
-        ZulipCommandV1::SendDirectWithUpload { operation_id, account_id, recipients, content, blob, filename } => {
+        ZulipCommandV1::SendDirectWithUpload {
+            operation_id,
+            account_id,
+            recipients,
+            content,
+            blob,
+            filename,
+        } => {
             bytes.push(7);
             append_text(&mut bytes, operation_id);
             append_text(&mut bytes, account_id);
-            bytes.extend_from_slice(&(u32::try_from(recipients.len()).unwrap_or(u32::MAX)).to_be_bytes());
-            for recipient in recipients { append_text(&mut bytes, recipient); }
+            bytes.extend_from_slice(
+                &(u32::try_from(recipients.len()).unwrap_or(u32::MAX)).to_be_bytes(),
+            );
+            for recipient in recipients {
+                append_text(&mut bytes, recipient);
+            }
             append_text(&mut bytes, content);
             append_blob_intent(&mut bytes, blob);
             append_text(&mut bytes, filename);
         }
-        ZulipCommandV1::DownloadAttachment { operation_id, account_id, upload_path, blob } => {
-            bytes.push(8); append_text(&mut bytes, operation_id); append_text(&mut bytes, account_id); append_text(&mut bytes, upload_path); append_blob_intent(&mut bytes, blob);
+        ZulipCommandV1::DownloadAttachment {
+            operation_id,
+            account_id,
+            upload_path,
+            blob,
+        } => {
+            bytes.push(8);
+            append_text(&mut bytes, operation_id);
+            append_text(&mut bytes, account_id);
+            append_text(&mut bytes, upload_path);
+            append_blob_intent(&mut bytes, blob);
         }
     }
     bytes
@@ -297,7 +362,9 @@ fn append_optional_text(bytes: &mut Vec<u8>, value: Option<&str>) {
 
 fn append_blob_intent(bytes: &mut Vec<u8>, value: &ZulipBlobIntentV1) {
     append_text(bytes, &value.blob_ref);
-    bytes.extend_from_slice(&(u32::try_from(value.reference_id.len()).unwrap_or(u32::MAX)).to_be_bytes());
+    bytes.extend_from_slice(
+        &(u32::try_from(value.reference_id.len()).unwrap_or(u32::MAX)).to_be_bytes(),
+    );
     bytes.extend_from_slice(&value.reference_id);
     bytes.extend_from_slice(&value.declared_size.to_be_bytes());
     bytes.extend_from_slice(&value.backup_class.to_be_bytes());
@@ -314,19 +381,30 @@ mod generated_client_wire_tests {
     #[test]
     fn preserves_exact_command_and_terminal_status_payloads() {
         let request = ZulipClientRequestV1::Command(ZulipCommandV1::SendDirectWithUpload {
-            operation_id: "operation".into(), account_id: "account".into(),
-            recipients: vec!["41".into(), "42".into()], content: "private body".into(),
+            operation_id: "operation".into(),
+            account_id: "account".into(),
+            recipients: vec!["41".into(), "42".into()],
+            content: "private body".into(),
             blob: super::ZulipBlobIntentV1 {
-                blob_ref: "blob-ref".into(), reference_id: vec![1; 16],
-                declared_size: 3, backup_class: 1,
-            }, filename: "attachment.txt".into(),
+                blob_ref: "blob-ref".into(),
+                reference_id: vec![1; 16],
+                declared_size: 3,
+                backup_class: 1,
+            },
+            filename: "attachment.txt".into(),
         });
         assert_eq!(decode_request(&encode_request(&request)), Ok(request));
-        let response = ZulipClientResponseV1::OperationStatus(Some(ZulipCommandOperationStatusV1 {
-            operation_id: "operation".into(), account_id: "account".into(),
-            outcome: ZulipCommandOperationOutcomeV1::Accepted { provider_message_id: Some(7), blob_ref: None },
-            requested_at_unix_seconds: 1, completed_at_unix_seconds: Some(2),
-        }));
+        let response =
+            ZulipClientResponseV1::OperationStatus(Some(ZulipCommandOperationStatusV1 {
+                operation_id: "operation".into(),
+                account_id: "account".into(),
+                outcome: ZulipCommandOperationOutcomeV1::Accepted {
+                    provider_message_id: Some(7),
+                    blob_ref: None,
+                },
+                requested_at_unix_seconds: 1,
+                completed_at_unix_seconds: Some(2),
+            }));
         assert_eq!(decode_response(&encode_response(&response)), Ok(response));
     }
 }
@@ -398,14 +476,23 @@ mod tests {
     #[test]
     fn command_fingerprint_is_unambiguous_and_payload_sensitive() {
         let first = ZulipCommandV1::SendStream {
-            operation_id: "op".into(), account_id: "account".into(), stream: "a".into(),
-            topic: "bc".into(), content: "body".into(),
+            operation_id: "op".into(),
+            account_id: "account".into(),
+            stream: "a".into(),
+            topic: "bc".into(),
+            content: "body".into(),
         };
         let second = ZulipCommandV1::SendStream {
-            operation_id: "op".into(), account_id: "account".into(), stream: "ab".into(),
-            topic: "c".into(), content: "body".into(),
+            operation_id: "op".into(),
+            account_id: "account".into(),
+            stream: "ab".into(),
+            topic: "c".into(),
+            content: "body".into(),
         };
-        assert_ne!(command_fingerprint_bytes(&first), command_fingerprint_bytes(&second));
+        assert_ne!(
+            command_fingerprint_bytes(&first),
+            command_fingerprint_bytes(&second)
+        );
         assert_eq!(command_operation_id(&first), "op");
     }
 }

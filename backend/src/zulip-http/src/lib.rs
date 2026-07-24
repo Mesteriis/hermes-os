@@ -64,8 +64,14 @@ pub async fn upload_file(
     filename: &str,
     bytes: &[u8],
 ) -> Result<String, ZulipHttpErrorV1> {
-    let (_, value) = wire::execute_value(config, command::request_for_upload(config, filename, bytes)?).await?;
-    value.get("uri").and_then(serde_json::Value::as_str)
+    let (_, value) = wire::execute_value(
+        config,
+        command::request_for_upload(config, filename, bytes)?,
+    )
+    .await?;
+    value
+        .get("uri")
+        .and_then(serde_json::Value::as_str)
         .filter(|uri| is_same_realm_upload_url(&config.account.realm_url, uri))
         .map(str::to_owned)
         .ok_or(ZulipHttpErrorV1::Protocol)
@@ -75,7 +81,11 @@ pub async fn download_user_upload(
     config: &ZulipHttpConfigV1,
     upload_path: &str,
 ) -> Result<(Vec<u8>, Option<String>), ZulipHttpErrorV1> {
-    wire::execute_binary(config, command::request_for_user_upload_download(config, upload_path)?).await
+    wire::execute_binary(
+        config,
+        command::request_for_user_upload_download(config, upload_path)?,
+    )
+    .await
 }
 
 pub async fn register_event_queue(
@@ -166,7 +176,12 @@ mod tests {
         assert_eq!(request.method, "POST");
         assert!(request.path.ends_with("/api/v1/user_uploads"));
         assert!(request.content_type.starts_with("multipart/form-data"));
-        assert!(request.body.windows(b"private bytes".len()).any(|window| window == b"private bytes"));
+        assert!(
+            request
+                .body
+                .windows(b"private bytes".len())
+                .any(|window| window == b"private bytes")
+        );
         assert!(!request.path.contains("private"));
     }
 
@@ -175,7 +190,16 @@ mod tests {
         let request = command::request_for_user_upload_download(&config(), "/user_uploads/a/file")
             .expect("download request");
         assert_eq!(request.path, "/user_uploads/a/file");
-        assert!(command::request_for_user_upload_download(&config(), "https://evil.test/user_uploads/a").is_err());
-        assert!(command::request_for_user_upload_download(&config(), "/user_uploads/a?token=x").is_err());
+        assert!(
+            command::request_for_user_upload_download(
+                &config(),
+                "https://evil.test/user_uploads/a"
+            )
+            .is_err()
+        );
+        assert!(
+            command::request_for_user_upload_download(&config(), "/user_uploads/a?token=x")
+                .is_err()
+        );
     }
 }

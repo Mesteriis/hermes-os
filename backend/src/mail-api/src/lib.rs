@@ -8,9 +8,14 @@ pub mod wire {
 pub mod client_wire;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MailClientRequestV1 { SyncInbox(MailSyncInboxRequestV1), SendMail(MailSendMailRequestV1) }
+pub enum MailClientRequestV1 {
+    SyncInbox(MailSyncInboxRequestV1),
+    SendMail(MailSendMailRequestV1),
+}
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MailSyncInboxRequestV1 { pub operation_id: String }
+pub struct MailSyncInboxRequestV1 {
+    pub operation_id: String,
+}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailSendMailRequestV1 {
     pub operation_id: String,
@@ -20,7 +25,16 @@ pub struct MailSendMailRequestV1 {
     pub text_body: String,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MailClientResponseV1 { SyncInboxCompleted { operation_id: String, observed_messages: u32 }, MailAccepted { operation_id: String, response_code: u16 } }
+pub enum MailClientResponseV1 {
+    SyncInboxCompleted {
+        operation_id: String,
+        observed_messages: u32,
+    },
+    MailAccepted {
+        operation_id: String,
+        response_code: u16,
+    },
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailAccountConfigurationV1 {
@@ -81,7 +95,9 @@ pub fn valid_inbound_transport(transport: &MailInboundTransportV1) -> bool {
 pub fn valid_gmail_user_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 512
-        && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'@'))
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'@'))
 }
 
 pub fn valid_mailbox(value: &str) -> bool {
@@ -192,7 +208,6 @@ pub struct OutgoingMailV1 {
     pub subject: String,
     pub text_body: String,
 }
-
 
 #[derive(Clone, Debug)]
 pub struct GetConnection {

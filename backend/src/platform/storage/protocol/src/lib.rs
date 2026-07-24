@@ -10,6 +10,6 @@ pub mod v1 {
 
 pub use model::{
     StorageAccessProfileV1, StorageBindingAccessV1, StorageBindingErrorV1, StorageBindingFencesV1,
-    StorageBindingIdentityV1, StorageBindingV1, StorageEffectiveBudgetsV1, storage_runtime_pool_alias,
-    StorageNamespaceRequestV1, StorageRequestErrorV1,
+    StorageBindingIdentityV1, StorageBindingV1, StorageEffectiveBudgetsV1,
+    StorageNamespaceRequestV1, StorageRequestErrorV1, storage_runtime_pool_alias,
 };

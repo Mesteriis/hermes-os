@@ -87,8 +87,11 @@ where
         let grant = request.grant.ok_or(())?;
         let session = self
             .verifier
-            .verify(grant, &request.channel_binding, expected, now)?;
-        let lease = self.content_key(&session, now)?;
+            .verify(grant, &request.channel_binding, expected, now)
+            .map_err(|_| developer_denied("session"))?;
+        let lease = self
+            .content_key(&session, now)
+            .map_err(|_| developer_denied("content_key"))?;
         match operation.ok_or(())? {
             Operation::Write(write) => {
                 self.store
@@ -100,7 +103,7 @@ where
                         &write.plaintext,
                         now,
                     )
-                    .map_err(|_| ())?;
+                    .map_err(|_| developer_denied("write"))?;
                 Ok(BlobDataResponseV1 {
                     plaintext: Vec::new(),
                     accepted: true,
@@ -117,7 +120,7 @@ where
                 let plaintext = self
                     .store
                     .read_range(session.reference(), session.access(), &lease, range, now)
-                    .map_err(|_| ())?;
+                    .map_err(|_| developer_denied("read"))?;
                 Ok(BlobDataResponseV1 {
                     plaintext,
                     accepted: true,
@@ -191,6 +194,12 @@ where
         complete_immediately(self.keys.ensure_content_key(reference, &fence, now))
             .map_err(|_| ())?
             .map_err(|_| ())
+    }
+}
+
+fn developer_denied(stage: &str) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_blob_data_request_denied stage={stage}");
     }
 }
 

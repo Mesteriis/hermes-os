@@ -3,6 +3,7 @@
 use hermes_communications_api::CommunicationSearchHitV1;
 use hermes_communications_domain::normalize_search_query_v1;
 use hermes_communications_persistence::CommunicationsDurablePersistence;
+use std::os::unix::net::UnixStream;
 
 use crate::{
     search_access::{CommunicationsSearchAccessErrorV1, CommunicationsSearchAccessV1},
@@ -18,13 +19,14 @@ pub enum CommunicationsSearchQueryErrorV1 {
 pub async fn search_communications_v1(
     persistence: &CommunicationsDurablePersistence,
     access: &mut CommunicationsSearchAccessV1,
+    control_channel: &mut UnixStream,
     query: &str,
     limit: u16,
 ) -> Result<Vec<CommunicationSearchHitV1>, CommunicationsSearchQueryErrorV1> {
     if !(1..=100).contains(&limit) {
         return Err(CommunicationsSearchQueryErrorV1::InvalidQuery);
     }
-    let key = access.ensure_index_key().map_err(access_error)?;
+    let key = access.ensure_index_key(control_channel).map_err(access_error)?;
     let digests = query_token_digests_v1(query, &key)?;
     persistence
         .search_by_token_digests(&digests, limit)

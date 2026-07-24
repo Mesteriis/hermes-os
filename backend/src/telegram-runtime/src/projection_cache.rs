@@ -579,7 +579,6 @@ impl TelegramRuntimeProjectionCache {
         self.message_tombstones.get(message_id).map(Vec::as_slice)
     }
 
-
     pub fn put_attachment(&mut self, attachment: TelegramAttachmentProjection) {
         self.attachments
             .insert(attachment.attachment_id.clone(), attachment);
@@ -798,8 +797,6 @@ impl TelegramRuntimeProjectionCache {
         true
     }
 
-
-
     pub fn schedule_operation_retry(
         &mut self,
         operation_id: &str,
@@ -823,7 +820,6 @@ impl TelegramRuntimeProjectionCache {
         operation.reconciled_at_unix_seconds = Some(now_unix_seconds);
         true
     }
-
 
     pub fn reconcile_operation(&mut self, operation_id: &str, observed: bool) -> bool {
         let Some(operation) = self.operations.get_mut(operation_id) else {
@@ -852,7 +848,6 @@ impl TelegramRuntimeProjectionCache {
     pub fn qr_session(&self, setup_id: &str) -> Option<&TelegramQrLoginSession> {
         self.qr_sessions.get(setup_id)
     }
-
 
     pub fn put_file(&mut self, file: TelegramFileSnapshot) {
         self.files.insert(
@@ -892,7 +887,6 @@ impl TelegramRuntimeProjectionCache {
             items.push(participant);
         }
     }
-
 
     pub fn append_realtime_frame(&mut self, frame: TelegramRealtimeFrame) {
         self.realtime_frames

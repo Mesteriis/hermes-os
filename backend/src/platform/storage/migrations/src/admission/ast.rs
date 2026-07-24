@@ -47,7 +47,10 @@ fn create_table_is_additive(statement: &pg_query::protobuf::CreateStmt, owner: &
         && statement.table_elts.iter().all(|element| {
             is_column_definition(element) || is_owner_local_table_constraint(element, owner)
         })
-        && statement.constraints.iter().all(|constraint| is_owner_local_table_constraint(constraint, owner))
+        && statement
+            .constraints
+            .iter()
+            .all(|constraint| is_owner_local_table_constraint(constraint, owner))
         && statement.inh_relations.is_empty()
         && statement.partbound.is_none()
         && statement.partspec.is_none()

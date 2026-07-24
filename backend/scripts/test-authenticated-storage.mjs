@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -27,6 +27,17 @@ const authenticatedTests = [
 ];
 
 async function run(command, args, options = {}) {
+  if (process.env.HERMES_STORAGE_UNBUFFERED === '1') {
+    await new Promise((resolve, reject) => {
+      const child = spawn(command, args, { stdio: 'inherit', ...options });
+      child.once('error', reject);
+      child.once('exit', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`${command} exited with ${code ?? 'signal'}`));
+      });
+    });
+    return;
+  }
   await execFileAsync(command, args, { encoding: 'utf8', ...options });
 }
 

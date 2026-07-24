@@ -1,11 +1,12 @@
 //! Typed conversion from owner query values to the public Protobuf contract.
 
 use crate::{
-    AttachmentDispositionV1, AttachmentSafetyStateV1, CommunicationAccountSummaryV1, CommunicationAttachmentAnchorSummaryV1,
-    CommunicationConversationSummaryV1, CommunicationMessageLifecycleStateV1,
+    AttachmentDispositionV1, AttachmentSafetyStateV1, CommunicationAccountSummaryV1,
+    CommunicationAttachmentAnchorSummaryV1, CommunicationConversationSummaryV1,
+    CommunicationDirectionV1, CommunicationMessageLifecycleStateV1,
     CommunicationMessageReferenceKindV1, CommunicationMessageReferenceSummaryV1,
     CommunicationMessageSummaryV1, CommunicationObservedParticipantSummaryV1,
-    CommunicationDirectionV1, CommunicationProviderProvenanceV1, query_wire,
+    CommunicationProviderProvenanceV1, query_wire,
 };
 
 impl From<&CommunicationAccountSummaryV1> for query_wire::AccountSummaryV1 {
@@ -75,12 +76,39 @@ impl From<&CommunicationAttachmentAnchorSummaryV1> for query_wire::AttachmentAnc
             last_observed_at_unix_seconds: value.last_observed_at_unix_seconds,
             last_evidence_id: value.last_evidence_id.bytes().to_vec(),
             has_descriptor: value.descriptor.is_some(),
-            filename: value.descriptor.as_ref().and_then(|descriptor| descriptor.filename()).unwrap_or_default().to_owned(),
-            has_filename: value.descriptor.as_ref().and_then(|descriptor| descriptor.filename()).is_some(),
-            media_type: value.descriptor.as_ref().map(|descriptor| descriptor.media_type()).unwrap_or_default().to_owned(),
-            declared_bytes: value.descriptor.as_ref().map_or(0, |descriptor| descriptor.declared_bytes()),
-            sha256: value.descriptor.as_ref().and_then(|descriptor| descriptor.sha256()).map_or_else(Vec::new, |value| value.to_vec()),
-            disposition: value.descriptor.as_ref().map_or(0, |descriptor| match descriptor.disposition() { AttachmentDispositionV1::Attachment => 1, AttachmentDispositionV1::Inline => 2, AttachmentDispositionV1::Unknown => 3 }),
+            filename: value
+                .descriptor
+                .as_ref()
+                .and_then(|descriptor| descriptor.filename())
+                .unwrap_or_default()
+                .to_owned(),
+            has_filename: value
+                .descriptor
+                .as_ref()
+                .and_then(|descriptor| descriptor.filename())
+                .is_some(),
+            media_type: value
+                .descriptor
+                .as_ref()
+                .map(|descriptor| descriptor.media_type())
+                .unwrap_or_default()
+                .to_owned(),
+            declared_bytes: value
+                .descriptor
+                .as_ref()
+                .map_or(0, |descriptor| descriptor.declared_bytes()),
+            sha256: value
+                .descriptor
+                .as_ref()
+                .and_then(|descriptor| descriptor.sha256())
+                .map_or_else(Vec::new, |value| value.to_vec()),
+            disposition: value.descriptor.as_ref().map_or(0, |descriptor| {
+                match descriptor.disposition() {
+                    AttachmentDispositionV1::Attachment => 1,
+                    AttachmentDispositionV1::Inline => 2,
+                    AttachmentDispositionV1::Unknown => 3,
+                }
+            }),
         }
     }
 }
@@ -91,7 +119,9 @@ impl From<&CommunicationMessageReferenceSummaryV1> for query_wire::MessageRefere
             source_message_id: value.source_message_id.bytes().to_vec(),
             kind: reference_kind_value(value.kind),
             target_source_cursor_sha256: value.target_source_cursor.bytes().to_vec(),
-            target_message_id: value.target_message_id.map_or_else(Vec::new, |id| id.bytes().to_vec()),
+            target_message_id: value
+                .target_message_id
+                .map_or_else(Vec::new, |id| id.bytes().to_vec()),
             observed_at_unix_seconds: value.observed_at_unix_seconds,
             evidence_id: value.evidence_id.bytes().to_vec(),
         }

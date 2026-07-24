@@ -25,31 +25,46 @@ impl AttachmentDescriptorV1 {
     ) -> Result<Self, AttachmentDescriptorViolationV1> {
         if filename.as_deref().is_some_and(|value| {
             value.is_empty() || value.len() > MAX_FILENAME_BYTES || !value.is_ascii()
-        })
-            || media_type.is_empty()
+        }) || media_type.is_empty()
             || media_type.len() > MAX_MEDIA_TYPE_BYTES
             || !valid_media_type(&media_type)
             || declared_bytes > MAX_DECLARED_BYTES
         {
             return Err(AttachmentDescriptorViolationV1::InvalidDescriptor);
         }
-        Ok(Self { filename, media_type, declared_bytes, sha256, disposition })
+        Ok(Self {
+            filename,
+            media_type,
+            declared_bytes,
+            sha256,
+            disposition,
+        })
     }
 
     #[must_use]
-    pub fn filename(&self) -> Option<&str> { self.filename.as_deref() }
+    pub fn filename(&self) -> Option<&str> {
+        self.filename.as_deref()
+    }
 
     #[must_use]
-    pub fn media_type(&self) -> &str { &self.media_type }
+    pub fn media_type(&self) -> &str {
+        &self.media_type
+    }
 
     #[must_use]
-    pub const fn declared_bytes(&self) -> u64 { self.declared_bytes }
+    pub const fn declared_bytes(&self) -> u64 {
+        self.declared_bytes
+    }
 
     #[must_use]
-    pub const fn sha256(&self) -> Option<[u8; 32]> { self.sha256 }
+    pub const fn sha256(&self) -> Option<[u8; 32]> {
+        self.sha256
+    }
 
     #[must_use]
-    pub const fn disposition(&self) -> AttachmentDispositionV1 { self.disposition }
+    pub const fn disposition(&self) -> AttachmentDispositionV1 {
+        self.disposition
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -107,11 +122,23 @@ impl AttachmentSafetyStateV1 {
         transition: AttachmentSafetyTransitionV1,
     ) -> Result<Self, AttachmentSafetyTransitionViolationV1> {
         match (self, transition) {
-            (Self::DescriptorOnly, AttachmentSafetyTransitionV1::BlobAdmissionRequested) => Ok(Self::BlobPending),
-            (Self::BlobPending, AttachmentSafetyTransitionV1::BlobAdmitted) => Ok(Self::BlobAdmitted),
-            (Self::BlobAdmitted, AttachmentSafetyTransitionV1::DeclaredClean) => Ok(Self::SafeForDelivery),
-            (Self::DescriptorOnly | Self::BlobPending | Self::BlobAdmitted, AttachmentSafetyTransitionV1::Quarantined) => Ok(Self::Quarantined),
-            (Self::DescriptorOnly | Self::BlobPending | Self::BlobAdmitted, AttachmentSafetyTransitionV1::Rejected) => Ok(Self::Rejected),
+            (Self::DescriptorOnly, AttachmentSafetyTransitionV1::BlobAdmissionRequested) => {
+                Ok(Self::BlobPending)
+            }
+            (Self::BlobPending, AttachmentSafetyTransitionV1::BlobAdmitted) => {
+                Ok(Self::BlobAdmitted)
+            }
+            (Self::BlobAdmitted, AttachmentSafetyTransitionV1::DeclaredClean) => {
+                Ok(Self::SafeForDelivery)
+            }
+            (
+                Self::DescriptorOnly | Self::BlobPending | Self::BlobAdmitted,
+                AttachmentSafetyTransitionV1::Quarantined,
+            ) => Ok(Self::Quarantined),
+            (
+                Self::DescriptorOnly | Self::BlobPending | Self::BlobAdmitted,
+                AttachmentSafetyTransitionV1::Rejected,
+            ) => Ok(Self::Rejected),
             _ => Err(AttachmentSafetyTransitionViolationV1::InvalidTransition),
         }
     }
@@ -123,7 +150,5 @@ pub enum AttachmentDescriptorViolationV1 {
 }
 
 fn valid_media_type(value: &str) -> bool {
-    value.is_ascii()
-        && value.contains('/')
-        && !value.contains([' ', '\t', '\n', '\r', ';'])
+    value.is_ascii() && value.contains('/') && !value.contains([' ', '\t', '\n', '\r', ';'])
 }

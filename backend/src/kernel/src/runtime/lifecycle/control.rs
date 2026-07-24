@@ -12,12 +12,12 @@ use hermes_kernel_control_store::{
     PlatformManagedProcessBinding, PlatformManagedProcessLaunch,
 };
 use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeResponseV1, ManagedRuntimeControlRequestV1,
+    DescribeManagedRuntimeResponseV1, ManagedRuntimeBlobSessionDeliveryV1,
+    ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, ManagedRuntimeEventCredentialDeliveryV1,
-    ManagedRuntimeEventCredentialRequestV1, ManagedRuntimeProviderCredentialDeliveryV1,
-    ManagedRuntimeProviderCredentialRequestV1, ManagedRuntimeBlobSessionDeliveryV1,
-    ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeVaultRouteRequestV1,
-    ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedRuntimeOwnerDerivedKeyRequestV1,
+    ManagedRuntimeEventCredentialRequestV1, ManagedRuntimeOwnerDerivedKeyDeliveryV1,
+    ManagedRuntimeOwnerDerivedKeyRequestV1, ManagedRuntimeProviderCredentialDeliveryV1,
+    ManagedRuntimeProviderCredentialRequestV1, ManagedRuntimeVaultRouteRequestV1,
     VaultCiphertextResponseV1, VaultCiphertextRouteV1,
 };
 use hermes_runtime_protocol::validation::descriptor::{
@@ -88,12 +88,20 @@ impl ManagedRuntimeRelayRequest {
         channel: &mut UnixStream,
         expectation: &ManagedRuntimeExpectation,
         vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
+        event_credential_handler: Option<&dyn ManagedRuntimeEventCredentialHandler>,
+        provider_credential_handler: Option<&dyn ManagedRuntimeProviderCredentialHandler>,
+        owner_derived_key_handler: Option<&dyn ManagedRuntimeOwnerDerivedKeyHandler>,
+        blob_session_handler: Option<&dyn ManagedRuntimeBlobSessionHandler>,
     ) {
-        let _ = self.response.send(relay_with_vault_routes(
+        let _ = self.response.send(relay_with_control_routes(
             channel,
             &self.payload,
             expectation,
             vault_route_handler,
+            event_credential_handler,
+            provider_credential_handler,
+            owner_derived_key_handler,
+            blob_session_handler,
         ));
     }
 }
@@ -277,19 +285,61 @@ pub(crate) fn relay_with_vault_routes(
     expectation: &ManagedRuntimeExpectation,
     vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
 ) -> Result<Vec<u8>, String> {
+    relay_with_control_routes(channel, payload, expectation, vault_route_handler, None, None, None, None)
+}
+
+pub(crate) fn relay_with_control_routes(
+    channel: &mut UnixStream,
+    payload: &[u8],
+    expectation: &ManagedRuntimeExpectation,
+    vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
+    event_credential_handler: Option<&dyn ManagedRuntimeEventCredentialHandler>,
+    provider_credential_handler: Option<&dyn ManagedRuntimeProviderCredentialHandler>,
+    owner_derived_key_handler: Option<&dyn ManagedRuntimeOwnerDerivedKeyHandler>,
+    blob_session_handler: Option<&dyn ManagedRuntimeBlobSessionHandler>,
+) -> Result<Vec<u8>, String> {
     if payload.is_empty() || payload.len() > MAX_FRAME_BYTES {
         return Err("managed runtime relay payload is invalid".to_owned());
     }
     write_frame(channel, payload)?;
     loop {
         let frame = read_frame(channel)?;
-        let Some(route) = vault_route(&frame) else {
-            return Ok(frame);
-        };
-        let result = vault_route_handler
-            .ok_or_else(|| "managed runtime Vault route is not available".to_owned())?
-            .route_vault_ciphertext(expectation, route);
-        inbound::respond_vault_route(channel, result)?;
+        if let Some(route) = vault_route(&frame) {
+            let result = vault_route_handler
+                .ok_or_else(|| "managed runtime Vault route is not available".to_owned())?
+                .route_vault_ciphertext(expectation, route);
+            inbound::respond_vault_route(channel, result)?;
+            continue;
+        }
+        if let Ok(Some(request)) = inbound::event_credential_request(&frame) {
+            let result = event_credential_handler
+                .ok_or_else(|| "managed runtime Event credential handler is not available".to_owned())?
+                .issue_event_credential(expectation, request);
+            inbound::respond_event_credential(channel, result)?;
+            continue;
+        }
+        if let Ok(Some(request)) = inbound::provider_credential_request(&frame) {
+            let result = provider_credential_handler
+                .ok_or_else(|| "managed runtime provider credential handler is not available".to_owned())?
+                .issue_provider_credential(expectation, request);
+            inbound::respond_provider_credential(channel, result)?;
+            continue;
+        }
+        if let Ok(Some(request)) = inbound::owner_derived_key_request(&frame) {
+            let result = owner_derived_key_handler
+                .ok_or_else(|| "managed runtime owner-derived key handler is not available".to_owned())?
+                .issue_owner_derived_key(expectation, request);
+            inbound::respond_owner_derived_key(channel, result)?;
+            continue;
+        }
+        if let Ok(Some(request)) = inbound::blob_session_request(&frame) {
+            let result = blob_session_handler
+                .ok_or_else(|| "managed runtime Blob session handler is not available".to_owned())?
+                .issue_blob_session(expectation, request);
+            inbound::respond_blob_session(channel, result)?;
+            continue;
+        }
+        return Ok(frame);
     }
 }
 

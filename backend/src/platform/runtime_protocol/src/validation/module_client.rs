@@ -32,9 +32,10 @@ pub fn validate_module_client_request_v1(
 pub fn validate_module_client_response_v1(
     response: &ModuleClientResponseV1,
 ) -> Result<(), ModuleClientValidationErrorV1> {
-    let successful_response = response.response_payload.len() <= MAX_PAYLOAD_BYTES
-        && response.error_code.is_empty();
-    let failed_response = response.response_payload.is_empty() && valid_error_code(&response.error_code);
+    let successful_response =
+        response.response_payload.len() <= MAX_PAYLOAD_BYTES && response.error_code.is_empty();
+    let failed_response =
+        response.response_payload.is_empty() && valid_error_code(&response.error_code);
     if response.protocol_major != PROTOCOL_MAJOR
         || response.request_id == 0
         || (!successful_response && !failed_response)
@@ -55,9 +56,7 @@ fn valid_identifier(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= MAX_IDENTIFIER_BYTES
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'.' | b'_' | b'-')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
         })
 }
 

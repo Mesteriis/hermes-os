@@ -7,85 +7,161 @@ pub mod wire {
 }
 
 pub mod query_wire {
-    include!(concat!(env!("OUT_DIR"), "/hermes.communications.query.v1.rs"));
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.communications.query.v1.rs"
+    ));
 }
 
-mod query_projection;
 mod attachment;
+mod query_projection;
 
 pub use attachment::{
-    AttachmentDescriptorV1, AttachmentDispositionV1, AttachmentSafetyStateV1,
-    AttachmentSafetyTransitionV1, AttachmentSafetyTransitionViolationV1,
-    AttachmentDescriptorViolationV1, AttachmentSafetyTransitionCommandV1,
-    AttachmentSafetyTransitionDecisionV1,
+    AttachmentDescriptorV1, AttachmentDescriptorViolationV1, AttachmentDispositionV1,
+    AttachmentSafetyStateV1, AttachmentSafetyTransitionCommandV1,
+    AttachmentSafetyTransitionDecisionV1, AttachmentSafetyTransitionV1,
+    AttachmentSafetyTransitionViolationV1,
 };
 
-include!(concat!(env!("OUT_DIR"), "/communications_evidence_schema.rs"));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/communications_evidence_schema.rs"
+));
 include!(concat!(env!("OUT_DIR"), "/communications_query_schema.rs"));
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct CommunicationObservationIdV1([u8; 16]);
 impl CommunicationObservationIdV1 {
-    pub const fn new(value: [u8; 16]) -> Self { Self(value) }
-    pub const fn bytes(self) -> [u8; 16] { self.0 }
-    pub fn as_hex(self) -> String { hex(&self.0) }
+    pub const fn new(value: [u8; 16]) -> Self {
+        Self(value)
+    }
+    pub const fn bytes(self) -> [u8; 16] {
+        self.0
+    }
+    pub fn as_hex(self) -> String {
+        hex(&self.0)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct CommunicationSourceCursorV1([u8; 32]);
 impl CommunicationSourceCursorV1 {
-    pub const fn new(value: [u8; 32]) -> Self { Self(value) }
-    pub const fn bytes(self) -> [u8; 32] { self.0 }
-    pub fn as_hex(self) -> String { hex(&self.0) }
+    pub const fn new(value: [u8; 32]) -> Self {
+        Self(value)
+    }
+    pub const fn bytes(self) -> [u8; 32] {
+        self.0
+    }
+    pub fn as_hex(self) -> String {
+        hex(&self.0)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct CommunicationConversationIdV1([u8; 16]);
 impl CommunicationConversationIdV1 {
-    pub const fn new(value: [u8; 16]) -> Self { Self(value) }
-    pub const fn bytes(self) -> [u8; 16] { self.0 }
+    pub const fn new(value: [u8; 16]) -> Self {
+        Self(value)
+    }
+    pub const fn bytes(self) -> [u8; 16] {
+        self.0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct CommunicationMessageIdV1([u8; 16]);
 impl CommunicationMessageIdV1 {
-    pub const fn new(value: [u8; 16]) -> Self { Self(value) }
-    pub const fn bytes(self) -> [u8; 16] { self.0 }
+    pub const fn new(value: [u8; 16]) -> Self {
+        Self(value)
+    }
+    pub const fn bytes(self) -> [u8; 16] {
+        self.0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct CommunicationParticipantIdV1([u8; 16]);
 impl CommunicationParticipantIdV1 {
-    pub const fn new(value: [u8; 16]) -> Self { Self(value) }
-    pub const fn bytes(self) -> [u8; 16] { self.0 }
+    pub const fn new(value: [u8; 16]) -> Self {
+        Self(value)
+    }
+    pub const fn bytes(self) -> [u8; 16] {
+        self.0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct CommunicationAttachmentAnchorIdV1([u8; 16]);
 impl CommunicationAttachmentAnchorIdV1 {
-    pub const fn new(value: [u8; 16]) -> Self { Self(value) }
-    pub const fn bytes(self) -> [u8; 16] { self.0 }
+    pub const fn new(value: [u8; 16]) -> Self {
+        Self(value)
+    }
+    pub const fn bytes(self) -> [u8; 16] {
+        self.0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct CommunicationAccountIdV1([u8; 16]);
 impl CommunicationAccountIdV1 {
-    pub const fn new(value: [u8; 16]) -> Self { Self(value) }
-    pub const fn bytes(self) -> [u8; 16] { self.0 }
+    pub const fn new(value: [u8; 16]) -> Self {
+        Self(value)
+    }
+    pub const fn bytes(self) -> [u8; 16] {
+        self.0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommunicationProviderProvenanceV1 { MailImap, Telegram, WhatsAppWeb, MailSmtp, Zulip, MailGmail }
+pub enum CommunicationProviderProvenanceV1 {
+    MailImap,
+    Telegram,
+    WhatsAppWeb,
+    MailSmtp,
+    Zulip,
+    MailGmail,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommunicationDirectionV1 { Incoming, Outgoing, Unknown }
+pub enum CommunicationDirectionV1 {
+    Incoming,
+    Outgoing,
+    Unknown,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CanonicalCommunicationEvidenceKindV1 { EmailMessage, ChatMessage, MessageEdited, MessageDeleted, ReactionChanged, DeliveryStateChanged, ConversationStateChanged, ParticipantChanged, MediaChanged, TopicChanged, TypingChanged }
+pub enum CanonicalCommunicationEvidenceKindV1 {
+    EmailMessage,
+    ChatMessage,
+    MessageEdited,
+    MessageDeleted,
+    ReactionChanged,
+    DeliveryStateChanged,
+    ConversationStateChanged,
+    ParticipantChanged,
+    MediaChanged,
+    TopicChanged,
+    TypingChanged,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommunicationBodyStateV1 { MetadataOnly, PendingBlob, Unavailable, AdmittedBlob }
+pub enum CommunicationBodyStateV1 {
+    MetadataOnly,
+    PendingBlob,
+    Unavailable,
+    AdmittedBlob,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommunicationBodyAdmissionFailureV1 { SourceUnavailable, SizeLimitExceeded, IntegrityMismatch, PolicyRejected }
+pub enum CommunicationBodyAdmissionFailureV1 {
+    SourceUnavailable,
+    SizeLimitExceeded,
+    IntegrityMismatch,
+    PolicyRejected,
+}
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CommunicationBodyBlobReferenceV1 { pub blob_ref: String, pub reference_id: [u8; 16], pub declared_bytes: u64, pub sha256: [u8; 32] }
+pub struct CommunicationBodyBlobReferenceV1 {
+    pub blob_ref: String,
+    pub reference_id: [u8; 16],
+    pub declared_bytes: u64,
+    pub sha256: [u8; 32],
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecordCommunicationEvidenceV1 {
@@ -129,7 +205,11 @@ pub struct CommunicationSummary {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CanonicalMessageMutationV1 { Create, Update, Delete }
+pub enum CanonicalMessageMutationV1 {
+    Create,
+    Update,
+    Delete,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CanonicalConversationProjectionV1 {
@@ -177,7 +257,10 @@ pub struct CanonicalAttachmentAnchorProjectionV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommunicationMessageReferenceKindV1 { Reply, Forward }
+pub enum CommunicationMessageReferenceKindV1 {
+    Reply,
+    Forward,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CanonicalMessageReferenceProjectionV1 {
@@ -199,7 +282,10 @@ pub struct CanonicalCommunicationProjectionV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommunicationMessageLifecycleStateV1 { Active, Deleted }
+pub enum CommunicationMessageLifecycleStateV1 {
+    Active,
+    Deleted,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommunicationConversationSummaryV1 {
@@ -270,10 +356,14 @@ pub struct CommunicationMessageReferenceSummaryV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GetCommunicationConversationV1 { pub conversation_id: CommunicationConversationIdV1 }
+pub struct GetCommunicationConversationV1 {
+    pub conversation_id: CommunicationConversationIdV1,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ListCommunicationAccountsV1 { pub limit: u16 }
+pub struct ListCommunicationAccountsV1 {
+    pub limit: u16,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListCommunicationConversationsV1 {
@@ -318,11 +408,20 @@ pub struct CommunicationSearchHitV1 {
     pub matched_token_count: u16,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GetCommunicationSummary { pub evidence_id: CommunicationObservationIdV1 }
+pub struct GetCommunicationSummary {
+    pub evidence_id: CommunicationObservationIdV1,
+}
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CommunicationsClientError { UnknownCommunication, DraftValidationFailed, DuplicateObservation, Unavailable }
+pub enum CommunicationsClientError {
+    UnknownCommunication,
+    DraftValidationFailed,
+    DuplicateObservation,
+    Unavailable,
+}
 
-fn hex(value: &[u8]) -> String { value.iter().map(|byte| format!("{byte:02x}")).collect() }
+fn hex(value: &[u8]) -> String {
+    value.iter().map(|byte| format!("{byte:02x}")).collect()
+}
 
 #[cfg(test)]
 mod tests {

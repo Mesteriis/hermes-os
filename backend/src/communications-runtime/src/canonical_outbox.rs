@@ -2,14 +2,14 @@
 
 use hermes_communications_api::{
     COMMUNICATION_EVIDENCE_SCHEMA_SHA256, CanonicalCommunicationEvidenceKindV1,
-    CommunicationBodyStateV1, CommunicationDirectionV1, CommunicationProviderProvenanceV1, CommunicationSummary,
-    wire::CommunicationEvidenceRecordedV1,
+    CommunicationBodyStateV1, CommunicationDirectionV1, CommunicationProviderProvenanceV1,
+    CommunicationSummary, wire::CommunicationEvidenceRecordedV1,
 };
 use hermes_events_protocol::{
     delivery::OutboxRecordV1,
     v1::{
-        ActorKindV1, ActorRefV1, ContractRefV1, DurableEnvelopeV1, EventMetadataV1,
-        FenceKindV1, SourceFenceV1, SourceRefV1, durable_envelope_v1::Semantics,
+        ActorKindV1, ActorRefV1, ContractRefV1, DurableEnvelopeV1, EventMetadataV1, FenceKindV1,
+        SourceFenceV1, SourceRefV1, durable_envelope_v1::Semantics,
     },
     validation::envelope::validate_envelope_v1,
 };
@@ -39,8 +39,14 @@ pub fn build_evidence_recorded_outbox_v1(
     if !valid_context(context) {
         return Err(CanonicalOutboxBuildErrorV1::InvalidContext);
     }
-    let message_id = identifier(b"hermes.communications.evidence-recorded.v1\0", summary.evidence_id.bytes());
-    let correlation_id = identifier(b"hermes.communications.evidence-correlation.v1\0", summary.evidence_id.bytes());
+    let message_id = identifier(
+        b"hermes.communications.evidence-recorded.v1\0",
+        summary.evidence_id.bytes(),
+    );
+    let correlation_id = identifier(
+        b"hermes.communications.evidence-correlation.v1\0",
+        summary.evidence_id.bytes(),
+    );
     let recorded_at = Timestamp {
         seconds: context.recorded_at_unix_seconds,
         nanos: context.recorded_at_nanos,
@@ -52,12 +58,24 @@ pub fn build_evidence_recorded_outbox_v1(
     let payload = CommunicationEvidenceRecordedV1 {
         evidence_id: summary.evidence_id.bytes().to_vec(),
         source_cursor_sha256: summary.source_cursor.bytes().to_vec(),
-        account_cursor_sha256: summary.account_cursor.map_or_else(Vec::new, |value| value.bytes().to_vec()),
-        conversation_cursor_sha256: summary.conversation_cursor.map_or_else(Vec::new, |value| value.bytes().to_vec()),
-        participant_cursor_sha256: summary.participant_cursor.map_or_else(Vec::new, |value| value.bytes().to_vec()),
-        media_cursor_sha256: summary.media_cursor.map_or_else(Vec::new, |value| value.bytes().to_vec()),
-        reply_to_source_cursor_sha256: summary.reply_to_source_cursor.map_or_else(Vec::new, |value| value.bytes().to_vec()),
-        forward_origin_source_cursor_sha256: summary.forward_origin_source_cursor.map_or_else(Vec::new, |value| value.bytes().to_vec()),
+        account_cursor_sha256: summary
+            .account_cursor
+            .map_or_else(Vec::new, |value| value.bytes().to_vec()),
+        conversation_cursor_sha256: summary
+            .conversation_cursor
+            .map_or_else(Vec::new, |value| value.bytes().to_vec()),
+        participant_cursor_sha256: summary
+            .participant_cursor
+            .map_or_else(Vec::new, |value| value.bytes().to_vec()),
+        media_cursor_sha256: summary
+            .media_cursor
+            .map_or_else(Vec::new, |value| value.bytes().to_vec()),
+        reply_to_source_cursor_sha256: summary
+            .reply_to_source_cursor
+            .map_or_else(Vec::new, |value| value.bytes().to_vec()),
+        forward_origin_source_cursor_sha256: summary
+            .forward_origin_source_cursor
+            .map_or_else(Vec::new, |value| value.bytes().to_vec()),
         provider: provider_value(summary.provider),
         kind: kind_value(summary.kind),
         body: body_value(summary.body),
@@ -101,7 +119,8 @@ pub fn build_evidence_recorded_outbox_v1(
         payload,
     };
     validate_envelope_v1(&envelope).map_err(|_| CanonicalOutboxBuildErrorV1::InvalidEnvelope)?;
-    OutboxRecordV1::accept(envelope.encode_to_vec()).map_err(|_| CanonicalOutboxBuildErrorV1::InvalidEnvelope)
+    OutboxRecordV1::accept(envelope.encode_to_vec())
+        .map_err(|_| CanonicalOutboxBuildErrorV1::InvalidEnvelope)
 }
 
 fn valid_context(context: &CanonicalEventContextV1) -> bool {
@@ -120,7 +139,9 @@ fn identifier(domain: &[u8], evidence_id: [u8; 16]) -> [u8; 16] {
     hasher.update(domain);
     hasher.update(evidence_id);
     let digest: [u8; 32] = hasher.finalize().into();
-    digest[..16].try_into().expect("fixed SHA-256 prefix length")
+    digest[..16]
+        .try_into()
+        .expect("fixed SHA-256 prefix length")
 }
 
 fn runtime_source_reference(runtime_instance_id: &str) -> [u8; 16] {
@@ -128,7 +149,9 @@ fn runtime_source_reference(runtime_instance_id: &str) -> [u8; 16] {
     hasher.update(b"hermes.communications.runtime-source.v1\0");
     hasher.update(runtime_instance_id.as_bytes());
     let digest: [u8; 32] = hasher.finalize().into();
-    digest[..16].try_into().expect("fixed SHA-256 prefix length")
+    digest[..16]
+        .try_into()
+        .expect("fixed SHA-256 prefix length")
 }
 
 const fn provider_value(value: CommunicationProviderProvenanceV1) -> i32 {

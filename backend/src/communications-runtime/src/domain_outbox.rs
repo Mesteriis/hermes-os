@@ -1,4 +1,6 @@
-use hermes_communications_persistence::{CommunicationsDurablePersistence, CommunicationsPersistenceError};
+use hermes_communications_persistence::{
+    CommunicationsDurablePersistence, CommunicationsPersistenceError,
+};
 use hermes_events_jetstream::{RuntimeJetStreamConnection, RuntimePublishPermitV1};
 
 pub async fn relay_domain_outbox_once(

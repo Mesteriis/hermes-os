@@ -1,6 +1,6 @@
 use hermes_communications_ingress::{
-    BodyAvailabilityV1, CommunicationEvidenceKindV1, ObservationEnvelopeContextV1,
-    CommunicationDirectionV1, ProviderProvenanceV1, SourceEnvelope, SourceScopeEnvelope,
+    BodyAvailabilityV1, CommunicationDirectionV1, CommunicationEvidenceKindV1,
+    ObservationEnvelopeContextV1, ProviderProvenanceV1, SourceEnvelope, SourceScopeEnvelope,
     build_observation_outbox_record_v1, new_scoped_communication_observation_draft,
 };
 use hermes_events_protocol::validation::envelope::decode_envelope_v1;
@@ -93,10 +93,16 @@ fn builds_a_fenced_exact_envelope_without_provider_locator() {
     .expect("outbox record");
 
     let envelope = decode_envelope_v1(record.exact_bytes()).expect("valid envelope");
-    assert_eq!(envelope.contract.expect("contract").name, "communication_observed");
-    assert!(!record.exact_bytes().windows(b"private-imap-uid-42".len()).any(|window| {
-        window == b"private-imap-uid-42"
-    }));
+    assert_eq!(
+        envelope.contract.expect("contract").name,
+        "communication_observed"
+    );
+    assert!(
+        !record
+            .exact_bytes()
+            .windows(b"private-imap-uid-42".len())
+            .any(|window| { window == b"private-imap-uid-42" })
+    );
     let payload = hermes_communications_ingress::v1::CommunicationObservationV1::decode(
         envelope.payload.as_slice(),
     )

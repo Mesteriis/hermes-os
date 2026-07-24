@@ -110,8 +110,8 @@ impl ZulipDurablePersistence {
         {
             return Err(ZulipDurablePersistenceError::InvalidRow);
         }
-        let port = u16::try_from(pgbouncer_port)
-            .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
+        let port =
+            u16::try_from(pgbouncer_port).map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
         let options = PgConnectOptions::new()
             .host(pgbouncer_host)
             .port(port)
@@ -151,7 +151,11 @@ impl ZulipDurablePersistence {
         if exact_command_bytes.is_empty() {
             return Err(ZulipDurablePersistenceError::InvalidRow);
         }
-        let mut transaction = self.pool.begin().await.map_err(|_| ZulipDurablePersistenceError::Database)?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| ZulipDurablePersistenceError::Database)?;
         let inserted = sqlx::query(
             "INSERT INTO zulip_command_operations \\
              (operation_id, account_id, command_sha256, state, requested_at_unix_seconds) \\
@@ -172,7 +176,10 @@ impl ZulipDurablePersistence {
                 .execute(&mut *transaction)
                 .await
                 .map_err(|_| ZulipDurablePersistenceError::Database)?;
-            transaction.commit().await.map_err(|_| ZulipDurablePersistenceError::Database)?;
+            transaction
+                .commit()
+                .await
+                .map_err(|_| ZulipDurablePersistenceError::Database)?;
             return Ok(true);
         }
         let matching = sqlx::query(
@@ -188,8 +195,13 @@ impl ZulipDurablePersistence {
         .fetch_optional(&mut *transaction)
         .await
         .map_err(|_| ZulipDurablePersistenceError::Database)?;
-        transaction.commit().await.map_err(|_| ZulipDurablePersistenceError::Database)?;
-        matching.map(|_| false).ok_or(ZulipDurablePersistenceError::InvalidRow)
+        transaction
+            .commit()
+            .await
+            .map_err(|_| ZulipDurablePersistenceError::Database)?;
+        matching
+            .map(|_| false)
+            .ok_or(ZulipDurablePersistenceError::InvalidRow)
     }
 
     /// Claims one queued command exactly once. The dispatch fence is committed
@@ -217,15 +229,27 @@ impl ZulipDurablePersistence {
         .await
         .map_err(|_| ZulipDurablePersistenceError::Database)?;
         row.map(|row| {
-            let digest: Vec<u8> = row.try_get("command_sha256").map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
-            let command_sha256: [u8; 32] = digest.as_slice().try_into().map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
+            let digest: Vec<u8> = row
+                .try_get("command_sha256")
+                .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
+            let command_sha256: [u8; 32] = digest
+                .as_slice()
+                .try_into()
+                .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
             Ok(ZulipQueuedCommandV1 {
-                operation_id: row.try_get("operation_id").map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
-                account_id: row.try_get("account_id").map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
+                operation_id: row
+                    .try_get("operation_id")
+                    .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
+                account_id: row
+                    .try_get("account_id")
+                    .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
                 command_sha256,
-                exact_command_bytes: row.try_get("exact_command_bytes").map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
+                exact_command_bytes: row
+                    .try_get("exact_command_bytes")
+                    .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
             })
-        }).transpose()
+        })
+        .transpose()
     }
 
     pub async fn complete_command_operation(
@@ -241,8 +265,11 @@ impl ZulipDurablePersistence {
             || completed_at_unix_seconds <= 0
             || state == ZulipCommandOperationStateV1::OutcomeUnknown
             || blob_ref.is_some_and(|value| value.trim().is_empty())
-            || (state == ZulipCommandOperationStateV1::Rejected && (provider_message_id.is_some() || blob_ref.is_some()))
-            || (state == ZulipCommandOperationStateV1::Accepted && provider_message_id.is_some() && blob_ref.is_some())
+            || (state == ZulipCommandOperationStateV1::Rejected
+                && (provider_message_id.is_some() || blob_ref.is_some()))
+            || (state == ZulipCommandOperationStateV1::Accepted
+                && provider_message_id.is_some()
+                && blob_ref.is_some())
         {
             return Err(ZulipDurablePersistenceError::InvalidRow);
         }
@@ -260,7 +287,9 @@ impl ZulipDurablePersistence {
         .execute(&self.pool)
         .await
         .map_err(|_| ZulipDurablePersistenceError::Database)?;
-        (result.rows_affected() == 1).then_some(()).ok_or(ZulipDurablePersistenceError::InvalidRow)
+        (result.rows_affected() == 1)
+            .then_some(())
+            .ok_or(ZulipDurablePersistenceError::InvalidRow)
     }
 
     pub async fn command_operation_status(
@@ -279,30 +308,49 @@ impl ZulipDurablePersistence {
         .await
         .map_err(|_| ZulipDurablePersistenceError::Database)?;
         row.map(|row| {
-            let state: i16 = row.try_get("state").map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
+            let state: i16 = row
+                .try_get("state")
+                .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
             let provider_message_id: Option<i64> = row
                 .try_get("provider_message_id")
                 .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
-            let blob_ref: Option<String> = row.try_get("blob_ref").map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
-            let completed_at_unix_seconds: Option<i64> = row
-                .try_get("completed_at_unix_seconds")
+            let blob_ref: Option<String> = row
+                .try_get("blob_ref")
                 .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
+            let completed_at_unix_seconds: Option<i64> =
+                row.try_get("completed_at_unix_seconds")
+                    .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
             let outcome = match state {
-                1 if completed_at_unix_seconds.is_none() && provider_message_id.is_none() && blob_ref.is_none() => {
+                1 if completed_at_unix_seconds.is_none()
+                    && provider_message_id.is_none()
+                    && blob_ref.is_none() =>
+                {
                     ZulipCommandOperationOutcomeV1::OutcomeUnknown
                 }
                 2 if completed_at_unix_seconds.is_some() => {
-                    if provider_message_id.is_some() && blob_ref.is_some() { return Err(ZulipDurablePersistenceError::InvalidRow); }
-                    ZulipCommandOperationOutcomeV1::Accepted { provider_message_id, blob_ref }
+                    if provider_message_id.is_some() && blob_ref.is_some() {
+                        return Err(ZulipDurablePersistenceError::InvalidRow);
+                    }
+                    ZulipCommandOperationOutcomeV1::Accepted {
+                        provider_message_id,
+                        blob_ref,
+                    }
                 }
-                3 if completed_at_unix_seconds.is_some() && provider_message_id.is_none() && blob_ref.is_none() => {
+                3 if completed_at_unix_seconds.is_some()
+                    && provider_message_id.is_none()
+                    && blob_ref.is_none() =>
+                {
                     ZulipCommandOperationOutcomeV1::Rejected
                 }
                 _ => return Err(ZulipDurablePersistenceError::InvalidRow),
             };
             Ok(ZulipCommandOperationStatusV1 {
-                operation_id: row.try_get("operation_id").map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
-                account_id: row.try_get("account_id").map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
+                operation_id: row
+                    .try_get("operation_id")
+                    .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
+                account_id: row
+                    .try_get("account_id")
+                    .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
                 outcome,
                 requested_at_unix_seconds: row
                     .try_get("requested_at_unix_seconds")
@@ -376,21 +424,36 @@ impl ZulipDurablePersistence {
         created_at_unix_seconds: i64,
     ) -> Result<bool, ZulipDurablePersistenceError> {
         validate_cursor(cursor)?;
-        if records.is_empty() { return self.advance_cursor(cursor).await; }
-        let mut transaction = self.pool.begin().await.map_err(|_| ZulipDurablePersistenceError::Database)?;
+        if records.is_empty() {
+            return self.advance_cursor(cursor).await;
+        }
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| ZulipDurablePersistenceError::Database)?;
         let advanced = sqlx::query(
             "INSERT INTO zulip_provider_cursor (account_id, queue_id, last_event_id) VALUES ($1, $2, $3) \\
              ON CONFLICT (account_id) DO UPDATE SET queue_id = EXCLUDED.queue_id, last_event_id = EXCLUDED.last_event_id \\
              WHERE zulip_provider_cursor.queue_id <> EXCLUDED.queue_id OR zulip_provider_cursor.last_event_id < EXCLUDED.last_event_id RETURNING account_id",
         ).bind(&cursor.account_id).bind(&cursor.queue_id).bind(cursor.last_event_id)
             .fetch_optional(&mut *transaction).await.map_err(|_| ZulipDurablePersistenceError::Database)?;
-        if advanced.is_none() { transaction.commit().await.map_err(|_| ZulipDurablePersistenceError::Database)?; return Ok(false); }
+        if advanced.is_none() {
+            transaction
+                .commit()
+                .await
+                .map_err(|_| ZulipDurablePersistenceError::Database)?;
+            return Ok(false);
+        }
         for record in records {
             sqlx::query("INSERT INTO zulip_communications_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
                 .bind(record.message_id().as_slice()).bind(record.envelope_sha256().as_slice()).bind(record.exact_bytes()).bind(created_at_unix_seconds)
                 .execute(&mut *transaction).await.map_err(|_| ZulipDurablePersistenceError::Database)?;
         }
-        transaction.commit().await.map_err(|_| ZulipDurablePersistenceError::Database)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| ZulipDurablePersistenceError::Database)?;
         Ok(true)
     }
 
@@ -416,7 +479,7 @@ impl ZulipDurablePersistence {
         .execute(&self.pool)
         .await
         .map(|result| result.rows_affected() == 1)
-            .map_err(|_| ZulipDurablePersistenceError::Database)
+        .map_err(|_| ZulipDurablePersistenceError::Database)
     }
 
     pub async fn current_cursor(
@@ -470,8 +533,7 @@ impl ZulipDurablePersistence {
                 let bytes: Vec<u8> = row
                     .try_get("exact_envelope_bytes")
                     .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?;
-                OutboxRecordV1::accept(bytes)
-                    .map_err(|_| ZulipDurablePersistenceError::InvalidRow)
+                OutboxRecordV1::accept(bytes).map_err(|_| ZulipDurablePersistenceError::InvalidRow)
             })
             .collect()
     }
@@ -509,7 +571,10 @@ fn validate_command_operation(
     account_id: &str,
     requested_at_unix_seconds: i64,
 ) -> Result<(), ZulipDurablePersistenceError> {
-    if operation_id.trim().is_empty() || account_id.trim().is_empty() || requested_at_unix_seconds <= 0 {
+    if operation_id.trim().is_empty()
+        || account_id.trim().is_empty()
+        || requested_at_unix_seconds <= 0
+    {
         return Err(ZulipDurablePersistenceError::InvalidRow);
     }
     Ok(())

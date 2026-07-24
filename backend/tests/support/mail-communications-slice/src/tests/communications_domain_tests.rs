@@ -1,10 +1,11 @@
 use hermes_communications_api::{
-    CanonicalCommunicationEvidenceKindV1, CommunicationBodyStateV1,
-    CommunicationDirectionV1, CommunicationObservationIdV1, CommunicationProviderProvenanceV1,
-    CommunicationSourceCursorV1, CommunicationsClientError, RecordCommunicationEvidenceV1,
+    CanonicalCommunicationEvidenceKindV1, CommunicationBodyStateV1, CommunicationDirectionV1,
+    CommunicationObservationIdV1, CommunicationProviderProvenanceV1, CommunicationSourceCursorV1,
+    CommunicationsClientError, RecordCommunicationEvidenceV1,
 };
 use hermes_communications_domain::{
-    CommunicationsDomainError, accept_command, canonicalize_communication, convert_client_query_error,
+    CommunicationsDomainError, accept_command, canonicalize_communication,
+    convert_client_query_error,
 };
 
 fn command(observed_at_unix_seconds: i64) -> RecordCommunicationEvidenceV1 {
@@ -31,13 +32,22 @@ fn command(observed_at_unix_seconds: i64) -> RecordCommunicationEvidenceV1 {
 #[test]
 fn accepts_a_typed_owner_command() {
     let summary = accept_command(command(1)).expect("command accepted");
-    assert_eq!(summary.evidence_id, CommunicationObservationIdV1::new([1; 16]));
+    assert_eq!(
+        summary.evidence_id,
+        CommunicationObservationIdV1::new([1; 16])
+    );
 }
 
 #[test]
 fn rejects_invalid_commands_and_maps_errors() {
-    assert!(matches!(accept_command(command(i64::MAX)), Err(CommunicationsDomainError::InvalidObservedTime)));
-    assert_eq!(convert_client_query_error(CommunicationsDomainError::InvalidObservedTime), CommunicationsClientError::DraftValidationFailed);
+    assert!(matches!(
+        accept_command(command(i64::MAX)),
+        Err(CommunicationsDomainError::InvalidObservedTime)
+    ));
+    assert_eq!(
+        convert_client_query_error(CommunicationsDomainError::InvalidObservedTime),
+        CommunicationsClientError::DraftValidationFailed
+    );
 }
 
 #[test]

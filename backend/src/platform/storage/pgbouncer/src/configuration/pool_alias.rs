@@ -11,7 +11,10 @@ impl PoolAliasV1 {
         if !valid_registration_id(registration_id) || runtime_generation == 0 {
             return Err(PoolConfigErrorV1::Identifier);
         }
-        Ok(Self(storage_runtime_pool_alias(registration_id, runtime_generation)))
+        Ok(Self(storage_runtime_pool_alias(
+            registration_id,
+            runtime_generation,
+        )))
     }
 
     pub fn from_binding(binding: &StorageBindingV1) -> Result<Self, PoolConfigErrorV1> {
@@ -33,7 +36,7 @@ impl PoolAliasV1 {
 fn valid_registration_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-'))
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        })
 }

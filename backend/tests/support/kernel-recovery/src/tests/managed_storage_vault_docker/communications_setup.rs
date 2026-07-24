@@ -1,9 +1,12 @@
 use super::*;
 
+use crate::runtime::lifecycle::control::{
+    ManagedRuntimeBlobSessionHandler, ManagedRuntimeExpectation,
+};
+use hermes_blob_client::BlobDataClient;
 use hermes_communications_api::query_wire::{
     CommunicationsQueryRequestV1, CommunicationsQueryResponseV1, ListAccountsRequestV1,
-    SearchCommunicationsRequestV1,
-    communications_query_request_v1::Operation,
+    SearchCommunicationsRequestV1, communications_query_request_v1::Operation,
     communications_query_response_v1::Result as QueryResult,
 };
 use hermes_communications_persistence::{
@@ -13,11 +16,9 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_BLOB_CAPABILITY_ID, COMMUNICATIONS_BLOB_QUOTA_BYTES,
     COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
     COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
-    COMMUNICATIONS_STORAGE_CAPABILITY_ID, COMMUNICATIONS_QUERY_CAPABILITY_ID,
-    COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
-    communications_module_descriptor_v1,
-    communications_settings_schema_bytes_v1,
-    communication_evidence_recorded_contract_reference_v1,
+    COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
+    COMMUNICATIONS_STORAGE_CAPABILITY_ID, communication_evidence_recorded_contract_reference_v1,
+    communications_module_descriptor_v1, communications_settings_schema_bytes_v1,
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
 use hermes_kernel_control_store::{
@@ -25,10 +26,6 @@ use hermes_kernel_control_store::{
 };
 use hermes_runtime_protocol::v1::{
     BlobDataOperationV1, ManagedRuntimeBlobSessionRequestV1, ModuleClientResponseV1,
-};
-use hermes_blob_client::BlobDataClient;
-use crate::runtime::lifecycle::control::{
-    ManagedRuntimeBlobSessionHandler, ManagedRuntimeExpectation,
 };
 
 pub(super) const COMMUNICATIONS_REGISTRATION: &str = "communications-runtime";
@@ -44,7 +41,8 @@ pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> Sql
     crate::platform::blob::binding::bind_installed_release(&store, kernel)
         .expect("bind signed Blob release");
     let schema = communications_settings_schema_bytes_v1();
-    let descriptor = communications_module_descriptor_v1("managed-communications-live").encode_to_vec();
+    let descriptor =
+        communications_module_descriptor_v1("managed-communications-live").encode_to_vec();
     let grant_epoch = record_communications_registration(&store, &descriptor);
     record_communications_runtime_fixture(&store, &schema, &descriptor, grant_epoch);
     store
@@ -52,7 +50,10 @@ pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> Sql
 
 pub(super) fn issue_initial_communications_storage_binding(store: &SqliteControlStore) {
     let bundle = store
-        .platform_storage_bundle("communications", u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1))
+        .platform_storage_bundle(
+            "communications",
+            u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1),
+        )
         .expect("read Communications Storage bundle")
         .expect("Communications Storage bundle is present");
     let binding = issue_managed(
@@ -67,7 +68,7 @@ pub(super) fn issue_initial_communications_storage_binding(store: &SqliteControl
             u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1),
             *bundle.digest(),
         )
-            .expect("initial Communications Storage issue"),
+        .expect("initial Communications Storage issue"),
     )
     .expect("issue Communications Storage binding");
     assert_eq!(binding.runtime_generation(), 1);
@@ -77,7 +78,10 @@ pub(super) fn communications_storage_binding(
     store: &SqliteControlStore,
 ) -> hermes_kernel_control_store::PlatformStorageBindingV1 {
     store
-        .platform_storage_binding(COMMUNICATIONS_REGISTRATION, COMMUNICATIONS_STORAGE_CAPABILITY_ID)
+        .platform_storage_binding(
+            COMMUNICATIONS_REGISTRATION,
+            COMMUNICATIONS_STORAGE_CAPABILITY_ID,
+        )
         .expect("read Communications Storage binding")
         .filter(|binding| binding.state() == PlatformStorageBindingStateV1::Active)
         .expect("active Communications Storage binding")
@@ -95,7 +99,9 @@ pub(super) fn configure_communications_jetstream(store: &SqliteControlStore) {
         .expect("Tokio runtime")
         .block_on(async move {
             let context = async_nats::jetstream::new(
-                async_nats::connect(&endpoint).await.expect("connect JetStream"),
+                async_nats::connect(&endpoint)
+                    .await
+                    .expect("connect JetStream"),
             );
             for stream in plan.streams() {
                 let (name, subject) = communications_stream_details(stream.kind());
@@ -140,8 +146,8 @@ pub(super) fn start_communications_domain(
     let reservation = managed_launch::load(supervisor, store, COMMUNICATIONS_REGISTRATION)
         .expect("load Communications reservation");
     let binding = communications_storage_binding(store);
-    let topology = crate::platform::storage::topology::current(store)
-        .expect("read Storage topology");
+    let topology =
+        crate::platform::storage::topology::current(store).expect("read Storage topology");
     let vault = vault_status::read_current(store, &supervisor.relay_port())
         .expect("read live Vault status");
     let storage = crate::platform::storage::topology::to_managed_runtime_configuration(
@@ -185,7 +191,9 @@ pub(super) fn assert_communications_query_delivery(
     }
     .encode_to_vec();
     let query = route_communications_query(store, supervisor, 1, &payload);
-    assert!(matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if accounts.accounts.is_empty()));
+    assert!(
+        matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if accounts.accounts.is_empty())
+    );
 }
 
 pub(super) fn assert_communications_search_query_delivery(
@@ -194,23 +202,29 @@ pub(super) fn assert_communications_search_query_delivery(
 ) {
     let missing_payload = CommunicationsQueryRequestV1 {
         protocol_major: 1,
-        operation: Some(Operation::SearchCommunications(SearchCommunicationsRequestV1 {
-            query: "known-missing-token".to_owned(),
-            limit: 16,
-        })),
+        operation: Some(Operation::SearchCommunications(
+            SearchCommunicationsRequestV1 {
+                query: "known-missing-token".to_owned(),
+                limit: 16,
+            },
+        )),
     }
     .encode_to_vec();
     let query = route_communications_query(store, supervisor, 2, &missing_payload);
-    assert!(matches!(query.result, Some(QueryResult::SearchCommunications(hits)) if hits.hits.is_empty()));
+    assert!(
+        matches!(query.result, Some(QueryResult::SearchCommunications(hits)) if hits.hits.is_empty())
+    );
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
         let payload = CommunicationsQueryRequestV1 {
             protocol_major: 1,
-            operation: Some(Operation::SearchCommunications(SearchCommunicationsRequestV1 {
-                query: "fixture".to_owned(),
-                limit: 16,
-            })),
+            operation: Some(Operation::SearchCommunications(
+                SearchCommunicationsRequestV1 {
+                    query: "fixture".to_owned(),
+                    limit: 16,
+                },
+            )),
         }
         .encode_to_vec();
         let query = route_communications_query(store, supervisor, 16, &payload);
@@ -376,18 +390,20 @@ pub(super) fn assert_communications_ingress_delivery(
                     record.exact_bytes().to_vec().into(),
                 )
                 .await
-                .expect("publish exact typed integration envelope");
-            let canonical = tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                canonical_events.next(),
-            )
-            .await
-            .unwrap_or_else(|_| panic!(
-                "canonical Communications event timeout: active={:?}, failure={:?}",
-                supervisor.is_active(COMMUNICATIONS_REGISTRATION),
-                supervisor.last_failure(COMMUNICATIONS_REGISTRATION),
-            ))
-            .expect("canonical Communications event missing");
+                .expect("publish exact typed integration envelope")
+                .await
+                .expect("acknowledge exact typed integration envelope");
+            let canonical =
+                tokio::time::timeout(std::time::Duration::from_secs(5), canonical_events.next())
+                    .await
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "canonical Communications event timeout: active={:?}, failure={:?}",
+                            supervisor.is_active(COMMUNICATIONS_REGISTRATION),
+                            supervisor.last_failure(COMMUNICATIONS_REGISTRATION),
+                        )
+                    })
+                    .expect("canonical Communications event missing");
             let envelope = hermes_events_protocol::validation::envelope::decode_envelope_v1(
                 canonical.payload.as_ref(),
             )
@@ -406,14 +422,13 @@ pub(super) fn assert_communications_ingress_delivery(
                     record.exact_bytes().to_vec().into(),
                 )
                 .await
-                .expect("republish exact typed integration envelope");
-            assert!(
-                tokio::time::timeout(
-                    std::time::Duration::from_secs(1),
-                    canonical_events.next(),
-                )
+                .expect("republish exact typed integration envelope")
                 .await
-                .is_err(),
+                .expect("acknowledge republished exact typed integration envelope");
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_secs(1), canonical_events.next(),)
+                    .await
+                    .is_err(),
                 "duplicate ingress must not produce a second canonical event"
             );
         });
@@ -426,10 +441,14 @@ pub(super) fn assert_communications_ingress_delivery(
         }
         .encode_to_vec();
         let query = route_communications_query(store, supervisor, 3, &payload);
-        if matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if !accounts.accounts.is_empty()) {
+        if matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if !accounts.accounts.is_empty())
+        {
             return;
         }
-        assert!(std::time::Instant::now() < deadline, "typed integration ingress was not committed to Communications");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "typed integration ingress was not committed to Communications"
+        );
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
 }
@@ -494,7 +513,9 @@ pub(super) fn assert_communications_transferred_body_projection(
             external_record_id: "integration-private-body-record-rejected-1".to_owned(),
             scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
                 external_account_id: "integration-private-body-account-1".to_owned(),
-                external_conversation_id: Some("integration-private-body-conversation-1".to_owned()),
+                external_conversation_id: Some(
+                    "integration-private-body-conversation-1".to_owned(),
+                ),
                 external_participant_id: None,
                 external_media_id: None,
                 external_reply_to_record_id: None,
@@ -536,7 +557,9 @@ pub(super) fn assert_communications_transferred_body_projection(
             external_record_id: "integration-private-body-record-1".to_owned(),
             scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
                 external_account_id: "integration-private-body-account-1".to_owned(),
-                external_conversation_id: Some("integration-private-body-conversation-1".to_owned()),
+                external_conversation_id: Some(
+                    "integration-private-body-conversation-1".to_owned(),
+                ),
                 external_participant_id: None,
                 external_media_id: None,
                 external_reply_to_record_id: None,
@@ -577,7 +600,9 @@ pub(super) fn assert_communications_transferred_body_projection(
         .expect("Event Hub topology")
         .nats_endpoint()
         .to_owned();
-    supervisor.stop("blob").expect("stop Blob for custody outage");
+    supervisor
+        .stop("blob")
+        .expect("stop Blob for custody outage");
     tokio::runtime::Runtime::new()
         .expect("Tokio runtime")
         .block_on(async move {
@@ -592,14 +617,18 @@ pub(super) fn assert_communications_transferred_body_projection(
                     rejected_record.exact_bytes().to_vec().into(),
                 )
                 .await
-                .expect("publish altered admitted-body typed ingress envelope");
+                .expect("publish altered admitted-body typed ingress envelope")
+                .await
+                .expect("acknowledge altered admitted-body typed ingress envelope");
             context
                 .publish(
                     "hermes.observation.v1.communications.communication_observed.v1",
                     record.exact_bytes().to_vec().into(),
                 )
                 .await
-                .expect("publish admitted-body typed ingress envelope");
+                .expect("publish admitted-body typed ingress envelope")
+                .await
+                .expect("acknowledge admitted-body typed ingress envelope");
         });
 
     std::thread::sleep(std::time::Duration::from_secs(2));
@@ -639,8 +668,15 @@ pub(super) fn assert_communications_transferred_body_projection(
         let Some(QueryResult::ListAccounts(accounts)) = accounts.result else {
             panic!("Communications accounts query result");
         };
-        let Some(account) = accounts.accounts.iter().find(|account| account.provider == 2) else {
-            assert!(std::time::Instant::now() < deadline, "admitted body account was not projected");
+        let Some(account) = accounts
+            .accounts
+            .iter()
+            .find(|account| account.provider == 2)
+        else {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "admitted body account was not projected"
+            );
             std::thread::sleep(std::time::Duration::from_millis(25));
             continue;
         };
@@ -663,7 +699,10 @@ pub(super) fn assert_communications_transferred_body_projection(
             panic!("Communications conversations query result");
         };
         let Some(conversation) = conversations.conversations.first() else {
-            assert!(std::time::Instant::now() < deadline, "admitted body conversation was not projected");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "admitted body conversation was not projected"
+            );
             std::thread::sleep(std::time::Duration::from_millis(25));
             continue;
         };
@@ -685,7 +724,10 @@ pub(super) fn assert_communications_transferred_body_projection(
         let Some(QueryResult::ListConversationMessages(messages)) = messages.result else {
             panic!("Communications messages query result");
         };
-        let transferred = messages.messages.iter().any(|message| message.body_state == 4);
+        let transferred = messages
+            .messages
+            .iter()
+            .any(|message| message.body_state == 4);
         let rejected = messages
             .messages
             .iter()
@@ -702,26 +744,29 @@ pub(super) fn assert_communications_transferred_body_projection(
                     source_grant_epoch,
                 ))
                 .expect("record fixture source integration successor launch");
-            let stale_draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
-                "managed-stale-body-observation-1",
-                hermes_communications_ingress::SourceEnvelope {
-                    provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
-                    external_record_id: "integration-private-body-record-stale-1".to_owned(),
-                    scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
-                        external_account_id: "integration-private-body-account-1".to_owned(),
-                        external_conversation_id: Some("integration-private-body-conversation-1".to_owned()),
-                        external_participant_id: None,
-                        external_media_id: None,
-                        external_reply_to_record_id: None,
-                        external_forward_origin_record_id: None,
-                    }),
-                },
-                hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage,
-                hermes_communications_ingress::BodyAvailabilityV1::AdmittedBlob,
-                hermes_communications_ingress::CommunicationDirectionV1::Incoming,
-                Some(1_783_024_002),
-            )
-            .expect("build stale admitted-body ingress draft");
+            let stale_draft =
+                hermes_communications_ingress::new_scoped_communication_observation_draft(
+                    "managed-stale-body-observation-1",
+                    hermes_communications_ingress::SourceEnvelope {
+                        provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
+                        external_record_id: "integration-private-body-record-stale-1".to_owned(),
+                        scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                            external_account_id: "integration-private-body-account-1".to_owned(),
+                            external_conversation_id: Some(
+                                "integration-private-body-conversation-1".to_owned(),
+                            ),
+                            external_participant_id: None,
+                            external_media_id: None,
+                            external_reply_to_record_id: None,
+                            external_forward_origin_record_id: None,
+                        }),
+                    },
+                    hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage,
+                    hermes_communications_ingress::BodyAvailabilityV1::AdmittedBlob,
+                    hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+                    Some(1_783_024_002),
+                )
+                .expect("build stale admitted-body ingress draft");
             let stale_draft = hermes_communications_ingress::with_admitted_body_blob(
                 stale_draft,
                 hermes_communications_ingress::BodyBlobReceiptV1 {
@@ -763,7 +808,9 @@ pub(super) fn assert_communications_transferred_body_projection(
                         stale_record.exact_bytes().to_vec().into(),
                     )
                     .await
-                    .expect("publish stale source typed ingress envelope");
+                    .expect("publish stale source typed ingress envelope")
+                    .await
+                    .expect("acknowledge stale source typed ingress envelope");
                 });
             stale_source_published = true;
             continue;
@@ -806,7 +853,9 @@ pub(super) fn assert_communications_transferred_body_projection(
             BlobDataClient::new(current_delivery.data_socket_path)
                 .expect("open successor source Blob data client")
                 .write(
-                    current_delivery.grant.expect("successor source Blob write grant"),
+                    current_delivery
+                        .grant
+                        .expect("successor source Blob write grant"),
                     current_channel_binding,
                     plaintext.to_vec(),
                 )
@@ -817,26 +866,29 @@ pub(super) fn assert_communications_transferred_body_projection(
                     ModuleRegistrationState::Revoked,
                 )
                 .expect("revoke fixture source integration");
-            let revoked_draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
-                "managed-revoked-body-observation-1",
-                hermes_communications_ingress::SourceEnvelope {
-                    provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
-                    external_record_id: "integration-private-body-record-revoked-1".to_owned(),
-                    scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
-                        external_account_id: "integration-private-body-account-1".to_owned(),
-                        external_conversation_id: Some("integration-private-body-conversation-1".to_owned()),
-                        external_participant_id: None,
-                        external_media_id: None,
-                        external_reply_to_record_id: None,
-                        external_forward_origin_record_id: None,
-                    }),
-                },
-                hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage,
-                hermes_communications_ingress::BodyAvailabilityV1::AdmittedBlob,
-                hermes_communications_ingress::CommunicationDirectionV1::Incoming,
-                Some(1_783_024_002),
-            )
-            .expect("build revoked admitted-body ingress draft");
+            let revoked_draft =
+                hermes_communications_ingress::new_scoped_communication_observation_draft(
+                    "managed-revoked-body-observation-1",
+                    hermes_communications_ingress::SourceEnvelope {
+                        provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
+                        external_record_id: "integration-private-body-record-revoked-1".to_owned(),
+                        scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                            external_account_id: "integration-private-body-account-1".to_owned(),
+                            external_conversation_id: Some(
+                                "integration-private-body-conversation-1".to_owned(),
+                            ),
+                            external_participant_id: None,
+                            external_media_id: None,
+                            external_reply_to_record_id: None,
+                            external_forward_origin_record_id: None,
+                        }),
+                    },
+                    hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage,
+                    hermes_communications_ingress::BodyAvailabilityV1::AdmittedBlob,
+                    hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+                    Some(1_783_024_002),
+                )
+                .expect("build revoked admitted-body ingress draft");
             let revoked_draft = hermes_communications_ingress::with_admitted_body_blob(
                 revoked_draft,
                 hermes_communications_ingress::BodyBlobReceiptV1 {
@@ -878,7 +930,9 @@ pub(super) fn assert_communications_transferred_body_projection(
                         revoked_record.exact_bytes().to_vec().into(),
                     )
                     .await
-                    .expect("publish revoked source typed ingress envelope");
+                    .expect("publish revoked source typed ingress envelope")
+                    .await
+                    .expect("acknowledge revoked source typed ingress envelope");
                 });
             revoked_source_published = true;
             continue;
@@ -905,7 +959,6 @@ pub(super) fn assert_communications_transferred_body_projection(
     }
 }
 
-
 pub(super) fn assert_communications_attachment_anchor_projection(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
@@ -919,7 +972,7 @@ pub(super) fn assert_communications_attachment_anchor_projection(
             external_record_id: "integration-private-record-1".to_owned(),
             scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
                 external_account_id: "integration-private-account-1".to_owned(),
-                external_conversation_id: Some("integration-private-conversation-1".to_owned()),
+                external_conversation_id: Some("integration-private-record-1".to_owned()),
                 external_participant_id: None,
                 external_media_id: Some(PROVIDER_MEDIA_LOCATOR.to_owned()),
                 external_reply_to_record_id: None,
@@ -974,7 +1027,9 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                     record.exact_bytes().to_vec().into(),
                 )
                 .await
-                .expect("publish attachment typed ingress envelope");
+                .expect("publish attachment typed ingress envelope")
+                .await
+                .expect("acknowledge attachment typed ingress envelope");
         });
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -992,8 +1047,15 @@ pub(super) fn assert_communications_attachment_anchor_projection(
         let Some(QueryResult::ListAccounts(accounts)) = accounts.result else {
             panic!("Communications accounts query result");
         };
-        let Some(account) = accounts.accounts.iter().find(|account| account.provider == 1) else {
-            assert!(std::time::Instant::now() < deadline, "attachment account was not projected");
+        let Some(account) = accounts
+            .accounts
+            .iter()
+            .find(|account| account.provider == 1)
+        else {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "attachment account was not projected"
+            );
             std::thread::sleep(std::time::Duration::from_millis(25));
             continue;
         };
@@ -1016,7 +1078,10 @@ pub(super) fn assert_communications_attachment_anchor_projection(
             panic!("Communications conversations query result");
         };
         let Some(conversation) = conversations.conversations.first() else {
-            assert!(std::time::Instant::now() < deadline, "attachment conversation was not projected");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "attachment conversation was not projected"
+            );
             std::thread::sleep(std::time::Duration::from_millis(25));
             continue;
         };
@@ -1083,7 +1148,10 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                 return;
             }
         }
-        assert!(std::time::Instant::now() < deadline, "attachment anchor was not projected");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "attachment anchor was not projected"
+        );
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
 }
@@ -1095,8 +1163,8 @@ pub(super) fn assert_communications_relationship_projection(
     const PRIVATE_PARTICIPANT_ID: &str = "integration-private-participant-1";
     const PRIVATE_REPLY_RECORD_ID: &str = "integration-private-reply-1";
     const PRIVATE_FORWARD_RECORD_ID: &str = "integration-private-forward-1";
-    let draft = hermes_telegram_core::observation_draft(
-        hermes_telegram_api::TelegramMessageObservation {
+    let draft =
+        hermes_telegram_core::observation_draft(hermes_telegram_api::TelegramMessageObservation {
             account_id: "integration-private-relationship-account-1".to_owned(),
             provider_chat_id: "integration-private-relationship-conversation-1".to_owned(),
             provider_message_id: "managed-relationship-observation-1".to_owned(),
@@ -1112,7 +1180,9 @@ pub(super) fn assert_communications_relationship_projection(
                     provider_message_id: PRIVATE_REPLY_RECORD_ID.to_owned(),
                 }),
                 forward_origin: Some(hermes_telegram_api::TelegramForwardOrigin {
-                    provider_chat_id: Some("integration-private-relationship-conversation-1".to_owned()),
+                    provider_chat_id: Some(
+                        "integration-private-relationship-conversation-1".to_owned(),
+                    ),
                     provider_message_id: Some(PRIVATE_FORWARD_RECORD_ID.to_owned()),
                     provider_sender_id: None,
                     sender_name: None,
@@ -1120,9 +1190,8 @@ pub(super) fn assert_communications_relationship_projection(
                 }),
             },
             observed_at_unix_seconds: 1_783_024_003,
-        },
-    )
-    .expect("build typed Telegram relationship ingress draft");
+        })
+        .expect("build typed Telegram relationship ingress draft");
     let record = hermes_communications_ingress::build_observation_outbox_record_v1(
         &draft,
         &hermes_communications_ingress::ObservationEnvelopeContextV1 {
@@ -1154,7 +1223,9 @@ pub(super) fn assert_communications_relationship_projection(
                     record.exact_bytes().to_vec().into(),
                 )
                 .await
-                .expect("publish relationship typed ingress envelope");
+                .expect("publish relationship typed ingress envelope")
+                .await
+                .expect("acknowledge relationship typed ingress envelope");
         });
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -1172,8 +1243,15 @@ pub(super) fn assert_communications_relationship_projection(
         let Some(QueryResult::ListAccounts(accounts)) = accounts.result else {
             panic!("Communications accounts query result");
         };
-        let Some(account) = accounts.accounts.iter().find(|account| account.provider == 2) else {
-            assert!(std::time::Instant::now() < deadline, "relationship account was not projected");
+        let Some(account) = accounts
+            .accounts
+            .iter()
+            .find(|account| account.provider == 2)
+        else {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "relationship account was not projected"
+            );
             std::thread::sleep(std::time::Duration::from_millis(25));
             continue;
         };
@@ -1196,7 +1274,10 @@ pub(super) fn assert_communications_relationship_projection(
             panic!("Communications conversations query result");
         };
         let Some(conversation) = conversations.conversations.first() else {
-            assert!(std::time::Instant::now() < deadline, "relationship conversation was not projected");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "relationship conversation was not projected"
+            );
             std::thread::sleep(std::time::Duration::from_millis(25));
             continue;
         };
@@ -1215,7 +1296,8 @@ pub(super) fn assert_communications_relationship_projection(
             }
             .encode_to_vec(),
         );
-        let Some(QueryResult::ListConversationParticipants(participants)) = participants.result else {
+        let Some(QueryResult::ListConversationParticipants(participants)) = participants.result
+        else {
             panic!("Communications participants query result");
         };
         let messages = route_communications_query(
@@ -1237,7 +1319,10 @@ pub(super) fn assert_communications_relationship_projection(
             panic!("Communications messages query result");
         };
         let Some(message) = messages.messages.first() else {
-            assert!(std::time::Instant::now() < deadline, "relationship message was not projected");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "relationship message was not projected"
+            );
             std::thread::sleep(std::time::Duration::from_millis(25));
             continue;
         };
@@ -1260,8 +1345,14 @@ pub(super) fn assert_communications_relationship_projection(
             panic!("Communications references query result");
         };
         if !participants.participants.is_empty()
-            && references.references.iter().any(|reference| reference.kind == 1)
-            && references.references.iter().any(|reference| reference.kind == 2)
+            && references
+                .references
+                .iter()
+                .any(|reference| reference.kind == 1)
+            && references
+                .references
+                .iter()
+                .any(|reference| reference.kind == 2)
         {
             let participant_payload = CommunicationsQueryResponseV1 {
                 result: Some(QueryResult::ListConversationParticipants(participants)),
@@ -1273,16 +1364,27 @@ pub(super) fn assert_communications_relationship_projection(
                 error_code: String::new(),
             }
             .encode_to_vec();
-            for private_id in [PRIVATE_PARTICIPANT_ID, PRIVATE_REPLY_RECORD_ID, PRIVATE_FORWARD_RECORD_ID] {
+            for private_id in [
+                PRIVATE_PARTICIPANT_ID,
+                PRIVATE_REPLY_RECORD_ID,
+                PRIVATE_FORWARD_RECORD_ID,
+            ] {
                 assert!(
-                    !participant_payload.windows(private_id.len()).any(|window| window == private_id.as_bytes())
-                        && !reference_payload.windows(private_id.len()).any(|window| window == private_id.as_bytes()),
+                    !participant_payload
+                        .windows(private_id.len())
+                        .any(|window| window == private_id.as_bytes())
+                        && !reference_payload
+                            .windows(private_id.len())
+                            .any(|window| window == private_id.as_bytes()),
                     "public Communications relationships must not reveal provider-local identifiers",
                 );
             }
             return;
         }
-        assert!(std::time::Instant::now() < deadline, "relationship projections were not committed");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "relationship projections were not committed"
+        );
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
 }
@@ -1352,7 +1454,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_BLOB_QUOTA_BYTES,
     );
     let recorded = communication_evidence_recorded_contract_reference_v1();
-    let observed = hermes_communications_ingress::admission::communication_observed_contract_reference_v1();
+    let observed =
+        hermes_communications_ingress::admission::communication_observed_contract_reference_v1();
     let routes = [
         communications_event_route(
             COMMUNICATIONS_EVENTS_CAPABILITY_ID,
@@ -1446,9 +1549,12 @@ fn record_communications_runtime_fixture(
     store
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
-                "communications", u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1), digest, canonical_bundle,
+                "communications",
+                u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1),
+                digest,
+                canonical_bundle,
             )
-                .expect("record Communications Storage bundle"),
+            .expect("record Communications Storage bundle"),
         )
         .expect("persist Communications Storage bundle");
     store
@@ -1457,8 +1563,10 @@ fn record_communications_runtime_fixture(
             1,
             "hermes-managed-runtime-conformance",
             "domain.communications",
-            Sha256::digest(std::fs::read(communications_binary()).expect("Communications binary bytes"))
-                .into(),
+            Sha256::digest(
+                std::fs::read(communications_binary()).expect("Communications binary bytes"),
+            )
+            .into(),
             Sha256::digest(descriptor).into(),
             Some(Sha256::digest(schema).into()),
         ))
@@ -1484,21 +1592,31 @@ fn communications_event_route(
     contract: &hermes_runtime_protocol::v1::ContractReferenceV1,
     direction: ModuleEventRouteDirectionV1,
 ) -> ModuleEventRouteRequestV1 {
-    ModuleEventRouteRequestV1::new(hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
-        registration_id: COMMUNICATIONS_REGISTRATION.to_owned(),
-        capability_id: capability.to_owned(),
-        envelope_kind: kind,
-        contract_owner: contract.owner.clone(),
-        contract_name: contract.name.clone(),
-        contract_major: contract.major,
-        contract_revision: contract.revision,
-        contract_schema_sha256: contract.schema_sha256.as_slice().try_into().expect("contract digest"),
-        direction,
-        max_in_flight: 16,
-        delivery_policy: matches!(direction, ModuleEventRouteDirectionV1::Consume).then(|| {
-            ModuleEventDeliveryPolicyV1::new(ModuleEventSubscriptionRequirementV1::Required, 8, 30_000)
-        }),
-    })
+    ModuleEventRouteRequestV1::new(
+        hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
+            registration_id: COMMUNICATIONS_REGISTRATION.to_owned(),
+            capability_id: capability.to_owned(),
+            envelope_kind: kind,
+            contract_owner: contract.owner.clone(),
+            contract_name: contract.name.clone(),
+            contract_major: contract.major,
+            contract_revision: contract.revision,
+            contract_schema_sha256: contract
+                .schema_sha256
+                .as_slice()
+                .try_into()
+                .expect("contract digest"),
+            direction,
+            max_in_flight: 16,
+            delivery_policy: matches!(direction, ModuleEventRouteDirectionV1::Consume).then(|| {
+                ModuleEventDeliveryPolicyV1::new(
+                    ModuleEventSubscriptionRequirementV1::Required,
+                    8,
+                    30_000,
+                )
+            }),
+        },
+    )
 }
 
 fn communications_event_hub_topology() -> PlatformEventHubTopologyV1 {
@@ -1536,12 +1654,8 @@ pub(super) fn installed_communications_release(root: &Path) -> InstalledSignedBu
                 vault_binary(),
                 descriptor("vault").encode_to_vec(),
             ),
-            SignedRuntimeArtifact::new(
-                "platform.blob",
-                blob_binary(),
-                blob_descriptor(),
-            )
-            .with_settings_schema(blob_settings_schema()),
+            SignedRuntimeArtifact::new("platform.blob", blob_binary(), blob_descriptor())
+                .with_settings_schema(blob_settings_schema()),
             SignedRuntimeArtifact::new(
                 "domain.communications",
                 communications_binary(),
@@ -1607,9 +1721,7 @@ fn communications_stream_details(
         event_topology::subject::EventStreamKindV1::Result => {
             ("HERMES_RESULT_V1", "hermes.result.v1.>")
         }
-        event_topology::subject::EventStreamKindV1::Ack => {
-            ("HERMES_ACK_V1", "hermes.ack.v1.>")
-        }
+        event_topology::subject::EventStreamKindV1::Ack => ("HERMES_ACK_V1", "hermes.ack.v1.>"),
     }
 }
 

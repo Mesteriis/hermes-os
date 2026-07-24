@@ -163,10 +163,7 @@ fn authentication_http_fixture() -> AuthenticationHttpFixture {
     }
 }
 
-pub(super) fn admit_browser_test_device(
-    store: &Arc<SqliteControlStore>,
-    logical_owner_id: &str,
-) {
+pub(super) fn admit_browser_test_device(store: &Arc<SqliteControlStore>, logical_owner_id: &str) {
     store
         .admit_browser_device(
             &BrowserDeviceEnrollmentV1::new(
@@ -199,9 +196,15 @@ pub(super) fn authenticate_gateway_router(
         .expect("begin response body")
         .to_bytes();
     let ceremony: serde_json::Value = serde_json::from_slice(&begin_body).expect("begin JSON");
-    let authentication_id = ceremony["authentication_id"].as_str().expect("authentication ID");
-    let challenge = ceremony["public_key"]["challenge"].as_str().expect("WebAuthn challenge");
-    let browser_key_challenge = ceremony["browser_key_challenge"].as_str().expect("browser key challenge");
+    let authentication_id = ceremony["authentication_id"]
+        .as_str()
+        .expect("authentication ID");
+    let challenge = ceremony["public_key"]["challenge"]
+        .as_str()
+        .expect("WebAuthn challenge");
+    let browser_key_challenge = ceremony["browser_key_challenge"]
+        .as_str()
+        .expect("browser key challenge");
     let response = runtime.block_on(router.route(finish_authentication_request(
         authentication_id,
         &signed_browser_assertion(challenge, 1),

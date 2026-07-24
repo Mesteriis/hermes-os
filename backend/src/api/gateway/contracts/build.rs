@@ -24,5 +24,4 @@ fn main() {
             &["proto", "../../../platform/runtime_protocol/proto"],
         )
         .expect("gateway protocol must compile");
-
 }

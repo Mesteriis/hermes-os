@@ -110,7 +110,10 @@ impl GmailApiClientV1 {
         access_token: &str,
     ) -> Result<Vec<GmailLabelV1>, GmailAdapterErrorV1> {
         let response: GmailLabelsResponse = self
-            .get(access_token, &format!("/gmail/v1/users/{}/labels", self.user_id))
+            .get(
+                access_token,
+                &format!("/gmail/v1/users/{}/labels", self.user_id),
+            )
             .await?;
         Ok(response.labels.unwrap_or_default())
     }
@@ -176,7 +179,11 @@ impl GmailApiClientV1 {
         }
         self.get(
             access_token,
-            &format!("/gmail/v1/users/{}/history?{}", self.user_id, query.join("&")),
+            &format!(
+                "/gmail/v1/users/{}/history?{}",
+                self.user_id,
+                query.join("&")
+            ),
         )
         .await
     }
@@ -260,7 +267,11 @@ impl GmailApiClientV1 {
         path: &str,
         body: Option<&[u8]>,
     ) -> Result<T, GmailAdapterErrorV1> {
-        if access_token.trim().is_empty() || !path.starts_with('/') || path.contains('\r') || path.contains('\n') {
+        if access_token.trim().is_empty()
+            || !path.starts_with('/')
+            || path.contains('\r')
+            || path.contains('\n')
+        {
             return Err(GmailAdapterErrorV1::InvalidRequest);
         }
         let stream = TcpStream::connect((self.host.as_str(), 443))
@@ -276,13 +287,25 @@ impl GmailApiClientV1 {
             self.host,
             body.len(),
         );
-        stream.write_all(request.as_bytes()).await.map_err(|_| GmailAdapterErrorV1::Transport)?;
+        stream
+            .write_all(request.as_bytes())
+            .await
+            .map_err(|_| GmailAdapterErrorV1::Transport)?;
         if !body.is_empty() {
-            stream.write_all(body).await.map_err(|_| GmailAdapterErrorV1::Transport)?;
+            stream
+                .write_all(body)
+                .await
+                .map_err(|_| GmailAdapterErrorV1::Transport)?;
         }
-        stream.flush().await.map_err(|_| GmailAdapterErrorV1::Transport)?;
+        stream
+            .flush()
+            .await
+            .map_err(|_| GmailAdapterErrorV1::Transport)?;
         let mut response = Vec::new();
-        stream.read_to_end(&mut response).await.map_err(|_| GmailAdapterErrorV1::Transport)?;
+        stream
+            .read_to_end(&mut response)
+            .await
+            .map_err(|_| GmailAdapterErrorV1::Transport)?;
         parse_json_response(&response)
     }
 }
@@ -297,46 +320,84 @@ pub struct GmailListMessagesRequestV1 {
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GmailListedMessageV1 { pub id: String, pub thread_id: Option<String> }
+pub struct GmailListedMessageV1 {
+    pub id: String,
+    pub thread_id: Option<String>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GmailMessagePageV1 { pub messages: Vec<GmailListedMessageV1>, pub next_page_token: Option<String> }
+pub struct GmailMessagePageV1 {
+    pub messages: Vec<GmailListedMessageV1>,
+    pub next_page_token: Option<String>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GmailRawMessageV1 {
-    pub id: Option<String>, pub thread_id: Option<String>, pub label_ids: Option<Vec<String>>,
-    pub history_id: Option<String>, pub internal_date: Option<String>, pub raw: Option<String>,
+    pub id: Option<String>,
+    pub thread_id: Option<String>,
+    pub label_ids: Option<Vec<String>>,
+    pub history_id: Option<String>,
+    pub internal_date: Option<String>,
+    pub raw: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
-pub struct GmailLabelV1 { pub id: Option<String>, pub name: Option<String>, #[serde(rename = "type")] pub label_type: Option<String> }
+pub struct GmailLabelV1 {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    #[serde(rename = "type")]
+    pub label_type: Option<String>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GmailBatchModifyRequestV1 { pub message_ids: Vec<String>, pub add_label_ids: Vec<String>, pub remove_label_ids: Vec<String> }
+pub struct GmailBatchModifyRequestV1 {
+    pub message_ids: Vec<String>,
+    pub add_label_ids: Vec<String>,
+    pub remove_label_ids: Vec<String>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GmailSentMessageV1 { pub id: Option<String>, pub thread_id: Option<String> }
+pub struct GmailSentMessageV1 {
+    pub id: Option<String>,
+    pub thread_id: Option<String>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GmailHistoryPageV1 { pub history: Option<Vec<GmailHistoryItemV1>>, pub history_id: Option<String>, pub next_page_token: Option<String> }
+pub struct GmailHistoryPageV1 {
+    pub history: Option<Vec<GmailHistoryItemV1>>,
+    pub history_id: Option<String>,
+    pub next_page_token: Option<String>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GmailHistoryItemV1 { pub messages_added: Option<Vec<GmailHistoryMessageAddedV1>>, pub labels_added: Option<Vec<GmailHistoryMessageAddedV1>>, pub labels_removed: Option<Vec<GmailHistoryMessageAddedV1>> }
+pub struct GmailHistoryItemV1 {
+    pub messages_added: Option<Vec<GmailHistoryMessageAddedV1>>,
+    pub labels_added: Option<Vec<GmailHistoryMessageAddedV1>>,
+    pub labels_removed: Option<Vec<GmailHistoryMessageAddedV1>>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
-pub struct GmailHistoryMessageAddedV1 { pub message: GmailHistoryMessageV1 }
+pub struct GmailHistoryMessageAddedV1 {
+    pub message: GmailHistoryMessageV1,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
-pub struct GmailHistoryMessageV1 { pub id: String }
+pub struct GmailHistoryMessageV1 {
+    pub id: String,
+}
 
 pub fn history_message_ids(page: &GmailHistoryPageV1) -> Vec<String> {
     let mut message_ids = BTreeSet::new();
     for item in page.history.as_deref().unwrap_or_default() {
-        for changes in [&item.messages_added, &item.labels_added, &item.labels_removed] {
+        for changes in [
+            &item.messages_added,
+            &item.labels_added,
+            &item.labels_removed,
+        ] {
             for change in changes.as_deref().unwrap_or_default() {
                 if valid_provider_id(&change.message.id) {
                     message_ids.insert(change.message.id.clone());
@@ -349,27 +410,53 @@ pub fn history_message_ids(page: &GmailHistoryPageV1) -> Vec<String> {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GmailLabelsResponse { labels: Option<Vec<GmailLabelV1>> }
+struct GmailLabelsResponse {
+    labels: Option<Vec<GmailLabelV1>>,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GmailListResponse { messages: Option<Vec<GmailListedMessageV1>>, next_page_token: Option<String> }
+struct GmailListResponse {
+    messages: Option<Vec<GmailListedMessageV1>>,
+    next_page_token: Option<String>,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GmailAdapterErrorV1 { InvalidRequest, Transport, ProviderStatus(u16), InvalidResponse }
+pub enum GmailAdapterErrorV1 {
+    InvalidRequest,
+    Transport,
+    ProviderStatus(u16),
+    InvalidResponse,
+}
 
 impl fmt::Display for GmailAdapterErrorV1 {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result { write!(formatter, "{self:?}") }
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{self:?}")
+    }
 }
 
 impl std::error::Error for GmailAdapterErrorV1 {}
 
-fn parse_json_response<T: for<'de> Deserialize<'de>>(response: &[u8]) -> Result<T, GmailAdapterErrorV1> {
-    if response.len() > MAX_RESPONSE_BYTES { return Err(GmailAdapterErrorV1::InvalidResponse); }
-    let split = response.windows(4).position(|value| value == b"\r\n\r\n").ok_or(GmailAdapterErrorV1::InvalidResponse)?;
-    let headers = std::str::from_utf8(&response[..split]).map_err(|_| GmailAdapterErrorV1::InvalidResponse)?;
-    let status = headers.split_whitespace().nth(1).and_then(|value| value.parse::<u16>().ok()).ok_or(GmailAdapterErrorV1::InvalidResponse)?;
-    if !(200..300).contains(&status) { return Err(GmailAdapterErrorV1::ProviderStatus(status)); }
+fn parse_json_response<T: for<'de> Deserialize<'de>>(
+    response: &[u8],
+) -> Result<T, GmailAdapterErrorV1> {
+    if response.len() > MAX_RESPONSE_BYTES {
+        return Err(GmailAdapterErrorV1::InvalidResponse);
+    }
+    let split = response
+        .windows(4)
+        .position(|value| value == b"\r\n\r\n")
+        .ok_or(GmailAdapterErrorV1::InvalidResponse)?;
+    let headers = std::str::from_utf8(&response[..split])
+        .map_err(|_| GmailAdapterErrorV1::InvalidResponse)?;
+    let status = headers
+        .split_whitespace()
+        .nth(1)
+        .and_then(|value| value.parse::<u16>().ok())
+        .ok_or(GmailAdapterErrorV1::InvalidResponse)?;
+    if !(200..300).contains(&status) {
+        return Err(GmailAdapterErrorV1::ProviderStatus(status));
+    }
     serde_json::from_slice(&response[split + 4..]).map_err(|_| GmailAdapterErrorV1::InvalidResponse)
 }
 
@@ -378,25 +465,49 @@ async fn request_oauth_token(
     form: &[(&str, String)],
 ) -> Result<GmailOAuthTokenResponseV1, GmailAdapterErrorV1> {
     let (host, path) = https_endpoint(token_endpoint)?;
-    if form.iter().any(|(name, value)| name.is_empty() || value.trim().is_empty() || value.len() > 8192) {
+    if form
+        .iter()
+        .any(|(name, value)| name.is_empty() || value.trim().is_empty() || value.len() > 8192)
+    {
         return Err(GmailAdapterErrorV1::InvalidRequest);
     }
-    let body = form.iter().map(|(name, value)| {
-        let name = percent_encode(name)?;
-        let value = percent_encode(value)?;
-        Ok(format!("{name}={value}"))
-    }).collect::<Result<Vec<_>, GmailAdapterErrorV1>>()?.join("&");
-    let stream = TcpStream::connect((host.as_str(), 443)).await.map_err(|_| GmailAdapterErrorV1::Transport)?;
-    let mut stream = TlsConnector::new().connect(host.as_str(), stream).await.map_err(|_| GmailAdapterErrorV1::Transport)?;
+    let body = form
+        .iter()
+        .map(|(name, value)| {
+            let name = percent_encode(name)?;
+            let value = percent_encode(value)?;
+            Ok(format!("{name}={value}"))
+        })
+        .collect::<Result<Vec<_>, GmailAdapterErrorV1>>()?
+        .join("&");
+    let stream = TcpStream::connect((host.as_str(), 443))
+        .await
+        .map_err(|_| GmailAdapterErrorV1::Transport)?;
+    let mut stream = TlsConnector::new()
+        .connect(host.as_str(), stream)
+        .await
+        .map_err(|_| GmailAdapterErrorV1::Transport)?;
     let request = format!(
         "POST {path} HTTP/1.1\r\nHost: {host}\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len(),
     );
-    stream.write_all(request.as_bytes()).await.map_err(|_| GmailAdapterErrorV1::Transport)?;
-    stream.write_all(body.as_bytes()).await.map_err(|_| GmailAdapterErrorV1::Transport)?;
-    stream.flush().await.map_err(|_| GmailAdapterErrorV1::Transport)?;
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .map_err(|_| GmailAdapterErrorV1::Transport)?;
+    stream
+        .write_all(body.as_bytes())
+        .await
+        .map_err(|_| GmailAdapterErrorV1::Transport)?;
+    stream
+        .flush()
+        .await
+        .map_err(|_| GmailAdapterErrorV1::Transport)?;
     let mut response = Vec::new();
-    stream.read_to_end(&mut response).await.map_err(|_| GmailAdapterErrorV1::Transport)?;
+    stream
+        .read_to_end(&mut response)
+        .await
+        .map_err(|_| GmailAdapterErrorV1::Transport)?;
     let token: GmailOAuthTokenResponseV1 = parse_json_response(&response)?;
     if token.access_token.trim().is_empty() || token.expires_in == 0 {
         return Err(GmailAdapterErrorV1::InvalidResponse);
@@ -405,38 +516,126 @@ async fn request_oauth_token(
 }
 
 fn https_endpoint(value: &str) -> Result<(String, String), GmailAdapterErrorV1> {
-    let Some(endpoint) = value.strip_prefix("https://") else { return Err(GmailAdapterErrorV1::InvalidRequest); };
+    let Some(endpoint) = value.strip_prefix("https://") else {
+        return Err(GmailAdapterErrorV1::InvalidRequest);
+    };
     let (host, path) = endpoint.split_once('/').unwrap_or((endpoint, ""));
-    if !valid_host(host) || host.len() > 253 || path.contains('\r') || path.contains('\n') || path.len() > 4096 {
+    if !valid_host(host)
+        || host.len() > 253
+        || path.contains('\r')
+        || path.contains('\n')
+        || path.len() > 4096
+    {
         return Err(GmailAdapterErrorV1::InvalidRequest);
     }
-    Ok((host.to_owned(), if path.is_empty() { "/".to_owned() } else { format!("/{path}") }))
+    Ok((
+        host.to_owned(),
+        if path.is_empty() {
+            "/".to_owned()
+        } else {
+            format!("/{path}")
+        },
+    ))
 }
 
-fn valid_host(host: &str) -> bool { !host.is_empty() && host.len() <= 253 && host.bytes().all(|value| value.is_ascii_alphanumeric() || matches!(value, b'.' | b'-')) }
-fn valid_provider_id(value: &str) -> bool { !value.is_empty() && value.len() <= 512 && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'@')) }
-fn provider_id(value: &str) -> Result<String, GmailAdapterErrorV1> { valid_provider_id(value).then(|| value.to_owned()).ok_or(GmailAdapterErrorV1::InvalidRequest) }
-fn percent_encode(value: &str) -> Result<String, GmailAdapterErrorV1> { if value.len() > 4096 || value.contains('\r') || value.contains('\n') { return Err(GmailAdapterErrorV1::InvalidRequest); } Ok(value.bytes().flat_map(|byte| if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') { vec![char::from(byte)] } else { format!("%{byte:02X}").chars().collect() }).collect()) }
+fn valid_host(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host
+            .bytes()
+            .all(|value| value.is_ascii_alphanumeric() || matches!(value, b'.' | b'-'))
+}
+fn valid_provider_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 512
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'@'))
+}
+fn provider_id(value: &str) -> Result<String, GmailAdapterErrorV1> {
+    valid_provider_id(value)
+        .then(|| value.to_owned())
+        .ok_or(GmailAdapterErrorV1::InvalidRequest)
+}
+fn percent_encode(value: &str) -> Result<String, GmailAdapterErrorV1> {
+    if value.len() > 4096 || value.contains('\r') || value.contains('\n') {
+        return Err(GmailAdapterErrorV1::InvalidRequest);
+    }
+    Ok(value
+        .bytes()
+        .flat_map(|byte| {
+            if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+                vec![char::from(byte)]
+            } else {
+                format!("%{byte:02X}").chars().collect()
+            }
+        })
+        .collect())
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn parses_a_bounded_success_response() { let value: GmailLabelsResponse = parse_json_response(b"HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\n{\"labels\":[]}").expect("response"); assert!(value.labels.unwrap_or_default().is_empty()); }
-    #[test] fn rejects_non_success_status() { let value: Result<serde_json::Value, _> = parse_json_response(b"HTTP/1.1 401 Unauthorized\r\n\r\n{}"); assert_eq!(value, Err(GmailAdapterErrorV1::ProviderStatus(401))); }
-    #[test] fn percent_encodes_query_values() { assert_eq!(percent_encode("label:inbox hello").expect("encoded"), "label%3Ainbox%20hello"); }
-    #[test] fn accepts_only_safe_https_oauth_endpoints() {
-        assert_eq!(https_endpoint("https://oauth2.googleapis.com/token"), Ok(("oauth2.googleapis.com".to_owned(), "/token".to_owned())));
-        assert_eq!(https_endpoint("http://oauth2.googleapis.com/token"), Err(GmailAdapterErrorV1::InvalidRequest));
-        assert_eq!(https_endpoint("https://oauth2.googleapis.com\r/token"), Err(GmailAdapterErrorV1::InvalidRequest));
+    #[test]
+    fn parses_a_bounded_success_response() {
+        let value: GmailLabelsResponse =
+            parse_json_response(b"HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\n{\"labels\":[]}")
+                .expect("response");
+        assert!(value.labels.unwrap_or_default().is_empty());
     }
-    #[test] fn history_collects_unique_valid_message_ids_from_supported_change_families() {
+    #[test]
+    fn rejects_non_success_status() {
+        let value: Result<serde_json::Value, _> =
+            parse_json_response(b"HTTP/1.1 401 Unauthorized\r\n\r\n{}");
+        assert_eq!(value, Err(GmailAdapterErrorV1::ProviderStatus(401)));
+    }
+    #[test]
+    fn percent_encodes_query_values() {
+        assert_eq!(
+            percent_encode("label:inbox hello").expect("encoded"),
+            "label%3Ainbox%20hello"
+        );
+    }
+    #[test]
+    fn accepts_only_safe_https_oauth_endpoints() {
+        assert_eq!(
+            https_endpoint("https://oauth2.googleapis.com/token"),
+            Ok(("oauth2.googleapis.com".to_owned(), "/token".to_owned()))
+        );
+        assert_eq!(
+            https_endpoint("http://oauth2.googleapis.com/token"),
+            Err(GmailAdapterErrorV1::InvalidRequest)
+        );
+        assert_eq!(
+            https_endpoint("https://oauth2.googleapis.com\r/token"),
+            Err(GmailAdapterErrorV1::InvalidRequest)
+        );
+    }
+    #[test]
+    fn history_collects_unique_valid_message_ids_from_supported_change_families() {
         let page = GmailHistoryPageV1 {
             history: Some(vec![GmailHistoryItemV1 {
-                messages_added: Some(vec![GmailHistoryMessageAddedV1 { message: GmailHistoryMessageV1 { id: "message-2".into() } }]),
-                labels_added: Some(vec![GmailHistoryMessageAddedV1 { message: GmailHistoryMessageV1 { id: "message-1".into() } }]),
+                messages_added: Some(vec![GmailHistoryMessageAddedV1 {
+                    message: GmailHistoryMessageV1 {
+                        id: "message-2".into(),
+                    },
+                }]),
+                labels_added: Some(vec![GmailHistoryMessageAddedV1 {
+                    message: GmailHistoryMessageV1 {
+                        id: "message-1".into(),
+                    },
+                }]),
                 labels_removed: Some(vec![
-                    GmailHistoryMessageAddedV1 { message: GmailHistoryMessageV1 { id: "message-2".into() } },
-                    GmailHistoryMessageAddedV1 { message: GmailHistoryMessageV1 { id: "invalid id".into() } },
+                    GmailHistoryMessageAddedV1 {
+                        message: GmailHistoryMessageV1 {
+                            id: "message-2".into(),
+                        },
+                    },
+                    GmailHistoryMessageAddedV1 {
+                        message: GmailHistoryMessageV1 {
+                            id: "invalid id".into(),
+                        },
+                    },
                 ]),
             }]),
             history_id: Some("42".into()),

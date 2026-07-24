@@ -86,7 +86,7 @@ impl CommunicationsDurablePersistence {
             .port(port)
             .username(binding.access().runtime_principal())
             .password(password)
-            .database(database_id);
+            .database(binding.access().pool_alias());
         let pool = PgPoolOptions::new()
             .max_connections(u32::from(
                 binding.access().effective_budgets().max_connections(),

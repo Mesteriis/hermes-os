@@ -7,7 +7,10 @@ use hermes_whatsapp_api::{
     WhatsAppProviderQuery, WhatsAppProviderQueryResponse, client_wire,
     host_bridge::{WhatsAppHostBridgeEnvelopeV1, decode_host_bridge_payload},
     validate_provider_query,
-    wire::{self, WhatsAppClientResponseV1, WhatsAppObservationAcceptedV1, whats_app_client_response_v1::Response},
+    wire::{
+        self, WhatsAppClientResponseV1, WhatsAppObservationAcceptedV1,
+        whats_app_client_response_v1::Response,
+    },
 };
 use prost::Message;
 
@@ -40,7 +43,8 @@ enum WhatsAppHostRequest {
 fn decode_host_request(
     bytes: &[u8],
 ) -> Result<(u64, WhatsAppHostRequest), WhatsAppClientPortError> {
-    let request = ModuleClientRequestV1::decode(bytes).map_err(|_| WhatsAppClientPortError::Protocol)?;
+    let request =
+        ModuleClientRequestV1::decode(bytes).map_err(|_| WhatsAppClientPortError::Protocol)?;
     if request.protocol_major != MODULE_CLIENT_PROTOCOL_MAJOR
         || request.module_id != MODULE_ID
         || request.owner_id != OWNER_ID
@@ -57,7 +61,8 @@ fn decode_host_request(
             host_claim_id,
             lease_seconds,
             limit,
-        } = query else {
+        } = query
+        else {
             return Err(WhatsAppClientPortError::HostBridge);
         };
         return Ok((
@@ -72,7 +77,10 @@ fn decode_host_request(
     }
     let envelope = decode_host_bridge_payload(&request.request_payload)
         .map_err(|_| WhatsAppClientPortError::HostBridge)?;
-    Ok((request.request_id, WhatsAppHostRequest::Observation(envelope)))
+    Ok((
+        request.request_id,
+        WhatsAppHostRequest::Observation(envelope),
+    ))
 }
 
 pub async fn handle_host_request(
@@ -89,9 +97,11 @@ pub async fn handle_host_request(
                 .await
                 .map_err(|_| WhatsAppClientPortError::Ingress)?;
             WhatsAppClientResponseV1 {
-                response: Some(Response::ObservationAccepted(WhatsAppObservationAcceptedV1 {
-                    provider_event_id: envelope.provider_event_id,
-                })),
+                response: Some(Response::ObservationAccepted(
+                    WhatsAppObservationAcceptedV1 {
+                        provider_event_id: envelope.provider_event_id,
+                    },
+                )),
             }
             .encode_to_vec()
         }
@@ -146,8 +156,8 @@ fn client_contract() -> ContractReferenceV1 {
 mod tests {
     use super::*;
     use hermes_whatsapp_api::host_bridge::{
-        HOST_BRIDGE_PROTOCOL_MAJOR, HOST_BRIDGE_PROTOCOL_REVISION,
-        WhatsAppHostObservationV1, encode_host_bridge_payload,
+        HOST_BRIDGE_PROTOCOL_MAJOR, HOST_BRIDGE_PROTOCOL_REVISION, WhatsAppHostObservationV1,
+        encode_host_bridge_payload,
     };
 
     #[test]
@@ -158,7 +168,9 @@ mod tests {
             account_id: "wa-1".to_owned(),
             provider_event_id: "event-1".to_owned(),
             observed_at_unix_seconds: 1_782_504_000,
-            observation: WhatsAppHostObservationV1::RuntimeState { state: "running".to_owned() },
+            observation: WhatsAppHostObservationV1::RuntimeState {
+                state: "running".to_owned(),
+            },
         })
         .expect("payload");
         let request = ModuleClientRequestV1 {
@@ -170,10 +182,12 @@ mod tests {
             request_payload: payload,
         };
 
-        let (request_id, request) = decode_host_request(&request.encode_to_vec())
-            .expect("decoded host observation");
+        let (request_id, request) =
+            decode_host_request(&request.encode_to_vec()).expect("decoded host observation");
 
         assert_eq!(request_id, 7);
-        assert!(matches!(request, WhatsAppHostRequest::Observation(envelope) if envelope.provider_event_id == "event-1"));
+        assert!(
+            matches!(request, WhatsAppHostRequest::Observation(envelope) if envelope.provider_event_id == "event-1")
+        );
     }
 }

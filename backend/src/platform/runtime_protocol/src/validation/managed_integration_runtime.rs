@@ -13,9 +13,10 @@ pub enum ManagedIntegrationRuntimeValidationErrorV1 {
 pub fn validate_managed_integration_runtime_configuration(
     configuration: &ManagedIntegrationRuntimeConfigurationV1,
 ) -> Result<(), ManagedIntegrationRuntimeValidationErrorV1> {
-    let storage = configuration.storage.as_ref().ok_or(
-        ManagedIntegrationRuntimeValidationErrorV1::InvalidConfiguration,
-    )?;
+    let storage = configuration
+        .storage
+        .as_ref()
+        .ok_or(ManagedIntegrationRuntimeValidationErrorV1::InvalidConfiguration)?;
     if configuration.major != 1
         || !valid_identifier(&configuration.logical_owner_id)
         || !valid_identifier(&configuration.registration_id)

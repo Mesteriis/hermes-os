@@ -2,9 +2,9 @@
 
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::runtime::lifecycle::control::{
-    self as managed_runtime_control, ManagedRuntimeEventCredentialHandler,
-    ManagedRuntimeExpectation, ManagedRuntimeProviderCredentialHandler,
-    ManagedRuntimeBlobSessionHandler, ManagedRuntimeOwnerDerivedKeyHandler,
+    self as managed_runtime_control, ManagedRuntimeBlobSessionHandler,
+    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
+    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeProviderCredentialHandler,
     ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::{
@@ -138,7 +138,15 @@ fn wait_until_shutdown_with_relay(
             Err(_) => return terminal_status_after_control_close(child),
         }
         match input.relay_requests.recv_timeout(Duration::from_millis(25)) {
-            Ok(request) => request.dispatch(channel, input.expectation, input.vault_route_handler),
+            Ok(request) => request.dispatch(
+                channel,
+                input.expectation,
+                input.vault_route_handler,
+                input.event_credential_handler,
+                input.provider_credential_handler,
+                input.owner_derived_key_handler,
+                input.blob_session_handler,
+            ),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
                 bounded_managed_child_execution::terminate(child)?;
@@ -175,7 +183,8 @@ fn process_typed_requests(
         dispatch_provider_credential(channel, expectation, provider_credential_handler, request)?;
         return Ok(true);
     }
-    if let Some(request) = managed_runtime_control::inbound::try_receive_owner_derived_key(channel)? {
+    if let Some(request) = managed_runtime_control::inbound::try_receive_owner_derived_key(channel)?
+    {
         dispatch_owner_derived_key(channel, expectation, owner_derived_key_handler, request)?;
         return Ok(true);
     }

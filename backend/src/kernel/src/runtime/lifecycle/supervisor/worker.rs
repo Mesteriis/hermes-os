@@ -8,9 +8,10 @@ use std::thread::JoinHandle;
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::{
-    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
-    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeBlobSessionHandler, ManagedRuntimeRelayRequest,
-    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeBlobSessionHandler, ManagedRuntimeEventCredentialHandler,
+    ManagedRuntimeExpectation, ManagedRuntimeOwnerDerivedKeyHandler,
+    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeRelayRequest,
+    ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 use crate::runtime::managed::supervisor as managed_child_supervisor;

@@ -116,6 +116,7 @@ message ManagedRuntimeControlRequestV1 {
     ManagedRuntimeVaultRouteRequestV1 route_vault_ciphertext = 5;
     ManagedRuntimeBlobSessionRequestV1 issue_blob_session = 6;
     ManagedRuntimeOwnerDerivedKeyRequestV1 issue_owner_derived_key = 7;
+    ManagedRuntimeClientDeliveryRequestV1 client_delivery = 8;
   }
 }
 message ManagedRuntimeControlResponseV1 {
@@ -126,17 +127,15 @@ message ManagedRuntimeControlResponseV1 {
     ManagedRuntimeVaultRouteResponseV1 vault_route = 4;
     ManagedRuntimeBlobSessionDeliveryV1 blob_session_delivery = 5;
     ManagedRuntimeOwnerDerivedKeyDeliveryV1 owner_derived_key_delivery = 6;
+    ManagedRuntimeClientDeliveryResponseV1 client_delivery = 8;
   }
   string error_code = 15;
 }
 
-// Kernel-to-managed-runtime capability delivery. The Kernel validates the
-// target runtime fence and envelope structure, but never decodes the
-// owner-owned request payload.
+// Kernel-to-managed-runtime capability delivery. This is carried only in the
+// `client_delivery` control oneof; it never shares an untyped frame with
+// runtime-initiated Vault, Event, or Blob operations.
 message ManagedRuntimeClientDeliveryRequestV1 {
-  // Field 10 deliberately does not overlap VaultCiphertextRouteV1, whose
-  // field 1 is inspected by the control-FD relay before it returns a frame to
-  // the Kernel. Client delivery is a distinct control-plane direction.
   ModuleClientRequestV1 request = 10;
 }
 message ManagedRuntimeClientDeliveryResponseV1 {

@@ -6,6 +6,7 @@ use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
 use prost::Message;
+use std::os::unix::net::UnixStream;
 
 use crate::query_port::{CommunicationsQueryPortErrorV1, handle_query_request_v1};
 use crate::search_access::CommunicationsSearchAccessV1;
@@ -62,10 +63,11 @@ pub fn decode_module_query_request_v1(
 pub async fn handle_module_query_request_v1(
     persistence: &CommunicationsDurablePersistence,
     search_access: &mut CommunicationsSearchAccessV1,
+    control_channel: &mut UnixStream,
     bytes: &[u8],
 ) -> Result<Vec<u8>, CommunicationsQueryClientPortErrorV1> {
     let (request_id, query_payload) = decode_module_query_request_v1(bytes)?;
-    let response_payload = handle_query_request_v1(persistence, search_access, &query_payload)
+    let response_payload = handle_query_request_v1(persistence, search_access, control_channel, &query_payload)
         .await
         .map_err(map_query_error)?;
     Ok(ModuleClientResponseV1 {
@@ -92,7 +94,9 @@ const fn map_query_error(
 ) -> CommunicationsQueryClientPortErrorV1 {
     match error {
         CommunicationsQueryPortErrorV1::Protocol => CommunicationsQueryClientPortErrorV1::Protocol,
-        CommunicationsQueryPortErrorV1::Unavailable => CommunicationsQueryClientPortErrorV1::Unavailable,
+        CommunicationsQueryPortErrorV1::Unavailable => {
+            CommunicationsQueryClientPortErrorV1::Unavailable
+        }
     }
 }
 

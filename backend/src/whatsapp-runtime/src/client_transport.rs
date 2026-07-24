@@ -36,8 +36,8 @@ pub fn serve_connection(
         let recorded_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| WhatsAppClientTransportError::Io)?;
-        let recorded_at_unix_seconds = i64::try_from(recorded_at.as_secs())
-            .map_err(|_| WhatsAppClientTransportError::Io)?;
+        let recorded_at_unix_seconds =
+            i64::try_from(recorded_at.as_secs()).map_err(|_| WhatsAppClientTransportError::Io)?;
         let recorded_at_nanos = i32::try_from(recorded_at.subsec_nanos())
             .map_err(|_| WhatsAppClientTransportError::Io)?;
         let response = handle
@@ -105,7 +105,9 @@ fn read_length(stream: &mut UnixStream) -> Result<usize, WhatsAppClientTransport
         let mut byte = [0_u8; 1];
         match stream.read_exact(&mut byte) {
             Ok(()) => {}
-            Err(error) if error.kind() == ErrorKind::UnexpectedEof => return Err(WhatsAppClientTransportError::Closed),
+            Err(error) if error.kind() == ErrorKind::UnexpectedEof => {
+                return Err(WhatsAppClientTransportError::Closed);
+            }
             Err(_) => return Err(WhatsAppClientTransportError::Io),
         }
         value |= u64::from(byte[0] & 0x7f) << (index * 7);

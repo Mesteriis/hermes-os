@@ -53,9 +53,12 @@ fn derives_a_safe_alias_for_a_hyphenated_registration_id() {
         alias.as_str(),
         hermes_storage_protocol::storage_runtime_pool_alias("communications-runtime", 1),
     );
-    assert!(alias.as_str().bytes().all(|byte| {
-        byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
-    }));
+    assert!(
+        alias
+            .as_str()
+            .bytes()
+            .all(|byte| { byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' })
+    );
 }
 
 #[test]

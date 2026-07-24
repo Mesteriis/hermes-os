@@ -1,6 +1,8 @@
 //! Typed local client port for Zulip operational commands and operation status.
 
-use hermes_runtime_protocol::v1::{ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1};
+use hermes_runtime_protocol::v1::{
+    ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
+};
 use hermes_zulip_api::{ZulipClientRequestV1, ZulipClientResponseV1, client_wire};
 use prost::Message;
 
@@ -40,7 +42,8 @@ pub fn encode_module_request(
 pub fn decode_module_request(
     bytes: &[u8],
 ) -> Result<(u64, ZulipClientRequestV1), ZulipClientPortErrorV1> {
-    let envelope = ModuleClientRequestV1::decode(bytes).map_err(|_| ZulipClientPortErrorV1::Protocol)?;
+    let envelope =
+        ModuleClientRequestV1::decode(bytes).map_err(|_| ZulipClientPortErrorV1::Protocol)?;
     if envelope.protocol_major != MODULE_CLIENT_PROTOCOL_MAJOR
         || envelope.module_id != MODULE_ID
         || envelope.owner_id != OWNER_ID
@@ -88,7 +91,8 @@ pub async fn handle_client_request(
 pub fn decode_module_response(
     bytes: &[u8],
 ) -> Result<(u64, ZulipClientResponseV1), ZulipClientPortErrorV1> {
-    let envelope = ModuleClientResponseV1::decode(bytes).map_err(|_| ZulipClientPortErrorV1::Protocol)?;
+    let envelope =
+        ModuleClientResponseV1::decode(bytes).map_err(|_| ZulipClientPortErrorV1::Protocol)?;
     if envelope.protocol_major != MODULE_CLIENT_PROTOCOL_MAJOR
         || envelope.request_id == 0
         || !envelope.error_code.is_empty()
@@ -120,8 +124,11 @@ mod tests {
     #[test]
     fn accepts_only_the_exact_zulip_contract() {
         let request = ZulipClientRequestV1::Command(ZulipCommandV1::SendStream {
-            operation_id: "operation".into(), account_id: "account".into(), stream: "stream".into(),
-            topic: "topic".into(), content: "content".into(),
+            operation_id: "operation".into(),
+            account_id: "account".into(),
+            stream: "stream".into(),
+            topic: "topic".into(),
+            content: "content".into(),
         });
         let bytes = encode_module_request(1, &request).expect("request");
         assert_eq!(decode_module_request(&bytes), Ok((1, request)));

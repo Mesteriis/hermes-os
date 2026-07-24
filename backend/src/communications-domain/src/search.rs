@@ -35,13 +35,26 @@ pub struct CommunicationsSearchIndexJobV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommunicationsSearchIndexDecisionV1 {
     Index(CommunicationsSearchIndexJobV1),
-    Remove { evidence_id: CommunicationObservationIdV1, message_id: CommunicationMessageIdV1, projection_revision: u32, observed_at_unix_seconds: i64 },
-    Reject { evidence_id: CommunicationObservationIdV1, message_id: CommunicationMessageIdV1, projection_revision: u32, observed_at_unix_seconds: i64, reason: CommunicationsSearchIndexRejectionV1 },
+    Remove {
+        evidence_id: CommunicationObservationIdV1,
+        message_id: CommunicationMessageIdV1,
+        projection_revision: u32,
+        observed_at_unix_seconds: i64,
+    },
+    Reject {
+        evidence_id: CommunicationObservationIdV1,
+        message_id: CommunicationMessageIdV1,
+        projection_revision: u32,
+        observed_at_unix_seconds: i64,
+        reason: CommunicationsSearchIndexRejectionV1,
+    },
     Ignore,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommunicationsSearchIndexRejectionV1 { DocumentLimit }
+pub enum CommunicationsSearchIndexRejectionV1 {
+    DocumentLimit,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationsSearchTokenErrorV1 {
@@ -61,12 +74,24 @@ pub fn decide_search_index_v1(
         return CommunicationsSearchIndexDecisionV1::Ignore;
     };
     if message.mutation == CanonicalMessageMutationV1::Delete {
-        return CommunicationsSearchIndexDecisionV1::Remove { evidence_id: projection.summary.evidence_id, message_id: message.message_id, projection_revision, observed_at_unix_seconds: projection.summary.observed_at_unix_seconds };
+        return CommunicationsSearchIndexDecisionV1::Remove {
+            evidence_id: projection.summary.evidence_id,
+            message_id: message.message_id,
+            projection_revision,
+            observed_at_unix_seconds: projection.summary.observed_at_unix_seconds,
+        };
     }
     let Some(blob) = projection.summary.body_blob.as_ref() else {
-        return CommunicationsSearchIndexDecisionV1::Remove { evidence_id: projection.summary.evidence_id, message_id: message.message_id, projection_revision, observed_at_unix_seconds: projection.summary.observed_at_unix_seconds };
+        return CommunicationsSearchIndexDecisionV1::Remove {
+            evidence_id: projection.summary.evidence_id,
+            message_id: message.message_id,
+            projection_revision,
+            observed_at_unix_seconds: projection.summary.observed_at_unix_seconds,
+        };
     };
-    if blob.declared_bytes > u64::try_from(COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1).expect("bounded constant") {
+    if blob.declared_bytes
+        > u64::try_from(COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1).expect("bounded constant")
+    {
         return CommunicationsSearchIndexDecisionV1::Reject {
             evidence_id: projection.summary.evidence_id,
             message_id: message.message_id,
@@ -88,15 +113,23 @@ pub fn decide_search_index_v1(
 pub fn normalize_search_query_v1(
     query: &str,
 ) -> Result<CommunicationsSearchQueryV1, CommunicationsSearchTokenErrorV1> {
-    normalize_tokens(query, COMMUNICATIONS_SEARCH_MAX_QUERY_BYTES_V1, COMMUNICATIONS_SEARCH_MAX_QUERY_TOKENS_V1)
-        .map(|tokens| CommunicationsSearchQueryV1 { tokens })
+    normalize_tokens(
+        query,
+        COMMUNICATIONS_SEARCH_MAX_QUERY_BYTES_V1,
+        COMMUNICATIONS_SEARCH_MAX_QUERY_TOKENS_V1,
+    )
+    .map(|tokens| CommunicationsSearchQueryV1 { tokens })
 }
 
 pub fn normalize_search_document_tokens_v1(
     document: &str,
 ) -> Result<CommunicationsSearchDocumentV1, CommunicationsSearchTokenErrorV1> {
-    normalize_tokens(document, COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1, COMMUNICATIONS_SEARCH_MAX_DOCUMENT_TOKENS_V1)
-        .map(|tokens| CommunicationsSearchDocumentV1 { tokens })
+    normalize_tokens(
+        document,
+        COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1,
+        COMMUNICATIONS_SEARCH_MAX_DOCUMENT_TOKENS_V1,
+    )
+    .map(|tokens| CommunicationsSearchDocumentV1 { tokens })
 }
 
 fn normalize_tokens(
@@ -120,7 +153,9 @@ fn normalize_tokens(
         push_token(&mut tokens, &mut token, max_tokens)?;
     }
     push_token(&mut tokens, &mut token, max_tokens)?;
-    (!tokens.is_empty()).then_some(tokens).ok_or(CommunicationsSearchTokenErrorV1::Empty)
+    (!tokens.is_empty())
+        .then_some(tokens)
+        .ok_or(CommunicationsSearchTokenErrorV1::Empty)
 }
 
 fn push_token(

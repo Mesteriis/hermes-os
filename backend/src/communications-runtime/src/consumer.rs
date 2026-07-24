@@ -399,7 +399,10 @@ fn optional_cursor(
     }
     Ok(Some(CommunicationSourceCursorV1::new(id32(value)?)))
 }
-fn persistence_error(_: CommunicationsPersistenceError) -> CommunicationsEventConsumeErrorV1 {
+fn persistence_error(error: CommunicationsPersistenceError) -> CommunicationsEventConsumeErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_communications_persistence_error={error:?}");
+    }
     CommunicationsEventConsumeErrorV1::PersistenceRejected
 }
 

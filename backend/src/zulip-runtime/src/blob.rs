@@ -18,16 +18,33 @@ pub struct ZulipBlobMaterializer<R> {
 }
 
 impl<R> ZulipBlobMaterializer<R> {
-    pub fn new(reader: R) -> Self { Self { reader, sessions: Vec::new() } }
+    pub fn new(reader: R) -> Self {
+        Self {
+            reader,
+            sessions: Vec::new(),
+        }
+    }
 
     pub fn register(&mut self, session: ZulipBlobSessionV1) -> Result<(), ZulipRuntimeErrorV1> {
-        if session.blob_ref.trim().is_empty() || session.channel_binding.is_empty() || session.declared_size == 0 || session.declared_size > 64 * 1024 * 1024 {
+        if session.blob_ref.trim().is_empty()
+            || session.channel_binding.is_empty()
+            || session.declared_size == 0
+            || session.declared_size > 64 * 1024 * 1024
+        {
             return Err(ZulipRuntimeErrorV1::Credential);
         }
-        if session.grant.operation != BlobDataOperationV1::BlobDataOperationReadRangeV1 as i32 || session.grant.declared_size != session.declared_size {
+        if session.grant.operation != BlobDataOperationV1::BlobDataOperationReadRangeV1 as i32
+            || session.grant.declared_size != session.declared_size
+        {
             return Err(ZulipRuntimeErrorV1::Credential);
         }
-        if self.sessions.iter().any(|existing| existing.blob_ref == session.blob_ref) { return Err(ZulipRuntimeErrorV1::OperationAlreadyKnown); }
+        if self
+            .sessions
+            .iter()
+            .any(|existing| existing.blob_ref == session.blob_ref)
+        {
+            return Err(ZulipRuntimeErrorV1::OperationAlreadyKnown);
+        }
         self.sessions.push(session);
         Ok(())
     }
@@ -39,10 +56,25 @@ pub struct ZulipBlobWriteMaterializer<W> {
 }
 
 impl<W> ZulipBlobWriteMaterializer<W> {
-    pub fn new(writer: W) -> Self { Self { writer, sessions: Vec::new() } }
+    pub fn new(writer: W) -> Self {
+        Self {
+            writer,
+            sessions: Vec::new(),
+        }
+    }
 
     pub fn register(&mut self, session: ZulipBlobSessionV1) -> Result<(), ZulipRuntimeErrorV1> {
-        if session.blob_ref.trim().is_empty() || session.channel_binding.is_empty() || session.declared_size == 0 || session.declared_size > 64 * 1024 * 1024 || session.grant.operation != BlobDataOperationV1::BlobDataOperationWriteV1 as i32 || session.grant.declared_size != session.declared_size || self.sessions.iter().any(|existing| existing.blob_ref == session.blob_ref) {
+        if session.blob_ref.trim().is_empty()
+            || session.channel_binding.is_empty()
+            || session.declared_size == 0
+            || session.declared_size > 64 * 1024 * 1024
+            || session.grant.operation != BlobDataOperationV1::BlobDataOperationWriteV1 as i32
+            || session.grant.declared_size != session.declared_size
+            || self
+                .sessions
+                .iter()
+                .any(|existing| existing.blob_ref == session.blob_ref)
+        {
             return Err(ZulipRuntimeErrorV1::Credential);
         }
         self.sessions.push(session);
@@ -51,26 +83,54 @@ impl<W> ZulipBlobWriteMaterializer<W> {
 }
 
 impl ZulipBlobWriteMaterializer<hermes_blob_client::BlobDataClient> {
-    pub fn write_download(&mut self, blob_ref: &str, bytes: Vec<u8>) -> Result<(), ZulipRuntimeErrorV1> {
-        let index = self.sessions.iter().position(|session| session.blob_ref == blob_ref).ok_or(ZulipRuntimeErrorV1::Credential)?;
+    pub fn write_download(
+        &mut self,
+        blob_ref: &str,
+        bytes: Vec<u8>,
+    ) -> Result<(), ZulipRuntimeErrorV1> {
+        let index = self
+            .sessions
+            .iter()
+            .position(|session| session.blob_ref == blob_ref)
+            .ok_or(ZulipRuntimeErrorV1::Credential)?;
         let session = self.sessions.remove(index);
-        if u64::try_from(bytes.len()).ok() != Some(session.declared_size) { return Err(ZulipRuntimeErrorV1::Credential); }
-        self.writer.write(session.grant, session.channel_binding, bytes).map_err(|_| ZulipRuntimeErrorV1::Credential)
+        if u64::try_from(bytes.len()).ok() != Some(session.declared_size) {
+            return Err(ZulipRuntimeErrorV1::Credential);
+        }
+        self.writer
+            .write(session.grant, session.channel_binding, bytes)
+            .map_err(|_| ZulipRuntimeErrorV1::Credential)
     }
 }
 
 impl<R: BlobReadPort> ZulipBlobMaterializer<R> {
     pub fn take_bytes(&mut self, blob_ref: &str) -> Result<Vec<u8>, ZulipRuntimeErrorV1> {
-        let index = self.sessions.iter().position(|session| session.blob_ref == blob_ref).ok_or(ZulipRuntimeErrorV1::Credential)?;
+        let index = self
+            .sessions
+            .iter()
+            .position(|session| session.blob_ref == blob_ref)
+            .ok_or(ZulipRuntimeErrorV1::Credential)?;
         let session = self.sessions.remove(index);
-        let bytes = self.reader.read_range(session.grant, session.channel_binding, 0, session.declared_size)
+        let bytes = self
+            .reader
+            .read_range(
+                session.grant,
+                session.channel_binding,
+                0,
+                session.declared_size,
+            )
             .map_err(map_read_error)?;
-        if u64::try_from(bytes.len()).ok() != Some(session.declared_size) { return Err(ZulipRuntimeErrorV1::Credential); }
+        if u64::try_from(bytes.len()).ok() != Some(session.declared_size) {
+            return Err(ZulipRuntimeErrorV1::Credential);
+        }
         Ok(bytes)
     }
-
 }
 
 fn map_read_error(error: BlobReadError) -> ZulipRuntimeErrorV1 {
-    match error { BlobReadError::Unavailable | BlobReadError::Rejected | BlobReadError::InvalidResponse => ZulipRuntimeErrorV1::Credential }
+    match error {
+        BlobReadError::Unavailable | BlobReadError::Rejected | BlobReadError::InvalidResponse => {
+            ZulipRuntimeErrorV1::Credential
+        }
+    }
 }
