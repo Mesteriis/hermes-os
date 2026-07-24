@@ -2,7 +2,9 @@
 
 use std::os::unix::net::UnixStream;
 
-use hermes_blob_client::{BlobDataClient, request_managed_blob_session_v2};
+use hermes_blob_client::{
+    BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
+};
 use hermes_communications_api::CommunicationBodyBlobReferenceV1;
 use hermes_communications_domain::COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1;
 use hermes_managed_vault_client::owner_derived_key::{
@@ -98,12 +100,14 @@ impl CommunicationsSearchAccessV1 {
             let session = request_managed_blob_session_v2(
                 control_channel,
                 dispatcher,
-                COMMUNICATIONS_BLOB_CAPABILITY_ID,
-                BlobDataOperationV1::BlobDataOperationReadRangeV1,
-                &blob.reference_id,
-                blob.declared_bytes,
-                1,
-                None,
+                ManagedBlobSessionRequestV1 {
+                    capability_id: COMMUNICATIONS_BLOB_CAPABILITY_ID,
+                    operation: BlobDataOperationV1::BlobDataOperationReadRangeV1,
+                    reference_id: &blob.reference_id,
+                    declared_size: blob.declared_bytes,
+                    backup_class: 1,
+                    receipt_sha256: None,
+                },
             )
             .map_err(|_| CommunicationsSearchAccessErrorV1::Denied)?;
             BlobDataClient::new(session.data_socket_path)

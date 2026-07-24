@@ -54,6 +54,16 @@ pub struct ManagedBlobCustodyTransferRequestV1<'a> {
     pub evidence_envelope_sha256: &'a [u8; 32],
 }
 
+/// One exact Blob data-session intent, independent of the control transport.
+pub struct ManagedBlobSessionRequestV1<'a> {
+    pub capability_id: &'a str,
+    pub operation: BlobDataOperationV1,
+    pub reference_id: &'a [u8],
+    pub declared_size: u64,
+    pub backup_class: u32,
+    pub receipt_sha256: Option<&'a [u8; 32]>,
+}
+
 pub fn request_managed_blob_custody_transfer(
     channel: &mut UnixStream,
     request: ManagedBlobCustodyTransferRequestV1<'_>,
@@ -324,20 +334,16 @@ pub fn request_managed_blob_session(
 pub fn request_managed_blob_session_v2(
     channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
-    capability_id: &str,
-    operation: BlobDataOperationV1,
-    reference_id: &[u8],
-    declared_size: u64,
-    backup_class: u32,
-    receipt_sha256: Option<&[u8; 32]>,
+    request: ManagedBlobSessionRequestV1<'_>,
 ) -> Result<ManagedBlobSessionV1, BlobClientError> {
-    if capability_id.is_empty()
-        || capability_id.len() > 128
-        || reference_id.len() != 16
-        || reference_id.iter().all(|byte| *byte == 0)
-        || declared_size == 0
-        || !(1..=3).contains(&backup_class)
-        || (receipt_sha256.is_some() && operation != BlobDataOperationV1::BlobDataOperationWriteV1)
+    if request.capability_id.is_empty()
+        || request.capability_id.len() > 128
+        || request.reference_id.len() != 16
+        || request.reference_id.iter().all(|byte| *byte == 0)
+        || request.declared_size == 0
+        || !(1..=3).contains(&request.backup_class)
+        || (request.receipt_sha256.is_some()
+            && request.operation != BlobDataOperationV1::BlobDataOperationWriteV1)
     {
         return Err(BlobClientError::InvalidSessionRequest);
     }
@@ -351,14 +357,15 @@ pub fn request_managed_blob_session_v2(
                 operation: Some(ControlOperation::IssueBlobSession(
                     ManagedRuntimeBlobSessionRequestV1 {
                         request_id: request_id.to_vec(),
-                        capability_id: capability_id.to_owned(),
-                        operation: operation as u32,
+                        capability_id: request.capability_id.to_owned(),
+                        operation: request.operation as u32,
                         channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
-                        reference_id: reference_id.to_vec(),
-                        declared_size,
-                        backup_class,
+                        reference_id: request.reference_id.to_vec(),
+                        declared_size: request.declared_size,
+                        backup_class: request.backup_class,
                         ttl_seconds: 30,
-                        receipt_sha256: receipt_sha256
+                        receipt_sha256: request
+                            .receipt_sha256
                             .map_or_else(Vec::new, |digest| digest.to_vec()),
                         custody_source_proof: Vec::new(),
                         evidence_id: Vec::new(),
@@ -382,11 +389,11 @@ pub fn request_managed_blob_session_v2(
     };
     let grant = delivery.grant.ok_or(BlobClientError::InvalidResponse)?;
     if !Path::new(&delivery.data_socket_path).is_absolute()
-        || grant.reference_id != reference_id
-        || grant.declared_size != declared_size
-        || grant.operation != operation as i32
+        || grant.reference_id != request.reference_id
+        || grant.declared_size != request.declared_size
+        || grant.operation != request.operation as i32
         || grant.channel_binding_sha256 != Sha256::digest(&channel_binding).as_slice()
-        || (receipt_sha256.is_some() && delivery.custody_transfer_source_proof.is_empty())
+        || (request.receipt_sha256.is_some() && delivery.custody_transfer_source_proof.is_empty())
     {
         return Err(BlobClientError::InvalidResponse);
     }

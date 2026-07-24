@@ -3,8 +3,9 @@
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use hermes_blob_client::BlobDataClient;
-use hermes_blob_client::request_managed_blob_session_v2;
+use hermes_blob_client::{
+    BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
+};
 use hermes_communications_ingress::{BodyAdmissionFailureV1, BodyBlobReceiptV1};
 use hermes_runtime_protocol::v1::BlobDataOperationV1;
 use hermes_runtime_protocol::{
@@ -251,12 +252,14 @@ pub fn serve_admitted_provider_loop(admitted: TelegramAdmittedRuntime) -> Result
                         request_managed_blob_session_v2(
                             &mut control_channel,
                             &mut dispatcher,
-                            "blob.content",
-                            BlobDataOperationV1::BlobDataOperationReadRangeV1,
-                            &intent.reference_id,
-                            intent.declared_size,
-                            intent.backup_class,
-                            None,
+                            ManagedBlobSessionRequestV1 {
+                                capability_id: "blob.content",
+                                operation: BlobDataOperationV1::BlobDataOperationReadRangeV1,
+                                reference_id: &intent.reference_id,
+                                declared_size: intent.declared_size,
+                                backup_class: intent.backup_class,
+                                receipt_sha256: None,
+                            },
                         )
                         .map_err(|_| {
                             TdlibError::Protocol(
@@ -308,12 +311,15 @@ fn admit_telegram_plaintext(
     let session = request_managed_blob_session_v2(
         control_channel,
         &mut dispatcher,
-        "blob.content",
-        BlobDataOperationV1::BlobDataOperationWriteV1,
-        &reference_id,
-        u64::try_from(plaintext.len()).map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
-        1,
-        Some(&sha256),
+        ManagedBlobSessionRequestV1 {
+            capability_id: "blob.content",
+            operation: BlobDataOperationV1::BlobDataOperationWriteV1,
+            reference_id: &reference_id,
+            declared_size: u64::try_from(plaintext.len())
+                .map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
+            backup_class: 1,
+            receipt_sha256: Some(&sha256),
+        },
     );
     let restored = control_channel.inner_mut().set_nonblocking(true);
     let session = session.map_err(|_| BodyAdmissionFailureV1::PolicyRejected)?;
@@ -425,12 +431,14 @@ fn authorize_media_for_request<T: hermes_telegram_tdlib::TdlibTransport>(
     let session = request_managed_blob_session_v2(
         channel,
         &mut dispatcher,
-        "blob.content",
-        BlobDataOperationV1::BlobDataOperationReadRangeV1,
-        &media.blob.reference_id,
-        media.blob.declared_size,
-        media.blob.backup_class,
-        None,
+        ManagedBlobSessionRequestV1 {
+            capability_id: "blob.content",
+            operation: BlobDataOperationV1::BlobDataOperationReadRangeV1,
+            reference_id: &media.blob.reference_id,
+            declared_size: media.blob.declared_size,
+            backup_class: media.blob.backup_class,
+            receipt_sha256: None,
+        },
     )
     .map_err(|_| "Telegram Blob session request was denied".to_owned())?;
     runtime

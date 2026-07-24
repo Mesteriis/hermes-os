@@ -301,12 +301,14 @@ pub fn ensure_managed_owner_derived_key_v2(
     let delivery = request_owner_key_lease_v2(
         channel,
         dispatcher,
-        request_id,
-        capability_id,
-        purpose_id,
-        key_schema_revision,
-        ttl_seconds,
-        recipient.public_key().as_bytes(),
+        owner_key_request(
+            request_id,
+            capability_id,
+            purpose_id,
+            key_schema_revision,
+            ttl_seconds,
+            recipient.public_key().as_bytes(),
+        ),
     )?;
     let purpose = VaultPurposeRequestV1::new(
         purpose_id.to_owned(),
@@ -363,24 +365,12 @@ pub fn ensure_managed_owner_derived_key_v2(
 fn request_owner_key_lease_v2(
     channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
-    request_id: [u8; 16],
-    capability_id: &str,
-    purpose_id: &str,
-    key_schema_revision: u32,
-    ttl_seconds: u32,
-    recipient_public_key_x25519: &[u8; 32],
+    request: ManagedRuntimeOwnerDerivedKeyRequestV1,
 ) -> Result<ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedOwnerDerivedKeyErrorV1> {
     let response = channel
         .request_next_with_dispatch(
             ManagedRuntimeControlRequestV1 {
-                operation: Some(Operation::IssueOwnerDerivedKey(owner_key_request(
-                    request_id,
-                    capability_id,
-                    purpose_id,
-                    key_schema_revision,
-                    ttl_seconds,
-                    recipient_public_key_x25519,
-                ))),
+                operation: Some(Operation::IssueOwnerDerivedKey(request)),
             },
             dispatcher,
         )
