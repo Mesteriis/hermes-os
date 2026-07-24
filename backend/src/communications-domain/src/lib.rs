@@ -54,11 +54,8 @@ pub fn accept_command(
     {
         return Err(CommunicationsDomainError::InvalidAttachmentScope);
     }
-    if matches!(
-        command.kind,
-        CanonicalCommunicationEvidenceKindV1::EmailMessage
-            | CanonicalCommunicationEvidenceKindV1::ChatMessage
-    ) && (command.account_cursor.is_none() || command.conversation_cursor.is_none())
+    if requires_message_scope(command.kind)
+        && (command.account_cursor.is_none() || command.conversation_cursor.is_none())
     {
         return Err(CommunicationsDomainError::MissingMessageScope);
     }
@@ -94,6 +91,19 @@ pub fn accept_command(
             CommunicationsDomainError::InvalidObservedTime
         }
     })
+}
+
+const fn requires_message_scope(kind: CanonicalCommunicationEvidenceKindV1) -> bool {
+    matches!(
+        kind,
+        CanonicalCommunicationEvidenceKindV1::EmailMessage
+            | CanonicalCommunicationEvidenceKindV1::ChatMessage
+            | CanonicalCommunicationEvidenceKindV1::MessageEdited
+            | CanonicalCommunicationEvidenceKindV1::MessageDeleted
+            | CanonicalCommunicationEvidenceKindV1::ReactionChanged
+            | CanonicalCommunicationEvidenceKindV1::DeliveryStateChanged
+            | CanonicalCommunicationEvidenceKindV1::MediaChanged
+    )
 }
 
 const fn valid_timestamp(seconds: i64, nanos: i32) -> bool {
@@ -410,6 +420,48 @@ mod tests {
             projection.message.as_ref().map(|value| value.mutation),
             Some(CanonicalMessageMutationV1::Delete)
         ));
+    }
+
+    #[test]
+    fn message_transitions_require_canonical_message_scope() {
+        let command = RecordCommunicationEvidenceV1 {
+            observation_id: CommunicationObservationIdV1::new([1; 16]),
+            causation_message_id: None,
+            correlation_id: CommunicationObservationIdV1::new([6; 16]),
+            source_cursor: cursor(2),
+            account_cursor: Some(cursor(3)),
+            conversation_cursor: None,
+            participant_cursor: None,
+            media_cursor: None,
+            reply_to_source_cursor: None,
+            forward_origin_source_cursor: None,
+            provider: CommunicationProviderProvenanceV1::Telegram,
+            direction: CommunicationDirectionV1::Incoming,
+            kind: CanonicalCommunicationEvidenceKindV1::EmailMessage,
+            body: CommunicationBodyStateV1::MetadataOnly,
+            body_blob: None,
+            body_admission_failure: None,
+            attachment_descriptor: None,
+            observed_at_unix_seconds: 1,
+            recorded_at_unix_seconds: 2,
+            recorded_at_nanos: 3,
+        };
+        for kind in [
+            CanonicalCommunicationEvidenceKindV1::EmailMessage,
+            CanonicalCommunicationEvidenceKindV1::ChatMessage,
+            CanonicalCommunicationEvidenceKindV1::MessageEdited,
+            CanonicalCommunicationEvidenceKindV1::MessageDeleted,
+            CanonicalCommunicationEvidenceKindV1::ReactionChanged,
+            CanonicalCommunicationEvidenceKindV1::DeliveryStateChanged,
+            CanonicalCommunicationEvidenceKindV1::MediaChanged,
+        ] {
+            let mut scoped = command.clone();
+            scoped.kind = kind;
+            assert_eq!(
+                accept_command(scoped),
+                Err(CommunicationsDomainError::MissingMessageScope)
+            );
+        }
     }
 
     #[test]
