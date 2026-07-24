@@ -22,6 +22,15 @@ pub struct AttachmentMetadataV1 {
     pub disposition: AttachmentDispositionV1,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AttachmentPartExtractionErrorV1 {
+    InvalidSource,
+    InvalidPart,
+    NotFound,
+    InvalidEncoding,
+    TooLarge,
+}
+
 /// Extracts the first bounded `text/plain` MIME leaf that is not an attachment.
 /// Malformed, oversized and unsupported encodings are rejected rather than letting
 /// raw RFC822 or attachment bytes enter the Communications body pipeline.
@@ -198,17 +207,63 @@ pub fn attachment_metadata(raw_message: &[u8]) -> Vec<AttachmentMetadataV1> {
     }
     let mut attachments = Vec::new();
     let mut next_part_id = 1_u16;
-    collect_multipart_attachments(body, &boundary, 0, &mut next_part_id, &mut attachments);
+    visit_multipart_attachments(
+        body,
+        &boundary,
+        0,
+        &mut next_part_id,
+        &mut |metadata, _, _| attachments.push(metadata),
+    );
     attachments
 }
 
-fn collect_multipart_attachments(
+pub fn extract_attachment_part(
+    raw_message: &[u8],
+    part_id: u16,
+) -> Result<Vec<u8>, AttachmentPartExtractionErrorV1> {
+    if raw_message.is_empty() || raw_message.len() > MAX_RFC822_BYTES {
+        return Err(AttachmentPartExtractionErrorV1::InvalidSource);
+    }
+    if part_id == 0 {
+        return Err(AttachmentPartExtractionErrorV1::InvalidPart);
+    }
+    let (headers, body) = split_headers_and_body(raw_message)
+        .ok_or(AttachmentPartExtractionErrorV1::InvalidSource)?;
+    let boundary = header_parameter(headers, "content-type", "boundary")
+        .ok_or(AttachmentPartExtractionErrorV1::InvalidSource)?;
+    let content_type = header_value(headers, "content-type").unwrap_or_default();
+    if !content_type
+        .trim_start()
+        .to_ascii_lowercase()
+        .starts_with("multipart/")
+    {
+        return Err(AttachmentPartExtractionErrorV1::InvalidSource);
+    }
+    let mut next_part_id = 1_u16;
+    let mut result = None;
+    visit_multipart_attachments(
+        body,
+        &boundary,
+        0,
+        &mut next_part_id,
+        &mut |metadata, body, encoding| {
+            if metadata.part_id == part_id {
+                result = Some(decode_attachment_part(body, encoding.as_deref()));
+            }
+        },
+    );
+    result.ok_or(AttachmentPartExtractionErrorV1::NotFound)?
+}
+
+fn visit_multipart_attachments<F>(
     body: &[u8],
     boundary: &str,
     depth: u8,
     next_part_id: &mut u16,
-    attachments: &mut Vec<AttachmentMetadataV1>,
-) {
+    visitor: &mut F,
+) where
+    F: FnMut(AttachmentMetadataV1, &[u8], Option<String>),
+{
     if depth >= MAX_MIME_DEPTH
         || boundary.is_empty()
         || boundary.len() > 200
@@ -224,7 +279,7 @@ fn collect_multipart_attachments(
         let normalized = line.strip_suffix(b"\r").unwrap_or(line);
         if normalized == marker.as_bytes() || normalized == closing_marker.as_bytes() {
             if inside_part {
-                collect_attachment_from_part(&current, depth, next_part_id, attachments);
+                visit_attachment_from_part(&current, depth, next_part_id, visitor);
                 current.clear();
             }
             if normalized == closing_marker.as_bytes() {
@@ -238,12 +293,10 @@ fn collect_multipart_attachments(
     }
 }
 
-fn collect_attachment_from_part(
-    part: &[u8],
-    depth: u8,
-    next_part_id: &mut u16,
-    attachments: &mut Vec<AttachmentMetadataV1>,
-) {
+fn visit_attachment_from_part<F>(part: &[u8], depth: u8, next_part_id: &mut u16, visitor: &mut F)
+where
+    F: FnMut(AttachmentMetadataV1, &[u8], Option<String>),
+{
     let Some((headers, body)) = split_headers_and_body(part) else {
         return;
     };
@@ -254,12 +307,26 @@ fn collect_attachment_from_part(
         .starts_with("multipart/")
     {
         if let Some(boundary) = header_parameter(headers, "content-type", "boundary") {
-            collect_multipart_attachments(body, &boundary, depth + 1, next_part_id, attachments);
+            visit_multipart_attachments(body, &boundary, depth + 1, next_part_id, visitor);
         }
         return;
     }
-    let Some(disposition) = header_value(headers, "content-disposition") else {
+    let Some((metadata, transfer_encoding)) =
+        attachment_metadata_from_part(headers, body, next_part_id)
+    else {
         return;
+    };
+    visitor(metadata, body, transfer_encoding);
+}
+
+fn attachment_metadata_from_part(
+    headers: &[u8],
+    body: &[u8],
+    next_part_id: &mut u16,
+) -> Option<(AttachmentMetadataV1, Option<String>)> {
+    let content_type = header_value(headers, "content-type").unwrap_or_default();
+    let Some(disposition) = header_value(headers, "content-disposition") else {
+        return None;
     };
     let disposition = match disposition
         .split(';')
@@ -271,7 +338,7 @@ fn collect_attachment_from_part(
     {
         "attachment" => AttachmentDispositionV1::Attachment,
         "inline" => AttachmentDispositionV1::Inline,
-        _ => return,
+        _ => return None,
     };
     let Some(media_type) = content_type
         .split(';')
@@ -279,28 +346,68 @@ fn collect_attachment_from_part(
         .map(str::trim)
         .filter(valid_media_type)
     else {
-        return;
+        return None;
     };
-    let Some(declared_bytes) =
-        decoded_part_size(body, header_value(headers, "content-transfer-encoding"))
-    else {
-        return;
+    let transfer_encoding = header_value(headers, "content-transfer-encoding");
+    let Some(declared_bytes) = decoded_part_size(body, transfer_encoding.clone()) else {
+        return None;
     };
     let filename = header_parameter(headers, "content-disposition", "filename")
         .or_else(|| header_parameter(headers, "content-type", "name"))
         .filter(|value| !value.is_empty() && value.len() <= 512 && value.is_ascii());
     let part_id = *next_part_id;
     let Some(next) = next_part_id.checked_add(1) else {
-        return;
+        return None;
     };
     *next_part_id = next;
-    attachments.push(AttachmentMetadataV1 {
-        part_id,
-        filename,
-        media_type: media_type.to_owned(),
-        declared_bytes,
-        disposition,
-    });
+    Some((
+        AttachmentMetadataV1 {
+            part_id,
+            filename,
+            media_type: media_type.to_owned(),
+            declared_bytes,
+            disposition,
+        },
+        transfer_encoding,
+    ))
+}
+
+fn decode_attachment_part(
+    body: &[u8],
+    transfer_encoding: Option<&str>,
+) -> Result<Vec<u8>, AttachmentPartExtractionErrorV1> {
+    let body = body
+        .strip_suffix(b"\n")
+        .unwrap_or(body)
+        .strip_suffix(b"\r")
+        .unwrap_or(body);
+    match transfer_encoding
+        .map(str::trim)
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        None | Some("") | Some("7bit") | Some("8bit") | Some("binary") => (body.len()
+            <= MAX_RFC822_BYTES)
+            .then(|| body.to_vec())
+            .ok_or(AttachmentPartExtractionErrorV1::TooLarge),
+        Some("base64") => {
+            let compact = body
+                .iter()
+                .copied()
+                .filter(|byte| !byte.is_ascii_whitespace())
+                .collect::<Vec<_>>();
+            if compact.is_empty() || compact.len() > MAX_RFC822_BYTES {
+                return Err(AttachmentPartExtractionErrorV1::TooLarge);
+            }
+            let decoded = STANDARD
+                .decode(compact)
+                .map_err(|_| AttachmentPartExtractionErrorV1::InvalidEncoding)?;
+            (decoded.len() <= MAX_RFC822_BYTES)
+                .then_some(decoded)
+                .ok_or(AttachmentPartExtractionErrorV1::TooLarge)
+        }
+        _ => Err(AttachmentPartExtractionErrorV1::InvalidEncoding),
+    }
 }
 
 fn split_headers_and_body(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
@@ -394,6 +501,32 @@ mod tests {
     fn extracts_bounded_attachment_metadata() {
         let raw = b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nbody\r\n--x\r\nContent-Type: application/pdf; name=a.pdf\r\nContent-Disposition: attachment; filename=a.pdf\r\nContent-Transfer-Encoding: base64\r\n\r\naGVsbG8=\r\n--x--\r\n";
         assert_eq!(attachment_metadata(raw)[0].declared_bytes, 5);
+    }
+
+    #[test]
+    fn extracts_the_same_base64_part_identified_by_metadata() {
+        let raw = b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nbody\r\n--x\r\nContent-Type: application/pdf; name=a.pdf\r\nContent-Disposition: attachment; filename=a.pdf\r\nContent-Transfer-Encoding: base64\r\n\r\naGVsbG8=\r\n--x--\r\n";
+        let metadata = attachment_metadata(raw);
+
+        assert_eq!(metadata.len(), 1);
+        assert_eq!(
+            extract_attachment_part(raw, metadata[0].part_id),
+            Ok(b"hello".to_vec())
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_or_unsupported_attachment_parts() {
+        let raw = b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nhello=20world\r\n--x--\r\n";
+
+        assert_eq!(
+            extract_attachment_part(raw, 1),
+            Err(AttachmentPartExtractionErrorV1::NotFound)
+        );
+        assert_eq!(
+            extract_attachment_part(raw, 0),
+            Err(AttachmentPartExtractionErrorV1::InvalidPart)
+        );
     }
 
     #[test]
