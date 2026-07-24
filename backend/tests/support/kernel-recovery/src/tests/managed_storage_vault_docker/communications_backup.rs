@@ -117,21 +117,21 @@ impl PostgresRecoveryTools {
             &directory,
             "pg_dump",
             &format!(
-                "#!/bin/sh\nset -eu\noutput=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    --file) output=$2; shift 2 ;;\n    *) shift ;;\n  esac\ndone\n[ -n \"$output\" ]\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec pg_dump --format=custom --no-owner --no-privileges --dbname=hermes_storage_authenticated' > \"$output\"\n"
+                "#!/bin/sh\nset -eu\noutput=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    --file) output=$2; shift 2 ;;\n    *) shift ;;\n  esac\ndone\n[ -n \"$output\" ]\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec pg_dump --username=hermes_postgres_admin --format=custom --no-owner --no-privileges --dbname=hermes_storage_authenticated' > \"$output\"\n"
             ),
         );
         let pg_restore = write_recovery_tool(
             &directory,
             "pg_restore",
             &format!(
-                "#!/bin/sh\nset -eu\ninput=\nfor value in \"$@\"; do input=$value; done\n[ -n \"$input\" ]\ndocker cp \"$input\" {container}:/tmp/hermes-communications-recovery.dump\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec pg_restore --no-owner --no-privileges --exit-on-error --single-transaction --dbname={target_database} /tmp/hermes-communications-recovery.dump'\n"
+                "#!/bin/sh\nset -eu\ninput=\nfor value in \"$@\"; do input=$value; done\n[ -n \"$input\" ]\ndocker cp \"$input\" {container}:/tmp/hermes-communications-recovery.dump\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec pg_restore --username=hermes_postgres_admin --no-owner --no-privileges --exit-on-error --single-transaction --dbname={target_database} /tmp/hermes-communications-recovery.dump'\n"
             ),
         );
         let psql = write_recovery_tool(
             &directory,
             "psql",
             &format!(
-                "#!/bin/sh\nset -eu\nquery=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    --command) query=$2; shift 2 ;;\n    *) shift ;;\n  esac\ndone\n[ -n \"$query\" ]\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec psql --tuples-only --no-align --dbname={target_database} --command \"$1\"' -- \"$query\"\n"
+                "#!/bin/sh\nset -eu\nquery=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    --command) query=$2; shift 2 ;;\n    *) shift ;;\n  esac\ndone\n[ -n \"$query\" ]\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec psql --username=hermes_postgres_admin --tuples-only --no-align --dbname={target_database} --command \"$1\"' -- \"$query\"\n"
             ),
         );
         Self {
@@ -158,14 +158,18 @@ fn run_storage_recovery<const N: usize>(command: &str, arguments: [(&str, &Path)
         invocation.arg(name).arg(value);
     }
     let output = invocation.output().expect("start Storage offline recovery");
-    assert!(output.status.success(), "Storage offline recovery failed");
+    assert!(
+        output.status.success(),
+        "Storage offline recovery {command} failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
 }
 
 fn postgres_command(container: &str, database: &str, query: &str) -> String {
     let output = Command::new("docker")
         .args([
             "exec", container, "sh", "-ceu",
-            "export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec psql --tuples-only --no-align --dbname=\"$1\" --command \"$2\"",
+            "export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec psql --username=hermes_postgres_admin --tuples-only --no-align --dbname=\"$1\" --command \"$2\"",
             "--", database, query,
         ])
         .output()

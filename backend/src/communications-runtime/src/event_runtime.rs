@@ -346,6 +346,10 @@ impl CommunicationsEventRuntimeV1 {
             persistence: &self.persistence,
             search_access: &mut nested_search_access,
         };
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| unavailable_at("client_blocking"))?;
         let payload = crate::query_client_port::handle_module_query_request_v1(
             &self.persistence,
             &mut self.search_access,
@@ -354,6 +358,10 @@ impl CommunicationsEventRuntimeV1 {
             &request.encode_to_vec(),
         )
         .await;
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| unavailable_at("client_nonblocking"))?;
         let response = match payload {
             Ok(payload) => ModuleClientResponseV1::decode(payload.as_slice())
                 .map_err(|_| unavailable_at("client_response_decode"))?,
@@ -436,7 +444,11 @@ impl CommunicationsEventRuntimeV1 {
             persistence: &self.persistence,
             search_access: &mut nested_search_access,
         };
-        process_next_derived_index_job_v1(
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| unavailable_at("search_worker_blocking"))?;
+        let result = process_next_derived_index_job_v1(
             &self.persistence,
             &mut self.search_access,
             &mut self.control_channel,
@@ -445,7 +457,12 @@ impl CommunicationsEventRuntimeV1 {
             context.recorded_at_unix_seconds,
         )
         .await
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)
+        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable);
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| unavailable_at("search_worker_nonblocking"))?;
+        result
     }
 
     pub async fn reconcile_search_projection_jobs(

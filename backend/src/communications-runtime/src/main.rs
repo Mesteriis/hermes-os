@@ -170,6 +170,8 @@ const fn runtime_startup_reason_code(error: CommunicationsEventRuntimeErrorV1) -
     }
 }
 
+const MAX_DERIVED_INDEX_JOBS_PER_MAINTENANCE_TICK: usize = 64;
+
 async fn consume_or_tick(
     runtime: &mut CommunicationsEventRuntimeV1,
     maintenance: &mut tokio::time::Interval,
@@ -221,11 +223,16 @@ async fn run_maintenance_tick(runtime: &mut CommunicationsEventRuntimeV1) -> Res
         .reconcile_search_projection_jobs()
         .await
         .map_err(|error| maintenance_error("search_reconcile", error))?;
-    runtime
-        .process_next_derived_index_job()
-        .await
-        .map(|_| ())
-        .map_err(|error| maintenance_error("search_worker", error))
+    for _ in 0..MAX_DERIVED_INDEX_JOBS_PER_MAINTENANCE_TICK {
+        let processed = runtime
+            .process_next_derived_index_job()
+            .await
+            .map_err(|error| maintenance_error("search_worker", error))?;
+        if !processed {
+            break;
+        }
+    }
+    Ok(())
 }
 
 fn maintenance_error(stage: &str, error: CommunicationsEventRuntimeErrorV1) -> String {

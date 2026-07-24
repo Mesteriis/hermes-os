@@ -91,13 +91,18 @@ impl LeaseManager {
         }
         let active = self
             .active
-            .get_mut(lease_id.as_str())
+            .get(lease_id.as_str())
             .ok_or(LeaseError::UnknownOrInvalidatedLease)?;
         if active.lease.single_resolve() && active.resolved {
             return Err(LeaseError::AlreadyResolved);
         }
-        active.resolved = true;
-        Ok(active.lease.clone())
+        let lease = active.lease.clone();
+        // A successful one-shot use must release its bounded slot immediately.
+        // Keeping consumed leases until their TTL turns normal request volume into
+        // a capacity denial while providing no additional replay protection: the
+        // lease has already been consumed and cannot be accepted again.
+        self.active.remove(lease_id.as_str());
+        Ok(lease)
     }
 
     pub fn invalidate_audience(&mut self, audience: &LeaseAudienceV1) {
@@ -152,4 +157,55 @@ pub enum LeaseError {
     InvalidLease,
     Capacity,
     Randomness,
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_vault_protocol::{
+        LeaseAudienceV1, SecretClassV1, VaultActionV1, VaultLeaseIssueRequestV1,
+        VaultPurposeRequestV1,
+    };
+
+    use super::{LeaseError, LeaseManager};
+
+    fn audience() -> LeaseAudienceV1 {
+        LeaseAudienceV1::new("module".to_owned(), "runtime".to_owned(), 1, 1)
+            .expect("test audience")
+    }
+
+    fn request() -> VaultLeaseIssueRequestV1 {
+        VaultLeaseIssueRequestV1::new(
+            "vault-runtime".to_owned(),
+            1,
+            1,
+            "owner".to_owned(),
+            VaultPurposeRequestV1::new(
+                "purpose".to_owned(),
+                "instance".to_owned(),
+                vec![SecretClassV1::OwnerDerivedKey],
+                vec![VaultActionV1::IssueOwnerDerivedKey],
+                60,
+            )
+            .expect("test purpose"),
+            audience(),
+        )
+        .expect("test request")
+    }
+
+    #[test]
+    fn consuming_a_one_shot_lease_releases_its_bounded_slot() {
+        let mut manager =
+            LeaseManager::new("vault-runtime".to_owned(), 1).expect("test lease manager");
+        let lease = manager.issue(request(), 1).expect("issue lease");
+
+        manager
+            .consume_once(lease.lease_id(), &audience(), 1)
+            .expect("consume lease");
+
+        assert_eq!(
+            manager.consume_once(lease.lease_id(), &audience(), 1),
+            Err(LeaseError::UnknownOrInvalidatedLease),
+        );
+        manager.issue(request(), 1).expect("reuse released slot");
+    }
 }

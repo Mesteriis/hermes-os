@@ -24,8 +24,9 @@ use hermes_communications_runtime::admission::{
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
 use hermes_kernel_control_store::{
-    ModuleBlobQuotaRequestV1, ModuleDescriptorRegistrationRequestsV1, ModuleRegistrationState,
-    ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1, PlatformStorageBindingStateV1,
+    ModuleBlobQuotaRequestV1, ModuleClientRpcContractVersionV1, ModuleClientRpcRouteV1,
+    ModuleDescriptorRegistrationRequestsV1, ModuleRegistrationState, ModuleVaultPurposePolicyV1,
+    ModuleVaultPurposeRequestV1, PlatformStorageBindingStateV1,
 };
 use hermes_runtime_protocol::v1::{
     BlobDataOperationV1, ManagedRuntimeBlobSessionRequestV1, ModuleClientResponseV1, VaultActionV1,
@@ -1438,7 +1439,11 @@ fn route_communications_query(
     let response = ModuleClientResponseV1::decode(bytes.as_slice())
         .expect("decode Communications module response");
     assert_eq!(response.request_id, request_id);
-    assert!(response.error_code.is_empty());
+    assert!(
+        response.error_code.is_empty(),
+        "Communications query {request_id} failed: {}",
+        response.error_code,
+    );
     CommunicationsQueryResponseV1::decode(response.response_payload.as_slice())
         .expect("decode Communications query response")
 }
@@ -1503,6 +1508,18 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             ModuleEventRouteDirectionV1::Consume,
         ),
     ];
+    let client_rpc_route = ModuleClientRpcRouteV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_QUERY_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        "communications.query",
+        ModuleClientRpcContractVersionV1 {
+            major: 1,
+            revision: 1,
+        },
+        hermes_communications_api::COMMUNICATIONS_QUERY_SCHEMA_SHA256,
+        "/hermes.communications.query.v1.CommunicationsQueryService/Query",
+    );
     store
         .create_pending_registration_with_all_descriptor_requests(
             &registration,
@@ -1513,7 +1530,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
                 blobs: std::slice::from_ref(&blob),
                 scheduler: &[],
                 vault_purposes: std::slice::from_ref(&vault_purpose),
-                client_rpc_routes: &[],
+                client_rpc_routes: std::slice::from_ref(&client_rpc_route),
             },
         )
         .expect("record Communications registration");

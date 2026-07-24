@@ -74,10 +74,6 @@ impl CommunicationsSearchAccessV1 {
         control_channel: &mut ManagedControlChannelV2<UnixStream>,
         dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     ) -> Result<Zeroizing<Vec<u8>>, CommunicationsSearchAccessErrorV1> {
-        control_channel
-            .inner_mut()
-            .set_nonblocking(false)
-            .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)?;
         let result = ensure_managed_owner_derived_key_v2(
             control_channel,
             dispatcher,
@@ -88,10 +84,6 @@ impl CommunicationsSearchAccessV1 {
             COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS,
         )
         .map_err(|_| CommunicationsSearchAccessErrorV1::Denied);
-        control_channel
-            .inner_mut()
-            .set_nonblocking(true)
-            .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)?;
         result
     }
 
@@ -102,10 +94,6 @@ impl CommunicationsSearchAccessV1 {
         blob: &CommunicationBodyBlobReferenceV1,
     ) -> Result<Vec<u8>, CommunicationsSearchAccessErrorV1> {
         let read_end = bounded_read_end(blob.declared_bytes)?;
-        control_channel
-            .inner_mut()
-            .set_nonblocking(false)
-            .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)?;
         let result = (|| {
             let session = request_managed_blob_session_v2(
                 control_channel,
@@ -124,10 +112,6 @@ impl CommunicationsSearchAccessV1 {
                 })
                 .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)
         })();
-        control_channel
-            .inner_mut()
-            .set_nonblocking(true)
-            .map_err(|_| CommunicationsSearchAccessErrorV1::Unavailable)?;
         result
     }
 }

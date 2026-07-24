@@ -4,7 +4,7 @@
 //! routing. Operation authorization remains with Kernel and operation meaning
 //! remains in the typed protocol messages.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{ErrorKind, Read, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -77,6 +77,8 @@ impl From<std::io::Error> for ManagedControlTransportErrorV2 {
 pub struct ManagedControlChannelV2<S> {
     stream: S,
     pending_request_ids: BTreeSet<[u8; MANAGED_CONTROL_CORRELATION_ID_BYTES]>,
+    pending_responses:
+        BTreeMap<[u8; MANAGED_CONTROL_CORRELATION_ID_BYTES], ManagedRuntimeControlResponseV1>,
     read_buffer: Vec<u8>,
 }
 
@@ -118,6 +120,7 @@ impl<S> ManagedControlChannelV2<S> {
         Self {
             stream,
             pending_request_ids: BTreeSet::new(),
+            pending_responses: BTreeMap::new(),
             read_buffer: Vec::new(),
         }
     }
@@ -270,11 +273,19 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
             return Err(error);
         }
         let result = (|| loop {
+            if let Some(response) = self.pending_responses.remove(&correlation_id) {
+                break Ok(response);
+            }
             let frame = self.read_frame()?;
             let received_id = correlation_id_from_slice(&frame.correlation_id)?;
             match frame.frame {
                 Some(Frame::Response(response)) if received_id == correlation_id => {
                     break Ok(response);
+                }
+                Some(Frame::Response(response))
+                    if self.pending_request_ids.contains(&received_id) =>
+                {
+                    self.pending_responses.insert(received_id, response);
                 }
                 Some(Frame::Response(_)) => {
                     break Err(ManagedControlTransportErrorV2::UnexpectedResponse);
@@ -284,6 +295,7 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
             }
         })();
         self.pending_request_ids.remove(&correlation_id);
+        self.pending_responses.remove(&correlation_id);
         result
     }
 
@@ -539,6 +551,48 @@ mod tests {
                 .error_code,
             "REJECTED"
         );
+    }
+
+    #[test]
+    fn buffers_an_outer_response_while_a_nested_request_is_in_flight() {
+        let (left, right) = UnixStream::pair().expect("control pair");
+        let peer = thread::spawn(move || -> Result<(), ManagedControlTransportErrorV2> {
+            let mut channel = ManagedControlChannelV2::new(right);
+            let (outer_id, _) = channel.receive_request()?;
+            channel.write_request([2; MANAGED_CONTROL_CORRELATION_ID_BYTES], ready_request())?;
+            let (nested_id, _) = channel.receive_request()?;
+            channel.write_response(outer_id, rejected_response())?;
+            channel.write_response(nested_id, rejected_response())?;
+            let frame = channel.read_frame()?;
+            assert_eq!(
+                frame.correlation_id,
+                vec![2; MANAGED_CONTROL_CORRELATION_ID_BYTES]
+            );
+            assert!(matches!(frame.frame, Some(Frame::Response(_))));
+            Ok(())
+        });
+
+        let mut channel = ManagedControlChannelV2::new(left);
+        let response = channel
+            .request(
+                [1; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+                ready_request(),
+                |channel, request_id, _| {
+                    let nested = channel.request(
+                        [3; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+                        ready_request(),
+                        |channel, nested_request_id, _| {
+                            channel.write_response(nested_request_id, rejected_response())
+                        },
+                    )?;
+                    assert_eq!(nested.error_code, "REJECTED");
+                    channel.write_response(request_id, rejected_response())
+                },
+            )
+            .expect("outer response");
+
+        assert_eq!(response.error_code, "REJECTED");
+        peer.join().expect("peer join").expect("peer response");
     }
 
     #[test]
