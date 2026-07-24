@@ -5,6 +5,7 @@ package hermes.runtime.v1;
 import "hermes/runtime/v1/vault_runtime.proto";
 import "hermes/runtime/v1/module_client.proto";
 import "hermes/runtime/v1/blob_runtime.proto";
+import "hermes/runtime/v1/recovery.proto";
 
 // One-shot inherited private control channel for a Kernel-managed runtime.
 message DescribeManagedRuntimeRequestV1 {
@@ -39,6 +40,9 @@ message ManagedRuntimeEventConsumerBindingV1 {
   uint32 ack_wait_millis = 4;
   uint32 max_deliver = 5;
   uint32 max_ack_pending = 6;
+  // Exact approved contract behind this broker binding. A runtime must select
+  // a delivery by this reference, never by a subject string it constructed.
+  ContractReferenceV1 contract = 7;
 }
 message ManagedRuntimeEventCredentialDeliveryV1 {
   bytes encapped_key = 1;

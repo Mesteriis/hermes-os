@@ -53,6 +53,8 @@ test('Communications first owner inventory is exact and owner-local implementati
     workflows: [],
     engines: [],
     businessCapabilities: [
+      'communications.attachment.blob-admission.observe.v1',
+      'communications.attachment.safety-verdict.observe.v1',
       'communications.blob.v1',
       'communications.events.v1',
       'communications.observe.v1',

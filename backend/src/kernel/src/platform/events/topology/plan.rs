@@ -8,6 +8,7 @@ use hermes_kernel_control_store::{
     ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventSubscriptionRequirementV1,
     PlatformEventHubTopologyV1,
 };
+use hermes_runtime_protocol::v1::ContractReferenceV1;
 
 use crate::platform::events::catalog::{EventCatalogContractV1, EventCatalogParticipantV1};
 
@@ -82,6 +83,7 @@ pub struct EventConsumerPlanV1 {
     subject: EventSubjectV1,
     max_in_flight: u16,
     delivery_policy: ModuleEventDeliveryPolicyV1,
+    contract: ContractReferenceV1,
 }
 
 impl EventConsumerPlanV1 {
@@ -119,6 +121,11 @@ impl EventConsumerPlanV1 {
     pub const fn delivery_policy(&self) -> ModuleEventDeliveryPolicyV1 {
         self.delivery_policy
     }
+
+    #[must_use]
+    pub fn contract(&self) -> &ContractReferenceV1 {
+        &self.contract
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,7 +160,7 @@ impl EventTopologyPlanV1 {
                 contract
                     .consumers()
                     .iter()
-                    .map(|participant| consumer(participant, &subject))
+                    .map(|participant| consumer(participant, &subject, contract))
                     .collect::<Result<Vec<_>, _>>()?,
             );
         }
@@ -222,6 +229,7 @@ fn publisher(
 fn consumer(
     participant: &EventCatalogParticipantV1,
     subject: &EventSubjectV1,
+    contract: &EventCatalogContractV1,
 ) -> Result<EventConsumerPlanV1, String> {
     let delivery_policy = participant
         .delivery_policy()
@@ -239,6 +247,13 @@ fn consumer(
         subject: subject.clone(),
         max_in_flight: participant.max_in_flight(),
         delivery_policy,
+        contract: ContractReferenceV1 {
+            owner: contract.owner().to_owned(),
+            name: contract.name().to_owned(),
+            major: contract.major(),
+            revision: contract.revision(),
+            schema_sha256: contract.schema_sha256().to_vec(),
+        },
     })
     .ok_or_else(|| "Event consumer has an invalid delivery policy".to_owned())
 }

@@ -21,9 +21,31 @@ pub mod v1 {
     ));
 }
 
+pub mod attachment_blob_v1 {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.communications.ingress.attachment.blob.v1.rs"
+    ));
+}
+
+pub mod attachment_safety_v1 {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.communications.ingress.attachment.safety.v1.rs"
+    ));
+}
+
 include!(concat!(
     env!("OUT_DIR"),
     "/communications_observation_schema.rs"
+));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/communications_attachment_blob_admission_observation_schema.rs"
+));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/communications_attachment_safety_verdict_observation_schema.rs"
 ));
 
 pub const PACKAGE: &str = "hermes-communications-ingress";

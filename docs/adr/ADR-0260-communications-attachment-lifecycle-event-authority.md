@@ -2,12 +2,13 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: В работе. Owner-local CAS и canonical outbox event для
-успешного transition реализованы; exact inbound contracts, permits и producer
-admission ещё не реализованы. ADR-0246 определил owner-local attachment state
-machine, но не зафиксировал exact producer authority и contracts для её
-terminal external facts. До реализации ни один producer не получает право
-изменять attachment safety state через generic observation или direct storage.
+Состояние реализации: В работе. Owner-local CAS/canonical outbox, оба exact
+inbound contract, отдельные consumer capability и fail-closed typed permit set
+реализованы. Реальный producer admission и live conformance ещё не выполнены.
+ADR-0246 определил owner-local attachment state machine, но не зафиксировал
+exact producer authority и contracts для её terminal external facts. До
+отдельного admission ни один producer не получает право изменять attachment
+safety state через generic observation или direct storage.
 
 Зависит от:
 
@@ -43,7 +44,8 @@ own PostgreSQL transaction, and publishes a canonical owner event through its
 existing outbox. It does not open a Blob data session, invoke a scanner, or
 import an integration or engine package while consuming either observation.
 
-The current exact first-owner inventory remains unchanged. Adding a producer
+The current exact first-owner package inventory remains unchanged; the
+Communications descriptor adds only its two consumer capabilities. Adding a producer
 requires a separate admission decision for that integration, workflow or
 engine, including its own package inventory, Event Hub publish route and live
 conformance. A producer cannot become part of the Communications domain merely

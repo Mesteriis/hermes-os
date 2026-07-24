@@ -58,6 +58,7 @@ fn binding(
         ack_wait_millis: policy.ack_wait_millis(),
         max_deliver: u32::from(policy.max_deliver()),
         max_ack_pending: u32::from(consumer.max_in_flight()),
+        contract: Some(consumer.contract().clone()),
     })
 }
 

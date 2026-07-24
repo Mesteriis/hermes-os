@@ -3,6 +3,8 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use hermes_runtime_protocol::v1::ContractReferenceV1;
+
 use crate::{subjects::DurableSubjectV1, topology::ConsumerSpecV1};
 
 /// Runtime identity fenced to one generation and grant epoch.
@@ -39,6 +41,7 @@ pub struct RuntimeSubscribePermitV1 {
     runtime_generation: u64,
     grant_epoch: u64,
     consumer: ConsumerSpecV1,
+    contract: Option<ContractReferenceV1>,
 }
 
 impl NatsPasswordCredentialV1 {
@@ -147,6 +150,7 @@ impl RuntimeSubscribePermitV1 {
                 runtime_generation,
                 grant_epoch,
                 consumer,
+                contract: None,
             })
             .ok_or_else(|| "NATS runtime subscribe permit is invalid".to_owned())
     }
@@ -154,6 +158,33 @@ impl RuntimeSubscribePermitV1 {
     #[must_use]
     pub fn consumer(&self) -> &ConsumerSpecV1 {
         &self.consumer
+    }
+
+    pub fn new_bound(
+        registration_id: impl Into<String>,
+        runtime_id: impl Into<String>,
+        runtime_generation: u64,
+        grant_epoch: u64,
+        consumer: ConsumerSpecV1,
+        contract: ContractReferenceV1,
+    ) -> Result<Self, String> {
+        (valid_contract_reference(&contract) && contract_subject_matches(&consumer, &contract))
+            .then_some(())
+            .ok_or_else(|| "NATS runtime subscription contract is invalid".to_owned())?;
+        let mut permit = Self::new(
+            registration_id,
+            runtime_id,
+            runtime_generation,
+            grant_epoch,
+            consumer,
+        )?;
+        permit.contract = Some(contract);
+        Ok(permit)
+    }
+
+    #[must_use]
+    pub fn contract(&self) -> Option<&ContractReferenceV1> {
+        self.contract.as_ref()
     }
 
     pub(super) fn permits(&self, identity: &RuntimeNatsIdentity) -> bool {
@@ -222,4 +253,79 @@ fn valid_credential_id(value: &str) -> bool {
         && value.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
         })
+}
+
+fn valid_contract_reference(value: &ContractReferenceV1) -> bool {
+    valid_credential_id(&value.owner)
+        && valid_credential_id(&value.name)
+        && value.major > 0
+        && value.revision > 0
+        && value.schema_sha256.len() == 32
+}
+
+fn contract_subject_matches(consumer: &ConsumerSpecV1, contract: &ContractReferenceV1) -> bool {
+    consumer.filter_subject()
+        == format!(
+            "hermes.{}.v1.{}.{}.v{}",
+            consumer.stream_kind().subject_token(),
+            contract.owner,
+            contract.name,
+            contract.major
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use hermes_runtime_protocol::v1::ContractReferenceV1;
+
+    use super::*;
+    use crate::topology::{ConsumerBudgetV1, StreamKindV1};
+
+    #[test]
+    fn bound_permit_rejects_a_contract_that_does_not_match_its_subject() {
+        let consumer = ConsumerSpecV1::new(
+            StreamKindV1::Observation,
+            "consumer",
+            "hermes.observation.v1.communications.communication_observed.v1",
+            ConsumerBudgetV1::new(1, 1, Duration::from_secs(1)).expect("budget"),
+        )
+        .expect("consumer");
+        let matching = ContractReferenceV1 {
+            owner: "communications".to_owned(),
+            name: "communication_observed".to_owned(),
+            major: 1,
+            revision: 1,
+            schema_sha256: vec![7; 32],
+        };
+        assert!(
+            RuntimeSubscribePermitV1::new_bound(
+                "registration",
+                "runtime",
+                1,
+                1,
+                consumer.clone(),
+                matching,
+            )
+            .is_ok()
+        );
+        assert!(
+            RuntimeSubscribePermitV1::new_bound(
+                "registration",
+                "runtime",
+                1,
+                1,
+                consumer,
+                ContractReferenceV1 {
+                    owner: "communications".to_owned(),
+                    name: "other".to_owned(),
+                    major: 1,
+                    revision: 1,
+                    schema_sha256: vec![7; 32],
+                },
+            )
+            .is_err()
+        );
+    }
 }

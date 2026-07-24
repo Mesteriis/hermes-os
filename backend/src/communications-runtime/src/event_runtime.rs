@@ -6,6 +6,11 @@ use std::{
 };
 
 use hermes_communications_domain::COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1;
+use hermes_communications_ingress::admission::{
+    communication_attachment_blob_admission_observed_contract_reference_v1,
+    communication_attachment_safety_verdict_observed_contract_reference_v1,
+    communication_observed_contract_reference_v1,
+};
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
@@ -16,6 +21,7 @@ use hermes_runtime_protocol::managed_control::{
     ManagedControlRequestDispatcherV2, ManagedControlTransportErrorV2,
     RejectManagedControlRequestsV2,
 };
+use hermes_runtime_protocol::v1::ContractReferenceV1;
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeReadyRequestV1, ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
@@ -36,6 +42,10 @@ use hermes_storage_vault::{
 use prost::Message;
 
 use crate::{
+    attachment_observation_consumer::{
+        consume_next_attachment_blob_admission_observation_v1,
+        consume_next_attachment_safety_verdict_observation_v1,
+    },
     canonical_outbox::CanonicalEventContextV1,
     consumer::{CommunicationsDeliveryErrorV1, consume_next_observation_v1},
     custody_worker::{CommunicationsCustodyWorkerErrorV1, process_next_body_custody_transfer_v1},
@@ -55,7 +65,7 @@ pub struct CommunicationsRuntimeAdmissionV1 {
 pub struct CommunicationsEventRuntimeV1 {
     control_channel: ManagedControlChannelV2<UnixStream>,
     connection: RuntimeJetStreamConnection,
-    observation_permit: RuntimeSubscribePermitV1,
+    permits: CommunicationsSubscribePermitsV1,
     domain_publish_permit: RuntimePublishPermitV1,
     persistence: CommunicationsDurablePersistence,
     search_access: CommunicationsSearchAccessV1,
@@ -67,6 +77,66 @@ pub struct CommunicationsEventRuntimeV1 {
 pub enum CommunicationsEventRuntimeErrorV1 {
     Admission,
     Unavailable,
+}
+
+struct CommunicationsSubscribePermitsV1 {
+    observation: RuntimeSubscribePermitV1,
+    attachment_blob_admission: RuntimeSubscribePermitV1,
+    attachment_safety_verdict: RuntimeSubscribePermitV1,
+}
+
+impl CommunicationsSubscribePermitsV1 {
+    fn bind(
+        permits: Vec<RuntimeSubscribePermitV1>,
+    ) -> Result<Self, CommunicationsEventRuntimeErrorV1> {
+        let observation = communication_observed_contract_reference_v1();
+        let attachment_blob_admission =
+            communication_attachment_blob_admission_observed_contract_reference_v1();
+        let attachment_safety_verdict =
+            communication_attachment_safety_verdict_observed_contract_reference_v1();
+        let mut observation_permit = None;
+        let mut attachment_blob_admission_permit = None;
+        let mut attachment_safety_verdict_permit = None;
+        for permit in permits {
+            let Some(contract) = permit.contract() else {
+                return Err(CommunicationsEventRuntimeErrorV1::Admission);
+            };
+            if exact_contract(contract, &observation) {
+                replace_once(&mut observation_permit, permit)?;
+            } else if exact_contract(contract, &attachment_blob_admission) {
+                replace_once(&mut attachment_blob_admission_permit, permit)?;
+            } else if exact_contract(contract, &attachment_safety_verdict) {
+                replace_once(&mut attachment_safety_verdict_permit, permit)?;
+            } else {
+                return Err(CommunicationsEventRuntimeErrorV1::Admission);
+            }
+        }
+        Ok(Self {
+            observation: observation_permit.ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
+            attachment_blob_admission: attachment_blob_admission_permit
+                .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
+            attachment_safety_verdict: attachment_safety_verdict_permit
+                .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
+        })
+    }
+}
+
+fn replace_once(
+    slot: &mut Option<RuntimeSubscribePermitV1>,
+    permit: RuntimeSubscribePermitV1,
+) -> Result<(), CommunicationsEventRuntimeErrorV1> {
+    slot.replace(permit)
+        .is_none()
+        .then_some(())
+        .ok_or(CommunicationsEventRuntimeErrorV1::Admission)
+}
+
+fn exact_contract(left: &ContractReferenceV1, right: &ContractReferenceV1) -> bool {
+    left.owner == right.owner
+        && left.name == right.name
+        && left.major == right.major
+        && left.revision == right.revision
+        && left.schema_sha256 == right.schema_sha256
 }
 
 struct CommunicationsNestedRequestDispatcher<'a> {
@@ -181,7 +251,7 @@ impl CommunicationsEventRuntimeV1 {
             credential_revision,
         )
         .map_err(|_| unavailable_at("event_access"))?;
-        let mut permits = access
+        let permits = access
             .subscribe_permits(
                 &admission.registration_id,
                 &admission.runtime_instance_id,
@@ -189,12 +259,7 @@ impl CommunicationsEventRuntimeV1 {
                 admission.grant_epoch,
             )
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
-        if permits.len() != 1 {
-            return Err(CommunicationsEventRuntimeErrorV1::Admission);
-        }
-        let observation_permit = permits
-            .pop()
-            .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?;
+        let permits = CommunicationsSubscribePermitsV1::bind(permits)?;
         let domain_publish_permit = access
             .publish_permit(
                 &admission.registration_id,
@@ -271,7 +336,7 @@ impl CommunicationsEventRuntimeV1 {
         Ok(Self {
             control_channel,
             connection,
-            observation_permit,
+            permits,
             domain_publish_permit,
             persistence,
             search_access,
@@ -395,14 +460,26 @@ impl CommunicationsEventRuntimeV1 {
 
     pub async fn consume_next(&mut self) -> Result<(), CommunicationsDeliveryErrorV1> {
         let canonical_event_context = self.canonical_event_context()?;
-        consume_next_observation_v1(
-            &self.persistence,
-            &self.connection,
-            &self.observation_permit,
-            &canonical_event_context,
-        )
-        .await
-        .map(|_| ())?;
+        tokio::select! {
+            result = consume_next_observation_v1(
+                &self.persistence,
+                &self.connection,
+                &self.permits.observation,
+                &canonical_event_context,
+            ) => result.map(|_| ())?,
+            result = consume_next_attachment_blob_admission_observation_v1(
+                &self.persistence,
+                &self.connection,
+                &self.permits.attachment_blob_admission,
+                &canonical_event_context,
+            ) => result.map(|_| ())?,
+            result = consume_next_attachment_safety_verdict_observation_v1(
+                &self.persistence,
+                &self.connection,
+                &self.permits.attachment_safety_verdict,
+                &canonical_event_context,
+            ) => result.map(|_| ())?,
+        }
         Ok(())
     }
 

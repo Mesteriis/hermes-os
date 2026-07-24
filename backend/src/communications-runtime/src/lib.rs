@@ -1,6 +1,7 @@
 //! Managed Communications runtime contracts.
 
 pub mod admission;
+pub mod attachment_observation_consumer;
 pub mod attachment_safety;
 pub mod canonical_outbox;
 pub mod consumer;

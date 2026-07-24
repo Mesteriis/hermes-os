@@ -58,13 +58,18 @@ impl ManagedRuntimeEventAccessV1 {
             .iter()
             .cloned()
             .map(|binding| {
+                let contract = binding
+                    .contract
+                    .clone()
+                    .ok_or(ManagedRuntimeEventAccessErrorV1::Rejected)?;
                 let consumer = consumer_spec(binding)?;
-                RuntimeSubscribePermitV1::new(
+                RuntimeSubscribePermitV1::new_bound(
                     registration_id,
                     runtime_id,
                     runtime_generation,
                     grant_epoch,
                     consumer,
+                    contract,
                 )
                 .map_err(|_| ManagedRuntimeEventAccessErrorV1::Rejected)
             })
