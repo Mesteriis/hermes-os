@@ -149,7 +149,13 @@ pub(crate) fn respond_vault_route(
     channel: &mut UnixStream,
     result: Result<VaultCiphertextResponseV1, String>,
 ) -> Result<(), String> {
-    let response = match result {
+    write_frame(channel, &vault_route_response(result).encode_to_vec())
+}
+
+pub(crate) fn vault_route_response(
+    result: Result<VaultCiphertextResponseV1, String>,
+) -> ManagedRuntimeControlResponseV1 {
+    match result {
         Ok(response) => ManagedRuntimeControlResponseV1 {
             result: Some(ControlResult::VaultRoute(
                 ManagedRuntimeVaultRouteResponseV1 {
@@ -168,15 +174,20 @@ pub(crate) fn respond_vault_route(
             )),
             error_code: "managed_vault_route_denied".to_owned(),
         },
-    };
-    write_frame(channel, &response.encode_to_vec())
+    }
 }
 
 pub(crate) fn respond_event_credential(
     channel: &mut UnixStream,
     result: Result<ManagedRuntimeEventCredentialDeliveryV1, String>,
 ) -> Result<(), String> {
-    let response = match result {
+    write_frame(channel, &event_credential_response(result).encode_to_vec())
+}
+
+pub(crate) fn event_credential_response(
+    result: Result<ManagedRuntimeEventCredentialDeliveryV1, String>,
+) -> ManagedRuntimeControlResponseV1 {
+    match result {
         Ok(delivery) => ManagedRuntimeControlResponseV1 {
             result: Some(ControlResult::EventCredentialDelivery(delivery)),
             error_code: String::new(),
@@ -185,8 +196,7 @@ pub(crate) fn respond_event_credential(
             result: None,
             error_code: "managed_event_credential_denied".to_owned(),
         },
-    };
-    write_frame(channel, &response.encode_to_vec())
+    }
 }
 
 pub(crate) fn try_receive_provider_credential(
@@ -231,7 +241,13 @@ pub(crate) fn respond_provider_credential(
     channel: &mut UnixStream,
     result: Result<ManagedRuntimeProviderCredentialDeliveryV1, String>,
 ) -> Result<(), String> {
-    let response = match result {
+    write_frame(channel, &provider_credential_response(result).encode_to_vec())
+}
+
+pub(crate) fn provider_credential_response(
+    result: Result<ManagedRuntimeProviderCredentialDeliveryV1, String>,
+) -> ManagedRuntimeControlResponseV1 {
+    match result {
         Ok(delivery) => ManagedRuntimeControlResponseV1 {
             result: Some(ControlResult::ProviderCredentialDelivery(delivery)),
             error_code: String::new(),
@@ -240,8 +256,7 @@ pub(crate) fn respond_provider_credential(
             result: None,
             error_code: "managed_provider_credential_denied".to_owned(),
         },
-    };
-    write_frame(channel, &response.encode_to_vec())
+    }
 }
 
 pub(crate) fn try_receive_owner_derived_key(
@@ -286,7 +301,13 @@ pub(crate) fn respond_owner_derived_key(
     channel: &mut UnixStream,
     result: Result<ManagedRuntimeOwnerDerivedKeyDeliveryV1, String>,
 ) -> Result<(), String> {
-    let response = match result {
+    write_frame(channel, &owner_derived_key_response(result).encode_to_vec())
+}
+
+pub(crate) fn owner_derived_key_response(
+    result: Result<ManagedRuntimeOwnerDerivedKeyDeliveryV1, String>,
+) -> ManagedRuntimeControlResponseV1 {
+    match result {
         Ok(delivery) => ManagedRuntimeControlResponseV1 {
             result: Some(ControlResult::OwnerDerivedKeyDelivery(delivery)),
             error_code: String::new(),
@@ -295,8 +316,7 @@ pub(crate) fn respond_owner_derived_key(
             result: None,
             error_code: "managed_owner_derived_key_denied".to_owned(),
         },
-    };
-    write_frame(channel, &response.encode_to_vec())
+    }
 }
 
 pub(crate) fn try_receive_blob_session(
@@ -341,7 +361,13 @@ pub(crate) fn respond_blob_session(
     channel: &mut UnixStream,
     result: Result<ManagedRuntimeBlobSessionDeliveryV1, String>,
 ) -> Result<(), String> {
-    let response = match result {
+    write_frame(channel, &blob_session_response(result).encode_to_vec())
+}
+
+pub(crate) fn blob_session_response(
+    result: Result<ManagedRuntimeBlobSessionDeliveryV1, String>,
+) -> ManagedRuntimeControlResponseV1 {
+    match result {
         Ok(delivery) => ManagedRuntimeControlResponseV1 {
             result: Some(ControlResult::BlobSessionDelivery(delivery)),
             error_code: String::new(),
@@ -350,8 +376,7 @@ pub(crate) fn respond_blob_session(
             result: None,
             error_code: blob_session_error_code(&error).to_owned(),
         },
-    };
-    write_frame(channel, &response.encode_to_vec())
+    }
 }
 
 fn blob_session_error_code(error: &str) -> &'static str {

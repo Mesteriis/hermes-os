@@ -51,6 +51,9 @@ Unknown, duplicate, expired, zero or oversized correlation IDs are terminal
 protocol failures for that managed session. Pending requests and deferred frame
 queues are bounded; timeout, runtime exit, revoke and generation change fail
 all pending requests without retrying a non-idempotent operation implicitly.
+Every accepted request receives its correlated typed response; one-way lifecycle
+signals use the explicit `ManagedRuntimeControlAckV1`, never an empty frame,
+repurposed `describe` result or implicit socket ordering.
 
 The Kernel owns the server-side pump and lifecycle fencing. The reusable
 platform runtime-control package owns frame encoding, validation and client

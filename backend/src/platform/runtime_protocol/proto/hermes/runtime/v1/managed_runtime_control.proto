@@ -119,6 +119,7 @@ message ManagedRuntimeControlRequestV1 {
     ManagedRuntimeClientDeliveryRequestV1 client_delivery = 8;
   }
 }
+message ManagedRuntimeControlAckV1 {}
 message ManagedRuntimeControlResponseV1 {
   oneof result {
     DescribeManagedRuntimeResponseV1 describe = 1;
@@ -127,6 +128,7 @@ message ManagedRuntimeControlResponseV1 {
     ManagedRuntimeVaultRouteResponseV1 vault_route = 4;
     ManagedRuntimeBlobSessionDeliveryV1 blob_session_delivery = 5;
     ManagedRuntimeOwnerDerivedKeyDeliveryV1 owner_derived_key_delivery = 6;
+    ManagedRuntimeControlAckV1 ack = 7;
     ManagedRuntimeClientDeliveryResponseV1 client_delivery = 8;
   }
   string error_code = 15;
