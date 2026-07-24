@@ -59,6 +59,24 @@ impl<S> ManagedControlChannelV2<S> {
 }
 
 impl<S: Read + Write> ManagedControlChannelV2<S> {
+    pub fn receive_request(
+        &mut self,
+    ) -> Result<
+        (
+            [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+            ManagedRuntimeControlRequestV1,
+        ),
+        ManagedControlTransportErrorV2,
+    > {
+        let frame = self.read_frame()?;
+        let correlation_id = correlation_id_from_slice(&frame.correlation_id)?;
+        match frame.frame {
+            Some(Frame::Request(request)) => Ok((correlation_id, request)),
+            Some(Frame::Response(_)) => Err(ManagedControlTransportErrorV2::UnexpectedResponse),
+            None => Err(ManagedControlTransportErrorV2::InvalidFrame),
+        }
+    }
+
     pub fn request<F>(
         &mut self,
         correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
@@ -271,5 +289,22 @@ mod tests {
             channel.begin_pending([7; MANAGED_CONTROL_CORRELATION_ID_BYTES]),
             Err(ManagedControlTransportErrorV2::DuplicateCorrelationId)
         ));
+    }
+
+    #[test]
+    fn receives_only_typed_requests_with_their_correlation_id() {
+        let (writer, reader) = UnixStream::pair().expect("control pair");
+        let writer = thread::spawn(move || {
+            let mut channel = ManagedControlChannelV2::new(writer);
+            channel
+                .write_request([9; MANAGED_CONTROL_CORRELATION_ID_BYTES], ready_request())
+                .expect("write request");
+        });
+        let mut channel = ManagedControlChannelV2::new(reader);
+        let (correlation_id, request) = channel.receive_request().expect("receive request");
+
+        assert_eq!(correlation_id, [9; MANAGED_CONTROL_CORRELATION_ID_BYTES]);
+        assert!(request.operation.is_some());
+        writer.join().expect("writer join");
     }
 }
