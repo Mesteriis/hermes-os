@@ -24,32 +24,35 @@ pub use hermes_vault_protocol::{CredentialLeaseV1 as TelegramCredentialLeaseV1, 
 
 pub const PACKAGE: &str = "hermes-telegram-core";
 
-pub const TELEGRAM_CREDENTIAL_PURPOSE_PREFIX: &str = "telegram.account";
+pub const TELEGRAM_API_HASH_PURPOSE_ID: &str = "telegram_api_hash";
+pub const TELEGRAM_SESSION_STORE_KEY_PURPOSE_ID: &str = "telegram_session_store_key";
 
 pub fn credential_lease_purpose(
-    account_id: &str,
     configuration_instance_id: &str,
     binding: &TelegramCredentialBinding,
 ) -> Result<VaultPurposeRequestV1, TelegramContractError> {
-    credential_lease_purpose_for_purpose(account_id, configuration_instance_id, binding.purpose)
+    credential_lease_purpose_for_purpose(configuration_instance_id, binding.purpose)
 }
 
 pub fn credential_lease_purpose_for_purpose(
-    account_id: &str,
     configuration_instance_id: &str,
     purpose: hermes_telegram_api::TelegramCredentialPurpose,
 ) -> Result<VaultPurposeRequestV1, TelegramContractError> {
-    let purpose_id = format!(
-        "{TELEGRAM_CREDENTIAL_PURPOSE_PREFIX}.{account_id}.{}",
-        purpose.as_str()
-    );
-    let secret_class = if purpose.is_session_store_key() {
-        SecretClassV1::SessionStoreKey
-    } else {
-        SecretClassV1::ProviderCredential
+    let (purpose_id, secret_class) = match purpose {
+        hermes_telegram_api::TelegramCredentialPurpose::ApiHash => (
+            TELEGRAM_API_HASH_PURPOSE_ID,
+            SecretClassV1::ProviderCredential,
+        ),
+        hermes_telegram_api::TelegramCredentialPurpose::SessionEncryptionKey => (
+            TELEGRAM_SESSION_STORE_KEY_PURPOSE_ID,
+            SecretClassV1::SessionStoreKey,
+        ),
+        hermes_telegram_api::TelegramCredentialPurpose::BotToken => {
+            return Err(TelegramContractError::InvalidTransition);
+        }
     };
     VaultPurposeRequestV1::new(
-        purpose_id,
+        purpose_id.to_owned(),
         configuration_instance_id.to_owned(),
         vec![secret_class],
         vec![VaultActionV1::Resolve],
@@ -59,13 +62,12 @@ pub fn credential_lease_purpose_for_purpose(
 }
 
 pub fn credential_lease_purposes(
-    account_id: &str,
     configuration_instance_id: &str,
     bindings: &[TelegramCredentialBinding],
 ) -> Result<Vec<VaultPurposeRequestV1>, TelegramContractError> {
     bindings
         .iter()
-        .map(|binding| credential_lease_purpose(account_id, configuration_instance_id, binding))
+        .map(|binding| credential_lease_purpose(configuration_instance_id, binding))
         .collect()
 }
 
@@ -807,7 +809,6 @@ mod tests {
             external_account_id: "telegram:42".to_owned(),
             credentials: vec![TelegramCredentialBinding {
                 purpose: TelegramCredentialPurpose::ApiHash,
-                secret_ref: "secret:telegram:api-hash".to_owned(),
                 revision: 1,
             }],
             qr_authorized: false,
@@ -817,8 +818,9 @@ mod tests {
     #[test]
     fn credential_purpose_is_scoped_to_provider_credential_and_resolve() {
         let binding = &account_setup().credentials[0];
-        let purpose = credential_lease_purpose("telegram-account", "cfg-1", binding)
-            .expect("valid Telegram Vault purpose");
+        let purpose =
+            credential_lease_purpose("cfg-1", binding).expect("valid Telegram Vault purpose");
+        assert_eq!(purpose.purpose_id(), TELEGRAM_API_HASH_PURPOSE_ID);
         assert_eq!(
             purpose.allowed_secret_classes(),
             &[SecretClassV1::ProviderCredential]

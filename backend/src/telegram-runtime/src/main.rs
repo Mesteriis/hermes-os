@@ -14,7 +14,7 @@ use hermes_runtime_protocol::{
     },
 };
 use hermes_telegram_api::TelegramProviderKind;
-use hermes_telegram_runtime::{TelegramRuntimeAdmission, bootstrap, process, settings};
+use hermes_telegram_runtime::{bootstrap, process, settings};
 use hermes_telegram_tdlib::TdJsonLibrary;
 use prost::Message;
 
@@ -58,7 +58,9 @@ where
     .map_err(|_| "Telegram runtime configuration is invalid".to_owned())?;
     validate_managed_integration_runtime_configuration(&configuration)
         .map_err(|_| "Telegram runtime configuration is invalid".to_owned())?;
-    if configuration.runtime_instance_id != paths.runtime_instance_id {
+    if configuration.runtime_instance_id != paths.runtime_instance_id
+        || snapshot.target_id != configuration.configuration_instance_id
+    {
         return Err("Telegram runtime configuration is stale".to_owned());
     }
     let settings = settings::decode(&snapshot)?;
@@ -69,17 +71,8 @@ where
         .storage
         .clone()
         .ok_or_else(|| "Telegram runtime configuration is invalid".to_owned())?;
-    let admission = TelegramRuntimeAdmission {
-        logical_owner_id: configuration.logical_owner_id.clone(),
-        configuration_instance_id: configuration.configuration_instance_id.clone(),
-        module_registration_id: configuration.registration_id.clone(),
-        runtime_instance_id: configuration.runtime_instance_id.clone(),
-        runtime_generation: configuration.runtime_generation,
-        grant_epoch: configuration.grant_epoch,
-        vault_runtime_generation: storage.vault_runtime_generation,
-        api_hash_revision: settings.api_hash_revision,
-        session_encryption_key_revision: settings.session_encryption_key_revision,
-    };
+    let admission =
+        bootstrap::TelegramManagedLaunchAdmissionV1::from_configuration(&configuration)?;
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|_| "Telegram runtime executor is unavailable".to_owned())?;
     let admitted = runtime

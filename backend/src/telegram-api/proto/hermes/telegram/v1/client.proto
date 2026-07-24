@@ -50,7 +50,7 @@ message ProvisionAccountRequest {
 }
 message CredentialBinding {
   string purpose = 1;
-  string secret_ref = 2;
+  reserved 2;
   uint64 revision = 3;
 }
 message RetryCommandRequest {

@@ -1,0 +1,284 @@
+//! Exact, still-unadmitted descriptor for the Telegram integration runtime.
+//!
+//! Client ports and platform dependencies stay separate capability units. This
+//! descriptor does not register Telegram in the production inventory or grant
+//! any capability.
+
+use hermes_communications_ingress::admission::communication_observed_publish_request_v1;
+use hermes_runtime_protocol::v1::{
+    BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1,
+    ClientRpcRouteV1, ContractReferenceV1, IntegrationStateRequestV1, ModuleDescriptorV1,
+    ModuleKindV1, ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
+    RuntimeArtifactRequestV1, RuntimeArtifactUseV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1,
+    StorageNamespaceRequestV1, VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1,
+    VaultTargetScopeV1, capability_request_v1::Request,
+};
+use hermes_telegram_api::client_contract::{
+    TELEGRAM_CLIENT_CONTRACT_MAJOR, TELEGRAM_CLIENT_CONTRACT_REVISION,
+    TELEGRAM_CLIENT_DESCRIPTOR_SET_V1, TELEGRAM_MODULE_ID, TELEGRAM_OWNER_ID,
+    TelegramClientContractV1,
+};
+use hermes_telegram_core::{TELEGRAM_API_HASH_PURPOSE_ID, TELEGRAM_SESSION_STORE_KEY_PURPOSE_ID};
+use sha2::{Digest, Sha256};
+
+use crate::settings::{
+    TELEGRAM_SETTINGS_SCHEMA_MAJOR_V1, TELEGRAM_SETTINGS_SCHEMA_REVISION_V1,
+    telegram_settings_schema_bytes_v1,
+};
+
+pub const TELEGRAM_BLOB_CAPABILITY_ID: &str = "telegram.blob.v1";
+pub const TELEGRAM_CREDENTIALS_CAPABILITY_ID: &str = "telegram.credentials.v1";
+pub const TELEGRAM_EVENTS_CAPABILITY_ID: &str = "telegram.events.v1";
+pub const TELEGRAM_RUNTIME_CAPABILITY_ID: &str = "telegram.runtime.v1";
+pub const TELEGRAM_STORAGE_CAPABILITY_ID: &str = "telegram.storage.v1";
+pub const TELEGRAM_TDJSON_ARTIFACT_ID: &str = "telegram.tdjson.v1";
+pub const TELEGRAM_STATE_LAYOUT_REVISION_V1: u32 = 1;
+pub const TELEGRAM_BLOB_QUOTA_BYTES: u64 = 64 * 1024 * 1024;
+pub const TELEGRAM_STORAGE_CONNECTION_BUDGET: u32 = 4;
+pub const TELEGRAM_STORAGE_STATEMENT_TIMEOUT_MILLIS: u32 = 5_000;
+pub const TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
+
+#[must_use]
+pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
+    vec![
+        telegram_client_capability_v1(TelegramClientContractV1::Authorization),
+        telegram_blob_capability_v1(),
+        telegram_client_capability_v1(TelegramClientContractV1::Command),
+        telegram_credentials_capability_v1(),
+        telegram_events_capability_v1(),
+        telegram_client_capability_v1(TelegramClientContractV1::Lifecycle),
+        telegram_client_capability_v1(TelegramClientContractV1::Query),
+        telegram_runtime_capability_v1(),
+        telegram_storage_capability_v1(),
+    ]
+}
+
+fn telegram_client_capability_v1(contract: TelegramClientContractV1) -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: contract.capability_id().to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+            contract: Some(telegram_client_contract_reference_v1(contract)),
+            client_rpc_route: Some(ClientRpcRouteV1 {
+                path: contract.connect_path().to_owned(),
+            }),
+        }],
+        ..Default::default()
+    }
+}
+
+fn telegram_client_contract_reference_v1(
+    contract: TelegramClientContractV1,
+) -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: TELEGRAM_OWNER_ID.to_owned(),
+        name: contract.contract_name().to_owned(),
+        major: TELEGRAM_CLIENT_CONTRACT_MAJOR,
+        revision: TELEGRAM_CLIENT_CONTRACT_REVISION,
+        schema_sha256: Sha256::digest(TELEGRAM_CLIENT_DESCRIPTOR_SET_V1).to_vec(),
+    }
+}
+
+fn telegram_blob_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: TELEGRAM_BLOB_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+                max_bytes: TELEGRAM_BLOB_QUOTA_BYTES,
+            })),
+        }],
+        ..Default::default()
+    }
+}
+
+fn telegram_credentials_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: TELEGRAM_CREDENTIALS_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![
+            vault_purpose_request_v1(
+                TELEGRAM_API_HASH_PURPOSE_ID,
+                VaultSecretClassV1::ProviderCredential,
+            ),
+            vault_purpose_request_v1(
+                TELEGRAM_SESSION_STORE_KEY_PURPOSE_ID,
+                VaultSecretClassV1::SessionStoreKey,
+            ),
+        ],
+        ..Default::default()
+    }
+}
+
+fn vault_purpose_request_v1(
+    purpose_id: &str,
+    secret_class: VaultSecretClassV1,
+) -> CapabilityRequestV1 {
+    CapabilityRequestV1 {
+        request: Some(Request::VaultPurpose(VaultPurposeRequestV1 {
+            purpose_id: purpose_id.to_owned(),
+            requested_lease_ttl_seconds: TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS,
+            allowed_secret_classes: vec![secret_class as i32],
+            actions: vec![VaultActionV1::Resolve as i32],
+            target_scope: VaultTargetScopeV1::ConfigurationInstance as i32,
+            key_schema_revision: 0,
+        })),
+    }
+}
+
+fn telegram_events_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: TELEGRAM_EVENTS_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![communication_observed_publish_request_v1()],
+        ..Default::default()
+    }
+}
+
+fn telegram_runtime_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: TELEGRAM_RUNTIME_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![
+            CapabilityRequestV1 {
+                request: Some(Request::RuntimeArtifact(RuntimeArtifactRequestV1 {
+                    artifact_id: TELEGRAM_TDJSON_ARTIFACT_ID.to_owned(),
+                    r#use: RuntimeArtifactUseV1::NativeDynamicLibrary as i32,
+                })),
+            },
+            CapabilityRequestV1 {
+                request: Some(Request::IntegrationState(IntegrationStateRequestV1 {
+                    state_layout_revision: TELEGRAM_STATE_LAYOUT_REVISION_V1,
+                })),
+            },
+        ],
+        ..Default::default()
+    }
+}
+
+fn telegram_storage_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: TELEGRAM_STORAGE_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::StorageNamespace(StorageNamespaceRequestV1 {
+                owner_id: TELEGRAM_OWNER_ID.to_owned(),
+                connection_budget: TELEGRAM_STORAGE_CONNECTION_BUDGET,
+                timeout_millis: TELEGRAM_STORAGE_STATEMENT_TIMEOUT_MILLIS,
+            })),
+        }],
+        ..Default::default()
+    }
+}
+
+#[must_use]
+pub fn telegram_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
+    let settings_schema = telegram_settings_schema_bytes_v1();
+    ModuleDescriptorV1 {
+        descriptor_major: 1,
+        descriptor_revision: 1,
+        module_id: TELEGRAM_MODULE_ID.to_owned(),
+        owner_id: TELEGRAM_OWNER_ID.to_owned(),
+        module_kind: ModuleKindV1::Integration as i32,
+        module_version: "1".to_owned(),
+        build_id: build_id.to_owned(),
+        runtime_protocol_range: Some(ProtocolRangeV1 {
+            minimum_major: 2,
+            maximum_major: 2,
+            minimum_revision: 1,
+        }),
+        capabilities: telegram_admission_capabilities_v1(),
+        settings_schema_ref: Some(SettingsSchemaRefV1 {
+            major: TELEGRAM_SETTINGS_SCHEMA_MAJOR_V1,
+            revision: TELEGRAM_SETTINGS_SCHEMA_REVISION_V1,
+            artifact_size_bytes: settings_schema.len() as u64,
+            sha256: Sha256::digest(&settings_schema).to_vec(),
+        }),
+        runtime_budget_request: Some(RuntimeBudgetRequestV1 {
+            max_processes: 1,
+            max_connections: TELEGRAM_STORAGE_CONNECTION_BUDGET,
+            max_memory_bytes: 512 * 1024 * 1024,
+            max_cpu_millis: 1_000,
+        }),
+        display_name: "Telegram".to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_runtime_protocol::{
+        v1::{
+            ModuleKindV1, ProvidedSurfaceKindV1, RuntimeArtifactUseV1,
+            capability_request_v1::Request,
+        },
+        validation::descriptor::validate_descriptor_v1,
+    };
+    use hermes_telegram_api::client_contract::TelegramClientContractV1;
+
+    use super::{
+        TELEGRAM_BLOB_CAPABILITY_ID, TELEGRAM_CREDENTIALS_CAPABILITY_ID,
+        TELEGRAM_EVENTS_CAPABILITY_ID, TELEGRAM_RUNTIME_CAPABILITY_ID,
+        TELEGRAM_STORAGE_CAPABILITY_ID, telegram_module_descriptor_v1,
+    };
+
+    #[test]
+    fn descriptor_is_valid_and_keeps_client_and_platform_capabilities_separate() {
+        let descriptor = telegram_module_descriptor_v1("test");
+
+        assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
+        assert_eq!(descriptor.module_kind, ModuleKindV1::Integration as i32);
+        assert_eq!(
+            descriptor
+                .capabilities
+                .iter()
+                .map(|capability| capability.capability_id.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "telegram.authorization.v1",
+                TELEGRAM_BLOB_CAPABILITY_ID,
+                "telegram.command.v1",
+                TELEGRAM_CREDENTIALS_CAPABILITY_ID,
+                TELEGRAM_EVENTS_CAPABILITY_ID,
+                "telegram.lifecycle.v1",
+                "telegram.query.v1",
+                TELEGRAM_RUNTIME_CAPABILITY_ID,
+                TELEGRAM_STORAGE_CAPABILITY_ID,
+            ]
+        );
+
+        let client_surfaces = descriptor
+            .capabilities
+            .iter()
+            .flat_map(|capability| &capability.provides)
+            .collect::<Vec<_>>();
+        assert_eq!(client_surfaces.len(), TelegramClientContractV1::ALL.len());
+        assert!(client_surfaces.iter().all(|surface| {
+            surface.kind == ProvidedSurfaceKindV1::ClientRpc as i32
+                && surface.contract.is_some()
+                && surface.client_rpc_route.is_some()
+        }));
+
+        let runtime = descriptor
+            .capabilities
+            .iter()
+            .find(|capability| capability.capability_id == TELEGRAM_RUNTIME_CAPABILITY_ID)
+            .expect("Telegram runtime capability");
+        assert!(runtime.requests.iter().any(|request| matches!(
+            request.request,
+            Some(Request::RuntimeArtifact(ref artifact))
+                if artifact.artifact_id == "telegram.tdjson.v1"
+                    && artifact.r#use == RuntimeArtifactUseV1::NativeDynamicLibrary as i32
+        )));
+        assert!(runtime.requests.iter().any(|request| matches!(
+            request.request,
+            Some(Request::IntegrationState(ref state)) if state.state_layout_revision == 1
+        )));
+    }
+}

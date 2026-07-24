@@ -1,33 +1,66 @@
 //! Telegram-owned decoding of one admitted generic settings snapshot.
 
-use hermes_runtime_protocol::v1::{SettingsSnapshotV1, setting_value_v1::Value};
+use hermes_runtime_protocol::v1::{
+    SettingApplyModeV1, SettingClientVisibilityV1, SettingDefinitionV1, SettingMutationAuthorityV1,
+    SettingTargetScopeV1, SettingValueTypeV1, SettingsSchemaV1, SettingsSnapshotV1,
+    setting_value_v1::Value,
+};
+use prost::Message;
 
 const ACCOUNT_ID: &str = "telegram.account_id";
 const API_ID: &str = "telegram.api_id";
-const API_HASH_REVISION: &str = "telegram.api_hash_revision";
-const SESSION_KEY_REVISION: &str = "telegram.session_encryption_key_revision";
+
+pub const TELEGRAM_SETTINGS_SCHEMA_MAJOR_V1: u32 = 1;
+pub const TELEGRAM_SETTINGS_SCHEMA_REVISION_V1: u32 = 1;
+
+#[must_use]
+pub fn telegram_settings_schema_v1() -> SettingsSchemaV1 {
+    SettingsSchemaV1 {
+        major: TELEGRAM_SETTINGS_SCHEMA_MAJOR_V1,
+        revision: TELEGRAM_SETTINGS_SCHEMA_REVISION_V1,
+        definitions: vec![
+            definition(ACCOUNT_ID, SettingValueTypeV1::String, "Telegram account"),
+            definition(API_ID, SettingValueTypeV1::SignedInteger, "Telegram API ID"),
+        ],
+    }
+}
+
+#[must_use]
+pub fn telegram_settings_schema_bytes_v1() -> Vec<u8> {
+    telegram_settings_schema_v1().encode_to_vec()
+}
+
+fn definition(
+    setting_id: &str,
+    value_type: SettingValueTypeV1,
+    display_name: &str,
+) -> SettingDefinitionV1 {
+    SettingDefinitionV1 {
+        setting_id: setting_id.to_owned(),
+        capability_id: String::new(),
+        value_type: value_type as i32,
+        mutation_authority: SettingMutationAuthorityV1::OperatorManaged as i32,
+        target_scope: SettingTargetScopeV1::ConfigurationInstance as i32,
+        apply_mode: SettingApplyModeV1::RestartModule as i32,
+        client_visibility: SettingClientVisibilityV1::Hidden as i32,
+        fresh_owner_proof_required: true,
+        kernel_controller_id: String::new(),
+        display_name: display_name.to_owned(),
+    }
+}
 
 pub struct TelegramRuntimeSettingsV1 {
     pub account_id: String,
     pub api_id: i64,
-    pub api_hash_revision: u64,
-    pub session_encryption_key_revision: u64,
 }
 
 pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<TelegramRuntimeSettingsV1, String> {
     let account_id = required_string(snapshot, ACCOUNT_ID)?;
     let api_id = required_signed(snapshot, API_ID)?;
-    let api_hash_revision = required_unsigned(snapshot, API_HASH_REVISION)?;
-    let session_encryption_key_revision = required_unsigned(snapshot, SESSION_KEY_REVISION)?;
-    if api_id <= 0 || api_hash_revision == 0 || session_encryption_key_revision == 0 {
+    if api_id <= 0 {
         return Err(invalid_settings());
     }
-    Ok(TelegramRuntimeSettingsV1 {
-        account_id,
-        api_id,
-        api_hash_revision,
-        session_encryption_key_revision,
-    })
+    Ok(TelegramRuntimeSettingsV1 { account_id, api_id })
 }
 
 fn required_string(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<String, String> {
@@ -40,13 +73,6 @@ fn required_string(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<St
 fn required_signed(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<i64, String> {
     match value(snapshot, setting_id)? {
         Value::SignedIntegerValue(value) => Ok(*value),
-        _ => Err(invalid_settings()),
-    }
-}
-
-fn required_unsigned(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<u64, String> {
-    match value(snapshot, setting_id)? {
-        Value::UnsignedIntegerValue(value) => Ok(*value),
         _ => Err(invalid_settings()),
     }
 }
@@ -66,4 +92,55 @@ fn value<'a>(snapshot: &'a SettingsSnapshotV1, setting_id: &str) -> Result<&'a V
 
 fn invalid_settings() -> String {
     "Telegram runtime settings are invalid".to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_runtime_protocol::{
+        v1::{SettingValueV1, SettingsSnapshotV1, SettingsValueEntryV1, setting_value_v1::Value},
+        validation::descriptor::validate_settings_schema_v1,
+    };
+
+    use super::{decode, telegram_settings_schema_v1};
+
+    #[test]
+    fn canonical_schema_contains_only_non_secret_operator_configuration() {
+        let schema = telegram_settings_schema_v1();
+
+        assert_eq!(validate_settings_schema_v1(&schema), Ok(()));
+        assert_eq!(
+            schema
+                .definitions
+                .iter()
+                .map(|definition| definition.setting_id.as_str())
+                .collect::<Vec<_>>(),
+            ["telegram.account_id", "telegram.api_id"]
+        );
+    }
+
+    #[test]
+    fn decoder_requires_no_path_or_secret_revision_setting() {
+        let settings = decode(&SettingsSnapshotV1 {
+            target_id: "telegram-account-1".to_owned(),
+            revision: 1,
+            values: vec![
+                entry(
+                    "telegram.account_id",
+                    Value::StringValue("account-1".to_owned()),
+                ),
+                entry("telegram.api_id", Value::SignedIntegerValue(42)),
+            ],
+        })
+        .expect("decode canonical Telegram settings");
+
+        assert_eq!(settings.account_id, "account-1");
+        assert_eq!(settings.api_id, 42);
+    }
+
+    fn entry(setting_id: &str, value: Value) -> SettingsValueEntryV1 {
+        SettingsValueEntryV1 {
+            setting_id: setting_id.to_owned(),
+            value: Some(SettingValueV1 { value: Some(value) }),
+        }
+    }
 }

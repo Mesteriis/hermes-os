@@ -2414,7 +2414,6 @@ pub fn encode_lifecycle_request(request: &TelegramLifecycleRequest) -> Vec<u8> {
                     .iter()
                     .map(|binding| wire::CredentialBinding {
                         purpose: binding.purpose.as_str().to_owned(),
-                        secret_ref: binding.secret_ref.clone(),
                         revision: binding.revision,
                     })
                     .collect(),
@@ -2507,7 +2506,6 @@ pub fn decode_lifecycle_request(
                     };
                     Ok(TelegramCredentialBinding {
                         purpose,
-                        secret_ref: binding.secret_ref,
                         revision: binding.revision,
                     })
                 })

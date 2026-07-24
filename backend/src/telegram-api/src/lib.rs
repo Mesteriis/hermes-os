@@ -49,7 +49,6 @@ impl TelegramCredentialPurpose {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TelegramCredentialBinding {
     pub purpose: TelegramCredentialPurpose,
-    pub secret_ref: String,
     pub revision: u64,
 }
 
@@ -1819,7 +1818,6 @@ pub fn validate_setup(setup: &TelegramAccountSetup) -> Result<(), TelegramContra
     }
     let mut has_provider_credential = false;
     for binding in &setup.credentials {
-        validate_id(&binding.secret_ref)?;
         if binding.revision == 0 {
             return Err(TelegramContractError::InvalidTransition);
         }

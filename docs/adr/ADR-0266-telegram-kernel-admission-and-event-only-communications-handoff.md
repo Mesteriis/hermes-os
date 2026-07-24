@@ -5,9 +5,10 @@
 Состояние реализации: Phase gate; `telegram_integration_v1` не открыт.
 Owner-neutral ClientRpc admission ADR-0256, Telegram generated Protobuf,
 integration-owned runtime client port и integration-owned Communications
-outbox уже существуют. Exact Telegram `ModuleDescriptorV1`, разделённые
-client capabilities, signed managed admission и live end-to-end conformance
-ещё не реализованы.
+outbox уже существуют. Exact Telegram `ModuleDescriptorV1`, четыре
+route-specific client capabilities, отдельные platform capability units и
+canonical non-secret settings schema реализованы. Signed managed admission и
+live end-to-end conformance ещё не реализованы.
 
 Уточняет:
 
@@ -132,9 +133,9 @@ approved owner-declared ClientRpc route
 hermes-telegram-runtime
 ```
 
-Telegram descriptor объявляет четыре независимые capabilities. Каждая
-capability предоставляет ровно один exact ClientRpc route и один exact
-contract reference:
+Telegram descriptor объявляет четыре независимые client capabilities. Каждая
+из них предоставляет ровно один exact ClientRpc route и один exact contract
+reference:
 
 | Capability | Contract name | Connect path |
 |---|---|---|
@@ -146,6 +147,13 @@ contract reference:
 Все четыре contracts имеют `major = 1`, `revision = 1` и exact SHA-256
 generated descriptor set. Совпадение schema digest не объединяет contracts:
 их stable names, routes, semantics и grants различны.
+
+Platform dependencies не прячутся в этих client grants. Descriptor отдельно
+объявляет `telegram.blob.v1`, `telegram.credentials.v1`,
+`telegram.events.v1`, `telegram.runtime.v1` и `telegram.storage.v1`.
+`telegram.runtime.v1` содержит exact `telegram.tdjson.v1` artifact request и
+state-layout revision; это отдельная assembly/readiness unit, а не пятая
+provider operation.
 
 Kernel выбирает route по approved descriptor metadata и передаёт opaque
 payload вместе с exact contract reference. Telegram runtime проверяет

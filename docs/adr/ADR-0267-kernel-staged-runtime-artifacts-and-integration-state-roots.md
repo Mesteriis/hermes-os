@@ -8,10 +8,11 @@ descriptor/effective grants/signed manifest, launch-scoped staging native
 dependencies и owner-private integration state root. Telegram runtime больше
 не принимает artifact/database paths через settings: он проверяет exact staged
 binding и создаёт provider-owned TDLib layout только внутри state root.
-Canonical Telegram schema/credential migration и native-loader conformance ещё
-не реализованы. Решение является обязательным prerequisite для
-`telegram_integration_v1`, но само не открывает этот gate и не расширяет
-production inventory.
+Canonical Telegram schema содержит только non-secret account/API identity, а
+credential revision выбирается из Telegram-owned operational binding, не из
+settings. Native-loader conformance ещё не реализован. Решение является
+обязательным prerequisite для `telegram_integration_v1`, но само не открывает
+этот gate и не расширяет production inventory.
 
 Уточняет:
 
@@ -199,6 +200,7 @@ Canonical Telegram settings schema не содержит:
 ```text
 telegram.tdjson_artifact_path
 telegram.database_directory
+telegram.api_hash_revision
 telegram.session_encryption_key_revision
 ```
 
@@ -206,6 +208,11 @@ TDJson runtime artifact берётся только из exact staged artifact b
 TDLib database root берётся только из exact integration state-root binding.
 Session-store key выбирается через exact Vault purpose и current
 configuration-instance target, а не через secret revision setting.
+Active purpose/revision хранится как Telegram-owned non-secret operational
+binding в owner-local PostgreSQL и создаётся/заменяется только explicit
+provider setup/rotation flow. Binding не содержит Vault record ID или
+`secret_ref`. Kernel авторизует статические descriptor purposes, но не хранит
+provider credential binding; Vault lease после выбора связан с exact revision.
 
 Оставшиеся Telegram settings могут описывать только настоящую operator
 configuration, например opaque configuration instance/account selection и

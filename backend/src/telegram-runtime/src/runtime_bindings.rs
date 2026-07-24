@@ -4,11 +4,12 @@ use std::path::{Path, PathBuf};
 
 use hermes_runtime_protocol::v1::{ManagedIntegrationRuntimeConfigurationV1, RuntimeArtifactUseV1};
 use hermes_secure_file::{SecureReadPolicy, read};
+use hermes_telegram_runtime::admission::{
+    TELEGRAM_STATE_LAYOUT_REVISION_V1, TELEGRAM_TDJSON_ARTIFACT_ID,
+};
 use sha2::{Digest, Sha256};
 
-const TDJSON_ARTIFACT_ID_V1: &str = "telegram.tdjson.v1";
 const TDLIB_STATE_DIRECTORY_V1: &str = "tdlib-v1";
-const TDLIB_STATE_LAYOUT_REVISION_V1: u32 = 1;
 const MAX_TDJSON_ARTIFACT_BYTES: u64 = 512 * 1024 * 1024;
 
 pub(crate) struct TelegramRuntimeBindingsV1 {
@@ -35,7 +36,12 @@ pub(crate) fn resolve(
 ) -> Result<TelegramRuntimeBindingsV1, String> {
     let artifact = configuration
         .runtime_artifacts
-        .binary_search_by(|candidate| candidate.artifact_id.as_str().cmp(TDJSON_ARTIFACT_ID_V1))
+        .binary_search_by(|candidate| {
+            candidate
+                .artifact_id
+                .as_str()
+                .cmp(TELEGRAM_TDJSON_ARTIFACT_ID)
+        })
         .ok()
         .map(|index| &configuration.runtime_artifacts[index])
         .ok_or_else(invalid_bindings)?;
@@ -65,7 +71,7 @@ pub(crate) fn resolve(
         .as_ref()
         .filter(|root| {
             root.state_generation != 0
-                && root.state_layout_revision == TDLIB_STATE_LAYOUT_REVISION_V1
+                && root.state_layout_revision == TELEGRAM_STATE_LAYOUT_REVISION_V1
         })
         .ok_or_else(invalid_bindings)?;
     let database_directory = prepare_database_directory(Path::new(&state_root.root_path))?;

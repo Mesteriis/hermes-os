@@ -11,13 +11,20 @@ use hermes_managed_vault_client::{
     ManagedProviderCredentialClientV1, ManagedProviderCredentialContextV1,
     ManagedProviderCredentialErrorV1,
 };
-use hermes_runtime_protocol::v1::ManagedStorageRuntimeConfigurationV1;
+use hermes_runtime_protocol::{
+    v1::{ManagedIntegrationRuntimeConfigurationV1, ManagedStorageRuntimeConfigurationV1},
+    validation::managed_integration_runtime::validate_managed_integration_runtime_configuration,
+};
 use hermes_storage_protocol::{
     StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1, StorageBindingV1,
     StorageEffectiveBudgetsV1,
 };
 use hermes_storage_vault::StorageVaultRouteContextV1;
-use hermes_telegram_api::{TelegramAccountSetup, TelegramCredentialPurpose, TelegramProviderKind};
+use hermes_telegram_api::client_contract::TELEGRAM_OWNER_ID;
+use hermes_telegram_api::{
+    TelegramAccountSetup, TelegramCredentialBinding, TelegramCredentialPurpose,
+    TelegramProviderKind,
+};
 use hermes_telegram_core::credential_lease_purpose_for_purpose;
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{TdJsonLibrary, TdlibAuthorizationParameters, TdlibError};
@@ -41,6 +48,42 @@ pub enum TelegramBootstrapError {
     UnsupportedProvider,
     MissingApiHash,
     EventHub,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TelegramManagedLaunchAdmissionV1 {
+    logical_owner_id: String,
+    configuration_instance_id: String,
+    module_registration_id: String,
+    runtime_instance_id: String,
+    runtime_generation: u64,
+    grant_epoch: u64,
+    vault_runtime_generation: u64,
+}
+
+impl TelegramManagedLaunchAdmissionV1 {
+    pub fn from_configuration(
+        configuration: &ManagedIntegrationRuntimeConfigurationV1,
+    ) -> Result<Self, String> {
+        validate_managed_integration_runtime_configuration(configuration)
+            .map_err(|_| "Telegram runtime configuration is invalid".to_owned())?;
+        if configuration.logical_owner_id != TELEGRAM_OWNER_ID {
+            return Err("Telegram runtime configuration is invalid".to_owned());
+        }
+        let storage = configuration
+            .storage
+            .as_ref()
+            .ok_or_else(|| "Telegram runtime configuration is invalid".to_owned())?;
+        Ok(Self {
+            logical_owner_id: configuration.logical_owner_id.clone(),
+            configuration_instance_id: configuration.configuration_instance_id.clone(),
+            module_registration_id: configuration.registration_id.clone(),
+            runtime_instance_id: configuration.runtime_instance_id.clone(),
+            runtime_generation: configuration.runtime_generation,
+            grant_epoch: configuration.grant_epoch,
+            vault_runtime_generation: storage.vault_runtime_generation,
+        })
+    }
 }
 
 pub struct TelegramAdmittedRuntime {
@@ -73,7 +116,7 @@ pub async fn open_admitted_runtime(
     account_id: &str,
     provider_kind: TelegramProviderKind,
     database_directory: PathBuf,
-    admission: &TelegramRuntimeAdmission,
+    launch_admission: &TelegramManagedLaunchAdmissionV1,
     storage_configuration: ManagedStorageRuntimeConfigurationV1,
     event_hub_endpoint: &str,
     event_credential_revision: u64,
@@ -81,7 +124,7 @@ pub async fn open_admitted_runtime(
     if provider_kind != TelegramProviderKind::User {
         return Err(TelegramBootstrapError::UnsupportedProvider);
     }
-    if admission.runtime_instance_id != runtime_instance_id
+    if launch_admission.runtime_instance_id != runtime_instance_id
         || event_hub_endpoint.trim().is_empty()
         || event_credential_revision == 0
     {
@@ -93,55 +136,13 @@ pub async fn open_admitted_runtime(
         runtime_instance_id,
     )
     .map_err(TelegramBootstrapError::ManagedRuntime)?;
-    if identity.registration_id() != admission.module_registration_id
-        || identity.runtime_generation() != admission.runtime_generation
-        || identity.grant_epoch() != admission.grant_epoch
+    if identity.registration_id() != launch_admission.module_registration_id
+        || identity.runtime_generation() != launch_admission.runtime_generation
+        || identity.grant_epoch() != launch_admission.grant_epoch
     {
         return Err(TelegramBootstrapError::AdmissionMismatch);
     }
 
-    let provider_context = provider_credential_context(admission, &storage_configuration)?;
-    let mut provider_credentials =
-        ManagedProviderCredentialClientV1::new(control_channel.try_clone().map_err(|_| {
-            TelegramBootstrapError::CredentialRoute(TelegramCredentialRouteError::Unavailable)
-        })?);
-    if admission.api_hash_revision == 0 || admission.session_encryption_key_revision == 0 {
-        return Err(TelegramBootstrapError::AdmissionMismatch);
-    }
-    let api_hash_purpose = credential_lease_purpose_for_purpose(
-        account_id,
-        &admission.configuration_instance_id,
-        TelegramCredentialPurpose::ApiHash,
-    )
-    .map_err(|_| TelegramBootstrapError::AdmissionMismatch)?;
-    let api_hash = provider_credentials
-        .resolve(
-            &provider_context,
-            &admission.configuration_instance_id,
-            api_hash_purpose.purpose_id(),
-            admission.api_hash_revision,
-            DEFAULT_LEASE_TTL_SECONDS,
-            SecretClassV1::ProviderCredential,
-        )
-        .map_err(map_provider_credential_error)?;
-    let session_purpose = credential_lease_purpose_for_purpose(
-        account_id,
-        &admission.configuration_instance_id,
-        TelegramCredentialPurpose::SessionEncryptionKey,
-    )
-    .map_err(|_| TelegramBootstrapError::AdmissionMismatch)?;
-    let session_encryption_key = Some(
-        provider_credentials
-            .resolve(
-                &provider_context,
-                &admission.configuration_instance_id,
-                session_purpose.purpose_id(),
-                admission.session_encryption_key_revision,
-                DEFAULT_LEASE_TTL_SECONDS,
-                SecretClassV1::SessionStoreKey,
-            )
-            .map_err(map_provider_credential_error)?,
-    );
     let storage_binding = storage_binding_from_configuration(&storage_configuration, &identity)?;
     let storage_vault_public_key: [u8; 32] = storage_configuration
         .vault_hpke_public_key_x25519
@@ -181,6 +182,64 @@ pub async fn open_admitted_runtime(
         .initialize()
         .await
         .map_err(TelegramBootstrapError::Persistence)?;
+    let (persisted_account, credential_bindings) = durable
+        .account(account_id)
+        .await
+        .map_err(TelegramBootstrapError::Persistence)?
+        .filter(|(account, _)| {
+            account.account_id == account_id && account.provider_kind == provider_kind
+        })
+        .ok_or(TelegramBootstrapError::AdmissionMismatch)?;
+    let (api_hash_revision, session_encryption_key_revision) =
+        credential_revisions(&credential_bindings)?;
+    let admission = TelegramRuntimeAdmission {
+        logical_owner_id: launch_admission.logical_owner_id.clone(),
+        configuration_instance_id: launch_admission.configuration_instance_id.clone(),
+        module_registration_id: launch_admission.module_registration_id.clone(),
+        runtime_instance_id: launch_admission.runtime_instance_id.clone(),
+        runtime_generation: launch_admission.runtime_generation,
+        grant_epoch: launch_admission.grant_epoch,
+        vault_runtime_generation: launch_admission.vault_runtime_generation,
+        api_hash_revision,
+        session_encryption_key_revision,
+    };
+    let provider_context = provider_credential_context(launch_admission, &storage_configuration)?;
+    let mut provider_credentials =
+        ManagedProviderCredentialClientV1::new(control_channel.try_clone().map_err(|_| {
+            TelegramBootstrapError::CredentialRoute(TelegramCredentialRouteError::Unavailable)
+        })?);
+    let api_hash_purpose = credential_lease_purpose_for_purpose(
+        &admission.configuration_instance_id,
+        TelegramCredentialPurpose::ApiHash,
+    )
+    .map_err(|_| TelegramBootstrapError::AdmissionMismatch)?;
+    let api_hash = provider_credentials
+        .resolve(
+            &provider_context,
+            &admission.configuration_instance_id,
+            api_hash_purpose.purpose_id(),
+            admission.api_hash_revision,
+            DEFAULT_LEASE_TTL_SECONDS,
+            SecretClassV1::ProviderCredential,
+        )
+        .map_err(map_provider_credential_error)?;
+    let session_purpose = credential_lease_purpose_for_purpose(
+        &admission.configuration_instance_id,
+        TelegramCredentialPurpose::SessionEncryptionKey,
+    )
+    .map_err(|_| TelegramBootstrapError::AdmissionMismatch)?;
+    let session_encryption_key = Some(
+        provider_credentials
+            .resolve(
+                &provider_context,
+                &admission.configuration_instance_id,
+                session_purpose.purpose_id(),
+                admission.session_encryption_key_revision,
+                DEFAULT_LEASE_TTL_SECONDS,
+                SecretClassV1::SessionStoreKey,
+            )
+            .map_err(map_provider_credential_error)?,
+    );
     let event_access = request_managed_runtime_event_access(
         &mut control_channel,
         &admission.logical_owner_id,
@@ -222,9 +281,9 @@ pub async fn open_admitted_runtime(
     let account_setup = TelegramAccountSetup {
         account_id: account_id.to_owned(),
         provider_kind,
-        display_name: account_id.to_owned(),
-        external_account_id: account_id.to_owned(),
-        credentials: Vec::new(),
+        display_name: persisted_account.display_name,
+        external_account_id: persisted_account.external_account_id,
+        credentials: credential_bindings,
         qr_authorized: true,
     };
     let mut composition =
@@ -247,8 +306,89 @@ pub async fn open_admitted_runtime(
     })
 }
 
+fn credential_revisions(
+    bindings: &[TelegramCredentialBinding],
+) -> Result<(u64, u64), TelegramBootstrapError> {
+    let mut api_hash_revision = None;
+    let mut session_encryption_key_revision = None;
+    for binding in bindings {
+        if binding.revision == 0 {
+            return Err(TelegramBootstrapError::AdmissionMismatch);
+        }
+        let selected = match binding.purpose {
+            TelegramCredentialPurpose::ApiHash => &mut api_hash_revision,
+            TelegramCredentialPurpose::SessionEncryptionKey => &mut session_encryption_key_revision,
+            TelegramCredentialPurpose::BotToken => {
+                return Err(TelegramBootstrapError::AdmissionMismatch);
+            }
+        };
+        if selected.replace(binding.revision).is_some() {
+            return Err(TelegramBootstrapError::AdmissionMismatch);
+        }
+    }
+    match (api_hash_revision, session_encryption_key_revision) {
+        (Some(api_hash_revision), Some(session_encryption_key_revision)) if bindings.len() == 2 => {
+            Ok((api_hash_revision, session_encryption_key_revision))
+        }
+        _ => Err(TelegramBootstrapError::AdmissionMismatch),
+    }
+}
+
+#[cfg(test)]
+mod credential_binding_tests {
+    use hermes_telegram_api::{TelegramCredentialBinding, TelegramCredentialPurpose};
+
+    use super::credential_revisions;
+
+    #[test]
+    fn selects_one_exact_revision_for_each_admitted_user_purpose() {
+        let revisions = credential_revisions(&[
+            TelegramCredentialBinding {
+                purpose: TelegramCredentialPurpose::ApiHash,
+                revision: 7,
+            },
+            TelegramCredentialBinding {
+                purpose: TelegramCredentialPurpose::SessionEncryptionKey,
+                revision: 9,
+            },
+        ])
+        .expect("select exact credential revisions");
+        assert_eq!(revisions, (7, 9));
+    }
+
+    #[test]
+    fn rejects_duplicate_or_bot_credential_bindings() {
+        assert!(
+            credential_revisions(&[
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::ApiHash,
+                    revision: 1,
+                },
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::ApiHash,
+                    revision: 2,
+                },
+            ])
+            .is_err()
+        );
+        assert!(
+            credential_revisions(&[
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::ApiHash,
+                    revision: 1,
+                },
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::BotToken,
+                    revision: 1,
+                },
+            ])
+            .is_err()
+        );
+    }
+}
+
 fn provider_credential_context(
-    admission: &TelegramRuntimeAdmission,
+    admission: &TelegramManagedLaunchAdmissionV1,
     configuration: &ManagedStorageRuntimeConfigurationV1,
 ) -> Result<ManagedProviderCredentialContextV1, TelegramBootstrapError> {
     let vault_public_key_x25519 = configuration

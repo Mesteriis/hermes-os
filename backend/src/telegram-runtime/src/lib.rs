@@ -2,6 +2,7 @@
 
 #![allow(clippy::collapsible_if)]
 
+pub mod admission;
 pub mod bootstrap;
 pub mod client_port;
 pub mod client_transport;
@@ -576,7 +577,6 @@ mod tests {
                 external_account_id: "telegram:1".to_owned(),
                 credentials: vec![hermes_telegram_api::TelegramCredentialBinding {
                     purpose: TelegramCredentialPurpose::ApiHash,
-                    secret_ref: "secret:api-hash".to_owned(),
                     revision: 1,
                 }],
                 qr_authorized: false,
@@ -1212,7 +1212,7 @@ where
             .persistence
             .credentials(account_id)
             .ok_or(TelegramContractError::AccountUnknown)?;
-        credential_lease_purposes(account_id, configuration_instance_id, bindings)
+        credential_lease_purposes(configuration_instance_id, bindings)
     }
 
     pub fn execute(
