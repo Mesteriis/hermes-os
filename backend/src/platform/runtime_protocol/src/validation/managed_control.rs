@@ -1,8 +1,6 @@
 //! Structural validation for the correlated private managed-control transport.
 
-use crate::v1::{
-    ManagedRuntimeControlFrameV2, managed_runtime_control_frame_v2::Frame,
-};
+use crate::v1::{ManagedRuntimeControlFrameV2, managed_runtime_control_frame_v2::Frame};
 
 pub const MANAGED_CONTROL_TRANSPORT_MAJOR_V2: u32 = 2;
 pub const MANAGED_CONTROL_CORRELATION_ID_BYTES: usize = 16;

@@ -9,8 +9,8 @@ use std::io::{Read, Write};
 use prost::Message;
 
 use crate::v1::{
-    ManagedRuntimeControlFrameV2, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, managed_runtime_control_frame_v2::Frame,
+    ManagedRuntimeControlFrameV2, ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
+    managed_runtime_control_frame_v2::Frame,
 };
 use crate::validation::managed_control::{
     MANAGED_CONTROL_CORRELATION_ID_BYTES, MANAGED_CONTROL_TRANSPORT_MAJOR_V2,
@@ -105,7 +105,9 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
         })
     }
 
-    pub fn read_frame(&mut self) -> Result<ManagedRuntimeControlFrameV2, ManagedControlTransportErrorV2> {
+    pub fn read_frame(
+        &mut self,
+    ) -> Result<ManagedRuntimeControlFrameV2, ManagedControlTransportErrorV2> {
         let bytes = read_length_delimited(&mut self.stream)?;
         let frame = ManagedRuntimeControlFrameV2::decode(bytes.as_slice())
             .map_err(|_| ManagedControlTransportErrorV2::InvalidFrame)?;
@@ -137,14 +139,17 @@ fn correlation_id_from_slice(
         .map_err(|_| ManagedControlTransportErrorV2::InvalidCorrelationId)
 }
 
-fn read_length_delimited(stream: &mut impl Read) -> Result<Vec<u8>, ManagedControlTransportErrorV2> {
+fn read_length_delimited(
+    stream: &mut impl Read,
+) -> Result<Vec<u8>, ManagedControlTransportErrorV2> {
     let mut length = 0_u64;
     for shift in (0..35).step_by(7) {
         let mut byte = [0_u8; 1];
         stream.read_exact(&mut byte)?;
         length |= u64::from(byte[0] & 0x7f) << shift;
         if byte[0] & 0x80 == 0 {
-            let length = usize::try_from(length).map_err(|_| ManagedControlTransportErrorV2::FrameTooLarge)?;
+            let length = usize::try_from(length)
+                .map_err(|_| ManagedControlTransportErrorV2::FrameTooLarge)?;
             if length == 0 {
                 return Err(ManagedControlTransportErrorV2::PeerClosed);
             }
@@ -163,7 +168,8 @@ fn write_length_delimited(
     stream: &mut impl Write,
     bytes: &[u8],
 ) -> Result<(), ManagedControlTransportErrorV2> {
-    let mut length = u32::try_from(bytes.len()).map_err(|_| ManagedControlTransportErrorV2::FrameTooLarge)?;
+    let mut length =
+        u32::try_from(bytes.len()).map_err(|_| ManagedControlTransportErrorV2::FrameTooLarge)?;
     while length >= 0x80 {
         stream.write_all(&[(length as u8 & 0x7f) | 0x80])?;
         length >>= 7;
@@ -203,19 +209,29 @@ mod tests {
         let (left, right) = UnixStream::pair().expect("control pair");
         let peer = thread::spawn(move || {
             let mut channel = ManagedControlChannelV2::new(right);
-            channel.request([2; MANAGED_CONTROL_CORRELATION_ID_BYTES], ready_request(), |channel, id, _| {
-                channel.write_response(id, rejected_response())
-            })
+            channel.request(
+                [2; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+                ready_request(),
+                |channel, id, _| channel.write_response(id, rejected_response()),
+            )
         });
 
         let mut channel = ManagedControlChannelV2::new(left);
         let response = channel
-            .request([1; MANAGED_CONTROL_CORRELATION_ID_BYTES], ready_request(), |channel, id, _| {
-                channel.write_response(id, rejected_response())
-            })
+            .request(
+                [1; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+                ready_request(),
+                |channel, id, _| channel.write_response(id, rejected_response()),
+            )
             .expect("correlated response");
 
         assert_eq!(response.error_code, "REJECTED");
-        assert_eq!(peer.join().expect("peer join").expect("peer response").error_code, "REJECTED");
+        assert_eq!(
+            peer.join()
+                .expect("peer join")
+                .expect("peer response")
+                .error_code,
+            "REJECTED"
+        );
     }
 }

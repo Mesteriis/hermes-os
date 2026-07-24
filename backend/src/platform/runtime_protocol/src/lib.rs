@@ -1,7 +1,7 @@
 //! Runtime lifecycle and recovery Protobuf contract.
 
-pub mod validation;
 pub mod managed_control;
+pub mod validation;
 
 #[allow(clippy::large_enum_variant)]
 pub mod v1 {
