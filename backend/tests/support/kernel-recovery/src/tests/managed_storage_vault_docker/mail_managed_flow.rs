@@ -89,6 +89,7 @@ fn managed_mail_runtime_uses_kernel_leases_and_route_specific_admission() {
         &root.join("runtime"),
         admitted_mail,
     );
+    assert_mail_event_only_communications_handoff(&store, &supervisor, &mail);
     assert_ungranted_delivery_is_rejected(&store, &supervisor, &mail);
     assert_stale_sync_generation_is_rejected(&store, &supervisor, &mail);
     let (owner_runtime_dir, owner_control) =

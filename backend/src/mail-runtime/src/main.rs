@@ -6,7 +6,10 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use hermes_mail_runtime::{MailRuntimeAdmission, managed, settings};
+use hermes_mail_runtime::{
+    MailRuntimeAdmission, communications_outbox::MailCommunicationsOutboxRelayError, managed,
+    settings,
+};
 use hermes_runtime_protocol::{
     v1::ManagedIntegrationRuntimeConfigurationV1,
     validation::{
@@ -89,7 +92,10 @@ where
             &configuration.event_hub_endpoint,
             configuration.event_credential_revision,
         ))
-        .map_err(|_| "Mail runtime admission was rejected".to_owned())?;
+        .map_err(|error| {
+            developer_diagnostic(&format!("developer_mail_admission_error={error:?}"));
+            "Mail runtime admission was rejected".to_owned()
+        })?;
     loop {
         runtime
             .block_on(admitted.try_handle_client_delivery())
@@ -101,11 +107,27 @@ where
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
         runtime
             .block_on(admitted.try_consume_attachment_anchor_handoff(now))
-            .map_err(|_| "Mail runtime attachment-anchor handoff failed".to_owned())?;
-        runtime
-            .block_on(admitted.relay_communications_outbox(now))
-            .map_err(|_| "Mail runtime outbox relay failed".to_owned())?;
+            .map_err(|_| {
+                developer_diagnostic("developer_mail_attachment_anchor_handoff_failed");
+                "Mail runtime attachment-anchor handoff failed".to_owned()
+            })?;
+        match runtime.block_on(admitted.relay_communications_outbox(now)) {
+            Ok(_) => {}
+            Err(MailCommunicationsOutboxRelayError::Unavailable) => {
+                developer_diagnostic("developer_mail_outbox_relay_unavailable");
+            }
+            Err(MailCommunicationsOutboxRelayError::Persistence(_)) => {
+                developer_diagnostic("developer_mail_outbox_persistence_failed");
+                return Err("Mail runtime outbox persistence failed".to_owned());
+            }
+        }
         std::thread::sleep(Duration::from_secs(1));
+    }
+}
+
+fn developer_diagnostic(message: &str) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("{message}");
     }
 }
 

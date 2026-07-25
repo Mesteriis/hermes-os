@@ -1,12 +1,12 @@
 //! Kernel-admitted Mail runtime bootstrap. No CLI, provider, or domain fallback exists here.
 
-use std::io::{Read, Write};
-use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hermes_blob_client::{BlobDataClient, request_managed_blob_session};
+use hermes_blob_client::{
+    BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
+};
 use hermes_communications_ingress::{
     AttachmentBlobAdmissionFactV1, AttachmentBlobAdmissionTransitionV1,
     AttachmentBlobExpectedStateV1, ObservationEnvelopeContextV1,
@@ -15,36 +15,43 @@ use hermes_communications_ingress::{
 use hermes_events_jetstream::{
     DurableSubjectV1, JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity,
     RuntimePublishPermitV1, RuntimeSubscribePermitV1, StreamKindV1,
-    request_managed_runtime_event_access,
+    request_managed_runtime_event_access_v2,
 };
 use hermes_managed_vault_client::{
-    ManagedProviderCredentialClientV1, ManagedProviderCredentialContextV1,
-    ManagedProviderCredentialErrorV1,
+    ManagedProviderCredentialClientV2, ManagedProviderCredentialContextV1,
+    ManagedProviderCredentialErrorV1, ManagedProviderCredentialRequestV1,
 };
 use hermes_runtime_protocol::v1::{
-    BlobDataOperationV1, DescribeManagedRuntimeRequestV1, ManagedRuntimeClientDeliveryRequestV1,
-    ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlRequestV1,
+    BlobDataOperationV1, ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
-    ManagedStorageRuntimeConfigurationV1, managed_runtime_control_request_v1::Operation,
+    ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
+    managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use hermes_runtime_protocol::validation::module_client::{
     validate_module_client_request_v1, validate_module_client_response_v1,
+};
+use hermes_runtime_protocol::{
+    managed_control::{
+        ManagedControlChannelV2, ManagedControlRequestDispatcherV2, ManagedControlTransportErrorV2,
+        RejectManagedControlRequestsV2,
+    },
+    validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES,
 };
 use hermes_storage_protocol::{
     StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1, StorageBindingV1,
     StorageEffectiveBudgetsV1,
 };
 use hermes_storage_vault::{
-    InheritedKernelVaultRouteV1, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
+    InheritedKernelVaultRouteV2, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
 };
-use hermes_vault_protocol::{DEFAULT_LEASE_TTL_SECONDS, SecretClassV1};
+use hermes_vault_protocol::SecretClassV1;
 use prost::Message;
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::MailRuntimeAdmission;
-use crate::admission::MAIL_MODULE_ID;
+use crate::admission::{MAIL_CREDENTIAL_LEASE_TTL_SECONDS, MAIL_MODULE_ID};
 use crate::attachment_anchor_mapping::{
     MailAttachmentAnchorMappingErrorV1, consume_next_attachment_anchor_recorded_v1,
 };
@@ -74,11 +81,10 @@ use hermes_mail_gmail::{
 };
 use hermes_mail_persistence::MailDurablePersistence;
 
-const MAX_FRAME_BYTES: usize = 512 * 1024;
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct MailAdmittedRuntime {
-    pub control_channel: UnixStream,
+    pub control_channel: ManagedControlChannelV2<UnixStream>,
     pub durable: MailDurablePersistence,
     inbound_credential: MailInboundCredentialV1,
     smtp_password: Option<Zeroizing<Vec<u8>>>,
@@ -136,7 +142,7 @@ pub enum MailBootstrapError {
 
 #[allow(clippy::too_many_arguments)]
 pub async fn open_admitted_runtime(
-    mut control_channel: UnixStream,
+    control_channel: UnixStream,
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
     admission: &MailRuntimeAdmission,
@@ -157,110 +163,85 @@ pub async fn open_admitted_runtime(
         .set_read_timeout(Some(CONTROL_TIMEOUT))
         .and_then(|_| control_channel.set_write_timeout(Some(CONTROL_TIMEOUT)))
         .map_err(|_| MailBootstrapError::Control)?;
-    write_frame(
-        &mut control_channel,
-        &ManagedRuntimeControlRequestV1 {
-            operation: Some(Operation::Describe(DescribeManagedRuntimeRequestV1 {
-                descriptor_bytes,
-                settings_schema_bytes,
-            })),
-        }
-        .encode_to_vec(),
-    )?;
-    let response =
-        ManagedRuntimeControlResponseV1::decode(read_frame(&mut control_channel)?.as_slice())
-            .map_err(|_| MailBootstrapError::Control)?;
-    let (registration_id, runtime_generation, grant_epoch) = match response.result {
-        Some(ControlResult::Describe(value))
-            if response.error_code.is_empty()
-                && !value.registration_id.is_empty()
-                && value.runtime_generation != 0
-                && value.grant_epoch != 0 =>
-        {
-            (
-                value.registration_id,
-                value.runtime_generation,
-                value.grant_epoch,
-            )
-        }
-        _ => return Err(MailBootstrapError::Admission),
-    };
+    let mut control_channel = ManagedControlChannelV2::new(control_channel);
+    let identity = control_channel
+        .describe_managed_runtime(descriptor_bytes, settings_schema_bytes)
+        .map_err(|_| MailBootstrapError::Control)?;
+    let registration_id = identity.registration_id;
+    let runtime_generation = identity.runtime_generation;
+    let grant_epoch = identity.grant_epoch;
     if registration_id != admission.module_registration_id
         || runtime_generation != admission.runtime_generation
         || grant_epoch != admission.grant_epoch
     {
         return Err(MailBootstrapError::Admission);
     }
-    write_frame(
-        &mut control_channel,
-        &ManagedRuntimeControlRequestV1 {
-            operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1 {
-                registration_id,
-                runtime_generation,
-                grant_epoch,
-            })),
-        }
-        .encode_to_vec(),
-    )?;
-    control_channel
-        .set_read_timeout(None)
-        .and_then(|_| control_channel.set_write_timeout(None))
-        .map_err(|_| MailBootstrapError::Control)?;
 
     let provider_context = provider_credential_context(admission, &storage_configuration)?;
-    let mut provider_credentials = ManagedProviderCredentialClientV1::new(
-        control_channel
-            .try_clone()
-            .map_err(|_| MailBootstrapError::Control)?,
-    );
-    let inbound_credential = match &admission.account.inbound {
-        MailInboundTransportV1::Imap(_) => {
-            let revision = credential_revision(admission, MailCredentialPurpose::ImapPassword)?
-                .ok_or(MailBootstrapError::Admission)?;
-            MailInboundCredentialV1::ImapPassword(
-                provider_credentials
-                    .resolve(
-                        &provider_context,
-                        &admission.configuration_instance_id,
-                        MailCredentialPurpose::ImapPassword.as_str(),
-                        revision,
-                        DEFAULT_LEASE_TTL_SECONDS,
-                        SecretClassV1::ProviderCredential,
-                    )
-                    .map_err(map_provider_credential_error)?,
-            )
-        }
-        MailInboundTransportV1::Gmail(_) => {
-            let revision = credential_revision(admission, MailCredentialPurpose::GmailAccessToken)?
-                .ok_or(MailBootstrapError::Admission)?;
-            MailInboundCredentialV1::GmailAccessToken(
-                provider_credentials
-                    .resolve(
-                        &provider_context,
-                        &admission.configuration_instance_id,
-                        MailCredentialPurpose::GmailAccessToken.as_str(),
-                        revision,
-                        DEFAULT_LEASE_TTL_SECONDS,
-                        SecretClassV1::ProviderCredential,
-                    )
-                    .map_err(map_provider_credential_error)?,
-            )
-        }
-    };
-    let smtp_password = match credential_revision(admission, MailCredentialPurpose::SmtpPassword)? {
-        Some(revision) => Some(
-            provider_credentials
-                .resolve(
-                    &provider_context,
-                    &admission.configuration_instance_id,
-                    MailCredentialPurpose::SmtpPassword.as_str(),
-                    revision,
-                    DEFAULT_LEASE_TTL_SECONDS,
-                    SecretClassV1::ProviderCredential,
+    let (inbound_credential, smtp_password) = {
+        let mut provider_credentials = ManagedProviderCredentialClientV2::new(&mut control_channel);
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let inbound_credential = match &admission.account.inbound {
+            MailInboundTransportV1::Imap(_) => {
+                let revision = credential_revision(admission, MailCredentialPurpose::ImapPassword)?
+                    .ok_or(MailBootstrapError::Admission)?;
+                MailInboundCredentialV1::ImapPassword(
+                    provider_credentials
+                        .resolve(
+                            &mut dispatcher,
+                            &provider_context,
+                            ManagedProviderCredentialRequestV1 {
+                                configuration_instance_id: &admission.configuration_instance_id,
+                                purpose_id: MailCredentialPurpose::ImapPassword.as_str(),
+                                credential_revision: revision,
+                                ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+                                secret_class: SecretClassV1::ProviderCredential,
+                            },
+                        )
+                        .map_err(map_provider_credential_error)?,
                 )
-                .map_err(map_provider_credential_error)?,
-        ),
-        None => None,
+            }
+            MailInboundTransportV1::Gmail(_) => {
+                let revision =
+                    credential_revision(admission, MailCredentialPurpose::GmailAccessToken)?
+                        .ok_or(MailBootstrapError::Admission)?;
+                MailInboundCredentialV1::GmailAccessToken(
+                    provider_credentials
+                        .resolve(
+                            &mut dispatcher,
+                            &provider_context,
+                            ManagedProviderCredentialRequestV1 {
+                                configuration_instance_id: &admission.configuration_instance_id,
+                                purpose_id: MailCredentialPurpose::GmailAccessToken.as_str(),
+                                credential_revision: revision,
+                                ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+                                secret_class: SecretClassV1::ProviderCredential,
+                            },
+                        )
+                        .map_err(map_provider_credential_error)?,
+                )
+            }
+        };
+        let smtp_password =
+            match credential_revision(admission, MailCredentialPurpose::SmtpPassword)? {
+                Some(revision) => Some(
+                    provider_credentials
+                        .resolve(
+                            &mut dispatcher,
+                            &provider_context,
+                            ManagedProviderCredentialRequestV1 {
+                                configuration_instance_id: &admission.configuration_instance_id,
+                                purpose_id: MailCredentialPurpose::SmtpPassword.as_str(),
+                                credential_revision: revision,
+                                ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+                                secret_class: SecretClassV1::ProviderCredential,
+                            },
+                        )
+                        .map_err(map_provider_credential_error)?,
+                ),
+                None => None,
+            };
+        (inbound_credential, smtp_password)
     };
 
     let binding = storage_binding(&storage_configuration, admission)?;
@@ -275,21 +256,28 @@ pub async fn open_admitted_runtime(
     )
     .map_err(|_| MailBootstrapError::Storage)?;
     let mut storage_leases = StorageVaultLeaseAdapterV1::new(
-        InheritedKernelVaultRouteV1::new(
-            control_channel
-                .try_clone()
-                .map_err(|_| MailBootstrapError::Control)?,
-        ),
+        InheritedKernelVaultRouteV2::new(control_channel),
         storage_context,
     );
     let lease_id = storage_leases
         .issue_runtime_credential(&binding)
         .await
-        .map_err(|_| MailBootstrapError::Credential)?;
+        .map_err(|error| {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_mail_storage_credential_issue_error={error:?}");
+            }
+            MailBootstrapError::Credential
+        })?;
     let password = storage_leases
         .resolve_runtime_credential(&binding, lease_id)
         .await
-        .map_err(|_| MailBootstrapError::Credential)?;
+        .map_err(|error| {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_mail_storage_credential_resolve_error={error:?}");
+            }
+            MailBootstrapError::Credential
+        })?;
+    let mut control_channel = storage_leases.into_route_port().into_channel();
     let password = std::str::from_utf8(&password).map_err(|_| MailBootstrapError::Credential)?;
     let durable = MailDurablePersistence::connect_runtime(
         &binding,
@@ -300,11 +288,7 @@ pub async fn open_admitted_runtime(
     )
     .await
     .map_err(|_| MailBootstrapError::Persistence)?;
-    durable
-        .initialize()
-        .await
-        .map_err(|_| MailBootstrapError::Persistence)?;
-    let event_access = request_managed_runtime_event_access(
+    let event_access = request_managed_runtime_event_access_v2(
         &mut control_channel,
         &admission.logical_owner_id,
         &admission.module_registration_id,
@@ -348,7 +332,17 @@ pub async fn open_admitted_runtime(
     .await
     .map_err(|_| MailBootstrapError::EventHub)?;
     control_channel
-        .set_nonblocking(true)
+        .signal_ready(ManagedRuntimeReadyRequestV1 {
+            registration_id,
+            runtime_generation,
+            grant_epoch,
+        })
+        .map_err(|_| MailBootstrapError::Control)?;
+    control_channel
+        .inner_mut()
+        .set_read_timeout(None)
+        .and_then(|_| control_channel.inner_mut().set_write_timeout(None))
+        .and_then(|_| control_channel.inner_mut().set_nonblocking(true))
         .map_err(|_| MailBootstrapError::Control)?;
     Ok(MailAdmittedRuntime {
         control_channel,
@@ -385,37 +379,48 @@ impl MailAdmittedRuntime {
         .await
         {
             Ok(Ok(_)) => Ok(true),
+            Ok(Err(MailAttachmentAnchorMappingErrorV1::Unavailable)) => Ok(false),
             Ok(Err(error)) => Err(map_attachment_anchor_mapping_error(error)),
             Err(_) => Ok(false),
         }
     }
 
     pub async fn try_handle_client_delivery(&mut self) -> Result<bool, MailBootstrapError> {
-        let Some(frame) = peek_complete_frame(&self.control_channel)? else {
+        let Some((correlation_id, control_request)) = self
+            .control_channel
+            .try_receive_request()
+            .map_err(|_| MailBootstrapError::Control)?
+        else {
             return Ok(false);
         };
-        let request = ManagedRuntimeClientDeliveryRequestV1::decode(frame.as_slice())
-            .map_err(|_| MailBootstrapError::Control)?
-            .request
-            .ok_or(MailBootstrapError::Control)?;
-        validate_module_client_request_v1(&request).map_err(|_| MailBootstrapError::Control)?;
-        if read_frame(&mut self.control_channel)? != frame {
-            return Err(MailBootstrapError::Control);
-        }
+        let request = match control_request.operation {
+            Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+                Some(request) if validate_module_client_request_v1(&request).is_ok() => request,
+                _ => {
+                    write_control_error(
+                        &mut self.control_channel,
+                        correlation_id,
+                        "managed_runtime_control_invalid_client_delivery",
+                    )?;
+                    return Ok(true);
+                }
+            },
+            _ => {
+                write_control_error(
+                    &mut self.control_channel,
+                    correlation_id,
+                    "managed_runtime_control_unexpected_request",
+                )?;
+                return Ok(true);
+            }
+        };
         let payload = crate::client_port::handle_client_request(self, &request.encode_to_vec())
             .await
             .map_err(|_| MailBootstrapError::Provider)?;
-        let response =
-            hermes_runtime_protocol::v1::ModuleClientResponseV1::decode(payload.as_slice())
-                .map_err(|_| MailBootstrapError::Provider)?;
+        let response = ModuleClientResponseV1::decode(payload.as_slice())
+            .map_err(|_| MailBootstrapError::Provider)?;
         validate_module_client_response_v1(&response).map_err(|_| MailBootstrapError::Provider)?;
-        write_frame(
-            &mut self.control_channel,
-            &ManagedRuntimeClientDeliveryResponseV1 {
-                response: Some(response),
-            }
-            .encode_to_vec(),
-        )?;
+        write_client_delivery_response(&mut self.control_channel, correlation_id, response)?;
         Ok(true)
     }
 
@@ -1084,19 +1089,24 @@ impl MailAdmittedRuntime {
         }
         let sha256: [u8; 32] = Sha256::digest(plaintext).into();
         self.control_channel
+            .inner_mut()
             .set_nonblocking(false)
             .map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
-        let session = request_managed_blob_session(
+        let mut dispatcher = MailBusyControlDispatcher;
+        let session = request_managed_blob_session_v2(
             &mut self.control_channel,
-            "blob.content",
-            BlobDataOperationV1::BlobDataOperationWriteV1,
-            &reference_id,
-            u64::try_from(plaintext.len())
-                .map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
-            1,
-            Some(&sha256),
+            &mut dispatcher,
+            ManagedBlobSessionRequestV1 {
+                capability_id: "blob.content",
+                operation: BlobDataOperationV1::BlobDataOperationWriteV1,
+                reference_id: &reference_id,
+                declared_size: u64::try_from(plaintext.len())
+                    .map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
+                backup_class: 1,
+                receipt_sha256: Some(&sha256),
+            },
         );
-        let restored = self.control_channel.set_nonblocking(true);
+        let restored = self.control_channel.inner_mut().set_nonblocking(true);
         let session = session.map_err(|_| BodyAdmissionFailureV1::PolicyRejected)?;
         restored.map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
         let custody_transfer_source_proof = session.custody_transfer_source_proof;
@@ -1215,18 +1225,24 @@ impl MailAdmittedRuntime {
         }
         let receipt_sha256: [u8; 32] = Sha256::digest(bytes).into();
         self.control_channel
+            .inner_mut()
             .set_nonblocking(false)
             .map_err(|_| MailBootstrapError::Control)?;
-        let session = request_managed_blob_session(
+        let mut dispatcher = MailBusyControlDispatcher;
+        let session = request_managed_blob_session_v2(
             &mut self.control_channel,
-            "blob.content",
-            BlobDataOperationV1::BlobDataOperationWriteV1,
-            &reference_id,
-            u64::try_from(bytes.len()).map_err(|_| MailBootstrapError::Admission)?,
-            1,
-            Some(&receipt_sha256),
+            &mut dispatcher,
+            ManagedBlobSessionRequestV1 {
+                capability_id: "blob.content",
+                operation: BlobDataOperationV1::BlobDataOperationWriteV1,
+                reference_id: &reference_id,
+                declared_size: u64::try_from(bytes.len())
+                    .map_err(|_| MailBootstrapError::Admission)?,
+                backup_class: 1,
+                receipt_sha256: Some(&receipt_sha256),
+            },
         );
-        let restored = self.control_channel.set_nonblocking(true);
+        let restored = self.control_channel.inner_mut().set_nonblocking(true);
         let session = session.map_err(|_| MailBootstrapError::Control)?;
         restored.map_err(|_| MailBootstrapError::Control)?;
         if session.custody_transfer_source_proof.is_empty() {
@@ -1237,6 +1253,82 @@ impl MailAdmittedRuntime {
             .map_err(|_| MailBootstrapError::Control)?;
         Ok(Sha256::digest(session.custody_transfer_source_proof).into())
     }
+}
+
+struct MailBusyControlDispatcher;
+
+impl ManagedControlRequestDispatcherV2<UnixStream> for MailBusyControlDispatcher {
+    fn dispatch_request(
+        &mut self,
+        channel: &mut ManagedControlChannelV2<UnixStream>,
+        correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+        request: ManagedRuntimeControlRequestV1,
+    ) -> Result<(), ManagedControlTransportErrorV2> {
+        let response = match request.operation {
+            Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+                Some(request) if validate_module_client_request_v1(&request).is_ok() => {
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::ClientDelivery(
+                            ManagedRuntimeClientDeliveryResponseV1 {
+                                response: Some(ModuleClientResponseV1 {
+                                    protocol_major: 1,
+                                    request_id: request.request_id,
+                                    response_payload: Vec::new(),
+                                    error_code: "RUNTIME_BUSY".to_owned(),
+                                }),
+                            },
+                        )),
+                        error_code: String::new(),
+                    }
+                }
+                _ => ManagedRuntimeControlResponseV1 {
+                    result: None,
+                    error_code: "managed_runtime_control_invalid_client_delivery".to_owned(),
+                },
+            },
+            _ => ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: "managed_runtime_control_unexpected_request".to_owned(),
+            },
+        };
+        channel.write_response(correlation_id, response)
+    }
+}
+
+fn write_client_delivery_response(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+    response: ModuleClientResponseV1,
+) -> Result<(), MailBootstrapError> {
+    channel
+        .write_response(
+            correlation_id,
+            ManagedRuntimeControlResponseV1 {
+                result: Some(ControlResult::ClientDelivery(
+                    ManagedRuntimeClientDeliveryResponseV1 {
+                        response: Some(response),
+                    },
+                )),
+                error_code: String::new(),
+            },
+        )
+        .map_err(|_| MailBootstrapError::Control)
+}
+
+fn write_control_error(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+    error_code: &str,
+) -> Result<(), MailBootstrapError> {
+    channel
+        .write_response(
+            correlation_id,
+            ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: error_code.to_owned(),
+            },
+        )
+        .map_err(|_| MailBootstrapError::Control)
 }
 
 fn attachment_blob_admission_publish_permitted(
@@ -1387,6 +1479,14 @@ fn observation_context(
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+
+    use hermes_runtime_protocol::v1::{
+        ContractReferenceV1, ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeControlAckV1,
+        ModuleClientRequestV1, managed_runtime_control_frame_v2::Frame,
+    };
+    use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
+
     use super::*;
 
     #[test]
@@ -1451,6 +1551,77 @@ mod tests {
                 Some(1),
             ),
         );
+    }
+
+    #[test]
+    fn nested_client_delivery_gets_a_correlated_busy_response_without_stealing_platform_reply() {
+        let (runtime, kernel) = UnixStream::pair().expect("control pair");
+        let kernel = thread::spawn(move || {
+            let mut channel = ManagedControlChannelV2::new(kernel);
+            let (platform_id, _) = channel.receive_request().expect("platform request");
+            channel
+                .write_request(
+                    [7; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+                    ManagedRuntimeControlRequestV1 {
+                        operation: Some(Operation::ClientDelivery(
+                            ManagedRuntimeClientDeliveryRequestV1 {
+                                request: Some(ModuleClientRequestV1 {
+                                    protocol_major: 1,
+                                    module_id: MAIL_MODULE_ID.to_owned(),
+                                    owner_id: MAIL_MODULE_ID.to_owned(),
+                                    contract: Some(ContractReferenceV1 {
+                                        owner: MAIL_MODULE_ID.to_owned(),
+                                        name: "query".to_owned(),
+                                        major: 1,
+                                        revision: 1,
+                                        schema_sha256: vec![1; 32],
+                                    }),
+                                    request_id: 41,
+                                    request_payload: vec![1],
+                                }),
+                            },
+                        )),
+                    },
+                )
+                .expect("client delivery");
+            let nested = channel.read_frame().expect("busy response");
+            assert_eq!(
+                nested.correlation_id,
+                vec![7; MANAGED_CONTROL_CORRELATION_ID_BYTES]
+            );
+            let Some(Frame::Response(response)) = nested.frame else {
+                panic!("nested response");
+            };
+            let Some(ControlResult::ClientDelivery(delivery)) = response.result else {
+                panic!("client delivery response");
+            };
+            assert_eq!(
+                delivery.response.expect("module response").error_code,
+                "RUNTIME_BUSY"
+            );
+            channel
+                .write_response(
+                    platform_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::Ack(ManagedRuntimeControlAckV1 {})),
+                        error_code: String::new(),
+                    },
+                )
+                .expect("platform response");
+        });
+
+        let mut channel = ManagedControlChannelV2::new(runtime);
+        let mut dispatcher = MailBusyControlDispatcher;
+        let response = channel
+            .request_next_with_dispatch(
+                ManagedRuntimeControlRequestV1 {
+                    operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1::default())),
+                },
+                &mut dispatcher,
+            )
+            .expect("correlated platform response");
+        assert!(matches!(response.result, Some(ControlResult::Ack(_))));
+        kernel.join().expect("kernel join");
     }
 }
 
@@ -1553,6 +1724,9 @@ fn storage_binding(
 }
 
 fn map_provider_credential_error(error: ManagedProviderCredentialErrorV1) -> MailBootstrapError {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_mail_provider_credential_error={error:?}");
+    }
     match error {
         ManagedProviderCredentialErrorV1::InvalidContext => MailBootstrapError::Admission,
         ManagedProviderCredentialErrorV1::Rejected
@@ -1567,104 +1741,4 @@ fn current_unix_seconds() -> Result<i64, MailBootstrapError> {
         .and_then(|elapsed| {
             i64::try_from(elapsed.as_secs()).map_err(|_| MailBootstrapError::Provider)
         })
-}
-
-fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), MailBootstrapError> {
-    if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES {
-        return Err(MailBootstrapError::Control);
-    }
-    let mut length = u32::try_from(bytes.len()).map_err(|_| MailBootstrapError::Control)?;
-    let mut prefix = Vec::with_capacity(5);
-    while length >= 0x80 {
-        prefix.push((length as u8 & 0x7f) | 0x80);
-        length >>= 7;
-    }
-    prefix.push(length as u8);
-    channel
-        .write_all(&prefix)
-        .and_then(|_| channel.write_all(bytes))
-        .and_then(|_| channel.flush())
-        .map_err(|_| MailBootstrapError::Control)
-}
-
-fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, MailBootstrapError> {
-    let length = usize::try_from(read_varint(channel)?).map_err(|_| MailBootstrapError::Control)?;
-    if length == 0 || length > MAX_FRAME_BYTES {
-        return Err(MailBootstrapError::Control);
-    }
-    let mut bytes = vec![0_u8; length];
-    channel
-        .read_exact(&mut bytes)
-        .map_err(|_| MailBootstrapError::Control)?;
-    Ok(bytes)
-}
-
-fn peek_complete_frame(channel: &UnixStream) -> Result<Option<Vec<u8>>, MailBootstrapError> {
-    let mut header = [0_u8; 5];
-    let length = unsafe {
-        libc::recv(
-            channel.as_raw_fd(),
-            header.as_mut_ptr().cast(),
-            header.len(),
-            libc::MSG_PEEK,
-        )
-    };
-    if length < 0 {
-        return if std::io::Error::last_os_error().kind() == std::io::ErrorKind::WouldBlock {
-            Ok(None)
-        } else {
-            Err(MailBootstrapError::Control)
-        };
-    }
-    if length == 0 {
-        return Err(MailBootstrapError::Control);
-    }
-    let (payload_length, prefix_length) = decode_peeked_length(
-        &header[..usize::try_from(length).map_err(|_| MailBootstrapError::Control)?],
-    )?;
-    if payload_length == 0 || payload_length > MAX_FRAME_BYTES {
-        return Err(MailBootstrapError::Control);
-    }
-    let mut framed = vec![0_u8; prefix_length + payload_length];
-    let received = unsafe {
-        libc::recv(
-            channel.as_raw_fd(),
-            framed.as_mut_ptr().cast(),
-            framed.len(),
-            libc::MSG_PEEK,
-        )
-    };
-    if received < 0 {
-        return Err(MailBootstrapError::Control);
-    }
-    if usize::try_from(received).map_err(|_| MailBootstrapError::Control)? < framed.len() {
-        return Ok(None);
-    }
-    Ok(Some(framed[prefix_length..].to_vec()))
-}
-
-fn decode_peeked_length(bytes: &[u8]) -> Result<(usize, usize), MailBootstrapError> {
-    let mut value = 0_usize;
-    for (index, byte) in bytes.iter().copied().enumerate() {
-        value |= usize::from(byte & 0x7f) << (index * 7);
-        if byte & 0x80 == 0 {
-            return Ok((value, index + 1));
-        }
-    }
-    Err(MailBootstrapError::Control)
-}
-
-fn read_varint(channel: &mut UnixStream) -> Result<u64, MailBootstrapError> {
-    let mut value = 0_u64;
-    for index in 0..5 {
-        let mut byte = [0_u8; 1];
-        channel
-            .read_exact(&mut byte)
-            .map_err(|_| MailBootstrapError::Control)?;
-        value |= u64::from(byte[0] & 0x7f) << (index * 7);
-        if byte[0] & 0x80 == 0 {
-            return Ok(value);
-        }
-    }
-    Err(MailBootstrapError::Control)
 }

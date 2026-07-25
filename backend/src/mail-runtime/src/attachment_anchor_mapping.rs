@@ -26,6 +26,7 @@ use crate::admission::MAIL_MODULE_ID;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailAttachmentAnchorMappingErrorV1 {
+    Unavailable,
     InvalidEnvelope,
     InvalidPayload,
     SourceObservationMismatch,
@@ -83,7 +84,7 @@ pub async fn consume_next_attachment_anchor_recorded_v1(
     }
     let delivery = receive_runtime_pull_delivery(connection, permit)
         .await
-        .map_err(|_| MailAttachmentAnchorMappingErrorV1::InvalidEnvelope)?;
+        .map_err(|_| MailAttachmentAnchorMappingErrorV1::Unavailable)?;
     let outcome = map_attachment_anchor_recorded_v1(
         durable,
         delivery.exact_bytes(),
@@ -93,7 +94,7 @@ pub async fn consume_next_attachment_anchor_recorded_v1(
     delivery
         .acknowledge()
         .await
-        .map_err(|_| MailAttachmentAnchorMappingErrorV1::InvalidEnvelope)?;
+        .map_err(|_| MailAttachmentAnchorMappingErrorV1::Unavailable)?;
     Ok(outcome)
 }
 

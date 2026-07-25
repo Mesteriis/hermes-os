@@ -246,23 +246,23 @@ fn mail_settings_snapshot() -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {
                 "mail.connection_id",
                 Value::StringValue(MAIL_ACCOUNT_ID.to_owned()),
             ),
-            entry("mail.inbound.kind", Value::StringValue("imap".to_owned())),
             entry(
                 "mail.imap.host",
                 Value::StringValue("imap.example.test".to_owned()),
+            ),
+            entry(
+                "mail.imap.password_revision",
+                Value::UnsignedIntegerValue(1),
             ),
             entry("mail.imap.port", Value::UnsignedIntegerValue(993)),
             entry(
                 "mail.imap.username",
                 Value::StringValue("owner@example.test".to_owned()),
             ),
+            entry("mail.inbound.kind", Value::StringValue("imap".to_owned())),
+            entry("mail.smtp.enabled", Value::BooleanValue(false)),
             entry("mail.sync.window", Value::UnsignedIntegerValue(1)),
             entry("mail.sync.windows", Value::UnsignedIntegerValue(1)),
-            entry(
-                "mail.imap.password_revision",
-                Value::UnsignedIntegerValue(1),
-            ),
-            entry("mail.smtp.enabled", Value::BooleanValue(false)),
         ],
     }
 }

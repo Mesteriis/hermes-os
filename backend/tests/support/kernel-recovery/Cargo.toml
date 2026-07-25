@@ -29,7 +29,7 @@ hermes-communications-ingress = { path = "../../../src/communications-ingress" }
 hermes-communications-api = { path = "../../../src/communications-api" }
 hermes-mail-api = { path = "../../../src/mail-api" }
 hermes-mail-core = { path = "../../../src/mail-core" }
-hermes-mail-persistence = { path = "../../../src/mail-persistence" }
+hermes-mail-persistence = { path = "../../../src/mail-persistence", features = ["conformance-test-support"] }
 hermes-mail-runtime = { path = "../../../src/mail-runtime" }
 hermes-telegram-api = { path = "../../../src/telegram-api" }
 hermes-telegram-core = { path = "../../../src/telegram-core" }

@@ -1,8 +1,12 @@
 //! Mail-owned PostgreSQL persistence for delivery state and Communications outbox.
 
+#[cfg(feature = "conformance-test-support")]
+mod conformance;
 mod durable;
 mod schema;
 
+#[cfg(feature = "conformance-test-support")]
+pub use conformance::MailPersistenceConformanceV1;
 pub use durable::{
     MAIL_SCHEMA_V1, MailAttachmentAnchorMappingOutcomeV1, MailAttachmentAnchorMappingV1,
     MailAttachmentBlobAdmissionStartOutcomeV1, MailDurablePersistence, MailDurablePersistenceError,
