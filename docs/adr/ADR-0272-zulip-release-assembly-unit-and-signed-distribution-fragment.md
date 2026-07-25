@@ -116,7 +116,7 @@ fences, live provider and event conformance остаются обязатель�
 - strict Clippy для Zulip persistence/runtime/assembly: passed;
 - signed distribution compiler test materializes exact Zulip assembly output
   and binds runtime/Storage digests: passed;
-- backend architecture/policy/SRP/Cargo/fmt/evidence gates: 463 architecture
+- backend architecture/policy/SRP/Cargo/fmt/evidence gates: 464 architecture
   tests passed.
 
 ## Отклонённые варианты

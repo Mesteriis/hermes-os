@@ -12,7 +12,11 @@ correlation-bound `RUNTIME_BUSY`. Generated command/query contracts, exact
 descriptor-set binding, canonical settings schema и `ModuleDescriptorV1` с
 раздельными client/platform capabilities реализованы. Immutable owner-local
 Storage bundle, отдельная unsigned release assembly unit и generic signed
-distribution binding реализованы. Live managed admission ещё не реализован.
+distribution binding реализованы. Signed managed launch и live
+grant/query/revoke/generation/Storage fencing conformance реализованы в
+`bfef3e1df`; gates 1–7 закрыты. Live provider command, event-only
+Communications delivery, outage replay и privacy evidence ещё не реализованы,
+поэтому `zulip_integration_v1` остаётся закрыт.
 
 Уточняет:
 
@@ -189,12 +193,30 @@ inventory, make integration a domain, or authorize WhatsApp/another provider.
 3. ~~Add immutable Storage bundle and separate release assembly unit.~~
    Реализовано в `81449906e`; signed distribution binding доказан в
    `ff2c53983`.
-4. Add signed managed launch, grant and revoke/generation conformance.
+4. ~~Add signed managed launch, grant and revoke/generation conformance.~~
+   Реализовано в `bfef3e1df`: real managed Vault/Blob/Storage/NATS,
+   Communications и Zulip processes доказывают approved query, ungranted
+   command rejection, stale-generation fence, owner-authorized revoke,
+   Storage `revoking`, остановку только Zulip runtime и сохранение живого
+   Communications runtime.
 5. Prove live provider command and event-only Communications delivery.
 6. Remove the frontend legacy REST surface in its own client slice.
 
 Каждый крупный slice является отдельным commit и проходит focused owner tests,
 Clippy, architecture/SRP/Cargo boundary gates и relevant live conformance.
+
+Текущее evidence для шага 4:
+
+- `managed_zulip_runtime_uses_kernel_leases_and_route_specific_admission`:
+  passed в disposable authenticated PostgreSQL/PgBouncer/NATS contour;
+- Zulip runtime установил TLS-соединение только с loopback fixture и explicit
+  conformance CA; production TLS validation не ослаблена;
+- Storage Control применил immutable Zulip bundle в `hermes_data`, выдал
+  owner-scoped runtime DML grants и PgBouncer pool alias; runtime не повторяет
+  DDL;
+- focused Zulip tests и strict Clippy: passed;
+- backend policy/SRP/Cargo/fmt/evidence gates: passed;
+- architecture tests: 464 passed.
 
 ## Отклонённые варианты
 
