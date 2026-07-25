@@ -24,7 +24,12 @@ endpoint из typed settings snapshot. Scanner payload/verdict и failure matrix
 этот smoke-контур не доказывает. Production gate
 `attachment_security_engine_v1` остаётся закрыт до signed admission и live
 ClamAV/Blob/Event conformance, включая failure/replay/revoke matrix. До открытия
-gate состояние `safe_for_delivery` остаётся недостижимым.
+gate состояние `safe_for_delivery` остаётся недостижимым. Live payload
+conformance также доказал, что задуманный здесь прямой read
+integration-owned Blob корректно отклоняется registration/capability fence.
+ADR-0274 уточняет обязательный путь: revision-2 candidate переносит bounded
+source proof, engine сначала выполняет evidence-bound transfer в собственную
+Blob custody и только затем получает one-use read.
 
 Зависит от:
 
@@ -40,7 +45,8 @@ gate состояние `safe_for_delivery` остаётся недостижи�
 - [ADR-0230: Blob opaque references](ADR-0230-blob-platform-opaque-references-and-owner-local-metadata.md);
 - [ADR-0231: private Blob data sessions](ADR-0231-private-blob-data-session-and-vault-route.md);
 - [ADR-0246: attachment admission and safety](ADR-0246-communications-attachment-admission-and-safety.md);
-- [ADR-0260: attachment lifecycle event authority](ADR-0260-communications-attachment-lifecycle-event-authority.md).
+- [ADR-0260: attachment lifecycle event authority](ADR-0260-communications-attachment-lifecycle-event-authority.md);
+- [ADR-0274: Attachment Security Blob custody](ADR-0274-attachment-security-evidence-bound-blob-custody.md).
 
 ## Контекст
 
@@ -64,7 +70,8 @@ Communications canonical blob_admitted event
   -> Attachment Security inbox
 
 joined exact candidate + canonical state
-  -> one-use Blob read session
+  -> evidence-bound transfer to Attachment Security Blob custody
+  -> one-use target-owned Blob read session
   -> local ClamAV INSTREAM adapter
   -> Attachment Security outbox
   -> communication_attachment_safety_verdict_observed.v1
@@ -173,11 +180,12 @@ source generation или revoked permit fail closed и не запускают s
 
 ### Blob и scanner boundary
 
-Engine запрашивает у Kernel one-use
-`BlobDataOperationReadRangeV1` session только по capability
-`attachment_security.blob.read.v1`, exact reference, declared size, receipt
-SHA-256, current runtime generation и grant epoch. Kernel выдаёт/fence-ит
-session, но не читает bytes и не знает scanner verdict.
+По ADR-0274 engine сначала запрашивает у Kernel evidence-bound custody transfer
+по capability `attachment_security.blob.v1`, exact source proof, candidate
+message ID/envelope hash, reference, declared size, receipt SHA-256, current
+runtime generation и grant epoch. Только полученный target-owned reference
+может использоваться в one-use `BlobDataOperationReadRangeV1` session. Kernel
+выдаёт/fence-ит sessions, но не читает bytes и не знает scanner verdict.
 
 Blob bytes идут напрямую из private Blob data socket в bounded engine buffer и
 затем в `hermes-attachment-security-clamav`. Maximum attachment size является
@@ -250,7 +258,7 @@ Exact descriptor содержит отдельные capability units:
 attachment_security.candidate.observe.v1
 attachment_security.communications-state.observe.v1
 attachment_security.verdict.publish.v1
-attachment_security.blob.read.v1
+attachment_security.blob.v1
 attachment_security.storage.v1
 ```
 
@@ -286,7 +294,8 @@ Gate открывается атомарно только после:
 5. canonical settings schema, immutable Storage bundle и release assembly;
 6. signed executable/descriptor/settings/Storage admission и owner grants;
 7. candidate/state join в любом порядке, exact replay и collision quarantine;
-8. one-use Blob read с size/hash/session/generation/grant fences;
+8. evidence-bound custody transfer и one-use target-owned Blob read с
+   size/hash/session/generation/grant fences;
 9. live loopback clamd clean и threat responses;
 10. scanner timeout/I/O/malformed response без clean verdict;
 11. exact engine outbox -> NATS -> Communications CAS flow;

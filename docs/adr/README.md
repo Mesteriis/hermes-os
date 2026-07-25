@@ -234,7 +234,12 @@ unsigned fragment. Она не имеет signing authority и не входит
 Gateway или Communications.
 ADR-0273 вводит отдельный `attachment_security` engine owner: integration
 публикует provider-neutral scan candidate, engine durably join-ит его с
-canonical Communications `blob_admitted`, читает bytes только через one-use
-Blob lease и публикует typed safety verdict из собственного outbox. Kernel/Core
-получает отдельный managed Engine launch contract и остаётся control plane, а
-Communications не импортирует scanner implementation.
+canonical Communications `blob_admitted` и публикует typed safety verdict из
+собственного outbox. Kernel/Core получает отдельный managed Engine launch
+contract и остаётся control plane, а Communications не импортирует scanner
+implementation.
+ADR-0274 закрывает обнаруженный live conformance разрыв: direct read
+integration-owned Blob остаётся запрещён, revision-2 candidate переносит
+bounded source custody proof, а engine выполняет evidence-bound transfer в
+собственную Blob custody перед one-use read. Kernel не декодирует candidate и
+не переносит bytes/verdict.
