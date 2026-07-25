@@ -4,11 +4,13 @@
 //! execution, or Communications persistence. It converts an admitted host
 //! observation into an exact provider-neutral Communications outbox record.
 
+pub mod admission;
 pub mod client_port;
 mod communications_outbox;
 pub mod host_bridge_port;
 pub mod host_bridge_transport;
 pub mod managed;
+pub mod settings;
 
 use hermes_communications_ingress::{
     CommunicationObservationDraft, ObservationEnvelopeBuildErrorV1, ObservationEnvelopeContextV1,
@@ -51,6 +53,7 @@ pub struct WhatsAppRuntimeAdmission {
 
 #[derive(Debug)]
 pub enum WhatsAppHostIngressError {
+    AccountScope,
     Core(WhatsAppCoreError),
     Envelope(ObservationEnvelopeBuildErrorV1),
     Persistence(WhatsAppDurablePersistenceError),

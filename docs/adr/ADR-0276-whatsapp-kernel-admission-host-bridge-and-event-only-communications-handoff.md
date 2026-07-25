@@ -3,7 +3,8 @@
 Статус: Принято
 Дата: 2026-07-25
 Состояние реализации: Phase gate; `whatsapp_integration_v1` не открыт.
-Первые два prerequisite этого решения реализованы. Runtime использует один
+Первые три implementation-слайса этого решения реализованы. Runtime использует
+один
 correlation-owned `ManagedControlChannelV2`, передаёт его последовательно
 Storage/Vault и Event Hub clients, не clone-ит inherited FD и отправляет
 `ready` только после admitted bindings, owner-local persistence и Event Hub.
@@ -15,9 +16,12 @@ owner-local queue, конфликтующий operation ID отклоняетс�
 использует собственные typed operation/response oneofs без provider-query
 decode probing; Tauri host проверяет exact contract name, descriptor digest и
 route binding. Umbrella `whatsapp.client` удалён из production path.
-Canonical descriptor/settings/storage artifacts, release assembly, signed
-managed launch и live provider conformance остаются обязательными следующими
-slices.
+Canonical descriptor, hidden configuration-scoped `whatsapp.account_id`
+settings, immutable owner-local Storage bundle и отдельная unsigned
+`hermes-whatsapp-assembly` теперь материализуются детерминированно. Один
+admitted runtime обслуживает только свой configured account. Signed
+distribution binding, managed launch и live provider conformance остаются
+обязательными следующими slices.
 
 Уточняет:
 
@@ -45,8 +49,9 @@ control FD имел несколько V1 readers, umbrella `whatsapp.client` с
 private host bridge и public provider client contract, generated Protobuf не
 объявлял route-specific Connect services, а exact artifacts, assembly и live
 provider evidence отсутствовали. Первые три дефекта устранены; exact
-`ModuleDescriptorV1`, settings/storage artifact builders, отдельная release
-assembly unit и live provider flow всё ещё отсутствуют.
+`ModuleDescriptorV1`, settings/storage artifact builders и отдельная release
+assembly unit также реализованы. Signed distribution binding и live provider
+flow всё ещё отсутствуют.
 
 Сохранить `/api/v1/communications/*` как временный transport нельзя:
 Communications не выполняет WhatsApp provider commands и не владеет его
@@ -72,9 +77,17 @@ hermes-whatsapp-persistence  owner-local queue, projection and outbox
 hermes-whatsapp-runtime      managed runtime composition
 ```
 
-Будущая `hermes-whatsapp-assembly` является отдельной integration-owned
+`hermes-whatsapp-assembly` является отдельной integration-owned
 build-time unit. Она материализует canonical artifacts, но не запускается
 Kernel, не входит в runtime inventory и не имеет signing authority.
+
+Settings schema содержит ровно один hidden operator-managed
+`whatsapp.account_id` с `ConfigurationInstance` scope, fresh owner proof и
+`RestartModule` apply mode. Runtime декодирует snapshot до admission и
+отклоняет public command, private host observation или command lease другого
+account. Owner-local Storage bundle создаёт только
+`hermes_data.whatsapp_*` tables и не содержит Communications tables, foreign
+keys или provider session state.
 
 `hermes-communications-ingress` остаётся единственной разрешённой
 WhatsApp → Communications compile dependency. Она предоставляет typed neutral

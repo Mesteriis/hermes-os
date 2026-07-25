@@ -71,6 +71,7 @@ members = [
   "src/whatsapp-core",
   "src/whatsapp-persistence",
   "src/whatsapp-runtime",
+  "src/whatsapp-assembly",
   "src/zulip-api",
   "src/zulip-core",
   "src/zulip-http",

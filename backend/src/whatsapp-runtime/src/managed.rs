@@ -36,12 +36,12 @@ use hermes_storage_vault::{
 use crate::{
     WhatsAppCommandQueueError, WhatsAppRuntimeAdmission, WhatsAppRuntimeIdentity,
     accept_host_observation, claim_provider_commands, enqueue_provider_command,
-    provider_command_status, relay_communications_outbox_once,
+    provider_command_status, relay_communications_outbox_once, settings::WhatsAppRuntimeSettingsV1,
 };
 use hermes_whatsapp_api::{
     WhatsAppProviderCommand, WhatsAppProviderCommandStatusV1,
     host_bridge::{WhatsAppHostBridgeEnvelopeV1, WhatsAppHostBridgeHandshakeV1},
-    provider_command_operation_id,
+    provider_command_account_id, provider_command_operation_id,
 };
 use hermes_whatsapp_persistence::WhatsAppDurablePersistence;
 use prost::Message;
@@ -54,6 +54,7 @@ pub struct WhatsAppAdmittedRuntime {
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
     identity: WhatsAppRuntimeIdentity,
+    account_id: String,
     host_bridge_socket_path: String,
     host_bridge_route_binding: [u8; 32],
 }
@@ -74,6 +75,7 @@ pub async fn open_admitted_runtime(
     control_channel: UnixStream,
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
+    settings: &WhatsAppRuntimeSettingsV1,
     admission: &WhatsAppRuntimeAdmission,
     storage_configuration: ManagedStorageRuntimeConfigurationV1,
     host_bridge_configuration: ManagedIntegrationHostBridgeConfigurationV1,
@@ -84,6 +86,7 @@ pub async fn open_admitted_runtime(
         || settings_schema_bytes.is_empty()
         || admission.logical_owner_id != "whatsapp"
         || admission.runtime_instance_id.trim().is_empty()
+        || settings.account_id.trim().is_empty()
         || event_hub_endpoint.trim().is_empty()
         || event_credential_revision == 0
     {
@@ -202,6 +205,7 @@ pub async fn open_admitted_runtime(
             runtime_instance_id: admission.runtime_instance_id.clone(),
             runtime_generation: admission.runtime_generation,
         },
+        account_id: settings.account_id.clone(),
         host_bridge_socket_path,
         host_bridge_route_binding,
     })
@@ -274,6 +278,9 @@ impl WhatsAppAdmittedRuntime {
         command: &WhatsAppProviderCommand,
         requested_at_unix_seconds: i64,
     ) -> Result<String, WhatsAppCommandQueueError> {
+        if provider_command_account_id(command) != self.account_id {
+            return Err(WhatsAppCommandQueueError::InvalidCommand);
+        }
         let operation_id = provider_command_operation_id(command).to_owned();
         enqueue_provider_command(&self.durable, command, requested_at_unix_seconds).await?;
         Ok(operation_id)
@@ -283,7 +290,9 @@ impl WhatsAppAdmittedRuntime {
         &self,
         operation_id: &str,
     ) -> Result<Option<WhatsAppProviderCommandStatusV1>, WhatsAppCommandQueueError> {
-        provider_command_status(&self.durable, operation_id).await
+        provider_command_status(&self.durable, operation_id)
+            .await
+            .map(|status| status.filter(|value| value.account_id == self.account_id))
     }
 
     /// Binds the exact host bridge endpoint staged by Kernel. The caller owns
@@ -336,6 +345,9 @@ impl WhatsAppAdmittedRuntime {
         recorded_at_unix_seconds: i64,
         recorded_at_nanos: i32,
     ) -> Result<(), crate::WhatsAppHostIngressError> {
+        if envelope.account_id != self.account_id {
+            return Err(crate::WhatsAppHostIngressError::AccountScope);
+        }
         accept_host_observation(
             &self.durable,
             &self.identity,
@@ -358,6 +370,9 @@ impl WhatsAppAdmittedRuntime {
         lease_seconds: i64,
         limit: i64,
     ) -> Result<Vec<WhatsAppProviderCommand>, WhatsAppCommandQueueError> {
+        if account_id != self.account_id {
+            return Err(WhatsAppCommandQueueError::InvalidCommand);
+        }
         claim_provider_commands(
             &self.durable,
             account_id,

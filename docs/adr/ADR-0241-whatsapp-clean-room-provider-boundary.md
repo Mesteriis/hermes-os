@@ -37,13 +37,16 @@ inherited-control readers with one correlation-owned
 host and runtime bind the private route to the same exact descriptor digest;
 accepted commands and their owner-local terminal status no longer pass through
 an umbrella `whatsapp.client` DTO. These prerequisites do not open the
-production phase gate. Canonical descriptor/settings/storage artifacts,
-release assembly, signed Kernel launch wiring, live provider command execution
-and live WebView evidence remain open migration work. No database URL
-environment variable or provider secret handoff is admitted.
+production phase gate. Canonical descriptor/settings/storage artifacts and the
+separate unsigned `hermes-whatsapp-assembly` now exist; one admitted runtime is
+bound by hidden configuration-scoped settings to one account, and its Storage
+bundle contains only `hermes_data.whatsapp_*` tables. Signed Kernel launch
+wiring, live provider command execution and live WebView evidence remain open
+migration work. No database URL environment variable or provider secret
+handoff is admitted.
 
-The backend API/core/persistence/runtime packages remain an independent
-WhatsApp integration build unit. "Host-owned" applies only to browser/WebView
+The backend API/core/persistence/runtime/assembly packages remain independent
+WhatsApp integration build units. "Host-owned" applies only to browser/WebView
 execution and session state; it does not prohibit the integration's typed
 runtime, owner-local durable queue or event outbox. Backend WhatsApp packages
 must not depend on Tauri, Wry, WebKit or WebView runtimes.

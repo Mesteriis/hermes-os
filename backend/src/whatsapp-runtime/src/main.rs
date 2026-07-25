@@ -17,7 +17,7 @@ use hermes_runtime_protocol::{
         managed_integration_runtime::validate_managed_integration_runtime_configuration,
     },
 };
-use hermes_whatsapp_runtime::{WhatsAppRuntimeAdmission, managed};
+use hermes_whatsapp_runtime::{WhatsAppRuntimeAdmission, managed, settings};
 use prost::Message;
 
 struct InheritedPaths {
@@ -53,6 +53,7 @@ where
         .map_err(|_| "WhatsApp runtime settings snapshot is invalid".to_owned())?;
     validate_settings_snapshot_against_schema_v1(&schema, &snapshot)
         .map_err(|_| "WhatsApp runtime settings snapshot is invalid".to_owned())?;
+    let runtime_settings = settings::decode(&snapshot)?;
     let configuration = ManagedIntegrationRuntimeConfigurationV1::decode(
         read_contract(&paths.runtime_configuration)?.as_slice(),
     )
@@ -86,6 +87,7 @@ where
             inherited_control_channel()?,
             descriptor,
             schema_bytes,
+            &runtime_settings,
             &admission,
             storage,
             host_bridge_configuration,

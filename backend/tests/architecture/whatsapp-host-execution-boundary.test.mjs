@@ -10,6 +10,7 @@ const packageNames = [
   'whatsapp-core',
   'whatsapp-persistence',
   'whatsapp-runtime',
+  'whatsapp-assembly',
 ];
 
 test('WhatsApp backend integration keeps provider browser execution in the host', () => {

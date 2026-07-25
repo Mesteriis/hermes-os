@@ -2612,6 +2612,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-whatsapp-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-whatsapp-persistence",
+ "hermes-whatsapp-runtime",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-whatsapp-core"
 version = "0.1.0"
 dependencies = [
@@ -2625,6 +2638,7 @@ version = "0.1.0"
 dependencies = [
  "hermes-events-protocol",
  "hermes-storage-protocol",
+ "sha2 0.11.0",
  "sqlx",
 ]
 

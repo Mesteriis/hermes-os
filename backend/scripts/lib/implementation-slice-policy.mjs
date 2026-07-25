@@ -267,6 +267,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-whatsapp-core', role: 'integration', owner: 'whatsapp', surface: 'implementation' },
   { name: 'hermes-whatsapp-persistence', role: 'integration', owner: 'whatsapp', surface: 'persistence' },
   { name: 'hermes-whatsapp-runtime', role: 'integration', owner: 'whatsapp', surface: 'runtime' },
+  { name: 'hermes-whatsapp-assembly', role: 'integration', owner: 'whatsapp', surface: 'assembly' },
   { name: 'hermes-zulip-api', role: 'integration', owner: 'zulip', surface: 'contract' },
   { name: 'hermes-zulip-core', role: 'integration', owner: 'zulip', surface: 'implementation' },
   { name: 'hermes-zulip-http', role: 'integration', owner: 'zulip', surface: 'implementation' },
@@ -507,6 +508,12 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-whatsapp-api', kind: 'normal' },
     { name: 'hermes-whatsapp-core', kind: 'normal' },
     { name: 'hermes-whatsapp-persistence', kind: 'normal' },
+  ],
+  'hermes-whatsapp-assembly': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-whatsapp-persistence', kind: 'normal' },
+    { name: 'hermes-whatsapp-runtime', kind: 'normal' },
   ],
   'hermes-zulip-api': [],
   'hermes-zulip-core': [
@@ -1021,12 +1028,19 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-whatsapp-core': [],
   'hermes-whatsapp-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
   ],
   'hermes-whatsapp-runtime': [
     { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread'] },
+  ],
+  'hermes-whatsapp-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
   'hermes-zulip-api': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },

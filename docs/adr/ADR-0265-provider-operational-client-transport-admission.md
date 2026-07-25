@@ -14,8 +14,10 @@ provider slices. Для WhatsApp correlated managed-control prerequisite и
 route-specific generated `whatsapp.command.v1`/`whatsapp.query.v1` contracts
 из ADR-0276 реализованы. Private `whatsapp.host_bridge.v1` имеет отдельные
 typed operation/response oneofs и exact descriptor digest; umbrella
-`whatsapp.client` удалён из backend и Tauri host path. Canonical artifacts,
-signed admission, live provider flow и frontend cutover ещё отсутствуют.
+`whatsapp.client` удалён из backend и Tauri host path. Canonical
+descriptor/settings/storage artifacts и отдельная unsigned release assembly
+реализованы. Signed admission, live provider flow и frontend cutover ещё
+отсутствуют.
 
 Первый exact provider profile:
 [ADR-0266: Telegram Kernel admission and event-only Communications handoff](ADR-0266-telegram-kernel-admission-and-event-only-communications-handoff.md).
