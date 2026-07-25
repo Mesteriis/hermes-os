@@ -3,9 +3,8 @@
 use prost::Message;
 
 use crate::{
-    ZulipBlobIntentV1, ZulipClientRequestV1, ZulipClientResponseV1, ZulipCommandOperationOutcomeV1,
-    ZulipCommandOperationStatusV1, ZulipCommandReceiptV1, ZulipCommandV1, ZulipReactionOperationV1,
-    ZulipReactionV1, wire,
+    ZulipBlobIntentV1, ZulipCommandOperationOutcomeV1, ZulipCommandOperationStatusV1,
+    ZulipCommandReceiptV1, ZulipCommandV1, ZulipReactionOperationV1, ZulipReactionV1, wire,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -14,90 +13,69 @@ pub enum ZulipClientWireErrorV1 {
     MissingVariant,
 }
 
-pub fn encode_request(request: &ZulipClientRequestV1) -> Vec<u8> {
-    use wire::zulip_client_request_v1::Request;
-    let request = match request {
-        ZulipClientRequestV1::Command(command) => Request::Command(command_message(command)),
-        ZulipClientRequestV1::OperationStatus { operation_id } => {
-            Request::OperationStatus(wire::ZulipOperationStatusQueryV1 {
-                operation_id: operation_id.clone(),
-            })
-        }
-    };
-    wire::ZulipClientRequestV1 {
-        request: Some(request),
-    }
-    .encode_to_vec()
-}
-
-pub fn decode_request(bytes: &[u8]) -> Result<ZulipClientRequestV1, ZulipClientWireErrorV1> {
-    use wire::zulip_client_request_v1::Request;
-    let message = wire::ZulipClientRequestV1::decode(bytes)
-        .map_err(|_| ZulipClientWireErrorV1::InvalidPayload)?;
-    match message
-        .request
-        .ok_or(ZulipClientWireErrorV1::MissingVariant)?
-    {
-        Request::Command(command) => {
-            decode_command_message(command).map(ZulipClientRequestV1::Command)
-        }
-        Request::OperationStatus(query) => Ok(ZulipClientRequestV1::OperationStatus {
-            operation_id: query.operation_id,
-        }),
-    }
-}
-
-pub fn encode_command(command: &ZulipCommandV1) -> Vec<u8> {
+pub fn encode_command_request(command: &ZulipCommandV1) -> Vec<u8> {
     command_message(command).encode_to_vec()
 }
 
-pub fn decode_command(bytes: &[u8]) -> Result<ZulipCommandV1, ZulipClientWireErrorV1> {
+pub fn decode_command_request(bytes: &[u8]) -> Result<ZulipCommandV1, ZulipClientWireErrorV1> {
     wire::ZulipProviderCommandV1::decode(bytes)
         .map_err(|_| ZulipClientWireErrorV1::InvalidPayload)
         .and_then(decode_command_message)
 }
 
-pub fn encode_response(response: &ZulipClientResponseV1) -> Vec<u8> {
-    use wire::zulip_client_response_v1::Response;
-    let response = match response {
-        ZulipClientResponseV1::CommandReceipt(receipt) => {
-            Response::CommandReceipt(wire::ZulipCommandReceiptV1 {
-                operation_id: receipt.operation_id.clone(),
-                account_id: receipt.account_id.clone(),
-            })
-        }
-        ZulipClientResponseV1::OperationStatus(status) => {
-            Response::OperationStatus(wire::ZulipOperationStatusResponseV1 {
-                status: status.as_ref().map(status_message),
-            })
-        }
-    };
-    wire::ZulipClientResponseV1 {
-        response: Some(response),
+pub fn encode_operation_status_query(operation_id: &str) -> Vec<u8> {
+    wire::ZulipOperationStatusQueryV1 {
+        operation_id: operation_id.to_owned(),
     }
     .encode_to_vec()
 }
 
-pub fn decode_response(bytes: &[u8]) -> Result<ZulipClientResponseV1, ZulipClientWireErrorV1> {
-    use wire::zulip_client_response_v1::Response;
-    let message = wire::ZulipClientResponseV1::decode(bytes)
+pub fn decode_operation_status_query(bytes: &[u8]) -> Result<String, ZulipClientWireErrorV1> {
+    let query = wire::ZulipOperationStatusQueryV1::decode(bytes)
         .map_err(|_| ZulipClientWireErrorV1::InvalidPayload)?;
-    match message
-        .response
-        .ok_or(ZulipClientWireErrorV1::MissingVariant)?
-    {
-        Response::CommandReceipt(value) => Ok(ZulipClientResponseV1::CommandReceipt(
-            ZulipCommandReceiptV1 {
-                operation_id: value.operation_id,
-                account_id: value.account_id,
-            },
-        )),
-        Response::OperationStatus(value) => value
-            .status
-            .map(decode_status_message)
-            .transpose()
-            .map(ZulipClientResponseV1::OperationStatus),
+    if query.operation_id.trim().is_empty() {
+        return Err(ZulipClientWireErrorV1::InvalidPayload);
     }
+    Ok(query.operation_id)
+}
+
+pub fn encode_command_response(receipt: &ZulipCommandReceiptV1) -> Vec<u8> {
+    wire::ZulipCommandReceiptV1 {
+        operation_id: receipt.operation_id.clone(),
+        account_id: receipt.account_id.clone(),
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_command_response(
+    bytes: &[u8],
+) -> Result<ZulipCommandReceiptV1, ZulipClientWireErrorV1> {
+    let receipt = wire::ZulipCommandReceiptV1::decode(bytes)
+        .map_err(|_| ZulipClientWireErrorV1::InvalidPayload)?;
+    if receipt.operation_id.trim().is_empty() || receipt.account_id.trim().is_empty() {
+        return Err(ZulipClientWireErrorV1::InvalidPayload);
+    }
+    Ok(ZulipCommandReceiptV1 {
+        operation_id: receipt.operation_id,
+        account_id: receipt.account_id,
+    })
+}
+
+pub fn encode_operation_status_response(status: Option<&ZulipCommandOperationStatusV1>) -> Vec<u8> {
+    wire::ZulipOperationStatusResponseV1 {
+        status: status.map(status_message),
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_operation_status_response(
+    bytes: &[u8],
+) -> Result<Option<ZulipCommandOperationStatusV1>, ZulipClientWireErrorV1> {
+    wire::ZulipOperationStatusResponseV1::decode(bytes)
+        .map_err(|_| ZulipClientWireErrorV1::InvalidPayload)?
+        .status
+        .map(decode_status_message)
+        .transpose()
 }
 
 fn command_message(command: &ZulipCommandV1) -> wire::ZulipProviderCommandV1 {

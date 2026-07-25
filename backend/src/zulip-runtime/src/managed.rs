@@ -43,7 +43,7 @@ use hermes_storage_protocol::{
 use hermes_storage_vault::{
     InheritedKernelVaultRouteV2, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
 };
-use hermes_vault_protocol::{DEFAULT_LEASE_TTL_SECONDS, SecretClassV1};
+use hermes_vault_protocol::SecretClassV1;
 use hermes_zulip_api::{
     ZulipAccountV1, ZulipCommandOperationStatusV1, ZulipCommandV1, ZulipEventQueueV1,
     command_blob_intent,
@@ -54,6 +54,7 @@ use hermes_zulip_persistence::ZulipDurablePersistence;
 use prost::Message;
 use sha2::{Digest, Sha256};
 
+use crate::admission::{ZULIP_BLOB_CAPABILITY_ID, ZULIP_CREDENTIAL_LEASE_TTL_SECONDS};
 use crate::{
     ZulipCommunicationsOutboxRelayError, ZulipRuntimeAdmissionV1, ZulipRuntimeErrorV1,
     ZulipRuntimeIdentityV1, acquire_event_queue, poll_once, relay_communications_outbox_once,
@@ -61,7 +62,6 @@ use crate::{
 use zeroize::Zeroizing;
 
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
-const ZULIP_BLOB_CAPABILITY_ID: &str = "zulip.blob.v1";
 
 pub struct ZulipAdmittedRuntimeV1 {
     pub control_channel: ManagedControlChannelV2<UnixStream>,
@@ -158,7 +158,7 @@ pub async fn open_admitted_runtime(
                     configuration_instance_id: &admission.configuration_instance_id,
                     purpose_id: purpose.purpose_id(),
                     credential_revision: api_key_revision,
-                    ttl_seconds: DEFAULT_LEASE_TTL_SECONDS,
+                    ttl_seconds: ZULIP_CREDENTIAL_LEASE_TTL_SECONDS,
                     secret_class: SecretClassV1::ProviderCredential,
                 },
             )

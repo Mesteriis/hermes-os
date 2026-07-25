@@ -1,5 +1,6 @@
 //! Typed Zulip operational contract. It contains no transport or domain dependency.
 
+pub mod client_contract;
 pub mod client_wire;
 #[allow(clippy::large_enum_variant)]
 pub mod wire {
@@ -373,14 +374,18 @@ fn append_blob_intent(bytes: &mut Vec<u8>, value: &ZulipBlobIntentV1) {
 #[cfg(test)]
 mod generated_client_wire_tests {
     use super::{
-        ZulipClientRequestV1, ZulipClientResponseV1, ZulipCommandOperationOutcomeV1,
-        ZulipCommandOperationStatusV1, ZulipCommandV1,
-        client_wire::{decode_request, decode_response, encode_request, encode_response},
+        ZulipCommandOperationOutcomeV1, ZulipCommandOperationStatusV1, ZulipCommandReceiptV1,
+        ZulipCommandV1,
+        client_wire::{
+            decode_command_request, decode_command_response, decode_operation_status_query,
+            decode_operation_status_response, encode_command_request, encode_command_response,
+            encode_operation_status_query, encode_operation_status_response,
+        },
     };
 
     #[test]
-    fn preserves_exact_command_and_terminal_status_payloads() {
-        let request = ZulipClientRequestV1::Command(ZulipCommandV1::SendDirectWithUpload {
+    fn preserves_exact_route_specific_command_and_status_payloads() {
+        let command = ZulipCommandV1::SendDirectWithUpload {
             operation_id: "operation".into(),
             account_id: "account".into(),
             recipients: vec!["41".into(), "42".into()],
@@ -392,20 +397,37 @@ mod generated_client_wire_tests {
                 backup_class: 1,
             },
             filename: "attachment.txt".into(),
-        });
-        assert_eq!(decode_request(&encode_request(&request)), Ok(request));
-        let response =
-            ZulipClientResponseV1::OperationStatus(Some(ZulipCommandOperationStatusV1 {
-                operation_id: "operation".into(),
-                account_id: "account".into(),
-                outcome: ZulipCommandOperationOutcomeV1::Accepted {
-                    provider_message_id: Some(7),
-                    blob_ref: None,
-                },
-                requested_at_unix_seconds: 1,
-                completed_at_unix_seconds: Some(2),
-            }));
-        assert_eq!(decode_response(&encode_response(&response)), Ok(response));
+        };
+        assert_eq!(
+            decode_command_request(&encode_command_request(&command)),
+            Ok(command)
+        );
+        assert_eq!(
+            decode_operation_status_query(&encode_operation_status_query("operation")),
+            Ok("operation".to_owned())
+        );
+        let receipt = ZulipCommandReceiptV1 {
+            operation_id: "operation".into(),
+            account_id: "account".into(),
+        };
+        assert_eq!(
+            decode_command_response(&encode_command_response(&receipt)),
+            Ok(receipt)
+        );
+        let status = ZulipCommandOperationStatusV1 {
+            operation_id: "operation".into(),
+            account_id: "account".into(),
+            outcome: ZulipCommandOperationOutcomeV1::Accepted {
+                provider_message_id: Some(7),
+                blob_ref: None,
+            },
+            requested_at_unix_seconds: 1,
+            completed_at_unix_seconds: Some(2),
+        };
+        assert_eq!(
+            decode_operation_status_response(&encode_operation_status_response(Some(&status))),
+            Ok(Some(status))
+        );
     }
 }
 

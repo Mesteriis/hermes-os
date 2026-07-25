@@ -3,7 +3,12 @@ fn main() {
     unsafe {
         std::env::set_var("PROTOC", protoc);
     }
-    prost_build::Config::new()
+    let descriptor_set =
+        std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR must be available"))
+            .join("hermes.zulip.v1.bin");
+    let mut config = prost_build::Config::new();
+    config.file_descriptor_set_path(descriptor_set);
+    config
         .compile_protos(&["proto/hermes/zulip/v1/client.proto"], &["proto"])
         .expect("Zulip client protocol must compile");
 }

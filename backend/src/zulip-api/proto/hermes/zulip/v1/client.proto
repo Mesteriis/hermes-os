@@ -12,15 +12,17 @@ message SendStreamWithUploadCommandV1 { string operation_id = 1; string account_
 message SendDirectWithUploadCommandV1 { string operation_id = 1; string account_id = 2; repeated string recipient = 3; string content = 4; ZulipBlobIntentV1 blob = 5; string filename = 6; }
 message DownloadAttachmentCommandV1 { string operation_id = 1; string account_id = 2; string upload_path = 3; ZulipBlobIntentV1 blob = 4; }
 
-message ZulipClientRequestV1 { oneof request { ZulipProviderCommandV1 command = 1; ZulipOperationStatusQueryV1 operation_status = 2; } }
 message ZulipOperationStatusQueryV1 { string operation_id = 1; }
-message ZulipClientResponseV1 { oneof response { ZulipCommandReceiptV1 command_receipt = 1; ZulipOperationStatusResponseV1 operation_status = 2; } }
 message ZulipCommandReceiptV1 { string operation_id = 1; string account_id = 2; }
 message ZulipOperationStatusResponseV1 { optional ZulipCommandOperationStatusV1 status = 1; }
 message ZulipCommandOperationStatusV1 { string operation_id = 1; string account_id = 2; string outcome = 3; optional int64 provider_message_id = 4; int64 requested_at_unix_seconds = 5; optional int64 completed_at_unix_seconds = 6; optional string blob_ref = 7; }
 
-// Provider-specific public operational contract. Gateway routes this exact
-// owner contract after authentication without translating Zulip payloads.
-service ZulipOperationalService {
-  rpc Execute(ZulipClientRequestV1) returns (ZulipClientResponseV1);
+// Provider-specific operational contracts. Core Gateway authenticates and
+// routes each exact contract but does not translate its Zulip payload.
+service ZulipCommandService {
+  rpc ExecuteCommand(ZulipProviderCommandV1) returns (ZulipCommandReceiptV1);
+}
+
+service ZulipQueryService {
+  rpc GetOperationStatus(ZulipOperationStatusQueryV1) returns (ZulipOperationStatusResponseV1);
 }

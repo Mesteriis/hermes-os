@@ -11,7 +11,7 @@ use hermes_vault_protocol::{
 use hermes_zulip_api::{ZulipAttachmentV1, ZulipEventV1};
 
 pub const PACKAGE: &str = "hermes-zulip-core";
-pub const ZULIP_CREDENTIAL_PURPOSE_PREFIX: &str = "zulip.account";
+pub const ZULIP_API_KEY_PURPOSE_ID: &str = "zulip_api_key";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ZulipCoreError {
@@ -65,7 +65,7 @@ pub fn credential_lease_purpose(
         return Err(ZulipCoreError::CredentialLeaseRejected);
     }
     VaultPurposeRequestV1::new(
-        format!("{ZULIP_CREDENTIAL_PURPOSE_PREFIX}.{account_id}.api_key"),
+        ZULIP_API_KEY_PURPOSE_ID.to_owned(),
         configuration_instance_id.to_owned(),
         vec![SecretClassV1::ProviderCredential],
         vec![VaultActionV1::Resolve],
@@ -275,6 +275,15 @@ impl<'a> ObservedEvent<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn api_key_purpose_is_stable_and_configuration_scoped() {
+        let purpose = credential_lease_purpose("account-1", "configuration-1", 7)
+            .expect("credential purpose");
+
+        assert_eq!(purpose.purpose_id(), ZULIP_API_KEY_PURPOSE_ID);
+        assert_eq!(purpose.configuration_instance_id(), "configuration-1");
+    }
 
     #[test]
     fn maps_zulip_message_without_content() {

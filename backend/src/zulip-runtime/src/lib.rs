@@ -3,6 +3,7 @@
 //! This crate composes provider-local HTTP, persistence and the public
 //! Communications ingress contract. It never reaches Communications storage.
 
+pub mod admission;
 pub mod blob;
 pub mod client_port;
 mod communications_outbox;
@@ -79,7 +80,7 @@ pub async fn submit_command(
             operation_id,
             command_account_id(command),
             &command_sha256,
-            &hermes_zulip_api::client_wire::encode_command(command),
+            &hermes_zulip_api::client_wire::encode_command_request(command),
             requested_at_unix_seconds,
         )
         .await
@@ -136,8 +137,11 @@ pub async fn execute_next_command_with_blob(
     else {
         return Ok(false);
     };
-    let command = hermes_zulip_api::client_wire::decode_command(&queued.exact_command_bytes)
-        .map_err(|_| ZulipRuntimeErrorV1::Persistence(ZulipDurablePersistenceError::InvalidRow))?;
+    let command =
+        hermes_zulip_api::client_wire::decode_command_request(&queued.exact_command_bytes)
+            .map_err(|_| {
+                ZulipRuntimeErrorV1::Persistence(ZulipDurablePersistenceError::InvalidRow)
+            })?;
     let command_sha256: [u8; 32] = Sha256::digest(command_fingerprint_bytes(&command)).into();
     if queued.operation_id != command_operation_id(&command)
         || queued.account_id != command_account_id(&command)
