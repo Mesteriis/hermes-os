@@ -8,7 +8,7 @@ services:
     image: nats:2.10-alpine
     command: ["-js", "-sd", "/var/lib/hermes", "-m", "8222"]
     ports:
-      - 127.0.0.1:43225:4222
+      - 127.0.0.1:${HERMES_STORAGE_AUTHENTICATED_NATS_PORT:-43225}:4222
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8222/healthz >/dev/null"]
       interval: 5s
@@ -28,7 +28,7 @@ services:
       POSTGRES_USER: hermes_postgres_admin
       POSTGRES_PASSWORD_FILE: /run/secrets/storage_postgres_admin_password
     ports:
-      - 127.0.0.1:35532:5432
+      - 127.0.0.1:${HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT:-35532}:5432
     secrets:
       - storage_postgres_admin_password
     networks:
@@ -54,7 +54,7 @@ services:
     entrypoint: ["/bin/sh", "/etc/hermes/boot.sh"]
     command: ["/usr/bin/pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
     ports:
-      - 127.0.0.1:36532:6432
+      - 127.0.0.1:${HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PORT:-36532}:6432
     secrets:
       - storage_pgbouncer_admin_password
     volumes:

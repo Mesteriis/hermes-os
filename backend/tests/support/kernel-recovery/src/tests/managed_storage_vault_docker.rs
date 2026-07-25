@@ -125,10 +125,18 @@ use zulip_managed_setup::*;
 #[path = "managed_storage_vault_docker/zulip_managed_fixture.rs"]
 mod zulip_managed_fixture;
 use zulip_managed_fixture::*;
+#[path = "managed_storage_vault_docker/whatsapp_managed_setup.rs"]
+mod whatsapp_managed_setup;
 #[path = "managed_storage_vault_docker/zulip_event_flow.rs"]
 mod zulip_event_flow;
 #[path = "managed_storage_vault_docker/zulip_managed_flow.rs"]
 mod zulip_managed_flow;
+use whatsapp_managed_setup::*;
+#[path = "managed_storage_vault_docker/whatsapp_managed_fixture.rs"]
+mod whatsapp_managed_fixture;
+use whatsapp_managed_fixture::*;
+#[path = "managed_storage_vault_docker/whatsapp_managed_flow.rs"]
+mod whatsapp_managed_flow;
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault and Storage binaries"]

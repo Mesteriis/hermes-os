@@ -16,8 +16,10 @@ route-specific generated `whatsapp.command.v1`/`whatsapp.query.v1` contracts
 typed operation/response oneofs и exact descriptor digest; umbrella
 `whatsapp.client` удалён из backend и Tauri host path. Canonical
 descriptor/settings/storage artifacts и отдельная unsigned release assembly
-реализованы. Signed admission, live provider flow и frontend cutover ещё
-отсутствуют.
+реализованы. Release compiler подписывает exact assembly entries, а live
+managed contour доказывает registration/grants, signed launch, private host
+route, generation/grant fencing и isolated revoke. Live provider flow,
+terminal result/replay и frontend cutover ещё отсутствуют.
 
 Первый exact provider profile:
 [ADR-0266: Telegram Kernel admission and event-only Communications handoff](ADR-0266-telegram-kernel-admission-and-event-only-communications-handoff.md).

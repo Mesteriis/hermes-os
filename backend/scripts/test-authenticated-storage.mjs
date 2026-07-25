@@ -1,6 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -43,6 +44,7 @@ async function run(command, args, options = {}) {
 
 async function create_secret_files() {
   const directory = await mkdtemp(join(tmpdir(), 'hermes-storage-auth-'));
+  const ports = await allocate_loopback_ports();
   await chmod(directory, 0o700);
   const postgresPath = await create_secret_file(directory, 'postgres-admin-password');
   const pgbouncerPath = await create_secret_file(directory, 'pgbouncer-admin-password');
@@ -67,7 +69,40 @@ async function create_secret_files() {
     pgbouncerAuthDirectory,
     databasesPath,
     authPath: join(pgbouncerAuthDirectory, 'users.txt'),
+    ...ports,
   };
+}
+
+async function allocate_loopback_ports() {
+  const reservations = await Promise.all(
+    ['nats', 'postgres', 'pgbouncer'].map(() => reserve_loopback_port()),
+  );
+  const [natsPort, postgresPort, pgbouncerPort] = reservations.map(
+    ({ port }) => port,
+  );
+  await Promise.all(
+    reservations.map(
+      ({ server }) =>
+        new Promise((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+        }),
+    ),
+  );
+  return { natsPort, postgresPort, pgbouncerPort };
+}
+
+async function reserve_loopback_port() {
+  const server = createServer();
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    server.close();
+    throw new Error('loopback port reservation is unavailable');
+  }
+  return { port: address.port, server };
 }
 
 async function create_secret_file(directory, name) {
@@ -85,6 +120,9 @@ function compose_environment(secrets) {
     HERMES_STORAGE_PGBOUNCER_DATABASES_DIRECTORY: secrets.pgbouncerDirectory,
     HERMES_STORAGE_PGBOUNCER_AUTH_DIRECTORY: secrets.pgbouncerAuthDirectory,
     HERMES_STORAGE_PGBOUNCER_RUNTIME_UID: String(process.getuid()),
+    HERMES_STORAGE_AUTHENTICATED_NATS_PORT: String(secrets.natsPort),
+    HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT: String(secrets.postgresPort),
+    HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PORT: String(secrets.pgbouncerPort),
   };
 }
 
@@ -163,9 +201,9 @@ async function run_conformance(secrets) {
       HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PASSWORD_FILE: secrets.pgbouncerPath,
       HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE: secrets.postgresPath,
       HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_HOST: '127.0.0.1',
-      HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PORT: '36532',
+      HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PORT: String(secrets.pgbouncerPort),
       HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST: '127.0.0.1',
-      HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT: '35532',
+      HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT: String(secrets.postgresPort),
       HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_DATABASES_FILE: secrets.databasesPath,
       HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_AUTH_FILE: secrets.authPath,
       HERMES_STORAGE_AUTHENTICATED_POSTGRES_CONTAINER: secrets.postgresContainer,
@@ -209,6 +247,8 @@ async function run_managed_process_conformance(secrets) {
     '-p',
     'hermes-zulip-runtime',
     '-p',
+    'hermes-whatsapp-runtime',
+    '-p',
     'hermes-blob-service',
     '--features',
     'hermes-mail-runtime/conformance-test-support,hermes-zulip-runtime/conformance-test-support',
@@ -221,6 +261,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_mail_runtime_uses_kernel_leases_and_route_specific_admission',
     'managed_zulip_runtime_uses_kernel_leases_and_route_specific_admission',
     'managed_zulip_runtime_delivers_live_command_and_event_only_communications_handoff',
+    'managed_whatsapp_runtime_uses_signed_kernel_admission_and_host_route_fencing',
   ]) {
     await start_contour(secrets);
     try {
@@ -242,15 +283,16 @@ async function run_managed_process_conformance(secrets) {
       HERMES_VAULT_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-vault-runtime`,
       HERMES_STORAGE_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-storage-runtime`,
       HERMES_SCHEDULER_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-scheduler-runtime`,
-      HERMES_SCHEDULER_LIVE_NATS_ENDPOINT: 'nats://127.0.0.1:43225',
+      HERMES_SCHEDULER_LIVE_NATS_ENDPOINT: `nats://127.0.0.1:${secrets.natsPort}`,
       HERMES_COMMUNICATIONS_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-communications-runtime`,
       HERMES_ATTACHMENT_SECURITY_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-attachment-security-runtime`,
       HERMES_MAIL_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-mail-runtime`,
       HERMES_TELEGRAM_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-telegram-runtime`,
       HERMES_ZULIP_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-zulip-runtime`,
+      HERMES_WHATSAPP_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-whatsapp-runtime`,
       HERMES_TELEGRAM_TDJSON_FIXTURE: tdjsonFixture,
       HERMES_BLOB_SERVICE_BIN: `${process.cwd()}/target/debug/hermes-blob-service`,
-      HERMES_COMMUNICATIONS_LIVE_NATS_ENDPOINT: 'nats://127.0.0.1:43225',
+      HERMES_COMMUNICATIONS_LIVE_NATS_ENDPOINT: `nats://127.0.0.1:${secrets.natsPort}`,
     },
       });
     } finally {
@@ -289,9 +331,9 @@ function authenticated_environment(secrets) {
     HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PASSWORD_FILE: secrets.pgbouncerPath,
     HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE: secrets.postgresPath,
     HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_HOST: '127.0.0.1',
-    HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PORT: '36532',
+    HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PORT: String(secrets.pgbouncerPort),
     HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST: '127.0.0.1',
-    HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT: '35532',
+    HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT: String(secrets.postgresPort),
     HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_DATABASES_FILE: secrets.databasesPath,
     HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_AUTH_FILE: secrets.authPath,
     HERMES_STORAGE_AUTHENTICATED_POSTGRES_CONTAINER: secrets.postgresContainer,

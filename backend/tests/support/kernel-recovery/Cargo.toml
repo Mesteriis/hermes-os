@@ -44,6 +44,9 @@ hermes-zulip-api = { path = "../../../src/zulip-api" }
 hermes-zulip-core = { path = "../../../src/zulip-core" }
 hermes-zulip-persistence = { path = "../../../src/zulip-persistence" }
 hermes-zulip-runtime = { path = "../../../src/zulip-runtime" }
+hermes-whatsapp-api = { path = "../../../src/whatsapp-api" }
+hermes-whatsapp-persistence = { path = "../../../src/whatsapp-persistence" }
+hermes-whatsapp-runtime = { path = "../../../src/whatsapp-runtime" }
 hermes-gateway-protocol = { path = "../../../src/api/gateway/contracts" }
 hermes-gateway-session = { path = "../../../src/api/gateway/session" }
 hermes-gateway-session-contract = { path = "../../../src/api/gateway/session_contract" }

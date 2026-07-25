@@ -2,7 +2,7 @@
 
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 use hermes_runtime_protocol::{
@@ -17,7 +17,7 @@ pub(crate) struct PublishedHostBridgeDescriptor {
 }
 
 impl PublishedHostBridgeDescriptor {
-    pub(crate) fn remove(self) {
+    pub(crate) fn remove(self, socket_path: &Path) {
         if let Ok(metadata) = std::fs::symlink_metadata(&self.path)
             && metadata.file_type().is_file()
             && !metadata.file_type().is_symlink()
@@ -25,6 +25,17 @@ impl PublishedHostBridgeDescriptor {
         {
             let _ = std::fs::remove_file(self.path);
         }
+        remove_owned_socket(socket_path);
+    }
+}
+
+fn remove_owned_socket(path: &Path) {
+    if let Ok(metadata) = std::fs::symlink_metadata(path)
+        && metadata.file_type().is_socket()
+        && !metadata.file_type().is_symlink()
+        && metadata.uid() == current_uid()
+    {
+        let _ = std::fs::remove_file(path);
     }
 }
 
@@ -110,12 +121,12 @@ mod tests {
     #[test]
     fn publishes_and_removes_only_the_exact_private_route_descriptor() {
         let root = std::env::temp_dir().join(format!(
-            "hermes-host-route-{}-{}",
+            "hhr-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .expect("clock")
-                .as_nanos(),
+                .subsec_nanos(),
         ));
         let directory = root.join("host-bridges");
         std::fs::create_dir_all(&directory).expect("directory");
@@ -149,8 +160,12 @@ mod tests {
             .expect("decoded descriptor"),
             configuration
         );
-        descriptor.remove();
+        let socket_path = root.join("whatsapp.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&socket_path).expect("host socket");
+        descriptor.remove(&socket_path);
         assert!(!path.exists());
+        assert!(!socket_path.exists());
+        drop(listener);
         std::fs::remove_dir_all(root).expect("cleanup root");
     }
 }

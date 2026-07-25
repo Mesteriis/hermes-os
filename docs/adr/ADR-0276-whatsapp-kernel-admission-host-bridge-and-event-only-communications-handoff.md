@@ -3,7 +3,7 @@
 Статус: Принято
 Дата: 2026-07-25
 Состояние реализации: Phase gate; `whatsapp_integration_v1` не открыт.
-Первые три implementation-слайса этого решения реализованы. Runtime использует
+Первые четыре implementation-слайса этого решения реализованы. Runtime использует
 один
 correlation-owned `ManagedControlChannelV2`, передаёт его последовательно
 Storage/Vault и Event Hub clients, не clone-ит inherited FD и отправляет
@@ -20,8 +20,15 @@ Canonical descriptor, hidden configuration-scoped `whatsapp.account_id`
 settings, immutable owner-local Storage bundle и отдельная unsigned
 `hermes-whatsapp-assembly` теперь материализуются детерминированно. Один
 admitted runtime обслуживает только свой configured account. Signed
-distribution binding, managed launch и live provider conformance остаются
-обязательными следующими slices.
+distribution compiler подписывает exact runtime/descriptor/settings/storage
+entries assembly unit. Disposable live contour доказывает pending
+registration, explicit owner-approved capability subset, exact signed managed
+launch, Storage binding через выданный PgBouncer pool alias, private host route
+handshake, stale runtime-generation fence и revoke с grant-epoch advance.
+Revoke переводит только WhatsApp Storage binding в `Revoking`, останавливает
+только WhatsApp, сохраняет Communications active и удаляет exact owner-owned
+Unix socket. Live provider command/result, WebView observation, event replay и
+frontend cutover остаются обязательными следующими slices.
 
 Уточняет:
 
@@ -50,8 +57,9 @@ private host bridge и public provider client contract, generated Protobuf не
 объявлял route-specific Connect services, а exact artifacts, assembly и live
 provider evidence отсутствовали. Первые три дефекта устранены; exact
 `ModuleDescriptorV1`, settings/storage artifact builders и отдельная release
-assembly unit также реализованы. Signed distribution binding и live provider
-flow всё ещё отсутствуют.
+assembly unit также реализованы. Signed distribution binding и managed
+admission/fencing теперь доказаны live contour; provider command/result,
+WebView evidence flow и replay всё ещё отсутствуют.
 
 Сохранить `/api/v1/communications/*` как временный transport нельзя:
 Communications не выполняет WhatsApp provider commands и не владеет его

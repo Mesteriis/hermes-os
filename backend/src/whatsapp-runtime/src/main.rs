@@ -94,7 +94,7 @@ where
             &configuration.event_hub_endpoint,
             configuration.event_credential_revision,
         ))
-        .map_err(|_| "WhatsApp runtime admission was rejected".to_owned())?;
+        .map_err(|error| format!("WhatsApp runtime admission was rejected: {error:?}"))?;
     let listener = admitted
         .bind_host_bridge_listener()
         .map_err(|_| "WhatsApp host bridge listener is unavailable".to_owned())?;

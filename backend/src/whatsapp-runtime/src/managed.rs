@@ -147,10 +147,6 @@ pub async fn open_admitted_runtime(
     )
     .await
     .map_err(|_| WhatsAppBootstrapError::Persistence)?;
-    durable
-        .initialize()
-        .await
-        .map_err(|_| WhatsAppBootstrapError::Persistence)?;
 
     let event_access = request_managed_runtime_event_access_v2(
         &mut control_channel,

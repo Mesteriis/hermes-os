@@ -1,6 +1,9 @@
 use hermes_events_protocol::delivery::OutboxRecordV1;
 use hermes_storage_protocol::StorageBindingV1;
-use sqlx::{PgPool, Row, postgres::PgConnectOptions};
+use sqlx::{
+    PgPool, Row,
+    postgres::{PgConnectOptions, PgPoolOptions},
+};
 
 use crate::WHATSAPP_SCHEMA_V1;
 
@@ -101,8 +104,12 @@ impl WhatsAppDurablePersistence {
             .port(port)
             .username(binding.access().runtime_principal())
             .password(password)
-            .database(database_id);
-        let pool = PgPool::connect_with(options)
+            .database(binding.access().pool_alias());
+        let pool = PgPoolOptions::new()
+            .max_connections(u32::from(
+                binding.access().effective_budgets().max_connections(),
+            ))
+            .connect_with(options)
             .await
             .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
         Ok(Self { pool })

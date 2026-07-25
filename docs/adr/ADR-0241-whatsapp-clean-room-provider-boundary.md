@@ -40,10 +40,14 @@ an umbrella `whatsapp.client` DTO. These prerequisites do not open the
 production phase gate. Canonical descriptor/settings/storage artifacts and the
 separate unsigned `hermes-whatsapp-assembly` now exist; one admitted runtime is
 bound by hidden configuration-scoped settings to one account, and its Storage
-bundle contains only `hermes_data.whatsapp_*` tables. Signed Kernel launch
-wiring, live provider command execution and live WebView evidence remain open
-migration work. No database URL environment variable or provider secret
-handoff is admitted.
+bundle contains only `hermes_data.whatsapp_*` tables. Exact assembly artifacts
+are included in the signed distribution, and live managed conformance proves
+owner-approved grants, signed Kernel launch, Storage admission through the
+issued PgBouncer pool alias, private host-route binding, stale generation
+rejection and revoke fencing without stopping Communications. Live provider
+command execution, terminal result, WebView observation delivery and replay
+remain open migration work. No database URL environment variable, runtime DDL
+or provider secret handoff is admitted.
 
 The backend API/core/persistence/runtime/assembly packages remain independent
 WhatsApp integration build units. "Host-owned" applies only to browser/WebView

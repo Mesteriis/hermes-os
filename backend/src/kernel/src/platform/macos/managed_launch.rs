@@ -1,6 +1,6 @@
 //! Prepares one fenced macOS managed runtime launch and hands it to the Kernel supervisor.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use hermes_kernel_control_store::{ManagedLaunchRecord, PlatformStorageBindingStateV1};
@@ -333,10 +333,13 @@ pub(crate) fn start_staged_with_host_bridge_configuration(
             return Err(error);
         }
     };
+    let host_bridge_socket_path = PathBuf::from(&host_bridge_configuration.socket_path);
     let (prepared_runtime, staged_runtime_artifacts) = prepared.into_launch_parts();
     let cleanup = combine_cleanup(
         staged_runtime_artifact_cleanup(staged_runtime_artifacts),
-        Some(Box::new(move || descriptor.remove())),
+        Some(Box::new(move || {
+            descriptor.remove(&host_bridge_socket_path);
+        })),
     );
     start_prepared_with_configuration_bytes(
         supervisor,
