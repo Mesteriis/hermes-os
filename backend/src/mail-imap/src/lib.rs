@@ -8,6 +8,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::time::Duration;
 
 use async_imap::Session;
+#[cfg(not(feature = "conformance-test-support"))]
 use async_native_tls::TlsConnector;
 use async_std::future;
 use async_std::net::TcpStream;
@@ -273,6 +274,7 @@ async fn imap_sync_once(
     })
 }
 
+#[cfg(not(feature = "conformance-test-support"))]
 async fn open_session(
     host: &str,
     port: u16,
@@ -295,7 +297,40 @@ async fn open_session(
                 format!("tls connect to {host}:{port} failed: {error}"),
             )
         })?;
-    let mut client = async_imap::Client::new(tls_stream);
+    login_session(tls_stream, username, password).await
+}
+
+#[cfg(feature = "conformance-test-support")]
+async fn open_session(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+) -> Result<Session<TcpStream>, ImapError> {
+    if !conformance_loopback_host(host) {
+        return Err(ImapError::new(
+            "conformance",
+            "plaintext IMAP conformance transport is loopback-only",
+        ));
+    }
+    let tcp_stream = TcpStream::connect((host, port)).await.map_err(|error| {
+        ImapError::new(
+            "network",
+            format!("tcp connect to loopback fixture {host}:{port} failed: {error}"),
+        )
+    })?;
+    login_session(tcp_stream, username, password).await
+}
+
+async fn login_session<T>(
+    stream: T,
+    username: &str,
+    password: &str,
+) -> Result<Session<T>, ImapError>
+where
+    T: AsyncRead + AsyncWrite + Debug + Send + Unpin,
+{
+    let mut client = async_imap::Client::new(stream);
     client
         .read_response()
         .await
@@ -305,6 +340,11 @@ async fn open_session(
         .await
         .map_err(|(error, _)| ImapError::new("auth", format!("imap login failed: {error}")))?;
     Ok(session)
+}
+
+#[cfg(feature = "conformance-test-support")]
+fn conformance_loopback_host(host: &str) -> bool {
+    matches!(host, "127.0.0.1" | "::1" | "localhost")
 }
 
 async fn fetch_messages<T>(
@@ -545,6 +585,15 @@ mod tests {
         );
 
         assert!(decode_message_attachments(message.as_bytes()).is_empty());
+    }
+
+    #[cfg(feature = "conformance-test-support")]
+    #[test]
+    fn plaintext_conformance_transport_is_loopback_only() {
+        assert!(conformance_loopback_host("127.0.0.1"));
+        assert!(conformance_loopback_host("::1"));
+        assert!(conformance_loopback_host("localhost"));
+        assert!(!conformance_loopback_host("imap.example.test"));
     }
 }
 

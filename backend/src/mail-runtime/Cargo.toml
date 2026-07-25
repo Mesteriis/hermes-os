@@ -12,6 +12,13 @@ path = "src/main.rs"
 name = "hermes_mail_runtime"
 path = "src/lib.rs"
 
+[features]
+default = []
+conformance-test-support = [
+    "hermes-mail-api/conformance-test-support",
+    "hermes-mail-imap/conformance-test-support",
+]
+
 [package.metadata.hermes]
 role = "integration"
 owner = "mail"

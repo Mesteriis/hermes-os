@@ -1,6 +1,6 @@
 //! Managed Mail-owned outbox to Communications event handoff conformance.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
 use hermes_communications_ingress::{
@@ -44,6 +44,7 @@ pub(super) fn assert_mail_event_only_communications_handoff(
             .subscribe("hermes.event.v1.communications.communication_evidence_recorded.v1")
             .await
             .expect("subscribe canonical Communications events");
+        client.flush().await.expect("activate Mail event observers");
         (client, observations, canonical_events)
     });
 
@@ -159,6 +160,7 @@ pub(super) fn assert_mail_event_only_communications_handoff(
         None
     );
     set_nats_container_running(true);
+    wait_for_nats_reconnect(&runtime, &client);
 
     let (replayed_observation, replayed_canonical) = runtime.block_on(async {
         let observation = tokio::time::timeout(Duration::from_secs(10), observations.next())
@@ -232,7 +234,7 @@ fn mail_observation(
     .expect("build exact Mail observation envelope")
 }
 
-async fn connect_postgres() -> MailDurablePersistence {
+pub(super) async fn connect_postgres() -> MailDurablePersistence {
     let password = Zeroizing::new(
         std::fs::read_to_string(required(
             "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",
@@ -253,6 +255,20 @@ async fn connect_postgres() -> MailDurablePersistence {
     )
     .await
     .expect("connect disposable PostgreSQL")
+}
+
+fn wait_for_nats_reconnect(runtime: &tokio::runtime::Runtime, client: &async_nats::Client) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while client.connection_state() != async_nats::connection::State::Connected {
+        assert!(
+            Instant::now() < deadline,
+            "Mail event observer did not reconnect to NATS"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    runtime
+        .block_on(client.flush())
+        .expect("flush reconnected Mail event observer");
 }
 
 fn set_nats_container_running(running: bool) {

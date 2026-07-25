@@ -266,7 +266,14 @@ pub fn valid_host(host: &str) -> bool {
 }
 
 pub fn valid_port(port: u16) -> bool {
-    port == IMAP_PORT && port > 0
+    #[cfg(feature = "conformance-test-support")]
+    {
+        port > 0
+    }
+    #[cfg(not(feature = "conformance-test-support"))]
+    {
+        port == IMAP_PORT && port > 0
+    }
 }
 
 pub fn valid_smtp_port(port: u16) -> bool {
@@ -283,4 +290,24 @@ pub fn valid_message_bytes(bytes: usize) -> bool {
 
 pub fn valid_plain_text_bytes(bytes: usize) -> bool {
     bytes <= MAX_PLAIN_TEXT_BYTES
+}
+
+#[cfg(test)]
+mod conformance_port_tests {
+    use super::*;
+
+    #[cfg(not(feature = "conformance-test-support"))]
+    #[test]
+    fn production_imap_transport_accepts_only_implicit_tls_port() {
+        assert!(valid_port(IMAP_PORT));
+        assert!(!valid_port(19_993));
+    }
+
+    #[cfg(feature = "conformance-test-support")]
+    #[test]
+    fn conformance_imap_transport_accepts_a_non_zero_fixture_port() {
+        assert!(valid_port(IMAP_PORT));
+        assert!(valid_port(19_993));
+        assert!(!valid_port(0));
+    }
 }

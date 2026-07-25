@@ -166,6 +166,7 @@ pub(super) fn start_mail_runtime(
     kernel_data: &Path,
     runtime_dir: &Path,
     admitted: AdmittedMailRuntime,
+    imap_port: u16,
 ) -> StartedMailRuntime {
     let reservation = managed_launch::load(supervisor, store, &admitted.registration_id)
         .expect("load Mail managed launch reservation");
@@ -213,7 +214,7 @@ pub(super) fn start_mail_runtime(
         reservation,
         managed_launch::ManagedIntegrationLaunchConfiguration {
             runtime: configuration,
-            settings_snapshot_bytes: mail_settings_snapshot().encode_to_vec(),
+            settings_snapshot_bytes: mail_settings_snapshot(imap_port).encode_to_vec(),
             granted_capability_ids: &admitted.capability_ids,
         },
     )
@@ -226,7 +227,7 @@ pub(super) fn start_mail_runtime(
     }
 }
 
-fn mail_settings_snapshot() -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {
+fn mail_settings_snapshot(imap_port: u16) -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {
     use hermes_runtime_protocol::v1::{
         SettingValueV1, SettingsValueEntryV1, setting_value_v1::Value,
     };
@@ -246,15 +247,15 @@ fn mail_settings_snapshot() -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {
                 "mail.connection_id",
                 Value::StringValue(MAIL_ACCOUNT_ID.to_owned()),
             ),
-            entry(
-                "mail.imap.host",
-                Value::StringValue("imap.example.test".to_owned()),
-            ),
+            entry("mail.imap.host", Value::StringValue("localhost".to_owned())),
             entry(
                 "mail.imap.password_revision",
                 Value::UnsignedIntegerValue(1),
             ),
-            entry("mail.imap.port", Value::UnsignedIntegerValue(993)),
+            entry(
+                "mail.imap.port",
+                Value::UnsignedIntegerValue(u64::from(imap_port)),
+            ),
             entry(
                 "mail.imap.username",
                 Value::StringValue("owner@example.test".to_owned()),

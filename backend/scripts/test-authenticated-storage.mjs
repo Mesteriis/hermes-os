@@ -206,6 +206,8 @@ async function run_managed_process_conformance(secrets) {
     'hermes-telegram-runtime',
     '-p',
     'hermes-blob-service',
+    '--features',
+    'hermes-mail-runtime/conformance-test-support',
   ]);
   for (const test of managedTest ? [managedTest] : [
     'managed_storage_binary_bootstraps_through_live_vault',

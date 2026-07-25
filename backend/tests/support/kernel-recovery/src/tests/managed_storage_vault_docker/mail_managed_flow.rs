@@ -25,6 +25,7 @@ fn managed_mail_runtime_uses_kernel_leases_and_route_specific_admission() {
         std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
         Ok("1")
     );
+    let imap = MailImapFixture::start();
     let root = unique_target_root("hermes-managed-mail-runtime");
     let data = private_directory(short_communications_kernel_data_directory());
     let vault_dir = private_directory(data.join("vault"));
@@ -88,10 +89,16 @@ fn managed_mail_runtime_uses_kernel_leases_and_route_specific_admission() {
         &data,
         &root.join("runtime"),
         admitted_mail,
+        imap.port(),
     );
     assert_mail_event_only_communications_handoff(&store, &supervisor, &mail);
+    assert_mail_attachment_lifecycle(&store, &supervisor, &mail);
     assert_ungranted_delivery_is_rejected(&store, &supervisor, &mail);
     assert_stale_sync_generation_is_rejected(&store, &supervisor, &mail);
+    assert!(
+        imap.accepted_connections() > 0,
+        "managed Mail runtime must reach the live loopback IMAP fixture"
+    );
     let (owner_runtime_dir, owner_control) =
         start_owner_control(&data, &store, &shutdown, &supervisor);
     revoke_mail_runtime(

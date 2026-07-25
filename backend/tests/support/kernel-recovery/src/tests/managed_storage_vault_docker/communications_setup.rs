@@ -1717,7 +1717,7 @@ pub(super) fn assert_communications_relationship_projection(
     }
 }
 
-fn route_communications_query(
+pub(super) fn route_communications_query(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     request_id: u64,

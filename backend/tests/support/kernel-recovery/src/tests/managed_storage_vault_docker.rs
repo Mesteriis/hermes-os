@@ -79,11 +79,17 @@ use telegram_event_flow::*;
 #[path = "managed_storage_vault_docker/telegram_managed_setup.rs"]
 mod telegram_managed_setup;
 use telegram_managed_setup::*;
+#[path = "managed_storage_vault_docker/mail_attachment_flow.rs"]
+mod mail_attachment_flow;
 #[path = "managed_storage_vault_docker/mail_event_flow.rs"]
 mod mail_event_flow;
+#[path = "managed_storage_vault_docker/mail_imap_fixture.rs"]
+mod mail_imap_fixture;
 #[path = "managed_storage_vault_docker/mail_managed_setup.rs"]
 mod mail_managed_setup;
+use mail_attachment_flow::*;
 use mail_event_flow::*;
+use mail_imap_fixture::*;
 #[path = "managed_storage_vault_docker/telegram_managed_flow.rs"]
 mod telegram_managed_flow;
 use mail_managed_setup::*;

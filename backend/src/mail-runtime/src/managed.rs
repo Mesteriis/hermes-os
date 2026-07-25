@@ -51,7 +51,9 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::MailRuntimeAdmission;
-use crate::admission::{MAIL_CREDENTIAL_LEASE_TTL_SECONDS, MAIL_MODULE_ID};
+use crate::admission::{
+    MAIL_BLOB_CAPABILITY_ID, MAIL_CREDENTIAL_LEASE_TTL_SECONDS, MAIL_MODULE_ID,
+};
 use crate::attachment_anchor_mapping::{
     MailAttachmentAnchorMappingErrorV1, consume_next_attachment_anchor_recorded_v1,
 };
@@ -1097,7 +1099,7 @@ impl MailAdmittedRuntime {
             &mut self.control_channel,
             &mut dispatcher,
             ManagedBlobSessionRequestV1 {
-                capability_id: "blob.content",
+                capability_id: MAIL_BLOB_CAPABILITY_ID,
                 operation: BlobDataOperationV1::BlobDataOperationWriteV1,
                 reference_id: &reference_id,
                 declared_size: u64::try_from(plaintext.len())
@@ -1233,7 +1235,7 @@ impl MailAdmittedRuntime {
             &mut self.control_channel,
             &mut dispatcher,
             ManagedBlobSessionRequestV1 {
-                capability_id: "blob.content",
+                capability_id: MAIL_BLOB_CAPABILITY_ID,
                 operation: BlobDataOperationV1::BlobDataOperationWriteV1,
                 reference_id: &reference_id,
                 declared_size: u64::try_from(bytes.len())

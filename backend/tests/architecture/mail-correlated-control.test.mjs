@@ -19,10 +19,15 @@ test('Mail runtime uses one correlated managed-control frame pump', async () => 
   assert.match(managed, /request_managed_blob_session_v2/);
   assert.match(managed, /InheritedKernelVaultRouteV2/);
   assert.match(managed, /ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS/);
+  assert.equal(
+    managed.match(/capability_id: MAIL_BLOB_CAPABILITY_ID/g)?.length,
+    2,
+  );
   assert.doesNotMatch(managed, /\.try_clone\(/);
   assert.doesNotMatch(managed, /ManagedProviderCredentialClientV1/);
   assert.doesNotMatch(managed, /request_managed_runtime_event_access\(/);
   assert.doesNotMatch(managed, /request_managed_blob_session\(/);
+  assert.doesNotMatch(managed, /capability_id: "blob\.content"/);
   assert.doesNotMatch(managed, /MSG_PEEK/);
   assert.doesNotMatch(managed, /\.initialize\(\)/);
 
