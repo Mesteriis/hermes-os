@@ -3,9 +3,8 @@ import type { SseClientOptions, SseMessageEvent, SseStatusEvent } from '../sse'
 import type { FrontendConfig } from '../config/env'
 import { applyMailRealtimePatch } from '../../domains/communications/queries/realtimeMailPatches'
 import { applyWhatsAppRealtimePatch } from '../../domains/communications/queries/realtimeWhatsAppPatches'
-import { applyTelegramParticipantRealtimePatch } from '../../domains/communications/queries/realtimeTelegramParticipantPatches'
-import { applyTelegramRealtimePatch } from '../../domains/communications/queries/realtimeTelegramPatches'
 import { applyTelegramCommandRealtimePatch } from '../../integrations/telegram/queries/realtimeTelegramCommandPatches'
+import { telegramQueryKeys } from '../../integrations/telegram/queries/telegramQueryKeys'
 import { applyWhatsAppRuntimeRealtimePatch } from '../../integrations/whatsapp/queries/realtimeWhatsAppRuntimePatches'
 import { zoomQueryKeys } from '../../integrations/zoom/queries/zoomQueryKeys'
 
@@ -59,13 +58,17 @@ const MAIL_RUNTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
 ]
 
 const TELEGRAM_QUERY_KEYS: readonly (readonly unknown[])[] = [
-	['integrations', 'telegram', 'capabilities'],
-	['integrations', 'telegram', 'accounts'],
-	['communications', 'telegram', 'chats'],
-	['communications', 'telegram', 'folders'],
-	['communications', 'telegram', 'messages'],
-	['integrations', 'telegram', 'runtime'],
-	['communications', 'telegram', 'calls']
+	telegramQueryKeys.capabilities,
+	telegramQueryKeys.accountCapabilities,
+	telegramQueryKeys.accounts,
+	telegramQueryKeys.chats,
+	telegramQueryKeys.folders,
+	telegramQueryKeys.chatDetail,
+	telegramQueryKeys.chatMembers,
+	telegramQueryKeys.runtime,
+	telegramQueryKeys.commands,
+	telegramQueryKeys.calls,
+	telegramQueryKeys.callTranscript,
 ]
 
 const WHATSAPP_QUERY_KEYS: readonly (readonly unknown[])[] = [
@@ -222,8 +225,6 @@ export function handleRealtimeEvent(
 	applyMailRealtimePatch(event.data, queryClient)
 	applyWhatsAppRealtimePatch(event.data, queryClient)
 	applyWhatsAppRuntimeRealtimePatch(event.data, queryClient)
-	applyTelegramRealtimePatch(event.data, queryClient)
-	applyTelegramParticipantRealtimePatch(event.data, queryClient)
 	applyTelegramCommandRealtimePatch(event.data, queryClient)
 
 	for (const queryKey of queryKeysForRealtimeEvent(event)) {
@@ -286,34 +287,39 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 		return [['communications-folders'], ['communications-folder-messages']]
 	}
 	if (eventType.startsWith('telegram.sync.')) {
-		return [['communications', 'telegram', 'chats'], ['communications', 'telegram', 'messages'], ['integrations', 'telegram', 'runtime']]
+		return [
+			telegramQueryKeys.chats,
+			telegramQueryKeys.folders,
+			telegramQueryKeys.chatMembers,
+			telegramQueryKeys.runtime,
+		]
 	}
 	if (eventType.startsWith('telegram.message.')) {
-		return [['communications', 'telegram', 'messages'], ['communications', 'telegram', 'chats']]
+		return [telegramQueryKeys.chats, telegramQueryKeys.runtime]
 	}
 	if (eventType.startsWith('telegram.typing.')) {
-		return [['communications', 'telegram', 'chats'], ['integrations', 'telegram', 'runtime']]
+		return [telegramQueryKeys.chats, telegramQueryKeys.runtime]
 	}
 	if (eventType.startsWith('telegram.topic.')) {
-		return [['communications', 'telegram', 'topics'], ['communications', 'telegram', 'topic-search'], ['communications', 'telegram', 'topic-messages']]
+		return [telegramQueryKeys.chats, telegramQueryKeys.runtime]
 	}
 	if (eventType.startsWith('telegram.participant.')) {
-		return [['communications', 'telegram', 'chat-members'], ['communications', 'telegram', 'chats']]
+		return [telegramQueryKeys.chatMembers, telegramQueryKeys.chats]
 	}
 	if (eventType.startsWith('telegram.folders.')) {
-		return [['communications', 'telegram', 'folders'], ['communications', 'telegram', 'chats']]
+		return [telegramQueryKeys.folders, telegramQueryKeys.chats]
 	}
 	if (eventType.startsWith('telegram.media.upload.')) {
-		return [['integrations', 'telegram', 'commands'], ['integrations', 'telegram', 'runtime']]
+		return [telegramQueryKeys.commands, telegramQueryKeys.runtime]
 	}
 	if (eventType.startsWith('telegram.media.download.')) {
-		return [['communications', 'telegram', 'messages'], ['communications', 'telegram', 'search', 'media']]
+		return [telegramQueryKeys.commands, telegramQueryKeys.runtime]
 	}
 	if (eventType.startsWith('telegram.reaction.')) {
-		return [['communications', 'telegram', 'messages']]
+		return [telegramQueryKeys.commands, telegramQueryKeys.runtime]
 	}
 	if (eventType.startsWith('telegram.command.')) {
-		return [['communications', 'telegram', 'messages'], ['integrations', 'telegram', 'runtime'], ['integrations', 'telegram', 'commands']]
+		return [telegramQueryKeys.runtime, telegramQueryKeys.commands]
 	}
 	if (eventType.startsWith('telegram.')) {
 		return TELEGRAM_QUERY_KEYS

@@ -20,6 +20,7 @@ import {
 } from '../../integrations/telegram/queries/useTelegramMutations'
 import { useSyncTelegramChatMembersMutation } from '../../integrations/telegram/queries/useTelegramMembersQuery'
 import { useJoinTelegramChatMutation, useLeaveTelegramChatMutation } from '../../integrations/telegram/queries/useTelegramParticipantLifecycleQuery'
+import { telegramQueryKeys } from '../../integrations/telegram/queries/telegramQueryKeys'
 
 const TELEGRAM_HISTORY_SYNC_CHUNK_SIZE = 200
 
@@ -150,7 +151,13 @@ export function useTelegramConversationRuntimeActions() {
         break
     }
 
-    await queryClient.invalidateQueries({ queryKey: ['communications', 'telegram'] })
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats }),
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.folders }),
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chatDetail }),
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime }),
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.commands }),
+    ])
   }
 
   return { run }

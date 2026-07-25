@@ -8,7 +8,6 @@ const SOURCE_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const LEGACY_ROUTE_PREFIX = ['/api/v1', 'communications'].join('/')
 const EXACT_PENDING_FILES = [
 	'domains/communications/api/attachmentImportApi.ts',
-	'integrations/telegram/api/telegramBusiness.ts',
 	'integrations/whatsapp/api/whatsappBusiness.ts',
 ] as const
 

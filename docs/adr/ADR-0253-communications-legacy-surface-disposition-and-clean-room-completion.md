@@ -10,10 +10,14 @@ Engine реализованы и допущены exact production inventory. Le
 ADR-0240 пока не объявляется полностью завершённым на уровне репозитория:
 secondary frontend всё ещё содержит старые `/api/v1/communications/*` callers,
 которые должны быть удалены или заменены контрактами их настоящих owners.
-Exact inventory сокращён до трёх production callers: dead AI-state,
-bilingual-reply и Mail provider-command-diagnostics chains удалены вместе с
-DTO, query/realtime и UI-обвязкой. Эти возможности остаются явными gaps своих
-будущих owners/workflows и не реализуются внутри Communications.
+Exact inventory сокращён до двух production callers: Communications attachment
+import и WhatsApp business facade. Telegram Communications REST/query/inspector
+chain удалён вместе с Communications-prefixed provider realtime cache patchers;
+единственным допустимым будущим provider-operation seam остаётся generated
+Telegram Connect client. Dead AI-state, bilingual-reply и Mail
+provider-command-diagnostics chains также удалены вместе с DTO, query/realtime
+и UI-обвязкой. Эти возможности остаются явными gaps своих будущих
+owners/workflows и не реализуются внутри Communications.
 Home и замороженная Timeline projection также больше не копируют Communications
 DTO и не вызывают legacy owner routes; их frontend surfaces честно помечены
 planned до отдельного admission вместо сохранения façade logic.

@@ -44,12 +44,15 @@ Communications и не интерпретирует business payload. Backend pr
 contract, Telegram не добавляет owner-private health surface, TDLib credential,
 session path, QR link, password hint и authorization diagnostics имеют
 redacted `Debug`, а недоверенный provider error message отбрасывается на
-adapter boundary. Phase gate остаётся закрытым только до финального frontend
-cutover без legacy REST/fallback. Frontend generator и три независимых
+adapter boundary. Phase gate остаётся закрытым до финального frontend
+cutover без legacy integration REST/fallback. Telegram
+`/api/v1/communications/*` business facade, его query/inspector chain и
+Communications-prefixed provider realtime caches уже удалены без alias или
+replacement facade. Frontend generator и три независимых
 `TelegramAuthorizationService`, `TelegramLifecycleService` и
-`TelegramOperationalService` client units теперь реализованы; их наличие не
-считается cutover, пока provider experience не удалит старые REST calls и
-Communications-prefixed query keys.
+`TelegramOperationalService` client units реализованы; их наличие не считается
+cutover, пока provider experience не удалит оставшиеся integration REST calls
+и не докажет live generated-client flow.
 
 Уточняет:
 

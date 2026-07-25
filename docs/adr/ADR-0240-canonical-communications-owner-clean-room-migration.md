@@ -54,10 +54,15 @@ legacy `/api/v1/communications/*` clients outside the generated canonical query
 adapter. Those clients have no clean-room backend facade and must be removed or
 replaced in their rightful integration/workflow owner before this ADR can be
 marked fully implemented across the repository. The exact legacy REST inventory
-is now three production callers after removing unsupported account,
-certificate, mail-import, read-receipt, AI-state, bilingual-reply and
+is now two production callers after removing the orphaned Telegram
+Communications REST/query/inspector chain and its Communications-prefixed
+realtime cache patchers, in addition to unsupported account, certificate,
+mail-import, read-receipt, AI-state, bilingual-reply and
 provider-command-diagnostics chains plus the Home and frozen Timeline
-cross-owner projections.
+cross-owner projections. The generated Telegram operational Connect client
+remains the only admitted future provider-operation seam; this removal does not
+claim that the separate Telegram frontend experience has completed its own
+generated-client phase gate.
 
 Depends on:
 
@@ -183,7 +188,7 @@ The domain is considered migrated only when all of the following are true:
 | Criterion | State | Evidence |
 |---|---|---|
 | 1-4: typed owner model, durable owner state and event-only integration ingress | Complete | Exact six-package Communications inventory, typed lifecycle contracts, owner-local PostgreSQL inbox/outbox and live Mail/Telegram replay evidence. |
-| 5: generated Gateway/client owner contract | Backend and canonical client adapter complete; legacy frontend residue pending | Generated Communications Connect client and canonical search/evidence adapters are present; `legacyCommunicationsRestInventory.boundary.test.ts` keeps the remaining 3 REST callers exact and bounded after removing unsupported account, certificate, mail-import, read-receipt, AI-state, bilingual-reply, provider-command-diagnostics, Home and frozen Timeline surfaces. |
+| 5: generated Gateway/client owner contract | Backend and canonical client adapter complete; legacy frontend residue pending | Generated Communications Connect client and canonical search/evidence adapters are present; `legacyCommunicationsRestInventory.boundary.test.ts` keeps the remaining 2 REST callers exact and bounded after removing the Telegram Communications facade/query/realtime chain plus unsupported account, certificate, mail-import, read-receipt, AI-state, bilingual-reply, provider-command-diagnostics, Home and frozen Timeline surfaces. |
 | 6: no legacy facade or cross-owner backend edge | Backend complete; repository pending | Architecture and Cargo guards reject backend facades, cross-owner SQL and direct owner edges. Frontend legacy REST source must still be removed. |
 | 7: complete validation | Backend complete; frontend pending | `make -C backend ci` passes, including 484 architecture tests, 731 workspace tests, integration profile, dependency policy and SBOM. Full frontend validation follows the legacy-client cutover. |
 

@@ -6,7 +6,7 @@ import {
   type TelegramMediaUploadKind,
 } from '../../integrations/telegram/api/telegramMediaUpload'
 import { patchTelegramCommandList } from '../../integrations/telegram/queries/realtimeTelegramCommandPatches'
-import { telegramQueryKeys } from '../../integrations/telegram/queries/useTelegramQuery'
+import { telegramQueryKeys } from '../../integrations/telegram/queries/telegramQueryKeys'
 import type { TelegramProviderWriteCommand } from '../../integrations/telegram/types/telegram'
 
 export type TelegramMediaUploadInput = {
@@ -46,10 +46,9 @@ export function invalidateTelegramMediaUploadState(
   queryClient: Pick<ReturnType<typeof useQueryClient>, 'invalidateQueries'>,
   accountId: string
 ): void {
-  queryClient.invalidateQueries({ queryKey: ['communications', 'telegram'] })
   queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
-  queryClient.invalidateQueries({ queryKey: ['integrations', 'telegram', 'commands', accountId] })
-  queryClient.invalidateQueries({ queryKey: ['integrations', 'telegram', 'commands'] })
+  queryClient.invalidateQueries({ queryKey: [...telegramQueryKeys.commands, accountId] })
+  queryClient.invalidateQueries({ queryKey: telegramQueryKeys.commands })
 }
 
 export function primeTelegramUploadCommandQueues(
@@ -64,7 +63,7 @@ export function primeTelegramUploadCommandQueues(
   caption?: string
 ): void {
   for (const [queryKey, data] of queryClient.getQueriesData<TelegramProviderWriteCommand[]>({
-    queryKey: ['integrations', 'telegram', 'commands'],
+    queryKey: telegramQueryKeys.commands,
   })) {
     const updated = patchTelegramCommandList(
       queryKey,

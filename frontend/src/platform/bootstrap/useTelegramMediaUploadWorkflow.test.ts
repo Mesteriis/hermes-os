@@ -4,6 +4,7 @@ import {
   primeTelegramUploadCommandQueues,
   telegramMediaTypeForFile,
 } from './useTelegramMediaUploadWorkflow'
+import { telegramQueryKeys } from '../../integrations/telegram/queries/telegramQueryKeys'
 import { TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE } from '../../integrations/telegram/queries/telegramRuntimePanelActions'
 
 describe('telegramMediaTypeForFile', () => {
@@ -58,16 +59,19 @@ describe('telegramMediaTypeForFile', () => {
     })
   })
 
-  it('refreshes the canonical Telegram conversation after an upload command is queued', () => {
+  it('refreshes only Telegram integration state after an upload command is queued', () => {
     const invalidateQueries = vi.fn()
 
     invalidateTelegramMediaUploadState({ invalidateQueries } as never, 'account-1')
 
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['communications', 'telegram'],
+      queryKey: telegramQueryKeys.runtime,
     })
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'commands', 'account-1'],
+      queryKey: [...telegramQueryKeys.commands, 'account-1'],
+    })
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: ['communications', 'telegram'],
     })
   })
 })

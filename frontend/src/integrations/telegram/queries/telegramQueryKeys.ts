@@ -7,6 +7,7 @@ export const telegramQueryKeys = {
   chatDetail: ['integrations', 'telegram', 'provider-conversation-detail'] as const,
   chatMembers: ['integrations', 'telegram', 'provider-conversation-members'] as const,
   runtime: ['integrations', 'telegram', 'runtime'] as const,
+  commands: ['integrations', 'telegram', 'commands'] as const,
   calls: ['integrations', 'telegram', 'provider-calls'] as const,
   callTranscript: ['integrations', 'telegram', 'provider-call-transcript'] as const,
 }

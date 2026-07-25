@@ -4,9 +4,13 @@
 Дата: 2026-07-24
 Состояние реализации: frontend generator выпускает exact owner-specific Mail,
 Telegram и Zulip contracts, а provider frontend владеет отдельными
-service-specific Connect client units поверх общего Gateway transport. Это
-только prerequisite: legacy REST/query surfaces ещё не удалены, поэтому
-frontend cutover и соответствующие provider phase gates не закрыты.
+service-specific Connect client units поверх общего Gateway transport.
+Telegram `/api/v1/communications/*` business facade, его query/inspector chain
+и Communications-prefixed provider realtime caches удалены. Telegram phase gate
+при этом остаётся закрытым: отдельные legacy integration lifecycle REST
+surfaces и live generated-client provider flow ещё не заменены и не доказаны.
+Mail, WhatsApp и Zulip cutover также остаются независимыми незакрытыми
+provider slices.
 
 Первый exact provider profile:
 [ADR-0266: Telegram Kernel admission and event-only Communications handoff](ADR-0266-telegram-kernel-admission-and-event-only-communications-handoff.md).
