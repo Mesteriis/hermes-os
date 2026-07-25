@@ -17,7 +17,8 @@ use hermes_communications_ingress::{
 use hermes_runtime_protocol::v1::BlobDataOperationV1;
 use hermes_zulip_api::{
     ZulipCommandOperationStatusV1, ZulipCommandReceiptV1, ZulipCommandV1, ZulipEventQueueV1,
-    ZulipPolledEventV1, command_account_id, command_fingerprint_bytes, command_operation_id,
+    ZulipPolledEventV1, client_contract::ZULIP_MODULE_ID, command_account_id,
+    command_fingerprint_bytes, command_operation_id,
 };
 use hermes_zulip_core::{ZulipCoreError, observation_drafts};
 use hermes_zulip_http::{
@@ -304,7 +305,7 @@ impl ZulipRuntimeIdentityV1 {
         ObservationEnvelopeContextV1 {
             runtime_instance_id: self.runtime_instance_id.clone(),
             runtime_generation: self.runtime_generation,
-            module_id: "zulip-runtime".to_owned(),
+            module_id: ZULIP_MODULE_ID.to_owned(),
             recorded_at_unix_seconds,
             recorded_at_nanos,
         }

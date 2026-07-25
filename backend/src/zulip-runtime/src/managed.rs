@@ -448,10 +448,13 @@ impl ZulipAdmittedRuntimeV1 {
             .poll_once(queue, now_unix_seconds, recorded_at_nanos)
             .await
             .map_err(ZulipRuntimeTickErrorV1::Poll)?;
-        let relayed_observations = self
-            .relay_communications_outbox(now_unix_seconds)
-            .await
-            .map_err(ZulipRuntimeTickErrorV1::Relay)?;
+        let relayed_observations = match self.relay_communications_outbox(now_unix_seconds).await {
+            Ok(relayed) => relayed,
+            Err(ZulipCommunicationsOutboxRelayError::Unavailable) => 0,
+            Err(error @ ZulipCommunicationsOutboxRelayError::Persistence(_)) => {
+                return Err(ZulipRuntimeTickErrorV1::Relay(error));
+            }
+        };
         Ok(ZulipRuntimeTickV1 {
             dispatched_command,
             accepted_observations,

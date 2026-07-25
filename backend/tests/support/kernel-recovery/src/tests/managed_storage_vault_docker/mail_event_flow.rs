@@ -133,7 +133,7 @@ pub(super) fn assert_mail_event_only_communications_handoff(
     });
     let initial_evidence_id = assert_communications_query_delivery(store, supervisor);
 
-    set_nats_container_running(false);
+    set_authenticated_nats_container_running(false);
     let replay = mail_observation(mail, "managed-mail-observation-2", 1_783_024_101);
     runtime
         .block_on(durable.enqueue_communications_outbox(&replay, 1_783_024_101))
@@ -159,8 +159,8 @@ pub(super) fn assert_mail_event_only_communications_handoff(
             .expect("read managed Mail failure"),
         None
     );
-    set_nats_container_running(true);
-    wait_for_nats_reconnect(&runtime, &client);
+    set_authenticated_nats_container_running(true);
+    wait_for_authenticated_nats_reconnect(&runtime, &client, "Mail event observer");
 
     let (replayed_observation, replayed_canonical) = runtime.block_on(async {
         let observation = tokio::time::timeout(Duration::from_secs(10), observations.next())
@@ -255,41 +255,4 @@ pub(super) async fn connect_postgres() -> MailDurablePersistence {
     )
     .await
     .expect("connect disposable PostgreSQL")
-}
-
-fn wait_for_nats_reconnect(runtime: &tokio::runtime::Runtime, client: &async_nats::Client) {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while client.connection_state() != async_nats::connection::State::Connected {
-        assert!(
-            Instant::now() < deadline,
-            "Mail event observer did not reconnect to NATS"
-        );
-        std::thread::sleep(Duration::from_millis(25));
-    }
-    runtime
-        .block_on(client.flush())
-        .expect("flush reconnected Mail event observer");
-}
-
-fn set_nats_container_running(running: bool) {
-    let container = std::env::var("HERMES_STORAGE_AUTHENTICATED_NATS_CONTAINER")
-        .expect("authenticated NATS container");
-    assert!(
-        (12..=64).contains(&container.len())
-            && container.bytes().all(|byte| byte.is_ascii_hexdigit()),
-        "authenticated NATS container id is invalid"
-    );
-    let mut command = std::process::Command::new("docker");
-    if running {
-        command.args(["start", &container]);
-    } else {
-        command.args(["stop", "--timeout", "1", &container]);
-    }
-    assert!(
-        command
-            .status()
-            .expect("control authenticated NATS container")
-            .success(),
-        "authenticated NATS container state change failed"
-    );
 }

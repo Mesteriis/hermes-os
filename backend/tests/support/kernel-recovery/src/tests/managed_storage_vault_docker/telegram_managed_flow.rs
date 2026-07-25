@@ -186,7 +186,7 @@ fn managed_telegram_runtime_uses_kernel_leases_and_event_only_communications_han
     });
     let initial_evidence_id = assert_communications_query_delivery(&store, &supervisor);
 
-    set_nats_container_running(false);
+    set_authenticated_nats_container_running(false);
     const OUTAGE_OPERATION_ID: &str = "managed-telegram-outage-send-1";
     assert_telegram_command_accepted(
         &store,
@@ -198,7 +198,7 @@ fn managed_telegram_runtime_uses_kernel_leases_and_event_only_communications_han
     assert_telegram_operation_completed(&store, &supervisor, &telegram, OUTAGE_OPERATION_ID);
     std::thread::sleep(Duration::from_millis(2_500));
     assert_telegram_operation_completed(&store, &supervisor, &telegram, OUTAGE_OPERATION_ID);
-    set_nats_container_running(true);
+    set_authenticated_nats_container_running(true);
 
     let (replayed_observation, replayed_canonical) = event_runtime.block_on(async {
         let observation = tokio::time::timeout(Duration::from_secs(10), observations.next())
@@ -354,29 +354,6 @@ fn assert_telegram_account_started(
             Err(error) => panic!("Telegram lifecycle start failed: {error:?}"),
         }
     }
-}
-
-fn set_nats_container_running(running: bool) {
-    let container = std::env::var("HERMES_STORAGE_AUTHENTICATED_NATS_CONTAINER")
-        .expect("authenticated NATS container");
-    assert!(
-        (12..=64).contains(&container.len())
-            && container.bytes().all(|byte| byte.is_ascii_hexdigit()),
-        "authenticated NATS container id is invalid"
-    );
-    let mut command = std::process::Command::new("docker");
-    if running {
-        command.args(["start", &container]);
-    } else {
-        command.args(["stop", "--timeout", "1", &container]);
-    }
-    assert!(
-        command
-            .status()
-            .expect("control authenticated NATS container")
-            .success(),
-        "authenticated NATS container state change failed"
-    );
 }
 
 fn assert_telegram_command_accepted(

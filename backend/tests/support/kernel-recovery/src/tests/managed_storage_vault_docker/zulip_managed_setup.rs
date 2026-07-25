@@ -25,6 +25,12 @@ pub(super) struct AdmittedZulipRuntime {
     capability_ids: Vec<String>,
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum ZulipGrantProfileV1 {
+    QueryOnly,
+    CommandAndQuery,
+}
+
 pub(super) struct StartedZulipRuntime {
     pub(super) registration_id: String,
     pub(super) runtime_instance_id: String,
@@ -70,18 +76,15 @@ pub(super) fn seed_zulip_vault(vault_dir: &Path) {
         .expect("store Zulip test credential");
 }
 
-pub(super) fn admit_zulip_runtime(store: &SqliteControlStore) -> AdmittedZulipRuntime {
+pub(super) fn admit_zulip_runtime(
+    store: &SqliteControlStore,
+    grant_profile: ZulipGrantProfileV1,
+) -> AdmittedZulipRuntime {
     let descriptor = zulip_module_descriptor_v1("managed-zulip-live");
     let descriptor_bytes = descriptor.encode_to_vec();
     let registration = crate::modules::registration::registry::register(store, &descriptor_bytes)
         .expect("register exact Zulip descriptor");
-    let capability_ids = vec![
-        ZULIP_BLOB_CAPABILITY_ID.to_owned(),
-        ZULIP_CREDENTIALS_CAPABILITY_ID.to_owned(),
-        ZULIP_EVENTS_CAPABILITY_ID.to_owned(),
-        ZulipClientContractV1::Query.capability_id().to_owned(),
-        ZULIP_STORAGE_CAPABILITY_ID.to_owned(),
-    ];
+    let capability_ids = granted_capability_ids(grant_profile);
     crate::modules::registration::registry::approve_after_owner_authorization(
         store,
         registration.registration_id(),
@@ -117,6 +120,20 @@ pub(super) fn admit_zulip_runtime(store: &SqliteControlStore) -> AdmittedZulipRu
         registration_id: registration.registration_id().to_owned(),
         capability_ids,
     }
+}
+
+fn granted_capability_ids(grant_profile: ZulipGrantProfileV1) -> Vec<String> {
+    let mut capability_ids = vec![ZULIP_BLOB_CAPABILITY_ID.to_owned()];
+    if matches!(grant_profile, ZulipGrantProfileV1::CommandAndQuery) {
+        capability_ids.push(ZulipClientContractV1::Command.capability_id().to_owned());
+    }
+    capability_ids.extend([
+        ZULIP_CREDENTIALS_CAPABILITY_ID.to_owned(),
+        ZULIP_EVENTS_CAPABILITY_ID.to_owned(),
+        ZulipClientContractV1::Query.capability_id().to_owned(),
+        ZULIP_STORAGE_CAPABILITY_ID.to_owned(),
+    ]);
+    capability_ids
 }
 
 pub(super) fn prepare_zulip_runtime(

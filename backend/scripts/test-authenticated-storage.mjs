@@ -217,6 +217,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_communications_domain_starts_with_owner_local_storage_and_events',
     'managed_mail_runtime_uses_kernel_leases_and_route_specific_admission',
     'managed_zulip_runtime_uses_kernel_leases_and_route_specific_admission',
+    'managed_zulip_runtime_delivers_live_command_and_event_only_communications_handoff',
   ]) {
     await start_contour(secrets);
     try {

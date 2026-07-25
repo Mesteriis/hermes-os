@@ -61,6 +61,9 @@ use crate::runtime::lifecycle::control::{
 #[path = "managed_storage_vault_docker/shared_fixture.rs"]
 mod shared_fixture;
 use shared_fixture::*;
+#[path = "managed_storage_vault_docker/nats_outage_fixture.rs"]
+mod nats_outage_fixture;
+use nats_outage_fixture::*;
 #[path = "managed_storage_vault_docker/owner_control_fixture.rs"]
 mod owner_control_fixture;
 use owner_control_fixture::*;
@@ -104,6 +107,11 @@ use zulip_https_fixture::*;
 #[path = "managed_storage_vault_docker/zulip_managed_setup.rs"]
 mod zulip_managed_setup;
 use zulip_managed_setup::*;
+#[path = "managed_storage_vault_docker/zulip_managed_fixture.rs"]
+mod zulip_managed_fixture;
+use zulip_managed_fixture::*;
+#[path = "managed_storage_vault_docker/zulip_event_flow.rs"]
+mod zulip_event_flow;
 #[path = "managed_storage_vault_docker/zulip_managed_flow.rs"]
 mod zulip_managed_flow;
 

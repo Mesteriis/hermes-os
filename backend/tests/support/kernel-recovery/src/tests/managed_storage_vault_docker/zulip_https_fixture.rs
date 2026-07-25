@@ -14,9 +14,16 @@ use super::*;
 pub(super) struct ZulipHttpsFixture {
     realm_url: String,
     ca_certificate_path: PathBuf,
-    accepted_connections: Arc<AtomicU64>,
+    state: Arc<ZulipHttpsFixtureState>,
     shutdown: Arc<AtomicBool>,
     server: Option<std::thread::JoinHandle<()>>,
+}
+
+struct ZulipHttpsFixtureState {
+    accepted_connections: AtomicU64,
+    released_events: AtomicU64,
+    served_events: AtomicU64,
+    message_commands: AtomicU64,
 }
 
 impl ZulipHttpsFixture {
@@ -41,17 +48,22 @@ impl ZulipHttpsFixture {
             .set_nonblocking(true)
             .expect("configure Zulip HTTPS fixture");
         let port = listener.local_addr().expect("Zulip fixture address").port();
-        let accepted_connections = Arc::new(AtomicU64::new(0));
-        let server_connections = Arc::clone(&accepted_connections);
+        let state = Arc::new(ZulipHttpsFixtureState {
+            accepted_connections: AtomicU64::new(0),
+            released_events: AtomicU64::new(0),
+            served_events: AtomicU64::new(0),
+            message_commands: AtomicU64::new(0),
+        });
+        let server_state = Arc::clone(&state);
         let shutdown = Arc::new(AtomicBool::new(false));
         let server_shutdown = Arc::clone(&shutdown);
         let server = std::thread::spawn(move || {
-            serve(listener, config, &server_shutdown, server_connections);
+            serve(listener, config, &server_shutdown, server_state);
         });
         Self {
             realm_url: format!("https://localhost:{port}"),
             ca_certificate_path,
-            accepted_connections,
+            state,
             shutdown,
             server: Some(server),
         }
@@ -66,7 +78,19 @@ impl ZulipHttpsFixture {
     }
 
     pub(super) fn accepted_connections(&self) -> u64 {
-        self.accepted_connections.load(Ordering::Relaxed)
+        self.state.accepted_connections.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn release_next_event(&self) -> u64 {
+        self.state.released_events.fetch_add(1, Ordering::Release) + 1
+    }
+
+    pub(super) fn served_events(&self) -> u64 {
+        self.state.served_events.load(Ordering::Acquire)
+    }
+
+    pub(super) fn message_commands(&self) -> u64 {
+        self.state.message_commands.load(Ordering::Acquire)
     }
 }
 
@@ -111,18 +135,20 @@ fn serve(
     listener: TcpListener,
     config: Arc<rustls::ServerConfig>,
     shutdown: &AtomicBool,
-    accepted_connections: Arc<AtomicU64>,
+    state: Arc<ZulipHttpsFixtureState>,
 ) {
     let mut connections = Vec::new();
     while !shutdown.load(Ordering::Relaxed) {
         match listener.accept() {
             Ok((tcp, _)) => {
                 let connection_config = Arc::clone(&config);
-                let connection_count = Arc::clone(&accepted_connections);
+                let connection_state = Arc::clone(&state);
                 connections.push(std::thread::spawn(move || {
-                    match serve_connection(tcp, connection_config) {
+                    match serve_connection(tcp, connection_config, &connection_state) {
                         Ok(()) => {
-                            connection_count.fetch_add(1, Ordering::Relaxed);
+                            connection_state
+                                .accepted_connections
+                                .fetch_add(1, Ordering::Relaxed);
                         }
                         Err(error) if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() => {
                             fixture_diagnostic(&format!(
@@ -155,6 +181,7 @@ fn fixture_diagnostic(message: &str) {
 fn serve_connection(
     tcp: TcpStream,
     config: Arc<rustls::ServerConfig>,
+    state: &ZulipHttpsFixtureState,
 ) -> Result<(), std::io::Error> {
     tcp.set_nonblocking(false)?;
     tcp.set_read_timeout(Some(Duration::from_secs(2)))?;
@@ -170,16 +197,21 @@ fn serve_connection(
     let (status, body) = if request_line.starts_with("POST /api/v1/register ") {
         (
             "200 OK",
-            r#"{"result":"success","msg":"","queue_id":"managed-zulip-queue","last_event_id":0}"#,
+            r#"{"result":"success","msg":"","queue_id":"managed-zulip-queue","last_event_id":0}"#
+                .to_owned(),
         )
     } else if request_line.starts_with("GET /api/v1/events?") {
-        ("200 OK", r#"{"result":"success","msg":"","events":[]}"#)
+        ("200 OK", next_event_response(state))
     } else if request_line.starts_with("POST /api/v1/messages ") {
-        ("200 OK", r#"{"result":"success","msg":"","id":4242}"#)
+        state.message_commands.fetch_add(1, Ordering::Release);
+        (
+            "200 OK",
+            r#"{"result":"success","msg":"","id":4242}"#.to_owned(),
+        )
     } else {
         (
             "404 Not Found",
-            r#"{"result":"error","msg":"unknown route"}"#,
+            r#"{"result":"error","msg":"unknown route"}"#.to_owned(),
         )
     };
     let response = format!(
@@ -188,6 +220,24 @@ fn serve_connection(
     );
     stream.write_all(response.as_bytes())?;
     stream.flush()
+}
+
+fn next_event_response(state: &ZulipHttpsFixtureState) -> String {
+    let released = state.released_events.load(Ordering::Acquire);
+    let event_id = state
+        .served_events
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |served| {
+            (served < released).then_some(served + 1)
+        })
+        .ok()
+        .map(|served| served + 1);
+    let Some(event_id) = event_id else {
+        return r#"{"result":"success","msg":"","events":[]}"#.to_owned();
+    };
+    let provider_message_id = 9_100 + event_id;
+    format!(
+        r#"{{"result":"success","msg":"","events":[{{"id":{event_id},"type":"message","message":{{"id":{provider_message_id},"sender_id":73,"sender_email":"sender@example.test","stream_id":44,"subject":"managed","content":"managed Zulip observation {event_id}"}}}}]}}"#
+    )
 }
 
 fn read_request(
