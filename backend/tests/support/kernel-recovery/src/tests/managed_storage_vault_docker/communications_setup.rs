@@ -354,6 +354,58 @@ pub(super) fn assert_fenced_communications_target_cannot_issue_blob_custody_gran
         result.is_err(),
         "stale Communications target must not receive a Blob custody grant",
     );
+    let retained_capabilities = store
+        .module_grant_snapshot(COMMUNICATIONS_REGISTRATION)
+        .expect("read Communications grant snapshot")
+        .expect("Communications grant snapshot")
+        .effective_grants()
+        .expect("approved Communications grants")
+        .capability_ids()
+        .iter()
+        .filter(|capability| capability.as_str() != COMMUNICATIONS_BLOB_CAPABILITY_ID)
+        .cloned()
+        .collect::<Vec<_>>();
+    let suspended = store
+        .transition_module_registration(
+            COMMUNICATIONS_REGISTRATION,
+            ModuleRegistrationState::Suspended,
+        )
+        .expect("suspend Communications target before grant replacement");
+    let reapproved = store
+        .approve_module_registration(COMMUNICATIONS_REGISTRATION, &retained_capabilities)
+        .expect("reapprove Communications without Blob capability");
+    assert!(
+        reapproved.grant_epoch() > suspended.grant_epoch(),
+        "grant replacement must advance the Communications grant epoch",
+    );
+    const GRANT_REVOKED_RUNTIME_INSTANCE_ID: &str =
+        "communications-runtime-instance-blob-grant-revoked";
+    store
+        .record_managed_launch(&ManagedLaunchRecord::new(
+            COMMUNICATIONS_REGISTRATION,
+            GRANT_REVOKED_RUNTIME_INSTANCE_ID,
+            1,
+            1,
+            launch.runtime_generation() + 2,
+            reapproved.grant_epoch(),
+        ))
+        .expect("record Communications launch without Blob capability");
+    let grant_revoked = handler.issue_blob_session(
+        &ManagedRuntimeExpectation::new(
+            COMMUNICATIONS_REGISTRATION,
+            GRANT_REVOKED_RUNTIME_INSTANCE_ID,
+            COMMUNICATIONS_MODULE_ID,
+            launch.runtime_generation() + 2,
+            reapproved.grant_epoch(),
+            [2; 32],
+            None,
+        ),
+        request.clone(),
+    );
+    assert!(
+        grant_revoked.is_err(),
+        "current Communications target without Blob capability must not receive a custody grant",
+    );
     store
         .transition_module_registration(
             COMMUNICATIONS_REGISTRATION,
@@ -363,10 +415,10 @@ pub(super) fn assert_fenced_communications_target_cannot_issue_blob_custody_gran
     let revoked = handler.issue_blob_session(
         &ManagedRuntimeExpectation::new(
             COMMUNICATIONS_REGISTRATION,
-            COMMUNICATIONS_RUNTIME_INSTANCE_ID_V2,
+            GRANT_REVOKED_RUNTIME_INSTANCE_ID,
             COMMUNICATIONS_MODULE_ID,
-            launch.runtime_generation() + 1,
-            launch.grant_epoch(),
+            launch.runtime_generation() + 2,
+            reapproved.grant_epoch(),
             [2; 32],
             None,
         ),
