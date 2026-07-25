@@ -11,10 +11,13 @@ Platform completes its internal rewrap. Communications derived search may read
 only that Communications-owned Blob reference. A direct cross-owner Blob read
 is rejected by the current registration/capability fence and must remain
 rejected. Managed conformance covers altered receipts, stale source and target
-launches, revoked source registrations, live Blob outage/restart with pending
-custody replay, and a current target generation whose reissued GrantSet no
-longer contains `communications.blob.v1`. Vault unavailability remains separate
-required evidence; a nominal managed conformance pass does not replace it.
+launches, revoked source registrations, a live Vault outage while Blob remains
+active, a separate Blob-unavailable window after Vault/Storage recovery,
+pending custody replay through successor Vault, Storage, Blob and Communications
+runtime generations, and a current target generation whose reissued GrantSet no
+longer contains `communications.blob.v1`. Communications reports `ready` only
+after its Event, Storage and search dependencies are open; transient
+Storage/NATS outbox failures retain the exact pending bytes for retry.
 
 Зависит от:
 
@@ -117,9 +120,13 @@ index job.
 
 ## Consequences
 
-The managed fixture now proves source receipt admission, target custody transfer,
-a canonical-ID-only derived search hit, stale source/target launch fencing, and
-explicit revoked source/target fencing. It does not replace the remaining
-negative degraded-path evidence. The existing `communications.blob.v1`
-capability remains read/derived-index authority only after successful custody
-transfer; producer write authority remains integration-owned.
+The managed fixture now proves source receipt admission, target custody
+transfer, a canonical-ID-only derived search hit, stale source/target launch
+fencing, explicit revoked source/target fencing, Vault failure while Blob stays
+active, Blob failure after Vault recovery, and replay after exact successor
+generation rebinding. This closes the explicit Vault-unavailability evidence
+gap for the canonical body-custody slice; it does not admit provider-specific
+attachment/session pipelines governed by separate integration ADRs. The
+existing `communications.blob.v1` capability remains read/derived-index
+authority only after successful custody transfer; producer write authority
+remains integration-owned.
