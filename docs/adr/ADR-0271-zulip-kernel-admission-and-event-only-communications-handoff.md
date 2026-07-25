@@ -8,9 +8,10 @@ owner-local PostgreSQL state и exact-byte Communications outbox уже суще
 Runtime использует один `ManagedControlChannelV2<UnixStream>` для descriptor,
 Storage/Vault, Blob, Event Hub и client delivery; cloned readers, V1 platform
 helpers и `MSG_PEEK` удалены, а вложенная client delivery получает
-correlation-bound `RUNTIME_BUSY`. Exact `ModuleDescriptorV1`, route-specific
-generated client contracts, canonical settings schema, immutable Storage
-bundle, release assembly и live managed admission ещё не реализованы.
+correlation-bound `RUNTIME_BUSY`. Generated command/query contracts, exact
+descriptor-set binding, canonical settings schema и `ModuleDescriptorV1` с
+раздельными client/platform capabilities реализованы. Immutable Storage bundle,
+release assembly и live managed admission ещё не реализованы.
 
 Уточняет:
 
@@ -182,7 +183,8 @@ inventory, make integration a domain, or authorize WhatsApp/another provider.
 
 1. ~~Replace the shared control FD readers with one correlated V2 frame pump.~~
    Реализовано в `8bc3acc73`.
-2. Split generated command/query routes and build exact descriptor/settings.
+2. ~~Split generated command/query routes and build exact descriptor/settings.~~
+   Реализовано в `6f9229ce3`.
 3. Add immutable Storage bundle and separate release assembly unit.
 4. Add signed managed launch, grant and revoke/generation conformance.
 5. Prove live provider command and event-only Communications delivery.

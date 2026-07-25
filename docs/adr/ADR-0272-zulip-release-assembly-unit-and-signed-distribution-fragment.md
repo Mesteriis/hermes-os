@@ -2,9 +2,10 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Не реализовано. Решение определяет отдельную Zulip-owned
-assembly unit; package, artifact materialization и signed distribution
-evidence ещё отсутствуют.
+Состояние реализации: Не реализовано. Canonical Zulip runtime descriptor и
+settings schema существуют; owner-local Storage bundle, отдельная Zulip-owned
+assembly unit, artifact materialization и signed distribution evidence ещё
+отсутствуют.
 
 Зависит от:
 
