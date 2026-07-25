@@ -4,12 +4,12 @@
 Дата: 2026-07-24
 Состояние реализации: Частично реализовано. Owner-local CAS/canonical outbox,
 оба exact inbound contract, отдельные consumer capability и fail-closed typed
-permit set реализованы. Managed conformance публикует schema-bound requested и
-admitted observations в Event Hub, доказывает owner-local CAS, canonical
-outbox causation/correlation и публичное `blob_admitted` состояние без
-provider locator. Это consumer conformance, а не producer admission: реальный
-producer, его signed descriptor/grant и producer-specific conformance ещё не
-выполнены.
+permit set реализованы. Первый реальный producer — signed managed Mail runtime
+с owner-approved exact grants — публикует `requested -> admitted` через свой
+outbox и Event Hub. Live conformance доказывает canonical causation/correlation,
+public `blob_admitted`, producer replay и stale CAS conflict без provider
+locator. Отдельный security/content producer для verdict contract ещё не
+допущен; `safe_for_delivery` остаётся недостижимым.
 ADR-0246 определил owner-local attachment state machine, но не зафиксировал
 exact producer authority и contracts для её terminal external facts. До
 отдельного admission ни один producer не получает право изменять attachment
@@ -85,6 +85,22 @@ because it writes an attachment result.
    revoke and conflict handling.
 5. Keep `safe_for_delivery` unreachable until the separately admitted security
    engine producer exists. No fallback or implied-clean state is allowed.
+
+## Evidence 2026-07-24 — first Mail producer
+
+- exact Mail descriptor/grant допускает только собственный Blob quota,
+  anchor subscription и Blob-admission observation publish route;
+- live loopback IMAP provider создаёт реальный bounded MIME attachment, после
+  чего Mail получает canonical anchor только из typed Communications event;
+- Mail запрашивает one-use Blob write session у Kernel по своей capability
+  `mail.blob.v1`, пишет exact provider bytes напрямую в Blob data socket и
+  публикует `requested`/`admitted` из Mail-owned outbox;
+- Communications применяет `descriptor_only -> blob_pending ->
+  blob_admitted`, сохраняет observation causation/correlation и выдаёт
+  terminal state через public owner query;
+- повторный provider sync не начинает вторую admission, exact terminal replay
+  не создаёт canonical event, а отдельный stale expected-state observation не
+  изменяет terminal state.
 
 ## Consequences
 

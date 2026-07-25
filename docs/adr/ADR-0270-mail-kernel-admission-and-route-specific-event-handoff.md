@@ -2,9 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Частично реализовано. Generated Mail API и descriptor
-теперь имеют независимые `mail.sync.v1`/`mail.delivery.v1` routes, три
-provider-purpose credential capabilities и один canonical module ID
+Состояние реализации: Backend inbound gate реализован. Generated Mail API и
+descriptor теперь имеют независимые `mail.sync.v1`/`mail.delivery.v1` routes,
+три provider-purpose credential capabilities и один canonical module ID
 `hermes-mail-runtime` во всех Mail-produced envelopes. Umbrella `mail.client`
 удалён из production code; assembly повторно доказала signed exact descriptor.
 Signed managed launch теперь проходит через exact Kernel registration,
@@ -14,8 +14,10 @@ runtime generation. Owner-authorized revoke повышает grant epoch, вып
 exact Storage/Vault/PgBouncer/PostgreSQL fence, останавливает только Mail worker
 и оставляет Communications активным. Live Mail-owned outbox → NATS →
 Communications delivery теперь доказана вместе с inbox deduplication и outage
-replay. Live provider sync и attachment conformance ещё не реализованы, поэтому
-`mail_runtime_admission_v1` закрыт.
+replay. Live provider sync и attachment anchor → Mail mapping → Kernel-issued
+Blob write → terminal Communications CAS conformance теперь доказаны.
+`mail_runtime_admission_v1` открыт для exact inbound sync subset. Delivery,
+Gmail/SMTP mutation и frontend cutover остаются отдельными закрытыми slices.
 
 Уточняет:
 
@@ -286,15 +288,36 @@ Clippy, architecture/SRP/Cargo boundaries и relevant live conformance.
 
 ```text
 HERMES_STORAGE_MANAGED_TEST_FILTER=managed_mail_runtime_uses_kernel_leases_and_route_specific_admission node scripts/test-authenticated-storage.mjs 1.97.0
-cargo +1.97.0 test -p hermes-mail-runtime -p hermes-mail-persistence
+cargo +1.97.0 test -p hermes-mail-api -p hermes-mail-imap -p hermes-mail-runtime -p hermes-mail-persistence
+cargo +1.97.0 test -p hermes-mail-api -p hermes-mail-imap --features conformance-test-support
 cargo +1.97.0 test -p hermes-kernel-recovery-testkit --no-run
 cargo +1.97.0 clippy -p hermes-mail-runtime -p hermes-mail-persistence -p hermes-kernel-recovery-testkit --all-targets -- -D warnings
 make -C backend architecture-policy-check srp-policy-check cargo-boundaries-check test-architecture
 ```
 
-Evidence не открывает gate: active sync route не вызывался против provider
-fixture, а attachment anchor → Mail mapping → Blob terminal observation →
-Communications CAS continuation ещё не выполнен.
+Реализованный live attachment slice:
+
+- test-only loopback IMAP transport отделён compile-time feature; default Mail
+  API/runtime сохраняют implicit TLS port `993`, а plaintext разрешён только
+  для `localhost`/loopback в conformance build;
+- active `mail.sync.v1` route получает exact credential из Vault и читает
+  реальный RFC822/MIME provider fixture;
+- Communications создаёт canonical attachment anchor и публикует typed handoff;
+  Mail проверяет и сохраняет mapping в своей PostgreSQL schema;
+- Mail запрашивает Blob write session у Kernel по exact `mail.blob.v1`
+  capability, пишет provider bytes напрямую в Blob и публикует typed
+  `requested`/`admitted` observations из owner-local outbox;
+- Communications применяет две CAS transition и выдаёт public
+  `blob_admitted`, не получая provider locator, MIME bytes или Blob path;
+- повторный provider sync, exact terminal replay и stale expected-state
+  observation не создают повторную admission/canonical transition;
+- тот же managed flow до и после attachment slice доказывает ungranted route,
+  stale runtime generation и owner-authorized revoke fences.
+
+Эти evidence закрывают пункты 1–10 phase gate
+`mail_runtime_admission_v1` для exact inbound sync subset. Gate не расширяет
+`first_owner_v1` и не допускает outbound delivery, Gmail/SMTP mutation,
+scanner verdict producer или frontend.
 
 ## Отклонённые варианты
 

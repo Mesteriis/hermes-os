@@ -2,15 +2,16 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Частично реализовано. Mail core extracts bounded MIME
-parts, Mail keeps an owner-local source-to-anchor mapping and durable
-`requested -> admitted/rejected` outbox state, and IMAP runtime writes through
-a one-use Blob lease. Mail also requires the exact Blob-admission publish
-subject before it begins an owner-local admission. Mail now also exposes an
-immutable owner-local Storage bundle for a future separate admission. ADR всё
-ещё не расширяет `first_owner_v1`, не допускает Mail production descriptor и
-не доказывает live Blob-result delivery. Versioned Mail settings schema,
-Storage bundle and unsigned descriptor artifact are defined by ADR-0263.
+Состояние реализации: Частично реализовано, production-positive путь доказан.
+Mail core extracts bounded MIME parts, Mail keeps an owner-local
+source-to-anchor mapping and durable `requested -> admitted/rejected` outbox
+state, and managed IMAP runtime writes exact provider bytes through a one-use
+Kernel-issued Blob session. Exact signed Mail descriptor/grant и live
+Blob-result delivery теперь доказаны вместе с replay/CAS conflict. Полный
+negative conformance matrix из admission gate, включая отдельные live Blob
+integrity/failure сценарии, ещё не завершён. ADR не расширяет
+`first_owner_v1`. Versioned Mail settings schema, Storage bundle and descriptor
+artifact are defined by ADR-0263.
 
 Зависит от:
 
@@ -88,6 +89,18 @@ The capability needs a separate atomic production gate before it is active:
 
 The scanner verdict producer remains outside this decision. No producer may
 emit `safe_for_delivery`.
+
+## Evidence 2026-07-24 — live positive path
+
+- conformance-only loopback IMAP transport включается отдельной Cargo feature;
+  default/release build сохраняет TLS и exact port `993`;
+- реальный IMAP fixture отдаёт RFC822 message с bounded base64 PDF part;
+- Mail использует owner capability `mail.blob.v1`, а не generic/foreign Blob
+  capability, и Kernel выдаёт process-bound one-use write session;
+- Blob binding содержит non-zero integrity proof, но bytes, socket path,
+  provider locator и credentials не попадают в Communications event;
+- третий provider sync и exact terminal replay не создают вторую admission;
+  stale CAS observation оставляет public owner state `blob_admitted`.
 
 ## Rejected alternatives
 

@@ -2,15 +2,13 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Частично реализовано. Communications publisher,
-schema-bound handoff через единственный integration boundary
+Состояние реализации: Реализовано для первого Mail producer. Communications
+publisher, schema-bound handoff через единственный integration boundary
 `hermes-communications-ingress`, atomic outbox insert и Mail-owned durable
-mapping реализованы. Mail runtime subscriber реализован и требует exact Kernel
-subscription permit; его production descriptor admission и Blob-result producer
-admission ещё не реализованы. Без этого handoff
-integration не может законно адресовать canonical attachment anchor: anchor ID
-является Communications-owned derived identity, а не provider- или
-integration-owned значением.
+mapping реализованы. Signed managed Mail runtime получает exact Kernel
+subscription permit, принимает anchor event, проверяет исходный Mail outbox
+record и сохраняет mapping с correlation ID до Blob-result continuation.
+Другой integration producer требует собственного admission и conformance.
 
 Зависит от:
 
@@ -94,3 +92,12 @@ The handoff is a public owner event, not a domain-to-integration call:
    prove replay, grant revoke, stale runtime generation and CAS conflict.
 4. Admit the scanner verdict producer separately. `safe_for_delivery` remains
    unreachable before that admission.
+
+## Evidence 2026-07-24 — Mail handoff
+
+Live managed conformance выполняет полный provider descriptor → canonical
+anchor → Mail mapping путь. Anchor source равен `communications-runtime`,
+causation указывает на Mail-owned source observation, а mapping хранится только
+в Mail PostgreSQL. Продолжение использует сохранённые canonical anchor и
+correlation ID; Mail не вызывает Communications RPC, не читает её storage и не
+повторяет owner identity derivation.
