@@ -39,9 +39,13 @@ Storage/Vault/provider/Event/Blob leases, lifecycle query и provider command с
 integration runtime остаётся доступным, затем запускает тот же broker и
 доказывает replay до нового durable Communications evidence. Kernel при этом
 управляет admission, capabilities, leases и routing, но не вызывает
-Communications и не интерпретирует business payload. Phase gate остаётся
-закрытым до проверки оставшегося privacy evidence и финального frontend cutover
-без legacy REST/fallback.
+Communications и не интерпретирует business payload. Backend privacy evidence
+также закрыто: subject и route metadata выводятся только из fixed admitted
+contract, Telegram не добавляет owner-private health surface, TDLib credential,
+session path, QR link, password hint и authorization diagnostics имеют
+redacted `Debug`, а недоверенный provider error message отбрасывается на
+adapter boundary. Phase gate остаётся закрытым только до финального frontend
+cutover без legacy REST/fallback.
 
 Уточняет:
 
