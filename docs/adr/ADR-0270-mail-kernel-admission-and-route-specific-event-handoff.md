@@ -2,10 +2,13 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Не реализовано. Exact Mail descriptor/settings/storage
-artifacts и release assembly существуют, но текущий общий `mail.client`,
-объединённый provider-credential capability и сокращённый attachment producer
-module ID не допускаются в production phase gate.
+Состояние реализации: Частично реализовано. Generated Mail API и descriptor
+теперь имеют независимые `mail.sync.v1`/`mail.delivery.v1` routes, три
+provider-purpose credential capabilities и один canonical module ID
+`hermes-mail-runtime` во всех Mail-produced envelopes. Umbrella `mail.client`
+удалён из production code; assembly повторно доказала signed exact descriptor.
+Managed launch, Kernel fence и live event/attachment conformance ещё не
+реализованы, поэтому `mail_runtime_admission_v1` закрыт.
 
 Уточняет:
 
