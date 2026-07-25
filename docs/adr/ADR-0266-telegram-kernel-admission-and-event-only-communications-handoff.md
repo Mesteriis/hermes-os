@@ -27,13 +27,21 @@ bindings integration registration в `revoking`, запускает сущест
 Control physical fence и независимо пытается остановить integration worker;
 недоступный Storage оставляет durable incomplete revocation вместо ложного
 успеха, а exact retry той же Storage binding revision повторно использует
-revocation reservation. Live conformance теперь доказывает путь provider frame
-→ Telegram-owned PostgreSQL outbox → exact bytes в JetStream → Communications
-inbox/canonical event. Недоступный publisher оставляет exact envelope pending,
-а повторная публикация после simulated publish-before-mark crash подтверждает
-JetStream duplicate и не создаёт второе Communications event. Полный managed
-Telegram runtime с Kernel-issued Event/provider leases и broker-process outage
-replay ещё не доказаны, поэтому phase gate остаётся закрытым.
+revocation reservation. Live conformance теперь доказывает signed managed
+launch exact Telegram runtime и native dependency, Kernel-issued
+Storage/Vault/provider/Event/Blob leases, lifecycle query и provider command с
+отдельными состояниями `accepted` и `completed`. Inbound путь проходит только
+как provider frame → Telegram-owned PostgreSQL outbox → exact bytes в JetStream
+→ Communications inbox/canonical event. Повторная доставка exact observation
+подтверждает inbox deduplication и не создаёт второе Communications event.
+Отдельный broker-process outage test останавливает NATS после provider command,
+сохраняет новое observation pending в Telegram outbox, подтверждает, что
+integration runtime остаётся доступным, затем запускает тот же broker и
+доказывает replay до нового durable Communications evidence. Kernel при этом
+управляет admission, capabilities, leases и routing, но не вызывает
+Communications и не интерпретирует business payload. Phase gate остаётся
+закрытым до проверки оставшегося privacy evidence и финального frontend cutover
+без legacy REST/fallback.
 
 Уточняет:
 
