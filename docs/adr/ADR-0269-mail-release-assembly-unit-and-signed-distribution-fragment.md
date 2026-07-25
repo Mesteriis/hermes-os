@@ -2,9 +2,13 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Не реализовано. Решение открывает только build-time
-assembly slice; Mail production registration, grants и managed launch остаются
-закрыты до отдельного executable и live conformance.
+Состояние реализации: Реализовано статически. Отдельный Cargo package
+материализует exact descriptor/settings/storage bytes и typed unsigned
+fragment; generic distribution compiler test запускает assembly binary и
+проверяет signed runtime и Storage entries. Compile-isolation guards запрещают
+обратную зависимость Mail runtime и зависимость Communications на assembly
+unit. Mail production registration, grants и managed launch остаются закрыты
+до отдельного executable и live conformance.
 
 Зависит от:
 
