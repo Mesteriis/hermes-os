@@ -6,7 +6,10 @@
 private 0600 Unix socket из staged configuration, проверяет one-use P-256
 `BlobDataSessionGrantV1` (Kernel instance, Blob/runtime/grant fences, expiry и
 32-byte channel binding) и умеет выполнить bounded `write`/`read_range` только
-после ciphertext-only Vault lease. Live managed conformance подтверждает
+после ciphertext-only Vault lease. Grant теперь также поддерживает optional
+signed `expected_plaintext_sha256`: bound write или полный read fail closed при
+несовпадении digest; partial read с таким binding запрещён. Live managed
+conformance подтверждает
 write/read через file-backed Vault, one-use replay rejection и stale Blob
 runtime-generation rejection. Kernel передаёт service verification key. Первый
 owner ещё не существует, поэтому owner-specific content-session issuer намеренно
@@ -44,13 +47,17 @@ operation и `BlobDataSessionGrantV1`. Grant является compact binary tok
 
 - registration ID, runtime instance/generation и grant epoch;
 - owner/capability scope, maximum bytes, expiry и random session ID;
-- exact Blob service runtime generation и a 32-byte socket-channel binding.
+- exact Blob service runtime generation и a 32-byte socket-channel binding;
+- optional expected plaintext SHA-256 только для explicit receipt-bound
+  write/full-read session.
 
 Blob verifies signature, expiry, service generation and all fence/quota fields
 before allocating, reading or deleting a byte. A revoked registration, changed
 grant epoch, expired grant, replayed session ID or wrong channel binding rejects
 the request before Vault routing. A grant never carries content-encryption key,
-filesystem path, URL, plaintext hash or generic bearer permission.
+filesystem path, URL, unrequested content metadata or generic bearer
+permission. Optional plaintext digest является private signed integrity fence,
+не логируется и не выдаёт право на другой reference или operation.
 
 For an admitted request Blob service itself creates a `BlobContentKeyFenceV1`
 and sends its HPKE-protected `VaultCiphertextRouteV1` over the verified
@@ -65,6 +72,8 @@ module runtime <-- private Blob socket -- Blob service <-- ciphertext response -
 
 Kernel is not on the private byte path. A single request has bounded framing,
 one operation, bounded plaintext/range and a sanitized result code. The service
+requires exact full range and verifies returned plaintext before accepting a
+receipt-bound read; write binding проверяется до сохранения. The service
 serializes mutations per reference; a crash before metadata commit is recovered
 by the existing pending-write protocol. Revoke closes all sessions for the
 affected registration/capability, destroys in-memory lease material and makes
@@ -80,6 +89,8 @@ socket response is never an empty Protobuf payload.
 - service request decoder rejects malformed, oversized, expired, wrong-runtime,
   wrong-binding or replayed grants and does not serialize paths/keys/private
   content into logs; this is covered by unit regressions;
+- signed expected-plaintext binding rejects partial reads and digest mismatch
+  before returning accepted content;
 - service creates and removes only its canonical 0600 Unix socket under a 0700
   private directory, rejecting symlink, wrong mode and stale-file attacks;
 - live managed-service startup and data-path conformance obtain a current Vault

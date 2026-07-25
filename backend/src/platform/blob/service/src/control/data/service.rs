@@ -14,6 +14,7 @@ use hermes_runtime_protocol::v1::{
     BlobDataOperationV1, BlobDataRequestV1, BlobDataResponseV1, blob_data_request_v1::Operation,
 };
 use prost::Message;
+use sha2::{Digest, Sha256};
 
 use super::{
     framing,
@@ -94,6 +95,9 @@ where
             .map_err(|_| developer_denied("content_key"))?;
         match operation.ok_or(())? {
             Operation::Write(write) => {
+                if !exact_plaintext_binding(session.expected_plaintext_sha256(), &write.plaintext) {
+                    return Err(());
+                }
                 self.store
                     .write_new(
                         session.reference(),
@@ -111,6 +115,14 @@ where
                 })
             }
             Operation::ReadRange(read) => {
+                if !exact_read_range_binding(
+                    session.expected_plaintext_sha256(),
+                    read.start,
+                    read.end_exclusive,
+                    session.reference().declared_size(),
+                ) {
+                    return Err(());
+                }
                 let range = hermes_blob_protocol::BlobRangeV1::new(
                     read.start,
                     read.end_exclusive,
@@ -121,6 +133,9 @@ where
                     .store
                     .read_range(session.reference(), session.access(), &lease, range, now)
                     .map_err(|_| developer_denied("read"))?;
+                if !exact_plaintext_binding(session.expected_plaintext_sha256(), &plaintext) {
+                    return Err(());
+                }
                 Ok(BlobDataResponseV1 {
                     plaintext,
                     accepted: true,
@@ -197,6 +212,20 @@ where
     }
 }
 
+fn exact_read_range_binding(
+    expected_plaintext_sha256: Option<&[u8; 32]>,
+    start: u64,
+    end_exclusive: u64,
+    declared_size: u64,
+) -> bool {
+    expected_plaintext_sha256.is_none() || (start == 0 && end_exclusive == declared_size)
+}
+
+fn exact_plaintext_binding(expected_plaintext_sha256: Option<&[u8; 32]>, plaintext: &[u8]) -> bool {
+    expected_plaintext_sha256
+        .is_none_or(|expected| Sha256::digest(plaintext).as_slice() == expected)
+}
+
 fn developer_denied(stage: &str) {
     if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
         eprintln!("developer_blob_data_request_denied stage={stage}");
@@ -219,5 +248,26 @@ fn complete_immediately<T>(future: impl Future<Output = T>) -> Result<T, ()> {
     match future.as_mut().poll(&mut context) {
         Poll::Ready(value) => Ok(value),
         Poll::Pending => Err(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sha2::{Digest, Sha256};
+
+    use super::{exact_plaintext_binding, exact_read_range_binding};
+
+    #[test]
+    fn signed_plaintext_binding_requires_a_full_exact_hash_match() {
+        let bytes = b"attachment";
+        let digest: [u8; 32] = Sha256::digest(bytes).into();
+
+        assert!(exact_read_range_binding(Some(&digest), 0, 10, 10));
+        assert!(!exact_read_range_binding(Some(&digest), 1, 10, 10));
+        assert!(!exact_read_range_binding(Some(&digest), 0, 9, 10));
+        assert!(exact_plaintext_binding(Some(&digest), bytes));
+        assert!(!exact_plaintext_binding(Some(&digest), b"changed"));
+        assert!(exact_read_range_binding(None, 1, 9, 10));
+        assert!(exact_plaintext_binding(None, b"changed"));
     }
 }

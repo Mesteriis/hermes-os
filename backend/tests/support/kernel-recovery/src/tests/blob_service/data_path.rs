@@ -59,7 +59,7 @@ fn managed_blob_writes_and_reads_through_the_live_vault_route() {
             [2; 16],
             [4; 32],
             blob_generation,
-            b"",
+            b"hello",
         ),
     )
     .unwrap_or_else(|error| failure(&supervisor, error));
@@ -80,7 +80,16 @@ fn request(
     blob_generation: u64,
     plaintext: &[u8],
 ) -> BlobDataRequestV1 {
-    let grant = signed_grant(signer, operation, session_id, &binding, blob_generation);
+    let expected_plaintext_sha256 =
+        (!plaintext.is_empty()).then(|| Sha256::digest(plaintext).into());
+    let grant = signed_grant(
+        signer,
+        operation,
+        session_id,
+        &binding,
+        blob_generation,
+        expected_plaintext_sha256,
+    );
     let operation = match operation {
         BlobDataOperationV1::BlobDataOperationWriteV1 => Operation::Write(BlobDataWriteRequestV1 {
             plaintext: plaintext.to_vec(),
@@ -107,6 +116,7 @@ fn signed_grant(
     session_id: [u8; 16],
     binding: &[u8; 32],
     blob_generation: u64,
+    expected_plaintext_sha256: Option<[u8; 32]>,
 ) -> BlobDataSessionGrantV1 {
     let mut grant = BlobDataSessionGrantV1 {
         major: 1,
@@ -129,6 +139,7 @@ fn signed_grant(
         expires_at_unix_ms: unix_ms() + 10_000,
         kernel_authorization_signature_raw: Vec::new(),
         blob_runtime_generation: blob_generation,
+        expected_plaintext_sha256: expected_plaintext_sha256.map_or_else(Vec::new, |v| v.to_vec()),
     };
     let mut message = b"hermes.blob-data-session.v1\0".to_vec();
     message.extend_from_slice(&grant.encode_to_vec());

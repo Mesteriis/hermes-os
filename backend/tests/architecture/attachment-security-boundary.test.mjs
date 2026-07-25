@@ -124,6 +124,40 @@ test('Attachment Security persistence owns the durable join, bounded jobs and ex
   );
 });
 
+test('Attachment Security Blob reads are one-use and receipt-bound below the engine', async () => {
+  const [protocol, client, kernelSession, serviceSession, service] = await Promise.all([
+    readFile(
+      new URL(
+        'src/platform/runtime_protocol/proto/hermes/runtime/v1/blob_runtime.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('src/platform/blob/client/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/kernel/src/platform/blob/session.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL('src/platform/blob/service/src/control/data/session.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/platform/blob/service/src/control/data/service.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(protocol, /bytes expected_plaintext_sha256 = 21;/);
+  assert.match(client, /BlobDataOperationV1::BlobDataOperationReadRangeV1/);
+  assert.match(client, /exact_receipt_binding\(&grant\.expected_plaintext_sha256/);
+  assert.match(kernelSession, /expected_plaintext_sha256: request\.receipt_sha256\.clone\(\)/);
+  assert.match(serviceSession, /expected_plaintext_sha256: Option<\[u8; 32\]>/);
+  assert.match(service, /exact_read_range_binding/);
+  assert.match(service, /Sha256::digest\(plaintext\)/);
+  assert.doesNotMatch(
+    `${kernelSession}\n${service}`,
+    /hermes_(?:communications|attachment_security)|clamav/i,
+  );
+});
+
 test('staged Attachment Security packages do not open the production engine gate', async () => {
   const policy = JSON.parse(await readFile(POLICY_PATH, 'utf8'));
   const productionPackages = policy.implementation.productionPackages;

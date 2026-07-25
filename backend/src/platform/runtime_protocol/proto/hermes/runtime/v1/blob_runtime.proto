@@ -40,6 +40,9 @@ message BlobDataSessionGrantV1 {
   uint64 expires_at_unix_ms = 18;
   bytes kernel_authorization_signature_raw = 19;
   uint64 blob_runtime_generation = 20;
+  // Optional exact plaintext binding. When present, full writes and reads are
+  // rejected unless their plaintext SHA-256 matches these signed bytes.
+  bytes expected_plaintext_sha256 = 21;
 }
 
 // Durable, non-readable proof that an exact producer-owned Blob reference was

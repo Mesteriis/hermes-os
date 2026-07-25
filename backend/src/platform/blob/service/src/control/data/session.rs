@@ -19,6 +19,7 @@ pub(super) struct VerifiedBlobDataSessionV1 {
     access: BlobAccessFenceV1,
     quota: BlobQuotaGrantV1,
     key_revision: u64,
+    expected_plaintext_sha256: Option<[u8; 32]>,
 }
 
 pub(super) struct VerifiedBlobCustodyTransferV1 {
@@ -71,6 +72,9 @@ impl VerifiedBlobDataSessionV1 {
     }
     pub(super) const fn key_revision(&self) -> u64 {
         self.key_revision
+    }
+    pub(super) const fn expected_plaintext_sha256(&self) -> Option<&[u8; 32]> {
+        self.expected_plaintext_sha256.as_ref()
     }
 }
 
@@ -292,11 +296,25 @@ fn decode_grant(grant: &BlobDataSessionGrantV1) -> Result<VerifiedBlobDataSessio
     if !quota.matches(&access) || grant.key_revision == 0 {
         return reject("quota_match");
     }
+    let expected_plaintext_sha256 = if grant.expected_plaintext_sha256.is_empty() {
+        None
+    } else {
+        let expected: [u8; 32] = grant
+            .expected_plaintext_sha256
+            .as_slice()
+            .try_into()
+            .map_err(|_| denied("expected_plaintext_sha256"))?;
+        if expected.iter().all(|byte| *byte == 0) {
+            return reject("expected_plaintext_sha256");
+        }
+        Some(expected)
+    };
     Ok(VerifiedBlobDataSessionV1 {
         reference,
         access,
         quota,
         key_revision: grant.key_revision,
+        expected_plaintext_sha256,
     })
 }
 

@@ -84,16 +84,6 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
                 )
             })
             .ok_or_else(|| "managed runtime Blob session request is denied".to_owned())?;
-        if (operation == BlobDataOperationV1::BlobDataOperationWriteV1
-            && !request.receipt_sha256.is_empty()
-            && (request.receipt_sha256.len() != 32
-                || request.receipt_sha256.iter().all(|byte| *byte == 0)))
-            || (operation != BlobDataOperationV1::BlobDataOperationWriteV1
-                && operation != BlobDataOperationV1::BlobDataOperationCustodyTransferV1
-                && !request.receipt_sha256.is_empty())
-        {
-            return Err("managed runtime Blob session request is denied".to_owned());
-        }
         if entry.request().owner_id().is_empty()
             || request.declared_size == 0
             || request.declared_size > entry.request().max_bytes()
@@ -143,12 +133,15 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
             expires_at_unix_ms,
             kernel_authorization_signature_raw: Vec::new(),
             blob_runtime_generation: blob.runtime_generation(),
+            expected_plaintext_sha256: request.receipt_sha256.clone(),
         };
         let signer = FileDeviceSigner::open_for_instance(&self.data_dir)?;
         let mut message = b"hermes.blob-data-session.v1\0".to_vec();
         message.extend_from_slice(&grant.encode_to_vec());
         grant.kernel_authorization_signature_raw = signer.sign(&message).to_vec();
-        let custody_transfer_source_proof = if request.receipt_sha256.is_empty() {
+        let custody_transfer_source_proof = if request.receipt_sha256.is_empty()
+            || operation != BlobDataOperationV1::BlobDataOperationWriteV1
+        {
             Vec::new()
         } else {
             issue_custody_source_proof(&signer, &grant, &request.receipt_sha256, now)?

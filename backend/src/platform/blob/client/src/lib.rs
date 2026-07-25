@@ -257,7 +257,7 @@ pub fn request_managed_blob_session(
         || reference_id.iter().all(|byte| *byte == 0)
         || declared_size == 0
         || !(1..=3).contains(&backup_class)
-        || (receipt_sha256.is_some() && operation != BlobDataOperationV1::BlobDataOperationWriteV1)
+        || !valid_receipt_binding(operation, receipt_sha256)
     {
         return Err(BlobClientError::InvalidSessionRequest);
     }
@@ -318,7 +318,10 @@ pub fn request_managed_blob_session(
         || grant.declared_size != declared_size
         || grant.operation != operation as i32
         || grant.channel_binding_sha256 != Sha256::digest(&channel_binding).as_slice()
-        || (receipt_sha256.is_some() && delivery.custody_transfer_source_proof.is_empty())
+        || !exact_receipt_binding(&grant.expected_plaintext_sha256, receipt_sha256)
+        || (receipt_sha256.is_some()
+            && operation == BlobDataOperationV1::BlobDataOperationWriteV1
+            && delivery.custody_transfer_source_proof.is_empty())
     {
         return Err(BlobClientError::InvalidResponse);
     }
@@ -342,8 +345,7 @@ pub fn request_managed_blob_session_v2(
         || request.reference_id.iter().all(|byte| *byte == 0)
         || request.declared_size == 0
         || !(1..=3).contains(&request.backup_class)
-        || (request.receipt_sha256.is_some()
-            && request.operation != BlobDataOperationV1::BlobDataOperationWriteV1)
+        || !valid_receipt_binding(request.operation, request.receipt_sha256)
     {
         return Err(BlobClientError::InvalidSessionRequest);
     }
@@ -393,7 +395,10 @@ pub fn request_managed_blob_session_v2(
         || grant.declared_size != request.declared_size
         || grant.operation != request.operation as i32
         || grant.channel_binding_sha256 != Sha256::digest(&channel_binding).as_slice()
-        || (request.receipt_sha256.is_some() && delivery.custody_transfer_source_proof.is_empty())
+        || !exact_receipt_binding(&grant.expected_plaintext_sha256, request.receipt_sha256)
+        || (request.receipt_sha256.is_some()
+            && request.operation == BlobDataOperationV1::BlobDataOperationWriteV1
+            && delivery.custody_transfer_source_proof.is_empty())
     {
         return Err(BlobClientError::InvalidResponse);
     }
@@ -403,6 +408,22 @@ pub fn request_managed_blob_session_v2(
         channel_binding,
         custody_transfer_source_proof: delivery.custody_transfer_source_proof,
     })
+}
+
+fn valid_receipt_binding(
+    operation: BlobDataOperationV1,
+    receipt_sha256: Option<&[u8; 32]>,
+) -> bool {
+    receipt_sha256.is_none()
+        || matches!(
+            operation,
+            BlobDataOperationV1::BlobDataOperationWriteV1
+                | BlobDataOperationV1::BlobDataOperationReadRangeV1
+        )
+}
+
+fn exact_receipt_binding(grant: &[u8], expected: Option<&[u8; 32]>) -> bool {
+    expected.map_or_else(|| grant.is_empty(), |expected| grant == expected)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -628,5 +649,25 @@ mod tests {
             ),
             BlobClientError::Rejected("managed_blob_session_denied".to_owned()),
         );
+    }
+
+    #[test]
+    fn receipt_binding_is_allowed_only_for_exact_write_or_read_sessions() {
+        let receipt = [7; 32];
+        assert!(valid_receipt_binding(
+            BlobDataOperationV1::BlobDataOperationWriteV1,
+            Some(&receipt)
+        ));
+        assert!(valid_receipt_binding(
+            BlobDataOperationV1::BlobDataOperationReadRangeV1,
+            Some(&receipt)
+        ));
+        assert!(!valid_receipt_binding(
+            BlobDataOperationV1::BlobDataOperationCustodyTransferV1,
+            Some(&receipt)
+        ));
+        assert!(exact_receipt_binding(&receipt, Some(&receipt)));
+        assert!(!exact_receipt_binding(&[8; 32], Some(&receipt)));
+        assert!(exact_receipt_binding(&[], None));
     }
 }
