@@ -20,7 +20,9 @@ duplicate suppression и NATS outage replay реализованы в `5deac37fa
 `890b8418e`; gate 11 закрыт. Открытие gate разрешает только explicit
 owner-approved Zulip admission с текущими fences, не расширяет
 `first_owner_v1`, не активирует runtime автоматически и не закрывает отдельный
-frontend cutover.
+frontend cutover. Frontend generator и независимые
+`ZulipCommandService`/`ZulipQueryService` Connect client units теперь
+реализованы как prerequisite; legacy Zulip surface ещё не удалён.
 
 Уточняет:
 

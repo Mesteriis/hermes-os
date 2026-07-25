@@ -9,6 +9,9 @@ const repoRoot = resolve(frontendRoot, '..')
 const protoRoot = join(repoRoot, 'contracts', 'proto')
 const gatewayProtoRoot = join(repoRoot, 'backend', 'src', 'api', 'gateway', 'contracts', 'proto')
 const communicationsQueryProtoRoot = join(repoRoot, 'backend', 'src', 'communications-api', 'proto')
+const mailProtoRoot = join(repoRoot, 'backend', 'src', 'mail-api', 'proto')
+const telegramProtoRoot = join(repoRoot, 'backend', 'src', 'telegram-api', 'proto')
+const zulipProtoRoot = join(repoRoot, 'backend', 'src', 'zulip-api', 'proto')
 const outputDir = join(frontendRoot, 'src', 'gen')
 const pluginPath = join(frontendRoot, 'node_modules', '.bin', 'protoc-gen-es')
 const protoFiles = [
@@ -17,6 +20,9 @@ const protoFiles = [
   join(protoRoot, 'hermes', 'signal_hub', 'v1', 'signal_hub.proto'),
   join(protoRoot, 'hermes', 'communications', 'v1', 'communications.proto'),
   join(communicationsQueryProtoRoot, 'hermes', 'communications', 'query', 'v1', 'query.proto'),
+  join(mailProtoRoot, 'hermes', 'mail', 'v1', 'client.proto'),
+  join(telegramProtoRoot, 'hermes', 'telegram', 'v1', 'client.proto'),
+  join(zulipProtoRoot, 'hermes', 'zulip', 'v1', 'client.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_realtime.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'browser_session.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_bootstrap.proto')
@@ -30,6 +36,9 @@ const result = spawnSync(
     `-I${protoRoot}`,
     `-I${gatewayProtoRoot}`,
     `-I${communicationsQueryProtoRoot}`,
+    `-I${mailProtoRoot}`,
+    `-I${telegramProtoRoot}`,
+    `-I${zulipProtoRoot}`,
     `--plugin=protoc-gen-es=${pluginPath}`,
     `--es_out=${outputDir}`,
     '--es_opt',

@@ -2,7 +2,11 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Phase gate; не admitted.
+Состояние реализации: frontend generator выпускает exact owner-specific Mail,
+Telegram и Zulip contracts, а provider frontend владеет отдельными
+service-specific Connect client units поверх общего Gateway transport. Это
+только prerequisite: legacy REST/query surfaces ещё не удалены, поэтому
+frontend cutover и соответствующие provider phase gates не закрыты.
 
 Первый exact provider profile:
 [ADR-0266: Telegram Kernel admission and event-only Communications handoff](ADR-0266-telegram-kernel-admission-and-event-only-communications-handoff.md).

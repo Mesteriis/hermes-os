@@ -45,7 +45,11 @@ contract, Telegram не добавляет owner-private health surface, TDLib c
 session path, QR link, password hint и authorization diagnostics имеют
 redacted `Debug`, а недоверенный provider error message отбрасывается на
 adapter boundary. Phase gate остаётся закрытым только до финального frontend
-cutover без legacy REST/fallback.
+cutover без legacy REST/fallback. Frontend generator и три независимых
+`TelegramAuthorizationService`, `TelegramLifecycleService` и
+`TelegramOperationalService` client units теперь реализованы; их наличие не
+считается cutover, пока provider experience не удалит старые REST calls и
+Communications-prefixed query keys.
 
 Уточняет:
 
