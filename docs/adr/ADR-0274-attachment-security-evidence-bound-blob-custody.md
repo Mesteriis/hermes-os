@@ -10,9 +10,12 @@ transfer реализованы. Live disposable contour доказал target-b
 target-owned read, clean ClamAV verdict, Communications CAS, exact replay без
 повторного scan и отдельный отказ прямого source read. Тот же contour теперь
 доказывает threat quarantine и fail-closed malformed/disconnect/timeout без
-verdict/outbox и без перевода Communications из `blob_admitted`. Phase gate
-`attachment_security_engine_v1` остаётся закрыт до
-outage/restart/revoke/stale-CAS matrix и production inventory admission.
+verdict/outbox и без перевода Communications из `blob_admitted`. NATS outage
+после scan сохраняет exact verdict в owner outbox; после остановки Engine и
+fenced Storage successor generation 2 публикует те же bytes без повторного
+custody/scan, а stale Communications CAS не меняет terminal state. Phase gate
+`attachment_security_engine_v1` остаётся закрыт до Blob/Vault outage,
+source/target revoke/stale matrix и production inventory admission.
 ADR-0275 определяет stable target-bound proof для этого cross-owner handoff.
 
 Зависит от:

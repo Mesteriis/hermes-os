@@ -75,7 +75,7 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
         prepare_attachment_security_runtime(&supervisor, &store, admitted_attachment_security);
     configure_communications_jetstream(&store);
     start_communications_domain(&supervisor, &store, &root.join("runtime"));
-    let attachment_security = start_attachment_security_runtime(
+    let mut attachment_security = start_attachment_security_runtime(
         &supervisor,
         &store,
         &root.join("runtime"),
@@ -109,6 +109,57 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
     );
     assert_eq!(
         wait_for_attachment_state(&store, &supervisor, attachment.attachment_anchor_id),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
+            as u32
+    );
+    assert_stale_attachment_security_verdict_cas_is_rejected(&store, &attachment);
+    assert_eq!(
+        wait_for_attachment_state(&store, &supervisor, attachment.attachment_anchor_id),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
+            as u32
+    );
+
+    let outage_plaintext =
+        b"attachment fixture-held-clean payload retained through NATS outage and relay restart";
+    let outage_blob = blob_source.write(&store, &supervisor, &data, [86; 16], outage_plaintext);
+    let outage_attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "outage-restart",
+        outage_blob.declared_size,
+        outage_blob.receipt_sha256,
+    );
+    let previous_runtime_instance_id = attachment_security.runtime_instance_id.clone();
+    attachment_security = assert_attachment_security_outbox_replays_after_nats_outage_and_restart(
+        &store,
+        &outage_attachment,
+        &outage_blob,
+        &clamav,
+        || {
+            supervisor
+                .stop(&attachment_security.registration_id)
+                .expect("stop Attachment Security runtime with pending verdict");
+        },
+        || {
+            restart_attachment_security_runtime(
+                &supervisor,
+                &store,
+                &root.join("runtime"),
+                &attachment_security,
+                clamav.port(),
+            )
+        },
+    );
+    assert_eq!(attachment_security.runtime_generation, 2);
+    assert_ne!(
+        attachment_security.runtime_instance_id,
+        previous_runtime_instance_id
+    );
+    assert_eq!(
+        wait_for_attachment_state(
+            &store,
+            &supervisor,
+            outage_attachment.attachment_anchor_id
+        ),
         hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
             as u32
     );
@@ -185,6 +236,7 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
     }
     assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::Clean), 1);
     assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::Threat), 1);
+    assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::HeldClean), 1);
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {

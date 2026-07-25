@@ -8,10 +8,12 @@ use hermes_attachment_security_contract::{
     build_attachment_security_scan_candidate_outbox_record_v1,
 };
 use hermes_attachment_security_persistence::AttachmentSecurityPersistenceConformanceV1;
+use hermes_attachment_security_runtime::admission::ATTACHMENT_SECURITY_MODULE_ID;
 use hermes_communications_attachment_contract::{
     AttachmentBlobAdmissionFactV1, AttachmentBlobAdmissionTransitionV1,
     AttachmentBlobExpectedStateV1, AttachmentObservationEnvelopeContextV1,
-    build_attachment_blob_admission_outbox_record_v1,
+    AttachmentSafetyVerdictFactV1, build_attachment_blob_admission_outbox_record_v1,
+    build_attachment_safety_verdict_outbox_record_v1,
     lifecycle_v1::{
         AttachmentSafetyStateChangedV1, AttachmentSafetyStateV1 as AttachmentSafetyStateWireV1,
     },
@@ -326,6 +328,58 @@ pub(super) fn assert_threat_attachment_security_verdict_flow(
     );
 }
 
+pub(super) fn assert_stale_attachment_security_verdict_cas_is_rejected(
+    store: &SqliteControlStore,
+    attachment: &CommunicationsAttachmentFixtureV1,
+) {
+    let observed_at = current_unix_seconds();
+    let stale = build_attachment_safety_verdict_outbox_record_v1(
+        &AttachmentSafetyVerdictFactV1 {
+            attachment_anchor_id: attachment.attachment_anchor_id,
+            evidence_id: [91; 16],
+            causation_message_id: attachment.blob_admitted_state_message_id,
+            correlation_id: attachment.correlation_id,
+            expected_state:
+                hermes_communications_attachment_contract::AttachmentSafetyExpectedStateV1::BlobAdmitted,
+            verdict:
+                hermes_communications_attachment_contract::AttachmentSafetyVerdictV1::Quarantined,
+            observed_at_unix_seconds: observed_at,
+        },
+        &AttachmentObservationEnvelopeContextV1 {
+            runtime_instance_id: "attachment-security-stale-cas-fixture".to_owned(),
+            runtime_generation: 1,
+            module_id: ATTACHMENT_SECURITY_MODULE_ID.to_owned(),
+            recorded_at_unix_seconds: observed_at,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build stale Attachment Security verdict");
+    let endpoint = event_endpoint(store);
+    tokio::runtime::Runtime::new()
+        .expect("Attachment Security stale CAS runtime")
+        .block_on(async move {
+            let client = async_nats::connect(endpoint)
+                .await
+                .expect("connect Attachment Security stale CAS observer");
+            let mut states = client
+                .subscribe(ATTACHMENT_STATE_SUBJECT)
+                .await
+                .expect("subscribe Communications stale CAS states");
+            client
+                .flush()
+                .await
+                .expect("activate Attachment Security stale CAS observer");
+            let context = async_nats::jetstream::new(client);
+            publish_exact(&context, ATTACHMENT_VERDICT_SUBJECT, stale.record()).await;
+            assert!(
+                tokio::time::timeout(Duration::from_secs(2), states.next())
+                    .await
+                    .is_err(),
+                "stale Attachment Security verdict must not mutate Communications state"
+            );
+        });
+}
+
 fn assert_attachment_security_verdict_flow(
     store: &SqliteControlStore,
     attachment: &CommunicationsAttachmentFixtureV1,
@@ -448,6 +502,100 @@ fn assert_attachment_security_verdict_flow(
                 scanner_count_before + 1
             );
         });
+}
+
+pub(super) fn assert_attachment_security_outbox_replays_after_nats_outage_and_restart<Started>(
+    store: &SqliteControlStore,
+    attachment: &CommunicationsAttachmentFixtureV1,
+    blob: &AttachmentSecurityFixtureBlobV1,
+    clamav: &AttachmentSecurityClamAvFixture,
+    stop_runtime: impl FnOnce(),
+    restart_runtime: impl FnOnce() -> Started,
+) -> Started {
+    let candidate = build_attachment_security_candidate(attachment, blob);
+    let endpoint = event_endpoint(store);
+    let runtime = tokio::runtime::Runtime::new().expect("Attachment Security outage runtime");
+    let _runtime_context = runtime.enter();
+    let (client, mut verdicts, mut states) = runtime.block_on(async {
+        let client = async_nats::connect(endpoint)
+            .await
+            .expect("connect Attachment Security outage observer");
+        let verdicts = client
+            .subscribe(ATTACHMENT_VERDICT_SUBJECT)
+            .await
+            .expect("subscribe Attachment Security outage verdicts");
+        let states = client
+            .subscribe(ATTACHMENT_STATE_SUBJECT)
+            .await
+            .expect("subscribe Communications outage states");
+        client
+            .flush()
+            .await
+            .expect("activate Attachment Security outage observers");
+        (client, verdicts, states)
+    });
+    let context = async_nats::jetstream::new(client.clone());
+    runtime.block_on(publish_exact(
+        &context,
+        ATTACHMENT_SCAN_CANDIDATE_SUBJECT,
+        &candidate,
+    ));
+    clamav.wait_until_held_scan_started();
+    set_authenticated_nats_container_running(false);
+    clamav.release_held_scan();
+    let pending_exact_bytes = runtime.block_on(wait_for_pending_outage_verdict(
+        attachment.attachment_anchor_id,
+        clamav,
+    ));
+    stop_runtime();
+    set_authenticated_nats_container_running(true);
+    wait_for_authenticated_nats_reconnect(&runtime, &client, "Attachment Security observer");
+    let restarted = restart_runtime();
+    runtime.block_on(async {
+        let verdict = tokio::time::timeout(Duration::from_secs(15), verdicts.next())
+            .await
+            .expect("replayed Attachment Security verdict timeout")
+            .expect("replayed Attachment Security verdict");
+        assert_eq!(
+            verdict.payload.as_ref(),
+            pending_exact_bytes,
+            "restarted relay must publish the exact persisted verdict bytes"
+        );
+        let verdict_envelope = decode_envelope_v1(verdict.payload.as_ref())
+            .expect("replayed Attachment Security verdict envelope");
+        assert_eq!(
+            verdict_envelope.causation_message_id,
+            attachment.blob_admitted_state_message_id
+        );
+        let state = tokio::time::timeout(Duration::from_secs(15), states.next())
+            .await
+            .expect("replayed Communications state timeout")
+            .expect("replayed Communications state");
+        let state = decode_envelope_v1(state.payload.as_ref())
+            .expect("replayed Communications state envelope");
+        assert_eq!(state.causation_message_id, verdict_envelope.message_id);
+        let state = AttachmentSafetyStateChangedV1::decode(state.payload.as_slice())
+            .expect("replayed Communications state payload");
+        assert_eq!(
+            state.next_state,
+            AttachmentSafetyStateWireV1::SafeForDelivery as i32
+        );
+        publish_exact(&context, ATTACHMENT_SCAN_CANDIDATE_SUBJECT, &candidate).await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(500), verdicts.next())
+                .await
+                .is_err(),
+            "outage candidate replay must not create another verdict"
+        );
+        assert!(
+            attachment_security_pending_verdict_outbox()
+                .await
+                .is_empty(),
+            "restarted relay must mark the persisted verdict published"
+        );
+    });
+    assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::HeldClean), 1);
+    restarted
 }
 
 pub(super) fn assert_attachment_security_scanner_failure_is_fail_closed(
@@ -578,6 +726,34 @@ async fn wait_for_failed_scan_attempt(
     }
 }
 
+async fn wait_for_pending_outage_verdict(
+    attachment_anchor_id: [u8; 16],
+    clamav: &AttachmentSecurityClamAvFixture,
+) -> Vec<u8> {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let job = attachment_security_scan_job_diagnostics(attachment_anchor_id).await;
+        let pending = attachment_security_pending_verdict_outbox().await;
+        if clamav.outcome_count(ClamAvFixtureOutcomeV1::HeldClean) == 1
+            && job.as_ref().is_some_and(|job| {
+                job.state == 2
+                    && job.attempt_count == 1
+                    && job.target_blob_receipt_present
+                    && job.outbox_message_id_present
+                    && !job.claimed
+            })
+            && pending.len() == 1
+        {
+            return pending[0].exact_bytes().to_vec();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Attachment Security verdict was not retained during NATS outage"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
 async fn publish_exact(
     context: &async_nats::jetstream::Context,
     subject: &str,
@@ -627,6 +803,15 @@ async fn attachment_security_scan_job_diagnostics(
     )
     .await
     .expect("read Attachment Security scan job diagnostics")
+}
+
+async fn attachment_security_pending_verdict_outbox()
+-> Vec<hermes_events_protocol::delivery::OutboxRecordV1> {
+    let persistence = attachment_security_conformance_persistence().await;
+    persistence
+        .pending_verdict_outbox(64)
+        .await
+        .expect("read pending Attachment Security verdict outbox")
 }
 
 async fn attachment_security_conformance_persistence()

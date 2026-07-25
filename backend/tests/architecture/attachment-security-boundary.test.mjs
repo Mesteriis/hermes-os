@@ -455,12 +455,19 @@ test('Attachment Security managed conformance launches the signed Engine through
   assert.match(setup, /SignedRuntimeArtifact::new\(/);
   assert.match(setup, /attachment_security_module_descriptor_v1\(/);
   assert.match(setup, /start_reserved_engine\(/);
+  assert.match(setup, /storage::successor::reserve\(/);
+  assert.match(setup, /restart_attachment_security_runtime\(/);
   assert.doesNotMatch(setup, /start_reserved_(?:domain|integration)\(/);
   assert.match(setup, /ManagedEngineRuntimeConfigurationV1/);
   assert.match(setup, /attachment_security_settings_snapshot\(/);
   assert.match(flow, /supervisor\s*\.is_active\(&attachment_security\.registration_id\)/);
   assert.match(flow, /assert_threat_attachment_security_verdict_flow\(/);
   assert.match(flow, /assert_attachment_security_scanner_failure_is_fail_closed\(/);
+  assert.match(
+    flow,
+    /assert_attachment_security_outbox_replays_after_nats_outage_and_restart\(/,
+  );
+  assert.match(flow, /runtime_generation,\s*2/);
   assert.match(clamav, /Ipv4Addr::LOCALHOST/);
   assert.match(clamav, /b"zINSTREAM\\0"/);
   for (const outcome of ['Threat', 'Malformed', 'Disconnect', 'Timeout']) {
@@ -468,9 +475,13 @@ test('Attachment Security managed conformance launches the signed Engine through
     assert.match(flow, new RegExp(`ClamAvFixtureOutcomeV1::${outcome}`));
   }
   assert.match(clamav, /Fixture-Signature FOUND/);
+  assert.match(clamav, /HeldClean = \d/);
   assert.match(eventFlow, /AttachmentSafetyVerdictV1::Quarantined/);
   assert.match(eventFlow, /scanner failure must not create a verdict/);
   assert.match(eventFlow, /after\.outbox, before\.outbox/);
+  assert.match(eventFlow, /set_authenticated_nats_container_running\(false\)/);
+  assert.match(eventFlow, /restarted relay must publish the exact persisted verdict bytes/);
+  assert.match(eventFlow, /stale Attachment Security verdict must not mutate Communications state/);
   assert.match(persistence, /WHERE attachment_anchor_id = \$1/);
   assert.doesNotMatch(
     `${setup}\n${flow}`,

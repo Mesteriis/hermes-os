@@ -143,14 +143,63 @@ pub(super) fn start_attachment_security_runtime(
 ) -> StartedAttachmentSecurityRuntime {
     let reservation = managed_launch::load(supervisor, store, &admitted.registration_id)
         .expect("load Attachment Security managed launch reservation");
+    start_reserved_attachment_security_runtime(
+        supervisor,
+        store,
+        runtime_dir,
+        reservation,
+        clamav_port,
+    )
+}
+
+pub(super) fn restart_attachment_security_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    started: &StartedAttachmentSecurityRuntime,
+    clamav_port: u16,
+) -> StartedAttachmentSecurityRuntime {
+    let predecessor = store
+        .platform_storage_binding(
+            &started.registration_id,
+            ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID,
+        )
+        .expect("read predecessor Attachment Security Storage binding")
+        .expect("predecessor Attachment Security Storage binding");
+    let issue = crate::platform::storage::successor::issue_after(&predecessor)
+        .expect("build successor Attachment Security Storage binding issue");
+    let (reservation, binding) = crate::platform::storage::successor::reserve(
+        supervisor,
+        store,
+        &started.registration_id,
+        ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID,
+        issue,
+    )
+    .expect("reserve restarted Attachment Security runtime and Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision restarted Attachment Security Storage binding");
+    start_reserved_attachment_security_runtime(
+        supervisor,
+        store,
+        runtime_dir,
+        reservation,
+        clamav_port,
+    )
+}
+
+fn start_reserved_attachment_security_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    reservation: managed_launch::ManagedLaunchReservation,
+    clamav_port: u16,
+) -> StartedAttachmentSecurityRuntime {
+    let registration_id = reservation.registration_id().to_owned();
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
     let grant_epoch = reservation.grant_epoch();
     let binding = store
-        .platform_storage_binding(
-            &admitted.registration_id,
-            ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID,
-        )
+        .platform_storage_binding(&registration_id, ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID)
         .expect("read Attachment Security Storage binding")
         .expect("Attachment Security Storage binding");
     let topology =
@@ -172,7 +221,7 @@ pub(super) fn start_attachment_security_runtime(
     let configuration = ManagedEngineRuntimeConfigurationV1 {
         major: 1,
         logical_owner_id: ATTACHMENT_SECURITY_OWNER_ID.to_owned(),
-        registration_id: admitted.registration_id.clone(),
+        registration_id: registration_id.clone(),
         runtime_instance_id: runtime_instance_id.clone(),
         runtime_generation,
         grant_epoch,
@@ -186,12 +235,11 @@ pub(super) fn start_attachment_security_runtime(
         runtime_dir,
         reservation,
         configuration,
-        attachment_security_settings_snapshot(&admitted.registration_id, clamav_port)
-            .encode_to_vec(),
+        attachment_security_settings_snapshot(&registration_id, clamav_port).encode_to_vec(),
     )
     .expect("start managed Attachment Security engine");
     StartedAttachmentSecurityRuntime {
-        registration_id: admitted.registration_id,
+        registration_id,
         runtime_instance_id,
         runtime_generation,
         grant_epoch,

@@ -7,7 +7,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const CLAMAV_INSTREAM_COMMAND: &[u8; 10] = b"zINSTREAM\0";
 const MAX_FIXTURE_CHUNK_BYTES: usize = 64 * 1024;
@@ -16,7 +16,8 @@ const THREAT_MARKER: &[u8] = b"fixture-threat";
 const MALFORMED_MARKER: &[u8] = b"fixture-malformed";
 const DISCONNECT_MARKER: &[u8] = b"fixture-disconnect";
 const TIMEOUT_MARKER: &[u8] = b"fixture-timeout";
-const FIXTURE_OUTCOME_COUNT: usize = 5;
+const HELD_CLEAN_MARKER: &[u8] = b"fixture-held-clean";
+const FIXTURE_OUTCOME_COUNT: usize = 6;
 const TIMEOUT_RESPONSE_DELAY: Duration = Duration::from_millis(1_500);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -27,6 +28,7 @@ pub(super) enum ClamAvFixtureOutcomeV1 {
     Malformed = 2,
     Disconnect = 3,
     Timeout = 4,
+    HeldClean = 5,
 }
 
 impl ClamAvFixtureOutcomeV1 {
@@ -39,6 +41,8 @@ pub(super) struct AttachmentSecurityClamAvFixture {
     port: u16,
     shutdown: Arc<AtomicBool>,
     outcome_counts: Arc<[AtomicUsize; FIXTURE_OUTCOME_COUNT]>,
+    held_scan_started: Arc<AtomicBool>,
+    release_held_scan: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -55,8 +59,12 @@ impl AttachmentSecurityClamAvFixture {
             .port();
         let shutdown = Arc::new(AtomicBool::new(false));
         let outcome_counts = Arc::new(std::array::from_fn(|_| AtomicUsize::new(0)));
+        let held_scan_started = Arc::new(AtomicBool::new(false));
+        let release_held_scan = Arc::new(AtomicBool::new(false));
         let worker_shutdown = Arc::clone(&shutdown);
         let worker_outcome_counts = Arc::clone(&outcome_counts);
+        let worker_held_scan_started = Arc::clone(&held_scan_started);
+        let worker_release_held_scan = Arc::clone(&release_held_scan);
         let worker = thread::spawn(move || {
             while !worker_shutdown.load(Ordering::Acquire) {
                 match listener.accept() {
@@ -64,7 +72,11 @@ impl AttachmentSecurityClamAvFixture {
                         if worker_shutdown.load(Ordering::Acquire) {
                             break;
                         }
-                        let outcome = serve_scan(stream);
+                        let outcome = serve_scan(
+                            stream,
+                            &worker_held_scan_started,
+                            &worker_release_held_scan,
+                        );
                         worker_outcome_counts[outcome.index()].fetch_add(1, Ordering::AcqRel);
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -78,6 +90,8 @@ impl AttachmentSecurityClamAvFixture {
             port,
             shutdown,
             outcome_counts,
+            held_scan_started,
+            release_held_scan,
             worker: Some(worker),
         }
     }
@@ -96,11 +110,24 @@ impl AttachmentSecurityClamAvFixture {
     pub(super) fn outcome_count(&self, outcome: ClamAvFixtureOutcomeV1) -> usize {
         self.outcome_counts[outcome.index()].load(Ordering::Acquire)
     }
+
+    pub(super) fn wait_until_held_scan_started(&self) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !self.held_scan_started.load(Ordering::Acquire) {
+            assert!(Instant::now() < deadline, "held ClamAV scan did not start");
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    pub(super) fn release_held_scan(&self) {
+        self.release_held_scan.store(true, Ordering::Release);
+    }
 }
 
 impl Drop for AttachmentSecurityClamAvFixture {
     fn drop(&mut self) {
         self.shutdown.store(true, Ordering::Release);
+        self.release_held_scan.store(true, Ordering::Release);
         let _ = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, self.port));
         if let Some(worker) = self.worker.take() {
             worker.join().expect("join loopback ClamAV fixture");
@@ -108,7 +135,11 @@ impl Drop for AttachmentSecurityClamAvFixture {
     }
 }
 
-fn serve_scan(mut stream: TcpStream) -> ClamAvFixtureOutcomeV1 {
+fn serve_scan(
+    mut stream: TcpStream,
+    held_scan_started: &AtomicBool,
+    release_held_scan: &AtomicBool,
+) -> ClamAvFixtureOutcomeV1 {
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .and_then(|_| stream.set_write_timeout(Some(Duration::from_secs(5))))
@@ -159,6 +190,18 @@ fn serve_scan(mut stream: TcpStream) -> ClamAvFixtureOutcomeV1 {
                 .write_all(b"stream: OK\0")
                 .and_then(|_| stream.flush());
         }
+        ClamAvFixtureOutcomeV1::HeldClean => {
+            held_scan_started.store(true, Ordering::Release);
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !release_held_scan.load(Ordering::Acquire) {
+                assert!(
+                    Instant::now() < deadline,
+                    "held ClamAV scan was not released"
+                );
+                thread::sleep(Duration::from_millis(10));
+            }
+            write_fixture_response(&mut stream, b"stream: OK\0", "held clean");
+        }
     }
     outcome
 }
@@ -169,6 +212,7 @@ fn scan_outcome_for_payload(payload: &[u8]) -> ClamAvFixtureOutcomeV1 {
         (MALFORMED_MARKER, ClamAvFixtureOutcomeV1::Malformed),
         (DISCONNECT_MARKER, ClamAvFixtureOutcomeV1::Disconnect),
         (TIMEOUT_MARKER, ClamAvFixtureOutcomeV1::Timeout),
+        (HELD_CLEAN_MARKER, ClamAvFixtureOutcomeV1::HeldClean),
     ] {
         if payload.windows(marker.len()).any(|window| window == marker) {
             return outcome;
@@ -209,6 +253,10 @@ mod tests {
         assert_eq!(
             scan_outcome_for_payload(b"attachment fixture-timeout marker"),
             ClamAvFixtureOutcomeV1::Timeout
+        );
+        assert_eq!(
+            scan_outcome_for_payload(b"attachment fixture-held-clean marker"),
+            ClamAvFixtureOutcomeV1::HeldClean
         );
     }
 }

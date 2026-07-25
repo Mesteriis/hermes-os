@@ -29,11 +29,15 @@ read integration-owned source Blob отклоняется data-plane access fenc
 scanner matrix теперь также доказывает threat verdict до `quarantined` и
 fail-closed malformed response, disconnect/I/O и timeout: Communications
 остаётся в `blob_admitted`, verdict/outbox не создаётся, а exact replay не
-дублирует первую custody/scan attempt. Production gate
-`attachment_security_engine_v1` остаётся закрыт до
-outage/restart/revoke/stale-CAS matrix и атомарного production inventory
-admission. `safe_for_delivery` доказан только в disposable conformance contour
-и ещё не объявлен production-ready.
+дублирует первую custody/scan attempt. Дополнительный live contour удерживает
+clean scan до NATS outage, сохраняет exact verdict в owner outbox, останавливает
+Engine, fences predecessor Storage binding и запускает generation 2 с новым
+runtime/Storage fence; новый relay публикует те же bytes без повторного scan.
+Отдельный stale-CAS verdict не изменяет terminal Communications state.
+Production gate `attachment_security_engine_v1` остаётся закрыт до
+Blob/Vault outage, source/target revoke/stale matrix и атомарного production
+inventory admission. `safe_for_delivery` доказан только в disposable
+conformance contour и ещё не объявлен production-ready.
 ADR-0274 фиксирует обязательный custody path, а ADR-0275 — стабильную target
 identity без зависимости от динамического Kernel registration ID.
 
