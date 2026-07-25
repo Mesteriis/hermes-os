@@ -15,8 +15,12 @@ Kernel proof issuance/verification и Blob data plane. Unit tests доказыв
 same-owner fallback, exact/wrong target и distinct source/target fences. Live
 disposable Attachment Security contour доказывает настоящий
 `mail -> attachment_security` transfer через динамический target registration,
-replay и прямой source-read denial. Полная stale/revoke/outage matrix ещё не
-закрыта.
+replay и прямой source-read denial. Live authority matrix дополнительно
+доказывает stale source runtime generation, revoked source registration,
+revoked target registration и недоступность Blob/Vault: transfer остаётся
+retryable, scanner и verdict не запускаются. Вместе с unit evidence для
+wrong-target/current-runtime fences это закрывает stale/revoke/outage evidence
+этого решения; production inventory admission остаётся отдельным phase gate.
 
 Зависит от:
 

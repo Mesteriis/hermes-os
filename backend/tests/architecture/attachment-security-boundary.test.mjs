@@ -401,7 +401,16 @@ test('Attachment Security release assembly is a separate unsigned engine unit', 
 });
 
 test('Attachment Security managed conformance launches the signed Engine through typed settings', async () => {
-  const [manifest, script, setup, flow, eventFlow, clamav, persistence] = await Promise.all([
+  const [
+    manifest,
+    script,
+    setup,
+    flow,
+    eventFlow,
+    clamav,
+    blobFixture,
+    persistence,
+  ] = await Promise.all([
     readFile(
       new URL('tests/support/kernel-recovery/Cargo.toml', BACKEND_ROOT),
       'utf8',
@@ -440,6 +449,14 @@ test('Attachment Security managed conformance launches the signed Engine through
       'utf8',
     ),
     readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/'
+          + 'attachment_security_blob_fixture.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
       new URL('src/attachment-security-persistence/src/conformance.rs', BACKEND_ROOT),
       'utf8',
     ),
@@ -468,9 +485,34 @@ test('Attachment Security managed conformance launches the signed Engine through
     /assert_attachment_security_outbox_replays_after_nats_outage_and_restart\(/,
   );
   assert.match(flow, /runtime_generation,\s*2/);
+  assert.match(flow, /runtime_generation,\s*3/);
+  assert.match(flow, /blob_source\.advance_runtime_generation\(/);
+  assert.match(flow, /blob_source\.revoke\(/);
+  assert.match(
+    flow,
+    /assert_attachment_security_custody_failure_is_fail_closed\(/,
+  );
+  assert.match(flow, /supervisor\s*\.stop\("vault"\)/);
+  assert.match(flow, /supervisor\s*\.stop\("blob"\)/);
+  assert.match(
+    flow,
+    /transition_module_registration\([\s\S]*ModuleRegistrationState::Revoked/,
+  );
+  assert.match(blobFixture, /admit_authority_source\(/);
+  assert.match(blobFixture, /advance_runtime_generation\(/);
+  assert.match(blobFixture, /transition_module_registration\(/);
   assert.match(clamav, /Ipv4Addr::LOCALHOST/);
   assert.match(clamav, /b"zINSTREAM\\0"/);
   for (const outcome of ['Threat', 'Malformed', 'Disconnect', 'Timeout']) {
+    assert.match(clamav, new RegExp(`${outcome} = \\d`));
+    assert.match(flow, new RegExp(`ClamAvFixtureOutcomeV1::${outcome}`));
+  }
+  for (const outcome of [
+    'CustodyProbe',
+    'VaultOutageProbe',
+    'BlobOutageProbe',
+    'TargetRevokedProbe',
+  ]) {
     assert.match(clamav, new RegExp(`${outcome} = \\d`));
     assert.match(flow, new RegExp(`ClamAvFixtureOutcomeV1::${outcome}`));
   }
@@ -482,6 +524,9 @@ test('Attachment Security managed conformance launches the signed Engine through
   assert.match(eventFlow, /set_authenticated_nats_container_running\(false\)/);
   assert.match(eventFlow, /restarted relay must publish the exact persisted verdict bytes/);
   assert.match(eventFlow, /stale Attachment Security verdict must not mutate Communications state/);
+  assert.match(eventFlow, /custody failure must not create a verdict/);
+  assert.match(eventFlow, /!first_job\.target_blob_receipt_present/);
+  assert.match(eventFlow, /!first_job\.outbox_message_id_present/);
   assert.match(persistence, /WHERE attachment_anchor_id = \$1/);
   assert.doesNotMatch(
     `${setup}\n${flow}`,

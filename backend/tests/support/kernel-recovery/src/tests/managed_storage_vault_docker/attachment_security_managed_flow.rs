@@ -37,7 +37,7 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
         .expect("claim initial owner");
     let _admitted_mail = admit_mail_runtime(&store);
     let admitted_attachment_security = admit_attachment_security_runtime(&store);
-    let blob_source = AttachmentSecurityBlobSourceFixture::admit(&store);
+    let mut blob_source = AttachmentSecurityBlobSourceFixture::admit(&store);
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
     configure_route_handler(&supervisor, &store, &data);
@@ -237,6 +237,225 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
     assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::Clean), 1);
     assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::Threat), 1);
     assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::HeldClean), 1);
+
+    let stale_source_blob = blob_source.write(
+        &store,
+        &supervisor,
+        &data,
+        [87; 16],
+        b"fixture-custody source generation stale before target-bound transfer",
+    );
+    let stale_source_attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "source-stale",
+        stale_source_blob.declared_size,
+        stale_source_blob.receipt_sha256,
+    );
+    blob_source.advance_runtime_generation(&store, "72727272727272727272727272727272");
+    assert_attachment_security_custody_failure_is_fail_closed(
+        &store,
+        &stale_source_attachment,
+        &stale_source_blob,
+        &clamav,
+        ClamAvFixtureOutcomeV1::CustodyProbe,
+    );
+    assert_eq!(
+        wait_for_attachment_state(
+            &store,
+            &supervisor,
+            stale_source_attachment.attachment_anchor_id
+        ),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::BlobAdmitted
+            as u32
+    );
+
+    let revoked_source_blob = blob_source.write(
+        &store,
+        &supervisor,
+        &data,
+        [88; 16],
+        b"fixture-custody source revoked before target-bound transfer",
+    );
+    let revoked_source_attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "source-revoked",
+        revoked_source_blob.declared_size,
+        revoked_source_blob.receipt_sha256,
+    );
+    blob_source.revoke(&store);
+    assert_attachment_security_custody_failure_is_fail_closed(
+        &store,
+        &revoked_source_attachment,
+        &revoked_source_blob,
+        &clamav,
+        ClamAvFixtureOutcomeV1::CustodyProbe,
+    );
+    assert_eq!(
+        wait_for_attachment_state(
+            &store,
+            &supervisor,
+            revoked_source_attachment.attachment_anchor_id
+        ),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::BlobAdmitted
+            as u32
+    );
+
+    let authority_blob_source = AttachmentSecurityBlobSourceFixture::admit_authority_source(&store);
+    let vault_outage_blob = authority_blob_source.write(
+        &store,
+        &supervisor,
+        &data,
+        [89; 16],
+        b"fixture-vault-outage Vault unavailable payload",
+    );
+    let vault_outage_attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "vault-outage",
+        vault_outage_blob.declared_size,
+        vault_outage_blob.receipt_sha256,
+    );
+    let blob_outage_blob = authority_blob_source.write(
+        &store,
+        &supervisor,
+        &data,
+        [90; 16],
+        b"fixture-blob-outage Blob unavailable payload",
+    );
+    let blob_outage_attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "blob-outage",
+        blob_outage_blob.declared_size,
+        blob_outage_blob.receipt_sha256,
+    );
+    let target_revoked_blob = authority_blob_source.write(
+        &store,
+        &supervisor,
+        &data,
+        [92; 16],
+        b"fixture-target-revoked before target-bound transfer",
+    );
+    let target_revoked_attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "target-revoked",
+        target_revoked_blob.declared_size,
+        target_revoked_blob.receipt_sha256,
+    );
+
+    supervisor
+        .stop("vault")
+        .expect("stop Vault for Attachment Security custody outage");
+    assert_attachment_security_custody_failure_is_fail_closed(
+        &store,
+        &vault_outage_attachment,
+        &vault_outage_blob,
+        &clamav,
+        ClamAvFixtureOutcomeV1::VaultOutageProbe,
+    );
+    assert_eq!(
+        wait_for_attachment_state(
+            &store,
+            &supervisor,
+            vault_outage_attachment.attachment_anchor_id
+        ),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::BlobAdmitted
+            as u32
+    );
+    supervisor
+        .stop(&attachment_security.registration_id)
+        .expect("stop Attachment Security before rebinding successor Storage");
+    supervisor
+        .stop("blob")
+        .expect("stop Blob before rebinding successor Vault");
+    supervisor
+        .stop("storage")
+        .expect("stop Storage before rebinding successor Vault");
+    assert_eq!(start_vault(&supervisor, &store, &data, release.kernel()), 2);
+    assert_eq!(
+        start_storage(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &storage_runtime_directory(),
+        ),
+        2
+    );
+    assert_eq!(
+        blob_launch::start_from_kernel(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &data,
+            &root.join("runtime"),
+        )
+        .expect("restart signed Blob runtime after Vault outage"),
+        2
+    );
+    assert_eq!(
+        restart_communications_domain(&supervisor, &store, &root.join("runtime")),
+        2
+    );
+    attachment_security = restart_attachment_security_runtime(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        &attachment_security,
+        clamav.port(),
+    );
+    assert_eq!(attachment_security.runtime_generation, 3);
+
+    supervisor
+        .stop("blob")
+        .expect("stop Blob for Attachment Security custody outage");
+    assert_attachment_security_custody_failure_is_fail_closed(
+        &store,
+        &blob_outage_attachment,
+        &blob_outage_blob,
+        &clamav,
+        ClamAvFixtureOutcomeV1::BlobOutageProbe,
+    );
+    assert_eq!(
+        wait_for_attachment_state(
+            &store,
+            &supervisor,
+            blob_outage_attachment.attachment_anchor_id
+        ),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::BlobAdmitted
+            as u32
+    );
+    assert_eq!(
+        blob_launch::start_from_kernel(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &data,
+            &root.join("runtime"),
+        )
+        .expect("restart signed Blob runtime after Blob outage"),
+        3
+    );
+
+    store
+        .transition_module_registration(
+            &attachment_security.registration_id,
+            ModuleRegistrationState::Revoked,
+        )
+        .expect("revoke Attachment Security target registration");
+    assert_attachment_security_custody_failure_is_fail_closed(
+        &store,
+        &target_revoked_attachment,
+        &target_revoked_blob,
+        &clamav,
+        ClamAvFixtureOutcomeV1::TargetRevokedProbe,
+    );
+    assert_eq!(
+        wait_for_attachment_state(
+            &store,
+            &supervisor,
+            target_revoked_attachment.attachment_anchor_id
+        ),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::BlobAdmitted
+            as u32
+    );
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {

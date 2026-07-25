@@ -20,8 +20,17 @@ const SOURCE_MODULE_ID: &str = "integration.attachment-security-fixture-source";
 const SOURCE_OWNER_ID: &str = "mail";
 const SOURCE_BLOB_CAPABILITY_ID: &str = "attachment-security-fixture-source.blob.v1";
 const SOURCE_RUNTIME_INSTANCE_ID: &str = "71717171717171717171717171717171";
+const AUTHORITY_SOURCE_REGISTRATION_ID: &str = "attachment-security-authority-source";
+const AUTHORITY_SOURCE_MODULE_ID: &str = "integration.attachment-security-authority-source";
+const AUTHORITY_SOURCE_BLOB_CAPABILITY_ID: &str = "attachment-security-authority-source.blob.v1";
+const AUTHORITY_SOURCE_RUNTIME_INSTANCE_ID: &str = "73737373737373737373737373737373";
 
 pub(super) struct AttachmentSecurityBlobSourceFixture {
+    registration_id: String,
+    module_id: String,
+    capability_id: String,
+    runtime_instance_id: String,
+    runtime_generation: u64,
     grant_epoch: u64,
 }
 
@@ -34,18 +43,44 @@ pub(super) struct AttachmentSecurityFixtureBlobV1 {
 
 impl AttachmentSecurityBlobSourceFixture {
     pub(super) fn admit(store: &SqliteControlStore) -> Self {
-        let registration = ModuleRegistration::new(
+        Self::admit_with_identity(
+            store,
             SOURCE_REGISTRATION_ID,
             SOURCE_MODULE_ID,
+            SOURCE_BLOB_CAPABILITY_ID,
+            SOURCE_RUNTIME_INSTANCE_ID,
+        )
+    }
+
+    pub(super) fn admit_authority_source(store: &SqliteControlStore) -> Self {
+        Self::admit_with_identity(
+            store,
+            AUTHORITY_SOURCE_REGISTRATION_ID,
+            AUTHORITY_SOURCE_MODULE_ID,
+            AUTHORITY_SOURCE_BLOB_CAPABILITY_ID,
+            AUTHORITY_SOURCE_RUNTIME_INSTANCE_ID,
+        )
+    }
+
+    fn admit_with_identity(
+        store: &SqliteControlStore,
+        registration_id: &str,
+        module_id: &str,
+        capability_id: &str,
+        runtime_instance_id: &str,
+    ) -> Self {
+        let registration = ModuleRegistration::new(
+            registration_id,
+            module_id,
             SOURCE_OWNER_ID,
-            Sha256::digest(b"attachment-security-fixture-source").into(),
+            Sha256::digest(registration_id.as_bytes()).into(),
             ModuleRegistrationState::Pending,
             1,
         );
-        let capabilities = [SOURCE_BLOB_CAPABILITY_ID.to_owned()];
+        let capabilities = [capability_id.to_owned()];
         let blob = ModuleBlobQuotaRequestV1::new(
-            SOURCE_REGISTRATION_ID,
-            SOURCE_BLOB_CAPABILITY_ID,
+            registration_id,
+            capability_id,
             SOURCE_OWNER_ID,
             64 * 1024 * 1024,
         );
@@ -59,31 +94,67 @@ impl AttachmentSecurityBlobSourceFixture {
             )
             .expect("record Attachment Security fixture source");
         let grant_epoch = store
-            .approve_module_registration(SOURCE_REGISTRATION_ID, &capabilities)
+            .approve_module_registration(registration_id, &capabilities)
             .expect("approve Attachment Security fixture Blob capability")
             .grant_epoch();
         store
             .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
-                SOURCE_REGISTRATION_ID,
+                registration_id,
                 1,
-                "attachment-security-fixture-distribution",
-                SOURCE_MODULE_ID,
-                Sha256::digest(b"attachment-security-fixture-source-binary").into(),
-                Sha256::digest(b"attachment-security-fixture-source").into(),
+                format!("{registration_id}-distribution"),
+                module_id,
+                Sha256::digest(format!("{registration_id}-binary")).into(),
+                Sha256::digest(registration_id.as_bytes()).into(),
                 None,
             ))
             .expect("record Attachment Security fixture source binding");
         store
             .record_managed_launch(&ManagedLaunchRecord::new(
-                SOURCE_REGISTRATION_ID,
-                SOURCE_RUNTIME_INSTANCE_ID,
+                registration_id,
+                runtime_instance_id,
                 1,
                 1,
                 1,
                 grant_epoch,
             ))
             .expect("record Attachment Security fixture source launch");
-        Self { grant_epoch }
+        Self {
+            registration_id: registration_id.to_owned(),
+            module_id: module_id.to_owned(),
+            capability_id: capability_id.to_owned(),
+            runtime_instance_id: runtime_instance_id.to_owned(),
+            runtime_generation: 1,
+            grant_epoch,
+        }
+    }
+
+    pub(super) fn advance_runtime_generation(
+        &mut self,
+        store: &SqliteControlStore,
+        successor_runtime_instance_id: &str,
+    ) {
+        let runtime_generation = self
+            .runtime_generation
+            .checked_add(1)
+            .expect("Attachment Security fixture source generation");
+        store
+            .record_managed_launch(&ManagedLaunchRecord::new(
+                &self.registration_id,
+                successor_runtime_instance_id,
+                1,
+                1,
+                runtime_generation,
+                self.grant_epoch,
+            ))
+            .expect("record Attachment Security fixture source successor launch");
+        self.runtime_instance_id = successor_runtime_instance_id.to_owned();
+        self.runtime_generation = runtime_generation;
+    }
+
+    pub(super) fn revoke(&self, store: &SqliteControlStore) {
+        store
+            .transition_module_registration(&self.registration_id, ModuleRegistrationState::Revoked)
+            .expect("revoke Attachment Security fixture source");
     }
 
     pub(super) fn write(
@@ -105,17 +176,17 @@ impl AttachmentSecurityBlobSourceFixture {
         )
         .issue_blob_session(
             &ManagedRuntimeExpectation::new(
-                SOURCE_REGISTRATION_ID,
-                SOURCE_RUNTIME_INSTANCE_ID,
-                SOURCE_MODULE_ID,
-                1,
+                &self.registration_id,
+                &self.runtime_instance_id,
+                &self.module_id,
+                self.runtime_generation,
                 self.grant_epoch,
                 [3; 32],
                 None,
             ),
             ManagedRuntimeBlobSessionRequestV1 {
                 request_id: request_digest[..16].to_vec(),
-                capability_id: SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+                capability_id: self.capability_id.clone(),
                 operation: BlobDataOperationV1::BlobDataOperationWriteV1 as u32,
                 channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
                 reference_id: reference_id.to_vec(),

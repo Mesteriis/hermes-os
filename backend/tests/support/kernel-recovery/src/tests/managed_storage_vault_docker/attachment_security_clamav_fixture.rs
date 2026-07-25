@@ -17,7 +17,11 @@ const MALFORMED_MARKER: &[u8] = b"fixture-malformed";
 const DISCONNECT_MARKER: &[u8] = b"fixture-disconnect";
 const TIMEOUT_MARKER: &[u8] = b"fixture-timeout";
 const HELD_CLEAN_MARKER: &[u8] = b"fixture-held-clean";
-const FIXTURE_OUTCOME_COUNT: usize = 6;
+const CUSTODY_PROBE_MARKER: &[u8] = b"fixture-custody";
+const VAULT_OUTAGE_PROBE_MARKER: &[u8] = b"fixture-vault-outage";
+const BLOB_OUTAGE_PROBE_MARKER: &[u8] = b"fixture-blob-outage";
+const TARGET_REVOKED_PROBE_MARKER: &[u8] = b"fixture-target-revoked";
+const FIXTURE_OUTCOME_COUNT: usize = 10;
 const TIMEOUT_RESPONSE_DELAY: Duration = Duration::from_millis(1_500);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -29,6 +33,10 @@ pub(super) enum ClamAvFixtureOutcomeV1 {
     Disconnect = 3,
     Timeout = 4,
     HeldClean = 5,
+    CustodyProbe = 6,
+    VaultOutageProbe = 7,
+    BlobOutageProbe = 8,
+    TargetRevokedProbe = 9,
 }
 
 impl ClamAvFixtureOutcomeV1 {
@@ -202,6 +210,12 @@ fn serve_scan(
             }
             write_fixture_response(&mut stream, b"stream: OK\0", "held clean");
         }
+        ClamAvFixtureOutcomeV1::CustodyProbe
+        | ClamAvFixtureOutcomeV1::VaultOutageProbe
+        | ClamAvFixtureOutcomeV1::BlobOutageProbe
+        | ClamAvFixtureOutcomeV1::TargetRevokedProbe => {
+            write_fixture_response(&mut stream, b"stream: OK\0", "authority probe");
+        }
     }
     outcome
 }
@@ -213,6 +227,19 @@ fn scan_outcome_for_payload(payload: &[u8]) -> ClamAvFixtureOutcomeV1 {
         (DISCONNECT_MARKER, ClamAvFixtureOutcomeV1::Disconnect),
         (TIMEOUT_MARKER, ClamAvFixtureOutcomeV1::Timeout),
         (HELD_CLEAN_MARKER, ClamAvFixtureOutcomeV1::HeldClean),
+        (CUSTODY_PROBE_MARKER, ClamAvFixtureOutcomeV1::CustodyProbe),
+        (
+            VAULT_OUTAGE_PROBE_MARKER,
+            ClamAvFixtureOutcomeV1::VaultOutageProbe,
+        ),
+        (
+            BLOB_OUTAGE_PROBE_MARKER,
+            ClamAvFixtureOutcomeV1::BlobOutageProbe,
+        ),
+        (
+            TARGET_REVOKED_PROBE_MARKER,
+            ClamAvFixtureOutcomeV1::TargetRevokedProbe,
+        ),
     ] {
         if payload.windows(marker.len()).any(|window| window == marker) {
             return outcome;
@@ -257,6 +284,22 @@ mod tests {
         assert_eq!(
             scan_outcome_for_payload(b"attachment fixture-held-clean marker"),
             ClamAvFixtureOutcomeV1::HeldClean
+        );
+        assert_eq!(
+            scan_outcome_for_payload(b"attachment fixture-custody marker"),
+            ClamAvFixtureOutcomeV1::CustodyProbe
+        );
+        assert_eq!(
+            scan_outcome_for_payload(b"attachment fixture-vault-outage marker"),
+            ClamAvFixtureOutcomeV1::VaultOutageProbe
+        );
+        assert_eq!(
+            scan_outcome_for_payload(b"attachment fixture-blob-outage marker"),
+            ClamAvFixtureOutcomeV1::BlobOutageProbe
+        );
+        assert_eq!(
+            scan_outcome_for_payload(b"attachment fixture-target-revoked marker"),
+            ClamAvFixtureOutcomeV1::TargetRevokedProbe
         );
     }
 }

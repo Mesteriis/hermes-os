@@ -516,23 +516,15 @@ pub(super) fn assert_attachment_security_outbox_replays_after_nats_outage_and_re
     let endpoint = event_endpoint(store);
     let runtime = tokio::runtime::Runtime::new().expect("Attachment Security outage runtime");
     let _runtime_context = runtime.enter();
-    let (client, mut verdicts, mut states) = runtime.block_on(async {
-        let client = async_nats::connect(endpoint)
+    let client = runtime.block_on(async {
+        let client = async_nats::connect(endpoint.clone())
             .await
             .expect("connect Attachment Security outage observer");
-        let verdicts = client
-            .subscribe(ATTACHMENT_VERDICT_SUBJECT)
-            .await
-            .expect("subscribe Attachment Security outage verdicts");
-        let states = client
-            .subscribe(ATTACHMENT_STATE_SUBJECT)
-            .await
-            .expect("subscribe Communications outage states");
         client
             .flush()
             .await
-            .expect("activate Attachment Security outage observers");
-        (client, verdicts, states)
+            .expect("activate Attachment Security outage observer");
+        client
     });
     let context = async_nats::jetstream::new(client.clone());
     runtime.block_on(publish_exact(
@@ -550,6 +542,25 @@ pub(super) fn assert_attachment_security_outbox_replays_after_nats_outage_and_re
     stop_runtime();
     set_authenticated_nats_container_running(true);
     wait_for_authenticated_nats_reconnect(&runtime, &client, "Attachment Security observer");
+    let (replay_client, mut verdicts, mut states) = runtime.block_on(async {
+        let client = async_nats::connect(endpoint)
+            .await
+            .expect("connect fresh Attachment Security replay observer");
+        let verdicts = client
+            .subscribe(ATTACHMENT_VERDICT_SUBJECT)
+            .await
+            .expect("subscribe fresh Attachment Security replay verdicts");
+        let states = client
+            .subscribe(ATTACHMENT_STATE_SUBJECT)
+            .await
+            .expect("subscribe fresh Communications replay states");
+        client
+            .flush()
+            .await
+            .expect("activate fresh Attachment Security replay observers");
+        (client, verdicts, states)
+    });
+    let replay_context = async_nats::jetstream::new(replay_client);
     let restarted = restart_runtime();
     runtime.block_on(async {
         let verdict = tokio::time::timeout(Duration::from_secs(15), verdicts.next())
@@ -580,7 +591,12 @@ pub(super) fn assert_attachment_security_outbox_replays_after_nats_outage_and_re
             state.next_state,
             AttachmentSafetyStateWireV1::SafeForDelivery as i32
         );
-        publish_exact(&context, ATTACHMENT_SCAN_CANDIDATE_SUBJECT, &candidate).await;
+        publish_exact(
+            &replay_context,
+            ATTACHMENT_SCAN_CANDIDATE_SUBJECT,
+            &candidate,
+        )
+        .await;
         assert!(
             tokio::time::timeout(Duration::from_millis(500), verdicts.next())
                 .await
@@ -675,6 +691,70 @@ pub(super) fn assert_attachment_security_scanner_failure_is_fail_closed(
         });
 }
 
+pub(super) fn assert_attachment_security_custody_failure_is_fail_closed(
+    store: &SqliteControlStore,
+    attachment: &CommunicationsAttachmentFixtureV1,
+    blob: &AttachmentSecurityFixtureBlobV1,
+    clamav: &AttachmentSecurityClamAvFixture,
+    scanner_probe: ClamAvFixtureOutcomeV1,
+) {
+    let candidate = build_attachment_security_candidate(attachment, blob);
+    let endpoint = event_endpoint(store);
+    tokio::runtime::Runtime::new()
+        .expect("Attachment Security custody failure runtime")
+        .block_on(async move {
+            let scanner_count_before = clamav.outcome_count(scanner_probe);
+            let client = async_nats::connect(endpoint)
+                .await
+                .expect("connect Attachment Security custody failure observer");
+            let mut verdicts = client
+                .subscribe(ATTACHMENT_VERDICT_SUBJECT)
+                .await
+                .expect("subscribe Attachment Security custody failure verdicts");
+            client
+                .flush()
+                .await
+                .expect("activate Attachment Security custody failure observer");
+            let context = async_nats::jetstream::new(client);
+            publish_exact(&context, ATTACHMENT_SCAN_CANDIDATE_SUBJECT, &candidate).await;
+            let first_job = wait_for_custody_failure(
+                attachment.attachment_anchor_id,
+                clamav,
+                scanner_probe,
+                scanner_count_before,
+            )
+            .await;
+            assert_eq!(first_job.state, 1);
+            assert!(first_job.attempt_count >= 1);
+            assert!(!first_job.target_blob_receipt_present);
+            assert!(!first_job.outbox_message_id_present);
+            assert!(!first_job.claimed);
+            assert!(
+                tokio::time::timeout(Duration::from_millis(500), verdicts.next())
+                    .await
+                    .is_err(),
+                "custody failure must not create a verdict"
+            );
+
+            publish_exact(&context, ATTACHMENT_SCAN_CANDIDATE_SUBJECT, &candidate).await;
+            assert!(
+                tokio::time::timeout(Duration::from_millis(500), verdicts.next())
+                    .await
+                    .is_err(),
+                "custody failure replay must not create a verdict"
+            );
+            let replayed_job =
+                attachment_security_scan_job_diagnostics(attachment.attachment_anchor_id)
+                    .await
+                    .expect("failed Attachment Security custody job");
+            assert_eq!(replayed_job.state, 1);
+            assert!(replayed_job.attempt_count >= first_job.attempt_count);
+            assert!(!replayed_job.target_blob_receipt_present);
+            assert!(!replayed_job.outbox_message_id_present);
+            assert_eq!(clamav.outcome_count(scanner_probe), scanner_count_before);
+        });
+}
+
 fn build_attachment_security_candidate(
     attachment: &CommunicationsAttachmentFixtureV1,
     blob: &AttachmentSecurityFixtureBlobV1,
@@ -721,6 +801,34 @@ async fn wait_for_failed_scan_attempt(
         assert!(
             Instant::now() < deadline,
             "Attachment Security scanner failure was not persisted"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+async fn wait_for_custody_failure(
+    attachment_anchor_id: [u8; 16],
+    clamav: &AttachmentSecurityClamAvFixture,
+    scanner_probe: ClamAvFixtureOutcomeV1,
+    scanner_count_before: usize,
+) -> hermes_attachment_security_persistence::AttachmentSecurityScanJobDiagnosticsV1 {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let job = attachment_security_scan_job_diagnostics(attachment_anchor_id).await;
+        if clamav.outcome_count(scanner_probe) == scanner_count_before
+            && job.as_ref().is_some_and(|job| {
+                job.state == 1
+                    && job.attempt_count >= 1
+                    && !job.target_blob_receipt_present
+                    && !job.outbox_message_id_present
+                    && !job.claimed
+            })
+        {
+            return job.expect("failed Attachment Security custody job");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Attachment Security custody failure was not persisted"
         );
         tokio::time::sleep(Duration::from_millis(25)).await;
     }

@@ -14,8 +14,12 @@ verdict/outbox и без перевода Communications из `blob_admitted`. N
 после scan сохраняет exact verdict в owner outbox; после остановки Engine и
 fenced Storage successor generation 2 публикует те же bytes без повторного
 custody/scan, а stale Communications CAS не меняет terminal state. Phase gate
-`attachment_security_engine_v1` остаётся закрыт до Blob/Vault outage,
-source/target revoke/stale matrix и production inventory admission.
+теперь дополнительно имеет live fail-closed evidence для stale source runtime,
+revoked source/target registrations и недоступных Blob/Vault: retryable job
+остаётся без target receipt/outbox/verdict, scanner не вызывается, а
+Communications остаётся в `blob_admitted`. Exact replay не обходит authority
+fence. `attachment_security_engine_v1` остаётся закрыт только до production
+inventory admission и полного финального backend gate.
 ADR-0275 определяет stable target-bound proof для этого cross-owner handoff.
 
 Зависит от:

@@ -34,10 +34,15 @@ clean scan до NATS outage, сохраняет exact verdict в owner outbox, �
 Engine, fences predecessor Storage binding и запускает generation 2 с новым
 runtime/Storage fence; новый relay публикует те же bytes без повторного scan.
 Отдельный stale-CAS verdict не изменяет terminal Communications state.
-Production gate `attachment_security_engine_v1` остаётся закрыт до
-Blob/Vault outage, source/target revoke/stale matrix и атомарного production
-inventory admission. `safe_for_delivery` доказан только в disposable
-conformance contour и ещё не объявлен production-ready.
+Тот же authenticated contour теперь доказывает fail-closed custody authority:
+stale source runtime generation, revoked source registration, revoked target
+registration, остановленный Vault и остановленный Blob сохраняют retryable
+engine job без target receipt/outbox/verdict, не запускают scanner и оставляют
+Communications в `blob_admitted`; exact candidate replay также не создаёт
+terminal fact. Production gate `attachment_security_engine_v1` остаётся закрыт
+только до атомарного production inventory admission и полного финального
+backend gate. `safe_for_delivery` доказан только в disposable conformance
+contour и ещё не объявлен production-ready.
 ADR-0274 фиксирует обязательный custody path, а ADR-0275 — стабильную target
 identity без зависимости от динамического Kernel registration ID.
 
@@ -309,7 +314,8 @@ Gate открывается атомарно только после:
 9. live loopback clamd clean и threat responses;
 10. scanner timeout/I/O/malformed response без clean verdict;
 11. exact engine outbox -> NATS -> Communications CAS flow;
-12. duplicate, stale CAS, relay restart, NATS outage replay и revoke evidence;
+12. duplicate, stale CAS, relay restart, NATS outage replay, stale/revoked
+    source, revoked target и Blob/Vault outage evidence;
 13. negative-output scanner без bytes, reference, signature, provider data,
     settings endpoint или private socket path;
 14. architecture/SRP/Cargo/full backend gates.

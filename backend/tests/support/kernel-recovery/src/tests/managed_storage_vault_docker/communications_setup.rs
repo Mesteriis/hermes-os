@@ -163,7 +163,7 @@ pub(super) fn start_communications_domain(
     start_reserved_communications_domain(supervisor, store, runtime_dir, reservation, binding)
 }
 
-fn restart_communications_domain(
+pub(super) fn restart_communications_domain(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,
     runtime_dir: &Path,
