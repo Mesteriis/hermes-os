@@ -279,8 +279,47 @@ fn assert_communications_gateway_query_delivery(
     .expect("compose owner Gateway routes");
     let runtime = tokio::runtime::Runtime::new().expect("Gateway test runtime");
     let cookie = super::browser_gateway_session::authenticate_gateway_router(&router, &runtime);
-    let payload = prost::Message::encode_to_vec(
-        &hermes_communications_api::query_wire::CommunicationsQueryRequestV1 {
+    let route_query =
+        |request: hermes_communications_api::query_wire::CommunicationsQueryRequestV1| {
+            let response = runtime.block_on(
+                router.route(
+                    hyper::Request::builder()
+                        .method("POST")
+                        .uri("/hermes.communications.query.v1.CommunicationsQueryService/Query")
+                        .header("content-type", "application/connect+proto")
+                        .header("cookie", &cookie)
+                        .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                            request.encode_to_vec(),
+                        )))
+                        .expect("Gateway owner query request"),
+                ),
+            );
+            assert_eq!(response.status(), hyper::StatusCode::OK);
+            assert_eq!(
+                response
+                    .headers()
+                    .get("content-type")
+                    .and_then(|value| value.to_str().ok()),
+                Some("application/proto"),
+            );
+            assert_eq!(
+                response
+                    .headers()
+                    .get("connect-protocol-version")
+                    .and_then(|value| value.to_str().ok()),
+                Some("1"),
+            );
+            let bytes = runtime
+                .block_on(response.into_body().collect())
+                .expect("Gateway owner query response")
+                .to_bytes();
+            hermes_communications_api::query_wire::CommunicationsQueryResponseV1::decode(
+                bytes.as_ref(),
+            )
+            .expect("decode Gateway Communications query response")
+        };
+    let response = route_query(
+        hermes_communications_api::query_wire::CommunicationsQueryRequestV1 {
             protocol_major: 1,
             operation: Some(
                 hermes_communications_api::query_wire::communications_query_request_v1::Operation::ListAccounts(
@@ -289,45 +328,49 @@ fn assert_communications_gateway_query_delivery(
             ),
         },
     );
-    let response = runtime.block_on(
-        router.route(
-            hyper::Request::builder()
-                .method("POST")
-                .uri("/hermes.communications.query.v1.CommunicationsQueryService/Query")
-                .header("content-type", "application/connect+proto")
-                .header("cookie", cookie)
-                .body(http_body_util::Full::new(hyper::body::Bytes::from(payload)))
-                .expect("Gateway owner query request"),
-        ),
-    );
-    assert_eq!(response.status(), hyper::StatusCode::OK);
-    assert_eq!(
-        response
-            .headers()
-            .get("content-type")
-            .and_then(|value| value.to_str().ok()),
-        Some("application/proto"),
-    );
-    assert_eq!(
-        response
-            .headers()
-            .get("connect-protocol-version")
-            .and_then(|value| value.to_str().ok()),
-        Some("1"),
-    );
-    let bytes = runtime
-        .block_on(response.into_body().collect())
-        .expect("Gateway owner query response")
-        .to_bytes();
-    let response = hermes_communications_api::query_wire::CommunicationsQueryResponseV1::decode(
-        bytes.as_ref(),
-    )
-    .expect("decode Gateway Communications query response");
     assert!(matches!(
         response.result,
         Some(hermes_communications_api::query_wire::communications_query_response_v1::Result::ListAccounts(accounts))
             if !accounts.accounts.is_empty()
     ));
+
+    let response = route_query(
+        hermes_communications_api::query_wire::CommunicationsQueryRequestV1 {
+            protocol_major: 1,
+            operation: Some(
+                hermes_communications_api::query_wire::communications_query_request_v1::Operation::SearchCommunications(
+                    hermes_communications_api::query_wire::SearchCommunicationsRequestV1 {
+                        query: "fixture".to_owned(),
+                        limit: 16,
+                    },
+                ),
+            ),
+        },
+    );
+    assert!(response.error_code.is_empty());
+    assert!(matches!(
+        &response.result,
+        Some(hermes_communications_api::query_wire::communications_query_response_v1::Result::SearchCommunications(hits))
+            if !hits.hits.is_empty()
+                && hits.hits.iter().all(|hit| {
+                    hit.evidence_id.len() == 16
+                        && hit.message_id.len() == 16
+                        && hit.conversation_id.len() == 16
+                        && hit.matched_token_count > 0
+                })
+    ));
+    let public_payload = response.encode_to_vec();
+    for private_value in [
+        "fixture source body for custody transfer",
+        "blob://fixture-source/admitted-body-1",
+    ] {
+        assert!(
+            !public_payload
+                .windows(private_value.len())
+                .any(|window| window == private_value.as_bytes()),
+            "external Communications search must not reveal private body or Blob locator",
+        );
+    }
 }
 
 struct SchedulerRecoveryFixture {
