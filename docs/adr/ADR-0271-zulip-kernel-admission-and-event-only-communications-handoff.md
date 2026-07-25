@@ -14,9 +14,10 @@ descriptor-set binding, canonical settings schema и `ModuleDescriptorV1` с
 Storage bundle, отдельная unsigned release assembly unit и generic signed
 distribution binding реализованы. Signed managed launch и live
 grant/query/revoke/generation/Storage fencing conformance реализованы в
-`bfef3e1df`; gates 1–7 закрыты. Live provider command, event-only
-Communications delivery, outage replay и privacy evidence ещё не реализованы,
-поэтому `zulip_integration_v1` остаётся закрыт.
+`bfef3e1df`. Live provider command, event-only Communications delivery,
+duplicate suppression и NATS outage replay реализованы в `5deac37fa`; gates
+1–10 закрыты. Privacy evidence для subjects, routes, errors, logs и health ещё
+не завершён, поэтому `zulip_integration_v1` остаётся закрыт.
 
 Уточняет:
 
@@ -199,13 +200,18 @@ inventory, make integration a domain, or authorize WhatsApp/another provider.
    command rejection, stale-generation fence, owner-authorized revoke,
    Storage `revoking`, остановку только Zulip runtime и сохранение живого
    Communications runtime.
-5. Prove live provider command and event-only Communications delivery.
+5. ~~Prove live provider command and event-only Communications delivery.~~
+   Реализовано в `5deac37fa`: exact command grant приводит к одному live HTTPS
+   provider mutation и terminal query result; typed observation проходит
+   Zulip outbox, NATS и Communications inbox; duplicate не создаёт второе
+   canonical event, а NATS outage не завершает runtime и доставляет сохранённые
+   exact bytes после reconnect.
 6. Remove the frontend legacy REST surface in its own client slice.
 
 Каждый крупный slice является отдельным commit и проходит focused owner tests,
 Clippy, architecture/SRP/Cargo boundary gates и relevant live conformance.
 
-Текущее evidence для шага 4:
+Текущее evidence для шагов 4–5:
 
 - `managed_zulip_runtime_uses_kernel_leases_and_route_specific_admission`:
   passed в disposable authenticated PostgreSQL/PgBouncer/NATS contour;
@@ -216,7 +222,17 @@ Clippy, architecture/SRP/Cargo boundary gates и relevant live conformance.
   DDL;
 - focused Zulip tests и strict Clippy: passed;
 - backend policy/SRP/Cargo/fmt/evidence gates: passed;
-- architecture tests: 464 passed.
+- `managed_zulip_runtime_delivers_live_command_and_event_only_communications_handoff`:
+  passed в том же disposable managed contour; live command исполнена provider
+  fixture ровно один раз, terminal query вернул provider message ID, а source
+  observation использует canonical `hermes-zulip-runtime` identity;
+- повтор exact observation не создал второе Communications event; второй
+  provider event был принят при остановленном NATS, Zulip runtime остался
+  активным без `last_failure`, а outbox доставил observation после reconnect;
+- architecture tests: 465 passed, включая event-only/outage executable guard.
+
+Gate 11 и `zulip_integration_v1` остаются закрыты: эти проверки не являются
+полным privacy evidence для subjects, routes, errors, logs и health.
 
 ## Отклонённые варианты
 
