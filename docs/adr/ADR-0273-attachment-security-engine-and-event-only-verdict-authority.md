@@ -7,10 +7,13 @@ schemas выделены без facade/duplicate source в
 `hermes-communications-attachment-contract`; executable dependency policy и
 отдельный managed Engine launch path реализованы. Engine-owned typed candidate
 contract, pure join/verdict core и bounded loopback ClamAV `INSTREAM` adapter
-реализованы отдельными Cargo units с unit и architecture coverage. Production
-gate `attachment_security_engine_v1` остаётся закрыт до реализации owner-local
-persistence/runtime, release assembly и live ClamAV/Blob/Event conformance. До
-открытия gate состояние `safe_for_delivery` остаётся недостижимым.
+реализованы отдельными Cargo units с unit и architecture coverage. Owner-local
+PostgreSQL persistence также реализован отдельным unit: exact inbox ID/hash,
+anchor-serialized order-independent join, bounded attempt/lease-fenced scan
+jobs, quarantine evidence и exact verdict outbox. Production gate
+`attachment_security_engine_v1` остаётся закрыт до реализации runtime, release
+assembly и live ClamAV/Blob/Event conformance. До открытия gate состояние
+`safe_for_delivery` остаётся недостижимым.
 
 Зависит от:
 

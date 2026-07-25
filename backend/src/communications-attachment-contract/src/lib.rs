@@ -6,7 +6,10 @@ mod observation;
 pub use observation::{
     AttachmentBlobAdmissionFactV1, AttachmentBlobAdmissionTransitionV1,
     AttachmentBlobExpectedStateV1, AttachmentObservationEnvelopeBuildErrorV1,
-    AttachmentObservationEnvelopeContextV1, build_attachment_blob_admission_outbox_record_v1,
+    AttachmentObservationEnvelopeContextV1, AttachmentSafetyExpectedStateV1,
+    AttachmentSafetyVerdictFactV1, AttachmentSafetyVerdictOutboxRecordV1,
+    AttachmentSafetyVerdictV1, build_attachment_blob_admission_outbox_record_v1,
+    build_attachment_safety_verdict_outbox_record_v1,
 };
 
 pub mod blob_admission_v1 {

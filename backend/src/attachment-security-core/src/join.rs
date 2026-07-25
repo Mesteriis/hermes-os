@@ -109,20 +109,24 @@ pub fn decide_candidate_record_v1(
     policy: AttachmentSecurityJoinPolicyV1,
 ) -> AttachmentSecurityRecordDecisionV1 {
     if !valid_candidate(incoming, policy) {
-        return AttachmentSecurityRecordDecisionV1::Quarantine(quarantine(
-            incoming.attachment_anchor_id,
-            incoming.correlation_id,
-            AttachmentSecurityQuarantineReasonV1::InvalidCandidate,
-        ));
+        return AttachmentSecurityRecordDecisionV1::Quarantine(
+            attachment_security_quarantine_evidence_v1(
+                incoming.attachment_anchor_id,
+                incoming.correlation_id,
+                AttachmentSecurityQuarantineReasonV1::InvalidCandidate,
+            ),
+        );
     }
     match existing {
         None => AttachmentSecurityRecordDecisionV1::Insert,
         Some(current) if current == incoming => AttachmentSecurityRecordDecisionV1::Duplicate,
-        Some(_) => AttachmentSecurityRecordDecisionV1::Quarantine(quarantine(
-            incoming.attachment_anchor_id,
-            incoming.correlation_id,
-            AttachmentSecurityQuarantineReasonV1::CandidateConflict,
-        )),
+        Some(_) => AttachmentSecurityRecordDecisionV1::Quarantine(
+            attachment_security_quarantine_evidence_v1(
+                incoming.attachment_anchor_id,
+                incoming.correlation_id,
+                AttachmentSecurityQuarantineReasonV1::CandidateConflict,
+            ),
+        ),
     }
 }
 
@@ -132,20 +136,24 @@ pub fn decide_canonical_state_record_v1(
     incoming: &AttachmentSecurityCanonicalStateFactV1,
 ) -> AttachmentSecurityRecordDecisionV1 {
     if !valid_canonical_state(incoming) {
-        return AttachmentSecurityRecordDecisionV1::Quarantine(quarantine(
-            incoming.attachment_anchor_id,
-            incoming.correlation_id,
-            AttachmentSecurityQuarantineReasonV1::InvalidCanonicalState,
-        ));
+        return AttachmentSecurityRecordDecisionV1::Quarantine(
+            attachment_security_quarantine_evidence_v1(
+                incoming.attachment_anchor_id,
+                incoming.correlation_id,
+                AttachmentSecurityQuarantineReasonV1::InvalidCanonicalState,
+            ),
+        );
     }
     match existing {
         None => AttachmentSecurityRecordDecisionV1::Insert,
         Some(current) if current == incoming => AttachmentSecurityRecordDecisionV1::Duplicate,
-        Some(_) => AttachmentSecurityRecordDecisionV1::Quarantine(quarantine(
-            incoming.attachment_anchor_id,
-            incoming.correlation_id,
-            AttachmentSecurityQuarantineReasonV1::CanonicalStateConflict,
-        )),
+        Some(_) => AttachmentSecurityRecordDecisionV1::Quarantine(
+            attachment_security_quarantine_evidence_v1(
+                incoming.attachment_anchor_id,
+                incoming.correlation_id,
+                AttachmentSecurityQuarantineReasonV1::CanonicalStateConflict,
+            ),
+        ),
     }
 }
 
@@ -158,37 +166,45 @@ pub fn decide_scan_join_v1(
     if let Some(value) = candidate
         && !valid_candidate(value, policy)
     {
-        return AttachmentSecurityJoinDecisionV1::Quarantine(quarantine(
-            value.attachment_anchor_id,
-            value.correlation_id,
-            AttachmentSecurityQuarantineReasonV1::InvalidCandidate,
-        ));
+        return AttachmentSecurityJoinDecisionV1::Quarantine(
+            attachment_security_quarantine_evidence_v1(
+                value.attachment_anchor_id,
+                value.correlation_id,
+                AttachmentSecurityQuarantineReasonV1::InvalidCandidate,
+            ),
+        );
     }
     if let Some(value) = canonical_state
         && !valid_canonical_state(value)
     {
-        return AttachmentSecurityJoinDecisionV1::Quarantine(quarantine(
-            value.attachment_anchor_id,
-            value.correlation_id,
-            AttachmentSecurityQuarantineReasonV1::InvalidCanonicalState,
-        ));
+        return AttachmentSecurityJoinDecisionV1::Quarantine(
+            attachment_security_quarantine_evidence_v1(
+                value.attachment_anchor_id,
+                value.correlation_id,
+                AttachmentSecurityQuarantineReasonV1::InvalidCanonicalState,
+            ),
+        );
     }
     let (Some(candidate), Some(canonical_state)) = (candidate, canonical_state) else {
         return AttachmentSecurityJoinDecisionV1::Waiting;
     };
     if candidate.attachment_anchor_id != canonical_state.attachment_anchor_id {
-        return AttachmentSecurityJoinDecisionV1::Quarantine(quarantine(
-            candidate.attachment_anchor_id,
-            candidate.correlation_id,
-            AttachmentSecurityQuarantineReasonV1::AnchorMismatch,
-        ));
+        return AttachmentSecurityJoinDecisionV1::Quarantine(
+            attachment_security_quarantine_evidence_v1(
+                candidate.attachment_anchor_id,
+                candidate.correlation_id,
+                AttachmentSecurityQuarantineReasonV1::AnchorMismatch,
+            ),
+        );
     }
     if candidate.correlation_id != canonical_state.correlation_id {
-        return AttachmentSecurityJoinDecisionV1::Quarantine(quarantine(
-            candidate.attachment_anchor_id,
-            candidate.correlation_id,
-            AttachmentSecurityQuarantineReasonV1::CorrelationMismatch,
-        ));
+        return AttachmentSecurityJoinDecisionV1::Quarantine(
+            attachment_security_quarantine_evidence_v1(
+                candidate.attachment_anchor_id,
+                candidate.correlation_id,
+                AttachmentSecurityQuarantineReasonV1::CorrelationMismatch,
+            ),
+        );
     }
 
     AttachmentSecurityJoinDecisionV1::Runnable(AttachmentSecurityScanJobV1 {
@@ -227,7 +243,8 @@ fn valid_canonical_state(state: &AttachmentSecurityCanonicalStateFactV1) -> bool
         && valid_timestamp(state.observed_at_unix_seconds)
 }
 
-fn quarantine(
+#[must_use]
+pub fn attachment_security_quarantine_evidence_v1(
     attachment_anchor_id: [u8; 16],
     correlation_id: [u8; 16],
     reason: AttachmentSecurityQuarantineReasonV1,
@@ -354,6 +371,28 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn quarantine_evidence_is_deterministic_and_reason_scoped() {
+        let first = attachment_security_quarantine_evidence_v1(
+            [2; 16],
+            [6; 16],
+            AttachmentSecurityQuarantineReasonV1::CandidateConflict,
+        );
+        let duplicate = attachment_security_quarantine_evidence_v1(
+            [2; 16],
+            [6; 16],
+            AttachmentSecurityQuarantineReasonV1::CandidateConflict,
+        );
+        let other_reason = attachment_security_quarantine_evidence_v1(
+            [2; 16],
+            [6; 16],
+            AttachmentSecurityQuarantineReasonV1::CanonicalStateConflict,
+        );
+
+        assert_eq!(first, duplicate);
+        assert_ne!(first.evidence_id, other_reason.evidence_id);
     }
 
     fn policy() -> AttachmentSecurityJoinPolicyV1 {

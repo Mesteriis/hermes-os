@@ -47,6 +47,7 @@ members = [
   "src/attachment-security-contract",
   "src/attachment-security-core",
   "src/attachment-security-clamav",
+  "src/attachment-security-persistence",
   "src/kernel/control_store/contract",
   "src/kernel/control_store/sqlite",
   "src/kernel",

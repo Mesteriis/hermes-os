@@ -79,6 +79,51 @@ test('Attachment Security core and ClamAV adapter remain separate engine units',
   assert.doesNotMatch(`${endpoint}\n${instream}`, /hermes_communications|blob_store|postgres|sqlx/i);
 });
 
+test('Attachment Security persistence owns the durable join, bounded jobs and exact outbox', async () => {
+  const [manifest, schema, observation, jobs] = await Promise.all([
+    readFile(new URL('src/attachment-security-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/attachment-security-persistence/migrations/0001_attachment_security_state.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-security-persistence/src/observation.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(new URL('src/attachment-security-persistence/src/jobs.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+
+  assert.match(manifest, /surface = "persistence"/);
+  assert.match(manifest, /hermes-attachment-security-core/);
+  assert.match(manifest, /hermes-communications-attachment-contract/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:communications-(?!attachment-contract)|blob|kernel|attachment-security-clamav)/,
+  );
+  assert.equal(schema.match(/CREATE TABLE hermes_data\./g)?.length, 7);
+  assert.doesNotMatch(schema, /hermes_data\.(?:communications|mail|telegram|zulip|whatsapp)_/);
+  assert.match(schema, /attachment_security_event_inbox/);
+  assert.match(schema, /envelope_sha256/);
+  assert.match(schema, /max_attempts INTEGER NOT NULL CHECK \(max_attempts BETWEEN 1 AND 32\)/);
+  assert.match(observation, /attachment_security_join_locks/);
+  assert.match(observation, /FOR UPDATE/);
+  assert.match(observation, /decide_scan_join_v1/);
+  assert.match(jobs, /FOR UPDATE SKIP LOCKED/);
+  assert.match(jobs, /attempt_count >= max_attempts/);
+  assert.match(jobs, /attempt_count = \$4 FOR UPDATE/);
+  assert.match(jobs, /AttachmentSafetyVerdictOutboxRecordV1/);
+  assert.match(jobs, /AttachmentSafetyExpectedStateV1::BlobAdmitted/);
+  assert.match(jobs, /exact_envelope_bytes/);
+  assert.match(jobs, /OutboxHashConflict/);
+  assert.doesNotMatch(
+    `${observation}\n${jobs}`,
+    /hermes_communications_(?!attachment_contract)|provider_(?:id|locator|sdk)|scanner_signature/i,
+  );
+});
+
 test('staged Attachment Security packages do not open the production engine gate', async () => {
   const policy = JSON.parse(await readFile(POLICY_PATH, 'utf8'));
   const productionPackages = policy.implementation.productionPackages;
