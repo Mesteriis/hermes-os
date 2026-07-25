@@ -29,8 +29,11 @@ are not promoted directly to durable business entities.
 
 The versioned API and host bridge contracts, metadata-only core policy,
 owner-local durable observation/outbox persistence, typed client port and
-managed identity/storage bootstrap now exist. Provider projections beyond the
-metadata-only evidence boundary, Kernel launch wiring, command execution and
+managed identity/storage bootstrap now exist. ADR-0276 also replaces cloned V1
+inherited-control readers with one correlation-owned
+`ManagedControlChannelV2`; this prerequisite does not open the production
+phase gate. Provider projections beyond the metadata-only evidence boundary,
+route-specific public contracts, Kernel launch wiring, command execution and
 live WebView execution remain open migration work. No database URL environment
 variable or provider secret handoff is admitted.
 

@@ -10,7 +10,9 @@ Telegram `/api/v1/communications/*` business facade, его query/inspector chai
 при этом остаётся закрытым: отдельные legacy integration lifecycle REST
 surfaces и live generated-client provider flow ещё не заменены и не доказаны.
 Mail, WhatsApp и Zulip cutover также остаются независимыми незакрытыми
-provider slices.
+provider slices. Для WhatsApp один correlated managed-control prerequisite из
+ADR-0276 реализован, но route-specific generated contracts, signed admission и
+live provider flow ещё отсутствуют.
 
 Первый exact provider profile:
 [ADR-0266: Telegram Kernel admission and event-only Communications handoff](ADR-0266-telegram-kernel-admission-and-event-only-communications-handoff.md).

@@ -248,3 +248,9 @@ same-owner proof сохраняет прежний fence, а cross-owner delegat
 криптографически bind-ить exact target owner/registration/capability. Audience
 принадлежит public owner contract, поэтому integration не импортирует target
 runtime implementation, а Kernel не выбирает recipient по business event.
+ADR-0276 задаёт отдельный WhatsApp phase gate: Kernel/Core владеет только
+admission, leases, fencing, private host-route staging и opaque public client
+routing; WhatsApp evidence пересекает Communications boundary только через
+owner-local outbox, NATS и Communications inbox. Host bridge, command и query
+являются разными capability units, а runtime обязан использовать один
+correlated V2 control reader без cloned FD.
