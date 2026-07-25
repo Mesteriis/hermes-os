@@ -106,6 +106,22 @@ CREATE TABLE IF NOT EXISTS hermes_data.mail_gmail_oauth_credential_bindings (
 );
 "#;
 
+pub const MAIL_SCHEMA_V2: &str = r#"
+CREATE TABLE IF NOT EXISTS hermes_data.mail_attachment_security_outbox (
+    message_id BYTEA PRIMARY KEY,
+    envelope_sha256 BYTEA NOT NULL,
+    exact_envelope_bytes BYTEA NOT NULL,
+    created_at_unix_seconds BIGINT NOT NULL,
+    published_at_unix_seconds BIGINT,
+    CHECK (octet_length(message_id) = 16),
+    CHECK (octet_length(envelope_sha256) = 32),
+    CHECK (octet_length(exact_envelope_bytes) > 0)
+);
+CREATE INDEX IF NOT EXISTS mail_attachment_security_outbox_pending_idx
+    ON hermes_data.mail_attachment_security_outbox (created_at_unix_seconds, message_id)
+    WHERE published_at_unix_seconds IS NULL;
+"#;
+
 pub struct MailDurablePersistence {
     pool: PgPool,
 }
@@ -200,6 +216,10 @@ impl MailDurablePersistence {
 
     pub async fn initialize(&self) -> Result<(), MailDurablePersistenceError> {
         sqlx::raw_sql(MAIL_SCHEMA_V1)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        sqlx::raw_sql(MAIL_SCHEMA_V2)
             .execute(&self.pool)
             .await
             .map(|_| ())
@@ -435,9 +455,13 @@ impl MailDurablePersistence {
         attachment_anchor_id: [u8; 16],
         terminal_state: i16,
         terminal_record: &OutboxRecordV1,
+        attachment_security_record: Option<&OutboxRecordV1>,
         completed_at_unix_seconds: i64,
     ) -> Result<bool, MailDurablePersistenceError> {
-        if !matches!(terminal_state, 2 | 3) {
+        if !matches!(
+            (terminal_state, attachment_security_record),
+            (2, Some(_)) | (3, None)
+        ) {
             return Err(MailDurablePersistenceError::InvalidAttachmentAdmissionState);
         }
         let mut transaction = self
@@ -480,6 +504,10 @@ impl MailDurablePersistence {
         }
         insert_communications_outbox(&mut transaction, terminal_record, completed_at_unix_seconds)
             .await?;
+        if let Some(record) = attachment_security_record {
+            insert_attachment_security_outbox(&mut transaction, record, completed_at_unix_seconds)
+                .await?;
+        }
         transaction
             .commit()
             .await
@@ -831,6 +859,39 @@ impl MailDurablePersistence {
             .map(|result| result.rows_affected() == 1)
             .map_err(|_| MailDurablePersistenceError::Database)
     }
+
+    pub async fn pending_attachment_security_outbox(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<OutboxRecordV1>, MailDurablePersistenceError> {
+        let rows = sqlx::query("SELECT exact_envelope_bytes FROM hermes_data.mail_attachment_security_outbox WHERE published_at_unix_seconds IS NULL ORDER BY created_at_unix_seconds ASC, message_id ASC LIMIT $1")
+            .bind(limit.clamp(1, 256))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        rows.into_iter()
+            .map(|row| {
+                let bytes: Vec<u8> = row
+                    .try_get("exact_envelope_bytes")
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+                OutboxRecordV1::accept(bytes).map_err(|_| MailDurablePersistenceError::InvalidRow)
+            })
+            .collect()
+    }
+
+    pub async fn mark_attachment_security_outbox_published(
+        &self,
+        message_id: &[u8; 16],
+        published_at_unix_seconds: i64,
+    ) -> Result<bool, MailDurablePersistenceError> {
+        sqlx::query("UPDATE hermes_data.mail_attachment_security_outbox SET published_at_unix_seconds = $2 WHERE message_id = $1 AND published_at_unix_seconds IS NULL")
+            .bind(message_id.as_slice())
+            .bind(published_at_unix_seconds)
+            .execute(&self.pool)
+            .await
+            .map(|result| result.rows_affected() == 1)
+            .map_err(|_| MailDurablePersistenceError::Database)
+    }
 }
 
 async fn insert_communications_outbox(
@@ -839,6 +900,22 @@ async fn insert_communications_outbox(
     created_at_unix_seconds: i64,
 ) -> Result<(), MailDurablePersistenceError> {
     sqlx::query("INSERT INTO hermes_data.mail_communications_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
+        .bind(record.message_id().as_slice())
+        .bind(record.envelope_sha256().as_slice())
+        .bind(record.exact_bytes())
+        .bind(created_at_unix_seconds)
+        .execute(&mut **transaction)
+        .await
+        .map(|_| ())
+        .map_err(|_| MailDurablePersistenceError::Database)
+}
+
+async fn insert_attachment_security_outbox(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    record: &OutboxRecordV1,
+    created_at_unix_seconds: i64,
+) -> Result<(), MailDurablePersistenceError> {
+    sqlx::query("INSERT INTO hermes_data.mail_attachment_security_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
         .bind(record.message_id().as_slice())
         .bind(record.envelope_sha256().as_slice())
         .bind(record.exact_bytes())

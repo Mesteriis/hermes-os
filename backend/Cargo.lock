@@ -2008,6 +2008,7 @@ dependencies = [
  "h2",
  "h3",
  "h3-quinn",
+ "hermes-attachment-security-contract",
  "hermes-blob-client",
  "hermes-communications-api",
  "hermes-communications-attachment-contract",
@@ -2151,6 +2152,7 @@ name = "hermes-mail-runtime"
 version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
+ "hermes-attachment-security-contract",
  "hermes-blob-client",
  "hermes-communications-attachment-contract",
  "hermes-communications-ingress",

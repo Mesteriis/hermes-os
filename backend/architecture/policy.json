@@ -3030,6 +3030,9 @@
     "engineDomainContractPackages": [
       "hermes-communications-attachment-contract"
     ],
+    "integrationEngineContractPackages": [
+      "hermes-attachment-security-contract"
+    ],
     "integrationDomainContractPackages": [
       "hermes-communications-attachment-contract",
       "hermes-communications-ingress"

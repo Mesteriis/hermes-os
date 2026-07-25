@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_mail_runtime::{
-    MailRuntimeAdmission, communications_outbox::MailCommunicationsOutboxRelayError, managed,
-    settings,
+    MailRuntimeAdmission, attachment_security_outbox::MailAttachmentSecurityOutboxRelayError,
+    communications_outbox::MailCommunicationsOutboxRelayError, managed, settings,
 };
 use hermes_runtime_protocol::{
     v1::ManagedIntegrationRuntimeConfigurationV1,
@@ -119,6 +119,18 @@ where
             Err(MailCommunicationsOutboxRelayError::Persistence(_)) => {
                 developer_diagnostic("developer_mail_outbox_persistence_failed");
                 return Err("Mail runtime outbox persistence failed".to_owned());
+            }
+        }
+        match runtime.block_on(admitted.relay_attachment_security_outbox(now)) {
+            Ok(_) => {}
+            Err(MailAttachmentSecurityOutboxRelayError::Unavailable) => {
+                developer_diagnostic("developer_mail_attachment_security_outbox_relay_unavailable");
+            }
+            Err(MailAttachmentSecurityOutboxRelayError::Persistence(_)) => {
+                developer_diagnostic(
+                    "developer_mail_attachment_security_outbox_persistence_failed",
+                );
+                return Err("Mail runtime Attachment Security outbox persistence failed".to_owned());
             }
         }
         std::thread::sleep(Duration::from_secs(1));

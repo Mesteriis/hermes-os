@@ -6,12 +6,15 @@
 Mail core extracts bounded MIME parts, Mail keeps an owner-local
 source-to-anchor mapping and durable `requested -> admitted/rejected` outbox
 state, and managed IMAP runtime writes exact provider bytes through a one-use
-Kernel-issued Blob session. Exact signed Mail descriptor/grant и live
-Blob-result delivery теперь доказаны вместе с replay/CAS conflict. Полный
-negative conformance matrix из admission gate, включая отдельные live Blob
-integrity/failure сценарии, ещё не завершён. ADR не расширяет
-`first_owner_v1`. Versioned Mail settings schema, Storage bundle and descriptor
-artifact are defined by ADR-0263.
+Kernel-issued Blob session. После успешного owner-local Blob commit Mail
+атомарно сохраняет отдельный typed Attachment Security scan-candidate outbox;
+live managed contour доказывает exact provider-neutral candidate и отсутствие
+в нём provider/credential data. Exact signed Mail descriptor/grant и live
+Blob-result delivery доказаны вместе с replay/CAS conflict. Полный negative
+conformance matrix из admission gate, включая отдельные live Blob
+integrity/failure сценарии, ещё не завершён. ADR не расширяет `first_owner_v1`
+и не открывает `attachment_security_engine_v1`. Versioned Mail settings schema,
+Storage bundle and descriptor artifact are defined by ADR-0263.
 
 Зависит от:
 

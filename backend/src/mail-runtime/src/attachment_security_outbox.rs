@@ -1,0 +1,38 @@
+//! Mail-owned exact-byte relay for Attachment Security scan candidates.
+
+use hermes_events_jetstream::{RuntimeJetStreamConnection, RuntimePublishPermitV1};
+use hermes_mail_persistence::{MailDurablePersistence, MailDurablePersistenceError};
+
+pub async fn relay_attachment_security_outbox_once(
+    durable: &MailDurablePersistence,
+    connection: &RuntimeJetStreamConnection,
+    permit: &RuntimePublishPermitV1,
+    published_at_unix_seconds: i64,
+) -> Result<usize, MailAttachmentSecurityOutboxRelayError> {
+    let records = durable
+        .pending_attachment_security_outbox(64)
+        .await
+        .map_err(MailAttachmentSecurityOutboxRelayError::Persistence)?;
+    let mut published = 0;
+    for record in records {
+        connection
+            .publish_exact(permit, record.exact_bytes())
+            .await
+            .map_err(|_| MailAttachmentSecurityOutboxRelayError::Unavailable)?;
+        durable
+            .mark_attachment_security_outbox_published(
+                record.message_id(),
+                published_at_unix_seconds,
+            )
+            .await
+            .map_err(MailAttachmentSecurityOutboxRelayError::Persistence)?;
+        published += 1;
+    }
+    Ok(published)
+}
+
+#[derive(Debug)]
+pub enum MailAttachmentSecurityOutboxRelayError {
+    Persistence(MailDurablePersistenceError),
+    Unavailable,
+}

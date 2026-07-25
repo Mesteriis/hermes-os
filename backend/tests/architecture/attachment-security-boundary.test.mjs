@@ -124,6 +124,51 @@ test('Attachment Security persistence owns the durable join, bounded jobs and ex
   );
 });
 
+test('Mail publishes scan candidates through one exact contract and a separate durable outbox', async () => {
+  const [manifest, admission, managed, durable, relay, main] = await Promise.all([
+    readFile(new URL('src/mail-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/mail-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/mail-runtime/src/managed.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/mail-persistence/src/durable.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL('src/mail-runtime/src/attachment_security_outbox.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(new URL('src/mail-runtime/src/main.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+
+  assert.match(manifest, /^hermes-attachment-security-contract =/m);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-attachment-security-(?:core|clamav|persistence|runtime|assembly)/,
+  );
+  assert.match(
+    admission,
+    /MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID: &str =\s*"mail\.attachment\.scan-candidate\.publish\.v1"/,
+  );
+  assert.match(
+    admission,
+    /attachment_security_scan_candidate_observed_publish_request_v1\(\)/,
+  );
+  assert.match(managed, /build_attachment_security_scan_candidate_outbox_record_v1/);
+  assert.match(managed, /blob_reference_id: write\.reference_id/);
+  assert.match(managed, /blob_receipt_sha256: write\.receipt_sha256/);
+  assert.match(
+    managed,
+    /complete_attachment_blob_admission\([\s\S]*attachment_security_record\.as_ref\(\)/,
+  );
+  assert.match(durable, /mail_attachment_security_outbox/);
+  assert.match(durable, /insert_attachment_security_outbox\(/);
+  assert.match(relay, /pending_attachment_security_outbox/);
+  assert.match(relay, /publish_exact\(permit, record\.exact_bytes\(\)\)/);
+  assert.match(relay, /mark_attachment_security_outbox_published/);
+  assert.match(main, /relay_attachment_security_outbox\(now\)/);
+  assert.doesNotMatch(
+    `${managed}\n${durable}\n${relay}`,
+    /hermes_attachment_security_(?:core|clamav|persistence|runtime|assembly)/,
+  );
+});
+
 test('Attachment Security runtime is a managed engine with event-only business boundaries', async () => {
   const [manifest, admission, runtime, scanner, decoder, outbox] = await Promise.all([
     readFile(new URL('src/attachment-security-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),

@@ -3,6 +3,7 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
+use hermes_attachment_security_contract::v1::AttachmentSecurityScanCandidateObservedV1;
 use hermes_communications_api::query_wire::{
     CommunicationsQueryRequestV1, ListAccountsRequestV1, ListConversationMessagesRequestV1,
     ListConversationsRequestV1, ListMessageAttachmentAnchorsRequestV1,
@@ -52,34 +53,44 @@ pub(super) fn assert_mail_attachment_lifecycle(
     let runtime = tokio::runtime::Runtime::new().expect("Mail attachment observer runtime");
     let _runtime_context = runtime.enter();
     let durable = runtime.block_on(connect_postgres());
-    let (client, mut anchors, mut admissions, mut state_changes) = runtime.block_on(async {
-        let client = async_nats::connect(endpoint)
-            .await
-            .expect("connect Mail attachment observer");
-        let anchors = client
-            .subscribe("hermes.event.v1.communications.communication_attachment_anchor_recorded.v1")
-            .await
-            .expect("subscribe attachment anchors");
-        let admissions = client
-            .subscribe(
-                "hermes.observation.v1.communications.\
+    let (client, mut anchors, mut admissions, mut candidates, mut state_changes) = runtime
+        .block_on(async {
+            let client = async_nats::connect(endpoint)
+                .await
+                .expect("connect Mail attachment observer");
+            let anchors = client
+                .subscribe(
+                    "hermes.event.v1.communications.communication_attachment_anchor_recorded.v1",
+                )
+                .await
+                .expect("subscribe attachment anchors");
+            let admissions = client
+                .subscribe(
+                    "hermes.observation.v1.communications.\
                  communication_attachment_blob_admission_observed.v1",
-            )
-            .await
-            .expect("subscribe Mail Blob admissions");
-        let state_changes = client
-            .subscribe(
-                "hermes.event.v1.communications.\
+                )
+                .await
+                .expect("subscribe Mail Blob admissions");
+            let candidates = client
+                .subscribe(
+                    "hermes.observation.v1.attachment_security.\
+                 attachment_security_scan_candidate_observed.v1",
+                )
+                .await
+                .expect("subscribe Attachment Security candidates");
+            let state_changes = client
+                .subscribe(
+                    "hermes.event.v1.communications.\
                  communication_attachment_safety_state_changed.v1",
-            )
-            .await
-            .expect("subscribe attachment state changes");
-        client
-            .flush()
-            .await
-            .expect("activate Mail attachment observers");
-        (client, anchors, admissions, state_changes)
-    });
+                )
+                .await
+                .expect("subscribe attachment state changes");
+            client
+                .flush()
+                .await
+                .expect("activate Mail attachment observers");
+            (client, anchors, admissions, candidates, state_changes)
+        });
 
     assert_mail_sync(
         store,
@@ -195,6 +206,45 @@ pub(super) fn assert_mail_attachment_lifecycle(
         assert_eq!(envelope.causation_message_id, admission_records[index].0);
         assert_eq!(envelope.correlation_id, mapping.correlation_id);
     }
+    let candidate = runtime
+        .block_on(async { tokio::time::timeout(Duration::from_secs(10), candidates.next()).await })
+        .expect("Attachment Security candidate timeout")
+        .expect("Attachment Security candidate");
+    let candidate_exact_bytes = candidate.payload.to_vec();
+    let candidate_envelope = decode_envelope_v1(&candidate_exact_bytes)
+        .expect("Attachment Security candidate durable envelope");
+    let candidate_payload =
+        AttachmentSecurityScanCandidateObservedV1::decode(candidate_envelope.payload.as_slice())
+            .expect("Attachment Security candidate payload");
+    assert_eq!(candidate_payload.attachment_anchor_id, attachment_anchor_id);
+    assert_eq!(candidate_payload.blob_reference_id.len(), 16);
+    assert_eq!(candidate_payload.blob_receipt_sha256.len(), 32);
+    assert!(candidate_payload.declared_size > 0);
+    assert_eq!(
+        candidate_envelope.causation_message_id,
+        source_observation_id
+    );
+    assert_eq!(candidate_envelope.correlation_id, mapping.correlation_id);
+    assert_eq!(
+        candidate_envelope
+            .source
+            .as_ref()
+            .expect("Mail candidate source")
+            .module_id,
+        MAIL_MODULE_ID
+    );
+    for forbidden in [
+        b"attachment.txt".as_slice(),
+        b"application/octet-stream".as_slice(),
+        b"managed-mail-imap-password".as_slice(),
+    ] {
+        assert!(
+            !candidate_exact_bytes
+                .windows(forbidden.len())
+                .any(|window| window == forbidden),
+            "scan candidate must not expose provider or credential data"
+        );
+    }
     assert_eq!(
         wait_for_attachment_state(store, supervisor, attachment_anchor_id),
         AttachmentSafetyStateWireV1::BlobAdmitted as u32,
@@ -215,6 +265,14 @@ pub(super) fn assert_mail_attachment_lifecycle(
             })
             .is_err(),
         "provider replay must not start a second Mail Blob admission"
+    );
+    assert!(
+        runtime
+            .block_on(async {
+                tokio::time::timeout(Duration::from_secs(1), candidates.next()).await
+            })
+            .is_err(),
+        "provider replay must not create a second Attachment Security candidate"
     );
 
     publish_exact(

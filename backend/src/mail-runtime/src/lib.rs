@@ -2,6 +2,7 @@
 
 pub mod admission;
 pub mod attachment_anchor_mapping;
+pub mod attachment_security_outbox;
 pub mod client_port;
 pub mod communications_outbox;
 pub mod managed;

@@ -31,6 +31,7 @@ hermes-mail-imap = { path = "../mail-imap" }
 hermes-mail-gmail = { path = "../mail-gmail" }
 hermes-mail-smtp = { path = "../mail-smtp" }
 hermes-mail-persistence = { path = "../mail-persistence" }
+hermes-attachment-security-contract = { path = "../attachment-security-contract" }
 hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }
 hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-blob-client = { path = "../platform/blob/client" }

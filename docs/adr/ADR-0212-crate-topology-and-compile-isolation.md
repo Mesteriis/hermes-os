@@ -330,7 +330,7 @@ integration api + core + provider adapter + persistence ← integration runtime
 
 - module → Kernel implementation;
 - Kernel/Gateway → owner-specific module package;
-- integration → любой domain contract, кроме точного Communications ingress;
+- integration → любой domain/engine contract вне exact executable allowlists;
 - cross-owner persistence → persistence;
 - runtime → runtime даже внутри одного owner;
 - cross-owner dependency на implementation для normal, build и dev edges;
@@ -348,6 +348,7 @@ integration api + core + provider adapter + persistence ← integration runtime
 | `hermes-contacts-domain` | Contacts persistence/runtime и Contacts tests |
 | `hermes-communications-ingress` | integrations, которые публикуют neutral evidence; это осознанный fan-out |
 | `hermes-communications-attachment-contract` | integrations и engines, которые обмениваются typed attachment facts; это осознанный contract fan-out |
+| `hermes-attachment-security-contract` | integrations, которые публикуют provider-neutral scan candidates; это отдельный exact integration-to-engine allowlist |
 | global runtime/event protocol | его consumers; изменение требует contract review |
 | Storage PostgreSQL/PgBouncer/migration adapter | `hermes-storage-runtime` и Storage tests |
 | `hermes-storage-control` | `hermes-storage-runtime` и Storage tests |
@@ -364,7 +365,8 @@ domains или integrations. Contract change может иметь больши�
 
 `backend/architecture/policy.json` и Cargo guard проверяют:
 
-- точный allowlist integration ingress packages;
+- точные allowlists integration-to-domain, engine-to-domain и
+  integration-to-engine contract packages;
 - единственный `hermes-events-protocol` с metadata
   `platform:events:contract` и без transport/storage dependencies;
 - запрещённые aggregate package names;

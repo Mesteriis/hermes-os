@@ -3,8 +3,11 @@
 Статус: Принято
 Дата: 2026-07-24
 Состояние реализации: Реализованы versioned hidden settings schema, immutable
-Mail-owned Storage bundle и exact unsigned descriptor artifact. Approved grant
-set, signed distribution binding и production managed launch ещё не admitted.
+Mail-owned Storage bundle revision 2 с отдельным Attachment Security candidate
+outbox и exact unsigned descriptor artifact. Descriptor содержит отдельную
+optional scan-candidate publish capability; signed managed conformance
+доказывает exact grant и durable publication, но production engine admission
+остаётся отдельным gate.
 
 Зависит от:
 

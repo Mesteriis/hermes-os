@@ -3,6 +3,7 @@
 //! This artifact describes the smallest Mail-owned capability set. It does
 //! not register Mail in the production inventory or grant any capability.
 
+use hermes_attachment_security_contract::admission::attachment_security_scan_candidate_observed_publish_request_v1;
 use hermes_communications_attachment_contract::admission::{
     communication_attachment_anchor_recorded_contract_reference_v1,
     communication_attachment_blob_admission_observed_publish_request_v1,
@@ -29,6 +30,8 @@ use crate::settings::{
     MAIL_SETTINGS_SCHEMA_MAJOR_V1, MAIL_SETTINGS_SCHEMA_REVISION_V1, mail_settings_schema_bytes_v1,
 };
 
+pub const MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID: &str =
+    "mail.attachment.scan-candidate.publish.v1";
 pub const MAIL_BLOB_CAPABILITY_ID: &str = "mail.blob.v1";
 pub const MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID: &str = "mail.gmail.credentials.v1";
 pub const MAIL_IMAP_CREDENTIALS_CAPABILITY_ID: &str = "mail.imap.credentials.v1";
@@ -45,6 +48,7 @@ pub const MAIL_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
 #[must_use]
 pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
+        mail_attachment_scan_candidate_publish_capability_v1(),
         mail_blob_capability_v1(),
         mail_client_capability_v1(MailClientContractV1::Delivery),
         mail_events_capability_v1(),
@@ -63,6 +67,17 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_storage_capability_v1(),
         mail_client_capability_v1(MailClientContractV1::Sync),
     ]
+}
+
+#[must_use]
+pub fn mail_attachment_scan_candidate_publish_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![attachment_security_scan_candidate_observed_publish_request_v1()],
+        ..Default::default()
+    }
 }
 
 fn mail_client_capability_v1(contract: MailClientContractV1) -> CapabilityDescriptorV1 {
@@ -233,6 +248,7 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID,
                 MAIL_BLOB_CAPABILITY_ID,
                 MailClientContractV1::Delivery.capability_id(),
                 MAIL_EVENTS_CAPABILITY_ID,
@@ -243,6 +259,26 @@ mod tests {
                 MailClientContractV1::Sync.capability_id(),
             ]
         );
+
+        let candidate = descriptor
+            .capabilities
+            .iter()
+            .find(|capability| {
+                capability.capability_id == MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID
+            })
+            .expect("Mail Attachment Security candidate capability");
+        assert_eq!(
+            candidate.criticality,
+            CapabilityCriticalityV1::Optional as i32
+        );
+        assert_eq!(candidate.provides, []);
+        assert_eq!(candidate.requests.len(), 1);
+        assert!(matches!(
+            candidate.requests[0].request.as_ref(),
+            Some(Request::EventRoute(route))
+                if route.direction == EventRouteDirectionV1::Publish as i32
+                    && route.envelope_kind == DurableEnvelopeKindV1::Observation as i32
+        ));
 
         let events = descriptor
             .capabilities

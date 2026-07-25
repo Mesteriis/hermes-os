@@ -23,6 +23,7 @@ base64 = "=0.22.1"
 hermes-events-protocol = { path = "../../../src/platform/events" }
 hermes-events-jetstream = { path = "../../../src/platform/events/jetstream" }
 hermes-blob-client = { path = "../../../src/platform/blob/client" }
+hermes-attachment-security-contract = { path = "../../../src/attachment-security-contract" }
 hermes-communications-persistence = { path = "../../../src/communications-persistence" }
 hermes-communications-runtime = { path = "../../../src/communications-runtime" }
 hermes-communications-attachment-contract = { path = "../../../src/communications-attachment-contract" }

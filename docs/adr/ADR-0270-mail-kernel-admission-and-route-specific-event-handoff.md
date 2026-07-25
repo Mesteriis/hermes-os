@@ -18,6 +18,9 @@ replay. Live provider sync и attachment anchor → Mail mapping → Kernel-issu
 Blob write → terminal Communications CAS conformance теперь доказаны.
 `mail_runtime_admission_v1` открыт для exact inbound sync subset. Delivery,
 Gmail/SMTP mutation и frontend cutover остаются отдельными закрытыми slices.
+Отдельная optional scan-candidate publish capability, Mail-owned durable outbox
+и live integration-to-engine observation реализованы как prerequisite
+Attachment Security gate; они не дают engine runtime production admission.
 
 Уточняет:
 

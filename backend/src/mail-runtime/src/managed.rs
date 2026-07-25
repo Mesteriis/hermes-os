@@ -4,6 +4,10 @@ use std::os::unix::net::UnixStream;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use hermes_attachment_security_contract::{
+    AttachmentSecurityObservationContextV1, AttachmentSecurityScanCandidateFactV1,
+    build_attachment_security_scan_candidate_outbox_record_v1,
+};
 use hermes_blob_client::{
     BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
 };
@@ -60,6 +64,9 @@ use crate::admission::{
 use crate::attachment_anchor_mapping::{
     MailAttachmentAnchorMappingErrorV1, consume_next_attachment_anchor_recorded_v1,
 };
+use crate::attachment_security_outbox::{
+    MailAttachmentSecurityOutboxRelayError, relay_attachment_security_outbox_once,
+};
 use crate::communications_outbox::{
     MailCommunicationsOutboxRelayError, relay_communications_outbox_once,
 };
@@ -97,9 +104,17 @@ pub struct MailAdmittedRuntime {
     event_publish_permit: RuntimePublishPermitV1,
     attachment_anchor_subscribe_permit: Option<RuntimeSubscribePermitV1>,
     attachment_blob_admission_publish_permitted: bool,
+    attachment_security_scan_candidate_publish_permitted: bool,
     account: hermes_mail_api::MailAccountConfigurationV1,
     runtime_instance_id: String,
     runtime_generation: u64,
+}
+
+struct MailAttachmentBlobWriteV1 {
+    reference_id: [u8; 16],
+    receipt_sha256: [u8; 32],
+    reference_binding_sha256: [u8; 32],
+    declared_size: u64,
 }
 
 enum MailInboundCredentialV1 {
@@ -329,6 +344,8 @@ pub async fn open_admitted_runtime(
     )?;
     let attachment_blob_admission_publish_permitted =
         attachment_blob_admission_publish_permitted(&event_publish_permit)?;
+    let attachment_security_scan_candidate_publish_permitted =
+        attachment_security_scan_candidate_publish_permitted(&event_publish_permit)?;
     let event_connection = JetStreamClient::connect_runtime_with_jwt(
         event_hub_endpoint,
         identity,
@@ -358,6 +375,7 @@ pub async fn open_admitted_runtime(
         event_publish_permit,
         attachment_anchor_subscribe_permit,
         attachment_blob_admission_publish_permitted,
+        attachment_security_scan_candidate_publish_permitted,
         account: admission.account.clone(),
         runtime_instance_id: admission.runtime_instance_id.clone(),
         runtime_generation: admission.runtime_generation,
@@ -592,6 +610,22 @@ impl MailAdmittedRuntime {
         published_at_unix_seconds: i64,
     ) -> Result<usize, MailCommunicationsOutboxRelayError> {
         relay_communications_outbox_once(
+            &self.durable,
+            &self.event_connection,
+            &self.event_publish_permit,
+            published_at_unix_seconds,
+        )
+        .await
+    }
+
+    pub async fn relay_attachment_security_outbox(
+        &self,
+        published_at_unix_seconds: i64,
+    ) -> Result<usize, MailAttachmentSecurityOutboxRelayError> {
+        if !self.attachment_security_scan_candidate_publish_permitted {
+            return Ok(0);
+        }
+        relay_attachment_security_outbox_once(
             &self.durable,
             &self.event_connection,
             &self.event_publish_permit,
@@ -1184,11 +1218,12 @@ impl MailAdmittedRuntime {
         ) {
             return Ok(());
         }
-        let terminal = match self.write_attachment_blob(bytes) {
-            Ok(binding) => (
+        let write = self.write_attachment_blob(bytes);
+        let terminal = match &write {
+            Ok(write) => (
                 2,
                 AttachmentBlobAdmissionTransitionV1::Admitted,
-                Some(binding),
+                Some(write.reference_binding_sha256),
             ),
             Err(_) => (3, AttachmentBlobAdmissionTransitionV1::Rejected, None),
         };
@@ -1206,12 +1241,38 @@ impl MailAdmittedRuntime {
             &context,
         )
         .map_err(|_| MailBootstrapError::Admission)?;
+        let attachment_security_record = write
+            .as_ref()
+            .ok()
+            .map(|write| {
+                build_attachment_security_scan_candidate_outbox_record_v1(
+                    &AttachmentSecurityScanCandidateFactV1 {
+                        attachment_anchor_id: mapping.attachment_anchor_id,
+                        blob_reference_id: write.reference_id,
+                        declared_size: write.declared_size,
+                        blob_receipt_sha256: write.receipt_sha256,
+                        source_observation_id,
+                        correlation_id: mapping.correlation_id,
+                        observed_at_unix_seconds,
+                    },
+                    &AttachmentSecurityObservationContextV1 {
+                        runtime_instance_id: self.runtime_instance_id.clone(),
+                        runtime_generation: self.runtime_generation,
+                        module_id: MAIL_MODULE_ID.to_owned(),
+                        recorded_at_unix_seconds: observed_at_unix_seconds,
+                        recorded_at_nanos: observed_at_nanos,
+                    },
+                )
+                .map_err(|_| MailBootstrapError::Admission)
+            })
+            .transpose()?;
         self.durable
             .complete_attachment_blob_admission(
                 source_observation_id,
                 mapping.attachment_anchor_id,
                 terminal.0,
                 &terminal_record,
+                attachment_security_record.as_ref(),
                 observed_at_unix_seconds,
             )
             .await
@@ -1219,7 +1280,10 @@ impl MailAdmittedRuntime {
         Ok(())
     }
 
-    fn write_attachment_blob(&mut self, bytes: &[u8]) -> Result<[u8; 32], MailBootstrapError> {
+    fn write_attachment_blob(
+        &mut self,
+        bytes: &[u8],
+    ) -> Result<MailAttachmentBlobWriteV1, MailBootstrapError> {
         if bytes.is_empty() || bytes.len() > 16 * 1024 * 1024 {
             return Err(MailBootstrapError::Admission);
         }
@@ -1229,6 +1293,8 @@ impl MailAdmittedRuntime {
             return Err(MailBootstrapError::Control);
         }
         let receipt_sha256: [u8; 32] = Sha256::digest(bytes).into();
+        let declared_size =
+            u64::try_from(bytes.len()).map_err(|_| MailBootstrapError::Admission)?;
         self.control_channel
             .inner_mut()
             .set_nonblocking(false)
@@ -1241,8 +1307,7 @@ impl MailAdmittedRuntime {
                 capability_id: MAIL_BLOB_CAPABILITY_ID,
                 operation: BlobDataOperationV1::BlobDataOperationWriteV1,
                 reference_id: &reference_id,
-                declared_size: u64::try_from(bytes.len())
-                    .map_err(|_| MailBootstrapError::Admission)?,
+                declared_size,
                 backup_class: 1,
                 receipt_sha256: Some(&receipt_sha256),
             },
@@ -1256,7 +1321,12 @@ impl MailAdmittedRuntime {
         BlobDataClient::new(session.data_socket_path)
             .and_then(|client| client.write(session.grant, session.channel_binding, bytes.to_vec()))
             .map_err(|_| MailBootstrapError::Control)?;
-        Ok(Sha256::digest(session.custody_transfer_source_proof).into())
+        Ok(MailAttachmentBlobWriteV1 {
+            reference_id,
+            receipt_sha256,
+            reference_binding_sha256: Sha256::digest(session.custody_transfer_source_proof).into(),
+            declared_size,
+        })
     }
 }
 
@@ -1340,6 +1410,21 @@ fn attachment_blob_admission_publish_permitted(
     permit: &RuntimePublishPermitV1,
 ) -> Result<bool, MailBootstrapError> {
     let contract = hermes_communications_attachment_contract::admission::communication_attachment_blob_admission_observed_contract_reference_v1();
+    let subject = DurableSubjectV1::new(
+        StreamKindV1::Observation,
+        contract.owner,
+        contract.name,
+        contract.major,
+    )
+    .map_err(|_| MailBootstrapError::EventHub)?;
+    Ok(permit.permits_subject(&subject))
+}
+
+fn attachment_security_scan_candidate_publish_permitted(
+    permit: &RuntimePublishPermitV1,
+) -> Result<bool, MailBootstrapError> {
+    let contract = hermes_attachment_security_contract::admission::
+        attachment_security_scan_candidate_observed_contract_reference_v1();
     let subject = DurableSubjectV1::new(
         StreamKindV1::Observation,
         contract.owner,

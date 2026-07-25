@@ -64,6 +64,13 @@ test('requires an exact engine domain contract package allowlist', () => {
   assert.ok(codes(validatePolicy(invalid)).has('dependency_policy'));
 });
 
+test('requires an exact integration engine contract package allowlist', () => {
+  const invalid = policy();
+  invalid.dependencies.integrationEngineContractPackages = ['attachment_security'];
+
+  assert.ok(codes(validatePolicy(invalid)).has('dependency_policy'));
+});
+
 
 
 test('requires explicit compile-isolation policy', () => {

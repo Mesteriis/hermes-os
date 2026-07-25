@@ -13,7 +13,11 @@ order-independent join, bounded attempt/lease-fenced scan jobs, quarantine
 evidence и exact verdict outbox. Отдельный managed runtime получает только
 Kernel-issued Storage/Blob/Event capabilities, а отдельная assembly unit
 материализует canonical descriptor/settings/Storage bytes и unsigned release
-fragment для generic distribution compiler. Production gate
+fragment для generic distribution compiler. Первый реальный producer —
+managed Mail runtime — после owner-local Blob commit атомарно сохраняет typed
+candidate в отдельном Mail outbox и публикует exact bytes по отдельной
+owner-approved capability; live contour доказывает replay и privacy boundary.
+Production gate
 `attachment_security_engine_v1` остаётся закрыт до signed admission и live
 ClamAV/Blob/Event conformance, включая failure/replay/revoke matrix. До открытия
 gate состояние `safe_for_delivery` остаётся недостижимым.

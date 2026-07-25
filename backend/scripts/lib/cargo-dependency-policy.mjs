@@ -50,7 +50,9 @@ function isAllowedDependency(policy, source, target, targetPackageName) {
     case 'domain':
       return target.role === 'platform';
     case 'integration':
-      return ['platform', 'engine'].includes(target.role)
+      return target.role === 'platform'
+        || (target.role === 'engine'
+          && policy.dependencies.integrationEngineContractPackages.includes(targetPackageName))
         || (target.role === 'domain'
           && policy.dependencies.integrationDomainContractPackages.includes(targetPackageName));
     case 'workflow':
@@ -350,6 +352,18 @@ export function validateDependencyEdges(policy, packages, descriptors) {
           'cross_owner_persistence_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
           'persistence adapters cannot depend on another owner persistence adapter',
+        ));
+        continue;
+      }
+
+      if (source.role === 'integration'
+        && target.role === 'engine'
+        && target.surface === 'contract'
+        && !policy.dependencies.integrationEngineContractPackages.includes(dependency.name)) {
+        violations.push(violation(
+          'integration_engine_contract_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'integrations may publish engine observations only through an explicitly allowed contract package',
         ));
         continue;
       }
