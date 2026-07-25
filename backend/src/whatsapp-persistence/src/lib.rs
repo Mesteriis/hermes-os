@@ -5,7 +5,8 @@ mod durable;
 pub use durable::{
     WHATSAPP_SCHEMA_V1, WhatsAppClaimedCommandV1, WhatsAppDurablePersistence,
     WhatsAppDurablePersistenceError, WhatsAppHostObservationRecordV1,
-    WhatsAppProviderCommandCompletionV1, WhatsAppProviderCommandStateV1,
+    WhatsAppProviderCommandCompletionV1, WhatsAppProviderCommandEnqueueV1,
+    WhatsAppProviderCommandStateV1, WhatsAppProviderCommandStatusV1,
 };
 
 pub const PACKAGE: &str = "hermes-whatsapp-persistence";

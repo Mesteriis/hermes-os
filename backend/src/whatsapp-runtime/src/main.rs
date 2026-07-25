@@ -81,7 +81,7 @@ where
     };
     let executor = tokio::runtime::Runtime::new()
         .map_err(|_| "WhatsApp runtime executor is unavailable".to_owned())?;
-    let admitted = executor
+    let mut admitted = executor
         .block_on(managed::open_admitted_runtime(
             inherited_control_channel()?,
             descriptor,
@@ -101,10 +101,13 @@ where
         .map_err(|_| "WhatsApp host bridge listener is unavailable".to_owned())?;
 
     loop {
+        let now = unix_seconds()?;
+        executor
+            .block_on(admitted.try_handle_client_delivery(now))
+            .map_err(|_| "WhatsApp runtime client delivery failed".to_owned())?;
         admitted
             .try_serve_host_bridge_once(&listener, executor.handle())
             .map_err(|_| "WhatsApp host bridge delivery failed".to_owned())?;
-        let now = unix_seconds()?;
         executor
             .block_on(admitted.relay_communications_outbox(now))
             .map_err(|_| "WhatsApp runtime outbox relay failed".to_owned())?;

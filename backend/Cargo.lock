@@ -2643,6 +2643,7 @@ dependencies = [
  "hermes-whatsapp-persistence",
  "libc",
  "prost 0.14.4",
+ "sha2 0.11.0",
  "tokio",
 ]
 

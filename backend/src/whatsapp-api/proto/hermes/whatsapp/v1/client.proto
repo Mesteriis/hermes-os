@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package hermes.whatsapp.v1;
 
-message WhatsAppHostBridgeRequestV1 {
+message WhatsAppHostObservationV1 {
   uint32 protocol_major = 1;
   uint32 protocol_revision = 2;
   string account_id = 3;
@@ -26,6 +26,18 @@ message WhatsAppHostBridgeRequestV1 {
     SessionLinkedMetadata session_linked = 24;
     SessionRevokedMetadata session_revoked = 25;
     CommandResultMetadata command_result = 26;
+  }
+}
+message WhatsAppHostCommandClaimV1 {
+  string account_id = 1;
+  string host_claim_id = 2;
+  uint32 lease_seconds = 3;
+  uint32 limit = 4;
+}
+message WhatsAppHostBridgeOperationV1 {
+  oneof operation {
+    WhatsAppHostObservationV1 observation = 1;
+    WhatsAppHostCommandClaimV1 claim_commands = 2;
   }
 }
 
@@ -60,20 +72,17 @@ message SessionRevokedMetadata {}
 message CommandResultMetadata { string operation_id = 1; optional string provider_request_id = 2; bool succeeded = 3; string host_claim_id = 4; }
 
 message WhatsAppObservationAcceptedV1 { string provider_event_id = 1; }
-message WhatsAppOperationAcceptedV1 { string operation_id = 1; }
-message WhatsAppHostCommandFailureV1 { string operation_id = 1; string host_claim_id = 2; string reason = 3; }
-message WhatsAppHostCommandFailureRecordedV1 { string operation_id = 1; }
-message WhatsAppRetryCommandV1 { string operation_id = 1; }
-message WhatsAppDeadLetterCommandV1 { string operation_id = 1; string reason = 2; }
-message WhatsAppCommandLifecycleResponseV1 { string operation_id = 1; string state = 2; }
-message WhatsAppClientResponseV1 {
+message WhatsAppOperationAcceptedV1 {
+  string operation_id = 1;
+  string contract_name = 2;
+}
+message WhatsAppHostCommandLeaseV1 {
+  repeated WhatsAppProviderCommandV1 command = 1;
+}
+message WhatsAppHostBridgeResponseV1 {
   oneof response {
-    WhatsAppAccountResponseV1 account = 1;
-    WhatsAppObservationAcceptedV1 observation_accepted = 2;
-    WhatsAppOperationAcceptedV1 accepted = 3;
-    WhatsAppHostCommandFailureRecordedV1 host_command_failure_recorded = 4;
-    WhatsAppCommandLifecycleResponseV1 command_lifecycle_updated = 5;
-    WhatsAppQueryResponseV1 query = 6;
+    WhatsAppObservationAcceptedV1 observation_accepted = 1;
+    WhatsAppHostCommandLeaseV1 command_lease = 2;
   }
 }
 
@@ -180,8 +189,6 @@ message WhatsAppProviderQueryV1 {
     DialogsQuery dialogs = 3;
     ParticipantsQuery participants = 4;
     ReplayQuery replay = 5;
-    PendingCommandsQuery pending_commands = 6;
-    ClaimPendingCommandsQuery claim_pending_commands = 7;
     EventsQuery events = 8;
     RuntimeStatusQuery runtime_status = 10;
   }
@@ -213,8 +220,6 @@ message SearchMessagesQuery { string account_id = 1; optional string provider_ch
 message DialogsQuery { string account_id = 1; uint32 limit = 2; }
 message ParticipantsQuery { string account_id = 1; string provider_chat_id = 2; uint32 limit = 3; }
 message ReplayQuery { string account_id = 1; uint64 after_sequence = 2; uint32 limit = 3; }
-message PendingCommandsQuery { string account_id = 1; uint32 limit = 2; }
-message ClaimPendingCommandsQuery { string account_id = 1; string host_claim_id = 2; uint32 lease_seconds = 3; uint32 limit = 4; }
 message EventsQuery { string account_id = 1; ProviderEventKind kind = 2; optional string provider_chat_id = 3; uint32 limit = 4; }
 
 message WhatsAppQueryResponseV1 {
@@ -223,7 +228,6 @@ message WhatsAppQueryResponseV1 {
     WhatsAppDialogList dialogs = 2;
     WhatsAppParticipantList participants = 3;
     WhatsAppRealtimeList realtime = 4;
-    WhatsAppCommandList commands = 5;
     WhatsAppProviderEventList events = 6;
     WhatsAppAccountList account = 7;
     WhatsAppRuntimeStatusV1 runtime_status = 8;
@@ -251,7 +255,6 @@ message WhatsAppMessageList { repeated WhatsAppMessage message = 1; }
 message WhatsAppDialogList { repeated WhatsAppDialog dialog = 1; }
 message WhatsAppParticipantList { repeated WhatsAppParticipant participant = 1; }
 message WhatsAppRealtimeList { repeated WhatsAppRealtimeFrame frame = 1; }
-message WhatsAppCommandList { repeated WhatsAppProviderCommandV1 command = 1; }
 message WhatsAppProviderEventList { repeated WhatsAppProviderEventV1 event = 1; }
 message WhatsAppMessage {
   string account_id = 1;
@@ -325,3 +328,26 @@ message StatusDeletedEvent { string account_id = 1; string provider_status_id = 
 message WhatsAppMedia { string account_id = 1; string provider_chat_id = 2; string provider_message_id = 3; string provider_media_id = 4; string media_kind = 5; optional string filename = 6; optional string content_type = 7; optional uint64 declared_size = 8; int64 observed_at_unix_seconds = 9; }
 message SessionStateChangedEvent { string account_id = 1; bool linked = 2; optional string secret_ref = 3; optional uint64 revision = 4; int64 observed_at_unix_seconds = 5; }
 message CommandResultObservedEvent { string account_id = 1; string operation_id = 2; optional string provider_request_id = 3; bool succeeded = 4; int64 observed_at_unix_seconds = 5; }
+
+message WhatsAppOperationStatusQueryV1 {
+  string operation_id = 1;
+}
+message WhatsAppCommandOperationStatusV1 {
+  string operation_id = 1;
+  string account_id = 2;
+  string state = 3;
+  int64 requested_at_unix_seconds = 4;
+  optional int64 completed_at_unix_seconds = 5;
+}
+message WhatsAppOperationStatusResponseV1 {
+  optional WhatsAppCommandOperationStatusV1 status = 1;
+  string contract_name = 2;
+}
+
+service WhatsAppCommandService {
+  rpc ExecuteCommand(WhatsAppProviderCommandV1) returns (WhatsAppOperationAcceptedV1);
+}
+
+service WhatsAppQueryService {
+  rpc GetOperationStatus(WhatsAppOperationStatusQueryV1) returns (WhatsAppOperationStatusResponseV1);
+}

@@ -3,13 +3,21 @@
 Статус: Принято
 Дата: 2026-07-25
 Состояние реализации: Phase gate; `whatsapp_integration_v1` не открыт.
-Первый prerequisite этого решения реализован: runtime использует один
+Первые два prerequisite этого решения реализованы. Runtime использует один
 correlation-owned `ManagedControlChannelV2`, передаёт его последовательно
 Storage/Vault и Event Hub clients, не clone-ит inherited FD и отправляет
 `ready` только после admitted bindings, owner-local persistence и Event Hub.
-Route-specific public contracts, canonical descriptor/settings/storage
-artifacts, release assembly, signed managed launch и live provider conformance
-остаются обязательными следующими slices.
+Generated `whatsapp.command.v1` и `whatsapp.query.v1` имеют разные capability,
+Connect path и response marker, а runtime принимает их только через exact
+descriptor-bound ClientRpc delivery. Accepted command сохраняет exact bytes в
+owner-local queue, конфликтующий operation ID отклоняется, terminal status
+читается через отдельный query route. Private `whatsapp.host_bridge.v1`
+использует собственные typed operation/response oneofs без provider-query
+decode probing; Tauri host проверяет exact contract name, descriptor digest и
+route binding. Umbrella `whatsapp.client` удалён из production path.
+Canonical descriptor/settings/storage artifacts, release assembly, signed
+managed launch и live provider conformance остаются обязательными следующими
+slices.
 
 Уточняет:
 
@@ -32,16 +40,13 @@ WhatsApp является отдельным integration owner, а не част
 имеет owner-local PostgreSQL command queue, Communications outbox и
 Kernel-issued Storage/Event/host-bridge configuration.
 
-Текущий contour ещё не является production admission:
-
-- inherited control FD читается несколькими независимыми V1 helpers после
-  `UnixStream::try_clone`;
-- umbrella `whatsapp.client` смешивает private host bridge и будущий public
-  provider client contract;
-- generated Protobuf не объявляет route-specific Connect services;
-- exact `ModuleDescriptorV1`, settings/storage artifact builders и отдельная
-  release assembly unit отсутствуют;
-- live host command, terminal result и provider observation flow не доказаны.
+На момент принятия contour ещё не являлся production admission: inherited
+control FD имел несколько V1 readers, umbrella `whatsapp.client` смешивал
+private host bridge и public provider client contract, generated Protobuf не
+объявлял route-specific Connect services, а exact artifacts, assembly и live
+provider evidence отсутствовали. Первые три дефекта устранены; exact
+`ModuleDescriptorV1`, settings/storage artifact builders, отдельная release
+assembly unit и live provider flow всё ещё отсутствуют.
 
 Сохранить `/api/v1/communications/*` как временный transport нельзя:
 Communications не выполняет WhatsApp provider commands и не владеет его
@@ -138,7 +143,7 @@ Public client surface разделяется по authority:
 | Capability | Generated contract | Responsibility |
 |---|---|---|
 | `whatsapp.command.v1` | `WhatsAppCommandService/ExecuteCommand` | accepted provider mutation command |
-| `whatsapp.query.v1` | `WhatsAppQueryService/ExecuteQuery` | integration-owned operational projection and terminal status |
+| `whatsapp.query.v1` | `WhatsAppQueryService/GetOperationStatus` | owner-local terminal operation status |
 
 Оба route используют exact descriptor-set digest, `major = 1` и explicit
 revision. Command grant не выдаёт query rights; query grant не разрешает

@@ -14,10 +14,17 @@ use hermes_events_jetstream::{
 };
 use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use hermes_runtime_protocol::v1::{
-    ManagedIntegrationHostBridgeConfigurationV1, ManagedRuntimeReadyRequestV1,
-    ManagedStorageRuntimeConfigurationV1,
+    ManagedIntegrationHostBridgeConfigurationV1, ManagedRuntimeClientDeliveryResponseV1,
+    ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
+    ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
+    managed_runtime_control_request_v1::Operation,
+    managed_runtime_control_response_v1::Result as ControlResult,
 };
 use hermes_runtime_protocol::validation::integration_host_bridge::validate_managed_integration_host_bridge_configuration;
+use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
+use hermes_runtime_protocol::validation::module_client::{
+    validate_module_client_request_v1, validate_module_client_response_v1,
+};
 use hermes_storage_protocol::{
     StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1, StorageBindingV1,
     StorageEffectiveBudgetsV1,
@@ -28,13 +35,16 @@ use hermes_storage_vault::{
 
 use crate::{
     WhatsAppCommandQueueError, WhatsAppRuntimeAdmission, WhatsAppRuntimeIdentity,
-    accept_host_observation, claim_provider_commands, relay_communications_outbox_once,
+    accept_host_observation, claim_provider_commands, enqueue_provider_command,
+    provider_command_status, relay_communications_outbox_once,
 };
 use hermes_whatsapp_api::{
-    WhatsAppProviderCommand,
+    WhatsAppProviderCommand, WhatsAppProviderCommandStatusV1,
     host_bridge::{WhatsAppHostBridgeEnvelopeV1, WhatsAppHostBridgeHandshakeV1},
+    provider_command_operation_id,
 };
 use hermes_whatsapp_persistence::WhatsAppDurablePersistence;
+use prost::Message;
 
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -198,6 +208,84 @@ pub async fn open_admitted_runtime(
 }
 
 impl WhatsAppAdmittedRuntime {
+    pub async fn try_handle_client_delivery(
+        &mut self,
+        requested_at_unix_seconds: i64,
+    ) -> Result<bool, WhatsAppBootstrapError> {
+        let Some((correlation_id, control_request)) = self
+            .control_channel
+            .try_receive_request()
+            .map_err(|_| WhatsAppBootstrapError::Control)?
+        else {
+            return Ok(false);
+        };
+        let request = match control_request.operation {
+            Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+                Some(request) if validate_module_client_request_v1(&request).is_ok() => request,
+                _ => {
+                    write_control_error(
+                        &mut self.control_channel,
+                        correlation_id,
+                        "managed_runtime_control_invalid_client_delivery",
+                    )?;
+                    return Ok(true);
+                }
+            },
+            _ => {
+                write_control_error(
+                    &mut self.control_channel,
+                    correlation_id,
+                    "managed_runtime_control_unexpected_request",
+                )?;
+                return Ok(true);
+            }
+        };
+        let response = match crate::client_port::handle_client_request(
+            self,
+            &request.encode_to_vec(),
+            requested_at_unix_seconds,
+        )
+        .await
+        {
+            Ok(payload) => {
+                let response = ModuleClientResponseV1::decode(payload.as_slice())
+                    .map_err(|_| WhatsAppBootstrapError::Admission)?;
+                validate_module_client_response_v1(&response)
+                    .map_err(|_| WhatsAppBootstrapError::Admission)?;
+                response
+            }
+            Err(error) => ModuleClientResponseV1 {
+                protocol_major: 1,
+                request_id: request.request_id,
+                response_payload: Vec::new(),
+                error_code: match error {
+                    crate::client_port::WhatsAppClientPortErrorV1::Protocol => "INVALID_ARGUMENT",
+                    crate::client_port::WhatsAppClientPortErrorV1::Runtime => "RUNTIME_UNAVAILABLE",
+                }
+                .to_owned(),
+            },
+        };
+        write_client_delivery_response(&mut self.control_channel, correlation_id, response)?;
+        Ok(true)
+    }
+
+    pub async fn submit_command(
+        &self,
+        command: &WhatsAppProviderCommand,
+        requested_at_unix_seconds: i64,
+    ) -> Result<String, WhatsAppCommandQueueError> {
+        let operation_id = provider_command_operation_id(command).to_owned();
+        enqueue_provider_command(&self.durable, command, requested_at_unix_seconds).await?;
+        Ok(operation_id)
+    }
+
+    pub async fn command_operation_status(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<WhatsAppProviderCommandStatusV1>, WhatsAppCommandQueueError> {
+        provider_command_status(&self.durable, operation_id).await
+    }
+
     /// Binds the exact host bridge endpoint staged by Kernel. The caller owns
     /// scheduling and shutdown; this runtime never invents a socket path or
     /// removes an existing endpoint.
@@ -220,7 +308,7 @@ impl WhatsAppAdmittedRuntime {
         let (stream, _) = listener
             .accept()
             .map_err(|_| WhatsAppBootstrapError::HostBridge)?;
-        crate::client_transport::serve_connection(stream, self, handle)
+        crate::host_bridge_transport::serve_connection(stream, self, handle)
             .map_err(|_| WhatsAppBootstrapError::HostBridge)
     }
 
@@ -237,7 +325,7 @@ impl WhatsAppAdmittedRuntime {
             Err(error) if error.kind() == ErrorKind::WouldBlock => return Ok(false),
             Err(_) => return Err(WhatsAppBootstrapError::HostBridge),
         };
-        crate::client_transport::serve_connection(stream, self, handle)
+        crate::host_bridge_transport::serve_connection(stream, self, handle)
             .map_err(|_| WhatsAppBootstrapError::HostBridge)?;
         Ok(true)
     }
@@ -293,6 +381,42 @@ impl WhatsAppAdmittedRuntime {
         )
         .await
     }
+}
+
+fn write_client_delivery_response(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+    response: ModuleClientResponseV1,
+) -> Result<(), WhatsAppBootstrapError> {
+    channel
+        .write_response(
+            correlation_id,
+            ManagedRuntimeControlResponseV1 {
+                result: Some(ControlResult::ClientDelivery(
+                    ManagedRuntimeClientDeliveryResponseV1 {
+                        response: Some(response),
+                    },
+                )),
+                error_code: String::new(),
+            },
+        )
+        .map_err(|_| WhatsAppBootstrapError::Control)
+}
+
+fn write_control_error(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+    error_code: &str,
+) -> Result<(), WhatsAppBootstrapError> {
+    channel
+        .write_response(
+            correlation_id,
+            ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: error_code.to_owned(),
+            },
+        )
+        .map_err(|_| WhatsAppBootstrapError::Control)
 }
 
 fn host_bridge_route(

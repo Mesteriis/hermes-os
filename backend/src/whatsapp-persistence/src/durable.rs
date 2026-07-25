@@ -67,6 +67,7 @@ pub enum WhatsAppDurablePersistenceError {
     Database,
     InvalidRow,
     ObservationConflict,
+    CommandConflict,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -85,11 +86,40 @@ pub enum WhatsAppProviderCommandStateV1 {
     Failed = 4,
 }
 
+impl TryFrom<i16> for WhatsAppProviderCommandStateV1 {
+    type Error = WhatsAppDurablePersistenceError;
+
+    fn try_from(value: i16) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Self::Pending),
+            2 => Ok(Self::Claimed),
+            3 => Ok(Self::Succeeded),
+            4 => Ok(Self::Failed),
+            _ => Err(WhatsAppDurablePersistenceError::InvalidRow),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WhatsAppClaimedCommandV1 {
     pub operation_id: String,
     pub account_id: String,
     pub exact_command_bytes: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WhatsAppProviderCommandEnqueueV1 {
+    Inserted,
+    Existing,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WhatsAppProviderCommandStatusV1 {
+    pub operation_id: String,
+    pub account_id: String,
+    pub state: WhatsAppProviderCommandStateV1,
+    pub requested_at_unix_seconds: i64,
+    pub completed_at_unix_seconds: Option<i64>,
 }
 
 impl WhatsAppDurablePersistence {
@@ -157,7 +187,7 @@ impl WhatsAppDurablePersistence {
         account_id: &str,
         exact_command_bytes: &[u8],
         requested_at_unix_seconds: i64,
-    ) -> Result<bool, WhatsAppDurablePersistenceError> {
+    ) -> Result<WhatsAppProviderCommandEnqueueV1, WhatsAppDurablePersistenceError> {
         if operation_id.trim().is_empty()
             || account_id.trim().is_empty()
             || exact_command_bytes.is_empty()
@@ -166,7 +196,7 @@ impl WhatsAppDurablePersistence {
         {
             return Err(WhatsAppDurablePersistenceError::InvalidRow);
         }
-        sqlx::query("INSERT INTO whatsapp_provider_commands (operation_id, account_id, exact_command_bytes, state, requested_at_unix_seconds) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (operation_id) DO NOTHING")
+        let inserted = sqlx::query("INSERT INTO whatsapp_provider_commands (operation_id, account_id, exact_command_bytes, state, requested_at_unix_seconds) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (operation_id) DO NOTHING")
             .bind(operation_id)
             .bind(account_id)
             .bind(exact_command_bytes)
@@ -174,8 +204,65 @@ impl WhatsAppDurablePersistence {
             .bind(requested_at_unix_seconds)
             .execute(&self.pool)
             .await
-            .map(|result| result.rows_affected() == 1)
-            .map_err(|_| WhatsAppDurablePersistenceError::Database)
+            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
+        if inserted.rows_affected() == 1 {
+            return Ok(WhatsAppProviderCommandEnqueueV1::Inserted);
+        }
+        let existing = sqlx::query(
+            "SELECT account_id, exact_command_bytes FROM whatsapp_provider_commands WHERE operation_id = $1",
+        )
+        .bind(operation_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| WhatsAppDurablePersistenceError::Database)?
+        .ok_or(WhatsAppDurablePersistenceError::CommandConflict)?;
+        let existing_account_id: String = existing
+            .try_get("account_id")
+            .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
+        let existing_bytes: Vec<u8> = existing
+            .try_get("exact_command_bytes")
+            .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
+        if existing_account_id != account_id || existing_bytes != exact_command_bytes {
+            return Err(WhatsAppDurablePersistenceError::CommandConflict);
+        }
+        Ok(WhatsAppProviderCommandEnqueueV1::Existing)
+    }
+
+    pub async fn provider_command_status(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<WhatsAppProviderCommandStatusV1>, WhatsAppDurablePersistenceError> {
+        if operation_id.trim().is_empty() {
+            return Err(WhatsAppDurablePersistenceError::InvalidRow);
+        }
+        let row = sqlx::query(
+            "SELECT operation_id, account_id, state, requested_at_unix_seconds, completed_at_unix_seconds FROM whatsapp_provider_commands WHERE operation_id = $1",
+        )
+        .bind(operation_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
+        row.map(|row| {
+            Ok(WhatsAppProviderCommandStatusV1 {
+                operation_id: row
+                    .try_get("operation_id")
+                    .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?,
+                account_id: row
+                    .try_get("account_id")
+                    .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?,
+                state: WhatsAppProviderCommandStateV1::try_from(
+                    row.try_get::<i16, _>("state")
+                        .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?,
+                )?,
+                requested_at_unix_seconds: row
+                    .try_get("requested_at_unix_seconds")
+                    .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?,
+                completed_at_unix_seconds: row
+                    .try_get("completed_at_unix_seconds")
+                    .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?,
+            })
+        })
+        .transpose()
     }
 
     pub async fn claim_provider_commands(

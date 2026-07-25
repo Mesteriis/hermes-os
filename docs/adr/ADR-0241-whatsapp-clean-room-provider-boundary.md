@@ -28,14 +28,19 @@ are not promoted directly to durable business entities.
 ## Implementation state
 
 The versioned API and host bridge contracts, metadata-only core policy,
-owner-local durable observation/outbox persistence, typed client port and
-managed identity/storage bootstrap now exist. ADR-0276 also replaces cloned V1
+owner-local durable observation/outbox persistence and managed
+identity/storage bootstrap now exist. ADR-0276 replaces cloned V1
 inherited-control readers with one correlation-owned
-`ManagedControlChannelV2`; this prerequisite does not open the production
-phase gate. Provider projections beyond the metadata-only evidence boundary,
-route-specific public contracts, Kernel launch wiring, command execution and
-live WebView execution remain open migration work. No database URL environment
-variable or provider secret handoff is admitted.
+`ManagedControlChannelV2` and separates the private
+`whatsapp.host_bridge.v1` operation/response oneofs from the public
+`whatsapp.command.v1` and `whatsapp.query.v1` generated contracts. The Tauri
+host and runtime bind the private route to the same exact descriptor digest;
+accepted commands and their owner-local terminal status no longer pass through
+an umbrella `whatsapp.client` DTO. These prerequisites do not open the
+production phase gate. Canonical descriptor/settings/storage artifacts,
+release assembly, signed Kernel launch wiring, live provider command execution
+and live WebView evidence remain open migration work. No database URL
+environment variable or provider secret handoff is admitted.
 
 The backend API/core/persistence/runtime packages remain an independent
 WhatsApp integration build unit. "Host-owned" applies only to browser/WebView

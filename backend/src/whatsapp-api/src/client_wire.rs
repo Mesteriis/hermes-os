@@ -5,10 +5,12 @@ use prost::Message;
 use crate::{
     WhatsAppAccount, WhatsAppAccountState, WhatsAppConversationCommandKind, WhatsAppDialog,
     WhatsAppMedia, WhatsAppMessage, WhatsAppParticipant, WhatsAppProviderCommand,
-    WhatsAppProviderEvent, WhatsAppProviderEventKind, WhatsAppProviderQuery,
-    WhatsAppProviderQueryResponse, WhatsAppProviderShape, WhatsAppRealtimeFrame,
-    WhatsAppRuntimeKind, WhatsAppRuntimeState, WhatsAppRuntimeStatus,
+    WhatsAppProviderCommandStateV1, WhatsAppProviderCommandStatusV1, WhatsAppProviderEvent,
+    WhatsAppProviderEventKind, WhatsAppProviderQuery, WhatsAppProviderQueryResponse,
+    WhatsAppProviderShape, WhatsAppRealtimeFrame, WhatsAppRuntimeKind, WhatsAppRuntimeState,
+    WhatsAppRuntimeStatus,
     capabilities::{WhatsAppActionClass, WhatsAppCapability, WhatsAppCapabilityState},
+    client_contract::WhatsAppClientContractV1,
     wire::{self, whats_app_provider_command_v1::Command, whats_app_provider_query_v1::Query},
 };
 
@@ -126,6 +128,83 @@ pub fn decode_command(bytes: &[u8]) -> Result<WhatsAppProviderCommand, ClientWir
     }
 }
 
+pub fn encode_command_accepted(operation_id: &str) -> Vec<u8> {
+    wire::WhatsAppOperationAcceptedV1 {
+        operation_id: operation_id.to_owned(),
+        contract_name: WhatsAppClientContractV1::Command.contract_name().to_owned(),
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_command_accepted(bytes: &[u8]) -> Result<String, ClientWireError> {
+    let response = wire::WhatsAppOperationAcceptedV1::decode(bytes)
+        .map_err(|_| ClientWireError::InvalidPayload)?;
+    (response.contract_name == WhatsAppClientContractV1::Command.contract_name()
+        && !response.operation_id.trim().is_empty())
+    .then_some(response.operation_id)
+    .ok_or(ClientWireError::InvalidPayload)
+}
+
+pub fn encode_operation_status_query(operation_id: &str) -> Vec<u8> {
+    wire::WhatsAppOperationStatusQueryV1 {
+        operation_id: operation_id.to_owned(),
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_operation_status_query(bytes: &[u8]) -> Result<String, ClientWireError> {
+    let query = wire::WhatsAppOperationStatusQueryV1::decode(bytes)
+        .map_err(|_| ClientWireError::InvalidPayload)?;
+    (!query.operation_id.trim().is_empty())
+        .then_some(query.operation_id)
+        .ok_or(ClientWireError::InvalidPayload)
+}
+
+pub fn encode_operation_status_response(
+    status: Option<&WhatsAppProviderCommandStatusV1>,
+) -> Vec<u8> {
+    wire::WhatsAppOperationStatusResponseV1 {
+        status: status.map(|value| wire::WhatsAppCommandOperationStatusV1 {
+            operation_id: value.operation_id.clone(),
+            account_id: value.account_id.clone(),
+            state: value.state.as_str().to_owned(),
+            requested_at_unix_seconds: value.requested_at_unix_seconds,
+            completed_at_unix_seconds: value.completed_at_unix_seconds,
+        }),
+        contract_name: WhatsAppClientContractV1::Query.contract_name().to_owned(),
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_operation_status_response(
+    bytes: &[u8],
+) -> Result<Option<WhatsAppProviderCommandStatusV1>, ClientWireError> {
+    let response = wire::WhatsAppOperationStatusResponseV1::decode(bytes)
+        .map_err(|_| ClientWireError::InvalidPayload)?;
+    if response.contract_name != WhatsAppClientContractV1::Query.contract_name() {
+        return Err(ClientWireError::InvalidPayload);
+    }
+    response
+        .status
+        .map(|status| {
+            if status.operation_id.trim().is_empty()
+                || status.account_id.trim().is_empty()
+                || status.requested_at_unix_seconds <= 0
+            {
+                return Err(ClientWireError::InvalidPayload);
+            }
+            Ok(WhatsAppProviderCommandStatusV1 {
+                operation_id: status.operation_id,
+                account_id: status.account_id,
+                state: WhatsAppProviderCommandStateV1::from_name(&status.state)
+                    .ok_or(ClientWireError::InvalidPayload)?,
+                requested_at_unix_seconds: status.requested_at_unix_seconds,
+                completed_at_unix_seconds: status.completed_at_unix_seconds,
+            })
+        })
+        .transpose()
+}
+
 pub fn encode_query(query: &WhatsAppProviderQuery) -> Vec<u8> {
     query_message(query).encode_to_vec()
 }
@@ -163,16 +242,6 @@ pub fn decode_query(bytes: &[u8]) -> Result<WhatsAppProviderQuery, ClientWireErr
         Query::Replay(value) => Ok(WhatsAppProviderQuery::Replay {
             account_id: value.account_id,
             after_sequence: value.after_sequence,
-            limit: value.limit,
-        }),
-        Query::PendingCommands(value) => Ok(WhatsAppProviderQuery::PendingCommands {
-            account_id: value.account_id,
-            limit: value.limit,
-        }),
-        Query::ClaimPendingCommands(value) => Ok(WhatsAppProviderQuery::ClaimPendingCommands {
-            account_id: value.account_id,
-            host_claim_id: value.host_claim_id,
-            lease_seconds: value.lease_seconds,
             limit: value.limit,
         }),
         Query::Events(value) => Ok(WhatsAppProviderQuery::Events {
@@ -213,11 +282,6 @@ pub fn encode_query_response(response: &WhatsAppProviderQueryResponse) -> Option
         WhatsAppProviderQueryResponse::Realtime(values) => {
             Response::Realtime(wire::WhatsAppRealtimeList {
                 frame: values.iter().map(realtime_to_wire).collect(),
-            })
-        }
-        WhatsAppProviderQueryResponse::Commands(values) => {
-            Response::Commands(wire::WhatsAppCommandList {
-                command: values.iter().map(command_message).collect(),
             })
         }
         WhatsAppProviderQueryResponse::Events(values) => {
@@ -407,13 +471,6 @@ pub fn decode_query_response(
                 .frame
                 .into_iter()
                 .map(parse_realtime)
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
-        Response::Commands(value) => Ok(WhatsAppProviderQueryResponse::Commands(
-            value
-                .command
-                .into_iter()
-                .map(|value| decode_command(&value.encode_to_vec()))
                 .collect::<Result<Vec<_>, _>>()?,
         )),
         Response::Events(value) => Ok(WhatsAppProviderQueryResponse::Events(
@@ -871,7 +928,9 @@ fn parse_realtime(
     })
 }
 
-fn command_message(command: &WhatsAppProviderCommand) -> wire::WhatsAppProviderCommandV1 {
+pub(crate) fn command_message(
+    command: &WhatsAppProviderCommand,
+) -> wire::WhatsAppProviderCommandV1 {
     use wire::whats_app_provider_command_v1::Command;
     let command = match command {
         WhatsAppProviderCommand::SendText {
@@ -1144,12 +1203,6 @@ fn query_message(query: &WhatsAppProviderQuery) -> wire::WhatsAppProviderQueryV1
             after_sequence: *after_sequence,
             limit: *limit,
         }),
-        WhatsAppProviderQuery::PendingCommands { account_id, limit } => {
-            Query::PendingCommands(wire::PendingCommandsQuery {
-                account_id: account_id.clone(),
-                limit: *limit,
-            })
-        }
         WhatsAppProviderQuery::Events {
             account_id,
             kind,
@@ -1159,17 +1212,6 @@ fn query_message(query: &WhatsAppProviderQuery) -> wire::WhatsAppProviderQueryV1
             account_id: account_id.clone(),
             kind: event_kind_to_wire(*kind),
             provider_chat_id: provider_chat_id.clone(),
-            limit: *limit,
-        }),
-        WhatsAppProviderQuery::ClaimPendingCommands {
-            account_id,
-            host_claim_id,
-            lease_seconds,
-            limit,
-        } => Query::ClaimPendingCommands(wire::ClaimPendingCommandsQuery {
-            account_id: account_id.clone(),
-            host_claim_id: host_claim_id.clone(),
-            lease_seconds: *lease_seconds,
             limit: *limit,
         }),
     };

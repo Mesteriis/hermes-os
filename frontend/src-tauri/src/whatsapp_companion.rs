@@ -5,22 +5,31 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::os::unix::{fs::{MetadataExt, PermissionsExt}, net::UnixStream};
+use std::os::unix::{
+    fs::{MetadataExt, PermissionsExt},
+    net::UnixStream,
+};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_runtime_protocol::{
-    v1::{ContractReferenceV1, ManagedIntegrationHostBridgeConfigurationV1, ModuleClientRequestV1, ModuleClientResponseV1},
+    v1::{
+        ContractReferenceV1, ManagedIntegrationHostBridgeConfigurationV1, ModuleClientRequestV1,
+        ModuleClientResponseV1,
+    },
     validation::integration_host_bridge::validate_managed_integration_host_bridge_configuration,
 };
-use hermes_whatsapp_api::host_bridge::{
-    HOST_BRIDGE_PROTOCOL_MAJOR, HOST_BRIDGE_PROTOCOL_REVISION,
-    WhatsAppHostBridgeHandshakeV1, decode_host_bridge_handshake_accepted,
-    WhatsAppHostBridgeEnvelopeV1, WhatsAppHostObservationV1, encode_host_bridge_handshake,
-    encode_host_bridge_payload,
+use hermes_whatsapp_api::client_contract::{
+    WHATSAPP_DESCRIPTOR_SET_V1, WHATSAPP_MODULE_ID, WHATSAPP_OWNER_ID,
 };
-use hermes_whatsapp_api::wire::{WhatsAppClientResponseV1, whats_app_client_response_v1::Response};
+use hermes_whatsapp_api::host_bridge::{
+    HOST_BRIDGE_CONTRACT_MAJOR, HOST_BRIDGE_CONTRACT_NAME, HOST_BRIDGE_CONTRACT_REVISION,
+    HOST_BRIDGE_PROTOCOL_MAJOR, HOST_BRIDGE_PROTOCOL_REVISION, WhatsAppHostBridgeEnvelopeV1,
+    WhatsAppHostBridgeHandshakeV1, WhatsAppHostObservationV1,
+    decode_host_bridge_handshake_accepted, decode_host_bridge_observation_accepted,
+    encode_host_bridge_handshake, encode_host_bridge_payload,
+};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -34,9 +43,6 @@ const MAX_HOST_DESCRIPTOR_BYTES: u64 = 8 * 1024;
 const MAX_HOST_FRAME_BYTES: usize = 512 * 1024;
 const HOST_BRIDGE_TIMEOUT: Duration = Duration::from_secs(5);
 const WHATSAPP_MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
-const WHATSAPP_MODULE_ID: &str = "hermes-whatsapp-runtime";
-const WHATSAPP_OWNER_ID: &str = "whatsapp";
-const WHATSAPP_CLIENT_CONTRACT_NAME: &str = "whatsapp.client";
 const HOST_ROUTE_ATTACHED_STATE: &str = "host_route_attached";
 const WEBVIEW_LOADED_STATE: &str = "webview_loaded";
 
@@ -299,10 +305,7 @@ fn manifest_for_account(
             navigation_guard: "https://web.whatsapp.com_only",
             relay_channel: "whatsapp_web_companion_relay_runtime_state_without_payload",
             runtime_bridge_dispatch: "exact_active_route_native_typed_client_request",
-            allowed_observations: vec![
-                "host_route_attached",
-                "webview_loaded",
-            ],
+            allowed_observations: vec!["host_route_attached", "webview_loaded"],
             forbidden_reads: vec![
                 "cookies",
                 "web_storage",
@@ -390,11 +393,11 @@ fn required_registration_id(registration_id: &str) -> Result<&str, String> {
     let registration_id = registration_id.trim();
     (!registration_id.is_empty()
         && registration_id.len() <= 128
-        && registration_id.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
-        }))
-        .then_some(registration_id)
-        .ok_or_else(|| "registration_id is invalid for WhatsApp companion runtime".to_owned())
+        && registration_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')))
+    .then_some(registration_id)
+    .ok_or_else(|| "registration_id is invalid for WhatsApp companion runtime".to_owned())
 }
 
 fn load_active_host_route(
@@ -489,10 +492,10 @@ fn relay_runtime_state(route: &ActiveWhatsAppHostRoute, state: &'static str) -> 
         owner_id: WHATSAPP_OWNER_ID.to_owned(),
         contract: Some(ContractReferenceV1 {
             owner: WHATSAPP_OWNER_ID.to_owned(),
-            name: WHATSAPP_CLIENT_CONTRACT_NAME.to_owned(),
-            major: 1,
-            revision: 1,
-            schema_sha256: Vec::new(),
+            name: HOST_BRIDGE_CONTRACT_NAME.to_owned(),
+            major: HOST_BRIDGE_CONTRACT_MAJOR,
+            revision: HOST_BRIDGE_CONTRACT_REVISION,
+            schema_sha256: Sha256::digest(WHATSAPP_DESCRIPTOR_SET_V1).to_vec(),
         }),
         request_id: 1,
         request_payload: payload,
@@ -507,9 +510,10 @@ fn relay_runtime_state(route: &ActiveWhatsAppHostRoute, state: &'static str) -> 
     {
         return Err("WhatsApp host runtime rejected its observation".to_owned());
     }
-    let response = WhatsAppClientResponseV1::decode(response.response_payload.as_slice())
-        .map_err(|_| "WhatsApp host runtime rejected its observation".to_owned())?;
-    matches!(response.response, Some(Response::ObservationAccepted(value)) if value.provider_event_id == provider_event_id)
+    let accepted_provider_event_id =
+        decode_host_bridge_observation_accepted(response.response_payload.as_slice())
+            .map_err(|_| "WhatsApp host runtime rejected its observation".to_owned())?;
+    (accepted_provider_event_id == provider_event_id)
         .then_some(())
         .ok_or_else(|| "WhatsApp host runtime rejected its observation".to_owned())
 }

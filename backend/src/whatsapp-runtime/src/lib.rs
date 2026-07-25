@@ -5,8 +5,9 @@
 //! observation into an exact provider-neutral Communications outbox record.
 
 pub mod client_port;
-pub mod client_transport;
 mod communications_outbox;
+pub mod host_bridge_port;
+pub mod host_bridge_transport;
 pub mod managed;
 
 use hermes_communications_ingress::{
@@ -15,15 +16,16 @@ use hermes_communications_ingress::{
 };
 use hermes_whatsapp_api::host_bridge::WhatsAppHostBridgeEnvelopeV1;
 use hermes_whatsapp_api::{
-    WhatsAppProviderCommand, client_wire, provider_command_account_id,
-    provider_command_operation_id, validate_provider_command,
+    WhatsAppProviderCommand, WhatsAppProviderCommandStateV1, WhatsAppProviderCommandStatusV1,
+    client_wire, provider_command_account_id, provider_command_operation_id,
+    validate_provider_command,
 };
 use hermes_whatsapp_core::{
     WhatsAppCoreError, communication_observation_draft, project_host_observation,
 };
 use hermes_whatsapp_persistence::{
     WhatsAppClaimedCommandV1, WhatsAppDurablePersistence, WhatsAppDurablePersistenceError,
-    WhatsAppHostObservationRecordV1,
+    WhatsAppHostObservationRecordV1, WhatsAppProviderCommandStateV1 as PersistedCommandStateV1,
 };
 
 pub use communications_outbox::{
@@ -70,7 +72,7 @@ impl WhatsAppRuntimeIdentity {
         ObservationEnvelopeContextV1 {
             runtime_instance_id: self.runtime_instance_id.clone(),
             runtime_generation: self.runtime_generation,
-            module_id: "whatsapp-runtime".to_owned(),
+            module_id: "hermes-whatsapp-runtime".to_owned(),
             recorded_at_unix_seconds,
             recorded_at_nanos,
         }
@@ -146,7 +148,7 @@ pub async fn enqueue_provider_command(
     durable: &WhatsAppDurablePersistence,
     command: &WhatsAppProviderCommand,
     requested_at_unix_seconds: i64,
-) -> Result<bool, WhatsAppCommandQueueError> {
+) -> Result<(), WhatsAppCommandQueueError> {
     validate_provider_command(command).map_err(|_| WhatsAppCommandQueueError::InvalidCommand)?;
     durable
         .enqueue_provider_command(
@@ -156,6 +158,31 @@ pub async fn enqueue_provider_command(
             requested_at_unix_seconds,
         )
         .await
+        .map(|_| ())
+        .map_err(WhatsAppCommandQueueError::Persistence)
+}
+
+pub async fn provider_command_status(
+    durable: &WhatsAppDurablePersistence,
+    operation_id: &str,
+) -> Result<Option<WhatsAppProviderCommandStatusV1>, WhatsAppCommandQueueError> {
+    durable
+        .provider_command_status(operation_id)
+        .await
+        .map(|status| {
+            status.map(|value| WhatsAppProviderCommandStatusV1 {
+                operation_id: value.operation_id,
+                account_id: value.account_id,
+                state: match value.state {
+                    PersistedCommandStateV1::Pending => WhatsAppProviderCommandStateV1::Pending,
+                    PersistedCommandStateV1::Claimed => WhatsAppProviderCommandStateV1::Claimed,
+                    PersistedCommandStateV1::Succeeded => WhatsAppProviderCommandStateV1::Succeeded,
+                    PersistedCommandStateV1::Failed => WhatsAppProviderCommandStateV1::Failed,
+                },
+                requested_at_unix_seconds: value.requested_at_unix_seconds,
+                completed_at_unix_seconds: value.completed_at_unix_seconds,
+            })
+        })
         .map_err(WhatsAppCommandQueueError::Persistence)
 }
 

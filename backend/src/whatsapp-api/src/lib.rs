@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod capabilities;
+pub mod client_contract;
 pub mod client_wire;
 pub mod host_bridge;
 
@@ -586,20 +587,10 @@ pub enum WhatsAppProviderQuery {
         after_sequence: u64,
         limit: u32,
     },
-    PendingCommands {
-        account_id: WhatsAppAccountId,
-        limit: u32,
-    },
     Events {
         account_id: WhatsAppAccountId,
         kind: WhatsAppProviderEventKind,
         provider_chat_id: Option<String>,
-        limit: u32,
-    },
-    ClaimPendingCommands {
-        account_id: WhatsAppAccountId,
-        host_claim_id: String,
-        lease_seconds: u32,
         limit: u32,
     },
 }
@@ -612,47 +603,59 @@ pub enum WhatsAppProviderQueryResponse {
     Dialogs(Vec<WhatsAppDialog>),
     Participants(Vec<WhatsAppParticipant>),
     Realtime(Vec<WhatsAppRealtimeFrame>),
-    Commands(Vec<WhatsAppProviderCommand>),
     Events(Vec<WhatsAppProviderEvent>),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum WhatsAppClientRequest {
-    Lifecycle(WhatsAppLifecycleRequest),
-    HostObservation(host_bridge::WhatsAppHostBridgeEnvelopeV1),
-    HostCommandFailed {
-        operation_id: WhatsAppOperationId,
-        host_claim_id: String,
-        reason: String,
-    },
-    RetryCommand {
-        operation_id: WhatsAppOperationId,
-    },
-    DeadLetterCommand {
-        operation_id: WhatsAppOperationId,
-        reason: String,
-    },
-    Command(WhatsAppProviderCommand),
-    Query(WhatsAppProviderQuery),
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum WhatsAppProviderCommandStateV1 {
+    Pending,
+    Claimed,
+    Succeeded,
+    Failed,
+}
+
+impl WhatsAppProviderCommandStateV1 {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Claimed => "claimed",
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+        }
+    }
+
+    #[must_use]
+    pub fn from_name(value: &str) -> Option<Self> {
+        match value {
+            "pending" => Some(Self::Pending),
+            "claimed" => Some(Self::Claimed),
+            "succeeded" => Some(Self::Succeeded),
+            "failed" => Some(Self::Failed),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum WhatsAppClientResponse {
-    Account(WhatsAppAccount),
-    Accepted {
-        operation_id: WhatsAppOperationId,
-    },
-    ObservationAccepted {
-        provider_event_id: String,
-    },
-    HostCommandFailureRecorded {
-        operation_id: WhatsAppOperationId,
-    },
-    CommandLifecycleUpdated {
-        operation_id: WhatsAppOperationId,
-        state: String,
-    },
-    Query(WhatsAppProviderQueryResponse),
+pub struct WhatsAppProviderCommandStatusV1 {
+    pub operation_id: WhatsAppOperationId,
+    pub account_id: WhatsAppAccountId,
+    pub state: WhatsAppProviderCommandStateV1,
+    pub requested_at_unix_seconds: i64,
+    pub completed_at_unix_seconds: Option<i64>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WhatsAppPublicClientRequestV1 {
+    Command(WhatsAppProviderCommand),
+    OperationStatus { operation_id: WhatsAppOperationId },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WhatsAppPublicClientResponseV1 {
+    Accepted { operation_id: WhatsAppOperationId },
+    OperationStatus(Option<WhatsAppProviderCommandStatusV1>),
 }
 
 pub fn validate_provider_query(query: &WhatsAppProviderQuery) -> Result<(), WhatsAppContractError> {
@@ -672,11 +675,7 @@ pub fn validate_provider_query(query: &WhatsAppProviderQuery) -> Result<(), What
         | WhatsAppProviderQuery::Replay {
             account_id, limit, ..
         }
-        | WhatsAppProviderQuery::PendingCommands { account_id, limit }
         | WhatsAppProviderQuery::Events {
-            account_id, limit, ..
-        }
-        | WhatsAppProviderQuery::ClaimPendingCommands {
             account_id, limit, ..
         } => (account_id, *limit),
     };
@@ -713,19 +712,7 @@ pub fn validate_provider_query(query: &WhatsAppProviderQuery) -> Result<(), What
                 validate_id(chat_id)?;
             }
         }
-        WhatsAppProviderQuery::Dialogs { .. }
-        | WhatsAppProviderQuery::Replay { .. }
-        | WhatsAppProviderQuery::PendingCommands { .. } => {}
-        WhatsAppProviderQuery::ClaimPendingCommands {
-            host_claim_id,
-            lease_seconds,
-            ..
-        } => {
-            validate_id(host_claim_id)?;
-            if *lease_seconds == 0 || *lease_seconds > 3600 {
-                return Err(WhatsAppContractError::FieldTooLong);
-            }
-        }
+        WhatsAppProviderQuery::Dialogs { .. } | WhatsAppProviderQuery::Replay { .. } => {}
     }
     Ok(())
 }
@@ -739,9 +726,7 @@ pub fn provider_query_account_id(query: &WhatsAppProviderQuery) -> &str {
         | WhatsAppProviderQuery::Dialogs { account_id, .. }
         | WhatsAppProviderQuery::Participants { account_id, .. }
         | WhatsAppProviderQuery::Replay { account_id, .. }
-        | WhatsAppProviderQuery::PendingCommands { account_id, .. }
-        | WhatsAppProviderQuery::Events { account_id, .. }
-        | WhatsAppProviderQuery::ClaimPendingCommands { account_id, .. } => account_id,
+        | WhatsAppProviderQuery::Events { account_id, .. } => account_id,
     }
 }
 
