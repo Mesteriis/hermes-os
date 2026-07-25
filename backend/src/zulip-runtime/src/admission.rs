@@ -13,8 +13,9 @@ use hermes_runtime_protocol::v1::{
 };
 use hermes_zulip_api::client_contract::{
     ZULIP_CLIENT_CONTRACT_MAJOR, ZULIP_CLIENT_CONTRACT_REVISION, ZULIP_CLIENT_DESCRIPTOR_SET_V1,
-    ZULIP_MODULE_ID, ZULIP_OWNER_ID, ZulipClientContractV1,
+    ZulipClientContractV1,
 };
+pub use hermes_zulip_api::client_contract::{ZULIP_MODULE_ID, ZULIP_OWNER_ID};
 use hermes_zulip_core::ZULIP_API_KEY_PURPOSE_ID;
 use sha2::{Digest, Sha256};
 

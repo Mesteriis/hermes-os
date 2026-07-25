@@ -1,9 +1,13 @@
 //! Owner-local Zulip cursor and exact-byte observation outbox persistence.
 
+mod schema;
+
 use hermes_events_protocol::delivery::OutboxRecordV1;
 use hermes_storage_protocol::StorageBindingV1;
 use hermes_zulip_api::{ZulipCommandOperationOutcomeV1, ZulipCommandOperationStatusV1};
 use sqlx::{PgPool, Row, postgres::PgConnectOptions};
+
+pub use schema::{ZULIP_STORAGE_BUNDLE_REVISION_V1, zulip_storage_bundle_v1};
 
 pub const PACKAGE: &str = "hermes-zulip-persistence";
 pub const ZULIP_SCHEMA_V1: &str = r#"

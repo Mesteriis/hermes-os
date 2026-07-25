@@ -69,6 +69,7 @@ members = [
   "src/zulip-http",
   "src/zulip-persistence",
   "src/zulip-runtime",
+  "src/zulip-assembly",
   "development/runtime",
   "tests/support/kernel-recovery",
   "tests/support/vault",

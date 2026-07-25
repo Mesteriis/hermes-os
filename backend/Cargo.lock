@@ -2553,6 +2553,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-zulip-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-zulip-persistence",
+ "hermes-zulip-runtime",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-zulip-core"
 version = "0.1.0"
 dependencies = [
@@ -2579,6 +2592,7 @@ dependencies = [
  "hermes-events-protocol",
  "hermes-storage-protocol",
  "hermes-zulip-api",
+ "sha2 0.11.0",
  "sqlx",
 ]
 
