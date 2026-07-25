@@ -6,10 +6,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use hermes_attachment_security_contract::{
     AttachmentSecurityObservationContextV1, AttachmentSecurityScanCandidateFactV1,
+    admission::{
+        ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
+        ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID,
+        ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_OWNER_ID,
+    },
     build_attachment_security_scan_candidate_outbox_record_v1,
 };
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
+    BlobDataClient, ManagedBlobCustodyTargetV1, ManagedBlobSessionRequestV1,
+    request_managed_blob_session_v2,
 };
 use hermes_communications_attachment_contract::{
     AttachmentBlobAdmissionFactV1, AttachmentBlobAdmissionTransitionV1,
@@ -17,7 +23,9 @@ use hermes_communications_attachment_contract::{
     build_attachment_blob_admission_outbox_record_v1,
 };
 use hermes_communications_ingress::{
-    ObservationEnvelopeContextV1, build_observation_outbox_record_v1,
+    COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID, COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID,
+    COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID, ObservationEnvelopeContextV1,
+    build_observation_outbox_record_v1,
 };
 use hermes_events_jetstream::{
     DurableSubjectV1, JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity,
@@ -113,6 +121,7 @@ pub struct MailAdmittedRuntime {
 struct MailAttachmentBlobWriteV1 {
     reference_id: [u8; 16],
     receipt_sha256: [u8; 32],
+    custody_transfer_source_proof: Vec<u8>,
     reference_binding_sha256: [u8; 32],
     declared_size: u64,
 }
@@ -1143,6 +1152,11 @@ impl MailAdmittedRuntime {
                     .map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
                 backup_class: 1,
                 receipt_sha256: Some(&sha256),
+                custody_target: Some(ManagedBlobCustodyTargetV1 {
+                    owner_id: COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID,
+                    module_id: COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID,
+                    capability_id: COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
+                }),
             },
         );
         let restored = self.control_channel.inner_mut().set_nonblocking(true);
@@ -1251,6 +1265,7 @@ impl MailAdmittedRuntime {
                         blob_reference_id: write.reference_id,
                         declared_size: write.declared_size,
                         blob_receipt_sha256: write.receipt_sha256,
+                        custody_transfer_source_proof: write.custody_transfer_source_proof.clone(),
                         source_observation_id,
                         correlation_id: mapping.correlation_id,
                         observed_at_unix_seconds,
@@ -1310,6 +1325,11 @@ impl MailAdmittedRuntime {
                 declared_size,
                 backup_class: 1,
                 receipt_sha256: Some(&receipt_sha256),
+                custody_target: Some(ManagedBlobCustodyTargetV1 {
+                    owner_id: ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_OWNER_ID,
+                    module_id: ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID,
+                    capability_id: ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
+                }),
             },
         );
         let restored = self.control_channel.inner_mut().set_nonblocking(true);
@@ -1318,13 +1338,15 @@ impl MailAdmittedRuntime {
         if session.custody_transfer_source_proof.is_empty() {
             return Err(MailBootstrapError::Control);
         }
+        let custody_transfer_source_proof = session.custody_transfer_source_proof;
         BlobDataClient::new(session.data_socket_path)
             .and_then(|client| client.write(session.grant, session.channel_binding, bytes.to_vec()))
             .map_err(|_| MailBootstrapError::Control)?;
         Ok(MailAttachmentBlobWriteV1 {
             reference_id,
             receipt_sha256,
-            reference_binding_sha256: Sha256::digest(session.custody_transfer_source_proof).into(),
+            reference_binding_sha256: Sha256::digest(&custody_transfer_source_proof).into(),
+            custody_transfer_source_proof,
             declared_size,
         })
     }

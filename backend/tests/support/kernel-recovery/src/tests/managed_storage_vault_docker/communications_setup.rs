@@ -370,6 +370,9 @@ pub(super) fn assert_fenced_communications_target_cannot_issue_blob_custody_gran
         custody_source_proof: vec![11],
         evidence_id: vec![12; 16],
         evidence_envelope_sha256: vec![13; 32],
+        custody_target_owner_id: String::new(),
+        custody_target_module_id: String::new(),
+        custody_target_capability_id: String::new(),
     };
     let handler = BlobSessionHandlerV1::new(
         Arc::clone(store),
@@ -630,6 +633,9 @@ pub(super) fn assert_communications_transferred_body_projection(
             custody_source_proof: Vec::new(),
             evidence_id: Vec::new(),
             evidence_envelope_sha256: Vec::new(),
+            custody_target_owner_id: String::new(),
+            custody_target_module_id: String::new(),
+            custody_target_capability_id: String::new(),
         },
     )
     .expect("issue source integration Blob write session");
@@ -1016,6 +1022,9 @@ pub(super) fn assert_communications_transferred_body_projection(
                     custody_source_proof: Vec::new(),
                     evidence_id: Vec::new(),
                     evidence_envelope_sha256: Vec::new(),
+                    custody_target_owner_id: String::new(),
+                    custody_target_module_id: String::new(),
+                    custody_target_capability_id: String::new(),
                 },
             )
             .expect("issue successor source integration Blob write session");

@@ -6,8 +6,17 @@
 conformance. Он доказал, что существующий proof правильно разрешает transfer
 только между registrations одного module owner и поэтому не поддерживает
 реальные `mail -> communications` и `mail -> attachment_security` handoff.
-Additive protocol fields, public custody audiences и cross-owner conformance
-ещё не реализованы.
+Первоначальный вариант target binding по `registration_id` был отклонён
+последующим live evidence: Kernel назначает новый opaque registration ID при
+каждой регистрации, поэтому source integration не может знать его без hidden
+synchronous dependency. Реализация stable `owner_id + module_id +
+capability_id` binding завершена в runtime protocol, public owner contracts,
+Kernel proof issuance/verification и Blob data plane. Unit tests доказывают
+same-owner fallback, exact/wrong target и distinct source/target fences. Live
+disposable Attachment Security contour доказывает настоящий
+`mail -> attachment_security` transfer через динамический target registration,
+replay и прямой source-read denial. Полная stale/revoke/outage matrix ещё не
+закрыта.
 
 Зависит от:
 
@@ -35,7 +44,9 @@ source proof в bearer authority: любой runtime с Blob quota и украд
 
 Kernel не должен определять business recipient по provider, event subject или
 payload. Integration также не должна импортировать target runtime
-implementation для получения registration/capability identity.
+implementation для получения module/capability identity. Kernel
+`registration_id` является динамической identity конкретного admission record,
+а не публичным именем logical recipient.
 
 ## Решение
 
@@ -46,12 +57,12 @@ implementation для получения registration/capability identity.
 ```text
 ManagedRuntimeBlobSessionRequestV1:
   string custody_target_owner_id
-  string custody_target_registration_id
+  string custody_target_module_id
   string custody_target_capability_id
 
 BlobCustodySourceProofV1:
   string target_owner_id
-  string target_registration_id
+  string target_module_id
   string target_capability_id
 ```
 
@@ -67,8 +78,9 @@ proof может быть использован только когда тек�
 совпадает по:
 
 - target owner ID из effective Blob quota entry;
-- target registration ID;
+- target module ID из текущей fenced managed-runtime expectation;
 - target capability ID;
+- current opaque registration ID;
 - current runtime instance/generation;
 - current grant epoch.
 
@@ -76,6 +88,9 @@ Source owner equality в target-bound случае не требуется: sour
 делегировал exact content exact recipient capability. Kernel по-прежнему
 проверяет current source grant/runtime при transfer. Proof не выдаёт target
 read grant; он позволяет только evidence-bound custody-transfer operation.
+Opaque target registration ID не входит в proof: это позволяет тому же
+logical module обработать durable event после approved successor registration,
+но не ослабляет current registration/runtime/grant fences в момент transfer.
 
 ### Issuance and availability
 
@@ -103,9 +118,10 @@ owner identity. Integration импортирует только уже разр�
 unit. Duplicate строковые literals в integration/runtime implementation
 запрещены architecture test.
 
-Registration identity остаётся exact bundled admission identity. Смена
-registration/capability требует contract revision и coordinated producer /
-subscriber cutover.
+Module identity остаётся exact descriptor `module_id` из bundled admission.
+Смена module/capability audience требует contract revision и coordinated
+producer/subscriber cutover. Смена opaque registration ID при revoke,
+re-registration или successor launch не меняет public contract.
 
 ### Data and control planes
 
@@ -140,9 +156,10 @@ implementation или target storage.
 
 1. Same-owner proof без target fields сохраняет прежнее owner-equality fence.
 2. Target-bound proof разрешает exact source integration -> exact target
-   owner/registration/capability transfer.
-3. Wrong owner, registration или capability, partial target, altered signature,
-   stale/revoked source or target и expired proof отклоняются.
+   owner/module/capability transfer.
+3. Wrong owner, module или capability, partial target, altered signature,
+   stale/revoked current registration, source or target и expired proof
+   отклоняются.
 4. Target может быть offline при source write; durable replay после его
    admission выполняет transfer.
 5. Mail/Telegram/Zulip body receipts используют Communications public audience,
@@ -167,6 +184,14 @@ implementation или target storage.
 
 Отклонено: integration получила бы compile-time зависимость от implementation
 другого owner.
+
+### Bind proof к target registration ID
+
+Отклонено: registration ID создаётся Kernel динамически и неизвестен source
+runtime при записи Blob. Его discovery добавил бы синхронную зависимость от
+target availability, а сохранение ID в public contract сломало бы replay после
+re-registration. Stable module ID выбирает logical recipient; Kernel отдельно
+проверяет exact current registration, runtime generation и grant epoch.
 
 ### Общий owner ID для всех modules
 

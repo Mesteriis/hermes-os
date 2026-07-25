@@ -10,4 +10,5 @@ message AttachmentSecurityScanCandidateObservedV1 {
   uint64 declared_size = 3;
   bytes blob_receipt_sha256 = 4;
   int64 observed_at_unix_seconds = 5;
+  bytes custody_transfer_source_proof = 6;
 }

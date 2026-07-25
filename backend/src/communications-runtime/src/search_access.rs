@@ -106,6 +106,7 @@ impl CommunicationsSearchAccessV1 {
                     declared_size: blob.declared_bytes,
                     backup_class: 1,
                     receipt_sha256: None,
+                    custody_target: None,
                 },
             )
             .map_err(|_| CommunicationsSearchAccessErrorV1::Denied)?;

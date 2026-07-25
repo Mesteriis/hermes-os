@@ -13,6 +13,10 @@ use hermes_communications_attachment_contract::admission::{
 use hermes_communications_ingress::admission::{
     COMMUNICATION_OBSERVED_MAX_IN_FLIGHT, communication_observed_contract_reference_v1,
 };
+use hermes_communications_ingress::{
+    COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID, COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID,
+    COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID,
+};
 use hermes_runtime_protocol::v1::{
     BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1,
     ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1, EventRouteRequestV1,
@@ -24,7 +28,8 @@ use hermes_runtime_protocol::v1::{
 use prost::Message;
 use sha2::{Digest, Sha256};
 
-pub const COMMUNICATIONS_BLOB_CAPABILITY_ID: &str = "communications.blob.v1";
+pub const COMMUNICATIONS_BLOB_CAPABILITY_ID: &str =
+    COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID;
 pub const COMMUNICATIONS_EVENTS_CAPABILITY_ID: &str = "communications.events.v1";
 pub const COMMUNICATIONS_OBSERVE_CAPABILITY_ID: &str = "communications.observe.v1";
 pub const COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID: &str =
@@ -34,8 +39,8 @@ pub const COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID: &str =
 pub const COMMUNICATIONS_QUERY_CAPABILITY_ID: &str = "communications.query.v1";
 pub const COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID: &str = "communications.search.index.v1";
 pub const COMMUNICATIONS_STORAGE_CAPABILITY_ID: &str = "communications.storage.v1";
-pub const COMMUNICATIONS_MODULE_ID: &str = "hermes-communications-runtime";
-pub const COMMUNICATIONS_OWNER_ID: &str = "communications";
+pub const COMMUNICATIONS_MODULE_ID: &str = COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID;
+pub const COMMUNICATIONS_OWNER_ID: &str = COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID;
 pub const COMMUNICATIONS_BLOB_QUOTA_BYTES: u64 = 1 << 30;
 pub const COMMUNICATIONS_STORAGE_CONNECTION_BUDGET: u32 = 8;
 pub const COMMUNICATIONS_STORAGE_STATEMENT_TIMEOUT_MILLIS: u32 = 5_000;

@@ -20,16 +20,18 @@ owner-approved capability; live contour доказывает replay и privacy b
 Отдельный live managed contour также доказывает signed Engine
 executable/descriptor/settings/Storage binding, exact five-capability GrantSet,
 owner-local PostgreSQL, Event Hub credentials и readiness при loopback ClamAV
-endpoint из typed settings snapshot. Scanner payload/verdict и failure matrix
-этот smoke-контур не доказывает. Production gate
-`attachment_security_engine_v1` остаётся закрыт до signed admission и live
-ClamAV/Blob/Event conformance, включая failure/replay/revoke matrix. До открытия
-gate состояние `safe_for_delivery` остаётся недостижимым. Live payload
-conformance также доказал, что задуманный здесь прямой read
-integration-owned Blob корректно отклоняется registration/capability fence.
-ADR-0274 уточняет обязательный путь: revision-2 candidate переносит bounded
-source proof, engine сначала выполняет evidence-bound transfer в собственную
-Blob custody и только затем получает one-use read.
+endpoint из typed settings snapshot. Exact live payload contour теперь
+доказывает revision-2 candidate, target-bound cross-owner Blob transfer,
+engine-owned receipt, one-use read, loopback ClamAV clean response, typed
+verdict event, Communications CAS до `safe_for_delivery` и exact replay без
+второго transfer/verdict/scan. Тот же contour отдельно доказывает, что прямой
+read integration-owned source Blob отклоняется data-plane access fence.
+Production gate `attachment_security_engine_v1` остаётся закрыт до threat,
+timeout/I/O/malformed scanner, outage/restart/revoke/stale-CAS matrix и
+атомарного production inventory admission. `safe_for_delivery` доказан только
+в disposable conformance contour и ещё не объявлен production-ready.
+ADR-0274 фиксирует обязательный custody path, а ADR-0275 — стабильную target
+identity без зависимости от динамического Kernel registration ID.
 
 Зависит от:
 

@@ -66,6 +66,11 @@ message BlobCustodySourceProofV1 {
   bytes kernel_authorization_signature_raw = 15;
   BlobBackupClassV1 backup_class = 16;
   uint64 reference_expires_at_unix_ms = 17;
+  // Empty together for the legacy same-owner fence, or exact together for
+  // source-authorized cross-owner custody delegation.
+  string target_owner_id = 18;
+  string target_module_id = 19;
+  string target_capability_id = 20;
 }
 
 // One-use Kernel authorization for an internal Blob rewrap from the source

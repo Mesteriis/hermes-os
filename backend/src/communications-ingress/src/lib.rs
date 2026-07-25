@@ -27,6 +27,9 @@ include!(concat!(
 ));
 
 pub const PACKAGE: &str = "hermes-communications-ingress";
+pub const COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID: &str = "communications";
+pub const COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID: &str = "hermes-communications-runtime";
+pub const COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID: &str = "communications.blob.v1";
 pub const MAX_OBSERVATION_ID_LEN: usize = 256;
 pub const MAX_EXTERNAL_RECORD_ID_LEN: usize = 512;
 pub const MAX_SOURCE_SCOPE_ID_LEN: usize = 512;

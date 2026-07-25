@@ -3,11 +3,11 @@
 use super::*;
 
 use hermes_attachment_security_persistence::{
-    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V1, attachment_security_storage_bundle_v1,
+    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V2, attachment_security_storage_bundle_v1,
 };
 use hermes_attachment_security_runtime::{
     admission::{
-        ATTACHMENT_SECURITY_BLOB_READ_CAPABILITY_ID,
+        ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID,
         ATTACHMENT_SECURITY_CANDIDATE_OBSERVE_CAPABILITY_ID,
         ATTACHMENT_SECURITY_COMMUNICATIONS_STATE_OBSERVE_CAPABILITY_ID,
         ATTACHMENT_SECURITY_OWNER_ID, ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID,
@@ -53,7 +53,7 @@ pub(super) fn admit_attachment_security_runtime(
     let registration = crate::modules::registration::registry::register(store, &descriptor_bytes)
         .expect("register exact Attachment Security descriptor");
     let capability_ids = vec![
-        ATTACHMENT_SECURITY_BLOB_READ_CAPABILITY_ID.to_owned(),
+        ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID.to_owned(),
         ATTACHMENT_SECURITY_CANDIDATE_OBSERVE_CAPABILITY_ID.to_owned(),
         ATTACHMENT_SECURITY_COMMUNICATIONS_STATE_OBSERVE_CAPABILITY_ID.to_owned(),
         ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID.to_owned(),
@@ -86,7 +86,7 @@ pub(super) fn admit_attachment_security_runtime(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 ATTACHMENT_SECURITY_OWNER_ID,
-                u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V1),
+                u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V2),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -110,7 +110,7 @@ pub(super) fn prepare_attachment_security_runtime(
     let bundle = store
         .platform_storage_bundle(
             ATTACHMENT_SECURITY_OWNER_ID,
-            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V1),
+            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V2),
         )
         .expect("read Attachment Security Storage bundle")
         .expect("Attachment Security Storage bundle");
@@ -123,7 +123,7 @@ pub(super) fn prepare_attachment_security_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V1),
+            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V2),
             *bundle.digest(),
         )
         .expect("Attachment Security Storage binding issue"),
@@ -227,8 +227,8 @@ fn attachment_security_settings_snapshot(
         values: vec![
             entry("attachment_security.clamav.connect_timeout_millis", 500),
             entry("attachment_security.clamav.io_timeout_millis", 1_000),
-            entry("attachment_security.max_scan_bytes", 16 * 1024 * 1024),
             entry("attachment_security.clamav.port", u64::from(clamav_port)),
+            entry("attachment_security.max_scan_bytes", 16 * 1024 * 1024),
         ],
     }
 }

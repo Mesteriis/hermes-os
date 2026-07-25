@@ -347,13 +347,14 @@ async fn insert_candidate(
     let declared_size = i64::try_from(value.declared_size)
         .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidInput)?;
     sqlx::query(
-        "INSERT INTO hermes_data.attachment_security_scan_candidates (attachment_anchor_id, message_id, blob_reference_id, declared_size, blob_receipt_sha256, causation_message_id, correlation_id, observed_at_unix_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        "INSERT INTO hermes_data.attachment_security_scan_candidates (attachment_anchor_id, message_id, blob_reference_id, declared_size, blob_receipt_sha256, custody_transfer_source_proof, causation_message_id, correlation_id, observed_at_unix_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(value.attachment_anchor_id.as_slice())
     .bind(value.message_id.as_slice())
     .bind(value.blob_reference_id.as_slice())
     .bind(declared_size)
     .bind(value.blob_receipt_sha256.as_slice())
+    .bind(&value.custody_transfer_source_proof)
     .bind(value.causation_message_id.as_slice())
     .bind(value.correlation_id.as_slice())
     .bind(value.observed_at_unix_seconds)
@@ -386,7 +387,7 @@ async fn load_candidate(
     attachment_anchor_id: [u8; 16],
 ) -> Result<Option<AttachmentSecurityScanCandidateV1>, AttachmentSecurityPersistenceErrorV1> {
     let row = sqlx::query(
-        "SELECT message_id, blob_reference_id, declared_size, blob_receipt_sha256, causation_message_id, correlation_id, observed_at_unix_seconds FROM hermes_data.attachment_security_scan_candidates WHERE attachment_anchor_id = $1",
+        "SELECT message_id, blob_reference_id, declared_size, blob_receipt_sha256, custody_transfer_source_proof, causation_message_id, correlation_id, observed_at_unix_seconds FROM hermes_data.attachment_security_scan_candidates WHERE attachment_anchor_id = $1",
     )
     .bind(attachment_anchor_id.as_slice())
     .fetch_optional(&mut **transaction)
@@ -412,6 +413,9 @@ async fn load_candidate(
                 &row.try_get::<Vec<u8>, _>("blob_receipt_sha256")
                     .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidRow)?,
             )?,
+            custody_transfer_source_proof: row
+                .try_get("custody_transfer_source_proof")
+                .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidRow)?,
             causation_message_id: id16(
                 &row.try_get::<Vec<u8>, _>("causation_message_id")
                     .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidRow)?,

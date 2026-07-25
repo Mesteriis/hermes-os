@@ -14,10 +14,11 @@ use hermes_runtime_protocol::managed_control::{
     ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
 };
 use hermes_runtime_protocol::v1::{
-    BlobCustodyTransferGrantV1, BlobDataCustodyTransferRequestV1, BlobDataOperationV1,
-    BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
-    BlobDataWriteRequestV1, ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, blob_data_request_v1::Operation,
+    BlobCustodySourceProofV1, BlobCustodyTransferGrantV1, BlobDataCustodyTransferRequestV1,
+    BlobDataOperationV1, BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1,
+    BlobDataSessionGrantV1, BlobDataWriteRequestV1, ManagedRuntimeBlobSessionRequestV1,
+    ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
+    blob_data_request_v1::Operation,
     managed_runtime_control_request_v1::Operation as ControlOperation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
@@ -62,6 +63,14 @@ pub struct ManagedBlobSessionRequestV1<'a> {
     pub declared_size: u64,
     pub backup_class: u32,
     pub receipt_sha256: Option<&'a [u8; 32]>,
+    pub custody_target: Option<ManagedBlobCustodyTargetV1<'a>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ManagedBlobCustodyTargetV1<'a> {
+    pub owner_id: &'a str,
+    pub module_id: &'a str,
+    pub capability_id: &'a str,
 }
 
 pub fn request_managed_blob_custody_transfer(
@@ -105,6 +114,9 @@ pub fn request_managed_blob_custody_transfer(
                 custody_source_proof: request.custody_source_proof.to_vec(),
                 evidence_id: request.evidence_id.to_vec(),
                 evidence_envelope_sha256: request.evidence_envelope_sha256.to_vec(),
+                custody_target_owner_id: String::new(),
+                custody_target_module_id: String::new(),
+                custody_target_capability_id: String::new(),
             },
         )),
     };
@@ -204,6 +216,9 @@ pub fn request_managed_blob_custody_transfer_v2(
                         custody_source_proof: request.custody_source_proof.to_vec(),
                         evidence_id: request.evidence_id.to_vec(),
                         evidence_envelope_sha256: request.evidence_envelope_sha256.to_vec(),
+                        custody_target_owner_id: String::new(),
+                        custody_target_module_id: String::new(),
+                        custody_target_capability_id: String::new(),
                     },
                 )),
             },
@@ -283,6 +298,9 @@ pub fn request_managed_blob_session(
                 custody_source_proof: Vec::new(),
                 evidence_id: Vec::new(),
                 evidence_envelope_sha256: Vec::new(),
+                custody_target_owner_id: String::new(),
+                custody_target_module_id: String::new(),
+                custody_target_capability_id: String::new(),
             },
         )),
     };
@@ -346,6 +364,11 @@ pub fn request_managed_blob_session_v2(
         || request.declared_size == 0
         || !(1..=3).contains(&request.backup_class)
         || !valid_receipt_binding(request.operation, request.receipt_sha256)
+        || !valid_custody_target(
+            request.operation,
+            request.receipt_sha256,
+            request.custody_target,
+        )
     {
         return Err(BlobClientError::InvalidSessionRequest);
     }
@@ -372,6 +395,15 @@ pub fn request_managed_blob_session_v2(
                         custody_source_proof: Vec::new(),
                         evidence_id: Vec::new(),
                         evidence_envelope_sha256: Vec::new(),
+                        custody_target_owner_id: request
+                            .custody_target
+                            .map_or_else(String::new, |target| target.owner_id.to_owned()),
+                        custody_target_module_id: request
+                            .custody_target
+                            .map_or_else(String::new, |target| target.module_id.to_owned()),
+                        custody_target_capability_id: request
+                            .custody_target
+                            .map_or_else(String::new, |target| target.capability_id.to_owned()),
                     },
                 )),
             },
@@ -402,12 +434,46 @@ pub fn request_managed_blob_session_v2(
     {
         return Err(BlobClientError::InvalidResponse);
     }
+    if let Some(target) = request.custody_target {
+        let proof =
+            BlobCustodySourceProofV1::decode(delivery.custody_transfer_source_proof.as_slice())
+                .map_err(|_| BlobClientError::InvalidResponse)?;
+        if proof.target_owner_id != target.owner_id
+            || proof.target_module_id != target.module_id
+            || proof.target_capability_id != target.capability_id
+        {
+            return Err(BlobClientError::InvalidResponse);
+        }
+    }
     Ok(ManagedBlobSessionV1 {
         data_socket_path: PathBuf::from(delivery.data_socket_path),
         grant,
         channel_binding,
         custody_transfer_source_proof: delivery.custody_transfer_source_proof,
     })
+}
+
+fn valid_custody_target(
+    operation: BlobDataOperationV1,
+    receipt_sha256: Option<&[u8; 32]>,
+    target: Option<ManagedBlobCustodyTargetV1<'_>>,
+) -> bool {
+    let Some(target) = target else {
+        return true;
+    };
+    operation == BlobDataOperationV1::BlobDataOperationWriteV1
+        && receipt_sha256.is_some()
+        && valid_target_token(target.owner_id)
+        && valid_target_token(target.module_id)
+        && valid_target_token(target.capability_id)
+}
+
+fn valid_target_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
+        })
 }
 
 fn valid_receipt_binding(
@@ -669,5 +735,31 @@ mod tests {
         assert!(exact_receipt_binding(&receipt, Some(&receipt)));
         assert!(!exact_receipt_binding(&[8; 32], Some(&receipt)));
         assert!(exact_receipt_binding(&[], None));
+    }
+
+    #[test]
+    fn custody_target_is_allowed_only_on_receipt_bound_writes() {
+        let receipt = [7; 32];
+        let target = ManagedBlobCustodyTargetV1 {
+            owner_id: "attachment_security",
+            module_id: "hermes-attachment-security-runtime",
+            capability_id: "attachment_security.blob.v1",
+        };
+        assert!(valid_custody_target(
+            BlobDataOperationV1::BlobDataOperationWriteV1,
+            Some(&receipt),
+            Some(target),
+        ));
+        assert!(!valid_custody_target(
+            BlobDataOperationV1::BlobDataOperationReadRangeV1,
+            Some(&receipt),
+            Some(target),
+        ));
+        assert!(!valid_custody_target(
+            BlobDataOperationV1::BlobDataOperationWriteV1,
+            None,
+            Some(target),
+        ));
+        assert!(!valid_target_token("Attachment Security"));
     }
 }

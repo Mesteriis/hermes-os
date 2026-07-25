@@ -103,6 +103,11 @@ message ManagedRuntimeBlobSessionRequestV1 {
   bytes custody_source_proof = 10;
   bytes evidence_id = 11;
   bytes evidence_envelope_sha256 = 12;
+  // Optional only for a write that authorizes a later exact cross-owner
+  // custody transfer. All three target fields must be empty or present.
+  string custody_target_owner_id = 13;
+  string custody_target_module_id = 14;
+  string custody_target_capability_id = 15;
 }
 message ManagedRuntimeBlobSessionDeliveryV1 {
   string data_socket_path = 1;

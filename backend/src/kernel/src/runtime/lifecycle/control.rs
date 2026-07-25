@@ -259,6 +259,11 @@ impl ManagedRuntimeExpectation {
     }
 
     #[must_use]
+    pub fn module_id(&self) -> &str {
+        &self.module_id
+    }
+
+    #[must_use]
     pub fn runtime_instance_id(&self) -> &str {
         &self.runtime_instance_id
     }

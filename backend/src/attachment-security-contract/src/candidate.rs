@@ -20,6 +20,7 @@ use crate::{
 };
 
 pub const ATTACHMENT_SECURITY_MAX_SCAN_CANDIDATE_BYTES_V1: u64 = 64 * 1024 * 1024;
+pub const ATTACHMENT_SECURITY_MAX_CUSTODY_SOURCE_PROOF_BYTES_V1: usize = 2_048;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentSecurityObservationContextV1 {
@@ -36,6 +37,7 @@ pub struct AttachmentSecurityScanCandidateFactV1 {
     pub blob_reference_id: [u8; 16],
     pub declared_size: u64,
     pub blob_receipt_sha256: [u8; 32],
+    pub custody_transfer_source_proof: Vec<u8>,
     pub source_observation_id: [u8; 16],
     pub correlation_id: [u8; 16],
     pub observed_at_unix_seconds: i64,
@@ -56,8 +58,11 @@ pub fn build_attachment_security_scan_candidate_outbox_record_v1(
     validate_context(context)?;
     if !valid_identifier(&fact.attachment_anchor_id)
         || !valid_identifier(&fact.blob_reference_id)
+        || fact.declared_size == 0
         || fact.declared_size > ATTACHMENT_SECURITY_MAX_SCAN_CANDIDATE_BYTES_V1
         || !valid_sha256(&fact.blob_receipt_sha256)
+        || !(1..=ATTACHMENT_SECURITY_MAX_CUSTODY_SOURCE_PROOF_BYTES_V1)
+            .contains(&fact.custody_transfer_source_proof.len())
         || !valid_identifier(&fact.source_observation_id)
         || !valid_identifier(&fact.correlation_id)
         || !valid_timestamp(fact.observed_at_unix_seconds, 0)
@@ -77,6 +82,7 @@ pub fn build_attachment_security_scan_candidate_outbox_record_v1(
         declared_size: fact.declared_size,
         blob_receipt_sha256: fact.blob_receipt_sha256.to_vec(),
         observed_at_unix_seconds: fact.observed_at_unix_seconds,
+        custody_transfer_source_proof: fact.custody_transfer_source_proof.clone(),
     }
     .encode_to_vec();
     let envelope = DurableEnvelopeV1 {
@@ -141,11 +147,12 @@ fn validate_context(
 
 fn candidate_message_id(fact: &AttachmentSecurityScanCandidateFactV1) -> [u8; 16] {
     let mut hasher = Sha256::new();
-    hasher.update(b"hermes.attachment-security.scan-candidate-message.v1\0");
+    hasher.update(b"hermes.attachment-security.scan-candidate-message.v2\0");
     hasher.update(fact.attachment_anchor_id);
     hasher.update(fact.blob_reference_id);
     hasher.update(fact.declared_size.to_be_bytes());
     hasher.update(fact.blob_receipt_sha256);
+    hasher.update(Sha256::digest(&fact.custody_transfer_source_proof));
     let digest: [u8; 32] = hasher.finalize().into();
     digest[..16]
         .try_into()
@@ -154,11 +161,12 @@ fn candidate_message_id(fact: &AttachmentSecurityScanCandidateFactV1) -> [u8; 16
 
 fn candidate_source_cursor_sha256(fact: &AttachmentSecurityScanCandidateFactV1) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(b"hermes.attachment-security.scan-candidate-source.v1\0");
+    hasher.update(b"hermes.attachment-security.scan-candidate-source.v2\0");
     hasher.update(fact.attachment_anchor_id);
     hasher.update(fact.blob_reference_id);
     hasher.update(fact.declared_size.to_be_bytes());
     hasher.update(fact.blob_receipt_sha256);
+    hasher.update(Sha256::digest(&fact.custody_transfer_source_proof));
     hasher.finalize().into()
 }
 
@@ -218,6 +226,7 @@ mod tests {
         assert_eq!(payload.blob_reference_id, [2; 16]);
         assert_eq!(payload.blob_receipt_sha256, [3; 32]);
         assert_eq!(payload.declared_size, 42);
+        assert_eq!(payload.custody_transfer_source_proof, [6; 64]);
     }
 
     #[test]
@@ -237,6 +246,14 @@ mod tests {
                 .expect_err("oversized candidate"),
             AttachmentSecurityObservationBuildErrorV1::InvalidCandidate
         );
+
+        let mut missing_proof = candidate();
+        missing_proof.custody_transfer_source_proof.clear();
+        assert_eq!(
+            build_attachment_security_scan_candidate_outbox_record_v1(&missing_proof, &context())
+                .expect_err("missing custody proof"),
+            AttachmentSecurityObservationBuildErrorV1::InvalidCandidate
+        );
     }
 
     fn candidate() -> AttachmentSecurityScanCandidateFactV1 {
@@ -245,6 +262,7 @@ mod tests {
             blob_reference_id: [2; 16],
             declared_size: 42,
             blob_receipt_sha256: [3; 32],
+            custody_transfer_source_proof: vec![6; 64],
             source_observation_id: [4; 16],
             correlation_id: [5; 16],
             observed_at_unix_seconds: 1_700_000_000,

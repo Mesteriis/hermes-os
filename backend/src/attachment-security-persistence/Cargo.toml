@@ -12,6 +12,10 @@ role = "engine"
 owner = "attachment_security"
 surface = "persistence"
 
+[features]
+default = []
+conformance-test-support = []
+
 [dependencies]
 hermes-attachment-security-core = { path = "../attachment-security-core" }
 hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }

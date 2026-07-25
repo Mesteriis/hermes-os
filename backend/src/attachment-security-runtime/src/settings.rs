@@ -125,7 +125,9 @@ pub enum AttachmentSecuritySettingsErrorV1 {
 mod tests {
     use hermes_runtime_protocol::{
         v1::{SettingValueV1, SettingsValueEntryV1},
-        validation::descriptor::validate_settings_schema_v1,
+        validation::descriptor::{
+            validate_settings_schema_v1, validate_settings_snapshot_against_schema_v1,
+        },
     };
 
     use super::*;
@@ -159,6 +161,13 @@ mod tests {
     fn decoder_requires_exact_target_revision_and_bounded_values() {
         let snapshot = snapshot();
         assert_eq!(
+            validate_settings_snapshot_against_schema_v1(
+                &attachment_security_settings_schema_v1(),
+                &snapshot,
+            ),
+            Ok(())
+        );
+        assert_eq!(
             decode_attachment_security_settings_v1(&snapshot, "attachment-security", 7),
             Ok(AttachmentSecurityRuntimeSettingsV1 {
                 clamav_connect_timeout_millis: 2_000,
@@ -180,8 +189,8 @@ mod tests {
             values: vec![
                 entry(CONNECT_TIMEOUT_MILLIS, 2_000),
                 entry(IO_TIMEOUT_MILLIS, 30_000),
-                entry(MAX_SCAN_BYTES, 8 * 1024 * 1024),
                 entry(PORT, 3_310),
+                entry(MAX_SCAN_BYTES, 8 * 1024 * 1024),
             ],
         }
     }

@@ -164,8 +164,19 @@ where
         if let Err(error) = executor.block_on(runtime.consume_next(seconds)) {
             developer_diagnostic("consume", error);
         }
-        if let Err(error) = executor.block_on(runtime.process_next_scan_job(seconds, nanos)) {
-            developer_diagnostic("scan", error);
+        match executor.block_on(runtime.process_next_scan_job(seconds, nanos)) {
+            Ok(
+                hermes_attachment_security_runtime::runtime::AttachmentSecurityScanTickV1::RetryScheduled(
+                    error,
+                ),
+            ) => developer_scan_diagnostic("retry", error),
+            Ok(
+                hermes_attachment_security_runtime::runtime::AttachmentSecurityScanTickV1::Exhausted(
+                    error,
+                ),
+            ) => developer_scan_diagnostic("exhausted", error),
+            Ok(_) => {}
+            Err(error) => developer_diagnostic("scan", error),
         }
         if let Err(error) = executor.block_on(runtime.relay_verdict_outbox(seconds)) {
             developer_diagnostic("outbox", error);
@@ -252,5 +263,14 @@ fn developer_diagnostic(
 ) {
     if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
         eprintln!("developer_attachment_security_runtime_error stage={stage} error={error:?}");
+    }
+}
+
+fn developer_scan_diagnostic(
+    stage: &str,
+    error: hermes_attachment_security_runtime::AttachmentSecurityScanAdapterErrorV1,
+) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_attachment_security_scan_error stage={stage} error={error:?}");
     }
 }

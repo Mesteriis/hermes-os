@@ -1,7 +1,9 @@
 //! Exact descriptor and capability admission for the Attachment Security engine.
 
 use hermes_attachment_security_contract::admission::{
-    ATTACHMENT_SECURITY_MAX_IN_FLIGHT,
+    ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
+    ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID,
+    ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_OWNER_ID, ATTACHMENT_SECURITY_MAX_IN_FLIGHT,
     attachment_security_scan_candidate_observed_contract_reference_v1,
 };
 use hermes_communications_attachment_contract::admission::{
@@ -30,10 +32,11 @@ pub const ATTACHMENT_SECURITY_COMMUNICATIONS_STATE_OBSERVE_CAPABILITY_ID: &str =
     "attachment_security.communications-state.observe.v1";
 pub const ATTACHMENT_SECURITY_VERDICT_PUBLISH_CAPABILITY_ID: &str =
     "attachment_security.verdict.publish.v1";
-pub const ATTACHMENT_SECURITY_BLOB_READ_CAPABILITY_ID: &str = "attachment_security.blob.read.v1";
+pub const ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID: &str =
+    ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID;
 pub const ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID: &str = "attachment_security.storage.v1";
-pub const ATTACHMENT_SECURITY_MODULE_ID: &str = "hermes-attachment-security-runtime";
-pub const ATTACHMENT_SECURITY_OWNER_ID: &str = "attachment_security";
+pub const ATTACHMENT_SECURITY_MODULE_ID: &str = ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID;
+pub const ATTACHMENT_SECURITY_OWNER_ID: &str = ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_OWNER_ID;
 pub const ATTACHMENT_SECURITY_BLOB_QUOTA_BYTES: u64 = 64 * 1024 * 1024;
 pub const ATTACHMENT_SECURITY_STORAGE_CONNECTION_BUDGET: u32 = 4;
 pub const ATTACHMENT_SECURITY_STORAGE_STATEMENT_TIMEOUT_MILLIS: u32 = 5_000;
@@ -43,7 +46,7 @@ pub const ATTACHMENT_SECURITY_EVENT_ACK_WAIT_MILLIS: u32 = 30_000;
 #[must_use]
 pub fn attachment_security_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
-        blob_reader(),
+        blob_custody(),
         durable_consumer(
             ATTACHMENT_SECURITY_CANDIDATE_OBSERVE_CAPABILITY_ID,
             attachment_security_scan_candidate_observed_contract_reference_v1(),
@@ -140,9 +143,9 @@ fn verdict_publisher() -> CapabilityDescriptorV1 {
     }
 }
 
-fn blob_reader() -> CapabilityDescriptorV1 {
+fn blob_custody() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
-        capability_id: ATTACHMENT_SECURITY_BLOB_READ_CAPABILITY_ID.to_owned(),
+        capability_id: ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID.to_owned(),
         capability_revision: 1,
         criticality: CapabilityCriticalityV1::Required as i32,
         requests: vec![CapabilityRequestV1 {
@@ -189,7 +192,7 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
-                ATTACHMENT_SECURITY_BLOB_READ_CAPABILITY_ID,
+                ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_CANDIDATE_OBSERVE_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_COMMUNICATIONS_STATE_OBSERVE_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID,

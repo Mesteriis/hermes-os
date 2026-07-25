@@ -369,8 +369,10 @@ fn decode_transfer(
         grant.target_quota_max_bytes,
     )
     .map_err(|_| ())?;
-    if source.owner_id != target_reference.owner_id()
-        || !target_quota.matches(&target_access)
+    // The Kernel-signed transfer grant is the authority for an exact
+    // cross-owner handoff. Source and target access fences remain distinct;
+    // reapplying owner equality here would reject every target-bound grant.
+    if !target_quota.matches(&target_access)
         || source.key_revision == 0
         || grant.target_key_revision == 0
     {
@@ -398,5 +400,53 @@ fn backup_class(value: i32) -> Result<BlobBackupClassV1, ()> {
         WireBackupClass::BlobBackupClassRebuildableV1 => Ok(BlobBackupClassV1::Rebuildable),
         WireBackupClass::BlobBackupClassExcludedV1 => Ok(BlobBackupClassV1::Excluded),
         WireBackupClass::BlobBackupClassUnspecifiedV1 => Err(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_runtime_protocol::v1::{
+        BlobBackupClassV1 as WireBackupClass, BlobCustodySourceProofV1, BlobCustodyTransferGrantV1,
+    };
+
+    use super::decode_transfer;
+
+    #[test]
+    fn kernel_signed_transfer_keeps_distinct_cross_owner_fences() {
+        let grant = BlobCustodyTransferGrantV1 {
+            source: Some(BlobCustodySourceProofV1 {
+                owner_id: "mail".to_owned(),
+                registration_id: "mail-registration".to_owned(),
+                capability_id: "mail.blob.v1".to_owned(),
+                runtime_instance_id: "mail-runtime".to_owned(),
+                runtime_generation: 1,
+                grant_epoch: 2,
+                key_revision: 2,
+                reference_id: vec![1; 16],
+                declared_size: 4,
+                receipt_sha256: vec![2; 32],
+                backup_class: WireBackupClass::BlobBackupClassRequiredV1 as i32,
+                ..Default::default()
+            }),
+            target_owner_id: "attachment_security".to_owned(),
+            target_registration_id: "dynamic-target-registration".to_owned(),
+            target_capability_id: "attachment_security.blob.v1".to_owned(),
+            target_runtime_instance_id: "attachment-security-runtime".to_owned(),
+            target_runtime_generation: 3,
+            target_grant_epoch: 4,
+            target_key_revision: 4,
+            target_quota_max_bytes: 1024,
+            target_reference_id: vec![3; 16],
+            ..Default::default()
+        };
+
+        let verified = decode_transfer(&grant).expect("decode cross-owner transfer");
+        assert_eq!(verified.source_reference().owner_id(), "mail");
+        assert_eq!(
+            verified.target_reference().owner_id(),
+            "attachment_security"
+        );
+        assert_eq!(verified.source_access().owner_id(), "mail");
+        assert_eq!(verified.target_access().owner_id(), "attachment_security");
     }
 }

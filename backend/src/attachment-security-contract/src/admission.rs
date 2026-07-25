@@ -11,8 +11,14 @@ pub const ATTACHMENT_SECURITY_CONTRACT_OWNER: &str = "attachment_security";
 pub const ATTACHMENT_SECURITY_SCAN_CANDIDATE_CONTRACT_NAME: &str =
     "attachment_security_scan_candidate_observed";
 pub const ATTACHMENT_SECURITY_CONTRACT_MAJOR: u32 = 1;
-pub const ATTACHMENT_SECURITY_CONTRACT_REVISION: u32 = 1;
+pub const ATTACHMENT_SECURITY_CONTRACT_REVISION: u32 = 2;
 pub const ATTACHMENT_SECURITY_MAX_IN_FLIGHT: u32 = 32;
+pub const ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_OWNER_ID: &str =
+    ATTACHMENT_SECURITY_CONTRACT_OWNER;
+pub const ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID: &str =
+    "hermes-attachment-security-runtime";
+pub const ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID: &str =
+    "attachment_security.blob.v1";
 
 #[must_use]
 pub fn attachment_security_scan_candidate_observed_contract_reference_v1() -> ContractReferenceV1 {

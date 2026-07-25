@@ -42,6 +42,7 @@ pub struct AttachmentSecurityScanCandidateV1 {
     pub blob_reference_id: [u8; 16],
     pub declared_size: u64,
     pub blob_receipt_sha256: [u8; 32],
+    pub custody_transfer_source_proof: Vec<u8>,
     pub causation_message_id: [u8; 16],
     pub correlation_id: [u8; 16],
     pub observed_at_unix_seconds: i64,
@@ -226,8 +227,10 @@ fn valid_candidate(
     valid_identifier(&candidate.message_id)
         && valid_identifier(&candidate.attachment_anchor_id)
         && valid_identifier(&candidate.blob_reference_id)
+        && candidate.declared_size > 0
         && candidate.declared_size <= policy.max_scan_bytes
         && valid_sha256(&candidate.blob_receipt_sha256)
+        && (1..=2_048).contains(&candidate.custody_transfer_source_proof.len())
         && valid_identifier(&candidate.causation_message_id)
         && valid_identifier(&candidate.correlation_id)
         && valid_timestamp(candidate.observed_at_unix_seconds)
@@ -406,6 +409,7 @@ mod tests {
             blob_reference_id: [3; 16],
             declared_size: 42,
             blob_receipt_sha256: [4; 32],
+            custody_transfer_source_proof: vec![9; 64],
             causation_message_id: [5; 16],
             correlation_id: [6; 16],
             observed_at_unix_seconds: 1_700_000_000,

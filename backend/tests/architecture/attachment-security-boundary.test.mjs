@@ -6,7 +6,7 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const POLICY_PATH = new URL('architecture/policy.json', BACKEND_ROOT);
 
 test('Attachment Security candidate contract is provider-neutral and payload-bounded', async () => {
-  const [proto, admission, manifest] = await Promise.all([
+  const [proto, admission, candidate, manifest] = await Promise.all([
     readFile(
       new URL(
         'src/attachment-security-contract/proto/hermes/attachment_security/v1/scan_candidate.proto',
@@ -16,6 +16,10 @@ test('Attachment Security candidate contract is provider-neutral and payload-bou
     ),
     readFile(
       new URL('src/attachment-security-contract/src/admission.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-security-contract/src/candidate.rs', BACKEND_ROOT),
       'utf8',
     ),
     readFile(
@@ -34,6 +38,7 @@ test('Attachment Security candidate contract is provider-neutral and payload-bou
     'uint64 declared_size 3',
     'bytes blob_receipt_sha256 4',
     'int64 observed_at_unix_seconds 5',
+    'bytes custody_transfer_source_proof 6',
   ]);
   assert.doesNotMatch(
     schema,
@@ -42,6 +47,10 @@ test('Attachment Security candidate contract is provider-neutral and payload-bou
   assert.match(admission, /DurableEnvelopeKindV1::Observation/);
   assert.match(admission, /EventRouteDirectionV1::Publish/);
   assert.doesNotMatch(admission, /EventRouteDirectionV1::Subscribe/);
+  assert.match(
+    candidate,
+    /ATTACHMENT_SECURITY_MAX_CUSTODY_SOURCE_PROOF_BYTES_V1: usize = 2_048/,
+  );
   assert.match(manifest, /role = "engine"/);
   assert.match(manifest, /owner = "attachment_security"/);
   assert.match(manifest, /surface = "contract"/);
@@ -80,11 +89,18 @@ test('Attachment Security core and ClamAV adapter remain separate engine units',
 });
 
 test('Attachment Security persistence owns the durable join, bounded jobs and exact outbox', async () => {
-  const [manifest, schema, observation, jobs] = await Promise.all([
+  const [manifest, schema, custodySchema, observation, jobs] = await Promise.all([
     readFile(new URL('src/attachment-security-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL(
         'src/attachment-security-persistence/migrations/0001_attachment_security_state.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/attachment-security-persistence/migrations/0002_attachment_security_blob_custody.sql',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -108,6 +124,10 @@ test('Attachment Security persistence owns the durable join, bounded jobs and ex
   assert.match(schema, /attachment_security_event_inbox/);
   assert.match(schema, /envelope_sha256/);
   assert.match(schema, /max_attempts INTEGER NOT NULL CHECK \(max_attempts BETWEEN 1 AND 32\)/);
+  assert.match(custodySchema, /custody_transfer_source_proof BYTEA NOT NULL/);
+  assert.match(custodySchema, /octet_length\(custody_transfer_source_proof\) BETWEEN 1 AND 2048/);
+  assert.match(custodySchema, /target_blob_reference_id BYTEA/);
+  assert.match(custodySchema, /attachment_security_target_blob_receipt_complete/);
   assert.match(observation, /attachment_security_join_locks/);
   assert.match(observation, /FOR UPDATE/);
   assert.match(observation, /decide_scan_join_v1/);
@@ -202,17 +222,22 @@ test('Attachment Security runtime is a managed engine with event-only business b
       /pub const ATTACHMENT_SECURITY_[A-Z_]+_CAPABILITY_ID: &str =\s*"([^"]+)";/g,
     )].map(([, capability]) => capability).sort(),
     [
-      'attachment_security.blob.read.v1',
       'attachment_security.candidate.observe.v1',
       'attachment_security.communications-state.observe.v1',
       'attachment_security.storage.v1',
       'attachment_security.verdict.publish.v1',
     ],
   );
+  assert.match(
+    admission,
+    /ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID: &str =\s*ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID/,
+  );
   assert.match(admission, /ModuleKindV1::Engine/);
   assert.match(runtime, /ManagedControlChannelV2/);
   assert.match(runtime, /request_managed_runtime_event_access_v2/);
-  assert.match(scanner, /receipt_sha256: Some\(&claimed\.job\.blob_receipt_sha256\)/);
+  assert.match(scanner, /receipt_sha256: Some\(&target_blob\.receipt_sha256\)/);
+  assert.match(scanner, /receipt_sha256: &claimed\.job\.blob_receipt_sha256/);
+  assert.match(scanner, /request_managed_blob_custody_transfer_v2/);
   assert.match(scanner, /scan_clamav_loopback_v1/);
   assert.match(runtime, /retry_scan_job/);
   assert.match(runtime, /complete_scan_job_with_outbox/);
@@ -259,6 +284,76 @@ test('Attachment Security Blob reads are one-use and receipt-bound below the eng
     `${kernelSession}\n${service}`,
     /hermes_(?:communications|attachment_security)|clamav/i,
   );
+});
+
+test('Cross-owner Blob custody binds a public module audience and current runtime fences', async () => {
+  const [
+    controlProtocol,
+    blobProtocol,
+    attachmentContract,
+    communicationsContract,
+    attachmentAdmission,
+    communicationsAdmission,
+    mailRuntime,
+    kernelSession,
+    blobSession,
+  ] = await Promise.all([
+    readFile(
+      new URL(
+        'src/platform/runtime_protocol/proto/hermes/runtime/v1/managed_runtime_control.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/platform/runtime_protocol/proto/hermes/runtime/v1/blob_runtime.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-security-contract/src/admission.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(new URL('src/communications-ingress/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-security-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/mail-runtime/src/managed.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/kernel/src/platform/blob/session.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL('src/platform/blob/service/src/control/data/session.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(controlProtocol, /string custody_target_module_id = 14;/);
+  assert.doesNotMatch(controlProtocol, /custody_target_registration_id/);
+  assert.match(blobProtocol, /string target_module_id = 19;/);
+  assert.doesNotMatch(blobProtocol, /string target_registration_id = 19;/);
+  assert.match(
+    attachmentContract,
+    /ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID: &str =\s*"hermes-attachment-security-runtime"/,
+  );
+  assert.match(
+    communicationsContract,
+    /COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID: &str = "hermes-communications-runtime"/,
+  );
+  assert.match(
+    attachmentAdmission,
+    /ATTACHMENT_SECURITY_MODULE_ID: &str = ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID/,
+  );
+  assert.match(
+    communicationsAdmission,
+    /COMMUNICATIONS_MODULE_ID: &str = COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID/,
+  );
+  assert.match(mailRuntime, /module_id: ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID/);
+  assert.match(mailRuntime, /module_id: COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID/);
+  assert.doesNotMatch(mailRuntime, /hermes-attachment-security-runtime|hermes-communications-runtime/);
+  assert.match(kernelSession, /expectation\.module_id\(\)/);
+  assert.match(kernelSession, /target_registration_id: expectation\.registration_id\(\)\.to_owned\(\)/);
+  assert.doesNotMatch(blobSession, /source\.owner_id != target_reference\.owner_id\(\)/);
+  assert.match(blobSession, /kernel_signed_transfer_keeps_distinct_cross_owner_fences/);
 });
 
 test('Attachment Security release assembly is a separate unsigned engine unit', async () => {

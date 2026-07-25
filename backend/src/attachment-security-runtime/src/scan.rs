@@ -6,9 +6,12 @@ use hermes_attachment_security_clamav::{
     ClamAvInstreamLimitsV1, ClamAvLoopbackEndpointV1, ClamAvTimeoutsV1, scan_clamav_loopback_v1,
 };
 use hermes_attachment_security_core::ScannerOutcomeV1;
-use hermes_attachment_security_persistence::ClaimedAttachmentSecurityScanJobV1;
+use hermes_attachment_security_persistence::{
+    AttachmentSecurityTargetBlobReceiptV1, ClaimedAttachmentSecurityScanJobV1,
+};
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
+    BlobDataClient, ManagedBlobCustodyTransferRequestV1, ManagedBlobSessionRequestV1,
+    request_managed_blob_custody_transfer_v2, request_managed_blob_session_v2,
 };
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
@@ -16,7 +19,7 @@ use hermes_runtime_protocol::{
 };
 
 use crate::{
-    admission::ATTACHMENT_SECURITY_BLOB_READ_CAPABILITY_ID,
+    admission::ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID,
     settings::AttachmentSecurityRuntimeSettingsV1,
 };
 
@@ -54,43 +57,54 @@ impl AttachmentSecurityScannerV1 {
         &self,
         control_channel: &mut ManagedControlChannelV2<UnixStream>,
         claimed: &ClaimedAttachmentSecurityScanJobV1,
+        target_blob: AttachmentSecurityTargetBlobReceiptV1,
     ) -> Result<ScannerOutcomeV1, AttachmentSecurityScanAdapterErrorV1> {
-        let bytes = read_blob(control_channel, claimed)?;
+        let bytes = read_blob(control_channel, claimed, target_blob)?;
         scan_clamav_loopback_v1(
             self.endpoint,
             &bytes,
             claimed.job.declared_size,
-            claimed.job.blob_receipt_sha256,
+            target_blob.receipt_sha256,
             self.limits,
             self.timeouts,
         )
-        .map_err(|_| AttachmentSecurityScanAdapterErrorV1::Unavailable)
+        .map_err(|_| AttachmentSecurityScanAdapterErrorV1::Scanner)
+    }
+
+    pub fn transfer_claimed_blob(
+        &self,
+        control_channel: &mut ManagedControlChannelV2<UnixStream>,
+        claimed: &ClaimedAttachmentSecurityScanJobV1,
+    ) -> Result<AttachmentSecurityTargetBlobReceiptV1, AttachmentSecurityScanAdapterErrorV1> {
+        transfer_blob_custody(control_channel, claimed)
     }
 }
 
 fn read_blob(
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
     claimed: &ClaimedAttachmentSecurityScanJobV1,
+    target_blob: AttachmentSecurityTargetBlobReceiptV1,
 ) -> Result<Vec<u8>, AttachmentSecurityScanAdapterErrorV1> {
     if prepare_blocking_control_channel(control_channel).is_err() {
         let _ = restore_nonblocking_control_channel(control_channel);
-        return Err(AttachmentSecurityScanAdapterErrorV1::Unavailable);
+        return Err(AttachmentSecurityScanAdapterErrorV1::ControlChannel);
     }
-    let result = (|| {
+    let result: Result<Vec<u8>, AttachmentSecurityScanAdapterErrorV1> = (|| {
         let mut dispatcher = RejectManagedControlRequestsV2;
         let session = request_managed_blob_session_v2(
             control_channel,
             &mut dispatcher,
             ManagedBlobSessionRequestV1 {
-                capability_id: ATTACHMENT_SECURITY_BLOB_READ_CAPABILITY_ID,
+                capability_id: ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID,
                 operation: BlobDataOperationV1::BlobDataOperationReadRangeV1,
-                reference_id: &claimed.job.blob_reference_id,
+                reference_id: &target_blob.reference_id,
                 declared_size: claimed.job.declared_size,
                 backup_class: 1,
-                receipt_sha256: Some(&claimed.job.blob_receipt_sha256),
+                receipt_sha256: Some(&target_blob.receipt_sha256),
+                custody_target: None,
             },
         )
-        .map_err(|_| AttachmentSecurityScanAdapterErrorV1::Unavailable)?;
+        .map_err(|_| AttachmentSecurityScanAdapterErrorV1::BlobReadGrant)?;
         BlobDataClient::new(session.data_socket_path)
             .and_then(|client| {
                 client.read_range(
@@ -100,12 +114,60 @@ fn read_blob(
                     claimed.job.declared_size,
                 )
             })
-            .map_err(|_| AttachmentSecurityScanAdapterErrorV1::Unavailable)
+            .map_err(|_| AttachmentSecurityScanAdapterErrorV1::BlobReadDataPlane)
     })();
     let restored = restore_nonblocking_control_channel(control_channel);
     match (result, restored) {
         (Ok(bytes), Ok(())) => Ok(bytes),
-        _ => Err(AttachmentSecurityScanAdapterErrorV1::Unavailable),
+        (Err(error), _) | (Ok(_), Err(error)) => Err(error),
+    }
+}
+
+fn transfer_blob_custody(
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
+    claimed: &ClaimedAttachmentSecurityScanJobV1,
+) -> Result<AttachmentSecurityTargetBlobReceiptV1, AttachmentSecurityScanAdapterErrorV1> {
+    if prepare_blocking_control_channel(control_channel).is_err() {
+        let _ = restore_nonblocking_control_channel(control_channel);
+        return Err(AttachmentSecurityScanAdapterErrorV1::ControlChannel);
+    }
+    let result: Result<
+        AttachmentSecurityTargetBlobReceiptV1,
+        AttachmentSecurityScanAdapterErrorV1,
+    > = (|| {
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let transfer = request_managed_blob_custody_transfer_v2(
+            control_channel,
+            &mut dispatcher,
+            ManagedBlobCustodyTransferRequestV1 {
+                capability_id: ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID,
+                source_reference_id: &claimed.job.blob_reference_id,
+                declared_size: claimed.job.declared_size,
+                receipt_sha256: &claimed.job.blob_receipt_sha256,
+                custody_source_proof: &claimed.custody_transfer_source_proof,
+                evidence_id: &claimed.job.candidate_message_id,
+                evidence_envelope_sha256: &claimed.candidate_envelope_sha256,
+            },
+        )
+        .map_err(|_| AttachmentSecurityScanAdapterErrorV1::CustodyGrant)?;
+        let reference_id: [u8; 16] = transfer
+            .grant
+            .target_reference_id
+            .as_slice()
+            .try_into()
+            .map_err(|_| AttachmentSecurityScanAdapterErrorV1::CustodyGrant)?;
+        BlobDataClient::new(transfer.data_socket_path)
+            .and_then(|client| client.custody_transfer(transfer.grant, transfer.channel_binding))
+            .map_err(|_| AttachmentSecurityScanAdapterErrorV1::CustodyDataPlane)?;
+        Ok(AttachmentSecurityTargetBlobReceiptV1 {
+            reference_id,
+            receipt_sha256: claimed.job.blob_receipt_sha256,
+        })
+    })();
+    let restored = restore_nonblocking_control_channel(control_channel);
+    match (result, restored) {
+        (Ok(receipt), Ok(())) => Ok(receipt),
+        (Err(error), _) | (Ok(_), Err(error)) => Err(error),
     }
 }
 
@@ -125,7 +187,7 @@ fn prepare_blocking_control_channel(
                 .inner_mut()
                 .set_write_timeout(Some(Duration::from_secs(5)))
         })
-        .map_err(|_| AttachmentSecurityScanAdapterErrorV1::Unavailable)
+        .map_err(|_| AttachmentSecurityScanAdapterErrorV1::ControlChannel)
 }
 
 fn restore_nonblocking_control_channel(
@@ -136,11 +198,16 @@ fn restore_nonblocking_control_channel(
         .set_read_timeout(None)
         .and_then(|_| channel.inner_mut().set_write_timeout(None))
         .and_then(|_| channel.inner_mut().set_nonblocking(true))
-        .map_err(|_| AttachmentSecurityScanAdapterErrorV1::Unavailable)
+        .map_err(|_| AttachmentSecurityScanAdapterErrorV1::ControlChannel)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AttachmentSecurityScanAdapterErrorV1 {
     InvalidConfiguration,
-    Unavailable,
+    ControlChannel,
+    CustodyGrant,
+    CustodyDataPlane,
+    BlobReadGrant,
+    BlobReadDataPlane,
+    Scanner,
 }

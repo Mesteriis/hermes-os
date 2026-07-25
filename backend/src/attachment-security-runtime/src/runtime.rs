@@ -222,31 +222,40 @@ impl AttachmentSecurityRuntimeV1 {
             AttachmentSecurityConsumerV1::Candidate => {
                 let decoded = decode_scan_candidate_v1(delivery.exact_bytes())
                     .map_err(|_| AttachmentSecurityRuntimeErrorV1::InvalidDelivery)?;
-                self.persistence
-                    .persist_scan_candidate(
-                        &decoded.fact,
-                        decoded.envelope_sha256,
-                        self.join_policy,
-                        self.retry_policy,
-                        consumed_at_unix_seconds,
-                    )
-                    .await
+                Some(
+                    self.persistence
+                        .persist_scan_candidate(
+                            &decoded.fact,
+                            decoded.envelope_sha256,
+                            self.join_policy,
+                            self.retry_policy,
+                            consumed_at_unix_seconds,
+                        )
+                        .await,
+                )
             }
             AttachmentSecurityConsumerV1::CanonicalState => {
                 let decoded = decode_canonical_state_v1(delivery.exact_bytes())
                     .map_err(|_| AttachmentSecurityRuntimeErrorV1::InvalidDelivery)?;
-                self.persistence
-                    .persist_canonical_state(
-                        &decoded.fact,
-                        decoded.envelope_sha256,
-                        self.join_policy,
-                        self.retry_policy,
-                        consumed_at_unix_seconds,
-                    )
-                    .await
+                match decoded {
+                    Some(decoded) => Some(
+                        self.persistence
+                            .persist_canonical_state(
+                                &decoded.fact,
+                                decoded.envelope_sha256,
+                                self.join_policy,
+                                self.retry_policy,
+                                consumed_at_unix_seconds,
+                            )
+                            .await,
+                    ),
+                    None => None,
+                }
             }
         };
-        result.map_err(persistence_error)?;
+        if let Some(result) = result {
+            result.map_err(persistence_error)?;
+        }
         delivery
             .acknowledge()
             .await
@@ -274,13 +283,39 @@ impl AttachmentSecurityRuntimeV1 {
         else {
             return Ok(AttachmentSecurityScanTickV1::Idle);
         };
-        let scanner_outcome = match self
-            .scanner
-            .scan_claimed(&mut self.control_channel, &claimed)
-        {
-            Ok(outcome) => outcome,
-            Err(_) => return self.retry_claim(&claimed, observed_at_unix_seconds).await,
+        let target_blob = match claimed.target_blob_receipt {
+            Some(receipt) => receipt,
+            None => {
+                let receipt = match self
+                    .scanner
+                    .transfer_claimed_blob(&mut self.control_channel, &claimed)
+                {
+                    Ok(receipt) => receipt,
+                    Err(error) => {
+                        return self
+                            .retry_claim(&claimed, observed_at_unix_seconds, error)
+                            .await;
+                    }
+                };
+                self.persistence
+                    .record_target_blob_receipt(&claimed, receipt, observed_at_unix_seconds)
+                    .await
+                    .map_err(persistence_error)?;
+                receipt
+            }
         };
+        let scanner_outcome =
+            match self
+                .scanner
+                .scan_claimed(&mut self.control_channel, &claimed, target_blob)
+            {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    return self
+                        .retry_claim(&claimed, observed_at_unix_seconds, error)
+                        .await;
+                }
+            };
         let decision = decide_attachment_security_verdict_v1(
             &claimed.job,
             scanner_outcome,
@@ -337,6 +372,7 @@ impl AttachmentSecurityRuntimeV1 {
         &self,
         claimed: &ClaimedAttachmentSecurityScanJobV1,
         recorded_at_unix_seconds: i64,
+        error: crate::scan::AttachmentSecurityScanAdapterErrorV1,
     ) -> Result<AttachmentSecurityScanTickV1, AttachmentSecurityRuntimeErrorV1> {
         let exponent = claimed.attempt_count.saturating_sub(1).min(6);
         let delay_seconds = (5_i64 << exponent).min(300);
@@ -351,10 +387,10 @@ impl AttachmentSecurityRuntimeV1 {
         Ok(
             match outcome {
                 hermes_attachment_security_persistence::RetryAttachmentSecurityScanJobOutcomeV1::Scheduled => {
-                    AttachmentSecurityScanTickV1::RetryScheduled
+                    AttachmentSecurityScanTickV1::RetryScheduled(error)
                 }
                 hermes_attachment_security_persistence::RetryAttachmentSecurityScanJobOutcomeV1::Exhausted => {
-                    AttachmentSecurityScanTickV1::Exhausted
+                    AttachmentSecurityScanTickV1::Exhausted(error)
                 }
             },
         )
@@ -585,8 +621,8 @@ fn storage_binding(
 pub enum AttachmentSecurityScanTickV1 {
     Idle,
     Completed,
-    RetryScheduled,
-    Exhausted,
+    RetryScheduled(crate::scan::AttachmentSecurityScanAdapterErrorV1),
+    Exhausted(crate::scan::AttachmentSecurityScanAdapterErrorV1),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

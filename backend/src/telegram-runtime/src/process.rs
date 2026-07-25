@@ -4,9 +4,13 @@ use std::os::unix::net::UnixStream;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
+    BlobDataClient, ManagedBlobCustodyTargetV1, ManagedBlobSessionRequestV1,
+    request_managed_blob_session_v2,
 };
-use hermes_communications_ingress::{BodyAdmissionFailureV1, BodyBlobReceiptV1};
+use hermes_communications_ingress::{
+    BodyAdmissionFailureV1, BodyBlobReceiptV1, COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
+    COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID, COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID,
+};
 use hermes_runtime_protocol::v1::BlobDataOperationV1;
 use hermes_runtime_protocol::{
     managed_control::{
@@ -258,6 +262,7 @@ pub fn serve_admitted_provider_loop(
                                 declared_size: intent.declared_size,
                                 backup_class: intent.backup_class,
                                 receipt_sha256: None,
+                                custody_target: None,
                             },
                         )
                         .map_err(|_| {
@@ -328,6 +333,11 @@ fn admit_telegram_plaintext(
                 .map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
             backup_class: 1,
             receipt_sha256: Some(&sha256),
+            custody_target: Some(ManagedBlobCustodyTargetV1 {
+                owner_id: COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID,
+                module_id: COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID,
+                capability_id: COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
+            }),
         },
     );
     let restored = control_channel.inner_mut().set_nonblocking(true);
@@ -447,6 +457,7 @@ fn authorize_media_for_request<T: hermes_telegram_tdlib::TdlibTransport>(
             declared_size: media.blob.declared_size,
             backup_class: media.blob.backup_class,
             receipt_sha256: None,
+            custody_target: None,
         },
     )
     .map_err(|_| "Telegram Blob session request was denied".to_owned())?;

@@ -35,6 +35,7 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
         .expect("claim initial owner");
     let _admitted_mail = admit_mail_runtime(&store);
     let admitted_attachment_security = admit_attachment_security_runtime(&store);
+    let blob_source = AttachmentSecurityBlobSourceFixture::admit(&store);
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
     configure_route_handler(&supervisor, &store, &data);
@@ -61,9 +62,17 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
         release.kernel(),
         &storage_runtime_directory(),
     );
+    issue_initial_communications_storage_binding(&store);
+    crate::platform::storage::provisioning::apply_reserved_binding(
+        &supervisor,
+        &store,
+        &communications_storage_binding(&store),
+    )
+    .expect("provision Communications Storage binding");
     let admitted_attachment_security =
         prepare_attachment_security_runtime(&supervisor, &store, admitted_attachment_security);
     configure_communications_jetstream(&store);
+    start_communications_domain(&supervisor, &store, &root.join("runtime"));
     let attachment_security = start_attachment_security_runtime(
         &supervisor,
         &store,
@@ -79,7 +88,29 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
     assert_eq!(attachment_security.runtime_generation, 1);
     assert!(attachment_security.grant_epoch > 0);
     assert!(!attachment_security.runtime_instance_id.is_empty());
-    assert_eq!(clamav.scan_count(), 0);
+    let plaintext =
+        b"clean attachment payload visible only to Blob and the loopback scanner fixture";
+    let blob = blob_source.write(&store, &supervisor, &data, [81; 16], plaintext);
+    let attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "clean",
+        blob.declared_size,
+        blob.receipt_sha256,
+    );
+    assert_clean_attachment_security_verdict_flow(&store, &attachment, &blob, &clamav, plaintext);
+    assert_attachment_security_source_blob_read_is_denied(
+        &store,
+        &supervisor,
+        &data,
+        &attachment_security,
+        &blob,
+    );
+    assert_eq!(
+        wait_for_attachment_state(&store, &supervisor, attachment.attachment_anchor_id),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
+            as u32
+    );
+    assert_eq!(clamav.scan_count(), 1);
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {

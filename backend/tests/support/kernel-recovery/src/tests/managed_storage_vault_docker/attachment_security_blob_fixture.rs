@@ -1,0 +1,213 @@
+//! Kernel-issued Blob write fixture for Attachment Security scan inputs.
+
+use super::*;
+
+use hermes_attachment_security_contract::admission::{
+    ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
+    ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID,
+    ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_OWNER_ID,
+};
+use hermes_blob_client::{BlobClientError, BlobDataClient};
+use hermes_kernel_control_store::ModuleBlobQuotaRequestV1;
+use hermes_runtime_protocol::v1::{BlobDataOperationV1, ManagedRuntimeBlobSessionRequestV1};
+
+use crate::runtime::lifecycle::control::{
+    ManagedRuntimeBlobSessionHandler, ManagedRuntimeExpectation,
+};
+
+const SOURCE_REGISTRATION_ID: &str = "attachment-security-fixture-source";
+const SOURCE_MODULE_ID: &str = "integration.attachment-security-fixture-source";
+const SOURCE_OWNER_ID: &str = "mail";
+const SOURCE_BLOB_CAPABILITY_ID: &str = "attachment-security-fixture-source.blob.v1";
+const SOURCE_RUNTIME_INSTANCE_ID: &str = "71717171717171717171717171717171";
+
+pub(super) struct AttachmentSecurityBlobSourceFixture {
+    grant_epoch: u64,
+}
+
+pub(super) struct AttachmentSecurityFixtureBlobV1 {
+    pub(super) reference_id: [u8; 16],
+    pub(super) receipt_sha256: [u8; 32],
+    pub(super) custody_transfer_source_proof: Vec<u8>,
+    pub(super) declared_size: u64,
+}
+
+impl AttachmentSecurityBlobSourceFixture {
+    pub(super) fn admit(store: &SqliteControlStore) -> Self {
+        let registration = ModuleRegistration::new(
+            SOURCE_REGISTRATION_ID,
+            SOURCE_MODULE_ID,
+            SOURCE_OWNER_ID,
+            Sha256::digest(b"attachment-security-fixture-source").into(),
+            ModuleRegistrationState::Pending,
+            1,
+        );
+        let capabilities = [SOURCE_BLOB_CAPABILITY_ID.to_owned()];
+        let blob = ModuleBlobQuotaRequestV1::new(
+            SOURCE_REGISTRATION_ID,
+            SOURCE_BLOB_CAPABILITY_ID,
+            SOURCE_OWNER_ID,
+            64 * 1024 * 1024,
+        );
+        store
+            .create_pending_registration_with_requests(
+                &registration,
+                &capabilities,
+                &[],
+                &[],
+                std::slice::from_ref(&blob),
+            )
+            .expect("record Attachment Security fixture source");
+        let grant_epoch = store
+            .approve_module_registration(SOURCE_REGISTRATION_ID, &capabilities)
+            .expect("approve Attachment Security fixture Blob capability")
+            .grant_epoch();
+        store
+            .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
+                SOURCE_REGISTRATION_ID,
+                1,
+                "attachment-security-fixture-distribution",
+                SOURCE_MODULE_ID,
+                Sha256::digest(b"attachment-security-fixture-source-binary").into(),
+                Sha256::digest(b"attachment-security-fixture-source").into(),
+                None,
+            ))
+            .expect("record Attachment Security fixture source binding");
+        store
+            .record_managed_launch(&ManagedLaunchRecord::new(
+                SOURCE_REGISTRATION_ID,
+                SOURCE_RUNTIME_INSTANCE_ID,
+                1,
+                1,
+                1,
+                grant_epoch,
+            ))
+            .expect("record Attachment Security fixture source launch");
+        Self { grant_epoch }
+    }
+
+    pub(super) fn write(
+        &self,
+        store: &Arc<SqliteControlStore>,
+        supervisor: &ManagedRuntimeSupervisor,
+        kernel_data: &Path,
+        reference_id: [u8; 16],
+        plaintext: &[u8],
+    ) -> AttachmentSecurityFixtureBlobV1 {
+        assert!(!plaintext.is_empty());
+        let receipt_sha256: [u8; 32] = Sha256::digest(plaintext).into();
+        let channel_binding = Sha256::digest(reference_id).to_vec();
+        let request_digest = Sha256::digest([reference_id.as_slice(), b"write"].concat());
+        let delivery = BlobSessionHandlerV1::new(
+            Arc::clone(store),
+            supervisor.relay_port(),
+            kernel_data.to_path_buf(),
+        )
+        .issue_blob_session(
+            &ManagedRuntimeExpectation::new(
+                SOURCE_REGISTRATION_ID,
+                SOURCE_RUNTIME_INSTANCE_ID,
+                SOURCE_MODULE_ID,
+                1,
+                self.grant_epoch,
+                [3; 32],
+                None,
+            ),
+            ManagedRuntimeBlobSessionRequestV1 {
+                request_id: request_digest[..16].to_vec(),
+                capability_id: SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+                operation: BlobDataOperationV1::BlobDataOperationWriteV1 as u32,
+                channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
+                reference_id: reference_id.to_vec(),
+                declared_size: u64::try_from(plaintext.len()).expect("fixture Blob size"),
+                backup_class: 1,
+                ttl_seconds: 30,
+                receipt_sha256: receipt_sha256.to_vec(),
+                custody_source_proof: Vec::new(),
+                evidence_id: Vec::new(),
+                evidence_envelope_sha256: Vec::new(),
+                custody_target_owner_id: ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_OWNER_ID
+                    .to_owned(),
+                custody_target_module_id: ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID
+                    .to_owned(),
+                custody_target_capability_id: ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID
+                    .to_owned(),
+            },
+        )
+        .expect("issue Attachment Security fixture Blob write");
+        let custody_transfer_source_proof = delivery.custody_transfer_source_proof;
+        BlobDataClient::new(delivery.data_socket_path)
+            .expect("open Attachment Security fixture Blob client")
+            .write(
+                delivery
+                    .grant
+                    .expect("Attachment Security Blob write grant"),
+                channel_binding,
+                plaintext.to_vec(),
+            )
+            .expect("write Attachment Security fixture Blob");
+        AttachmentSecurityFixtureBlobV1 {
+            reference_id,
+            receipt_sha256,
+            custody_transfer_source_proof,
+            declared_size: u64::try_from(plaintext.len()).expect("fixture Blob size"),
+        }
+    }
+}
+
+pub(super) fn assert_attachment_security_source_blob_read_is_denied(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    kernel_data: &Path,
+    target: &StartedAttachmentSecurityRuntime,
+    blob: &AttachmentSecurityFixtureBlobV1,
+) {
+    let channel_binding = Sha256::digest(b"attachment-security-source-read-denial").to_vec();
+    let delivery = BlobSessionHandlerV1::new(
+        Arc::clone(store),
+        supervisor.relay_port(),
+        kernel_data.to_path_buf(),
+    )
+    .issue_blob_session(
+        &ManagedRuntimeExpectation::new(
+            &target.registration_id,
+            &target.runtime_instance_id,
+            ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID,
+            target.runtime_generation,
+            target.grant_epoch,
+            [4; 32],
+            None,
+        ),
+        ManagedRuntimeBlobSessionRequestV1 {
+            request_id: vec![91; 16],
+            capability_id: ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID.to_owned(),
+            operation: BlobDataOperationV1::BlobDataOperationReadRangeV1 as u32,
+            channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
+            reference_id: blob.reference_id.to_vec(),
+            declared_size: blob.declared_size,
+            backup_class: 1,
+            ttl_seconds: 30,
+            receipt_sha256: blob.receipt_sha256.to_vec(),
+            custody_source_proof: Vec::new(),
+            evidence_id: Vec::new(),
+            evidence_envelope_sha256: Vec::new(),
+            custody_target_owner_id: String::new(),
+            custody_target_module_id: String::new(),
+            custody_target_capability_id: String::new(),
+        },
+    )
+    .expect("issue target-fenced source Blob read session");
+    let error = BlobDataClient::new(delivery.data_socket_path)
+        .expect("open target-fenced source Blob read client")
+        .read_range(
+            delivery.grant.expect("source Blob read grant"),
+            channel_binding,
+            0,
+            blob.declared_size,
+        )
+        .expect_err("Attachment Security must not read the integration-owned source reference");
+    assert_eq!(
+        error,
+        BlobClientError::Rejected("data_request_denied".to_owned())
+    );
+}

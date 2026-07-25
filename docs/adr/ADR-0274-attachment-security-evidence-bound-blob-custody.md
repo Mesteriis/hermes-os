@@ -4,11 +4,14 @@
 Дата: 2026-07-25
 Состояние реализации: Решение принято после live managed conformance, который
 доказал, что прямой read integration-owned Blob правильно отклоняется
-registration/capability fence. Contract revision 2, engine-owned custody
-transfer и conformance matrix ещё не реализованы. До их реализации phase gate
-`attachment_security_engine_v1` остаётся закрыт. ADR-0275 дополнительно
-определяет target-bound proof, необходимый для безопасного transfer между
-module owners `mail` и `attachment_security`.
+registration/capability fence. Contract revision 2 и engine-owned custody
+transfer реализованы. Live disposable contour доказал target-bound
+`mail -> attachment_security` transfer, сохранение target receipt, one-use
+target-owned read, clean ClamAV verdict, Communications CAS, exact replay без
+повторного scan и отдельный отказ прямого source read. Phase gate
+`attachment_security_engine_v1` остаётся закрыт до threat/failure,
+outage/restart/revoke/stale-CAS matrix и production inventory admission.
+ADR-0275 определяет stable target-bound proof для этого cross-owner handoff.
 
 Зависит от:
 

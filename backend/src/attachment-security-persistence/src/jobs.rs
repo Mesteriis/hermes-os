@@ -11,16 +11,25 @@ use sqlx::{Postgres, Row, Transaction};
 
 use crate::{
     AttachmentSecurityPersistenceErrorV1, AttachmentSecurityPersistenceV1,
-    AttachmentSecurityRetryPolicyV1, id16, id32, valid_id16, valid_timestamp,
+    AttachmentSecurityRetryPolicyV1, id16, id32, valid_id16, valid_sha256, valid_timestamp,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClaimedAttachmentSecurityScanJobV1 {
     pub job_id: [u8; 16],
     pub job: AttachmentSecurityScanJobV1,
+    pub candidate_envelope_sha256: [u8; 32],
+    pub custody_transfer_source_proof: Vec<u8>,
+    pub target_blob_receipt: Option<AttachmentSecurityTargetBlobReceiptV1>,
     pub worker_id: String,
     pub attempt_count: u32,
     pub max_attempts: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttachmentSecurityTargetBlobReceiptV1 {
+    pub reference_id: [u8; 16],
+    pub receipt_sha256: [u8; 32],
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -88,7 +97,7 @@ impl AttachmentSecurityPersistenceV1 {
         .await
         .map_err(|_| AttachmentSecurityPersistenceErrorV1::StorageUnavailable)?;
         let row = sqlx::query(
-            "WITH candidate AS (SELECT job_id FROM hermes_data.attachment_security_scan_jobs WHERE state = 1 AND next_attempt_at_unix_seconds <= $2 AND attempt_count < max_attempts AND (lease_expires_at_unix_seconds IS NULL OR lease_expires_at_unix_seconds <= $2) ORDER BY next_attempt_at_unix_seconds ASC, job_id ASC LIMIT 1 FOR UPDATE SKIP LOCKED) UPDATE hermes_data.attachment_security_scan_jobs AS job SET claimed_by = $1, lease_expires_at_unix_seconds = $3, attempt_count = job.attempt_count + 1 FROM candidate WHERE job.job_id = candidate.job_id RETURNING job.job_id, job.candidate_message_id, job.canonical_state_message_id, job.attachment_anchor_id, job.blob_reference_id, job.declared_size, job.blob_receipt_sha256, job.causation_message_id, job.correlation_id, job.attempt_count, job.max_attempts",
+            "WITH next_job AS (SELECT job_id FROM hermes_data.attachment_security_scan_jobs WHERE state = 1 AND next_attempt_at_unix_seconds <= $2 AND attempt_count < max_attempts AND (lease_expires_at_unix_seconds IS NULL OR lease_expires_at_unix_seconds <= $2) ORDER BY next_attempt_at_unix_seconds ASC, job_id ASC LIMIT 1 FOR UPDATE SKIP LOCKED) UPDATE hermes_data.attachment_security_scan_jobs AS job SET claimed_by = $1, lease_expires_at_unix_seconds = $3, attempt_count = job.attempt_count + 1 FROM next_job, hermes_data.attachment_security_scan_candidates AS source_candidate, hermes_data.attachment_security_event_inbox AS candidate_inbox WHERE job.job_id = next_job.job_id AND source_candidate.message_id = job.candidate_message_id AND candidate_inbox.message_id = source_candidate.message_id RETURNING job.job_id, job.candidate_message_id, job.canonical_state_message_id, job.attachment_anchor_id, job.blob_reference_id, job.declared_size, job.blob_receipt_sha256, job.causation_message_id, job.correlation_id, job.attempt_count, job.max_attempts, source_candidate.custody_transfer_source_proof, candidate_inbox.envelope_sha256 AS candidate_envelope_sha256, job.target_blob_reference_id, job.target_blob_receipt_sha256",
         )
         .bind(worker_id)
         .bind(claimed_at_unix_seconds)
@@ -104,6 +113,40 @@ impl AttachmentSecurityPersistenceV1 {
             .await
             .map_err(|_| AttachmentSecurityPersistenceErrorV1::StorageUnavailable)?;
         Ok(claimed)
+    }
+
+    pub async fn record_target_blob_receipt(
+        &self,
+        claimed: &ClaimedAttachmentSecurityScanJobV1,
+        receipt: AttachmentSecurityTargetBlobReceiptV1,
+        recorded_at_unix_seconds: i64,
+    ) -> Result<(), AttachmentSecurityPersistenceErrorV1> {
+        if !valid_claim(claimed)
+            || !valid_id16(&receipt.reference_id)
+            || !valid_sha256(&receipt.receipt_sha256)
+            || !valid_timestamp(recorded_at_unix_seconds)
+        {
+            return Err(AttachmentSecurityPersistenceErrorV1::InvalidInput);
+        }
+        let updated = sqlx::query(
+            "UPDATE hermes_data.attachment_security_scan_jobs SET target_blob_reference_id = $5, target_blob_receipt_sha256 = $6 WHERE job_id = $1 AND state = 1 AND claimed_by = $2 AND attempt_count = $3 AND lease_expires_at_unix_seconds > $4 AND ((target_blob_reference_id IS NULL AND target_blob_receipt_sha256 IS NULL) OR (target_blob_reference_id = $5 AND target_blob_receipt_sha256 = $6))",
+        )
+        .bind(claimed.job_id.as_slice())
+        .bind(&claimed.worker_id)
+        .bind(
+            i32::try_from(claimed.attempt_count)
+                .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidInput)?,
+        )
+        .bind(recorded_at_unix_seconds)
+        .bind(receipt.reference_id.as_slice())
+        .bind(receipt.receipt_sha256.as_slice())
+        .execute(&self.pool)
+        .await
+        .map_err(|_| AttachmentSecurityPersistenceErrorV1::StorageUnavailable)?;
+        if updated.rows_affected() != 1 {
+            return Err(AttachmentSecurityPersistenceErrorV1::ClaimLost);
+        }
+        Ok(())
     }
 
     pub async fn retry_scan_job(
@@ -375,6 +418,14 @@ fn claimed_job_from_row(
                     .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidRow)?,
             )?,
         },
+        candidate_envelope_sha256: id32(
+            &row.try_get::<Vec<u8>, _>("candidate_envelope_sha256")
+                .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidRow)?,
+        )?,
+        custody_transfer_source_proof: row
+            .try_get("custody_transfer_source_proof")
+            .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidRow)?,
+        target_blob_receipt: target_blob_receipt_from_row(&row)?,
         worker_id: worker_id.to_owned(),
         attempt_count: u32::try_from(
             row.try_get::<i32, _>("attempt_count")
@@ -391,10 +442,36 @@ fn claimed_job_from_row(
 
 fn valid_claim(value: &ClaimedAttachmentSecurityScanJobV1) -> bool {
     valid_id16(&value.job_id)
+        && valid_sha256(&value.candidate_envelope_sha256)
+        && (1..=2_048).contains(&value.custody_transfer_source_proof.len())
+        && value.target_blob_receipt.is_none_or(|receipt| {
+            valid_id16(&receipt.reference_id) && valid_sha256(&receipt.receipt_sha256)
+        })
         && valid_worker_id(&value.worker_id)
         && value.attempt_count > 0
         && value.attempt_count <= value.max_attempts
         && (1..=32).contains(&value.max_attempts)
+}
+
+fn target_blob_receipt_from_row(
+    row: &sqlx::postgres::PgRow,
+) -> Result<Option<AttachmentSecurityTargetBlobReceiptV1>, AttachmentSecurityPersistenceErrorV1> {
+    let reference_id = row
+        .try_get::<Option<Vec<u8>>, _>("target_blob_reference_id")
+        .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidRow)?;
+    let receipt_sha256 = row
+        .try_get::<Option<Vec<u8>>, _>("target_blob_receipt_sha256")
+        .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidRow)?;
+    match (reference_id, receipt_sha256) {
+        (None, None) => Ok(None),
+        (Some(reference_id), Some(receipt_sha256)) => {
+            Ok(Some(AttachmentSecurityTargetBlobReceiptV1 {
+                reference_id: id16(&reference_id)?,
+                receipt_sha256: id32(&receipt_sha256)?,
+            }))
+        }
+        _ => Err(AttachmentSecurityPersistenceErrorV1::InvalidRow),
+    }
 }
 
 fn valid_verdict_for_claim(
@@ -458,6 +535,9 @@ mod tests {
         let claimed = ClaimedAttachmentSecurityScanJobV1 {
             job_id: [8; 16],
             job: job(),
+            candidate_envelope_sha256: [11; 32],
+            custody_transfer_source_proof: vec![12; 64],
+            target_blob_receipt: None,
             worker_id: "attachment-security-1".to_owned(),
             attempt_count: 1,
             max_attempts: 3,

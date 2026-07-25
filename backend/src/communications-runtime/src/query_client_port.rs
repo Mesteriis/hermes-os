@@ -13,9 +13,10 @@ use std::os::unix::net::UnixStream;
 
 use crate::query_port::{CommunicationsQueryPortErrorV1, handle_query_request_v1};
 use crate::search_access::CommunicationsSearchAccessV1;
+use hermes_communications_ingress::COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID;
 
 const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
-pub const COMMUNICATIONS_MODULE_ID: &str = "hermes-communications-runtime";
+pub const COMMUNICATIONS_MODULE_ID: &str = COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID;
 const MODULE_ID: &str = COMMUNICATIONS_MODULE_ID;
 const OWNER_ID: &str = "communications";
 const CONTRACT_NAME: &str = "communications.query";

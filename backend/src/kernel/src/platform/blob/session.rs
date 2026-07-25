@@ -96,6 +96,8 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
         if !request.custody_source_proof.is_empty()
             || !request.evidence_id.is_empty()
             || !request.evidence_envelope_sha256.is_empty()
+            || (operation != BlobDataOperationV1::BlobDataOperationWriteV1
+                && has_custody_target(&request))
         {
             return Err("managed runtime Blob session request is denied".to_owned());
         }
@@ -144,7 +146,15 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
         {
             Vec::new()
         } else {
-            issue_custody_source_proof(&signer, &grant, &request.receipt_sha256, now)?
+            issue_custody_source_proof(
+                &signer,
+                &grant,
+                &request.receipt_sha256,
+                &request.custody_target_owner_id,
+                &request.custody_target_module_id,
+                &request.custody_target_capability_id,
+                now,
+            )?
         };
         Ok(ManagedRuntimeBlobSessionDeliveryV1 {
             data_socket_path: launch::data_socket_path(&self.data_dir)
@@ -186,7 +196,12 @@ impl BlobSessionHandlerV1 {
         if source.reference_id != request.reference_id
             || source.declared_size != request.declared_size
             || source.receipt_sha256 != request.receipt_sha256
-            || source.owner_id.as_str() != target.request().owner_id()
+            || !proof_authorizes_target(
+                &source,
+                target.request().owner_id(),
+                expectation.module_id(),
+                &request.capability_id,
+            )
             || !catalog::resolve(&*self.store)?.iter().any(|entry| {
                 entry.registration_id() == source.registration_id.as_str()
                     && entry.capability_id() == source.capability_id.as_str()
@@ -268,6 +283,7 @@ pub(crate) fn valid_request(request: &ManagedRuntimeBlobSessionRequestV1) -> boo
         && (request.receipt_sha256.is_empty()
             || (request.receipt_sha256.len() == 32
                 && request.receipt_sha256.iter().any(|byte| *byte != 0)))
+        && valid_custody_target_request(request)
 }
 
 fn verify_custody_source_proof(
@@ -294,6 +310,7 @@ fn verify_custody_source_proof(
         || proof.expires_at_unix_ms <= now_unix_ms
         || proof.issued_at_unix_ms > now_unix_ms
         || proof.kernel_authorization_signature_raw.len() != 64
+        || !valid_proof_target(&proof)
     {
         return Err("managed runtime Blob custody transfer is denied".to_owned());
     }
@@ -333,6 +350,9 @@ fn issue_custody_source_proof(
     signer: &FileDeviceSigner,
     grant: &BlobDataSessionGrantV1,
     receipt_sha256: &[u8],
+    target_owner_id: &str,
+    target_module_id: &str,
+    target_capability_id: &str,
     now_unix_ms: u64,
 ) -> Result<Vec<u8>, String> {
     let expires_at_unix_ms = now_unix_ms
@@ -356,11 +376,71 @@ fn issue_custody_source_proof(
         kernel_authorization_signature_raw: Vec::new(),
         backup_class: grant.backup_class,
         reference_expires_at_unix_ms: grant.reference_expires_at_unix_ms,
+        target_owner_id: target_owner_id.to_owned(),
+        target_module_id: target_module_id.to_owned(),
+        target_capability_id: target_capability_id.to_owned(),
     };
     let mut message = b"hermes.blob-custody-source-proof.v1\0".to_vec();
     message.extend_from_slice(&proof.encode_to_vec());
     proof.kernel_authorization_signature_raw = signer.sign(&message).to_vec();
     Ok(proof.encode_to_vec())
+}
+
+fn valid_custody_target_request(request: &ManagedRuntimeBlobSessionRequestV1) -> bool {
+    let populated = [
+        request.custody_target_owner_id.as_str(),
+        request.custody_target_module_id.as_str(),
+        request.custody_target_capability_id.as_str(),
+    ];
+    populated.iter().all(|value| value.is_empty())
+        || (request.operation == BlobDataOperationV1::BlobDataOperationWriteV1 as u32
+            && !request.receipt_sha256.is_empty()
+            && populated.iter().all(|value| valid_target_token(value)))
+}
+
+fn has_custody_target(request: &ManagedRuntimeBlobSessionRequestV1) -> bool {
+    !request.custody_target_owner_id.is_empty()
+        || !request.custody_target_module_id.is_empty()
+        || !request.custody_target_capability_id.is_empty()
+}
+
+fn has_proof_target(proof: &BlobCustodySourceProofV1) -> bool {
+    !proof.target_owner_id.is_empty()
+        || !proof.target_module_id.is_empty()
+        || !proof.target_capability_id.is_empty()
+}
+
+fn valid_proof_target(proof: &BlobCustodySourceProofV1) -> bool {
+    let populated = [
+        proof.target_owner_id.as_str(),
+        proof.target_module_id.as_str(),
+        proof.target_capability_id.as_str(),
+    ];
+    populated.iter().all(|value| value.is_empty())
+        || populated.iter().all(|value| valid_target_token(value))
+}
+
+fn proof_authorizes_target(
+    proof: &BlobCustodySourceProofV1,
+    target_owner_id: &str,
+    target_module_id: &str,
+    target_capability_id: &str,
+) -> bool {
+    if has_proof_target(proof) {
+        proof.target_owner_id == target_owner_id
+            && proof.target_module_id == target_module_id
+            && proof.target_capability_id == target_capability_id
+    } else {
+        proof.owner_id == target_owner_id
+    }
+}
+
+fn valid_target_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
+        })
 }
 
 fn now_unix_ms() -> Result<u64, String> {
@@ -370,4 +450,61 @@ fn now_unix_ms() -> Result<u64, String> {
         .as_millis()
         .try_into()
         .map_err(|_| "managed runtime Blob session request is unavailable".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unbound_proof_remains_same_owner_only() {
+        let proof = BlobCustodySourceProofV1 {
+            owner_id: "mail".to_owned(),
+            ..Default::default()
+        };
+
+        assert!(proof_authorizes_target(
+            &proof,
+            "mail",
+            "mail-secondary",
+            "mail.blob.v1",
+        ));
+        assert!(!proof_authorizes_target(
+            &proof,
+            "communications",
+            "communications",
+            "communications.blob.v1",
+        ));
+    }
+
+    #[test]
+    fn bound_proof_requires_the_exact_cross_owner_target() {
+        let proof = BlobCustodySourceProofV1 {
+            owner_id: "mail".to_owned(),
+            target_owner_id: "attachment_security".to_owned(),
+            target_module_id: "hermes-attachment-security-runtime".to_owned(),
+            target_capability_id: "attachment_security.blob.v1".to_owned(),
+            ..Default::default()
+        };
+
+        assert!(valid_proof_target(&proof));
+        assert!(proof_authorizes_target(
+            &proof,
+            "attachment_security",
+            "hermes-attachment-security-runtime",
+            "attachment_security.blob.v1",
+        ));
+        assert!(!proof_authorizes_target(
+            &proof,
+            "communications",
+            "communications",
+            "communications.blob.v1",
+        ));
+
+        let partial = BlobCustodySourceProofV1 {
+            target_owner_id: "attachment_security".to_owned(),
+            ..Default::default()
+        };
+        assert!(!valid_proof_target(&partial));
+    }
 }

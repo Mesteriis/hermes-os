@@ -8,9 +8,13 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
+    BlobDataClient, ManagedBlobCustodyTargetV1, ManagedBlobSessionRequestV1,
+    request_managed_blob_session_v2,
 };
-use hermes_communications_ingress::{BodyAdmissionFailureV1, BodyBlobReceiptV1};
+use hermes_communications_ingress::{
+    BodyAdmissionFailureV1, BodyBlobReceiptV1, COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
+    COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID, COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID,
+};
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
     request_managed_runtime_event_access_v2,
@@ -492,6 +496,11 @@ fn admit_inbound_plaintext(
                 .map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
             backup_class: 1,
             receipt_sha256: Some(&sha256),
+            custody_target: Some(ManagedBlobCustodyTargetV1 {
+                owner_id: COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID,
+                module_id: COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID,
+                capability_id: COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
+            }),
         },
     );
     let restored = control_channel.inner_mut().set_nonblocking(true);
@@ -542,6 +551,7 @@ fn authorize_blob_session(
             declared_size: blob.declared_size,
             backup_class: blob.backup_class,
             receipt_sha256: None,
+            custody_target: None,
         },
     );
     let restored = control_channel.inner_mut().set_nonblocking(true);

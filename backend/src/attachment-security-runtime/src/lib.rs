@@ -7,4 +7,6 @@ pub mod runtime;
 mod scan;
 pub mod settings;
 
+pub use scan::AttachmentSecurityScanAdapterErrorV1;
+
 pub const PACKAGE: &str = "hermes-attachment-security-runtime";

@@ -219,6 +219,7 @@ pub(super) fn assert_mail_attachment_lifecycle(
     assert_eq!(candidate_payload.attachment_anchor_id, attachment_anchor_id);
     assert_eq!(candidate_payload.blob_reference_id.len(), 16);
     assert_eq!(candidate_payload.blob_receipt_sha256.len(), 32);
+    assert!((1..=2_048).contains(&candidate_payload.custody_transfer_source_proof.len()));
     assert!(candidate_payload.declared_size > 0);
     assert_eq!(
         candidate_envelope.causation_message_id,
@@ -390,7 +391,7 @@ fn wait_for_mail_mapping(
     }
 }
 
-fn wait_for_attachment_state(
+pub(super) fn wait_for_attachment_state(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     attachment_anchor_id: [u8; 16],

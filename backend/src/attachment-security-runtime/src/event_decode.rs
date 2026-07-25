@@ -55,6 +55,7 @@ pub fn decode_scan_candidate_v1(
     let correlation_id = id16(&envelope.correlation_id)?;
     if envelope.partition_key != payload.attachment_anchor_id
         || payload.declared_size == 0
+        || !(1..=2_048).contains(&payload.custody_transfer_source_proof.len())
         || !occurred_at_matches(
             metadata.occurred_at.as_ref(),
             payload.observed_at_unix_seconds,
@@ -69,6 +70,7 @@ pub fn decode_scan_candidate_v1(
             blob_reference_id,
             declared_size: payload.declared_size,
             blob_receipt_sha256,
+            custody_transfer_source_proof: payload.custody_transfer_source_proof,
             causation_message_id,
             correlation_id,
             observed_at_unix_seconds: payload.observed_at_unix_seconds,
@@ -79,7 +81,7 @@ pub fn decode_scan_candidate_v1(
 
 pub fn decode_canonical_state_v1(
     exact_envelope_bytes: &[u8],
-) -> Result<DecodedCanonicalStateV1, AttachmentSecurityDeliveryDecodeErrorV1> {
+) -> Result<Option<DecodedCanonicalStateV1>, AttachmentSecurityDeliveryDecodeErrorV1> {
     let (envelope, envelope_sha256) = accepted_envelope(exact_envelope_bytes)?;
     let expected = communication_attachment_safety_state_changed_contract_reference_v1();
     let Some(Semantics::Event(metadata)) = envelope.semantics.as_ref() else {
@@ -97,8 +99,7 @@ pub fn decode_canonical_state_v1(
     let expected_state = canonical_state(payload.expected_state)?;
     let next_state = canonical_state(payload.next_state)?;
     if envelope.partition_key != payload.attachment_anchor_id
-        || expected_state != CanonicalAttachmentSafetyStateV1::BlobPending
-        || next_state != CanonicalAttachmentSafetyStateV1::BlobAdmitted
+        || !valid_owner_transition(expected_state, next_state)
         || !occurred_at_matches(
             metadata.occurred_at.as_ref(),
             payload.observed_at_unix_seconds,
@@ -106,7 +107,12 @@ pub fn decode_canonical_state_v1(
     {
         return Err(AttachmentSecurityDeliveryDecodeErrorV1::InvalidPayload);
     }
-    Ok(DecodedCanonicalStateV1 {
+    if expected_state != CanonicalAttachmentSafetyStateV1::BlobPending
+        || next_state != CanonicalAttachmentSafetyStateV1::BlobAdmitted
+    {
+        return Ok(None);
+    }
+    Ok(Some(DecodedCanonicalStateV1 {
         fact: AttachmentSecurityCanonicalStateFactV1 {
             message_id,
             attachment_anchor_id,
@@ -117,7 +123,32 @@ pub fn decode_canonical_state_v1(
             observed_at_unix_seconds: payload.observed_at_unix_seconds,
         },
         envelope_sha256,
-    })
+    }))
+}
+
+const fn valid_owner_transition(
+    expected: CanonicalAttachmentSafetyStateV1,
+    next: CanonicalAttachmentSafetyStateV1,
+) -> bool {
+    matches!(
+        (expected, next),
+        (
+            CanonicalAttachmentSafetyStateV1::DescriptorOnly,
+            CanonicalAttachmentSafetyStateV1::BlobPending
+        ) | (
+            CanonicalAttachmentSafetyStateV1::BlobPending,
+            CanonicalAttachmentSafetyStateV1::BlobAdmitted
+        ) | (
+            CanonicalAttachmentSafetyStateV1::BlobAdmitted,
+            CanonicalAttachmentSafetyStateV1::SafeForDelivery
+        ) | (
+            CanonicalAttachmentSafetyStateV1::DescriptorOnly
+                | CanonicalAttachmentSafetyStateV1::BlobPending
+                | CanonicalAttachmentSafetyStateV1::BlobAdmitted,
+            CanonicalAttachmentSafetyStateV1::Quarantined
+                | CanonicalAttachmentSafetyStateV1::Rejected
+        )
+    )
 }
 
 fn accepted_envelope(
@@ -215,6 +246,7 @@ mod tests {
                 blob_reference_id: [2; 16],
                 declared_size: 42,
                 blob_receipt_sha256: [3; 32],
+                custody_transfer_source_proof: vec![9; 64],
                 source_observation_id: [4; 16],
                 correlation_id: [5; 16],
                 observed_at_unix_seconds: 1_700_000_000,
@@ -233,6 +265,7 @@ mod tests {
         assert_eq!(decoded.fact.attachment_anchor_id, [1; 16]);
         assert_eq!(decoded.fact.blob_reference_id, [2; 16]);
         assert_eq!(decoded.fact.blob_receipt_sha256, [3; 32]);
+        assert_eq!(decoded.fact.custody_transfer_source_proof, [9; 64]);
         assert_eq!(decoded.fact.causation_message_id, [4; 16]);
         assert_eq!(
             decoded.envelope_sha256,
@@ -293,7 +326,9 @@ mod tests {
         };
         let exact = envelope.encode_to_vec();
 
-        let decoded = decode_canonical_state_v1(&exact).expect("canonical state");
+        let decoded = decode_canonical_state_v1(&exact)
+            .expect("canonical state")
+            .expect("scan admission transition");
         assert_eq!(decoded.fact.message_id, [6; 16]);
         assert_eq!(decoded.fact.attachment_anchor_id, [1; 16]);
         assert_eq!(
@@ -306,5 +341,22 @@ mod tests {
         );
         assert_eq!(decoded.fact.evidence_id, [9; 16]);
         assert_eq!(decoded.fact.correlation_id, [5; 16]);
+
+        let mut irrelevant = envelope;
+        irrelevant.message_id = vec![10; 16];
+        irrelevant.payload = AttachmentSafetyStateChangedV1 {
+            attachment_anchor_id: vec![1; 16],
+            expected_state: AttachmentSafetyStateV1::DescriptorOnly as i32,
+            next_state: AttachmentSafetyStateV1::BlobPending as i32,
+            evidence_id: vec![11; 16],
+            observed_at_unix_seconds: 1_700_000_000,
+        }
+        .encode_to_vec();
+        assert!(
+            decode_canonical_state_v1(&irrelevant.encode_to_vec())
+                .expect("valid owner transition")
+                .is_none(),
+            "valid non-scan lifecycle events must be acknowledged without joining a job"
+        );
     }
 }

@@ -1,0 +1,475 @@
+//! Typed event-only Attachment Security to Communications verdict conformance.
+
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use futures_util::StreamExt;
+use hermes_attachment_security_contract::{
+    AttachmentSecurityObservationContextV1, AttachmentSecurityScanCandidateFactV1,
+    build_attachment_security_scan_candidate_outbox_record_v1,
+};
+use hermes_attachment_security_persistence::AttachmentSecurityPersistenceConformanceV1;
+use hermes_communications_attachment_contract::{
+    AttachmentBlobAdmissionFactV1, AttachmentBlobAdmissionTransitionV1,
+    AttachmentBlobExpectedStateV1, AttachmentObservationEnvelopeContextV1,
+    build_attachment_blob_admission_outbox_record_v1,
+    lifecycle_v1::{
+        AttachmentSafetyStateChangedV1, AttachmentSafetyStateV1 as AttachmentSafetyStateWireV1,
+    },
+    safety_verdict_v1::{
+        AttachmentSafetyExpectedStateV1, AttachmentSafetyVerdictObservationV1,
+        AttachmentSafetyVerdictV1,
+    },
+};
+use hermes_events_protocol::validation::envelope::decode_envelope_v1;
+use prost::Message;
+use zeroize::Zeroizing;
+
+use super::attachment_security_clamav_fixture::AttachmentSecurityClamAvFixture;
+use super::*;
+
+const COMMUNICATIONS_OBSERVATION_SUBJECT: &str =
+    "hermes.observation.v1.communications.communication_observed.v1";
+const ATTACHMENT_ANCHOR_SUBJECT: &str =
+    "hermes.event.v1.communications.communication_attachment_anchor_recorded.v1";
+const ATTACHMENT_ADMISSION_SUBJECT: &str = "hermes.observation.v1.communications.\
+    communication_attachment_blob_admission_observed.v1";
+const ATTACHMENT_STATE_SUBJECT: &str =
+    "hermes.event.v1.communications.communication_attachment_safety_state_changed.v1";
+const ATTACHMENT_SCAN_CANDIDATE_SUBJECT: &str = "hermes.observation.v1.attachment_security.\
+    attachment_security_scan_candidate_observed.v1";
+const ATTACHMENT_VERDICT_SUBJECT: &str = "hermes.observation.v1.communications.\
+    communication_attachment_safety_verdict_observed.v1";
+
+pub(super) struct CommunicationsAttachmentFixtureV1 {
+    pub(super) attachment_anchor_id: [u8; 16],
+    pub(super) source_observation_id: [u8; 16],
+    pub(super) correlation_id: [u8; 16],
+    pub(super) blob_admitted_state_message_id: [u8; 16],
+}
+
+pub(super) fn prepare_communications_attachment_for_scan(
+    store: &SqliteControlStore,
+    scenario_id: &str,
+    declared_size: u64,
+    receipt_sha256: [u8; 32],
+) -> CommunicationsAttachmentFixtureV1 {
+    let base_time = current_unix_seconds();
+    let external_account_id = format!("attachment-security-account-{scenario_id}");
+    let external_record_id = format!("attachment-security-record-{scenario_id}");
+    let external_conversation_id = format!("attachment-security-conversation-{scenario_id}");
+    let provider_media_locator = format!("attachment-security-private-media-{scenario_id}");
+    let base = hermes_communications_ingress::new_scoped_communication_observation_draft(
+        format!("attachment-security-base-{scenario_id}"),
+        hermes_communications_ingress::SourceEnvelope {
+            provider: hermes_communications_ingress::ProviderProvenanceV1::MailImap,
+            external_record_id: external_record_id.clone(),
+            scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                external_account_id: external_account_id.clone(),
+                external_conversation_id: Some(external_conversation_id.clone()),
+                external_participant_id: None,
+                external_media_id: None,
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage,
+        hermes_communications_ingress::BodyAvailabilityV1::MetadataOnly,
+        hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+        Some(base_time),
+    )
+    .expect("build Attachment Security base observation");
+    let base_record = hermes_communications_ingress::build_observation_outbox_record_v1(
+        &base,
+        &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+            runtime_instance_id: format!("attachment-security-source-{scenario_id}"),
+            runtime_generation: 1,
+            module_id: "attachment-security-fixture-source".to_owned(),
+            recorded_at_unix_seconds: base_time,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build Attachment Security base envelope");
+    let attachment = hermes_communications_ingress::new_scoped_communication_observation_draft(
+        format!("attachment-security-media-{scenario_id}"),
+        hermes_communications_ingress::SourceEnvelope {
+            provider: hermes_communications_ingress::ProviderProvenanceV1::MailImap,
+            external_record_id,
+            scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                external_account_id,
+                external_conversation_id: Some(external_conversation_id),
+                external_participant_id: None,
+                external_media_id: Some(provider_media_locator.clone()),
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        hermes_communications_ingress::CommunicationEvidenceKindV1::MediaChanged,
+        hermes_communications_ingress::BodyAvailabilityV1::MetadataOnly,
+        hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+        Some(base_time + 1),
+    )
+    .expect("build Attachment Security media observation");
+    let attachment = hermes_communications_ingress::with_attachment_descriptor(
+        attachment,
+        hermes_communications_ingress::AttachmentDescriptorV1 {
+            filename: Some(format!("{scenario_id}.bin")),
+            media_type: "application/octet-stream".to_owned(),
+            declared_bytes: declared_size,
+            sha256: Some(receipt_sha256),
+            disposition: hermes_communications_ingress::AttachmentDispositionV1::Attachment,
+        },
+    )
+    .expect("attach Attachment Security descriptor");
+    let attachment_record = hermes_communications_ingress::build_observation_outbox_record_v1(
+        &attachment,
+        &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+            runtime_instance_id: format!("attachment-security-source-{scenario_id}"),
+            runtime_generation: 1,
+            module_id: "attachment-security-fixture-source".to_owned(),
+            recorded_at_unix_seconds: base_time + 1,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build Attachment Security media envelope");
+    let endpoint = event_endpoint(store);
+    tokio::runtime::Runtime::new()
+        .expect("Attachment Security event runtime")
+        .block_on(async move {
+            let client = async_nats::connect(endpoint)
+                .await
+                .expect("connect Attachment Security event fixture");
+            let mut anchors = client
+                .subscribe(ATTACHMENT_ANCHOR_SUBJECT)
+                .await
+                .expect("subscribe attachment anchors");
+            let mut states = client
+                .subscribe(ATTACHMENT_STATE_SUBJECT)
+                .await
+                .expect("subscribe attachment states");
+            client
+                .flush()
+                .await
+                .expect("activate attachment fixture observers");
+            let context = async_nats::jetstream::new(client);
+            publish_exact(&context, COMMUNICATIONS_OBSERVATION_SUBJECT, &base_record).await;
+            publish_exact(
+                &context,
+                COMMUNICATIONS_OBSERVATION_SUBJECT,
+                &attachment_record,
+            )
+            .await;
+            let anchor_event = tokio::time::timeout(Duration::from_secs(10), anchors.next())
+                .await
+                .expect("attachment anchor timeout")
+                .expect("attachment anchor event");
+            let anchor_envelope = decode_envelope_v1(anchor_event.payload.as_ref())
+                .expect("attachment anchor envelope");
+            assert_eq!(
+                anchor_envelope.causation_message_id,
+                attachment_record.message_id().to_vec()
+            );
+            let anchor =
+                hermes_communications_attachment_contract::anchor_recorded_v1::AttachmentAnchorRecordedV1::decode(
+                    anchor_envelope.payload.as_slice(),
+                )
+                .expect("attachment anchor payload");
+            let attachment_anchor_id: [u8; 16] = anchor
+                .attachment_anchor_id
+                .as_slice()
+                .try_into()
+                .expect("attachment anchor identifier");
+            let media_cursor_sha256: [u8; 32] = anchor
+                .media_cursor_sha256
+                .as_slice()
+                .try_into()
+                .expect("attachment media cursor");
+            let ingress = decode_envelope_v1(attachment_record.exact_bytes())
+                .expect("attachment ingress envelope");
+            let correlation_id: [u8; 16] = ingress
+                .correlation_id
+                .as_slice()
+                .try_into()
+                .expect("attachment correlation identifier");
+            let requested = build_attachment_blob_admission_outbox_record_v1(
+                &AttachmentBlobAdmissionFactV1 {
+                    attachment_anchor_id,
+                    source_observation_id: *attachment_record.message_id(),
+                    correlation_id,
+                    media_cursor_sha256,
+                    expected_state: AttachmentBlobExpectedStateV1::DescriptorOnly,
+                    transition: AttachmentBlobAdmissionTransitionV1::Requested,
+                    observed_at_unix_seconds: base_time + 2,
+                    blob_reference_binding_sha256: None,
+                },
+                &AttachmentObservationEnvelopeContextV1 {
+                    runtime_instance_id: format!("attachment-security-source-{scenario_id}"),
+                    runtime_generation: 1,
+                    module_id: "attachment-security-fixture-source".to_owned(),
+                    recorded_at_unix_seconds: base_time + 2,
+                    recorded_at_nanos: 0,
+                },
+            )
+            .expect("build requested Blob admission");
+            let admitted = build_attachment_blob_admission_outbox_record_v1(
+                &AttachmentBlobAdmissionFactV1 {
+                    attachment_anchor_id,
+                    source_observation_id: *attachment_record.message_id(),
+                    correlation_id,
+                    media_cursor_sha256,
+                    expected_state: AttachmentBlobExpectedStateV1::BlobPending,
+                    transition: AttachmentBlobAdmissionTransitionV1::Admitted,
+                    observed_at_unix_seconds: base_time + 3,
+                    blob_reference_binding_sha256: Some(
+                        Sha256::digest(receipt_sha256).into(),
+                    ),
+                },
+                &AttachmentObservationEnvelopeContextV1 {
+                    runtime_instance_id: format!("attachment-security-source-{scenario_id}"),
+                    runtime_generation: 1,
+                    module_id: "attachment-security-fixture-source".to_owned(),
+                    recorded_at_unix_seconds: base_time + 3,
+                    recorded_at_nanos: 0,
+                },
+            )
+            .expect("build admitted Blob observation");
+            publish_exact(&context, ATTACHMENT_ADMISSION_SUBJECT, &requested).await;
+            publish_exact(&context, ATTACHMENT_ADMISSION_SUBJECT, &admitted).await;
+            let mut blob_admitted_state_message_id = None;
+            for expected_causation in [requested.message_id(), admitted.message_id()] {
+                let state_event = tokio::time::timeout(Duration::from_secs(10), states.next())
+                    .await
+                    .expect("attachment state timeout")
+                    .expect("attachment state event");
+                let state_envelope = decode_envelope_v1(state_event.payload.as_ref())
+                    .expect("attachment state envelope");
+                assert_eq!(
+                    state_envelope.causation_message_id,
+                    expected_causation.to_vec()
+                );
+                let state =
+                    AttachmentSafetyStateChangedV1::decode(state_envelope.payload.as_slice())
+                        .expect("attachment state payload");
+                if state.next_state == AttachmentSafetyStateWireV1::BlobAdmitted as i32 {
+                    blob_admitted_state_message_id = Some(
+                        state_envelope
+                            .message_id
+                            .as_slice()
+                            .try_into()
+                            .expect("Blob-admitted state message identifier"),
+                    );
+                }
+            }
+            assert!(
+                !anchor_event
+                    .payload
+                    .windows(provider_media_locator.len())
+                    .any(|window| window == provider_media_locator.as_bytes()),
+                "canonical attachment event must not expose provider media locator"
+            );
+            CommunicationsAttachmentFixtureV1 {
+                attachment_anchor_id,
+                source_observation_id: *attachment_record.message_id(),
+                correlation_id,
+                blob_admitted_state_message_id: blob_admitted_state_message_id
+                    .expect("Blob-admitted canonical state"),
+            }
+        })
+}
+
+pub(super) fn assert_clean_attachment_security_verdict_flow(
+    store: &SqliteControlStore,
+    attachment: &CommunicationsAttachmentFixtureV1,
+    blob: &AttachmentSecurityFixtureBlobV1,
+    clamav: &AttachmentSecurityClamAvFixture,
+    forbidden_plaintext: &[u8],
+) {
+    let observed_at = current_unix_seconds();
+    let candidate = build_attachment_security_scan_candidate_outbox_record_v1(
+        &AttachmentSecurityScanCandidateFactV1 {
+            attachment_anchor_id: attachment.attachment_anchor_id,
+            blob_reference_id: blob.reference_id,
+            declared_size: blob.declared_size,
+            blob_receipt_sha256: blob.receipt_sha256,
+            custody_transfer_source_proof: blob.custody_transfer_source_proof.clone(),
+            source_observation_id: attachment.source_observation_id,
+            correlation_id: attachment.correlation_id,
+            observed_at_unix_seconds: observed_at,
+        },
+        &AttachmentSecurityObservationContextV1 {
+            runtime_instance_id: "attachment-security-fixture-source-runtime".to_owned(),
+            runtime_generation: 1,
+            module_id: "attachment-security-fixture-source".to_owned(),
+            recorded_at_unix_seconds: observed_at,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build Attachment Security candidate");
+    let endpoint = event_endpoint(store);
+    tokio::runtime::Runtime::new()
+        .expect("Attachment Security verdict runtime")
+        .block_on(async move {
+            let client = async_nats::connect(endpoint)
+                .await
+                .expect("connect Attachment Security verdict observer");
+            let mut verdicts = client
+                .subscribe(ATTACHMENT_VERDICT_SUBJECT)
+                .await
+                .expect("subscribe Attachment Security verdicts");
+            let mut states = client
+                .subscribe(ATTACHMENT_STATE_SUBJECT)
+                .await
+                .expect("subscribe Communications attachment states");
+            client
+                .flush()
+                .await
+                .expect("activate Attachment Security verdict observers");
+            let context = async_nats::jetstream::new(client);
+            publish_exact(&context, ATTACHMENT_SCAN_CANDIDATE_SUBJECT, &candidate).await;
+            let verdict_event =
+                match tokio::time::timeout(Duration::from_secs(15), verdicts.next()).await {
+                    Ok(Some(verdict)) => verdict,
+                    outcome => {
+                        let diagnostics = attachment_security_persistence_diagnostics().await;
+                        panic!(
+                            "Attachment Security verdict unavailable: outcome={outcome:?} \
+                         candidates={} canonical_states={} jobs={} attempts={} \
+                         target_blob_receipts={} clamav_scans={} outbox={}",
+                            diagnostics.candidates,
+                            diagnostics.canonical_states,
+                            diagnostics.jobs,
+                            diagnostics.attempts,
+                            diagnostics.target_blob_receipts,
+                            clamav.scan_count(),
+                            diagnostics.outbox,
+                        );
+                    }
+                };
+            let verdict_exact_bytes = verdict_event.payload.to_vec();
+            let verdict_envelope = decode_envelope_v1(&verdict_exact_bytes)
+                .expect("Attachment Security verdict envelope");
+            assert_eq!(
+                verdict_envelope.causation_message_id,
+                attachment.blob_admitted_state_message_id
+            );
+            assert_eq!(verdict_envelope.correlation_id, attachment.correlation_id);
+            let verdict =
+                AttachmentSafetyVerdictObservationV1::decode(verdict_envelope.payload.as_slice())
+                    .expect("Attachment Security verdict payload");
+            assert_eq!(
+                verdict.attachment_anchor_id,
+                attachment.attachment_anchor_id
+            );
+            assert_eq!(
+                verdict.expected_state,
+                AttachmentSafetyExpectedStateV1::BlobAdmitted as i32
+            );
+            assert_eq!(
+                verdict.verdict,
+                AttachmentSafetyVerdictV1::SafeForDelivery as i32
+            );
+            assert_eq!(verdict.evidence_id.len(), 16);
+            let state_event = tokio::time::timeout(Duration::from_secs(15), states.next())
+                .await
+                .expect("Communications safe state timeout")
+                .expect("Communications safe state");
+            let state_envelope = decode_envelope_v1(state_event.payload.as_ref())
+                .expect("Communications safe state envelope");
+            assert_eq!(
+                state_envelope.causation_message_id,
+                verdict_envelope.message_id
+            );
+            let state = AttachmentSafetyStateChangedV1::decode(state_envelope.payload.as_slice())
+                .expect("Communications safe state payload");
+            assert_eq!(
+                state.next_state,
+                AttachmentSafetyStateWireV1::SafeForDelivery as i32
+            );
+            for forbidden in [
+                forbidden_plaintext,
+                blob.reference_id.as_slice(),
+                blob.receipt_sha256.as_slice(),
+                blob.custody_transfer_source_proof.as_slice(),
+                b"stream: OK".as_slice(),
+                b"127.0.0.1".as_slice(),
+            ] {
+                assert!(
+                    !verdict_exact_bytes
+                        .windows(forbidden.len())
+                        .any(|window| window == forbidden),
+                    "verdict must not expose Blob, scanner or endpoint data"
+                );
+            }
+            publish_exact(&context, ATTACHMENT_SCAN_CANDIDATE_SUBJECT, &candidate).await;
+            assert!(
+                tokio::time::timeout(Duration::from_secs(2), verdicts.next())
+                    .await
+                    .is_err(),
+                "candidate replay must not create a second verdict"
+            );
+            let diagnostics = attachment_security_persistence_diagnostics().await;
+            assert_eq!(diagnostics.candidates, 1);
+            assert_eq!(diagnostics.canonical_states, 1);
+            assert_eq!(diagnostics.jobs, 1);
+            assert_eq!(diagnostics.attempts, 1);
+            assert_eq!(diagnostics.target_blob_receipts, 1);
+            assert_eq!(diagnostics.outbox, 1);
+        });
+}
+
+async fn publish_exact(
+    context: &async_nats::jetstream::Context,
+    subject: &str,
+    record: &hermes_events_protocol::delivery::OutboxRecordV1,
+) {
+    context
+        .publish(subject.to_owned(), record.exact_bytes().to_vec().into())
+        .await
+        .expect("publish exact attachment event")
+        .await
+        .expect("acknowledge exact attachment event");
+}
+
+fn event_endpoint(store: &SqliteControlStore) -> String {
+    store
+        .platform_event_hub_topology()
+        .expect("read Event Hub topology")
+        .expect("Event Hub topology")
+        .nats_endpoint()
+        .to_owned()
+}
+
+fn current_unix_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("runtime clock")
+        .as_secs()
+        .try_into()
+        .expect("runtime clock seconds")
+}
+
+async fn attachment_security_persistence_diagnostics()
+-> hermes_attachment_security_persistence::AttachmentSecurityPersistenceDiagnosticsV1 {
+    let password = Zeroizing::new(
+        std::fs::read_to_string(required(
+            "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",
+        ))
+        .expect("read disposable PostgreSQL credential")
+        .trim()
+        .to_owned(),
+    );
+    let port = required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")
+        .parse::<u16>()
+        .expect("valid PostgreSQL port");
+    let persistence = AttachmentSecurityPersistenceConformanceV1::connect(
+        &required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST"),
+        port,
+        "hermes_postgres_admin",
+        password.as_str(),
+        "hermes_storage_authenticated",
+    )
+    .await
+    .expect("connect Attachment Security conformance persistence");
+    AttachmentSecurityPersistenceConformanceV1::diagnostics(&persistence)
+        .await
+        .expect("read Attachment Security persistence diagnostics")
+}
