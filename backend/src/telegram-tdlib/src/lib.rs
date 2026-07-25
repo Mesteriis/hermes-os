@@ -2,6 +2,7 @@
 
 use std::collections::VecDeque;
 use std::ffi::{CStr, CString};
+use std::fmt;
 use std::os::raw::{c_char, c_void};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -34,12 +35,27 @@ pub trait TelegramMediaMaterializer {
     fn release(&mut self, materialized_path: &str);
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct TdlibAuthorizationParameters {
     pub api_id: i64,
     pub api_hash: Zeroizing<String>,
     pub database_directory: PathBuf,
     pub session_encryption_key: Option<Zeroizing<Vec<u8>>>,
+}
+
+impl fmt::Debug for TdlibAuthorizationParameters {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TdlibAuthorizationParameters")
+            .field("api_id", &"[redacted]")
+            .field("api_hash", &"[redacted]")
+            .field("database_directory", &"[redacted]")
+            .field(
+                "session_encryption_key",
+                &self.session_encryption_key.as_ref().map(|_| "[redacted]"),
+            )
+            .finish()
+    }
 }
 
 impl TdlibAuthorizationParameters {
@@ -66,7 +82,7 @@ impl TdlibAuthorizationParameters {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum TdlibAuthorizationUpdate {
     WaitingParameters,
     WaitingEncryptionKey,
@@ -77,6 +93,29 @@ pub enum TdlibAuthorizationUpdate {
     Closed,
     Error { code: Option<i64>, message: String },
     Other(String),
+}
+
+impl fmt::Debug for TdlibAuthorizationUpdate {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::WaitingParameters => formatter.write_str("WaitingParameters"),
+            Self::WaitingEncryptionKey => formatter.write_str("WaitingEncryptionKey"),
+            Self::WaitingQrScan => formatter.write_str("WaitingQrScan"),
+            Self::WaitingPassword { hint } => formatter
+                .debug_struct("WaitingPassword")
+                .field("hint", &hint.as_ref().map(|_| "[redacted]"))
+                .finish(),
+            Self::Ready => formatter.write_str("Ready"),
+            Self::Closing => formatter.write_str("Closing"),
+            Self::Closed => formatter.write_str("Closed"),
+            Self::Error { code, .. } => formatter
+                .debug_struct("Error")
+                .field("code", code)
+                .field("message", &"[redacted]")
+                .finish(),
+            Self::Other(_) => formatter.write_str("Other([redacted])"),
+        }
+    }
 }
 
 pub fn set_tdlib_parameters_request(
@@ -179,11 +218,7 @@ pub fn parse_authorization_update(payload: &Value) -> Result<TdlibAuthorizationU
         "authorizationStateClosed" => TdlibAuthorizationUpdate::Closed,
         "error" => TdlibAuthorizationUpdate::Error {
             code: payload.get("code").and_then(Value::as_i64),
-            message: payload
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("TDLib error")
-                .to_owned(),
+            message: "TDLib authorization error".to_owned(),
         },
         other => TdlibAuthorizationUpdate::Other(other.to_owned()),
     })
@@ -1604,6 +1639,60 @@ mod tests {
     use super::*;
 
     #[test]
+    fn authorization_parameters_debug_redacts_credentials_and_session_path() {
+        let parameters = TdlibAuthorizationParameters {
+            api_id: 42,
+            api_hash: Zeroizing::new("private-api-hash".to_owned()),
+            database_directory: PathBuf::from("/private/provider-session"),
+            session_encryption_key: Some(Zeroizing::new(b"private-session-key".to_vec())),
+        };
+
+        let diagnostic = format!("{parameters:?}");
+
+        assert!(diagnostic.contains("[redacted]"));
+        assert!(!diagnostic.contains("42"));
+        assert!(!diagnostic.contains("private-api-hash"));
+        assert!(!diagnostic.contains("/private/provider-session"));
+        assert!(!diagnostic.contains("private-session-key"));
+    }
+
+    #[test]
+    fn provider_error_translation_drops_untrusted_message_content() {
+        let error = tdlib_error(&json!({
+            "code": 401,
+            "message": "private-message-and-credential-sentinel"
+        }));
+
+        let diagnostic = format!("{error:?}");
+
+        assert!(diagnostic.contains("401"));
+        assert!(!diagnostic.contains("private-message-and-credential-sentinel"));
+    }
+
+    #[test]
+    fn authorization_event_debug_redacts_qr_links_hints_and_provider_messages() {
+        let password = parse_authorization_update(&json!({
+            "@type": "authorizationStateWaitPassword",
+            "password_hint": "private-password-hint"
+        }))
+        .expect("password authorization update");
+        let provider_error = parse_authorization_update(&json!({
+            "@type": "error",
+            "code": 401,
+            "message": "private-provider-error"
+        }))
+        .expect("provider authorization error");
+        let qr = TdlibAuthorizationEvent::QrLink("tg://private-qr-token".to_owned());
+
+        let diagnostic = format!("{password:?} {provider_error:?} {qr:?}");
+
+        assert!(diagnostic.contains("[redacted]"));
+        assert!(!diagnostic.contains("private-password-hint"));
+        assert!(!diagnostic.contains("private-provider-error"));
+        assert!(!diagnostic.contains("tg://private-qr-token"));
+    }
+
+    #[test]
     fn edit_command_encodes_tdlib_message_operation_without_domain_fields() {
         let command = TelegramProviderCommand::Edit {
             operation_id: "op-edit".to_owned(),
@@ -2439,11 +2528,7 @@ fn tdlib_error(payload: &Value) -> TdlibError {
         .and_then(Value::as_i64)
         .map(|value| value.to_string())
         .unwrap_or_else(|| "unknown".to_owned());
-    let message = payload
-        .get("message")
-        .and_then(Value::as_str)
-        .unwrap_or("TDLib returned an error");
-    TdlibError::Protocol(format!("TDLib error {code}: {message}"))
+    TdlibError::Protocol(format!("TDLib error {code}"))
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 //! Long-lived TDLib authorization driver. Business lifecycle remains in telegram-core.
 
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 use serde_json::Value;
 
@@ -10,10 +10,22 @@ use crate::{
     parse_authorization_update, request_qr_code_authentication, set_tdlib_parameters_request,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum TdlibAuthorizationEvent {
     State(TdlibAuthorizationUpdate),
     QrLink(String),
+}
+
+impl fmt::Debug for TdlibAuthorizationEvent {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::State(state) => formatter.debug_tuple("State").field(state).finish(),
+            Self::QrLink(_) => formatter
+                .debug_tuple("QrLink")
+                .field(&"[redacted]")
+                .finish(),
+        }
+    }
 }
 
 pub struct TdlibAuthorizationDriver {
