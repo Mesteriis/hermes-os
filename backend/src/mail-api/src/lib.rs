@@ -12,6 +12,7 @@ pub mod client_wire;
 pub enum MailClientRequestV1 {
     SyncInbox(MailSyncInboxRequestV1),
     SendMail(MailSendMailRequestV1),
+    DeliveryStatus(MailDeliveryStatusRequestV1),
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailSyncInboxRequestV1 {
@@ -26,6 +27,10 @@ pub struct MailSendMailRequestV1 {
     pub text_body: String,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailDeliveryStatusRequestV1 {
+    pub operation_id: String,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MailClientResponseV1 {
     SyncInboxCompleted {
         operation_id: String,
@@ -33,8 +38,26 @@ pub enum MailClientResponseV1 {
     },
     MailAccepted {
         operation_id: String,
-        response_code: u16,
     },
+    DeliveryStatus(Option<MailDeliveryOperationStatusV1>),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailDeliveryOutcomeV1 {
+    Pending,
+    Accepted,
+    Rejected,
+    OutcomeUnknown,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailDeliveryOperationStatusV1 {
+    pub operation_id: String,
+    pub connection_id: String,
+    pub outcome: MailDeliveryOutcomeV1,
+    pub requested_at_unix_seconds: i64,
+    pub completed_at_unix_seconds: Option<i64>,
+    pub response_code: Option<u16>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -75,7 +98,11 @@ pub fn valid_account_configuration(configuration: &MailAccountConfigurationV1) -
             valid_host(&endpoint.host)
                 && valid_smtp_port(endpoint.port)
                 && !endpoint.username.trim().is_empty()
-                && !endpoint.from_address.trim().is_empty()
+                && valid_mailbox(&endpoint.from_address)
+                && endpoint
+                    .ca_certificate_pem
+                    .as_deref()
+                    .is_none_or(valid_ca_certificate_pem)
         })
 }
 
@@ -138,6 +165,7 @@ pub const SMTP_IMPLICIT_TLS_PORT: u16 = 465;
 pub const MAX_HOST_LEN: usize = 253;
 pub const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 pub const MAX_PLAIN_TEXT_BYTES: usize = 256 * 1024;
+pub const MAX_CA_CERTIFICATE_PEM_BYTES: usize = 64 * 1024;
 pub const DEFAULT_WINDOW: u32 = 5_000;
 pub const MAX_WINDOW: u32 = 1_000_000;
 pub const MAX_WINDOWS: u32 = 1_000_000;
@@ -198,6 +226,7 @@ pub struct SmtpEndpointV1 {
     pub port: u16,
     pub username: String,
     pub from_address: String,
+    pub ca_certificate_pem: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -277,7 +306,14 @@ pub fn valid_port(port: u16) -> bool {
 }
 
 pub fn valid_smtp_port(port: u16) -> bool {
-    port == SMTP_IMPLICIT_TLS_PORT
+    #[cfg(feature = "conformance-test-support")]
+    {
+        port > 0
+    }
+    #[cfg(not(feature = "conformance-test-support"))]
+    {
+        port == SMTP_IMPLICIT_TLS_PORT
+    }
 }
 
 pub fn valid_window(window: u32, windows: u32) -> bool {
@@ -290,6 +326,14 @@ pub fn valid_message_bytes(bytes: usize) -> bool {
 
 pub fn valid_plain_text_bytes(bytes: usize) -> bool {
     bytes <= MAX_PLAIN_TEXT_BYTES
+}
+
+#[must_use]
+pub fn valid_ca_certificate_pem(value: &str) -> bool {
+    value.is_ascii()
+        && value.len() <= MAX_CA_CERTIFICATE_PEM_BYTES
+        && value.starts_with("-----BEGIN CERTIFICATE-----\n")
+        && value.ends_with("-----END CERTIFICATE-----\n")
 }
 
 #[cfg(test)]

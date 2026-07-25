@@ -105,15 +105,20 @@ mod mail_event_flow;
 mod mail_imap_fixture;
 #[path = "managed_storage_vault_docker/mail_managed_setup.rs"]
 mod mail_managed_setup;
+#[path = "managed_storage_vault_docker/mail_smtp_fixture.rs"]
+mod mail_smtp_fixture;
 use mail_attachment_flow::*;
 use mail_event_flow::*;
 use mail_imap_fixture::*;
+use mail_smtp_fixture::*;
 #[path = "managed_storage_vault_docker/telegram_managed_flow.rs"]
 mod telegram_managed_flow;
 use attachment_security_blob_fixture::*;
 use attachment_security_event_flow::*;
 use attachment_security_managed_setup::*;
 use mail_managed_setup::*;
+#[path = "managed_storage_vault_docker/mail_delivery_flow.rs"]
+mod mail_delivery_flow;
 #[path = "managed_storage_vault_docker/mail_managed_flow.rs"]
 mod mail_managed_flow;
 #[path = "managed_storage_vault_docker/zulip_https_fixture.rs"]

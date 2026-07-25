@@ -2,8 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Backend inbound gate реализован. Generated Mail API и
-descriptor теперь имеют независимые `mail.sync.v1`/`mail.delivery.v1` routes,
+Состояние реализации: Backend inbound gate и bounded plain-text SMTP delivery
+gate реализованы. Generated Mail API и descriptor теперь имеют независимые
+`mail.sync.v1`, `mail.delivery.v1` и `mail.delivery.query.v1` routes,
 три provider-purpose credential capabilities и один canonical module ID
 `hermes-mail-runtime` во всех Mail-produced envelopes. Umbrella `mail.client`
 удалён из production code; assembly повторно доказала signed exact descriptor.
@@ -16,11 +17,13 @@ exact Storage/Vault/PgBouncer/PostgreSQL fence, останавливает то�
 Communications delivery теперь доказана вместе с inbox deduplication и outage
 replay. Live provider sync и attachment anchor → Mail mapping → Kernel-issued
 Blob write → terminal Communications CAS conformance теперь доказаны.
-`mail_runtime_admission_v1` открыт для exact inbound sync subset. Delivery,
-Gmail/SMTP mutation и frontend cutover остаются отдельными закрытыми slices.
-Frontend generator и раздельные `MailSyncService`/`MailDeliveryService`
-Connect client units реализованы как prerequisite; legacy Mail surfaces ими
-ещё не заменены.
+`mail_runtime_admission_v1` открыт для exact inbound sync subset. Отдельный
+SMTP delivery gate доказывает durable acceptance, terminal query, один
+provider execution и event-only outage replay. Gmail mutation, outbound
+attachments и frontend cutover остаются отдельными закрытыми slices.
+Frontend generator и раздельные `MailSyncService`,
+`MailDeliveryCommandService` и `MailDeliveryQueryService` Connect client units
+реализованы как prerequisite; legacy Mail surfaces ими ещё не заменены.
 Отдельная optional scan-candidate publish capability, Mail-owned durable outbox
 и live integration-to-engine observation реализованы как prerequisite
 Attachment Security gate; они не дают engine runtime production admission.
@@ -121,14 +124,15 @@ Kernel не:
 
 ### Route-specific provider operational contracts
 
-Generated Mail Protobuf descriptor set предоставляет два независимых routes:
+Generated Mail Protobuf descriptor set предоставляет три независимых routes:
 
 | Capability | Contract | Connect path | Responsibility |
 |---|---|---|---|
 | `mail.sync.v1` | `mail.sync.v1` | `/hermes.mail.v1.MailSyncService/Sync` | bounded inbound sync |
-| `mail.delivery.v1` | `mail.delivery.v1` | `/hermes.mail.v1.MailDeliveryService/Send` | outbound provider mutation |
+| `mail.delivery.v1` | `mail.delivery.v1` | `/hermes.mail.v1.MailDeliveryCommandService/Send` | durable outbound acceptance |
+| `mail.delivery.query.v1` | `mail.delivery.query.v1` | `/hermes.mail.v1.MailDeliveryQueryService/GetOperationStatus` | Mail-owned terminal status |
 
-Оба contracts имеют `major = 1`, `revision = 1` и exact SHA-256 одного
+Все contracts имеют `major = 1`, `revision = 2` и exact SHA-256 одного
 generated descriptor set. Общий digest не объединяет capabilities: route,
 payload type, authority и failure mode различны.
 
@@ -137,8 +141,10 @@ Mail runtime получает exact contract reference из routed
 Oneof umbrella `MailOperationalService/Execute`, decode probing, REST alias и
 fallback запрещены.
 
-Inbox sync и delivery остаются разными functional ports, даже если один
-managed process реализует оба.
+Inbox sync, delivery command и delivery query остаются разными functional
+ports, даже если один managed process реализует все три. `accepted` означает
+только durable persistence; provider response доступен только через terminal
+query и не возвращается синхронным command route.
 
 ### Provider credential capabilities
 
@@ -219,7 +225,8 @@ Backend gate открывается атомарно только при нал�
     route metadata, logs, errors и health.
 
 Delivery capability и frontend cutover не доказываются inbound sync gate.
-Они требуют отдельного live provider mutation evidence перед включением.
+SMTP delivery включается только отдельным live provider mutation evidence;
+Gmail mutation, outbound attachments и frontend требуют собственных gates.
 Frontend не используется как proof backend admission.
 
 Открытие gate:
@@ -324,6 +331,38 @@ make -C backend architecture-policy-check srp-policy-check cargo-boundaries-chec
 `mail_runtime_admission_v1` для exact inbound sync subset. Gate не расширяет
 `first_owner_v1` и не допускает outbound delivery, Gmail/SMTP mutation,
 scanner verdict producer или frontend.
+
+Реализованный live SMTP delivery slice:
+
+- отдельные optional `mail.delivery.v1` command и
+  `mail.delivery.query.v1` query capabilities могут быть одобрены независимо
+  от inbound sync route;
+- command route сохраняет exact generated request и RFC822 digest в
+  Mail-owned PostgreSQL transaction до возврата operation receipt;
+- owner-local queue claim делает ambiguous provider outcome
+  `outcome_unknown` и не выполняет автоматический retry, исключая скрытую
+  повторную отправку;
+- SMTP runtime получает только exact `mail_smtp_password` lease и выполняет
+  bounded implicit-TLS exchange через отдельный `hermes-mail-smtp` package;
+- successful provider mutation и neutral Communications observation
+  фиксируются атомарно в Mail state/outbox;
+- focused managed test останавливает NATS до command, получает durable
+  acceptance и terminal `accepted`, подтверждает одну SMTP mutation и
+  отсутствие второй mutation для exact duplicate;
+- после возврата NATS exact Mail observation воспроизводится в Communications
+  с исходным causation, а private recipient/body отсутствуют в
+  `DurableEnvelopeV1`;
+- generated frontend descriptor синхронизирован тем же canonical generator,
+  без handwritten REST или compatibility facade.
+
+Проверка:
+
+```text
+HERMES_STORAGE_MANAGED_TEST_FILTER=managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event node scripts/test-authenticated-storage.mjs 1.97.0
+```
+
+Этот gate открывает только bounded plain-text SMTP delivery. Gmail mutation,
+outbound MIME attachments и frontend cutover остаются отдельными slices.
 
 ## Отклонённые варианты
 

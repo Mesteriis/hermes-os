@@ -10,9 +10,15 @@ const clientUnits = [
 		foreignOwners: ['telegram', 'zulip']
 	},
 	{
-		file: './mail/api/mailDeliveryClient.ts',
+		file: './mail/api/mailDeliveryCommandClient.ts',
 		generatedContract: '../../../gen/hermes/mail/v1/client_pb',
-		service: 'MailDeliveryService',
+		service: 'MailDeliveryCommandService',
+		foreignOwners: ['telegram', 'zulip']
+	},
+	{
+		file: './mail/api/mailDeliveryQueryClient.ts',
+		generatedContract: '../../../gen/hermes/mail/v1/client_pb',
+		service: 'MailDeliveryQueryService',
 		foreignOwners: ['telegram', 'zulip']
 	},
 	{

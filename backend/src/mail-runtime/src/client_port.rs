@@ -44,6 +44,7 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
     match request {
         MailClientRequestV1::SyncInbox(_) => MailClientContractV1::Sync,
         MailClientRequestV1::SendMail(_) => MailClientContractV1::Delivery,
+        MailClientRequestV1::DeliveryStatus(_) => MailClientContractV1::DeliveryQuery,
     }
 }
 
@@ -51,6 +52,9 @@ fn encode_request_payload(request: &MailClientRequestV1) -> Vec<u8> {
     match request {
         MailClientRequestV1::SyncInbox(value) => client_wire::encode_sync_request(value),
         MailClientRequestV1::SendMail(value) => client_wire::encode_delivery_request(value),
+        MailClientRequestV1::DeliveryStatus(value) => {
+            client_wire::encode_delivery_status_request(value)
+        }
     }
 }
 
@@ -64,6 +68,9 @@ fn decode_request_payload(
             .map_err(|_| MailClientPortErrorV1::Protocol),
         MailClientContractV1::Delivery => client_wire::decode_delivery_request(bytes)
             .map(MailClientRequestV1::SendMail)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::DeliveryQuery => client_wire::decode_delivery_status_request(bytes)
+            .map(MailClientRequestV1::DeliveryStatus)
             .map_err(|_| MailClientPortErrorV1::Protocol),
     }
 }
@@ -113,7 +120,11 @@ pub fn decode_module_request(
 pub async fn handle_client_request(
     runtime: &mut MailAdmittedRuntime,
     bytes: &[u8],
+    requested_at_unix_seconds: i64,
 ) -> Result<Vec<u8>, MailClientPortErrorV1> {
+    if requested_at_unix_seconds <= 0 {
+        return Err(MailClientPortErrorV1::Protocol);
+    }
     let (request_id, contract, request) = decode_module_request(bytes)?;
     let response = match request {
         MailClientRequestV1::SyncInbox(value) => {
@@ -127,17 +138,16 @@ pub async fn handle_client_request(
                     .map_err(|_| MailClientPortErrorV1::Runtime)?,
             }
         }
-        MailClientRequestV1::SendMail(value) => {
-            let operation_id = value.operation_id.clone();
-            let response_code = runtime
-                .send_configured_mail(&value)
-                .await
-                .map_err(|_| MailClientPortErrorV1::Runtime)?;
-            MailClientResponseV1::MailAccepted {
-                operation_id,
-                response_code,
-            }
-        }
+        MailClientRequestV1::SendMail(value) => runtime
+            .submit_delivery(&value, requested_at_unix_seconds)
+            .await
+            .map(|operation_id| MailClientResponseV1::MailAccepted { operation_id })
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::DeliveryStatus(value) => runtime
+            .delivery_operation_status(&value.operation_id)
+            .await
+            .map(MailClientResponseV1::DeliveryStatus)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
     };
     encode_module_response(request_id, contract, &response)
 }
@@ -158,13 +168,12 @@ fn encode_module_response(
                 observed_messages,
             },
         ) => client_wire::encode_sync_response(operation_id, *observed_messages),
-        (
-            MailClientContractV1::Delivery,
-            MailClientResponseV1::MailAccepted {
-                operation_id,
-                response_code,
-            },
-        ) => client_wire::encode_delivery_response(operation_id, *response_code),
+        (MailClientContractV1::Delivery, MailClientResponseV1::MailAccepted { operation_id }) => {
+            client_wire::encode_delivery_response(operation_id)
+        }
+        (MailClientContractV1::DeliveryQuery, MailClientResponseV1::DeliveryStatus(status)) => {
+            client_wire::encode_delivery_status_response(status.as_ref())
+        }
         _ => return Err(MailClientPortErrorV1::Protocol),
     };
     Ok(ModuleClientResponseV1 {
@@ -194,6 +203,9 @@ pub fn decode_module_response(
         MailClientContractV1::Delivery => {
             client_wire::decode_delivery_response(&envelope.response_payload)
         }
+        MailClientContractV1::DeliveryQuery => {
+            client_wire::decode_delivery_status_response(&envelope.response_payload)
+        }
     }
     .map_err(|_| MailClientPortErrorV1::Protocol)?;
     Ok((envelope.request_id, response))
@@ -201,7 +213,9 @@ pub fn decode_module_response(
 
 #[cfg(test)]
 mod tests {
-    use hermes_mail_api::{MailSendMailRequestV1, MailSyncInboxRequestV1};
+    use hermes_mail_api::{
+        MailDeliveryStatusRequestV1, MailSendMailRequestV1, MailSyncInboxRequestV1,
+    };
 
     use super::*;
 
@@ -218,6 +232,12 @@ mod tests {
             recipients: vec!["recipient@example.com".to_owned()],
             subject: "subject".to_owned(),
             text_body: "body".to_owned(),
+        })
+    }
+
+    fn delivery_query() -> MailClientRequestV1 {
+        MailClientRequestV1::DeliveryStatus(MailDeliveryStatusRequestV1 {
+            operation_id: "delivery-operation".to_owned(),
         })
     }
 
@@ -242,6 +262,19 @@ mod tests {
             decode_module_request(&envelope.encode_to_vec()),
             Err(MailClientPortErrorV1::Protocol)
         );
+    }
+
+    #[test]
+    fn delivery_command_and_query_use_independent_contracts() {
+        let command = encode_module_request(2, &delivery_request()).expect("delivery request");
+        let (_, command_contract, _) =
+            decode_module_request(&command).expect("decode delivery request");
+        let query = encode_module_request(3, &delivery_query()).expect("delivery query");
+        let (_, query_contract, _) = decode_module_request(&query).expect("decode delivery query");
+
+        assert_eq!(command_contract, MailClientContractV1::Delivery);
+        assert_eq!(query_contract, MailClientContractV1::DeliveryQuery);
+        assert_ne!(command_contract, query_contract);
     }
 
     #[test]

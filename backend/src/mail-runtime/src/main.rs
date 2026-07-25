@@ -6,6 +6,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use hermes_mail_runtime::managed::MailDeliveryDispatchErrorV1;
 use hermes_mail_runtime::{
     MailRuntimeAdmission, attachment_security_outbox::MailAttachmentSecurityOutboxRelayError,
     communications_outbox::MailCommunicationsOutboxRelayError, managed, settings,
@@ -105,6 +106,23 @@ where
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
         let now = i64::try_from(now.as_secs())
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
+        match runtime.block_on(admitted.execute_next_delivery(now, now)) {
+            Ok(_) => {}
+            Err(MailDeliveryDispatchErrorV1::ProviderRejected) => {
+                developer_diagnostic("developer_mail_delivery_rejected");
+            }
+            Err(MailDeliveryDispatchErrorV1::ProviderOutcomeUnknown) => {
+                developer_diagnostic("developer_mail_delivery_outcome_unknown");
+            }
+            Err(MailDeliveryDispatchErrorV1::InvalidStoredCommand) => {
+                developer_diagnostic("developer_mail_delivery_command_invalid");
+                return Err("Mail runtime delivery command is invalid".to_owned());
+            }
+            Err(MailDeliveryDispatchErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_delivery_persistence_failed");
+                return Err("Mail runtime delivery persistence failed".to_owned());
+            }
+        }
         runtime
             .block_on(admitted.try_consume_attachment_anchor_handoff(now))
             .map_err(|_| {

@@ -21,6 +21,7 @@ const SYNC_WINDOW: &str = "mail.sync.window";
 const SYNC_WINDOWS: &str = "mail.sync.windows";
 const IMAP_PASSWORD_REVISION: &str = "mail.imap.password_revision";
 const SMTP_ENABLED: &str = "mail.smtp.enabled";
+const SMTP_CA_CERTIFICATE_PEM: &str = "mail.smtp.ca_certificate_pem";
 const SMTP_HOST: &str = "mail.smtp.host";
 const SMTP_PORT: &str = "mail.smtp.port";
 const SMTP_USERNAME: &str = "mail.smtp.username";
@@ -32,7 +33,7 @@ const GMAIL_FROM_ADDRESS: &str = "mail.gmail.from_address";
 const GMAIL_ACCESS_TOKEN_REVISION: &str = "mail.gmail.access_token_revision";
 
 pub const MAIL_SETTINGS_SCHEMA_MAJOR_V1: u32 = 1;
-pub const MAIL_SETTINGS_SCHEMA_REVISION_V1: u32 = 1;
+pub const MAIL_SETTINGS_SCHEMA_REVISION_V1: u32 = 2;
 
 /// The Mail integration owns these configuration-instance settings. They are
 /// deliberately hidden from generic client reads: endpoint details and
@@ -67,6 +68,11 @@ pub fn mail_settings_schema_v1() -> SettingsSchemaV1 {
                 INBOUND_KIND,
                 SettingValueTypeV1::String,
                 "Inbound transport",
+            ),
+            definition(
+                SMTP_CA_CERTIFICATE_PEM,
+                SettingValueTypeV1::String,
+                "SMTP CA certificate",
             ),
             definition(SMTP_ENABLED, SettingValueTypeV1::Boolean, "SMTP enabled"),
             definition(
@@ -195,7 +201,13 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, St
 
 fn smtp_endpoint(snapshot: &SettingsSnapshotV1) -> Result<Option<SmtpEndpointV1>, String> {
     if !required_boolean(snapshot, SMTP_ENABLED)? {
-        for setting_id in [SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_FROM_ADDRESS] {
+        for setting_id in [
+            SMTP_CA_CERTIFICATE_PEM,
+            SMTP_HOST,
+            SMTP_PORT,
+            SMTP_USERNAME,
+            SMTP_FROM_ADDRESS,
+        ] {
             absent(snapshot, setting_id)?;
         }
         return Ok(None);
@@ -206,6 +218,7 @@ fn smtp_endpoint(snapshot: &SettingsSnapshotV1) -> Result<Option<SmtpEndpointV1>
             .map_err(|_| invalid_settings())?,
         username: required_string(snapshot, SMTP_USERNAME)?,
         from_address: required_string(snapshot, SMTP_FROM_ADDRESS)?,
+        ca_certificate_pem: optional_string(snapshot, SMTP_CA_CERTIFICATE_PEM)?,
     }))
 }
 
@@ -219,6 +232,25 @@ fn required_string(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<St
 fn required_unsigned(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<u64, String> {
     match value(snapshot, setting_id)? {
         Value::UnsignedIntegerValue(value) => Ok(*value),
+        _ => Err(invalid_settings()),
+    }
+}
+
+fn optional_string(
+    snapshot: &SettingsSnapshotV1,
+    setting_id: &str,
+) -> Result<Option<String>, String> {
+    let entries = snapshot
+        .values
+        .iter()
+        .filter(|entry| entry.setting_id == setting_id)
+        .collect::<Vec<_>>();
+    match entries.as_slice() {
+        [] => Ok(None),
+        [entry] => match entry.value.as_ref().and_then(|value| value.value.as_ref()) {
+            Some(Value::StringValue(value)) if !value.trim().is_empty() => Ok(Some(value.clone())),
+            _ => Err(invalid_settings()),
+        },
         _ => Err(invalid_settings()),
     }
 }
@@ -273,6 +305,6 @@ mod tests {
                 && definition.client_visibility == SettingClientVisibilityV1::Hidden as i32
                 && definition.fresh_owner_proof_required
         }));
-        assert_eq!(schema.definitions.len(), 17);
+        assert_eq!(schema.definitions.len(), 18);
     }
 }

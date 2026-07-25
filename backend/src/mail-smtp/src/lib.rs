@@ -1,6 +1,8 @@
 //! Implicit-TLS SMTP protocol adapter owned exclusively by Mail.
 
-use async_native_tls::TlsConnector;
+use std::time::Duration;
+
+use async_native_tls::{Certificate, TlsConnector};
 use async_std::{
     io::{ReadExt, WriteExt},
     net::TcpStream,
@@ -9,6 +11,7 @@ use hermes_mail_api::{OutgoingMailV1, SmtpEndpointV1, valid_host, valid_mailbox,
 
 pub const PACKAGE: &str = "hermes-mail-smtp";
 const MAX_RESPONSE_LINE_BYTES: usize = 4 * 1024;
+const SMTP_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SmtpAcceptedReceiptV1 {
@@ -29,6 +32,20 @@ pub async fn send_implicit_tls(
     password: &str,
     rfc822_message: &str,
 ) -> Result<SmtpAcceptedReceiptV1, SmtpAdapterErrorV1> {
+    async_std::future::timeout(
+        SMTP_OPERATION_TIMEOUT,
+        send_implicit_tls_inner(endpoint, message, password, rfc822_message),
+    )
+    .await
+    .map_err(|_| SmtpAdapterErrorV1::Unavailable)?
+}
+
+async fn send_implicit_tls_inner(
+    endpoint: &SmtpEndpointV1,
+    message: &OutgoingMailV1,
+    password: &str,
+    rfc822_message: &str,
+) -> Result<SmtpAcceptedReceiptV1, SmtpAdapterErrorV1> {
     if !valid_host(&endpoint.host)
         || !valid_smtp_port(endpoint.port)
         || password.is_empty()
@@ -42,7 +59,17 @@ pub async fn send_implicit_tls(
     let tcp = TcpStream::connect((endpoint.host.as_str(), endpoint.port))
         .await
         .map_err(|_| SmtpAdapterErrorV1::Unavailable)?;
-    let mut stream = TlsConnector::new()
+    let connector = endpoint
+        .ca_certificate_pem
+        .as_deref()
+        .map(|pem| {
+            Certificate::from_pem(pem.as_bytes())
+                .map(|certificate| TlsConnector::new().add_root_certificate(certificate))
+                .map_err(|_| SmtpAdapterErrorV1::InvalidRequest)
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let mut stream = connector
         .connect(&endpoint.host, tcp)
         .await
         .map_err(|_| SmtpAdapterErrorV1::Unavailable)?;

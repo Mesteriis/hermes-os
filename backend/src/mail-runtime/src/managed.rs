@@ -84,8 +84,9 @@ use hermes_communications_ingress::{
     with_body_admission_failure,
 };
 use hermes_mail_api::{
-    MailCredentialPurpose, MailInboundTransportV1, MailSendMailRequestV1, OutgoingMailV1,
-    valid_account_configuration, valid_port,
+    MailCredentialPurpose, MailDeliveryOperationStatusV1, MailDeliveryOutcomeV1,
+    MailInboundTransportV1, MailSendMailRequestV1, OutgoingMailV1, valid_account_configuration,
+    valid_port,
 };
 use hermes_mail_core::rfc822::{
     AttachmentDispositionV1 as Rfc822AttachmentDispositionV1, attachment_metadata,
@@ -99,7 +100,10 @@ use hermes_mail_gmail::{
     GmailAdapterErrorV1, GmailApiClientV1, GmailListMessagesRequestV1, decode_raw_rfc822,
     history_message_ids,
 };
-use hermes_mail_persistence::MailDurablePersistence;
+use hermes_mail_persistence::{
+    MailDeliveryAttemptOutcomeV1, MailDurablePersistence, MailQueuedDeliveryV1,
+};
+use hermes_mail_smtp::SmtpAdapterErrorV1;
 
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -167,6 +171,20 @@ pub enum MailBootstrapError {
     Provider,
     EventHub,
     AttachmentAnchorMapping,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailDeliveryDispatchErrorV1 {
+    InvalidStoredCommand,
+    Persistence,
+    ProviderRejected,
+    ProviderOutcomeUnknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MailProviderDeliveryErrorV1 {
+    Rejected,
+    OutcomeUnknown,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -326,13 +344,13 @@ pub async fn open_admitted_runtime(
         admission.grant_epoch,
         event_credential_revision,
     )
-    .map_err(|_| MailBootstrapError::EventHub)?;
+    .map_err(|_| mail_event_hub_error("access"))?;
     let identity = RuntimeNatsIdentity::new(
         admission.runtime_instance_id.clone(),
         admission.runtime_generation,
         admission.grant_epoch,
     )
-    .map_err(|_| MailBootstrapError::EventHub)?;
+    .map_err(|_| mail_event_hub_error("identity"))?;
     let event_publish_permit = event_access
         .publish_permit(
             &admission.module_registration_id,
@@ -340,7 +358,7 @@ pub async fn open_admitted_runtime(
             admission.runtime_generation,
             admission.grant_epoch,
         )
-        .map_err(|_| MailBootstrapError::EventHub)?;
+        .map_err(|_| mail_event_hub_error("publish_permit"))?;
     let attachment_anchor_subscribe_permit = bind_attachment_anchor_subscribe_permit(
         event_access
             .subscribe_permits(
@@ -349,7 +367,7 @@ pub async fn open_admitted_runtime(
                 admission.runtime_generation,
                 admission.grant_epoch,
             )
-            .map_err(|_| MailBootstrapError::EventHub)?,
+            .map_err(|_| mail_event_hub_error("subscribe_permits"))?,
     )?;
     let attachment_blob_admission_publish_permitted =
         attachment_blob_admission_publish_permitted(&event_publish_permit)?;
@@ -361,7 +379,12 @@ pub async fn open_admitted_runtime(
         event_access.into_credential(),
     )
     .await
-    .map_err(|_| MailBootstrapError::EventHub)?;
+    .map_err(|error| {
+        if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+            eprintln!("developer_mail_event_hub_connect_error={error:?}");
+        }
+        mail_event_hub_error("connect")
+    })?;
     control_channel
         .signal_ready(ManagedRuntimeReadyRequestV1 {
             registration_id,
@@ -446,9 +469,13 @@ impl MailAdmittedRuntime {
                 return Ok(true);
             }
         };
-        let payload = crate::client_port::handle_client_request(self, &request.encode_to_vec())
-            .await
-            .map_err(|_| MailBootstrapError::Provider)?;
+        let payload = crate::client_port::handle_client_request(
+            self,
+            &request.encode_to_vec(),
+            current_unix_seconds()?,
+        )
+        .await
+        .map_err(|_| MailBootstrapError::Provider)?;
         let response = ModuleClientResponseV1::decode(payload.as_slice())
             .map_err(|_| MailBootstrapError::Provider)?;
         validate_module_client_response_v1(&response).map_err(|_| MailBootstrapError::Provider)?;
@@ -456,18 +483,95 @@ impl MailAdmittedRuntime {
         Ok(true)
     }
 
-    pub async fn send_configured_mail(
-        &mut self,
+    pub async fn submit_delivery(
+        &self,
         request: &MailSendMailRequestV1,
-    ) -> Result<u16, MailBootstrapError> {
-        let message = OutgoingMailV1 {
-            operation_id: request.operation_id.clone(),
-            connection_id: self.account.connection_id.clone(),
-            provider_conversation_id: request.provider_conversation_id.clone(),
-            recipients: request.recipients.clone(),
-            subject: request.subject.clone(),
-            text_body: request.text_body.clone(),
+        requested_at_unix_seconds: i64,
+    ) -> Result<String, MailBootstrapError> {
+        let message = self.outgoing_message(request);
+        let from_address = match &self.account.inbound {
+            MailInboundTransportV1::Imap(_) => self
+                .account
+                .smtp_endpoint
+                .as_ref()
+                .map(|endpoint| endpoint.from_address.as_str())
+                .ok_or(MailBootstrapError::Admission)?,
+            MailInboundTransportV1::Gmail(configuration) => configuration.from_address.as_str(),
         };
+        let rfc822_message =
+            compose_rfc822(from_address, &message).map_err(|_| MailBootstrapError::Admission)?;
+        let rfc822_sha256: [u8; 32] = Sha256::digest(rfc822_message.as_bytes()).into();
+        self.durable
+            .enqueue_delivery_command(
+                &message.operation_id,
+                &message.connection_id,
+                &rfc822_sha256,
+                &hermes_mail_api::client_wire::encode_delivery_request(request),
+                requested_at_unix_seconds,
+            )
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?;
+        Ok(message.operation_id)
+    }
+
+    pub async fn delivery_operation_status(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<MailDeliveryOperationStatusV1>, MailBootstrapError> {
+        self.durable
+            .delivery_attempt(operation_id)
+            .await
+            .map(|status| {
+                status.map(|status| {
+                    let (outcome, response_code) = match status.outcome {
+                        MailDeliveryAttemptOutcomeV1::Pending => {
+                            (MailDeliveryOutcomeV1::Pending, None)
+                        }
+                        MailDeliveryAttemptOutcomeV1::Accepted { response_code } => {
+                            (MailDeliveryOutcomeV1::Accepted, Some(response_code))
+                        }
+                        MailDeliveryAttemptOutcomeV1::Rejected => {
+                            (MailDeliveryOutcomeV1::Rejected, None)
+                        }
+                        MailDeliveryAttemptOutcomeV1::OutcomeUnknown => {
+                            (MailDeliveryOutcomeV1::OutcomeUnknown, None)
+                        }
+                    };
+                    MailDeliveryOperationStatusV1 {
+                        operation_id: status.operation_id,
+                        connection_id: status.connection_id,
+                        outcome,
+                        requested_at_unix_seconds: status.requested_at_unix_seconds,
+                        completed_at_unix_seconds: status.completed_at_unix_seconds,
+                        response_code,
+                    }
+                })
+            })
+            .map_err(|_| MailBootstrapError::Persistence)
+    }
+
+    pub async fn execute_next_delivery(
+        &mut self,
+        dispatched_at_unix_seconds: i64,
+        completed_at_unix_seconds: i64,
+    ) -> Result<bool, MailDeliveryDispatchErrorV1> {
+        let Some(queued) = self
+            .durable
+            .claim_next_delivery(dispatched_at_unix_seconds)
+            .await
+            .map_err(|_| MailDeliveryDispatchErrorV1::Persistence)?
+        else {
+            return Ok(false);
+        };
+        let request =
+            hermes_mail_api::client_wire::decode_delivery_request(&queued.exact_command_bytes)
+                .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
+        let message = self.outgoing_message(&request);
+        if queued.operation_id != message.operation_id
+            || queued.connection_id != message.connection_id
+        {
+            return Err(MailDeliveryDispatchErrorV1::InvalidStoredCommand);
+        }
         let account = self.account.clone();
         match account.inbound {
             MailInboundTransportV1::Imap(_) => {
@@ -475,19 +579,35 @@ impl MailAdmittedRuntime {
                     account
                         .smtp_endpoint
                         .as_ref()
-                        .ok_or(MailBootstrapError::Admission)?,
+                        .ok_or(MailDeliveryDispatchErrorV1::InvalidStoredCommand)?,
                     &message,
+                    &queued,
+                    completed_at_unix_seconds,
                 )
-                .await
+                .await?;
             }
             MailInboundTransportV1::Gmail(configuration) => {
                 self.send_mail_via_gmail(
                     &configuration.user_id,
                     &configuration.from_address,
                     &message,
+                    &queued,
+                    completed_at_unix_seconds,
                 )
-                .await
+                .await?;
             }
+        }
+        Ok(true)
+    }
+
+    fn outgoing_message(&self, request: &MailSendMailRequestV1) -> OutgoingMailV1 {
+        OutgoingMailV1 {
+            operation_id: request.operation_id.clone(),
+            connection_id: self.account.connection_id.clone(),
+            provider_conversation_id: request.provider_conversation_id.clone(),
+            recipients: request.recipients.clone(),
+            subject: request.subject.clone(),
+            text_body: request.text_body.clone(),
         }
     }
 
@@ -495,20 +615,33 @@ impl MailAdmittedRuntime {
         &mut self,
         endpoint: &hermes_mail_api::SmtpEndpointV1,
         message: &OutgoingMailV1,
-    ) -> Result<u16, MailBootstrapError> {
+        queued: &MailQueuedDeliveryV1,
+        completed_at_unix_seconds: i64,
+    ) -> Result<u16, MailDeliveryDispatchErrorV1> {
         let password = self
             .smtp_password
             .as_deref()
-            .ok_or(MailBootstrapError::Credential)?;
-        let password = std::str::from_utf8(password).map_err(|_| MailBootstrapError::Credential)?;
+            .ok_or(MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
+        let password = std::str::from_utf8(password)
+            .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         self.send_mail(
             message,
             &endpoint.from_address,
             ProviderProvenanceV1::MailSmtp,
+            queued,
+            completed_at_unix_seconds,
             |rfc822_message| async move {
                 hermes_mail_smtp::send_implicit_tls(endpoint, message, password, &rfc822_message)
                     .await
                     .map(|receipt| receipt.response_code)
+                    .map_err(|error| match error {
+                        SmtpAdapterErrorV1::InvalidRequest | SmtpAdapterErrorV1::Rejected => {
+                            MailProviderDeliveryErrorV1::Rejected
+                        }
+                        SmtpAdapterErrorV1::Unavailable | SmtpAdapterErrorV1::Protocol => {
+                            MailProviderDeliveryErrorV1::OutcomeUnknown
+                        }
+                    })
             },
         )
         .await
@@ -519,20 +652,24 @@ impl MailAdmittedRuntime {
         user_id: &str,
         from_address: &str,
         message: &OutgoingMailV1,
-    ) -> Result<u16, MailBootstrapError> {
+        queued: &MailQueuedDeliveryV1,
+        completed_at_unix_seconds: i64,
+    ) -> Result<u16, MailDeliveryDispatchErrorV1> {
         let MailInboundCredentialV1::GmailAccessToken(access_token) = &self.inbound_credential
         else {
-            return Err(MailBootstrapError::Credential);
+            return Err(MailDeliveryDispatchErrorV1::InvalidStoredCommand);
         };
-        let access_token =
-            std::str::from_utf8(access_token).map_err(|_| MailBootstrapError::Credential)?;
+        let access_token = std::str::from_utf8(access_token)
+            .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         self.send_mail(
             message,
             from_address,
             ProviderProvenanceV1::MailGmail,
+            queued,
+            completed_at_unix_seconds,
             |rfc822_message| async move {
                 let client = hermes_mail_gmail::GmailApiClientV1::new(user_id)
-                    .map_err(|_| hermes_mail_gmail::GmailAdapterErrorV1::Transport)?;
+                    .map_err(|_| MailProviderDeliveryErrorV1::Rejected)?;
                 client
                     .send_raw_message(
                         access_token,
@@ -541,76 +678,79 @@ impl MailAdmittedRuntime {
                     )
                     .await
                     .map(|_| 200)
+                    .map_err(|error| match error {
+                        GmailAdapterErrorV1::InvalidRequest => {
+                            MailProviderDeliveryErrorV1::Rejected
+                        }
+                        GmailAdapterErrorV1::Transport
+                        | GmailAdapterErrorV1::ProviderStatus(_)
+                        | GmailAdapterErrorV1::InvalidResponse => {
+                            MailProviderDeliveryErrorV1::OutcomeUnknown
+                        }
+                    })
             },
         )
         .await
     }
 
-    async fn send_mail<F, Fut, E>(
+    async fn send_mail<F, Fut>(
         &self,
         message: &OutgoingMailV1,
         from_address: &str,
         provider: ProviderProvenanceV1,
+        queued: &MailQueuedDeliveryV1,
+        completed_at_unix_seconds: i64,
         execute: F,
-    ) -> Result<u16, MailBootstrapError>
+    ) -> Result<u16, MailDeliveryDispatchErrorV1>
     where
         F: FnOnce(String) -> Fut,
-        Fut: std::future::Future<Output = Result<u16, E>>,
+        Fut: std::future::Future<Output = Result<u16, MailProviderDeliveryErrorV1>>,
     {
-        let rfc822_message =
-            compose_rfc822(from_address, message).map_err(|_| MailBootstrapError::Admission)?;
+        let rfc822_message = compose_rfc822(from_address, message)
+            .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         let rfc822_sha256: [u8; 32] = Sha256::digest(rfc822_message.as_bytes()).into();
-        let attempted_at = current_unix_seconds()?;
-        let started = self
-            .durable
-            .begin_delivery_attempt(
-                &message.operation_id,
-                &message.connection_id,
-                &rfc822_sha256,
-                attempted_at,
-            )
-            .await
-            .map_err(|_| MailBootstrapError::Persistence)?;
-        if !started {
-            return Err(MailBootstrapError::Admission);
+        if rfc822_sha256 != queued.rfc822_sha256 {
+            return Err(MailDeliveryDispatchErrorV1::InvalidStoredCommand);
         }
         let response_code = match execute(rfc822_message).await {
             Ok(response_code) => response_code,
-            Err(_) => {
+            Err(MailProviderDeliveryErrorV1::Rejected) => {
                 self.durable
                     .complete_delivery_rejected(
                         &message.operation_id,
                         &rfc822_sha256,
-                        current_unix_seconds()?,
+                        completed_at_unix_seconds,
                     )
                     .await
-                    .map_err(|_| MailBootstrapError::Persistence)?;
-                return Err(MailBootstrapError::Provider);
+                    .map_err(|_| MailDeliveryDispatchErrorV1::Persistence)?;
+                return Err(MailDeliveryDispatchErrorV1::ProviderRejected);
+            }
+            Err(MailProviderDeliveryErrorV1::OutcomeUnknown) => {
+                return Err(MailDeliveryDispatchErrorV1::ProviderOutcomeUnknown);
             }
         };
-        let completed_at = current_unix_seconds()?;
         let observation = draft_delivery_observation(provider, message)
-            .map_err(|_| MailBootstrapError::Admission)?;
+            .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         let record = build_observation_outbox_record_v1(
             &observation,
             &observation_context(
                 &self.runtime_instance_id,
                 self.runtime_generation,
-                completed_at,
+                completed_at_unix_seconds,
                 0,
             ),
         )
-        .map_err(|_| MailBootstrapError::Admission)?;
+        .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         self.durable
             .complete_delivery_accepted(
                 &message.operation_id,
                 &rfc822_sha256,
                 response_code,
                 &record,
-                completed_at,
+                completed_at_unix_seconds,
             )
             .await
-            .map_err(|_| MailBootstrapError::Persistence)?;
+            .map_err(|_| MailDeliveryDispatchErrorV1::Persistence)?;
         Ok(response_code)
     }
 
@@ -1868,4 +2008,11 @@ fn current_unix_seconds() -> Result<i64, MailBootstrapError> {
         .and_then(|elapsed| {
             i64::try_from(elapsed.as_secs()).map_err(|_| MailBootstrapError::Provider)
         })
+}
+
+fn mail_event_hub_error(stage: &str) -> MailBootstrapError {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_mail_event_hub_error={stage}");
+    }
+    MailBootstrapError::EventHub
 }

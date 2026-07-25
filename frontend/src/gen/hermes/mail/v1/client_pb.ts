@@ -2,15 +2,15 @@
 // @generated from file hermes/mail/v1/client.proto (package hermes.mail.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file hermes/mail/v1/client.proto.
  */
 export const file_hermes_mail_v1_client: GenFile = /*@__PURE__*/
-  fileDesc("ChtoZXJtZXMvbWFpbC92MS9jbGllbnQucHJvdG8SDmhlcm1lcy5tYWlsLnYxIioKElN5bmNJbmJveFJlcXVlc3RWMRIUCgxvcGVyYXRpb25faWQYASABKAkiggEKEVNlbmRNYWlsUmVxdWVzdFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoCRIgChhwcm92aWRlcl9jb252ZXJzYXRpb25faWQYAiABKAkSEQoJcmVjaXBpZW50GAMgAygJEg8KB3N1YmplY3QYBCABKAkSEQoJdGV4dF9ib2R5GAUgASgJIkcKFFN5bmNJbmJveENvbXBsZXRlZFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoCRIZChFvYnNlcnZlZF9tZXNzYWdlcxgCIAEoDSI9Cg5NYWlsQWNjZXB0ZWRWMRIUCgxvcGVyYXRpb25faWQYASABKAkSFQoNcmVzcG9uc2VfY29kZRgCIAEoDTJjCg9NYWlsU3luY1NlcnZpY2USUAoEU3luYxIiLmhlcm1lcy5tYWlsLnYxLlN5bmNJbmJveFJlcXVlc3RWMRokLmhlcm1lcy5tYWlsLnYxLlN5bmNJbmJveENvbXBsZXRlZFYxMmAKE01haWxEZWxpdmVyeVNlcnZpY2USSQoEU2VuZBIhLmhlcm1lcy5tYWlsLnYxLlNlbmRNYWlsUmVxdWVzdFYxGh4uaGVybWVzLm1haWwudjEuTWFpbEFjY2VwdGVkVjFiBnByb3RvMw");
+  fileDesc("ChtoZXJtZXMvbWFpbC92MS9jbGllbnQucHJvdG8SDmhlcm1lcy5tYWlsLnYxIioKElN5bmNJbmJveFJlcXVlc3RWMRIUCgxvcGVyYXRpb25faWQYASABKAkiggEKEVNlbmRNYWlsUmVxdWVzdFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoCRIgChhwcm92aWRlcl9jb252ZXJzYXRpb25faWQYAiABKAkSEQoJcmVjaXBpZW50GAMgAygJEg8KB3N1YmplY3QYBCABKAkSEQoJdGV4dF9ib2R5GAUgASgJIjYKHkdldE1haWxEZWxpdmVyeVN0YXR1c1JlcXVlc3RWMRIUCgxvcGVyYXRpb25faWQYASABKAkiRwoUU3luY0luYm94Q29tcGxldGVkVjESFAoMb3BlcmF0aW9uX2lkGAEgASgJEhkKEW9ic2VydmVkX21lc3NhZ2VzGAIgASgNIiYKDk1haWxBY2NlcHRlZFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoCSKbAgodTWFpbERlbGl2ZXJ5T3BlcmF0aW9uU3RhdHVzVjESFAoMb3BlcmF0aW9uX2lkGAEgASgJEhUKDWNvbm5lY3Rpb25faWQYAiABKAkSNgoHb3V0Y29tZRgDIAEoDjIlLmhlcm1lcy5tYWlsLnYxLk1haWxEZWxpdmVyeU91dGNvbWVWMRIhChlyZXF1ZXN0ZWRfYXRfdW5peF9zZWNvbmRzGAQgASgDEiYKGWNvbXBsZXRlZF9hdF91bml4X3NlY29uZHMYBSABKANIAIgBARIaCg1yZXNwb25zZV9jb2RlGAYgASgNSAGIAQFCHAoaX2NvbXBsZXRlZF9hdF91bml4X3NlY29uZHNCEAoOX3Jlc3BvbnNlX2NvZGUicAofR2V0TWFpbERlbGl2ZXJ5U3RhdHVzUmVzcG9uc2VWMRJCCgZzdGF0dXMYASABKAsyLS5oZXJtZXMubWFpbC52MS5NYWlsRGVsaXZlcnlPcGVyYXRpb25TdGF0dXNWMUgAiAEBQgkKB19zdGF0dXMqzAEKFU1haWxEZWxpdmVyeU91dGNvbWVWMRIlCiFNQUlMX0RFTElWRVJZX09VVENPTUVfVU5TUEVDSUZJRUQQABIhCh1NQUlMX0RFTElWRVJZX09VVENPTUVfUEVORElORxABEiIKHk1BSUxfREVMSVZFUllfT1VUQ09NRV9BQ0NFUFRFRBACEiIKHk1BSUxfREVMSVZFUllfT1VUQ09NRV9SRUpFQ1RFRBADEiEKHU1BSUxfREVMSVZFUllfT1VUQ09NRV9VTktOT1dOEAQyYwoPTWFpbFN5bmNTZXJ2aWNlElAKBFN5bmMSIi5oZXJtZXMubWFpbC52MS5TeW5jSW5ib3hSZXF1ZXN0VjEaJC5oZXJtZXMubWFpbC52MS5TeW5jSW5ib3hDb21wbGV0ZWRWMTJnChpNYWlsRGVsaXZlcnlDb21tYW5kU2VydmljZRJJCgRTZW5kEiEuaGVybWVzLm1haWwudjEuU2VuZE1haWxSZXF1ZXN0VjEaHi5oZXJtZXMubWFpbC52MS5NYWlsQWNjZXB0ZWRWMTKRAQoYTWFpbERlbGl2ZXJ5UXVlcnlTZXJ2aWNlEnUKEkdldE9wZXJhdGlvblN0YXR1cxIuLmhlcm1lcy5tYWlsLnYxLkdldE1haWxEZWxpdmVyeVN0YXR1c1JlcXVlc3RWMRovLmhlcm1lcy5tYWlsLnYxLkdldE1haWxEZWxpdmVyeVN0YXR1c1Jlc3BvbnNlVjFiBnByb3RvMw");
 
 /**
  * @generated from message hermes.mail.v1.SyncInboxRequestV1
@@ -67,6 +67,23 @@ export const SendMailRequestV1Schema: GenMessage<SendMailRequestV1> = /*@__PURE_
   messageDesc(file_hermes_mail_v1_client, 1);
 
 /**
+ * @generated from message hermes.mail.v1.GetMailDeliveryStatusRequestV1
+ */
+export type GetMailDeliveryStatusRequestV1 = Message<"hermes.mail.v1.GetMailDeliveryStatusRequestV1"> & {
+  /**
+   * @generated from field: string operation_id = 1;
+   */
+  operationId: string;
+};
+
+/**
+ * Describes the message hermes.mail.v1.GetMailDeliveryStatusRequestV1.
+ * Use `create(GetMailDeliveryStatusRequestV1Schema)` to create a new message.
+ */
+export const GetMailDeliveryStatusRequestV1Schema: GenMessage<GetMailDeliveryStatusRequestV1> = /*@__PURE__*/
+  messageDesc(file_hermes_mail_v1_client, 2);
+
+/**
  * @generated from message hermes.mail.v1.SyncInboxCompletedV1
  */
 export type SyncInboxCompletedV1 = Message<"hermes.mail.v1.SyncInboxCompletedV1"> & {
@@ -86,7 +103,7 @@ export type SyncInboxCompletedV1 = Message<"hermes.mail.v1.SyncInboxCompletedV1"
  * Use `create(SyncInboxCompletedV1Schema)` to create a new message.
  */
 export const SyncInboxCompletedV1Schema: GenMessage<SyncInboxCompletedV1> = /*@__PURE__*/
-  messageDesc(file_hermes_mail_v1_client, 2);
+  messageDesc(file_hermes_mail_v1_client, 3);
 
 /**
  * @generated from message hermes.mail.v1.MailAcceptedV1
@@ -96,11 +113,6 @@ export type MailAcceptedV1 = Message<"hermes.mail.v1.MailAcceptedV1"> & {
    * @generated from field: string operation_id = 1;
    */
   operationId: string;
-
-  /**
-   * @generated from field: uint32 response_code = 2;
-   */
-  responseCode: number;
 };
 
 /**
@@ -108,7 +120,102 @@ export type MailAcceptedV1 = Message<"hermes.mail.v1.MailAcceptedV1"> & {
  * Use `create(MailAcceptedV1Schema)` to create a new message.
  */
 export const MailAcceptedV1Schema: GenMessage<MailAcceptedV1> = /*@__PURE__*/
-  messageDesc(file_hermes_mail_v1_client, 3);
+  messageDesc(file_hermes_mail_v1_client, 4);
+
+/**
+ * @generated from message hermes.mail.v1.MailDeliveryOperationStatusV1
+ */
+export type MailDeliveryOperationStatusV1 = Message<"hermes.mail.v1.MailDeliveryOperationStatusV1"> & {
+  /**
+   * @generated from field: string operation_id = 1;
+   */
+  operationId: string;
+
+  /**
+   * @generated from field: string connection_id = 2;
+   */
+  connectionId: string;
+
+  /**
+   * @generated from field: hermes.mail.v1.MailDeliveryOutcomeV1 outcome = 3;
+   */
+  outcome: MailDeliveryOutcomeV1;
+
+  /**
+   * @generated from field: int64 requested_at_unix_seconds = 4;
+   */
+  requestedAtUnixSeconds: bigint;
+
+  /**
+   * @generated from field: optional int64 completed_at_unix_seconds = 5;
+   */
+  completedAtUnixSeconds?: bigint | undefined;
+
+  /**
+   * @generated from field: optional uint32 response_code = 6;
+   */
+  responseCode?: number | undefined;
+};
+
+/**
+ * Describes the message hermes.mail.v1.MailDeliveryOperationStatusV1.
+ * Use `create(MailDeliveryOperationStatusV1Schema)` to create a new message.
+ */
+export const MailDeliveryOperationStatusV1Schema: GenMessage<MailDeliveryOperationStatusV1> = /*@__PURE__*/
+  messageDesc(file_hermes_mail_v1_client, 5);
+
+/**
+ * @generated from message hermes.mail.v1.GetMailDeliveryStatusResponseV1
+ */
+export type GetMailDeliveryStatusResponseV1 = Message<"hermes.mail.v1.GetMailDeliveryStatusResponseV1"> & {
+  /**
+   * @generated from field: optional hermes.mail.v1.MailDeliveryOperationStatusV1 status = 1;
+   */
+  status?: MailDeliveryOperationStatusV1 | undefined;
+};
+
+/**
+ * Describes the message hermes.mail.v1.GetMailDeliveryStatusResponseV1.
+ * Use `create(GetMailDeliveryStatusResponseV1Schema)` to create a new message.
+ */
+export const GetMailDeliveryStatusResponseV1Schema: GenMessage<GetMailDeliveryStatusResponseV1> = /*@__PURE__*/
+  messageDesc(file_hermes_mail_v1_client, 6);
+
+/**
+ * @generated from enum hermes.mail.v1.MailDeliveryOutcomeV1
+ */
+export enum MailDeliveryOutcomeV1 {
+  /**
+   * @generated from enum value: MAIL_DELIVERY_OUTCOME_UNSPECIFIED = 0;
+   */
+  MAIL_DELIVERY_OUTCOME_UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: MAIL_DELIVERY_OUTCOME_PENDING = 1;
+   */
+  MAIL_DELIVERY_OUTCOME_PENDING = 1,
+
+  /**
+   * @generated from enum value: MAIL_DELIVERY_OUTCOME_ACCEPTED = 2;
+   */
+  MAIL_DELIVERY_OUTCOME_ACCEPTED = 2,
+
+  /**
+   * @generated from enum value: MAIL_DELIVERY_OUTCOME_REJECTED = 3;
+   */
+  MAIL_DELIVERY_OUTCOME_REJECTED = 3,
+
+  /**
+   * @generated from enum value: MAIL_DELIVERY_OUTCOME_UNKNOWN = 4;
+   */
+  MAIL_DELIVERY_OUTCOME_UNKNOWN = 4,
+}
+
+/**
+ * Describes the enum hermes.mail.v1.MailDeliveryOutcomeV1.
+ */
+export const MailDeliveryOutcomeV1Schema: GenEnum<MailDeliveryOutcomeV1> = /*@__PURE__*/
+  enumDesc(file_hermes_mail_v1_client, 0);
 
 /**
  * Provider-specific operational contracts. Core Gateway authenticates and
@@ -129,11 +236,11 @@ export const MailSyncService: GenService<{
   serviceDesc(file_hermes_mail_v1_client, 0);
 
 /**
- * @generated from service hermes.mail.v1.MailDeliveryService
+ * @generated from service hermes.mail.v1.MailDeliveryCommandService
  */
-export const MailDeliveryService: GenService<{
+export const MailDeliveryCommandService: GenService<{
   /**
-   * @generated from rpc hermes.mail.v1.MailDeliveryService.Send
+   * @generated from rpc hermes.mail.v1.MailDeliveryCommandService.Send
    */
   send: {
     methodKind: "unary";
@@ -142,4 +249,19 @@ export const MailDeliveryService: GenService<{
   },
 }> = /*@__PURE__*/
   serviceDesc(file_hermes_mail_v1_client, 1);
+
+/**
+ * @generated from service hermes.mail.v1.MailDeliveryQueryService
+ */
+export const MailDeliveryQueryService: GenService<{
+  /**
+   * @generated from rpc hermes.mail.v1.MailDeliveryQueryService.GetOperationStatus
+   */
+  getOperationStatus: {
+    methodKind: "unary";
+    input: typeof GetMailDeliveryStatusRequestV1Schema;
+    output: typeof GetMailDeliveryStatusResponseV1Schema;
+  },
+}> = /*@__PURE__*/
+  serviceDesc(file_hermes_mail_v1_client, 2);
 

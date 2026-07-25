@@ -50,6 +50,7 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
         mail_attachment_scan_candidate_publish_capability_v1(),
         mail_blob_capability_v1(),
+        mail_client_capability_v1(MailClientContractV1::DeliveryQuery),
         mail_client_capability_v1(MailClientContractV1::Delivery),
         mail_events_capability_v1(),
         mail_provider_credential_capability_v1(
@@ -86,7 +87,9 @@ fn mail_client_capability_v1(contract: MailClientContractV1) -> CapabilityDescri
         capability_revision: 1,
         criticality: match contract {
             MailClientContractV1::Sync => CapabilityCriticalityV1::Required,
-            MailClientContractV1::Delivery => CapabilityCriticalityV1::Optional,
+            MailClientContractV1::Delivery | MailClientContractV1::DeliveryQuery => {
+                CapabilityCriticalityV1::Optional
+            }
         } as i32,
         provides: vec![ProvidedSurfaceV1 {
             kind: ProvidedSurfaceKindV1::ClientRpc as i32,
@@ -250,6 +253,7 @@ mod tests {
             [
                 MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID,
                 MAIL_BLOB_CAPABILITY_ID,
+                MailClientContractV1::DeliveryQuery.capability_id(),
                 MailClientContractV1::Delivery.capability_id(),
                 MAIL_EVENTS_CAPABILITY_ID,
                 MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID,
@@ -313,7 +317,9 @@ mod tests {
                 capability.criticality,
                 match contract {
                     MailClientContractV1::Sync => CapabilityCriticalityV1::Required,
-                    MailClientContractV1::Delivery => CapabilityCriticalityV1::Optional,
+                    MailClientContractV1::Delivery | MailClientContractV1::DeliveryQuery => {
+                        CapabilityCriticalityV1::Optional
+                    }
                 } as i32
             );
         }

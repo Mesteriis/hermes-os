@@ -122,6 +122,20 @@ CREATE INDEX IF NOT EXISTS mail_attachment_security_outbox_pending_idx
     WHERE published_at_unix_seconds IS NULL;
 "#;
 
+pub const MAIL_SCHEMA_V3: &str = r#"
+CREATE TABLE IF NOT EXISTS hermes_data.mail_delivery_queue (
+    operation_id TEXT PRIMARY KEY
+        REFERENCES hermes_data.mail_delivery_attempts (operation_id) ON DELETE CASCADE,
+    exact_command_bytes BYTEA NOT NULL,
+    dispatched_at_unix_seconds BIGINT,
+    CHECK (octet_length(exact_command_bytes) > 0),
+    CHECK (dispatched_at_unix_seconds IS NULL OR dispatched_at_unix_seconds > 0)
+);
+CREATE INDEX IF NOT EXISTS mail_delivery_queue_pending_idx
+    ON hermes_data.mail_delivery_queue (operation_id)
+    WHERE dispatched_at_unix_seconds IS NULL;
+"#;
+
 pub struct MailDurablePersistence {
     pool: PgPool,
 }
@@ -170,9 +184,40 @@ pub enum MailAttachmentBlobAdmissionStartOutcomeV1 {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(i16)]
 pub enum MailSmtpDeliveryAttemptStateV1 {
-    OutcomeUnknown = 1,
+    Pending = 1,
     Accepted = 2,
     Rejected = 3,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailDeliveryEnqueueOutcomeV1 {
+    Enqueued,
+    Existing,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailQueuedDeliveryV1 {
+    pub operation_id: String,
+    pub connection_id: String,
+    pub rfc822_sha256: [u8; 32],
+    pub exact_command_bytes: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailDeliveryAttemptOutcomeV1 {
+    Pending,
+    Accepted { response_code: u16 },
+    Rejected,
+    OutcomeUnknown,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailDeliveryAttemptV1 {
+    pub operation_id: String,
+    pub connection_id: String,
+    pub outcome: MailDeliveryAttemptOutcomeV1,
+    pub requested_at_unix_seconds: i64,
+    pub completed_at_unix_seconds: Option<i64>,
 }
 
 impl MailDurablePersistence {
@@ -735,29 +780,113 @@ impl MailDurablePersistence {
         .map_err(|_| MailDurablePersistenceError::Database)
     }
 
-    pub async fn begin_delivery_attempt(
+    pub async fn enqueue_delivery_command(
         &self,
         operation_id: &str,
         connection_id: &str,
         rfc822_sha256: &[u8; 32],
-        attempted_at_unix_seconds: i64,
-    ) -> Result<bool, MailDurablePersistenceError> {
+        exact_command_bytes: &[u8],
+        requested_at_unix_seconds: i64,
+    ) -> Result<MailDeliveryEnqueueOutcomeV1, MailDurablePersistenceError> {
         if operation_id.trim().is_empty()
             || connection_id.trim().is_empty()
-            || attempted_at_unix_seconds <= 0
+            || exact_command_bytes.is_empty()
+            || requested_at_unix_seconds <= 0
         {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
-        sqlx::query("INSERT INTO hermes_data.mail_delivery_attempts (operation_id, connection_id, rfc822_sha256, state, attempted_at_unix_seconds) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (operation_id) DO NOTHING")
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        let inserted = sqlx::query("INSERT INTO hermes_data.mail_delivery_attempts (operation_id, connection_id, rfc822_sha256, state, attempted_at_unix_seconds) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (operation_id) DO NOTHING")
             .bind(operation_id)
             .bind(connection_id)
             .bind(rfc822_sha256.as_slice())
-            .bind(MailSmtpDeliveryAttemptStateV1::OutcomeUnknown as i16)
-            .bind(attempted_at_unix_seconds)
-            .execute(&self.pool)
+            .bind(MailSmtpDeliveryAttemptStateV1::Pending as i16)
+            .bind(requested_at_unix_seconds)
+            .execute(&mut *transaction)
             .await
-            .map(|result| result.rows_affected() == 1)
-            .map_err(|_| MailDurablePersistenceError::Database)
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        if inserted.rows_affected() == 1 {
+            sqlx::query("INSERT INTO hermes_data.mail_delivery_queue (operation_id, exact_command_bytes) VALUES ($1, $2)")
+                .bind(operation_id)
+                .bind(exact_command_bytes)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| MailDurablePersistenceError::Database)?;
+            transaction
+                .commit()
+                .await
+                .map_err(|_| MailDurablePersistenceError::Database)?;
+            return Ok(MailDeliveryEnqueueOutcomeV1::Enqueued);
+        }
+        let matching = sqlx::query(
+            "SELECT 1 FROM hermes_data.mail_delivery_attempts attempt \
+             JOIN hermes_data.mail_delivery_queue queue ON queue.operation_id = attempt.operation_id \
+             WHERE attempt.operation_id = $1 AND attempt.connection_id = $2 \
+               AND attempt.rfc822_sha256 = $3 AND queue.exact_command_bytes = $4",
+        )
+        .bind(operation_id)
+        .bind(connection_id)
+        .bind(rfc822_sha256.as_slice())
+        .bind(exact_command_bytes)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| MailDurablePersistenceError::Database)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        matching
+            .map(|_| MailDeliveryEnqueueOutcomeV1::Existing)
+            .ok_or(MailDurablePersistenceError::InvalidRow)
+    }
+
+    pub async fn claim_next_delivery(
+        &self,
+        dispatched_at_unix_seconds: i64,
+    ) -> Result<Option<MailQueuedDeliveryV1>, MailDurablePersistenceError> {
+        if dispatched_at_unix_seconds <= 0 {
+            return Err(MailDurablePersistenceError::InvalidRow);
+        }
+        let row = sqlx::query(
+            "WITH next AS (SELECT queue.operation_id FROM hermes_data.mail_delivery_queue queue \
+             JOIN hermes_data.mail_delivery_attempts attempt ON attempt.operation_id = queue.operation_id \
+             WHERE queue.dispatched_at_unix_seconds IS NULL AND attempt.state = $1 \
+             ORDER BY attempt.attempted_at_unix_seconds, queue.operation_id FOR UPDATE SKIP LOCKED LIMIT 1) \
+             UPDATE hermes_data.mail_delivery_queue queue SET dispatched_at_unix_seconds = $2 FROM next \
+             JOIN hermes_data.mail_delivery_attempts attempt ON attempt.operation_id = next.operation_id \
+             WHERE queue.operation_id = next.operation_id \
+             RETURNING queue.operation_id, attempt.connection_id, attempt.rfc822_sha256, queue.exact_command_bytes",
+        )
+        .bind(MailSmtpDeliveryAttemptStateV1::Pending as i16)
+        .bind(dispatched_at_unix_seconds)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| MailDurablePersistenceError::Database)?;
+        row.map(|row| {
+            let digest: Vec<u8> = row
+                .try_get("rfc822_sha256")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            Ok(MailQueuedDeliveryV1 {
+                operation_id: row
+                    .try_get("operation_id")
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+                connection_id: row
+                    .try_get("connection_id")
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+                rfc822_sha256: digest
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+                exact_command_bytes: row
+                    .try_get("exact_command_bytes")
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+            })
+        })
+        .transpose()
     }
 
     pub async fn complete_delivery_accepted(
@@ -785,7 +914,7 @@ impl MailDurablePersistence {
             .bind(MailSmtpDeliveryAttemptStateV1::Accepted as i16)
             .bind(completed_at_unix_seconds)
             .bind(i16::try_from(response_code).map_err(|_| MailDurablePersistenceError::InvalidRow)?)
-            .bind(MailSmtpDeliveryAttemptStateV1::OutcomeUnknown as i16)
+            .bind(MailSmtpDeliveryAttemptStateV1::Pending as i16)
             .execute(&mut *transaction)
             .await
             .map_err(|_| MailDurablePersistenceError::Database)?;
@@ -820,11 +949,81 @@ impl MailDurablePersistence {
             .bind(rfc822_sha256.as_slice())
             .bind(MailSmtpDeliveryAttemptStateV1::Rejected as i16)
             .bind(completed_at_unix_seconds)
-            .bind(MailSmtpDeliveryAttemptStateV1::OutcomeUnknown as i16)
+            .bind(MailSmtpDeliveryAttemptStateV1::Pending as i16)
             .execute(&self.pool)
             .await
-            .map(|_| ())
             .map_err(|_| MailDurablePersistenceError::Database)
+            .and_then(|result| {
+                (result.rows_affected() == 1)
+                    .then_some(())
+                    .ok_or(MailDurablePersistenceError::InvalidRow)
+            })
+    }
+
+    pub async fn delivery_attempt(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<MailDeliveryAttemptV1>, MailDurablePersistenceError> {
+        if operation_id.trim().is_empty() {
+            return Err(MailDurablePersistenceError::InvalidRow);
+        }
+        let row = sqlx::query(
+            "SELECT attempt.operation_id, attempt.connection_id, attempt.state, \
+                    attempt.attempted_at_unix_seconds, attempt.completed_at_unix_seconds, \
+                    attempt.response_code, queue.dispatched_at_unix_seconds \
+             FROM hermes_data.mail_delivery_attempts attempt \
+             JOIN hermes_data.mail_delivery_queue queue ON queue.operation_id = attempt.operation_id \
+             WHERE attempt.operation_id = $1",
+        )
+        .bind(operation_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| MailDurablePersistenceError::Database)?;
+        row.map(|row| {
+            let state: i16 = row
+                .try_get("state")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            let dispatched_at: Option<i64> = row
+                .try_get("dispatched_at_unix_seconds")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            let completed_at_unix_seconds: Option<i64> =
+                row.try_get("completed_at_unix_seconds")
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            let response_code: Option<i16> = row
+                .try_get("response_code")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+            let outcome = match (
+                state,
+                dispatched_at,
+                completed_at_unix_seconds,
+                response_code,
+            ) {
+                (1, None, None, None) => MailDeliveryAttemptOutcomeV1::Pending,
+                (1, Some(_), None, None) => MailDeliveryAttemptOutcomeV1::OutcomeUnknown,
+                (2, Some(_), Some(_), Some(code)) if (200..300).contains(&code) => {
+                    MailDeliveryAttemptOutcomeV1::Accepted {
+                        response_code: u16::try_from(code)
+                            .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+                    }
+                }
+                (3, Some(_), Some(_), None) => MailDeliveryAttemptOutcomeV1::Rejected,
+                _ => return Err(MailDurablePersistenceError::InvalidRow),
+            };
+            Ok(MailDeliveryAttemptV1 {
+                operation_id: row
+                    .try_get("operation_id")
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+                connection_id: row
+                    .try_get("connection_id")
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+                outcome,
+                requested_at_unix_seconds: row
+                    .try_get("attempted_at_unix_seconds")
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+                completed_at_unix_seconds,
+            })
+        })
+        .transpose()
     }
 
     pub async fn pending_communications_outbox(

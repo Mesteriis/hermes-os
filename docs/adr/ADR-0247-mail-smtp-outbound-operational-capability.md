@@ -2,10 +2,13 @@
 
 Status: Accepted
 Date: 2026-07-22
-Implementation state: Partial. Mail API/core define bounded SMTP endpoint and
-outbound command contracts, a distinct SMTP credential purpose and RFC822
-plain-text composition with header-injection rejection. No SMTP package,
-runtime command route, provider execution or terminal result exists yet.
+Implementation state: Partial. The bounded plain-text SMTP slice is
+implemented: Mail has a separate SMTP package and credential purpose,
+independent delivery command/query routes, an owner-local durable queue,
+implicit-TLS provider execution, terminal status, and a neutral
+Communications observation. Outbound attachment composition and Blob
+lease-only attachment reads are not implemented yet and do not inherit this
+gate.
 
 ## Decision
 
@@ -45,17 +48,51 @@ filesystem path from a client.
 
 ## Admission gates
 
-This capability remains blocked until one atomic policy/inventory admission
-adds the SMTP package and all its exact dependencies, targets and source roots.
-Required evidence includes implicit-TLS SMTP conformance, exact RFC822/MIME
-serialization and header-injection rejection, command idempotency and replay,
-Vault purpose/revoke fencing, Blob lease-only attachment streaming,
-compile-isolation, and generated Core Gateway contract evidence without an
+The bounded plain-text SMTP capability is admitted only as the exact package
+and capability subset implemented below. Required evidence includes
+implicit-TLS SMTP conformance, exact RFC822 serialization and header-injection
+rejection, command idempotency, terminal status, Vault purpose/revoke fencing,
+compile isolation, and generated Core Gateway contract evidence without an
 HTTP compatibility facade.
+
+Outbound attachments remain a separate closed extension. Opening that
+extension requires bounded MIME composition and Blob lease-only attachment
+streaming evidence; it may not accept client filesystem paths or reuse the
+inbound attachment mapping as a cross-owner store lookup.
 
 ## Consequences
 
 No SMTP code may be hidden in `hermes-mail-imap`, `hermes-mail-core` may not
 open sockets, and Communications cannot become a generic outbound provider
-dispatcher. The currently accepted IMAP read-only capability remains unchanged
-until the admission gates above are implemented and verified.
+dispatcher. Enabling SMTP does not implicitly enable Gmail mutation or
+outbound attachments.
+
+## Evidence 2026-07-25
+
+The implemented plain-text SMTP slice proves:
+
+- `mail.delivery.v1` persists exact command bytes before returning an
+  operation receipt; the receipt contains no provider result;
+- `mail.delivery.query.v1` is an independently approved route and returns
+  typed `pending`, `accepted`, `rejected`, or `outcome_unknown` status;
+- Mail persistence owns the queue and delivery-attempt state; exact duplicate
+  commands do not execute the provider twice, while conflicting reuse of an
+  operation ID is rejected;
+- a claimed delivery is never automatically replayed after an ambiguous
+  provider outcome, preventing unsafe SMTP double-send;
+- `hermes-mail-smtp` performs bounded implicit-TLS SMTP with an optional
+  bounded custom CA for conformance and a whole-operation deadline;
+- SMTP password resolution uses only `mail_smtp_password` for the admitted
+  configuration and never falls back to the IMAP credential;
+- provider acceptance and the neutral Communications observation are committed
+  atomically in Mail-owned PostgreSQL state and outbox;
+- with NATS unavailable, provider execution completes once and the exact
+  observation remains pending; after NATS recovery it is replayed through
+  Communications with original causation;
+- the durable envelope contains neither recipient address nor message body.
+
+The focused live proof is:
+
+```text
+HERMES_STORAGE_MANAGED_TEST_FILTER=managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event node scripts/test-authenticated-storage.mjs 1.97.0
+```
