@@ -11,9 +11,10 @@ Platform completes its internal rewrap. Communications derived search may read
 only that Communications-owned Blob reference. A direct cross-owner Blob read
 is rejected by the current registration/capability fence and must remain
 rejected. Managed conformance covers altered receipts, stale source and target
-launches, and revoked source registrations. Blob/Vault unavailability and target-grant
-revocation remain separate required evidence; a nominal managed conformance
-pass does not replace them.
+launches, revoked source registrations, live Blob outage/restart with pending
+custody replay, and a current target generation whose reissued GrantSet no
+longer contains `communications.blob.v1`. Vault unavailability remains separate
+required evidence; a nominal managed conformance pass does not replace it.
 
 Зависит от:
 
