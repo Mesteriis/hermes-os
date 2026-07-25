@@ -12,11 +12,33 @@ use std::time::Duration;
 const CLAMAV_INSTREAM_COMMAND: &[u8; 10] = b"zINSTREAM\0";
 const MAX_FIXTURE_CHUNK_BYTES: usize = 64 * 1024;
 const MAX_FIXTURE_SCAN_BYTES: usize = 64 * 1024 * 1024;
+const THREAT_MARKER: &[u8] = b"fixture-threat";
+const MALFORMED_MARKER: &[u8] = b"fixture-malformed";
+const DISCONNECT_MARKER: &[u8] = b"fixture-disconnect";
+const TIMEOUT_MARKER: &[u8] = b"fixture-timeout";
+const FIXTURE_OUTCOME_COUNT: usize = 5;
+const TIMEOUT_RESPONSE_DELAY: Duration = Duration::from_millis(1_500);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(usize)]
+pub(super) enum ClamAvFixtureOutcomeV1 {
+    Clean = 0,
+    Threat = 1,
+    Malformed = 2,
+    Disconnect = 3,
+    Timeout = 4,
+}
+
+impl ClamAvFixtureOutcomeV1 {
+    const fn index(self) -> usize {
+        self as usize
+    }
+}
 
 pub(super) struct AttachmentSecurityClamAvFixture {
     port: u16,
     shutdown: Arc<AtomicBool>,
-    scan_count: Arc<AtomicUsize>,
+    outcome_counts: Arc<[AtomicUsize; FIXTURE_OUTCOME_COUNT]>,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -32,15 +54,18 @@ impl AttachmentSecurityClamAvFixture {
             .expect("ClamAV fixture address")
             .port();
         let shutdown = Arc::new(AtomicBool::new(false));
-        let scan_count = Arc::new(AtomicUsize::new(0));
+        let outcome_counts = Arc::new(std::array::from_fn(|_| AtomicUsize::new(0)));
         let worker_shutdown = Arc::clone(&shutdown);
-        let worker_scan_count = Arc::clone(&scan_count);
+        let worker_outcome_counts = Arc::clone(&outcome_counts);
         let worker = thread::spawn(move || {
             while !worker_shutdown.load(Ordering::Acquire) {
                 match listener.accept() {
                     Ok((stream, _)) => {
-                        serve_clean_scan(stream);
-                        worker_scan_count.fetch_add(1, Ordering::AcqRel);
+                        if worker_shutdown.load(Ordering::Acquire) {
+                            break;
+                        }
+                        let outcome = serve_scan(stream);
+                        worker_outcome_counts[outcome.index()].fetch_add(1, Ordering::AcqRel);
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(10));
@@ -52,7 +77,7 @@ impl AttachmentSecurityClamAvFixture {
         Self {
             port,
             shutdown,
-            scan_count,
+            outcome_counts,
             worker: Some(worker),
         }
     }
@@ -62,7 +87,14 @@ impl AttachmentSecurityClamAvFixture {
     }
 
     pub(super) fn scan_count(&self) -> usize {
-        self.scan_count.load(Ordering::Acquire)
+        self.outcome_counts
+            .iter()
+            .map(|count| count.load(Ordering::Acquire))
+            .sum()
+    }
+
+    pub(super) fn outcome_count(&self, outcome: ClamAvFixtureOutcomeV1) -> usize {
+        self.outcome_counts[outcome.index()].load(Ordering::Acquire)
     }
 }
 
@@ -76,7 +108,7 @@ impl Drop for AttachmentSecurityClamAvFixture {
     }
 }
 
-fn serve_clean_scan(mut stream: TcpStream) {
+fn serve_scan(mut stream: TcpStream) -> ClamAvFixtureOutcomeV1 {
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .and_then(|_| stream.set_write_timeout(Some(Duration::from_secs(5))))
@@ -86,7 +118,7 @@ fn serve_clean_scan(mut stream: TcpStream) {
         .read_exact(&mut command)
         .expect("read ClamAV INSTREAM command");
     assert_eq!(command, *CLAMAV_INSTREAM_COMMAND);
-    let mut total = 0_usize;
+    let mut payload = Vec::new();
     loop {
         let mut length = [0_u8; 4];
         stream
@@ -97,16 +129,86 @@ fn serve_clean_scan(mut stream: TcpStream) {
             break;
         }
         assert!(length <= MAX_FIXTURE_CHUNK_BYTES);
-        total = total.checked_add(length).expect("ClamAV fixture scan size");
+        let total = payload
+            .len()
+            .checked_add(length)
+            .expect("ClamAV fixture scan size");
         assert!(total <= MAX_FIXTURE_SCAN_BYTES);
         let mut chunk = vec![0_u8; length];
         stream
             .read_exact(&mut chunk)
             .expect("read ClamAV INSTREAM chunk");
+        payload.extend_from_slice(&chunk);
     }
-    assert!(total > 0);
+    assert!(!payload.is_empty());
+    let outcome = scan_outcome_for_payload(&payload);
+    match outcome {
+        ClamAvFixtureOutcomeV1::Clean => {
+            write_fixture_response(&mut stream, b"stream: OK\0", "clean");
+        }
+        ClamAvFixtureOutcomeV1::Threat => {
+            write_fixture_response(&mut stream, b"stream: Fixture-Signature FOUND\0", "threat");
+        }
+        ClamAvFixtureOutcomeV1::Malformed => {
+            write_fixture_response(&mut stream, b"stream: BROKEN\0", "malformed");
+        }
+        ClamAvFixtureOutcomeV1::Disconnect => {}
+        ClamAvFixtureOutcomeV1::Timeout => {
+            thread::sleep(TIMEOUT_RESPONSE_DELAY);
+            let _ = stream
+                .write_all(b"stream: OK\0")
+                .and_then(|_| stream.flush());
+        }
+    }
+    outcome
+}
+
+fn scan_outcome_for_payload(payload: &[u8]) -> ClamAvFixtureOutcomeV1 {
+    for (marker, outcome) in [
+        (THREAT_MARKER, ClamAvFixtureOutcomeV1::Threat),
+        (MALFORMED_MARKER, ClamAvFixtureOutcomeV1::Malformed),
+        (DISCONNECT_MARKER, ClamAvFixtureOutcomeV1::Disconnect),
+        (TIMEOUT_MARKER, ClamAvFixtureOutcomeV1::Timeout),
+    ] {
+        if payload.windows(marker.len()).any(|window| window == marker) {
+            return outcome;
+        }
+    }
+    ClamAvFixtureOutcomeV1::Clean
+}
+
+fn write_fixture_response(stream: &mut TcpStream, response: &[u8], label: &str) {
     stream
-        .write_all(b"stream: OK\0")
+        .write_all(response)
         .and_then(|_| stream.flush())
-        .expect("write ClamAV clean response");
+        .unwrap_or_else(|error| panic!("write ClamAV {label} response: {error}"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ClamAvFixtureOutcomeV1, scan_outcome_for_payload};
+
+    #[test]
+    fn fixture_classifies_each_scanner_outcome_from_bounded_payload() {
+        assert_eq!(
+            scan_outcome_for_payload(b"ordinary attachment"),
+            ClamAvFixtureOutcomeV1::Clean
+        );
+        assert_eq!(
+            scan_outcome_for_payload(b"attachment fixture-threat marker"),
+            ClamAvFixtureOutcomeV1::Threat
+        );
+        assert_eq!(
+            scan_outcome_for_payload(b"attachment fixture-malformed marker"),
+            ClamAvFixtureOutcomeV1::Malformed
+        );
+        assert_eq!(
+            scan_outcome_for_payload(b"attachment fixture-disconnect marker"),
+            ClamAvFixtureOutcomeV1::Disconnect
+        );
+        assert_eq!(
+            scan_outcome_for_payload(b"attachment fixture-timeout marker"),
+            ClamAvFixtureOutcomeV1::Timeout
+        );
+    }
 }

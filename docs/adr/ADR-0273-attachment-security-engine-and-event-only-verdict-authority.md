@@ -25,11 +25,15 @@ endpoint из typed settings snapshot. Exact live payload contour теперь
 engine-owned receipt, one-use read, loopback ClamAV clean response, typed
 verdict event, Communications CAS до `safe_for_delivery` и exact replay без
 второго transfer/verdict/scan. Тот же contour отдельно доказывает, что прямой
-read integration-owned source Blob отклоняется data-plane access fence.
-Production gate `attachment_security_engine_v1` остаётся закрыт до threat,
-timeout/I/O/malformed scanner, outage/restart/revoke/stale-CAS matrix и
-атомарного production inventory admission. `safe_for_delivery` доказан только
-в disposable conformance contour и ещё не объявлен production-ready.
+read integration-owned source Blob отклоняется data-plane access fence. Live
+scanner matrix теперь также доказывает threat verdict до `quarantined` и
+fail-closed malformed response, disconnect/I/O и timeout: Communications
+остаётся в `blob_admitted`, verdict/outbox не создаётся, а exact replay не
+дублирует первую custody/scan attempt. Production gate
+`attachment_security_engine_v1` остаётся закрыт до
+outage/restart/revoke/stale-CAS matrix и атомарного production inventory
+admission. `safe_for_delivery` доказан только в disposable conformance contour
+и ещё не объявлен production-ready.
 ADR-0274 фиксирует обязательный custody path, а ADR-0275 — стабильную target
 identity без зависимости от динамического Kernel registration ID.
 

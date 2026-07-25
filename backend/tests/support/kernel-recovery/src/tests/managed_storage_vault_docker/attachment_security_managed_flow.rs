@@ -2,7 +2,9 @@
 
 use super::*;
 
-use super::attachment_security_clamav_fixture::AttachmentSecurityClamAvFixture;
+use super::attachment_security_clamav_fixture::{
+    AttachmentSecurityClamAvFixture, ClamAvFixtureOutcomeV1,
+};
 use crate::identity::device::signer::DeviceSigner;
 
 #[test]
@@ -110,7 +112,79 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
         hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
             as u32
     );
-    assert_eq!(clamav.scan_count(), 1);
+
+    let threat_plaintext =
+        b"attachment fixture-threat payload visible only to Blob and scanner fixture";
+    let threat_blob = blob_source.write(&store, &supervisor, &data, [82; 16], threat_plaintext);
+    let threat_attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "threat",
+        threat_blob.declared_size,
+        threat_blob.receipt_sha256,
+    );
+    assert_threat_attachment_security_verdict_flow(
+        &store,
+        &threat_attachment,
+        &threat_blob,
+        &clamav,
+        threat_plaintext,
+    );
+    assert_eq!(
+        wait_for_attachment_state(
+            &store,
+            &supervisor,
+            threat_attachment.attachment_anchor_id
+        ),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::Quarantined
+            as u32
+    );
+
+    for (scenario_id, blob_id, plaintext, scanner_outcome) in [
+        (
+            "malformed",
+            [83; 16],
+            b"attachment fixture-malformed response scenario".as_slice(),
+            ClamAvFixtureOutcomeV1::Malformed,
+        ),
+        (
+            "disconnect",
+            [84; 16],
+            b"attachment fixture-disconnect I/O scenario".as_slice(),
+            ClamAvFixtureOutcomeV1::Disconnect,
+        ),
+        (
+            "timeout",
+            [85; 16],
+            b"attachment fixture-timeout response scenario".as_slice(),
+            ClamAvFixtureOutcomeV1::Timeout,
+        ),
+    ] {
+        let failure_blob = blob_source.write(&store, &supervisor, &data, blob_id, plaintext);
+        let failure_attachment = prepare_communications_attachment_for_scan(
+            &store,
+            scenario_id,
+            failure_blob.declared_size,
+            failure_blob.receipt_sha256,
+        );
+        assert_attachment_security_scanner_failure_is_fail_closed(
+            &store,
+            &failure_attachment,
+            &failure_blob,
+            &clamav,
+            scanner_outcome,
+        );
+        assert_eq!(
+            wait_for_attachment_state(
+                &store,
+                &supervisor,
+                failure_attachment.attachment_anchor_id
+            ),
+            hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::BlobAdmitted
+                as u32
+        );
+    }
+    assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::Clean), 1);
+    assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::Threat), 1);
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {

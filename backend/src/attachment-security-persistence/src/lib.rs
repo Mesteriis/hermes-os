@@ -16,6 +16,7 @@ use sqlx::{
 #[cfg(feature = "conformance-test-support")]
 pub use conformance::{
     AttachmentSecurityPersistenceConformanceV1, AttachmentSecurityPersistenceDiagnosticsV1,
+    AttachmentSecurityScanJobDiagnosticsV1,
 };
 pub use jobs::{
     AttachmentSecurityTargetBlobReceiptV1, ClaimedAttachmentSecurityScanJobV1,

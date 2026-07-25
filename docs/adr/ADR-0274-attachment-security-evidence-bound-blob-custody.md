@@ -8,8 +8,10 @@ registration/capability fence. Contract revision 2 и engine-owned custody
 transfer реализованы. Live disposable contour доказал target-bound
 `mail -> attachment_security` transfer, сохранение target receipt, one-use
 target-owned read, clean ClamAV verdict, Communications CAS, exact replay без
-повторного scan и отдельный отказ прямого source read. Phase gate
-`attachment_security_engine_v1` остаётся закрыт до threat/failure,
+повторного scan и отдельный отказ прямого source read. Тот же contour теперь
+доказывает threat quarantine и fail-closed malformed/disconnect/timeout без
+verdict/outbox и без перевода Communications из `blob_admitted`. Phase gate
+`attachment_security_engine_v1` остаётся закрыт до
 outage/restart/revoke/stale-CAS matrix и production inventory admission.
 ADR-0275 определяет stable target-bound proof для этого cross-owner handoff.
 

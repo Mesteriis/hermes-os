@@ -401,7 +401,7 @@ test('Attachment Security release assembly is a separate unsigned engine unit', 
 });
 
 test('Attachment Security managed conformance launches the signed Engine through typed settings', async () => {
-  const [manifest, script, setup, flow, clamav] = await Promise.all([
+  const [manifest, script, setup, flow, eventFlow, clamav, persistence] = await Promise.all([
     readFile(
       new URL('tests/support/kernel-recovery/Cargo.toml', BACKEND_ROOT),
       'utf8',
@@ -426,9 +426,21 @@ test('Attachment Security managed conformance launches the signed Engine through
     readFile(
       new URL(
         'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/'
+          + 'attachment_security_event_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/'
           + 'attachment_security_clamav_fixture.rs',
         BACKEND_ROOT,
       ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-security-persistence/src/conformance.rs', BACKEND_ROOT),
       'utf8',
     ),
   ]);
@@ -447,8 +459,19 @@ test('Attachment Security managed conformance launches the signed Engine through
   assert.match(setup, /ManagedEngineRuntimeConfigurationV1/);
   assert.match(setup, /attachment_security_settings_snapshot\(/);
   assert.match(flow, /supervisor\s*\.is_active\(&attachment_security\.registration_id\)/);
+  assert.match(flow, /assert_threat_attachment_security_verdict_flow\(/);
+  assert.match(flow, /assert_attachment_security_scanner_failure_is_fail_closed\(/);
   assert.match(clamav, /Ipv4Addr::LOCALHOST/);
   assert.match(clamav, /b"zINSTREAM\\0"/);
+  for (const outcome of ['Threat', 'Malformed', 'Disconnect', 'Timeout']) {
+    assert.match(clamav, new RegExp(`${outcome} = \\d`));
+    assert.match(flow, new RegExp(`ClamAvFixtureOutcomeV1::${outcome}`));
+  }
+  assert.match(clamav, /Fixture-Signature FOUND/);
+  assert.match(eventFlow, /AttachmentSafetyVerdictV1::Quarantined/);
+  assert.match(eventFlow, /scanner failure must not create a verdict/);
+  assert.match(eventFlow, /after\.outbox, before\.outbox/);
+  assert.match(persistence, /WHERE attachment_anchor_id = \$1/);
   assert.doesNotMatch(
     `${setup}\n${flow}`,
     /hermes_communications_(?:domain|persistence|runtime)/,

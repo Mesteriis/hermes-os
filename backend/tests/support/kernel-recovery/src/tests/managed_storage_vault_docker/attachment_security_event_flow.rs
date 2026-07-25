@@ -1,6 +1,6 @@
 //! Typed event-only Attachment Security to Communications verdict conformance.
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
 use hermes_attachment_security_contract::{
@@ -24,7 +24,9 @@ use hermes_events_protocol::validation::envelope::decode_envelope_v1;
 use prost::Message;
 use zeroize::Zeroizing;
 
-use super::attachment_security_clamav_fixture::AttachmentSecurityClamAvFixture;
+use super::attachment_security_clamav_fixture::{
+    AttachmentSecurityClamAvFixture, ClamAvFixtureOutcomeV1,
+};
 use super::*;
 
 const COMMUNICATIONS_OBSERVATION_SUBJECT: &str =
@@ -45,6 +47,12 @@ pub(super) struct CommunicationsAttachmentFixtureV1 {
     pub(super) source_observation_id: [u8; 16],
     pub(super) correlation_id: [u8; 16],
     pub(super) blob_admitted_state_message_id: [u8; 16],
+}
+
+struct AttachmentSecurityVerdictExpectationV1 {
+    scanner_outcome: ClamAvFixtureOutcomeV1,
+    verdict: AttachmentSafetyVerdictV1,
+    state: AttachmentSafetyStateWireV1,
 }
 
 pub(super) fn prepare_communications_attachment_for_scan(
@@ -283,31 +291,56 @@ pub(super) fn assert_clean_attachment_security_verdict_flow(
     clamav: &AttachmentSecurityClamAvFixture,
     forbidden_plaintext: &[u8],
 ) {
-    let observed_at = current_unix_seconds();
-    let candidate = build_attachment_security_scan_candidate_outbox_record_v1(
-        &AttachmentSecurityScanCandidateFactV1 {
-            attachment_anchor_id: attachment.attachment_anchor_id,
-            blob_reference_id: blob.reference_id,
-            declared_size: blob.declared_size,
-            blob_receipt_sha256: blob.receipt_sha256,
-            custody_transfer_source_proof: blob.custody_transfer_source_proof.clone(),
-            source_observation_id: attachment.source_observation_id,
-            correlation_id: attachment.correlation_id,
-            observed_at_unix_seconds: observed_at,
+    assert_attachment_security_verdict_flow(
+        store,
+        attachment,
+        blob,
+        clamav,
+        forbidden_plaintext,
+        AttachmentSecurityVerdictExpectationV1 {
+            scanner_outcome: ClamAvFixtureOutcomeV1::Clean,
+            verdict: AttachmentSafetyVerdictV1::SafeForDelivery,
+            state: AttachmentSafetyStateWireV1::SafeForDelivery,
         },
-        &AttachmentSecurityObservationContextV1 {
-            runtime_instance_id: "attachment-security-fixture-source-runtime".to_owned(),
-            runtime_generation: 1,
-            module_id: "attachment-security-fixture-source".to_owned(),
-            recorded_at_unix_seconds: observed_at,
-            recorded_at_nanos: 0,
+    );
+}
+
+pub(super) fn assert_threat_attachment_security_verdict_flow(
+    store: &SqliteControlStore,
+    attachment: &CommunicationsAttachmentFixtureV1,
+    blob: &AttachmentSecurityFixtureBlobV1,
+    clamav: &AttachmentSecurityClamAvFixture,
+    forbidden_plaintext: &[u8],
+) {
+    assert_attachment_security_verdict_flow(
+        store,
+        attachment,
+        blob,
+        clamav,
+        forbidden_plaintext,
+        AttachmentSecurityVerdictExpectationV1 {
+            scanner_outcome: ClamAvFixtureOutcomeV1::Threat,
+            verdict: AttachmentSafetyVerdictV1::Quarantined,
+            state: AttachmentSafetyStateWireV1::Quarantined,
         },
-    )
-    .expect("build Attachment Security candidate");
+    );
+}
+
+fn assert_attachment_security_verdict_flow(
+    store: &SqliteControlStore,
+    attachment: &CommunicationsAttachmentFixtureV1,
+    blob: &AttachmentSecurityFixtureBlobV1,
+    clamav: &AttachmentSecurityClamAvFixture,
+    forbidden_plaintext: &[u8],
+    expectation: AttachmentSecurityVerdictExpectationV1,
+) {
+    let candidate = build_attachment_security_candidate(attachment, blob);
     let endpoint = event_endpoint(store);
     tokio::runtime::Runtime::new()
         .expect("Attachment Security verdict runtime")
         .block_on(async move {
+            let before = attachment_security_persistence_diagnostics().await;
+            let scanner_count_before = clamav.outcome_count(expectation.scanner_outcome);
             let client = async_nats::connect(endpoint)
                 .await
                 .expect("connect Attachment Security verdict observer");
@@ -363,15 +396,12 @@ pub(super) fn assert_clean_attachment_security_verdict_flow(
                 verdict.expected_state,
                 AttachmentSafetyExpectedStateV1::BlobAdmitted as i32
             );
-            assert_eq!(
-                verdict.verdict,
-                AttachmentSafetyVerdictV1::SafeForDelivery as i32
-            );
+            assert_eq!(verdict.verdict, expectation.verdict as i32);
             assert_eq!(verdict.evidence_id.len(), 16);
             let state_event = tokio::time::timeout(Duration::from_secs(15), states.next())
                 .await
-                .expect("Communications safe state timeout")
-                .expect("Communications safe state");
+                .expect("Communications attachment state timeout")
+                .expect("Communications attachment state");
             let state_envelope = decode_envelope_v1(state_event.payload.as_ref())
                 .expect("Communications safe state envelope");
             assert_eq!(
@@ -380,16 +410,13 @@ pub(super) fn assert_clean_attachment_security_verdict_flow(
             );
             let state = AttachmentSafetyStateChangedV1::decode(state_envelope.payload.as_slice())
                 .expect("Communications safe state payload");
-            assert_eq!(
-                state.next_state,
-                AttachmentSafetyStateWireV1::SafeForDelivery as i32
-            );
+            assert_eq!(state.next_state, expectation.state as i32);
             for forbidden in [
                 forbidden_plaintext,
                 blob.reference_id.as_slice(),
                 blob.receipt_sha256.as_slice(),
                 blob.custody_transfer_source_proof.as_slice(),
-                b"stream: OK".as_slice(),
+                b"stream:".as_slice(),
                 b"127.0.0.1".as_slice(),
             ] {
                 assert!(
@@ -401,19 +428,154 @@ pub(super) fn assert_clean_attachment_security_verdict_flow(
             }
             publish_exact(&context, ATTACHMENT_SCAN_CANDIDATE_SUBJECT, &candidate).await;
             assert!(
-                tokio::time::timeout(Duration::from_secs(2), verdicts.next())
+                tokio::time::timeout(Duration::from_millis(500), verdicts.next())
                     .await
                     .is_err(),
                 "candidate replay must not create a second verdict"
             );
             let diagnostics = attachment_security_persistence_diagnostics().await;
-            assert_eq!(diagnostics.candidates, 1);
-            assert_eq!(diagnostics.canonical_states, 1);
-            assert_eq!(diagnostics.jobs, 1);
-            assert_eq!(diagnostics.attempts, 1);
-            assert_eq!(diagnostics.target_blob_receipts, 1);
-            assert_eq!(diagnostics.outbox, 1);
+            assert_eq!(diagnostics.candidates, before.candidates + 1);
+            assert_eq!(diagnostics.canonical_states, before.canonical_states + 1);
+            assert_eq!(diagnostics.jobs, before.jobs + 1);
+            assert_eq!(diagnostics.attempts, before.attempts + 1);
+            assert_eq!(
+                diagnostics.target_blob_receipts,
+                before.target_blob_receipts + 1
+            );
+            assert_eq!(diagnostics.outbox, before.outbox + 1);
+            assert_eq!(
+                clamav.outcome_count(expectation.scanner_outcome),
+                scanner_count_before + 1
+            );
         });
+}
+
+pub(super) fn assert_attachment_security_scanner_failure_is_fail_closed(
+    store: &SqliteControlStore,
+    attachment: &CommunicationsAttachmentFixtureV1,
+    blob: &AttachmentSecurityFixtureBlobV1,
+    clamav: &AttachmentSecurityClamAvFixture,
+    scanner_outcome: ClamAvFixtureOutcomeV1,
+) {
+    assert!(matches!(
+        scanner_outcome,
+        ClamAvFixtureOutcomeV1::Malformed
+            | ClamAvFixtureOutcomeV1::Disconnect
+            | ClamAvFixtureOutcomeV1::Timeout
+    ));
+    let candidate = build_attachment_security_candidate(attachment, blob);
+    let endpoint = event_endpoint(store);
+    tokio::runtime::Runtime::new()
+        .expect("Attachment Security scanner failure runtime")
+        .block_on(async move {
+            let before = attachment_security_persistence_diagnostics().await;
+            let scanner_count_before = clamav.outcome_count(scanner_outcome);
+            let client = async_nats::connect(endpoint)
+                .await
+                .expect("connect Attachment Security failure observer");
+            let mut verdicts = client
+                .subscribe(ATTACHMENT_VERDICT_SUBJECT)
+                .await
+                .expect("subscribe Attachment Security failure verdicts");
+            client
+                .flush()
+                .await
+                .expect("activate Attachment Security failure observer");
+            let context = async_nats::jetstream::new(client);
+            publish_exact(&context, ATTACHMENT_SCAN_CANDIDATE_SUBJECT, &candidate).await;
+            let first_job = wait_for_failed_scan_attempt(
+                attachment.attachment_anchor_id,
+                clamav,
+                scanner_outcome,
+                scanner_count_before,
+            )
+            .await;
+            assert_eq!(first_job.state, 1);
+            assert_eq!(first_job.attempt_count, 1);
+            assert!(first_job.target_blob_receipt_present);
+            assert!(!first_job.outbox_message_id_present);
+            assert!(!first_job.claimed);
+            assert!(
+                tokio::time::timeout(Duration::from_millis(250), verdicts.next())
+                    .await
+                    .is_err(),
+                "scanner failure must not create a verdict"
+            );
+
+            publish_exact(&context, ATTACHMENT_SCAN_CANDIDATE_SUBJECT, &candidate).await;
+            assert!(
+                tokio::time::timeout(Duration::from_millis(250), verdicts.next())
+                    .await
+                    .is_err(),
+                "failed candidate replay must not create a verdict"
+            );
+            let replayed_job =
+                attachment_security_scan_job_diagnostics(attachment.attachment_anchor_id)
+                    .await
+                    .expect("failed Attachment Security scan job");
+            assert_eq!(replayed_job, first_job);
+            assert_eq!(
+                clamav.outcome_count(scanner_outcome),
+                scanner_count_before + 1
+            );
+            let after = attachment_security_persistence_diagnostics().await;
+            assert_eq!(after.candidates, before.candidates + 1);
+            assert_eq!(after.canonical_states, before.canonical_states + 1);
+            assert_eq!(after.jobs, before.jobs + 1);
+            assert_eq!(after.target_blob_receipts, before.target_blob_receipts + 1);
+            assert_eq!(after.outbox, before.outbox);
+        });
+}
+
+fn build_attachment_security_candidate(
+    attachment: &CommunicationsAttachmentFixtureV1,
+    blob: &AttachmentSecurityFixtureBlobV1,
+) -> hermes_events_protocol::delivery::OutboxRecordV1 {
+    let observed_at = current_unix_seconds();
+    build_attachment_security_scan_candidate_outbox_record_v1(
+        &AttachmentSecurityScanCandidateFactV1 {
+            attachment_anchor_id: attachment.attachment_anchor_id,
+            blob_reference_id: blob.reference_id,
+            declared_size: blob.declared_size,
+            blob_receipt_sha256: blob.receipt_sha256,
+            custody_transfer_source_proof: blob.custody_transfer_source_proof.clone(),
+            source_observation_id: attachment.source_observation_id,
+            correlation_id: attachment.correlation_id,
+            observed_at_unix_seconds: observed_at,
+        },
+        &AttachmentSecurityObservationContextV1 {
+            runtime_instance_id: "attachment-security-fixture-source-runtime".to_owned(),
+            runtime_generation: 1,
+            module_id: "attachment-security-fixture-source".to_owned(),
+            recorded_at_unix_seconds: observed_at,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build Attachment Security candidate")
+}
+
+async fn wait_for_failed_scan_attempt(
+    attachment_anchor_id: [u8; 16],
+    clamav: &AttachmentSecurityClamAvFixture,
+    scanner_outcome: ClamAvFixtureOutcomeV1,
+    scanner_count_before: usize,
+) -> hermes_attachment_security_persistence::AttachmentSecurityScanJobDiagnosticsV1 {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let job = attachment_security_scan_job_diagnostics(attachment_anchor_id).await;
+        if clamav.outcome_count(scanner_outcome) == scanner_count_before + 1
+            && job
+                .as_ref()
+                .is_some_and(|job| job.attempt_count >= 1 && !job.claimed)
+        {
+            return job.expect("failed Attachment Security scan job");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Attachment Security scanner failure was not persisted"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
 }
 
 async fn publish_exact(
@@ -449,6 +611,26 @@ fn current_unix_seconds() -> i64 {
 
 async fn attachment_security_persistence_diagnostics()
 -> hermes_attachment_security_persistence::AttachmentSecurityPersistenceDiagnosticsV1 {
+    let persistence = attachment_security_conformance_persistence().await;
+    AttachmentSecurityPersistenceConformanceV1::diagnostics(&persistence)
+        .await
+        .expect("read Attachment Security persistence diagnostics")
+}
+
+async fn attachment_security_scan_job_diagnostics(
+    attachment_anchor_id: [u8; 16],
+) -> Option<hermes_attachment_security_persistence::AttachmentSecurityScanJobDiagnosticsV1> {
+    let persistence = attachment_security_conformance_persistence().await;
+    AttachmentSecurityPersistenceConformanceV1::scan_job_diagnostics(
+        &persistence,
+        attachment_anchor_id,
+    )
+    .await
+    .expect("read Attachment Security scan job diagnostics")
+}
+
+async fn attachment_security_conformance_persistence()
+-> hermes_attachment_security_persistence::AttachmentSecurityPersistenceV1 {
     let password = Zeroizing::new(
         std::fs::read_to_string(required(
             "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",
@@ -460,7 +642,7 @@ async fn attachment_security_persistence_diagnostics()
     let port = required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")
         .parse::<u16>()
         .expect("valid PostgreSQL port");
-    let persistence = AttachmentSecurityPersistenceConformanceV1::connect(
+    AttachmentSecurityPersistenceConformanceV1::connect(
         &required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST"),
         port,
         "hermes_postgres_admin",
@@ -468,8 +650,5 @@ async fn attachment_security_persistence_diagnostics()
         "hermes_storage_authenticated",
     )
     .await
-    .expect("connect Attachment Security conformance persistence");
-    AttachmentSecurityPersistenceConformanceV1::diagnostics(&persistence)
-        .await
-        .expect("read Attachment Security persistence diagnostics")
+    .expect("connect Attachment Security conformance persistence")
 }
