@@ -126,14 +126,15 @@ revision/schema SHA-256, preserves outbox bytes through NATS publication and
 separates durable Ack, broker ACK, terminal result, technical DLQ and client
 SSE semantics. The protocol now includes a generic owner-local outbox relay
 port: owner persistence marks an entry published only after a transport ACK.
-Test-only delivery scaffolds exercise that port against PostgreSQL in a separate
-schema per designable owner and relay exact bytes through an authenticated
-JetStream test runtime, but contain no owner package, domain table, handler,
-migration or public contract. Their one narrow SQL allowance is
+Test-only delivery scaffolds exercised that port against PostgreSQL in a separate
+schema per designable owner and relayed exact bytes through an authenticated
+JetStream test runtime before the first owner admission, but contain no owner
+package, domain table, handler, migration or public contract. Their one narrow SQL allowance is
 `hermes-events-jetstream-testkit:dev:sqlx`; the Cargo guard rejects this client
 for production packages and all other test packages. The NATS platform gate is
-open; production owner adapters and owner runtimes remain closed under the
-separate `first_owner_v1` decision.
+open. The later `first_owner_v1` gate admitted the Communications owner, and the
+current `attachment_security_engine_v1` slice also admits the separate
+Attachment Security Engine.
 
 ADR-0221 defines the exact `hermes-runtime-protocol` package for
 `ModuleDescriptorV1`. Distribution manifest, descriptor, GrantSet and
@@ -278,8 +279,11 @@ Blob runtime has a ciphertext-only Vault route adapter. The distinct `hermes-blo
 is a verified managed child with one-shot private configuration and generation-bound status
 attestation. It owns a private 0600 direct data socket rather than sending content through
 Kernel; the socket accepts only a short-lived, one-use Kernel-signed session grant and
-resolves content keys over the inherited ciphertext-only Vault route. No first owner exists,
-so there is intentionally no generic owner/module issuer or domain content API.
+resolves content keys over the inherited ciphertext-only Vault route. At that Blob
+foundation gate no first owner existed, so it intentionally introduced no generic owner/module issuer or
+domain content API. The current Communications owner and Attachment Security
+Engine consume only their exact typed Blob contracts and custody grants; Blob
+still exposes no generic content API.
 The encrypted store rejects references at their own expiry before read/write and has a
 current-fence/key-authorized atomic delete. Its private technical ledger now durably
 reserves aggregate bytes per approved owner/capability quota before writing, records
@@ -386,15 +390,16 @@ subjects from the Event Hub topology, and relays only the opaque authority
 delivery back. Default Kernel startup configures this handler; owner-private
 control can start the separately release-bound authority child. The resolver
 update has live full-resolver conformance through that child, including
-revocation-driven runtime disconnect. This opens `nats_data_plane_v1` as a
-platform gate; the durable production owner delivery path remains intentionally
-deferred to `first_owner_v1`.
+revocation-driven runtime disconnect. This opened `nats_data_plane_v1` as a
+platform gate; the later `first_owner_v1` slice implemented the durable
+Communications owner delivery path.
 
 `hermes-events-protocol` now fixes the owner-local exact-byte `OutboxRecordV1`
 and SHA-256-based `InboxRecordV1` duplicate/hash-conflict contract; it does not
 introduce a shared event database. PostgreSQL outage/replay conformance remains
-available through owner-neutral test scaffolds; its future business mutation
-belongs to the owner that is admitted under `first_owner_v1`.
+available through owner-neutral test scaffolds. Communications now owns its
+business mutation and durable state under the admitted owner inventory; the
+platform scaffolds still own no business tables or mutations.
 
 ADR-0226 keeps AI from becoming a database superuser or cross-domain
 orchestrator. Cross-owner context is assembled by a typed use-case workflow

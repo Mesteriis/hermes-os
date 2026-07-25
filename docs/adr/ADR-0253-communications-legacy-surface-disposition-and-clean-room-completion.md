@@ -2,11 +2,14 @@
 
 Статус: Принято
 Дата: 2026-07-23
-Состояние реализации: Gap analysis зафиксирован. Канонический evidence owner,
-typed ingress, owner-local projections, inbox/outbox и managed runtime уже
-реализованы. Этот ADR не считает legacy HTTP surface совместимым контрактом и
-не объявляет ADR-0240 завершённым: каждый admitted capability требует typed
-contract, owner-local implementation и evidence своего пути.
+Состояние реализации: backend disposition выполнен, repository cutover
+продолжается. Канонический evidence owner, typed ingress, owner-local
+projections, inbox/outbox, managed runtime и отдельный Attachment Security
+Engine реализованы и допущены exact production inventory. Legacy HTTP surface
+не является совместимым контрактом и не восстановлен в clean-room backend.
+ADR-0240 пока не объявляется полностью завершённым на уровне репозитория:
+secondary frontend всё ещё содержит старые `/api/v1/communications/*` callers,
+которые должны быть удалены или заменены контрактами их настоящих owners.
 
 Зависит от:
 
@@ -56,7 +59,8 @@ Every remaining historical capability has exactly one disposition:
 | legal documents, exportable document artifacts and certificates | Documents owner when admitted | explicit document/export workflow and Blob reference |
 | review state, candidates, pin/snooze/mute and attention decisions | Review owner when admitted | evidence-backed review workflow; no hidden Communications projection |
 | templates, signatures and rich composition | provider integration or dedicated composition owner, selected by a later ADR | no generic Communications provider command |
-| SPF/DKIM, spam reputation, archive inspection, disarm, dedup and text extraction | owner-specific security/content workflow, selected by a later ADR | typed input/output and Blob lease; no cross-owner SQL |
+| attachment malware scanning and safety verdict | Attachment Security Engine under ADR-0273 | typed candidate/verdict events and evidence-bound Blob custody; no Communications implementation import or cross-owner SQL |
+| SPF/DKIM, spam reputation, archive inspection, disarm, dedup and text extraction | future owner-specific security/content workflow selected by a later ADR | typed input/output and Blob lease; no cross-owner SQL |
 
 Rows marked “when admitted” are not silently implemented in Communications
 while their owner gate is closed. Rows requiring a later ADR stay historical
@@ -94,7 +98,9 @@ ADR-0240 may be marked implemented only when:
 
 ## Consequences
 
-The migration remains broader than the current evidence owner implementation,
-but it is no longer ambiguous. Missing historical behaviour is either an
+The clean-room backend Communications owner is implemented and no longer
+depends on a legacy surface. Repository completion is now bounded to removal
+of the inventoried legacy frontend callers and validation of their generated
+owner/integration replacements. Missing historical behaviour remains either an
 explicit capability gap in its rightful owner or a blocked future decision; it
 is never a reason to make Communications a facade for another domain.
