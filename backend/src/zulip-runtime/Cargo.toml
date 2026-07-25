@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "hermes-zulip-runtime"
 path = "src/main.rs"
 
+[features]
+default = []
+conformance-test-support = ["hermes-zulip-http/conformance-test-support"]
+
 [package.metadata.hermes]
 role = "integration"
 owner = "zulip"

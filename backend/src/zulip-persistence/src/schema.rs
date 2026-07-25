@@ -47,6 +47,12 @@ mod tests {
         let sql = std::str::from_utf8(&bundle.steps[0].forward_sql_utf8)
             .expect("Zulip Storage SQL is UTF-8");
         assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 4);
+        assert_eq!(
+            sql.matches("CREATE TABLE IF NOT EXISTS hermes_data.")
+                .count(),
+            4,
+            "every Zulip table belongs to the owner-scoped hermes_data schema"
+        );
         assert!(!sql.contains("hermes_communications"));
         assert!(!sql.contains("REFERENCES communications_"));
     }

@@ -36,6 +36,10 @@ hermes-telegram-core = { path = "../../../src/telegram-core" }
 hermes-telegram-persistence = { path = "../../../src/telegram-persistence", features = ["conformance-test-support"] }
 hermes-telegram-runtime = { path = "../../../src/telegram-runtime" }
 hermes-telegram-tdlib = { path = "../../../src/telegram-tdlib" }
+hermes-zulip-api = { path = "../../../src/zulip-api" }
+hermes-zulip-core = { path = "../../../src/zulip-core" }
+hermes-zulip-persistence = { path = "../../../src/zulip-persistence" }
+hermes-zulip-runtime = { path = "../../../src/zulip-runtime" }
 hermes-gateway-protocol = { path = "../../../src/api/gateway/contracts" }
 hermes-gateway-session = { path = "../../../src/api/gateway/session" }
 hermes-gateway-session-contract = { path = "../../../src/api/gateway/session_contract" }

@@ -5,13 +5,16 @@ mod schema;
 use hermes_events_protocol::delivery::OutboxRecordV1;
 use hermes_storage_protocol::StorageBindingV1;
 use hermes_zulip_api::{ZulipCommandOperationOutcomeV1, ZulipCommandOperationStatusV1};
-use sqlx::{PgPool, Row, postgres::PgConnectOptions};
+use sqlx::{
+    PgPool, Row,
+    postgres::{PgConnectOptions, PgPoolOptions},
+};
 
 pub use schema::{ZULIP_STORAGE_BUNDLE_REVISION_V1, zulip_storage_bundle_v1};
 
 pub const PACKAGE: &str = "hermes-zulip-persistence";
 pub const ZULIP_SCHEMA_V1: &str = r#"
-CREATE TABLE IF NOT EXISTS zulip_provider_cursor (
+CREATE TABLE IF NOT EXISTS hermes_data.zulip_provider_cursor (
     account_id TEXT PRIMARY KEY,
     queue_id TEXT NOT NULL,
     last_event_id BIGINT NOT NULL,
@@ -19,7 +22,7 @@ CREATE TABLE IF NOT EXISTS zulip_provider_cursor (
     CHECK (length(trim(queue_id)) > 0),
     CHECK (last_event_id >= 0)
 );
-CREATE TABLE IF NOT EXISTS zulip_communications_outbox (
+CREATE TABLE IF NOT EXISTS hermes_data.zulip_communications_outbox (
     message_id BYTEA PRIMARY KEY,
     envelope_sha256 BYTEA NOT NULL,
     exact_envelope_bytes BYTEA NOT NULL,
@@ -30,9 +33,9 @@ CREATE TABLE IF NOT EXISTS zulip_communications_outbox (
     CHECK (octet_length(exact_envelope_bytes) > 0)
 );
 CREATE INDEX IF NOT EXISTS zulip_communications_outbox_pending_idx
-    ON zulip_communications_outbox (created_at_unix_seconds, message_id)
+    ON hermes_data.zulip_communications_outbox (created_at_unix_seconds, message_id)
     WHERE published_at_unix_seconds IS NULL;
-CREATE TABLE IF NOT EXISTS zulip_command_operations (
+CREATE TABLE IF NOT EXISTS hermes_data.zulip_command_operations (
     operation_id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
     command_sha256 BYTEA NOT NULL,
@@ -49,18 +52,17 @@ CREATE TABLE IF NOT EXISTS zulip_command_operations (
         OR (state = 2 AND completed_at_unix_seconds IS NOT NULL AND NOT (provider_message_id IS NOT NULL AND blob_ref IS NOT NULL))
         OR (state = 3 AND completed_at_unix_seconds IS NOT NULL AND provider_message_id IS NULL AND blob_ref IS NULL))
 );
-ALTER TABLE zulip_command_operations ADD COLUMN IF NOT EXISTS blob_ref TEXT;
 CREATE INDEX IF NOT EXISTS zulip_command_operations_unresolved_idx
-    ON zulip_command_operations (requested_at_unix_seconds, operation_id)
+    ON hermes_data.zulip_command_operations (requested_at_unix_seconds, operation_id)
     WHERE state = 1;
-CREATE TABLE IF NOT EXISTS zulip_command_queue (
-    operation_id TEXT PRIMARY KEY REFERENCES zulip_command_operations(operation_id),
+CREATE TABLE IF NOT EXISTS hermes_data.zulip_command_queue (
+    operation_id TEXT PRIMARY KEY REFERENCES hermes_data.zulip_command_operations(operation_id),
     exact_command_bytes BYTEA NOT NULL,
     dispatched_at_unix_seconds BIGINT,
     CHECK (octet_length(exact_command_bytes) > 0)
 );
 CREATE INDEX IF NOT EXISTS zulip_command_queue_pending_idx
-    ON zulip_command_queue (operation_id)
+    ON hermes_data.zulip_command_queue (operation_id)
     WHERE dispatched_at_unix_seconds IS NULL;
 "#;
 
@@ -121,8 +123,12 @@ impl ZulipDurablePersistence {
             .port(port)
             .username(binding.access().runtime_principal())
             .password(password)
-            .database(database_id);
-        let pool = PgPool::connect_with(options)
+            .database(binding.access().pool_alias());
+        let pool = PgPoolOptions::new()
+            .max_connections(u32::from(
+                binding.access().effective_budgets().max_connections(),
+            ))
+            .connect_with(options)
             .await
             .map_err(|_| ZulipDurablePersistenceError::Database)?;
         Ok(Self { pool })
@@ -161,8 +167,8 @@ impl ZulipDurablePersistence {
             .await
             .map_err(|_| ZulipDurablePersistenceError::Database)?;
         let inserted = sqlx::query(
-            "INSERT INTO zulip_command_operations \\
-             (operation_id, account_id, command_sha256, state, requested_at_unix_seconds) \\
+            "INSERT INTO hermes_data.zulip_command_operations \
+             (operation_id, account_id, command_sha256, state, requested_at_unix_seconds) \
              VALUES ($1, $2, $3, $4, $5) ON CONFLICT (operation_id) DO NOTHING",
         )
         .bind(operation_id)
@@ -174,7 +180,7 @@ impl ZulipDurablePersistence {
         .await
         .map_err(|_| ZulipDurablePersistenceError::Database)?;
         if inserted.rows_affected() == 1 {
-            sqlx::query("INSERT INTO zulip_command_queue (operation_id, exact_command_bytes) VALUES ($1, $2)")
+            sqlx::query("INSERT INTO hermes_data.zulip_command_queue (operation_id, exact_command_bytes) VALUES ($1, $2)")
                 .bind(operation_id)
                 .bind(exact_command_bytes)
                 .execute(&mut *transaction)
@@ -187,9 +193,9 @@ impl ZulipDurablePersistence {
             return Ok(true);
         }
         let matching = sqlx::query(
-            "SELECT 1 FROM zulip_command_operations operation \\
-             JOIN zulip_command_queue queue ON queue.operation_id = operation.operation_id \\
-             WHERE operation.operation_id = $1 AND operation.account_id = $2 \\
+            "SELECT 1 FROM hermes_data.zulip_command_operations operation \
+             JOIN hermes_data.zulip_command_queue queue ON queue.operation_id = operation.operation_id \
+             WHERE operation.operation_id = $1 AND operation.account_id = $2 \
                AND operation.command_sha256 = $3 AND queue.exact_command_bytes = $4",
         )
         .bind(operation_id)
@@ -218,13 +224,13 @@ impl ZulipDurablePersistence {
             return Err(ZulipDurablePersistenceError::InvalidRow);
         }
         let row = sqlx::query(
-            "WITH next AS (SELECT queue.operation_id FROM zulip_command_queue queue \\
-             JOIN zulip_command_operations operation ON operation.operation_id = queue.operation_id \\
-             WHERE queue.dispatched_at_unix_seconds IS NULL AND operation.state = $1 \\
-             ORDER BY operation.requested_at_unix_seconds, queue.operation_id FOR UPDATE SKIP LOCKED LIMIT 1) \\
-             UPDATE zulip_command_queue queue SET dispatched_at_unix_seconds = $2 FROM next \\
-             JOIN zulip_command_operations operation ON operation.operation_id = next.operation_id \\
-             WHERE queue.operation_id = next.operation_id \\
+            "WITH next AS (SELECT queue.operation_id FROM hermes_data.zulip_command_queue queue \
+             JOIN hermes_data.zulip_command_operations operation ON operation.operation_id = queue.operation_id \
+             WHERE queue.dispatched_at_unix_seconds IS NULL AND operation.state = $1 \
+             ORDER BY operation.requested_at_unix_seconds, queue.operation_id FOR UPDATE SKIP LOCKED LIMIT 1) \
+             UPDATE hermes_data.zulip_command_queue queue SET dispatched_at_unix_seconds = $2 FROM next \
+             JOIN hermes_data.zulip_command_operations operation ON operation.operation_id = next.operation_id \
+             WHERE queue.operation_id = next.operation_id \
              RETURNING queue.operation_id, operation.account_id, operation.command_sha256, queue.exact_command_bytes",
         )
         .bind(ZulipCommandOperationStateV1::OutcomeUnknown as i16)
@@ -278,7 +284,7 @@ impl ZulipDurablePersistence {
             return Err(ZulipDurablePersistenceError::InvalidRow);
         }
         let result = sqlx::query(
-            "UPDATE zulip_command_operations SET state = $3, completed_at_unix_seconds = $4, provider_message_id = $5, blob_ref = $6 \\
+            "UPDATE hermes_data.zulip_command_operations SET state = $3, completed_at_unix_seconds = $4, provider_message_id = $5, blob_ref = $6 \
              WHERE operation_id = $1 AND command_sha256 = $2 AND state = $7",
         )
         .bind(operation_id)
@@ -304,8 +310,8 @@ impl ZulipDurablePersistence {
             return Err(ZulipDurablePersistenceError::InvalidRow);
         }
         let row = sqlx::query(
-            "SELECT operation_id, account_id, state, requested_at_unix_seconds, completed_at_unix_seconds, provider_message_id, blob_ref \\
-             FROM zulip_command_operations WHERE operation_id = $1",
+            "SELECT operation_id, account_id, state, requested_at_unix_seconds, completed_at_unix_seconds, provider_message_id, blob_ref \
+             FROM hermes_data.zulip_command_operations WHERE operation_id = $1",
         )
         .bind(operation_id)
         .fetch_optional(&self.pool)
@@ -381,7 +387,7 @@ impl ZulipDurablePersistence {
             .await
             .map_err(|_| ZulipDurablePersistenceError::Database)?;
         let advanced = sqlx::query(
-            "INSERT INTO zulip_provider_cursor (account_id, queue_id, last_event_id) \
+            "INSERT INTO hermes_data.zulip_provider_cursor (account_id, queue_id, last_event_id) \
              VALUES ($1, $2, $3) \
              ON CONFLICT (account_id) DO UPDATE \
              SET queue_id = EXCLUDED.queue_id, last_event_id = EXCLUDED.last_event_id \
@@ -403,7 +409,7 @@ impl ZulipDurablePersistence {
             return Ok(false);
         }
         sqlx::query(
-            "INSERT INTO zulip_communications_outbox \
+            "INSERT INTO hermes_data.zulip_communications_outbox \
              (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) \
              VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING",
         )
@@ -437,8 +443,8 @@ impl ZulipDurablePersistence {
             .await
             .map_err(|_| ZulipDurablePersistenceError::Database)?;
         let advanced = sqlx::query(
-            "INSERT INTO zulip_provider_cursor (account_id, queue_id, last_event_id) VALUES ($1, $2, $3) \\
-             ON CONFLICT (account_id) DO UPDATE SET queue_id = EXCLUDED.queue_id, last_event_id = EXCLUDED.last_event_id \\
+            "INSERT INTO hermes_data.zulip_provider_cursor (account_id, queue_id, last_event_id) VALUES ($1, $2, $3) \
+             ON CONFLICT (account_id) DO UPDATE SET queue_id = EXCLUDED.queue_id, last_event_id = EXCLUDED.last_event_id \
              WHERE zulip_provider_cursor.queue_id <> EXCLUDED.queue_id OR zulip_provider_cursor.last_event_id < EXCLUDED.last_event_id RETURNING account_id",
         ).bind(&cursor.account_id).bind(&cursor.queue_id).bind(cursor.last_event_id)
             .fetch_optional(&mut *transaction).await.map_err(|_| ZulipDurablePersistenceError::Database)?;
@@ -450,7 +456,7 @@ impl ZulipDurablePersistence {
             return Ok(false);
         }
         for record in records {
-            sqlx::query("INSERT INTO zulip_communications_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
+            sqlx::query("INSERT INTO hermes_data.zulip_communications_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
                 .bind(record.message_id().as_slice()).bind(record.envelope_sha256().as_slice()).bind(record.exact_bytes()).bind(created_at_unix_seconds)
                 .execute(&mut *transaction).await.map_err(|_| ZulipDurablePersistenceError::Database)?;
         }
@@ -470,7 +476,7 @@ impl ZulipDurablePersistence {
     ) -> Result<bool, ZulipDurablePersistenceError> {
         validate_cursor(cursor)?;
         sqlx::query(
-            "INSERT INTO zulip_provider_cursor (account_id, queue_id, last_event_id) \
+            "INSERT INTO hermes_data.zulip_provider_cursor (account_id, queue_id, last_event_id) \
              VALUES ($1, $2, $3) \
              ON CONFLICT (account_id) DO UPDATE \
              SET queue_id = EXCLUDED.queue_id, last_event_id = EXCLUDED.last_event_id \
@@ -494,7 +500,7 @@ impl ZulipDurablePersistence {
             return Err(ZulipDurablePersistenceError::InvalidCursor);
         }
         let row = sqlx::query(
-            "SELECT account_id, queue_id, last_event_id FROM zulip_provider_cursor \
+            "SELECT account_id, queue_id, last_event_id FROM hermes_data.zulip_provider_cursor \
              WHERE account_id = $1",
         )
         .bind(account_id)
@@ -524,7 +530,7 @@ impl ZulipDurablePersistence {
         limit: i64,
     ) -> Result<Vec<OutboxRecordV1>, ZulipDurablePersistenceError> {
         let rows = sqlx::query(
-            "SELECT exact_envelope_bytes FROM zulip_communications_outbox \
+            "SELECT exact_envelope_bytes FROM hermes_data.zulip_communications_outbox \
              WHERE published_at_unix_seconds IS NULL \
              ORDER BY created_at_unix_seconds ASC, message_id ASC LIMIT $1",
         )
@@ -548,7 +554,7 @@ impl ZulipDurablePersistence {
         published_at_unix_seconds: i64,
     ) -> Result<bool, ZulipDurablePersistenceError> {
         sqlx::query(
-            "UPDATE zulip_communications_outbox SET published_at_unix_seconds = $2 \
+            "UPDATE hermes_data.zulip_communications_outbox SET published_at_unix_seconds = $2 \
              WHERE message_id = $1 AND published_at_unix_seconds IS NULL",
         )
         .bind(message_id.as_slice())

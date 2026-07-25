@@ -173,7 +173,6 @@ pub fn decode_module_response(
     if envelope.protocol_major != MODULE_CLIENT_PROTOCOL_MAJOR
         || envelope.request_id == 0
         || !envelope.error_code.is_empty()
-        || envelope.response_payload.is_empty()
     {
         return Err(ZulipClientPortErrorV1::Protocol);
     }
@@ -272,6 +271,22 @@ mod tests {
         );
         assert_eq!(
             decode_module_response(ZulipClientContractV1::Query, &encoded),
+            Err(ZulipClientPortErrorV1::Protocol)
+        );
+    }
+
+    #[test]
+    fn absent_operation_status_preserves_the_canonical_empty_protobuf_payload() {
+        let response = ZulipClientResponseV1::OperationStatus(None);
+        let encoded = encode_module_response(1, ZulipClientContractV1::Query, &response)
+            .expect("operation status response");
+
+        assert_eq!(
+            decode_module_response(ZulipClientContractV1::Query, &encoded),
+            Ok((1, response))
+        );
+        assert_eq!(
+            decode_module_response(ZulipClientContractV1::Command, &encoded),
             Err(ZulipClientPortErrorV1::Protocol)
         );
     }

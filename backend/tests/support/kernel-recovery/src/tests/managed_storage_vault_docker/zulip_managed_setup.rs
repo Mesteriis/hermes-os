@@ -1,0 +1,254 @@
+//! Exact admission, storage, Vault and release binding for managed Zulip conformance.
+
+use super::*;
+
+use hermes_vault_key_provider::WrappingKeyProvider;
+use hermes_vault_key_provider_file::FileWrappingKeyProvider;
+use hermes_vault_protocol::SecretClassV1;
+use hermes_vault_store_sqlcipher::{SecretRecordScope, VaultStore};
+use hermes_zulip_api::client_contract::{ZULIP_MODULE_ID, ZULIP_OWNER_ID, ZulipClientContractV1};
+use hermes_zulip_core::credential_lease_purpose;
+use hermes_zulip_persistence::{ZULIP_STORAGE_BUNDLE_REVISION_V1, zulip_storage_bundle_v1};
+use hermes_zulip_runtime::{
+    admission::{
+        ZULIP_BLOB_CAPABILITY_ID, ZULIP_CREDENTIALS_CAPABILITY_ID, ZULIP_EVENTS_CAPABILITY_ID,
+        ZULIP_STORAGE_CAPABILITY_ID, zulip_module_descriptor_v1,
+    },
+    settings::zulip_settings_schema_bytes_v1,
+};
+
+const ZULIP_RELEASE_ARTIFACT_ID: &str = "integration.zulip";
+pub(super) const ZULIP_ACCOUNT_ID: &str = "zulip-account-1";
+
+pub(super) struct AdmittedZulipRuntime {
+    registration_id: String,
+    capability_ids: Vec<String>,
+}
+
+pub(super) struct StartedZulipRuntime {
+    pub(super) registration_id: String,
+    pub(super) runtime_instance_id: String,
+    pub(super) runtime_generation: u64,
+    pub(super) grant_epoch: u64,
+}
+
+pub(super) fn installed_communications_zulip_release(root: &Path) -> InstalledSignedBundle {
+    let mut artifacts = communications_release_artifacts();
+    artifacts.push(
+        SignedRuntimeArtifact::new(
+            ZULIP_RELEASE_ARTIFACT_ID,
+            zulip_binary(),
+            zulip_module_descriptor_v1("managed-zulip-live").encode_to_vec(),
+        )
+        .with_settings_schema(zulip_settings_schema_bytes_v1()),
+    );
+    InstalledSignedBundle::install(root, &artifacts)
+        .expect("install signed Communications and Zulip release")
+}
+
+pub(super) fn seed_zulip_vault(vault_dir: &Path) {
+    let key = FileWrappingKeyProvider::new(&vault_dir.join("platform-wrapping-key.bin"))
+        .load_or_create()
+        .expect("open Vault wrapping key");
+    let store = VaultStore::open(
+        &vault_dir.join("vault.db"),
+        &vault_dir.join("vault.anchor"),
+        &key,
+    )
+    .expect("open initialized Vault");
+    let request = credential_lease_purpose(ZULIP_ACCOUNT_ID, ZULIP_ACCOUNT_ID, 1)
+        .expect("Zulip API key purpose");
+    let scope = SecretRecordScope::new(
+        ZULIP_OWNER_ID.to_owned(),
+        &request,
+        SecretClassV1::ProviderCredential,
+        1,
+    )
+    .expect("Zulip API key scope");
+    store
+        .store_secret(&scope, b"managed-zulip-api-key")
+        .expect("store Zulip test credential");
+}
+
+pub(super) fn admit_zulip_runtime(store: &SqliteControlStore) -> AdmittedZulipRuntime {
+    let descriptor = zulip_module_descriptor_v1("managed-zulip-live");
+    let descriptor_bytes = descriptor.encode_to_vec();
+    let registration = crate::modules::registration::registry::register(store, &descriptor_bytes)
+        .expect("register exact Zulip descriptor");
+    let capability_ids = vec![
+        ZULIP_BLOB_CAPABILITY_ID.to_owned(),
+        ZULIP_CREDENTIALS_CAPABILITY_ID.to_owned(),
+        ZULIP_EVENTS_CAPABILITY_ID.to_owned(),
+        ZulipClientContractV1::Query.capability_id().to_owned(),
+        ZULIP_STORAGE_CAPABILITY_ID.to_owned(),
+    ];
+    crate::modules::registration::registry::approve_after_owner_authorization(
+        store,
+        registration.registration_id(),
+        &capability_ids,
+    )
+    .expect("approve exact Zulip query capabilities");
+    let schema = zulip_settings_schema_bytes_v1();
+    store
+        .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
+            registration.registration_id(),
+            1,
+            "hermes-managed-runtime-conformance",
+            ZULIP_RELEASE_ARTIFACT_ID,
+            Sha256::digest(std::fs::read(zulip_binary()).expect("Zulip runtime binary bytes"))
+                .into(),
+            Sha256::digest(&descriptor_bytes).into(),
+            Some(Sha256::digest(&schema).into()),
+        ))
+        .expect("record Zulip release binding");
+    let bundle = zulip_storage_bundle_v1().encode_to_vec();
+    store
+        .record_platform_storage_bundle(
+            &PlatformStorageBundleV1::new(
+                ZULIP_OWNER_ID,
+                u64::from(ZULIP_STORAGE_BUNDLE_REVISION_V1),
+                Sha256::digest(&bundle).into(),
+                bundle,
+            )
+            .expect("record Zulip Storage bundle"),
+        )
+        .expect("persist Zulip Storage bundle");
+    AdmittedZulipRuntime {
+        registration_id: registration.registration_id().to_owned(),
+        capability_ids,
+    }
+}
+
+pub(super) fn prepare_zulip_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    admitted: AdmittedZulipRuntime,
+) -> AdmittedZulipRuntime {
+    let reservation = managed_launch::reserve(supervisor, store, &admitted.registration_id)
+        .expect("reserve Zulip managed launch");
+    let runtime_instance_id = reservation.runtime_instance_id().to_owned();
+    let runtime_generation = reservation.runtime_generation();
+    let bundle = store
+        .platform_storage_bundle(ZULIP_OWNER_ID, u64::from(ZULIP_STORAGE_BUNDLE_REVISION_V1))
+        .expect("read Zulip Storage bundle")
+        .expect("Zulip Storage bundle");
+    let binding = issue_managed(
+        store,
+        &admitted.registration_id,
+        &runtime_instance_id,
+        runtime_generation,
+        ZULIP_STORAGE_CAPABILITY_ID,
+        StorageBindingIssueV1::new(
+            1,
+            1,
+            u64::from(ZULIP_STORAGE_BUNDLE_REVISION_V1),
+            *bundle.digest(),
+        )
+        .expect("Zulip Storage binding issue"),
+    )
+    .expect("issue Zulip Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision Zulip Storage binding");
+    admitted
+}
+
+pub(super) fn start_zulip_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    admitted: AdmittedZulipRuntime,
+    realm_url: &str,
+) -> StartedZulipRuntime {
+    let reservation = managed_launch::load(supervisor, store, &admitted.registration_id)
+        .expect("load Zulip managed launch reservation");
+    let runtime_instance_id = reservation.runtime_instance_id().to_owned();
+    let runtime_generation = reservation.runtime_generation();
+    let grant_epoch = reservation.grant_epoch();
+    let binding = store
+        .platform_storage_binding(&admitted.registration_id, ZULIP_STORAGE_CAPABILITY_ID)
+        .expect("read Zulip Storage binding")
+        .expect("Zulip Storage binding");
+    let topology =
+        crate::platform::storage::topology::current(store).expect("read Storage topology");
+    let vault = vault_status::read_current(store, &supervisor.relay_port())
+        .expect("read live Vault status");
+    let storage = crate::platform::storage::topology::to_managed_runtime_configuration(
+        &topology,
+        &binding,
+        store.snapshot().instance_id(),
+        vault.runtime_generation(),
+        vault.hpke_public_key_x25519(),
+    )
+    .expect("build Zulip Storage configuration");
+    let events = store
+        .platform_event_hub_topology()
+        .expect("read Event Hub topology")
+        .expect("Event Hub topology");
+    let configuration = hermes_runtime_protocol::v1::ManagedIntegrationRuntimeConfigurationV1 {
+        major: 1,
+        logical_owner_id: ZULIP_OWNER_ID.to_owned(),
+        registration_id: admitted.registration_id.clone(),
+        runtime_instance_id: runtime_instance_id.clone(),
+        runtime_generation,
+        grant_epoch,
+        storage: Some(storage),
+        event_hub_endpoint: events.nats_endpoint().to_owned(),
+        event_credential_revision: events.credential_revision(),
+        configuration_instance_id: ZULIP_ACCOUNT_ID.to_owned(),
+        runtime_artifacts: Vec::new(),
+        integration_state_root: None,
+    };
+    managed_launch::start_reserved_integration(
+        supervisor,
+        kernel_data,
+        runtime_dir,
+        reservation,
+        managed_launch::ManagedIntegrationLaunchConfiguration {
+            runtime: configuration,
+            settings_snapshot_bytes: zulip_settings_snapshot(realm_url).encode_to_vec(),
+            granted_capability_ids: &admitted.capability_ids,
+        },
+    )
+    .expect("start managed Zulip integration");
+    StartedZulipRuntime {
+        registration_id: admitted.registration_id,
+        runtime_instance_id,
+        runtime_generation,
+        grant_epoch,
+    }
+}
+
+fn zulip_settings_snapshot(realm_url: &str) -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {
+    use hermes_runtime_protocol::v1::{
+        SettingValueV1, SettingsValueEntryV1, setting_value_v1::Value,
+    };
+
+    fn entry(setting_id: &str, value: Value) -> SettingsValueEntryV1 {
+        SettingsValueEntryV1 {
+            setting_id: setting_id.to_owned(),
+            value: Some(SettingValueV1 { value: Some(value) }),
+        }
+    }
+
+    hermes_runtime_protocol::v1::SettingsSnapshotV1 {
+        target_id: ZULIP_ACCOUNT_ID.to_owned(),
+        revision: 1,
+        values: vec![
+            entry(
+                "zulip.account_id",
+                Value::StringValue(ZULIP_ACCOUNT_ID.to_owned()),
+            ),
+            entry("zulip.api_key_revision", Value::UnsignedIntegerValue(1)),
+            entry(
+                "zulip.bot_email",
+                Value::StringValue("managed-bot@example.test".to_owned()),
+            ),
+            entry("zulip.realm_url", Value::StringValue(realm_url.to_owned())),
+        ],
+    }
+}
+
+fn zulip_binary() -> PathBuf {
+    binary("HERMES_ZULIP_RUNTIME_BIN")
+}

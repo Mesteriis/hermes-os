@@ -98,11 +98,11 @@ async fn execute_once(
     let endpoint = endpoint(&config.account.realm_url)?;
     let tcp = TcpStream::connect((endpoint.host.as_str(), endpoint.port))
         .await
-        .map_err(|_| ZulipHttpErrorV1::Unavailable)?;
-    let mut stream = TlsConnector::new()
+        .map_err(|error| unavailable("tcp_connect", &error))?;
+    let mut stream = tls_connector(&endpoint.host)?
         .connect(&endpoint.host, tcp)
         .await
-        .map_err(|_| ZulipHttpErrorV1::Unavailable)?;
+        .map_err(|error| unavailable("tls_connect", &error))?;
     let authorization = basic_authorization(&config.account.bot_email, &config.api_key);
     let mut request_bytes = format!(
         "{} {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Basic {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -117,21 +117,54 @@ async fn execute_once(
     stream
         .write_all(&request_bytes)
         .await
-        .map_err(|_| ZulipHttpErrorV1::Unavailable)?;
+        .map_err(|error| unavailable("write_request", &error))?;
     stream
         .flush()
         .await
-        .map_err(|_| ZulipHttpErrorV1::Unavailable)?;
+        .map_err(|error| unavailable("flush_request", &error))?;
     let mut bytes = Vec::new();
     stream
         .take(MAX_RESPONSE_BYTES)
         .read_to_end(&mut bytes)
         .await
-        .map_err(|_| ZulipHttpErrorV1::Unavailable)?;
+        .map_err(|error| unavailable("read_response", &error))?;
     (bytes.len() < usize::try_from(MAX_RESPONSE_BYTES).unwrap_or(usize::MAX))
         .then_some(())
         .ok_or(ZulipHttpErrorV1::Protocol)?;
     Ok(bytes)
+}
+
+fn unavailable(stage: &str, error: &impl std::fmt::Display) -> ZulipHttpErrorV1 {
+    #[cfg(feature = "conformance-test-support")]
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        let diagnostic = format!("developer_zulip_http_unavailable stage={stage} error={error}\n");
+        let mut stderr = std::io::stderr().lock();
+        let _ = std::io::Write::write_all(&mut stderr, diagnostic.as_bytes());
+    }
+    #[cfg(not(feature = "conformance-test-support"))]
+    let _ = (stage, error);
+    ZulipHttpErrorV1::Unavailable
+}
+
+#[cfg(not(feature = "conformance-test-support"))]
+fn tls_connector(_host: &str) -> Result<TlsConnector, ZulipHttpErrorV1> {
+    Ok(TlsConnector::new())
+}
+
+#[cfg(feature = "conformance-test-support")]
+fn tls_connector(host: &str) -> Result<TlsConnector, ZulipHttpErrorV1> {
+    use async_native_tls::Certificate;
+
+    if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+        return Ok(TlsConnector::new());
+    }
+    let certificate_path = std::env::var_os("HERMES_MANAGED_RUNTIME_CONFORMANCE_CA_CERT_FILE")
+        .ok_or(ZulipHttpErrorV1::InvalidConfiguration)?;
+    let certificate_bytes =
+        std::fs::read(certificate_path).map_err(|_| ZulipHttpErrorV1::InvalidConfiguration)?;
+    let certificate = Certificate::from_pem(&certificate_bytes)
+        .map_err(|_| ZulipHttpErrorV1::InvalidConfiguration)?;
+    Ok(TlsConnector::new().add_root_certificate(certificate))
 }
 
 struct Endpoint {

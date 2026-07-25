@@ -88,10 +88,18 @@ where
             &configuration.event_hub_endpoint,
             configuration.event_credential_revision,
         ))
-        .map_err(|_| "Zulip runtime admission was rejected".to_owned())?;
+        .map_err(|error| {
+            developer_diagnostic(&format!(
+                "developer_zulip_runtime_admission_error={error:?}"
+            ));
+            "Zulip runtime admission was rejected".to_owned()
+        })?;
     let mut queue = executor
         .block_on(admitted.acquire_event_queue())
-        .map_err(|_| "Zulip runtime event queue is unavailable".to_owned())?;
+        .map_err(|error| {
+            developer_diagnostic(&format!("developer_zulip_runtime_queue_error={error:?}"));
+            "Zulip runtime event queue is unavailable".to_owned()
+        })?;
     loop {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -102,11 +110,25 @@ where
             .map_err(|_| "Zulip runtime clock is unavailable".to_owned())?;
         executor
             .block_on(admitted.try_handle_client_delivery(seconds))
-            .map_err(|_| "Zulip runtime client delivery failed".to_owned())?;
+            .map_err(|error| {
+                developer_diagnostic(&format!(
+                    "developer_zulip_runtime_client_delivery_error={error:?}"
+                ));
+                "Zulip runtime client delivery failed".to_owned()
+            })?;
         executor
             .block_on(admitted.run_tick(&mut queue, seconds, nanos))
-            .map_err(|_| "Zulip runtime tick failed".to_owned())?;
+            .map_err(|error| {
+                developer_diagnostic(&format!("developer_zulip_runtime_tick_error={error:?}"));
+                "Zulip runtime tick failed".to_owned()
+            })?;
         std::thread::sleep(Duration::from_secs(1));
+    }
+}
+
+fn developer_diagnostic(message: &str) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("{message}");
     }
 }
 

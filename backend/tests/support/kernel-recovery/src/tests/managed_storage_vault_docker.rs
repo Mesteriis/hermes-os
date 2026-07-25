@@ -61,6 +61,9 @@ use crate::runtime::lifecycle::control::{
 #[path = "managed_storage_vault_docker/shared_fixture.rs"]
 mod shared_fixture;
 use shared_fixture::*;
+#[path = "managed_storage_vault_docker/owner_control_fixture.rs"]
+mod owner_control_fixture;
+use owner_control_fixture::*;
 #[path = "managed_storage_vault_docker/scheduler_setup.rs"]
 mod scheduler_setup;
 use scheduler_setup::*;
@@ -95,6 +98,14 @@ mod telegram_managed_flow;
 use mail_managed_setup::*;
 #[path = "managed_storage_vault_docker/mail_managed_flow.rs"]
 mod mail_managed_flow;
+#[path = "managed_storage_vault_docker/zulip_https_fixture.rs"]
+mod zulip_https_fixture;
+use zulip_https_fixture::*;
+#[path = "managed_storage_vault_docker/zulip_managed_setup.rs"]
+mod zulip_managed_setup;
+use zulip_managed_setup::*;
+#[path = "managed_storage_vault_docker/zulip_managed_flow.rs"]
+mod zulip_managed_flow;
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault and Storage binaries"]

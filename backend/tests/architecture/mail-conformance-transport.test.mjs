@@ -50,6 +50,6 @@ test('Mail plaintext IMAP transport is compile-time conformance-only', async () 
   );
   assert.match(
     harness,
-    /--features',\s+'hermes-mail-runtime\/conformance-test-support'/,
+    /--features',\s+'[^']*hermes-mail-runtime\/conformance-test-support[^']*'/,
   );
 });

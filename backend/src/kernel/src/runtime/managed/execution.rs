@@ -148,6 +148,15 @@ pub fn spawn_with_platform_control(
     if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
         command.env("HERMES_DEVELOPER_VERBOSE", "1");
     }
+    #[cfg(test)]
+    if let Some(certificate_path) =
+        std::env::var_os("HERMES_MANAGED_RUNTIME_CONFORMANCE_CA_CERT_FILE")
+    {
+        command.env(
+            "HERMES_MANAGED_RUNTIME_CONFORMANCE_CA_CERT_FILE",
+            certificate_path,
+        );
+    }
     command
         .spawn()
         .map_err(|error| format!("managed child could not start: {error}"))

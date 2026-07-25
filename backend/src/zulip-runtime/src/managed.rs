@@ -87,7 +87,7 @@ pub enum ZulipBootstrapErrorV1 {
     Control,
     Storage,
     Credential,
-    Persistence,
+    PersistenceConnect,
     EventHub,
 }
 
@@ -200,11 +200,7 @@ pub async fn open_admitted_runtime(
         password,
     )
     .await
-    .map_err(|_| ZulipBootstrapErrorV1::Persistence)?;
-    durable
-        .initialize()
-        .await
-        .map_err(|_| ZulipBootstrapErrorV1::Persistence)?;
+    .map_err(|_| ZulipBootstrapErrorV1::PersistenceConnect)?;
 
     let event_access = request_managed_runtime_event_access_v2(
         &mut control_channel,
