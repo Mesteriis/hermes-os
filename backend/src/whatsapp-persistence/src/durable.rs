@@ -7,16 +7,6 @@ use sqlx::{
 
 use crate::WHATSAPP_SCHEMA_V1;
 
-pub struct WhatsAppProviderCommandCompletionV1<'a> {
-    pub operation_id: &'a str,
-    pub account_id: &'a str,
-    pub host_claim_id: &'a str,
-    pub succeeded: bool,
-    pub observation: &'a WhatsAppHostObservationRecordV1,
-    pub record: &'a OutboxRecordV1,
-    pub completed_at_unix_seconds: i64,
-}
-
 pub struct WhatsAppDurablePersistence {
     pool: PgPool,
 }
@@ -302,66 +292,6 @@ impl WhatsAppDurablePersistence {
             .await
             .map(|result| result.rows_affected() == 1)
             .map_err(|_| WhatsAppDurablePersistenceError::Database)
-    }
-
-    pub async fn complete_provider_command_and_enqueue_observation(
-        &self,
-        completion: WhatsAppProviderCommandCompletionV1<'_>,
-    ) -> Result<bool, WhatsAppDurablePersistenceError> {
-        if completion.operation_id.trim().is_empty()
-            || completion.account_id.trim().is_empty()
-            || completion.host_claim_id.trim().is_empty()
-            || completion.observation.account_id != completion.account_id
-            || completion.completed_at_unix_seconds <= 0
-        {
-            return Err(WhatsAppDurablePersistenceError::InvalidRow);
-        }
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        let completed = sqlx::query("UPDATE hermes_data.whatsapp_provider_commands SET state = $4, completed_at_unix_seconds = $5 WHERE operation_id = $1 AND account_id = $2 AND host_claim_id = $3 AND state = $6 AND lease_expires_at_unix_seconds >= $5")
-            .bind(completion.operation_id)
-            .bind(completion.account_id)
-            .bind(completion.host_claim_id)
-            .bind(if completion.succeeded { WhatsAppProviderCommandStateV1::Succeeded as i16 } else { WhatsAppProviderCommandStateV1::Failed as i16 })
-            .bind(completion.completed_at_unix_seconds)
-            .bind(WhatsAppProviderCommandStateV1::Claimed as i16)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        if completed.rows_affected() != 1 {
-            transaction
-                .rollback()
-                .await
-                .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-            return Ok(false);
-        }
-        let inserted = sqlx::query("INSERT INTO hermes_data.whatsapp_host_observations (account_id, provider_event_id, evidence_kind, observed_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (account_id, provider_event_id) DO NOTHING RETURNING account_id")
-            .bind(&completion.observation.account_id)
-            .bind(&completion.observation.provider_event_id)
-            .bind(completion.observation.evidence_kind)
-            .bind(completion.observation.observed_at_unix_seconds)
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        if inserted.is_none() {
-            return Err(WhatsAppDurablePersistenceError::ObservationConflict);
-        }
-        sqlx::query("INSERT INTO hermes_data.whatsapp_communications_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
-            .bind(completion.record.message_id().as_slice())
-            .bind(completion.record.envelope_sha256().as_slice())
-            .bind(completion.record.exact_bytes())
-            .bind(completion.completed_at_unix_seconds)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        transaction
-            .commit()
-            .await
-            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        Ok(true)
     }
 
     pub async fn record_host_observation_and_enqueue(

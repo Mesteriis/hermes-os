@@ -34,7 +34,9 @@ test('WhatsApp managed admission is wired as an integration-owned conformance sl
   for (const supportModule of [
     'whatsapp_managed_setup',
     'whatsapp_managed_fixture',
+    'whatsapp_host_fixture',
     'whatsapp_managed_flow',
+    'whatsapp_event_flow',
   ]) {
     assert.match(harness, new RegExp(`mod ${supportModule};`));
   }
@@ -43,6 +45,10 @@ test('WhatsApp managed admission is wired as an integration-owned conformance sl
   assert.match(
     runner,
     /managed_whatsapp_runtime_uses_signed_kernel_admission_and_host_route_fencing/,
+  );
+  assert.match(
+    runner,
+    /managed_whatsapp_runtime_delivers_live_command_and_event_only_communications_handoff/,
   );
   assert.match(runner, /HERMES_WHATSAPP_RUNTIME_BIN:/);
 });

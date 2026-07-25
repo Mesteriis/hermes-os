@@ -110,9 +110,16 @@ where
         admitted
             .try_serve_host_bridge_once(&listener, executor.handle())
             .map_err(|_| "WhatsApp host bridge delivery failed".to_owned())?;
-        executor
-            .block_on(admitted.relay_communications_outbox(now))
-            .map_err(|_| "WhatsApp runtime outbox relay failed".to_owned())?;
+        match executor.block_on(admitted.relay_communications_outbox(now)) {
+            Ok(_)
+            | Err(hermes_whatsapp_runtime::WhatsAppCommunicationsOutboxRelayError::Unavailable) => {
+            }
+            Err(hermes_whatsapp_runtime::WhatsAppCommunicationsOutboxRelayError::Persistence(
+                _,
+            )) => {
+                return Err("WhatsApp runtime outbox persistence failed".to_owned());
+            }
+        }
         std::thread::sleep(Duration::from_millis(100));
     }
 }

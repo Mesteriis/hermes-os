@@ -98,6 +98,34 @@ pub async fn accept_host_observation(
     recorded_at_unix_seconds: i64,
     recorded_at_nanos: i32,
 ) -> Result<(), WhatsAppHostIngressError> {
+    hermes_whatsapp_api::host_bridge::validate_host_bridge_envelope(envelope)
+        .map_err(WhatsAppCoreError::HostBridge)
+        .map_err(WhatsAppHostIngressError::Core)?;
+    if let hermes_whatsapp_api::host_bridge::WhatsAppHostObservationV1::CommandResult {
+        operation_id,
+        host_claim_id,
+        succeeded,
+        ..
+    } = &envelope.observation
+    {
+        return durable
+            .complete_provider_command(
+                operation_id,
+                &envelope.account_id,
+                host_claim_id,
+                *succeeded,
+                recorded_at_unix_seconds,
+            )
+            .await
+            .map_err(WhatsAppHostIngressError::Persistence)
+            .and_then(|completed| {
+                completed
+                    .then_some(())
+                    .ok_or(WhatsAppHostIngressError::Persistence(
+                        WhatsAppDurablePersistenceError::CommandConflict,
+                    ))
+            });
+    }
     let projection = project_host_observation(envelope).map_err(WhatsAppHostIngressError::Core)?;
     let draft =
         communication_observation_draft(&projection).map_err(WhatsAppHostIngressError::Core)?;
@@ -112,39 +140,11 @@ pub async fn accept_host_observation(
         evidence_kind: evidence_kind_value(projection.evidence_kind),
         observed_at_unix_seconds: projection.observed_at_unix_seconds,
     };
-    match &envelope.observation {
-        hermes_whatsapp_api::host_bridge::WhatsAppHostObservationV1::CommandResult {
-            operation_id,
-            host_claim_id,
-            succeeded,
-            ..
-        } => durable
-            .complete_provider_command_and_enqueue_observation(
-                hermes_whatsapp_persistence::WhatsAppProviderCommandCompletionV1 {
-                    operation_id,
-                    account_id: &observation.account_id,
-                    host_claim_id,
-                    succeeded: *succeeded,
-                    observation: &observation,
-                    record: &record,
-                    completed_at_unix_seconds: recorded_at_unix_seconds,
-                },
-            )
-            .await
-            .map_err(WhatsAppHostIngressError::Persistence)
-            .and_then(|completed| {
-                completed
-                    .then_some(())
-                    .ok_or(WhatsAppHostIngressError::Persistence(
-                        WhatsAppDurablePersistenceError::ObservationConflict,
-                    ))
-            }),
-        _ => durable
-            .record_host_observation_and_enqueue(&observation, &record, recorded_at_unix_seconds)
-            .await
-            .map_err(WhatsAppHostIngressError::Persistence)
-            .map(|_| ()),
-    }
+    durable
+        .record_host_observation_and_enqueue(&observation, &record, recorded_at_unix_seconds)
+        .await
+        .map_err(WhatsAppHostIngressError::Persistence)
+        .map(|_| ())
 }
 
 pub async fn enqueue_provider_command(

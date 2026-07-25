@@ -135,6 +135,11 @@ use whatsapp_managed_setup::*;
 #[path = "managed_storage_vault_docker/whatsapp_managed_fixture.rs"]
 mod whatsapp_managed_fixture;
 use whatsapp_managed_fixture::*;
+#[path = "managed_storage_vault_docker/whatsapp_host_fixture.rs"]
+mod whatsapp_host_fixture;
+use whatsapp_host_fixture::*;
+#[path = "managed_storage_vault_docker/whatsapp_event_flow.rs"]
+mod whatsapp_event_flow;
 #[path = "managed_storage_vault_docker/whatsapp_managed_flow.rs"]
 mod whatsapp_managed_flow;
 

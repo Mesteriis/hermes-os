@@ -2,9 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-25
-Состояние реализации: Phase gate; `whatsapp_integration_v1` не открыт.
-Первые четыре implementation-слайса этого решения реализованы. Runtime использует
-один
+Состояние реализации: backend phase gate `whatsapp_integration_v1` открыт.
+Все двенадцать backend gates и первые пять implementation-слайсов этого
+решения реализованы. Runtime использует один
 correlation-owned `ManagedControlChannelV2`, передаёт его последовательно
 Storage/Vault и Event Hub clients, не clone-ит inherited FD и отправляет
 `ready` только после admitted bindings, owner-local persistence и Event Hub.
@@ -27,8 +27,15 @@ launch, Storage binding через выданный PgBouncer pool alias, privat
 handshake, stale runtime-generation fence и revoke с grant-epoch advance.
 Revoke переводит только WhatsApp Storage binding в `Revoking`, останавливает
 только WhatsApp, сохраняет Communications active и удаляет exact owner-owned
-Unix socket. Live provider command/result, WebView observation, event replay и
-frontend cutover остаются обязательными следующими slices.
+Unix socket. Второй disposable live contour доказывает accepted public command,
+exact native host lease, owner-local terminal result/query, отдельное
+metadata-only host observation, transactional WhatsApp outbox, exact-byte NATS
+delivery и Communications causation. Terminal provider receipt не становится
+Communications evidence. Duplicate delivery не создаёт второй canonical event,
+а NATS outage оставляет runtime active и pending outbox replay-ится после
+reconnect. Provider body, private socket path и route binding отсутствуют в
+durable event bytes. Frontend cutover остаётся отдельным secondary client
+slice.
 
 Уточняет:
 
@@ -58,8 +65,9 @@ private host bridge и public provider client contract, generated Protobuf не
 provider evidence отсутствовали. Первые три дефекта устранены; exact
 `ModuleDescriptorV1`, settings/storage artifact builders и отдельная release
 assembly unit также реализованы. Signed distribution binding и managed
-admission/fencing теперь доказаны live contour; provider command/result,
-WebView evidence flow и replay всё ещё отсутствуют.
+admission/fencing доказаны первым live contour. Второй live contour закрывает
+native host command/result, event-only Communications handoff, deduplication,
+outage replay и negative privacy evidence без прямого runtime/domain вызова.
 
 Сохранить `/api/v1/communications/*` как временный transport нельзя:
 Communications не выполняет WhatsApp provider commands и не владеет его
@@ -285,6 +293,7 @@ integration owner.
 
 WhatsApp получает отдельный атомарный production gate, который не смешивает
 Kernel control plane, integration provider execution и Communications business
-ownership. До закрытия всех gates отсутствие generated/live flow остаётся
-явным migration gap; legacy Communications facade не сохраняется как
-совместимость.
+ownership. Backend gate открыт только для exact owner-approved admission с
+доказанными fences и event flow; он не активирует runtime автоматически и не
+закрывает отдельный frontend cutover. Legacy Communications facade не
+сохраняется как совместимость.

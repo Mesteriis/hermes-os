@@ -262,6 +262,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_zulip_runtime_uses_kernel_leases_and_route_specific_admission',
     'managed_zulip_runtime_delivers_live_command_and_event_only_communications_handoff',
     'managed_whatsapp_runtime_uses_signed_kernel_admission_and_host_route_fencing',
+    'managed_whatsapp_runtime_delivers_live_command_and_event_only_communications_handoff',
   ]) {
     await start_contour(secrets);
     try {

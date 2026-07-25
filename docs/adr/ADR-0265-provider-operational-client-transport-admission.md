@@ -18,8 +18,12 @@ typed operation/response oneofs и exact descriptor digest; umbrella
 descriptor/settings/storage artifacts и отдельная unsigned release assembly
 реализованы. Release compiler подписывает exact assembly entries, а live
 managed contour доказывает registration/grants, signed launch, private host
-route, generation/grant fencing и isolated revoke. Live provider flow,
-terminal result/replay и frontend cutover ещё отсутствуют.
+route, generation/grant fencing и isolated revoke. Отдельный live contour
+доказывает generated public command/query route, native host lease и
+owner-local terminal result, metadata-only event handoff в Communications,
+duplicate suppression и NATS outage replay. Backend
+`whatsapp_integration_v1` открыт; frontend cutover без legacy
+REST/query/realtime surface остаётся отдельным незакрытым client slice.
 
 Первый exact provider profile:
 [ADR-0266: Telegram Kernel admission and event-only Communications handoff](ADR-0266-telegram-kernel-admission-and-event-only-communications-handoff.md).

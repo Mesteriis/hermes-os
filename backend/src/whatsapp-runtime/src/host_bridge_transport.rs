@@ -26,6 +26,9 @@ pub fn serve_connection(
     runtime: &WhatsAppAdmittedRuntime,
     handle: &tokio::runtime::Handle,
 ) -> Result<(), WhatsAppHostBridgeTransportError> {
+    stream
+        .set_nonblocking(false)
+        .map_err(|_| WhatsAppHostBridgeTransportError::Io)?;
     accept_host_bridge_handshake(&mut stream, runtime)?;
     loop {
         let request = match read_frame(&mut stream) {

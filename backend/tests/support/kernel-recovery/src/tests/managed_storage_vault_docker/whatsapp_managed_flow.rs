@@ -1,10 +1,5 @@
 //! Live signed WhatsApp admission, route-specific grants and revoke fencing.
 
-use std::{
-    io::{Read, Write},
-    os::unix::{fs::FileTypeExt, net::UnixStream},
-};
-
 use super::*;
 
 use hermes_kernel_control_store::{ModuleRegistrationState, PlatformStorageBindingStateV1};
@@ -109,34 +104,7 @@ fn assert_whatsapp_query_is_admitted(
 }
 
 fn assert_host_route_is_bound(whatsapp: &StartedWhatsAppRuntime) {
-    let deadline = std::time::Instant::now() + Duration::from_secs(10);
-    loop {
-        if let Ok(metadata) = std::fs::symlink_metadata(&whatsapp.host_bridge_socket_path)
-            && metadata.file_type().is_socket()
-        {
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "managed WhatsApp host route did not become a Unix socket",
-        );
-        std::thread::sleep(Duration::from_millis(25));
-    }
-    let mut stream = UnixStream::connect(&whatsapp.host_bridge_socket_path)
-        .expect("connect exact WhatsApp host route");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(2)))
-        .and_then(|_| stream.set_write_timeout(Some(Duration::from_secs(2))))
-        .expect("bound WhatsApp host route deadlines");
-    let handshake = encode_host_bridge_handshake(&WhatsAppHostBridgeHandshakeV1 {
-        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
-        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
-        route_binding_sha256: whatsapp.route_binding_sha256,
-    })
-    .expect("encode exact WhatsApp host route handshake");
-    write_frame(&mut stream, &handshake);
-    decode_host_bridge_handshake_accepted(&read_frame(&mut stream))
-        .expect("exact WhatsApp host route handshake");
+    drop(WhatsAppHostBridgeTestClient::connect(whatsapp));
 }
 
 fn assert_ungranted_whatsapp_command_is_rejected(
@@ -272,39 +240,4 @@ fn assert_revoked_whatsapp_query_is_rejected(
             .expect_err("revoked WhatsApp query route"),
         "module registration is not approved"
     );
-}
-
-fn write_frame(stream: &mut UnixStream, bytes: &[u8]) {
-    let mut length = u32::try_from(bytes.len()).expect("bounded WhatsApp host frame");
-    let mut prefix = [0_u8; 5];
-    let mut index = 0;
-    while length >= 0x80 {
-        prefix[index] = (length as u8 & 0x7f) | 0x80;
-        length >>= 7;
-        index += 1;
-    }
-    prefix[index] = length as u8;
-    stream
-        .write_all(&prefix[..=index])
-        .and_then(|_| stream.write_all(bytes))
-        .expect("write WhatsApp host frame");
-}
-
-fn read_frame(stream: &mut UnixStream) -> Vec<u8> {
-    let mut length = 0_u64;
-    for index in 0..5 {
-        let mut byte = [0_u8; 1];
-        stream
-            .read_exact(&mut byte)
-            .expect("read WhatsApp host frame length");
-        length |= u64::from(byte[0] & 0x7f) << (index * 7);
-        if byte[0] & 0x80 == 0 {
-            let mut bytes = vec![0_u8; usize::try_from(length).expect("bounded host frame length")];
-            stream
-                .read_exact(&mut bytes)
-                .expect("read WhatsApp host frame");
-            return bytes;
-        }
-    }
-    panic!("WhatsApp host frame length is invalid");
 }

@@ -44,10 +44,15 @@ bundle contains only `hermes_data.whatsapp_*` tables. Exact assembly artifacts
 are included in the signed distribution, and live managed conformance proves
 owner-approved grants, signed Kernel launch, Storage admission through the
 issued PgBouncer pool alias, private host-route binding, stale generation
-rejection and revoke fencing without stopping Communications. Live provider
-command execution, terminal result, WebView observation delivery and replay
-remain open migration work. No database URL environment variable, runtime DDL
-or provider secret handoff is admitted.
+rejection and revoke fencing without stopping Communications. A second live
+contour proves public command acceptance, exact native host lease, owner-local
+terminal result, metadata-only host observation, exact-byte outbox delivery,
+Communications inbox causation, duplicate suppression and NATS outage replay.
+Operational command receipts never become Communications evidence, and private
+provider body/host-route material is absent from durable event bytes.
+`whatsapp_integration_v1` is therefore open for the exact backend profile;
+frontend cutover remains separate. No database URL environment variable,
+runtime DDL or provider secret handoff is admitted.
 
 The backend API/core/persistence/runtime/assembly packages remain independent
 WhatsApp integration build units. "Host-owned" applies only to browser/WebView

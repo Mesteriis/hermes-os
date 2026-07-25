@@ -162,16 +162,9 @@ pub fn project_host_observation(
             envelope.provider_event_id.clone(),
             None,
         ),
-        WhatsAppHostObservationV1::CommandResult { operation_id, .. } => (
-            CommunicationEvidenceKindV1::DeliveryStateChanged,
-            None,
-            None,
-            None,
-            operation_id.clone(),
-            None,
-        ),
         WhatsAppHostObservationV1::SessionLinked { .. }
-        | WhatsAppHostObservationV1::SessionRevoked => {
+        | WhatsAppHostObservationV1::SessionRevoked
+        | WhatsAppHostObservationV1::CommandResult { .. } => {
             return Err(WhatsAppCoreError::UnsupportedObservation);
         }
     };
@@ -254,5 +247,27 @@ mod tests {
                 .body,
             BodyAvailabilityV1::MetadataOnly
         );
+    }
+
+    #[test]
+    fn provider_command_result_is_not_communications_evidence() {
+        let result = project_host_observation(&WhatsAppHostBridgeEnvelopeV1 {
+            protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+            protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+            account_id: "wa-1".to_owned(),
+            provider_event_id: "command-result-1".to_owned(),
+            observed_at_unix_seconds: 1_782_504_001,
+            observation: WhatsAppHostObservationV1::CommandResult {
+                operation_id: "operation-1".to_owned(),
+                provider_request_id: Some("provider-request-1".to_owned()),
+                succeeded: true,
+                host_claim_id: "host-claim-1".to_owned(),
+            },
+        });
+
+        assert!(matches!(
+            result,
+            Err(WhatsAppCoreError::UnsupportedObservation)
+        ));
     }
 }
