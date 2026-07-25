@@ -80,8 +80,9 @@ before their phase gate is opened.
 
 The compile-isolation policy is already executable: Kernel and Gateway cannot
 depend on owner modules, modules cannot depend on Kernel, integrations can use
-only the exact Communications ingress contract, and aggregate backend/common/
-provider packages are forbidden. The current-inventory guard is intentionally separate from the
+only the exact Communications ingress and attachment contract units, and
+aggregate backend/common/provider packages are forbidden. The
+current-inventory guard is intentionally separate from the
 reusable dependency validator: the former accepts only the exact ADR-0225
 package set in the real workspace, while the latter can still prove future
 owner graphs without authorizing those packages now.

@@ -303,7 +303,7 @@ host_bridge
 - Kernel process и minimal local recovery surface запускаются без PostgreSQL,
   PgBouncer, Storage Control, NATS, Vault, Blob, Scheduler и module runtimes;
 - текущий production inventory открыт как exact `first_owner_v1`: platform
-  packages плюс пять Communications packages; integrations остаются отдельными
+  packages плюс шесть Communications packages; integrations остаются отдельными
   units, а Kernel пока не заявляет отдельное состояние `ready`;
 - обязательного bootstrap configuration file и Hermes-specific environment
   overlay нет; data directory выбирается через OS-standard location либо
@@ -350,7 +350,8 @@ host_bridge
 - Kernel/Gateway не зависят от owner-specific Cargo packages, а modules не
   зависят от Kernel implementation;
 - runtime не агрегирует другой runtime; integration видит из business domains
-  только точный `hermes-communications-ingress`;
+  только exact public contract units `hermes-communications-ingress` и
+  `hermes-communications-attachment-contract`;
 - compile-isolation pattern применяется ко всем domains и integrations, а не к
   одному provider-примеру; WhatsApp implementation остаётся host-only hidden
   WebView;

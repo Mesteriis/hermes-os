@@ -314,6 +314,12 @@
         "surface": "contract"
       },
       {
+        "name": "hermes-communications-attachment-contract",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "contract"
+      },
+      {
         "name": "hermes-communications-api",
         "role": "domain",
         "owner": "communications",
@@ -788,6 +794,16 @@
           "kind": "normal"
         }
       ],
+      "hermes-communications-attachment-contract": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-communications-api": [],
       "hermes-communications-domain": [
         {
@@ -812,6 +828,10 @@
       "hermes-communications-runtime": [
         {
           "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-attachment-contract",
           "kind": "normal"
         },
         {
@@ -2276,6 +2296,56 @@
           "features": []
         }
       ],
+      "hermes-communications-attachment-contract": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-communications-api": [
         {
           "name": "prost",
@@ -2584,6 +2654,10 @@
         "customBuildAllowed": false
       },
       "hermes-communications-ingress": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communications-attachment-contract": {
         "primaryKind": "lib",
         "customBuildAllowed": true
       },
@@ -2957,6 +3031,7 @@
       "hermes-communications-attachment-contract"
     ],
     "integrationDomainContractPackages": [
+      "hermes-communications-attachment-contract",
       "hermes-communications-ingress"
     ]
   },

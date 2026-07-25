@@ -5,6 +5,7 @@ import test from 'node:test';
 
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const COMMUNICATIONS_INGRESS_ROOT = new URL('src/communications-ingress/src/', BACKEND_ROOT);
+const COMMUNICATIONS_ATTACHMENT_CONTRACT_ROOT = new URL('src/communications-attachment-contract/src/', BACKEND_ROOT);
 const COMMUNICATIONS_API_ROOT = new URL('src/communications-api/src/', BACKEND_ROOT);
 const COMMUNICATIONS_DOMAIN_ROOT = new URL('src/communications-domain/src/', BACKEND_ROOT);
 const COMMUNICATIONS_PERSISTENCE_ROOT = new URL('src/communications-persistence/src/', BACKEND_ROOT);
@@ -36,9 +37,18 @@ test('Communications domain does not import integration or Blob implementations'
 });
 
 test('Communications first owner inventory is exact and owner-local implementations stay provider-free', async () => {
-  const [policySource, ingressSources, apiSources, domainSources, persistenceSources, runtimeSources] = await Promise.all([
+  const [
+    policySource,
+    ingressSources,
+    attachmentContractSources,
+    apiSources,
+    domainSources,
+    persistenceSources,
+    runtimeSources,
+  ] = await Promise.all([
     readFile(POLICY_PATH, 'utf8'),
     rustSources(COMMUNICATIONS_INGRESS_ROOT),
+    rustSources(COMMUNICATIONS_ATTACHMENT_CONTRACT_ROOT),
     rustSources(COMMUNICATIONS_API_ROOT),
     rustSources(COMMUNICATIONS_DOMAIN_ROOT),
     rustSources(COMMUNICATIONS_PERSISTENCE_ROOT),
@@ -71,7 +81,14 @@ test('Communications first owner inventory is exact and owner-local implementati
     'first_owner_v1 must not carry integration build units in its production inventory',
   );
 
-  for (const source of [...ingressSources, ...apiSources, ...domainSources, ...persistenceSources, ...runtimeSources]) {
+  for (const source of [
+    ...ingressSources,
+    ...attachmentContractSources,
+    ...apiSources,
+    ...domainSources,
+    ...persistenceSources,
+    ...runtimeSources,
+  ]) {
     for (const implementation of FORBIDDEN_INTEGRATION_IMPLEMENTATIONS) {
       assert.ok(
         !source.content.includes(implementation),
@@ -86,6 +103,21 @@ test('Communications first owner inventory is exact and owner-local implementati
   const runtime = runtimeSources.map((source) => source.content).join('\n');
   assert.match(runtime, /consume_next_observation_v1/);
   assert.match(runtime, /relay_domain_outbox_once/);
+});
+
+test('Communications attachment schemas have one contract owner and no compatibility facade', async () => {
+  const [ingress, api, attachment] = await Promise.all([
+    readFile(new URL('src/communications-ingress/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-attachment-contract/src/lib.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+
+  assert.doesNotMatch(ingress, /attachment_(?:blob|safety|anchor)_v1/);
+  assert.doesNotMatch(api, /attachment_wire/);
+  assert.match(attachment, /pub mod blob_admission_v1/);
+  assert.match(attachment, /pub mod safety_verdict_v1/);
+  assert.match(attachment, /pub mod anchor_recorded_v1/);
+  assert.match(attachment, /pub mod lifecycle_v1/);
 });
 
 test('Communications custody transfer keeps source receipts private and uses only the Blob client port', async () => {

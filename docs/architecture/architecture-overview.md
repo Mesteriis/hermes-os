@@ -64,10 +64,11 @@ layout guard.
 ADR-0212 отделяет compile isolation от process isolation. Kernel и Gateway не
 линкуют owner-specific packages; каждый domain/integration runtime собирает
 только packages своего владельца. Integration видит из business domains только
-точный `hermes-communications-ingress`, поэтому изменение implementation Mail,
-Telegram, Zulip или будущей integration не пересобирает Communications, Kernel
-или другие providers. WhatsApp implementation остаётся в hidden host WebView и
-не получает backend runtime package.
+exact Communications contract units: `hermes-communications-ingress` и
+`hermes-communications-attachment-contract`. Поэтому изменение implementation
+Mail, Telegram, Zulip или будущей integration не пересобирает Communications,
+Kernel или другие providers. WhatsApp implementation остаётся в hidden host
+WebView и не получает backend runtime package.
 
 ADR-0213 задаёт code-level constitution: одна единица имеет одного owner, одну
 ответственность и одну причину изменения. Module обязан независимо собираться,

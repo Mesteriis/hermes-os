@@ -294,10 +294,12 @@ Core маршрутизирует оба contract family по descriptor/effecti
 provider-to-domain mapping.
 
 На compile boundary integration может импортировать из business domains только
-точный `hermes-communications-ingress`. Client-facing Communications API,
-Communications implementation, persistence и runtime для integration
-недоступны. Остальное взаимодействие происходит через описанные envelopes и
-Core routing, а не через Rust imports.
+exact public Communications contract units:
+`hermes-communications-ingress` для general provider-neutral evidence и
+`hermes-communications-attachment-contract` для attachment lifecycle.
+Client-facing Communications API, Communications implementation, persistence
+и runtime для integration недоступны. Остальное взаимодействие происходит
+через описанные envelopes и Core routing, а не через Rust imports.
 
 Bundled integration runtimes присутствуют в signed distribution manifest, а
 frontend experiences — в подписанном application bundle. Plugin store, runtime

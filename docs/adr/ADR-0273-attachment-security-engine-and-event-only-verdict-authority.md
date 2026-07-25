@@ -2,11 +2,14 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Решение принято, production gate
-`attachment_security_engine_v1` закрыт до реализации contracts, отдельного
-managed Engine launch path, owner-local persistence, release assembly и live
-ClamAV/Blob/Event conformance. До открытия gate состояние
-`safe_for_delivery` остаётся недостижимым.
+Состояние реализации: Решение принято. Attachment-specific Communications
+schemas выделены без facade/duplicate source в
+`hermes-communications-attachment-contract`; executable dependency policy и
+отдельный managed Engine launch path реализованы. Production gate
+`attachment_security_engine_v1` закрыт до реализации engine contracts/core/
+ClamAV adapter, owner-local persistence/runtime, release assembly и live
+ClamAV/Blob/Event conformance. До открытия gate состояние `safe_for_delivery`
+остаётся недостижимым.
 
 Зависит от:
 

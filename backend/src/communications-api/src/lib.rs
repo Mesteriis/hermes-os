@@ -13,13 +13,6 @@ pub mod query_wire {
     ));
 }
 
-pub mod attachment_wire {
-    include!(concat!(
-        env!("OUT_DIR"),
-        "/hermes.communications.attachment.v1.rs"
-    ));
-}
-
 mod attachment;
 mod query_projection;
 
@@ -35,10 +28,6 @@ include!(concat!(
     "/communications_evidence_schema.rs"
 ));
 include!(concat!(env!("OUT_DIR"), "/communications_query_schema.rs"));
-include!(concat!(
-    env!("OUT_DIR"),
-    "/communications_attachment_lifecycle_schema.rs"
-));
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct CommunicationObservationIdV1([u8; 16]);

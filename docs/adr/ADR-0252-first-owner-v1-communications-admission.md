@@ -46,6 +46,7 @@ schedules или timers.
 
 ```text
 hermes-communications-ingress
+hermes-communications-attachment-contract
 hermes-communications-api
 hermes-communications-domain
 hermes-communications-persistence
@@ -55,8 +56,9 @@ hermes-communications-runtime
 Integration owners `mail`, `telegram`, `whatsapp` и `zulip` не становятся
 частью Communications и не входят в этот owner inventory. Их packages,
 admission, storage, credentials и operational contracts остаются отдельными.
-Они могут публиковать только typed Communications ingress observations через
-свои outbox.
+Они могут публиковать только typed Communications observations через exact
+public contract units `hermes-communications-ingress` и, для attachment
+lifecycle, `hermes-communications-attachment-contract`, используя свои outbox.
 
 ## Owner capabilities
 

@@ -273,6 +273,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-zulip-persistence', role: 'integration', owner: 'zulip', surface: 'persistence' },
   { name: 'hermes-zulip-runtime', role: 'integration', owner: 'zulip', surface: 'runtime' },
   { name: 'hermes-communications-ingress', role: 'domain', owner: 'communications', surface: 'contract' },
+  { name: 'hermes-communications-attachment-contract', role: 'domain', owner: 'communications', surface: 'contract' },
   { name: 'hermes-communications-api', role: 'domain', owner: 'communications', surface: 'contract' },
   { name: 'hermes-communications-domain', role: 'domain', owner: 'communications', surface: 'implementation' },
   { name: 'hermes-communications-persistence', role: 'domain', owner: 'communications', surface: 'persistence' },
@@ -282,6 +283,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES = [
 const FIRST_OWNER_PRODUCTION_PACKAGES = [
   ...GATEWAY_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES,
   { name: 'hermes-communications-ingress', role: 'domain', owner: 'communications', surface: 'contract' },
+  { name: 'hermes-communications-attachment-contract', role: 'domain', owner: 'communications', surface: 'contract' },
   { name: 'hermes-communications-api', role: 'domain', owner: 'communications', surface: 'contract' },
   { name: 'hermes-communications-domain', role: 'domain', owner: 'communications', surface: 'implementation' },
   { name: 'hermes-communications-persistence', role: 'domain', owner: 'communications', surface: 'persistence' },
@@ -422,6 +424,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-mail-gmail', kind: 'normal' },
     { name: 'hermes-mail-smtp', kind: 'normal' },
     { name: 'hermes-mail-persistence', kind: 'normal' },
+    { name: 'hermes-communications-attachment-contract', kind: 'normal' },
     { name: 'hermes-communications-ingress', kind: 'normal' },
     { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-events-jetstream', kind: 'normal' },
@@ -526,6 +529,10 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
+  'hermes-communications-attachment-contract': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
   'hermes-communications-api': [],
   'hermes-communications-domain': [
     { name: 'hermes-communications-api', kind: 'normal' },
@@ -537,6 +544,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-communications-runtime': [
     { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communications-attachment-contract', kind: 'normal' },
     { name: 'hermes-communications-ingress', kind: 'normal' },
     { name: 'hermes-communications-api', kind: 'normal' },
     { name: 'hermes-communications-domain', kind: 'normal' },
@@ -999,6 +1007,14 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
+  'hermes-communications-attachment-contract': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
   'hermes-communications-api': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
@@ -1342,6 +1358,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-zulip-api',
       'hermes-mail-api',
       'hermes-communications-ingress',
+      'hermes-communications-attachment-contract',
       'hermes-communications-api',
     ].includes(packageName);
     return hasExactKeys(target, ['primaryKind', 'customBuildAllowed'])

@@ -1,12 +1,10 @@
 //! Mail-owned validation and persistence of the Communications anchor handoff.
 
-use hermes_communications_ingress::{
-    admission::{
-        communication_attachment_anchor_recorded_contract_reference_v1,
-        communication_observed_contract_reference_v1,
-    },
-    attachment_anchor_v1::AttachmentAnchorRecordedV1,
+use hermes_communications_attachment_contract::{
+    admission::communication_attachment_anchor_recorded_contract_reference_v1,
+    anchor_recorded_v1::AttachmentAnchorRecordedV1,
 };
+use hermes_communications_ingress::admission::communication_observed_contract_reference_v1;
 use hermes_events_jetstream::{
     RuntimeJetStreamConnection, RuntimeSubscribePermitV1, receive_runtime_pull_delivery,
 };

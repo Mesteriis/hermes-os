@@ -4,13 +4,13 @@ use hermes_communications_api::{
     AttachmentSafetyStateV1, AttachmentSafetyTransitionCommandV1, AttachmentSafetyTransitionV1,
     CommunicationAttachmentAnchorIdV1, CommunicationObservationIdV1,
 };
-use hermes_communications_ingress::{
+use hermes_communications_attachment_contract::{
     admission::{
         communication_attachment_blob_admission_observed_contract_reference_v1,
         communication_attachment_safety_verdict_observed_contract_reference_v1,
     },
-    attachment_blob_v1::AttachmentBlobAdmissionObservationV1,
-    attachment_safety_v1::AttachmentSafetyVerdictObservationV1,
+    blob_admission_v1::AttachmentBlobAdmissionObservationV1,
+    safety_verdict_v1::AttachmentSafetyVerdictObservationV1,
 };
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 use hermes_events_jetstream::{

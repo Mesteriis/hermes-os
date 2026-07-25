@@ -189,7 +189,7 @@ test('allows protobuf-only dependencies in the canonical events protocol', () =>
 
 
 
-test('allows an integration to publish only through Communications ingress', () => {
+test('allows an integration to publish only through explicit Communications contracts', () => {
   const communicationsContract = workspacePackage('hermes-communications-ingress', {
     role: 'domain',
     owner: 'communications',
@@ -206,6 +206,26 @@ test('allows an integration to publish only through Communications ingress', () 
   ];
 
   assert.deepEqual(validateCargoMetadata(canonicalPolicyForTests(), metadata(allowed)), []);
+
+  const attachmentContract = workspacePackage('hermes-communications-attachment-contract', {
+    role: 'domain',
+    owner: 'communications',
+    surface: 'contract',
+  });
+  const attachmentAllowed = [
+    kernel(),
+    attachmentContract,
+    workspacePackage(
+      'hermes-mail-runtime',
+      { role: 'integration', owner: 'mail', surface: 'runtime' },
+      [dependency('hermes-communications-attachment-contract')],
+    ),
+  ];
+
+  assert.deepEqual(
+    validateCargoMetadata(canonicalPolicyForTests(), metadata(attachmentAllowed)),
+    [],
+  );
 
   const clientContract = workspacePackage('hermes-communications-api', {
     role: 'domain',
@@ -488,7 +508,7 @@ for (const owner of ['contacts', 'organizations', 'tasks', 'calendar', 'document
   });
 }
 
-test('accepts the split Communications ingress and client API package graph', () => {
+test('accepts the split Communications ingress, attachment, and client API package graph', () => {
   const packages = [
     kernel(),
     workspacePackage('hermes-communications-ingress', {
@@ -501,13 +521,15 @@ test('accepts the split Communications ingress and client API package graph', ()
       owner: 'communications',
       surface: 'contract',
     }),
+    workspacePackage('hermes-communications-attachment-contract', {
+      role: 'domain',
+      owner: 'communications',
+      surface: 'contract',
+    }),
     workspacePackage(
       'hermes-communications-domain',
       { role: 'domain', owner: 'communications', surface: 'implementation' },
-      [
-        dependency('hermes-communications-ingress'),
-        dependency('hermes-communications-api'),
-      ],
+      [dependency('hermes-communications-api')],
     ),
     workspacePackage(
       'hermes-communications-persistence',
@@ -518,6 +540,7 @@ test('accepts the split Communications ingress and client API package graph', ()
       'hermes-communications-runtime',
       { role: 'domain', owner: 'communications', surface: 'runtime' },
       [
+        dependency('hermes-communications-attachment-contract'),
         dependency('hermes-communications-ingress'),
         dependency('hermes-communications-api'),
         dependency('hermes-communications-domain'),

@@ -1,15 +1,17 @@
 //! Exact descriptor and capability admission for the Communications owner runtime.
 
 use hermes_communications_api::{
-    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
-    COMMUNICATIONS_QUERY_SCHEMA_SHA256,
+    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_QUERY_SCHEMA_SHA256,
 };
-use hermes_communications_ingress::admission::{
-    COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+use hermes_communications_attachment_contract::admission::{
+    COMMUNICATION_ATTACHMENT_MAX_IN_FLIGHT,
     communication_attachment_anchor_recorded_contract_reference_v1,
     communication_attachment_blob_admission_observed_contract_reference_v1,
+    communication_attachment_safety_state_changed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
-    communication_observed_contract_reference_v1,
+};
+use hermes_communications_ingress::admission::{
+    COMMUNICATION_OBSERVED_MAX_IN_FLIGHT, communication_observed_contract_reference_v1,
 };
 use hermes_runtime_protocol::v1::{
     BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1,
@@ -117,7 +119,7 @@ pub fn communications_events_capability_v1() -> CapabilityDescriptorV1 {
                     envelope_kind: DurableEnvelopeKindV1::Event as i32,
                     contract: Some(attachment_anchor_recorded),
                     direction: EventRouteDirectionV1::Publish as i32,
-                    max_in_flight: COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+                    max_in_flight: COMMUNICATION_ATTACHMENT_MAX_IN_FLIGHT,
                     subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
                     max_deliver: 0,
                     ack_wait_millis: 0,
@@ -128,7 +130,7 @@ pub fn communications_events_capability_v1() -> CapabilityDescriptorV1 {
                     envelope_kind: DurableEnvelopeKindV1::Event as i32,
                     contract: Some(attachment_state_changed),
                     direction: EventRouteDirectionV1::Publish as i32,
-                    max_in_flight: COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+                    max_in_flight: COMMUNICATION_ATTACHMENT_MAX_IN_FLIGHT,
                     subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
                     max_deliver: 0,
                     ack_wait_millis: 0,
@@ -200,7 +202,7 @@ fn attachment_observation_consumer_capability_v1(
                 envelope_kind: DurableEnvelopeKindV1::Observation as i32,
                 contract: Some(observation),
                 direction: EventRouteDirectionV1::Consume as i32,
-                max_in_flight: COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+                max_in_flight: COMMUNICATION_ATTACHMENT_MAX_IN_FLIGHT,
                 subscription_requirement: EventSubscriptionRequirementV1::Required as i32,
                 max_deliver: COMMUNICATIONS_EVENT_MAX_DELIVER,
                 ack_wait_millis: COMMUNICATIONS_EVENT_ACK_WAIT_MILLIS,
@@ -283,18 +285,6 @@ pub fn communication_evidence_recorded_contract_reference_v1() -> ContractRefere
         major: 1,
         revision: 1,
         schema_sha256: COMMUNICATION_EVIDENCE_SCHEMA_SHA256.to_vec(),
-    }
-}
-
-#[must_use]
-pub fn communication_attachment_safety_state_changed_contract_reference_v1() -> ContractReferenceV1
-{
-    ContractReferenceV1 {
-        owner: COMMUNICATIONS_OWNER_ID.to_owned(),
-        name: "communication_attachment_safety_state_changed".to_owned(),
-        major: 1,
-        revision: 1,
-        schema_sha256: COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256.to_vec(),
     }
 }
 

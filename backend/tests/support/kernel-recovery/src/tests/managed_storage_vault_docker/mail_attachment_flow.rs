@@ -3,26 +3,24 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
-use hermes_communications_api::{
-    attachment_wire::{
-        AttachmentSafetyStateChangedV1, AttachmentSafetyStateV1 as AttachmentSafetyStateWireV1,
-    },
-    query_wire::{
-        CommunicationsQueryRequestV1, ListAccountsRequestV1, ListConversationMessagesRequestV1,
-        ListConversationsRequestV1, ListMessageAttachmentAnchorsRequestV1,
-        communications_query_request_v1::Operation,
-        communications_query_response_v1::Result as QueryResult,
-    },
+use hermes_communications_api::query_wire::{
+    CommunicationsQueryRequestV1, ListAccountsRequestV1, ListConversationMessagesRequestV1,
+    ListConversationsRequestV1, ListMessageAttachmentAnchorsRequestV1,
+    communications_query_request_v1::Operation,
+    communications_query_response_v1::Result as QueryResult,
 };
-use hermes_communications_ingress::{
+use hermes_communications_attachment_contract::{
     AttachmentBlobAdmissionFactV1, AttachmentBlobAdmissionTransitionV1,
-    AttachmentBlobExpectedStateV1, ObservationEnvelopeContextV1,
-    attachment_anchor_v1::AttachmentAnchorRecordedV1,
-    attachment_blob_v1::{
+    AttachmentBlobExpectedStateV1, AttachmentObservationEnvelopeContextV1,
+    anchor_recorded_v1::AttachmentAnchorRecordedV1,
+    blob_admission_v1::{
         AttachmentBlobAdmissionObservationV1,
         AttachmentBlobAdmissionTransitionV1 as AttachmentBlobAdmissionTransitionWireV1,
     },
     build_attachment_blob_admission_outbox_record_v1,
+    lifecycle_v1::{
+        AttachmentSafetyStateChangedV1, AttachmentSafetyStateV1 as AttachmentSafetyStateWireV1,
+    },
 };
 use hermes_events_protocol::validation::envelope::decode_envelope_v1;
 use hermes_mail_api::{
@@ -246,7 +244,7 @@ pub(super) fn assert_mail_attachment_lifecycle(
             observed_at_unix_seconds: current_unix_seconds(),
             blob_reference_binding_sha256: None,
         },
-        &ObservationEnvelopeContextV1 {
+        &AttachmentObservationEnvelopeContextV1 {
             runtime_instance_id: mail.runtime_instance_id.clone(),
             runtime_generation: mail.runtime_generation,
             module_id: MAIL_MODULE_ID.to_owned(),

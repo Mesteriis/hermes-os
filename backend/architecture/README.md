@@ -251,8 +251,9 @@ components = ["telemetry_collector"]
 - domain не зависит от другого domain или integration;
 - AI как domain также не зависит от contracts других owners; cross-owner AI
   context собирает только explicit use-case workflow;
-- integration зависит из business domains только от нейтрального
-  package `hermes-communications-ingress`; остальные domain contracts
+- integration зависит из business domains только от exact neutral contract
+  units `hermes-communications-ingress` и
+  `hermes-communications-attachment-contract`; остальные domain contracts
   запрещены;
 - workflow и API используют чужие packages только через `contract`;
 - contract не зависит от runtime, implementation или persistence своего

@@ -25,6 +25,7 @@ hermes-events-jetstream = { path = "../../../src/platform/events/jetstream" }
 hermes-blob-client = { path = "../../../src/platform/blob/client" }
 hermes-communications-persistence = { path = "../../../src/communications-persistence" }
 hermes-communications-runtime = { path = "../../../src/communications-runtime" }
+hermes-communications-attachment-contract = { path = "../../../src/communications-attachment-contract" }
 hermes-communications-ingress = { path = "../../../src/communications-ingress" }
 hermes-communications-api = { path = "../../../src/communications-api" }
 hermes-mail-api = { path = "../../../src/mail-api" }

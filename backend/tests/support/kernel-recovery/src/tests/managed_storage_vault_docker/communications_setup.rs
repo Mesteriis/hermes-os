@@ -10,9 +10,10 @@ use hermes_communications_api::query_wire::{
     communications_query_request_v1::Operation,
     communications_query_response_v1::Result as QueryResult,
 };
-use hermes_communications_ingress::admission::{
+use hermes_communications_attachment_contract::admission::{
     communication_attachment_anchor_recorded_contract_reference_v1,
     communication_attachment_blob_admission_observed_contract_reference_v1,
+    communication_attachment_safety_state_changed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
 };
 use hermes_communications_persistence::{
@@ -27,7 +28,6 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
     COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION, COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS,
     COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID, COMMUNICATIONS_STORAGE_CAPABILITY_ID,
-    communication_attachment_safety_state_changed_contract_reference_v1,
     communication_evidence_recorded_contract_reference_v1, communications_module_descriptor_v1,
     communications_settings_schema_bytes_v1,
 };
@@ -1247,7 +1247,7 @@ pub(super) fn assert_communications_attachment_anchor_projection(
             ));
             assert_eq!(envelope.causation_message_id, record.message_id().to_vec());
             assert_eq!(envelope.correlation_id, ingress.correlation_id);
-            let payload = hermes_communications_ingress::attachment_anchor_v1::AttachmentAnchorRecordedV1::decode(
+            let payload = hermes_communications_attachment_contract::anchor_recorded_v1::AttachmentAnchorRecordedV1::decode(
                 envelope.payload.as_slice(),
             )
             .expect("attachment-anchor handoff payload");
@@ -1269,18 +1269,18 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                 .as_slice()
                 .try_into()
                 .expect("attachment correlation identifier");
-            let requested = hermes_communications_ingress::build_attachment_blob_admission_outbox_record_v1(
-                &hermes_communications_ingress::AttachmentBlobAdmissionFactV1 {
+            let requested = hermes_communications_attachment_contract::build_attachment_blob_admission_outbox_record_v1(
+                &hermes_communications_attachment_contract::AttachmentBlobAdmissionFactV1 {
                     attachment_anchor_id,
                     source_observation_id: *record.message_id(),
                     correlation_id,
                     media_cursor_sha256,
-                    expected_state: hermes_communications_ingress::AttachmentBlobExpectedStateV1::DescriptorOnly,
-                    transition: hermes_communications_ingress::AttachmentBlobAdmissionTransitionV1::Requested,
+                    expected_state: hermes_communications_attachment_contract::AttachmentBlobExpectedStateV1::DescriptorOnly,
+                    transition: hermes_communications_attachment_contract::AttachmentBlobAdmissionTransitionV1::Requested,
                     observed_at_unix_seconds: 1_783_024_003,
                     blob_reference_binding_sha256: None,
                 },
-                &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+                &hermes_communications_attachment_contract::AttachmentObservationEnvelopeContextV1 {
                     runtime_instance_id: "attachment-integration-test-runtime-1".to_owned(),
                     runtime_generation: 1,
                     module_id: "attachment-integration-test-runtime".to_owned(),
@@ -1298,18 +1298,18 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                 .expect("publish requested attachment admission envelope")
                 .await
                 .expect("acknowledge requested attachment admission envelope");
-            let admitted = hermes_communications_ingress::build_attachment_blob_admission_outbox_record_v1(
-                &hermes_communications_ingress::AttachmentBlobAdmissionFactV1 {
+            let admitted = hermes_communications_attachment_contract::build_attachment_blob_admission_outbox_record_v1(
+                &hermes_communications_attachment_contract::AttachmentBlobAdmissionFactV1 {
                     attachment_anchor_id,
                     source_observation_id: *record.message_id(),
                     correlation_id,
                     media_cursor_sha256,
-                    expected_state: hermes_communications_ingress::AttachmentBlobExpectedStateV1::BlobPending,
-                    transition: hermes_communications_ingress::AttachmentBlobAdmissionTransitionV1::Admitted,
+                    expected_state: hermes_communications_attachment_contract::AttachmentBlobExpectedStateV1::BlobPending,
+                    transition: hermes_communications_attachment_contract::AttachmentBlobAdmissionTransitionV1::Admitted,
                     observed_at_unix_seconds: 1_783_024_004,
                     blob_reference_binding_sha256: Some([11; 32]),
                 },
-                &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+                &hermes_communications_attachment_contract::AttachmentObservationEnvelopeContextV1 {
                     runtime_instance_id: "attachment-integration-test-runtime-1".to_owned(),
                     runtime_generation: 1,
                     module_id: "attachment-integration-test-runtime".to_owned(),

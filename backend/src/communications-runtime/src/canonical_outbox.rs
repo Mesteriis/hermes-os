@@ -2,15 +2,14 @@
 
 use hermes_communications_api::{
     AttachmentSafetyStateV1, AttachmentSafetyTransitionDecisionV1,
-    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
-    CanonicalAttachmentAnchorProjectionV1, CanonicalCommunicationEvidenceKindV1,
-    CommunicationBodyStateV1, CommunicationDirectionV1, CommunicationProviderProvenanceV1,
-    CommunicationSummary, attachment_wire::AttachmentSafetyStateChangedV1,
-    wire::CommunicationEvidenceRecordedV1,
+    COMMUNICATION_EVIDENCE_SCHEMA_SHA256, CanonicalAttachmentAnchorProjectionV1,
+    CanonicalCommunicationEvidenceKindV1, CommunicationBodyStateV1, CommunicationDirectionV1,
+    CommunicationProviderProvenanceV1, CommunicationSummary, wire::CommunicationEvidenceRecordedV1,
 };
-use hermes_communications_ingress::{
+use hermes_communications_attachment_contract::{
+    COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
     admission::communication_attachment_anchor_recorded_contract_reference_v1,
-    attachment_anchor_v1::AttachmentAnchorRecordedV1,
+    anchor_recorded_v1::AttachmentAnchorRecordedV1, lifecycle_v1::AttachmentSafetyStateChangedV1,
 };
 use hermes_events_protocol::{
     delivery::OutboxRecordV1,
@@ -364,8 +363,8 @@ mod tests {
         CommunicationAttachmentAnchorIdV1, CommunicationBodyStateV1, CommunicationDirectionV1,
         CommunicationMessageIdV1, CommunicationObservationIdV1, CommunicationProviderProvenanceV1,
         CommunicationSourceCursorV1, CommunicationSummary,
-        attachment_wire::AttachmentSafetyStateChangedV1,
     };
+    use hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateChangedV1;
     use hermes_events_protocol::v1::DurableEnvelopeV1;
 
     use super::*;
@@ -513,7 +512,7 @@ mod tests {
         )
         .expect("canonical anchor handoff");
         let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");
-        let payload = hermes_communications_ingress::attachment_anchor_v1::AttachmentAnchorRecordedV1::decode(envelope.payload.as_slice()).expect("payload");
+        let payload = hermes_communications_attachment_contract::anchor_recorded_v1::AttachmentAnchorRecordedV1::decode(envelope.payload.as_slice()).expect("payload");
 
         assert_eq!(
             envelope.contract.as_ref().expect("contract").name,

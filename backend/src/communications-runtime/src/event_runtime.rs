@@ -5,12 +5,12 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use hermes_communications_domain::COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1;
-use hermes_communications_ingress::admission::{
+use hermes_communications_attachment_contract::admission::{
     communication_attachment_blob_admission_observed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
-    communication_observed_contract_reference_v1,
 };
+use hermes_communications_domain::COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1;
+use hermes_communications_ingress::admission::communication_observed_contract_reference_v1;
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,

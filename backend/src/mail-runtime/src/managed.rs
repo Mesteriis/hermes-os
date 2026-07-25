@@ -7,10 +7,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use hermes_blob_client::{
     BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
 };
-use hermes_communications_ingress::{
+use hermes_communications_attachment_contract::{
     AttachmentBlobAdmissionFactV1, AttachmentBlobAdmissionTransitionV1,
-    AttachmentBlobExpectedStateV1, ObservationEnvelopeContextV1,
-    build_attachment_blob_admission_outbox_record_v1, build_observation_outbox_record_v1,
+    AttachmentBlobExpectedStateV1, AttachmentObservationEnvelopeContextV1,
+    build_attachment_blob_admission_outbox_record_v1,
+};
+use hermes_communications_ingress::{
+    ObservationEnvelopeContextV1, build_observation_outbox_record_v1,
 };
 use hermes_events_jetstream::{
     DurableSubjectV1, JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity,
@@ -1145,7 +1148,7 @@ impl MailAdmittedRuntime {
         else {
             return Ok(());
         };
-        let context = observation_context(
+        let context = attachment_observation_context(
             &self.runtime_instance_id,
             self.runtime_generation,
             observed_at_unix_seconds,
@@ -1336,7 +1339,7 @@ fn write_control_error(
 fn attachment_blob_admission_publish_permitted(
     permit: &RuntimePublishPermitV1,
 ) -> Result<bool, MailBootstrapError> {
-    let contract = hermes_communications_ingress::admission::communication_attachment_blob_admission_observed_contract_reference_v1();
+    let contract = hermes_communications_attachment_contract::admission::communication_attachment_blob_admission_observed_contract_reference_v1();
     let subject = DurableSubjectV1::new(
         StreamKindV1::Observation,
         contract.owner,
@@ -1350,7 +1353,7 @@ fn attachment_blob_admission_publish_permitted(
 fn bind_attachment_anchor_subscribe_permit(
     permits: Vec<RuntimeSubscribePermitV1>,
 ) -> Result<Option<RuntimeSubscribePermitV1>, MailBootstrapError> {
-    let expected = hermes_communications_ingress::admission::communication_attachment_anchor_recorded_contract_reference_v1();
+    let expected = hermes_communications_attachment_contract::admission::communication_attachment_anchor_recorded_contract_reference_v1();
     let mut anchor = None;
     for permit in permits {
         let Some(contract) = permit.contract() else {
@@ -1471,6 +1474,21 @@ fn observation_context(
     recorded_at_nanos: i32,
 ) -> ObservationEnvelopeContextV1 {
     ObservationEnvelopeContextV1 {
+        runtime_instance_id: runtime_instance_id.to_owned(),
+        runtime_generation,
+        module_id: MAIL_MODULE_ID.to_owned(),
+        recorded_at_unix_seconds,
+        recorded_at_nanos,
+    }
+}
+
+fn attachment_observation_context(
+    runtime_instance_id: &str,
+    runtime_generation: u64,
+    recorded_at_unix_seconds: i64,
+    recorded_at_nanos: i32,
+) -> AttachmentObservationEnvelopeContextV1 {
+    AttachmentObservationEnvelopeContextV1 {
         runtime_instance_id: runtime_instance_id.to_owned(),
         runtime_generation,
         module_id: MAIL_MODULE_ID.to_owned(),

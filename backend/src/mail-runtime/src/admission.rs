@@ -3,11 +3,12 @@
 //! This artifact describes the smallest Mail-owned capability set. It does
 //! not register Mail in the production inventory or grant any capability.
 
-use hermes_communications_ingress::admission::{
-    COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+use hermes_communications_attachment_contract::admission::{
     communication_attachment_anchor_recorded_contract_reference_v1,
     communication_attachment_blob_admission_observed_publish_request_v1,
-    communication_observed_publish_request_v1,
+};
+use hermes_communications_ingress::admission::{
+    COMMUNICATION_OBSERVED_MAX_IN_FLIGHT, communication_observed_publish_request_v1,
 };
 use hermes_mail_api::client_contract::{
     MAIL_CLIENT_CONTRACT_MAJOR, MAIL_CLIENT_CONTRACT_REVISION, MAIL_CLIENT_DESCRIPTOR_SET_V1,

@@ -347,6 +347,7 @@ integration api + core + provider adapter + persistence ← integration runtime
 | `hermes-communications-domain` | Communications persistence/runtime и Communications tests |
 | `hermes-contacts-domain` | Contacts persistence/runtime и Contacts tests |
 | `hermes-communications-ingress` | integrations, которые публикуют neutral evidence; это осознанный fan-out |
+| `hermes-communications-attachment-contract` | integrations и engines, которые обмениваются typed attachment facts; это осознанный contract fan-out |
 | global runtime/event protocol | его consumers; изменение требует contract review |
 | Storage PostgreSQL/PgBouncer/migration adapter | `hermes-storage-runtime` и Storage tests |
 | `hermes-storage-control` | `hermes-storage-runtime` и Storage tests |
