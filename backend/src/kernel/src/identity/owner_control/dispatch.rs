@@ -526,6 +526,17 @@ fn transition(
         registration.registration_id(),
     );
     let runtime_stop = supervisor.stop_if_active(registration.registration_id());
+    let storage_revocation = storage_revocation.or_else(|_| {
+        let retry = crate::platform::storage::revocation::fence_registration_bindings(
+            supervisor,
+            store,
+            registration.registration_id(),
+        );
+        if retry.is_err() {
+            supervisor.stop_if_active(crate::platform::storage::binding::STORAGE_PROCESS_ID)?;
+        }
+        retry
+    });
     storage_revocation?;
     runtime_stop?;
     Ok(OwnerResult::TransitionModuleRegistration(

@@ -1,5 +1,8 @@
 use super::common::*;
-use hermes_kernel_control_store::{PlatformManagedProcessBinding, PlatformManagedProcessLaunch};
+use hermes_kernel_control_store::{
+    PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageBindingInputV1,
+    PlatformStorageBindingV1,
+};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::{ManagedRuntimeVaultRouteRequestV1, VaultCiphertextResponseV1};
 use hermes_runtime_protocol::validation::vault::STORAGE_REVOKE_AUDIENCE_OPERATION_DIGEST_V1;
@@ -62,6 +65,139 @@ fn platform_managed_runtime_fence_rejects_a_replaced_binding() {
         )
         .expect("check replaced platform runtime"),
         Some(false),
+    );
+
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn current_storage_can_revoke_an_exact_reserved_binding_after_target_grants_are_fenced() {
+    let root = unique_target_root("hermes-storage-revoking-vault-route");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
+        .expect("create Control Store");
+    store
+        .record_platform_managed_process_binding(&PlatformManagedProcessBinding::new(
+            "storage",
+            1,
+            "distribution-storage",
+            "storage-runtime",
+            [7; 32],
+            [3; 32],
+            None,
+        ))
+        .expect("record Storage process binding");
+    store
+        .record_platform_managed_process_launch(&PlatformManagedProcessLaunch::new(
+            "storage", 1, 1, 4, 3,
+        ))
+        .expect("record Storage process launch");
+    let binding = PlatformStorageBindingV1::new(PlatformStorageBindingInputV1 {
+        registration_id: "mail-registration".to_owned(),
+        capability_id: "mail.storage.v1".to_owned(),
+        owner_id: "mail".to_owned(),
+        binding_revision: 1,
+        topology_revision: 1,
+        storage_generation: 1,
+        runtime_instance_id: "mail-runtime".to_owned(),
+        runtime_generation: 5,
+        grant_epoch: 7,
+        role_epoch: 11,
+        runtime_principal: "mail_runtime".to_owned(),
+        connection_budget: 4,
+        statement_timeout_millis: 5_000,
+        credential_lease_revision: 13,
+        storage_bundle_revision: 1,
+        storage_bundle_digest: [8; 32],
+    })
+    .expect("valid Mail Storage binding");
+    store
+        .record_platform_storage_binding(&binding)
+        .expect("record Mail Storage binding");
+    store
+        .begin_platform_storage_binding_revocation(
+            binding.registration_id(),
+            binding.capability_id(),
+            binding.binding_revision(),
+        )
+        .expect("reserve Mail Storage binding revocation");
+    let expectation =
+        ManagedRuntimeExpectation::new("storage", "storage", "storage", 4, 3, [3; 32], None);
+    let route = revoking_storage_route(&binding);
+    assert_eq!(
+        current_platform_managed_runtime_matches(
+            &store,
+            expectation.registration_id(),
+            expectation.runtime_instance_id(),
+            expectation.runtime_generation(),
+            expectation.grant_epoch(),
+        )
+        .expect("check current Storage runtime"),
+        Some(true),
+    );
+    let reserved = store
+        .platform_storage_binding(binding.registration_id(), binding.capability_id())
+        .expect("read reserved Mail Storage binding")
+        .expect("reserved Mail Storage binding");
+    assert_eq!(reserved.runtime_instance_id(), route.runtime_instance_id);
+    assert_eq!(
+        reserved.runtime_generation(),
+        route.caller_runtime_generation
+    );
+    assert_eq!(reserved.grant_epoch(), route.grant_epoch);
+    assert_eq!(reserved.role_epoch(), route.storage_role_epoch);
+    assert_eq!(
+        reserved.credential_lease_revision(),
+        route.storage_credential_lease_revision
+    );
+    assert_eq!(
+        reserved.runtime_principal(),
+        route.storage_runtime_principal
+    );
+    assert_eq!(reserved.owner_id(), route.storage_owner_id);
+    assert_eq!(
+        reserved.state(),
+        hermes_kernel_control_store::PlatformStorageBindingStateV1::Revoking
+    );
+    assert_eq!(
+        route.operation_digest_sha256,
+        STORAGE_REVOKE_AUDIENCE_OPERATION_DIGEST_V1
+    );
+    assert_eq!(
+        store
+            .platform_storage_bindings()
+            .expect("list exact Storage bindings"),
+        vec![reserved]
+    );
+
+    crate::platform::vault::managed_route::authorize_storage_delegated_route(
+        &store,
+        &expectation,
+        &route,
+    )
+    .expect("current Storage may revoke an exact durable reservation");
+
+    let stale_storage =
+        ManagedRuntimeExpectation::new("storage", "storage", "storage", 5, 3, [3; 32], None);
+    assert!(
+        crate::platform::vault::managed_route::authorize_storage_delegated_route(
+            &store,
+            &stale_storage,
+            &route,
+        )
+        .is_err(),
+        "a stale Storage generation cannot use the reserved revoke route"
+    );
+    let mut non_revoke = route;
+    non_revoke.operation_digest_sha256 = vec![9; 32];
+    assert!(
+        crate::platform::vault::managed_route::authorize_storage_delegated_route(
+            &store,
+            &expectation,
+            &non_revoke,
+        )
+        .is_err(),
+        "a revoking binding authorizes only the exact RevokeAudience operation"
     );
 
     std::fs::remove_dir_all(root).expect("remove fixture directory");
@@ -251,6 +387,30 @@ fn valid_route() -> VaultCiphertextRouteV1 {
         storage_credential_lease_revision: 0,
         storage_runtime_principal: String::new(),
         storage_owner_id: String::new(),
+    }
+}
+
+fn revoking_storage_route(binding: &PlatformStorageBindingV1) -> VaultCiphertextRouteV1 {
+    VaultCiphertextRouteV1 {
+        major: 1,
+        registration_id: binding.registration_id().to_owned(),
+        runtime_instance_id: binding.runtime_instance_id().to_owned(),
+        caller_runtime_generation: binding.runtime_generation(),
+        vault_runtime_generation: 1,
+        grant_epoch: binding.grant_epoch(),
+        request_id: vec![1; 16],
+        operation_digest_sha256: STORAGE_REVOKE_AUDIENCE_OPERATION_DIGEST_V1.to_vec(),
+        direction: VaultCiphertextRouteDirectionV1::ToVault as i32,
+        hpke_encapped_key: vec![2; 32],
+        ciphertext: vec![3],
+        hpke_authentication_tag: vec![4; 16],
+        response_recipient_hpke_public_key_x25519: vec![5; 32],
+        kernel_instance_id: String::new(),
+        kernel_authorization_signature_raw: Vec::new(),
+        storage_role_epoch: binding.role_epoch(),
+        storage_credential_lease_revision: binding.credential_lease_revision(),
+        storage_runtime_principal: binding.runtime_principal().to_owned(),
+        storage_owner_id: binding.owner_id().to_owned(),
     }
 }
 

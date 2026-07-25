@@ -62,6 +62,21 @@ test('owner suspend or revoke reserves Storage fencing before stopping the affec
       < transition.indexOf('storage_revocation?'),
     'the affected runtime must still be stopped when physical Storage fencing fails',
   );
+  assert.equal(
+    transition.match(/fence_registration_bindings/g)?.length,
+    2,
+    'a failed physical fence must be retried after the affected runtime stops',
+  );
+  assert.ok(
+    transition.lastIndexOf('fence_registration_bindings')
+      > transition.indexOf('supervisor.stop_if_active'),
+    'the bounded Storage fence retry must run after the affected runtime stops',
+  );
+  assert.ok(
+    transition.indexOf('binding::STORAGE_PROCESS_ID')
+      > transition.lastIndexOf('fence_registration_bindings'),
+    'Storage must stop fail-closed only after the bounded retry fails',
+  );
 });
 
 test('managed runtime generation advances from the persisted high-watermark', async () => {

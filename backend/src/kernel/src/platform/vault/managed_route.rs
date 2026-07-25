@@ -127,42 +127,62 @@ impl KernelManagedVaultRouteHandler {
         expectation: &ManagedRuntimeExpectation,
         route: &VaultCiphertextRouteV1,
     ) -> Result<(), String> {
-        if expectation.registration_id() != STORAGE_PROCESS_ID {
-            return Err("managed Vault ciphertext route is stale".to_owned());
-        }
-        let binding = self
-            .store
-            .platform_storage_bindings()
-            .map_err(|_| "managed Vault ciphertext route is unavailable".to_owned())?
-            .into_iter()
-            .filter(|binding| {
-                (binding.state() == PlatformStorageBindingStateV1::Active
-                    || (binding.state() == PlatformStorageBindingStateV1::Revoking
-                        && route.operation_digest_sha256
-                            == STORAGE_REVOKE_AUDIENCE_OPERATION_DIGEST_V1))
-                    && binding.registration_id() == route.registration_id
-                    && binding.runtime_instance_id() == route.runtime_instance_id
-                    && binding.runtime_generation() == route.caller_runtime_generation
-                    && binding.grant_epoch() == route.grant_epoch
-                    && binding.role_epoch() == route.storage_role_epoch
-                    && binding.credential_lease_revision()
-                        == route.storage_credential_lease_revision
-                    && binding.runtime_principal() == route.storage_runtime_principal
-                    && binding.owner_id() == route.storage_owner_id
-            })
-            .collect::<Vec<_>>();
-        if binding.len() != 1 {
-            return Err("managed Vault ciphertext route is stale".to_owned());
-        }
-        current_managed_runtime_matches(
-            &*self.store,
-            &route.registration_id,
-            &route.runtime_instance_id,
-            route.caller_runtime_generation,
-            route.grant_epoch,
+        authorize_storage_delegated_route(&self.store, expectation, route)
+    }
+}
+
+pub(crate) fn authorize_storage_delegated_route(
+    store: &SqliteControlStore,
+    expectation: &ManagedRuntimeExpectation,
+    route: &VaultCiphertextRouteV1,
+) -> Result<(), String> {
+    if expectation.registration_id() != STORAGE_PROCESS_ID
+        || current_platform_managed_runtime_matches(
+            store,
+            expectation.registration_id(),
+            expectation.runtime_instance_id(),
+            expectation.runtime_generation(),
+            expectation.grant_epoch(),
         )
         .map_err(|_| "managed Vault ciphertext route is unavailable".to_owned())?
-        .then_some(())
-        .ok_or_else(|| "managed Vault ciphertext route is stale".to_owned())
+            != Some(true)
+    {
+        return Err("managed Vault ciphertext route is stale".to_owned());
     }
+    let bindings = store
+        .platform_storage_bindings()
+        .map_err(|_| "managed Vault ciphertext route is unavailable".to_owned())?
+        .into_iter()
+        .filter(|binding| {
+            binding.registration_id() == route.registration_id
+                && binding.runtime_instance_id() == route.runtime_instance_id
+                && binding.runtime_generation() == route.caller_runtime_generation
+                && binding.grant_epoch() == route.grant_epoch
+                && binding.role_epoch() == route.storage_role_epoch
+                && binding.credential_lease_revision() == route.storage_credential_lease_revision
+                && binding.runtime_principal() == route.storage_runtime_principal
+                && binding.owner_id() == route.storage_owner_id
+        })
+        .collect::<Vec<_>>();
+    let [binding] = bindings.as_slice() else {
+        return Err("managed Vault ciphertext route is stale".to_owned());
+    };
+    if binding.state() == PlatformStorageBindingStateV1::Revoking {
+        return (route.operation_digest_sha256 == STORAGE_REVOKE_AUDIENCE_OPERATION_DIGEST_V1)
+            .then_some(())
+            .ok_or_else(|| "managed Vault ciphertext route is stale".to_owned());
+    }
+    if binding.state() != PlatformStorageBindingStateV1::Active {
+        return Err("managed Vault ciphertext route is stale".to_owned());
+    }
+    current_managed_runtime_matches(
+        store,
+        &route.registration_id,
+        &route.runtime_instance_id,
+        route.caller_runtime_generation,
+        route.grant_epoch,
+    )
+    .map_err(|_| "managed Vault ciphertext route is unavailable".to_owned())?
+    .then_some(())
+    .ok_or_else(|| "managed Vault ciphertext route is stale".to_owned())
 }

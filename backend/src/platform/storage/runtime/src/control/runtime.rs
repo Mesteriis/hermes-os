@@ -302,7 +302,12 @@ fn response_for(
                         configuration.desired_bindings = active_bindings.clone();
                         revoked_response(binding)
                     })
-                    .unwrap_or_else(|error| error_response(revocation_error_code(&error)))
+                    .unwrap_or_else(|error| {
+                        if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                            eprintln!("developer_storage_binding_revocation_error={error}");
+                        }
+                        error_response(revocation_error_code(&error))
+                    })
             },
         ),
         Some(Operation::ApplyBinding(request)) => request.binding.zip(request.bundle).map_or_else(

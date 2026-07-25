@@ -11,8 +11,8 @@ use crate::owner_control_proof::owner_control_proof_message_v1;
 use crate::v1::{
     BeginBrowserPairingRequestV1, BeginOwnerControlSessionRequestV1,
     BeginOwnerControlSessionResponseV1, CompleteOwnerControlSessionRequestV1,
-    OwnerControlRequestV1, OwnerControlResponseV1, owner_control_request_v1,
-    owner_control_response_v1,
+    OwnerControlRequestV1, OwnerControlResponseV1, TransitionModuleRegistrationRequestV1,
+    TransitionModuleRegistrationResponseV1, owner_control_request_v1, owner_control_response_v1,
 };
 
 const IPC_TIMEOUT: Duration = Duration::from_secs(5);
@@ -86,6 +86,33 @@ impl OwnerControlClientV1 {
                 Ok(value.pairing_id)
             }
             _ => Err("browser pairing is unavailable".to_owned()),
+        }
+    }
+
+    pub fn transition_module_registration(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        target_state: &str,
+    ) -> Result<TransitionModuleRegistrationResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::TransitionModuleRegistration(
+                TransitionModuleRegistrationRequestV1 {
+                    owner_session_id: owner_session_id.to_owned(),
+                    registration_id: registration_id.to_owned(),
+                    target_state: target_state.to_owned(),
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::TransitionModuleRegistration(value))
+                if value.registration_id == registration_id
+                    && value.registration_state == target_state
+                    && value.grant_epoch > 0 =>
+            {
+                Ok(value)
+            }
+            _ => Err("module registration transition is unavailable".to_owned()),
         }
     }
 

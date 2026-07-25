@@ -28,7 +28,6 @@ pub(crate) fn fence_registration_bindings(
     }
     for binding in bindings {
         if fence_reserved_binding(supervisor, store, &binding).is_err() {
-            supervisor.stop_if_active(STORAGE_PROCESS_ID)?;
             return Err("managed Storage revocation is incomplete".to_owned());
         }
     }

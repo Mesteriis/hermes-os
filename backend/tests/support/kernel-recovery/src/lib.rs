@@ -29,6 +29,8 @@ mod identity {
     pub(crate) mod browser_gateway;
     pub(crate) mod device;
     pub(crate) mod owner;
+    #[path = "../../../../../src/kernel/src/identity/owner_control/mod.rs"]
+    pub(crate) mod owner_control;
 }
 
 #[cfg(test)]
@@ -43,6 +45,8 @@ mod infrastructure {
 mod modules {
     pub(crate) mod capability;
     pub(crate) mod registration;
+    #[path = "../../../../../src/kernel/src/modules/settings/mod.rs"]
+    pub(crate) mod settings;
 }
 
 #[cfg(test)]
@@ -59,6 +63,8 @@ mod platform {
     #[path = "../../../../../src/kernel/src/platform/scheduler/mod.rs"]
     pub(crate) mod scheduler;
     pub(crate) mod macos {
+        #[path = "../../../../../../src/kernel/src/platform/macos/bundled_release.rs"]
+        pub(crate) mod bundled_release;
         #[path = "../../../../../../src/kernel/src/platform/macos/code_signature.rs"]
         pub(crate) mod code_signature;
         #[path = "../../../../../../src/kernel/src/platform/macos/host_bridge_descriptor.rs"]
