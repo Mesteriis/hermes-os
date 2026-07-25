@@ -357,6 +357,59 @@ test('allows an owner assembly unit to compose runtime and persistence only down
   )).has('forbidden_dependency'));
 });
 
+test('keeps the Mail release assembly downstream from Mail runtime and persistence', () => {
+  const runtime = workspacePackage('hermes-mail-runtime', {
+    role: 'integration',
+    owner: 'mail',
+    surface: 'runtime',
+  });
+  const persistence = workspacePackage('hermes-mail-persistence', {
+    role: 'integration',
+    owner: 'mail',
+    surface: 'persistence',
+  });
+  const assembly = workspacePackage(
+    'hermes-mail-assembly',
+    { role: 'integration', owner: 'mail', surface: 'assembly' },
+    [
+      dependency('hermes-mail-persistence'),
+      dependency('hermes-mail-runtime'),
+    ],
+  );
+
+  assert.deepEqual(
+    validateCargoMetadata(
+      canonicalPolicyForTests(),
+      metadata([kernel(), runtime, persistence, assembly]),
+    ),
+    [],
+  );
+
+  for (const [forbiddenConsumer, expectedCode] of [
+    [
+      workspacePackage(
+        'hermes-mail-runtime',
+        { role: 'integration', owner: 'mail', surface: 'runtime' },
+        [dependency('hermes-mail-assembly')],
+      ),
+      'forbidden_dependency',
+    ],
+    [
+      workspacePackage(
+        'hermes-communications-runtime',
+        { role: 'domain', owner: 'communications', surface: 'runtime' },
+        [dependency('hermes-mail-assembly')],
+      ),
+      'implementation_dependency',
+    ],
+  ]) {
+    assert.ok(codes(validateCargoMetadata(
+      canonicalPolicyForTests(),
+      metadata([kernel(), forbiddenConsumer, persistence, assembly]),
+    )).has(expectedCode));
+  }
+});
+
 
 
 for (const sqlClient of ['sqlx']) {

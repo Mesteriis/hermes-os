@@ -53,6 +53,7 @@ members = [
   "src/mail-smtp",
   "src/mail-persistence",
   "src/mail-runtime",
+  "src/mail-assembly",
   "src/telegram-api",
   "src/telegram-core",
   "src/telegram-tdlib",

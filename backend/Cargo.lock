@@ -1976,6 +1976,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-mail-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-mail-persistence",
+ "hermes-mail-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-mail-communications-slice-testkit"
 version = "0.1.0"
 dependencies = [

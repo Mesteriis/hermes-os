@@ -256,6 +256,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-mail-smtp', role: 'integration', owner: 'mail', surface: 'implementation' },
   { name: 'hermes-mail-persistence', role: 'integration', owner: 'mail', surface: 'persistence' },
   { name: 'hermes-mail-runtime', role: 'integration', owner: 'mail', surface: 'runtime' },
+  { name: 'hermes-mail-assembly', role: 'integration', owner: 'mail', surface: 'assembly' },
   { name: 'hermes-telegram-api', role: 'integration', owner: 'telegram', surface: 'contract' },
   { name: 'hermes-telegram-core', role: 'integration', owner: 'telegram', surface: 'implementation' },
   { name: 'hermes-telegram-tdlib', role: 'integration', owner: 'telegram', surface: 'implementation' },
@@ -430,6 +431,12 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-storage-protocol', kind: 'normal' },
     { name: 'hermes-storage-vault', kind: 'normal' },
     { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
+  'hermes-mail-assembly': [
+    { name: 'hermes-mail-persistence', kind: 'normal' },
+    { name: 'hermes-mail-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
   'hermes-telegram-api': [],
   'hermes-telegram-core': [
@@ -907,6 +914,11 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-mail-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
   'hermes-telegram-api': [
     { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive'] },
