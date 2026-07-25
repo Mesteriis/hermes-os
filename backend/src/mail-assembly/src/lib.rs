@@ -19,8 +19,8 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 
 pub const MAIL_ASSEMBLY_FRAGMENT_VERSION_V1: u32 = 1;
-pub const MAIL_ASSEMBLY_OWNER_ID: &str = "mail";
-pub const MAIL_ASSEMBLY_MODULE_ID: &str = "hermes-mail-runtime";
+pub const MAIL_ASSEMBLY_OWNER_ID: &str = hermes_mail_runtime::admission::MAIL_OWNER_ID;
+pub const MAIL_ASSEMBLY_MODULE_ID: &str = hermes_mail_runtime::admission::MAIL_MODULE_ID;
 pub const MAIL_RUNTIME_ARTIFACT_ID: &str = "mail.runtime.v1";
 pub const MAIL_STORAGE_ARTIFACT_ID: &str = "mail.storage.v1";
 pub const MAIL_DESCRIPTOR_FILE: &str = "mail.runtime.descriptor.pb";

@@ -9,12 +9,18 @@ use hermes_communications_ingress::admission::{
     communication_attachment_blob_admission_observed_publish_request_v1,
     communication_observed_publish_request_v1,
 };
+use hermes_mail_api::client_contract::{
+    MAIL_CLIENT_CONTRACT_MAJOR, MAIL_CLIENT_CONTRACT_REVISION, MAIL_CLIENT_DESCRIPTOR_SET_V1,
+    MailClientContractV1,
+};
+pub use hermes_mail_api::client_contract::{MAIL_MODULE_ID, MAIL_OWNER_ID};
 use hermes_runtime_protocol::v1::{
     BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1,
-    DurableEnvelopeKindV1, EventRouteDirectionV1, EventRouteRequestV1,
+    ClientRpcRouteV1, DurableEnvelopeKindV1, EventRouteDirectionV1, EventRouteRequestV1,
     EventSubscriptionRequirementV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1,
-    RuntimeBudgetRequestV1, SettingsSchemaRefV1, StorageNamespaceRequestV1, VaultActionV1,
-    VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1, capability_request_v1::Request,
+    ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1,
+    StorageNamespaceRequestV1, VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1,
+    VaultTargetScopeV1, capability_request_v1::Request,
 };
 use sha2::{Digest, Sha256};
 
@@ -22,10 +28,10 @@ use crate::settings::{
     MAIL_SETTINGS_SCHEMA_MAJOR_V1, MAIL_SETTINGS_SCHEMA_REVISION_V1, mail_settings_schema_bytes_v1,
 };
 
-pub const MAIL_MODULE_ID: &str = "hermes-mail-runtime";
-pub const MAIL_OWNER_ID: &str = "mail";
 pub const MAIL_BLOB_CAPABILITY_ID: &str = "mail.blob.v1";
-pub const MAIL_CREDENTIALS_CAPABILITY_ID: &str = "mail.credentials.v1";
+pub const MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID: &str = "mail.gmail.credentials.v1";
+pub const MAIL_IMAP_CREDENTIALS_CAPABILITY_ID: &str = "mail.imap.credentials.v1";
+pub const MAIL_SMTP_CREDENTIALS_CAPABILITY_ID: &str = "mail.smtp.credentials.v1";
 pub const MAIL_EVENTS_CAPABILITY_ID: &str = "mail.events.v1";
 pub const MAIL_STORAGE_CAPABILITY_ID: &str = "mail.storage.v1";
 pub const MAIL_ATTACHMENT_BLOB_MAX_BYTES: u64 = 16 * 1024 * 1024;
@@ -39,10 +45,54 @@ pub const MAIL_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
 pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
         mail_blob_capability_v1(),
-        mail_credentials_capability_v1(),
+        mail_client_capability_v1(MailClientContractV1::Delivery),
         mail_events_capability_v1(),
+        mail_provider_credential_capability_v1(
+            MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID,
+            "mail_gmail_access_token",
+        ),
+        mail_provider_credential_capability_v1(
+            MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
+            "mail_imap_password",
+        ),
+        mail_provider_credential_capability_v1(
+            MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,
+            "mail_smtp_password",
+        ),
         mail_storage_capability_v1(),
+        mail_client_capability_v1(MailClientContractV1::Sync),
     ]
+}
+
+fn mail_client_capability_v1(contract: MailClientContractV1) -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: contract.capability_id().to_owned(),
+        capability_revision: 1,
+        criticality: match contract {
+            MailClientContractV1::Sync => CapabilityCriticalityV1::Required,
+            MailClientContractV1::Delivery => CapabilityCriticalityV1::Optional,
+        } as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+            contract: Some(mail_client_contract_reference_v1(contract)),
+            client_rpc_route: Some(ClientRpcRouteV1 {
+                path: contract.connect_path().to_owned(),
+            }),
+        }],
+        ..Default::default()
+    }
+}
+
+fn mail_client_contract_reference_v1(
+    contract: MailClientContractV1,
+) -> hermes_runtime_protocol::v1::ContractReferenceV1 {
+    hermes_runtime_protocol::v1::ContractReferenceV1 {
+        owner: MAIL_OWNER_ID.to_owned(),
+        name: contract.contract_name().to_owned(),
+        major: MAIL_CLIENT_CONTRACT_MAJOR,
+        revision: MAIL_CLIENT_CONTRACT_REVISION,
+        schema_sha256: Sha256::digest(MAIL_CLIENT_DESCRIPTOR_SET_V1).to_vec(),
+    }
 }
 
 #[must_use]
@@ -61,19 +111,15 @@ pub fn mail_blob_capability_v1() -> CapabilityDescriptorV1 {
 }
 
 #[must_use]
-pub fn mail_credentials_capability_v1() -> CapabilityDescriptorV1 {
+fn mail_provider_credential_capability_v1(
+    capability_id: &str,
+    purpose_id: &str,
+) -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
-        capability_id: MAIL_CREDENTIALS_CAPABILITY_ID.to_owned(),
+        capability_id: capability_id.to_owned(),
         capability_revision: 1,
-        criticality: CapabilityCriticalityV1::Required as i32,
-        requests: [
-            "mail_gmail_access_token",
-            "mail_imap_password",
-            "mail_smtp_password",
-        ]
-        .into_iter()
-        .map(provider_credential_request_v1)
-        .collect(),
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![provider_credential_request_v1(purpose_id)],
         ..Default::default()
     }
 }
@@ -187,9 +233,13 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 MAIL_BLOB_CAPABILITY_ID,
-                MAIL_CREDENTIALS_CAPABILITY_ID,
+                MailClientContractV1::Delivery.capability_id(),
                 MAIL_EVENTS_CAPABILITY_ID,
+                MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID,
+                MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
+                MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,
                 MAIL_STORAGE_CAPABILITY_ID,
+                MailClientContractV1::Sync.capability_id(),
             ]
         );
 
@@ -206,5 +256,53 @@ mod tests {
                 .iter()
                 .all(|request| matches!(request.request, Some(Request::EventRoute(_))))
         );
+
+        for contract in MailClientContractV1::ALL {
+            let capability = descriptor
+                .capabilities
+                .iter()
+                .find(|capability| capability.capability_id == contract.capability_id())
+                .expect("Mail client capability");
+            assert_eq!(capability.provides.len(), 1);
+            assert_eq!(
+                capability.provides[0]
+                    .client_rpc_route
+                    .as_ref()
+                    .expect("Mail client route")
+                    .path,
+                contract.connect_path()
+            );
+            assert_eq!(
+                capability.criticality,
+                match contract {
+                    MailClientContractV1::Sync => CapabilityCriticalityV1::Required,
+                    MailClientContractV1::Delivery => CapabilityCriticalityV1::Optional,
+                } as i32
+            );
+        }
+
+        for (capability_id, purpose_id) in [
+            (
+                MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID,
+                "mail_gmail_access_token",
+            ),
+            (MAIL_IMAP_CREDENTIALS_CAPABILITY_ID, "mail_imap_password"),
+            (MAIL_SMTP_CREDENTIALS_CAPABILITY_ID, "mail_smtp_password"),
+        ] {
+            let capability = descriptor
+                .capabilities
+                .iter()
+                .find(|capability| capability.capability_id == capability_id)
+                .expect("Mail credential capability");
+            assert_eq!(
+                capability.criticality,
+                CapabilityCriticalityV1::Optional as i32
+            );
+            assert_eq!(capability.requests.len(), 1);
+            assert!(matches!(
+                capability.requests[0].request.as_ref(),
+                Some(Request::VaultPurpose(request)) if request.purpose_id == purpose_id
+            ));
+        }
     }
 }

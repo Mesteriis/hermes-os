@@ -1,122 +1,157 @@
 use prost::Message;
 
-use crate::{
-    MailClientRequestV1, MailClientResponseV1, MailSendMailRequestV1, MailSyncInboxRequestV1, wire,
-};
+use crate::{MailClientResponseV1, MailSendMailRequestV1, MailSyncInboxRequestV1, wire};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailClientWireErrorV1 {
     InvalidPayload,
-    MissingVariant,
 }
 
-pub fn encode_request(request: &MailClientRequestV1) -> Vec<u8> {
-    use wire::mail_client_request_v1::Request;
-    let request = match request {
-        MailClientRequestV1::SyncInbox(value) => Request::SyncInbox(wire::SyncInboxRequestV1 {
-            operation_id: value.operation_id.clone(),
-        }),
-        MailClientRequestV1::SendMail(value) => Request::SendMail(wire::SendMailRequestV1 {
-            operation_id: value.operation_id.clone(),
-            provider_conversation_id: value.provider_conversation_id.clone(),
-            recipient: value.recipients.clone(),
-            subject: value.subject.clone(),
-            text_body: value.text_body.clone(),
-        }),
-    };
-    wire::MailClientRequestV1 {
-        request: Some(request),
+#[must_use]
+pub fn encode_sync_request(request: &MailSyncInboxRequestV1) -> Vec<u8> {
+    wire::SyncInboxRequestV1 {
+        operation_id: request.operation_id.clone(),
     }
     .encode_to_vec()
 }
 
-pub fn decode_request(bytes: &[u8]) -> Result<MailClientRequestV1, MailClientWireErrorV1> {
-    use wire::mail_client_request_v1::Request;
-    let request = wire::MailClientRequestV1::decode(bytes)
-        .map_err(|_| MailClientWireErrorV1::InvalidPayload)?
-        .request
-        .ok_or(MailClientWireErrorV1::MissingVariant)?;
-    match request {
-        Request::SyncInbox(value) => Ok(MailClientRequestV1::SyncInbox(MailSyncInboxRequestV1 {
-            operation_id: value.operation_id,
-        })),
-        Request::SendMail(value) => Ok(MailClientRequestV1::SendMail(MailSendMailRequestV1 {
-            operation_id: value.operation_id,
-            provider_conversation_id: value.provider_conversation_id,
-            recipients: value.recipient,
-            subject: value.subject,
-            text_body: value.text_body,
-        })),
+pub fn decode_sync_request(bytes: &[u8]) -> Result<MailSyncInboxRequestV1, MailClientWireErrorV1> {
+    let request = wire::SyncInboxRequestV1::decode(bytes)
+        .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    let request = MailSyncInboxRequestV1 {
+        operation_id: request.operation_id,
+    };
+    if request.operation_id.trim().is_empty() || encode_sync_request(&request) != bytes {
+        return Err(MailClientWireErrorV1::InvalidPayload);
     }
+    Ok(request)
 }
 
-pub fn encode_response(response: &MailClientResponseV1) -> Vec<u8> {
-    use wire::mail_client_response_v1::Response;
-    let response = match response {
-        MailClientResponseV1::SyncInboxCompleted {
-            operation_id,
-            observed_messages,
-        } => Response::SyncInboxCompleted(wire::SyncInboxCompletedV1 {
-            operation_id: operation_id.clone(),
-            observed_messages: *observed_messages,
-        }),
-        MailClientResponseV1::MailAccepted {
-            operation_id,
-            response_code,
-        } => Response::MailAccepted(wire::MailAcceptedV1 {
-            operation_id: operation_id.clone(),
-            response_code: u32::from(*response_code),
-        }),
-    };
-    wire::MailClientResponseV1 {
-        response: Some(response),
+#[must_use]
+pub fn encode_delivery_request(request: &MailSendMailRequestV1) -> Vec<u8> {
+    wire::SendMailRequestV1 {
+        operation_id: request.operation_id.clone(),
+        provider_conversation_id: request.provider_conversation_id.clone(),
+        recipient: request.recipients.clone(),
+        subject: request.subject.clone(),
+        text_body: request.text_body.clone(),
     }
     .encode_to_vec()
 }
 
-pub fn decode_response(bytes: &[u8]) -> Result<MailClientResponseV1, MailClientWireErrorV1> {
-    use wire::mail_client_response_v1::Response;
-    let response = wire::MailClientResponseV1::decode(bytes)
-        .map_err(|_| MailClientWireErrorV1::InvalidPayload)?
-        .response
-        .ok_or(MailClientWireErrorV1::MissingVariant)?;
-    match response {
-        Response::SyncInboxCompleted(value) => Ok(MailClientResponseV1::SyncInboxCompleted {
-            operation_id: value.operation_id,
-            observed_messages: value.observed_messages,
-        }),
-        Response::MailAccepted(value) => Ok(MailClientResponseV1::MailAccepted {
-            operation_id: value.operation_id,
-            response_code: u16::try_from(value.response_code)
-                .map_err(|_| MailClientWireErrorV1::InvalidPayload)?,
-        }),
+pub fn decode_delivery_request(
+    bytes: &[u8],
+) -> Result<MailSendMailRequestV1, MailClientWireErrorV1> {
+    let request = wire::SendMailRequestV1::decode(bytes)
+        .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    let request = MailSendMailRequestV1 {
+        operation_id: request.operation_id,
+        provider_conversation_id: request.provider_conversation_id,
+        recipients: request.recipient,
+        subject: request.subject,
+        text_body: request.text_body,
+    };
+    if request.operation_id.trim().is_empty()
+        || request.recipients.is_empty()
+        || request
+            .recipients
+            .iter()
+            .any(|recipient| recipient.trim().is_empty())
+        || encode_delivery_request(&request) != bytes
+    {
+        return Err(MailClientWireErrorV1::InvalidPayload);
     }
+    Ok(request)
+}
+
+#[must_use]
+pub fn encode_sync_response(operation_id: &str, observed_messages: u32) -> Vec<u8> {
+    wire::SyncInboxCompletedV1 {
+        operation_id: operation_id.to_owned(),
+        observed_messages,
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_sync_response(bytes: &[u8]) -> Result<MailClientResponseV1, MailClientWireErrorV1> {
+    let response = wire::SyncInboxCompletedV1::decode(bytes)
+        .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    if response.operation_id.trim().is_empty()
+        || encode_sync_response(&response.operation_id, response.observed_messages) != bytes
+    {
+        return Err(MailClientWireErrorV1::InvalidPayload);
+    }
+    Ok(MailClientResponseV1::SyncInboxCompleted {
+        operation_id: response.operation_id,
+        observed_messages: response.observed_messages,
+    })
+}
+
+#[must_use]
+pub fn encode_delivery_response(operation_id: &str, response_code: u16) -> Vec<u8> {
+    wire::MailAcceptedV1 {
+        operation_id: operation_id.to_owned(),
+        response_code: u32::from(response_code),
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_delivery_response(
+    bytes: &[u8],
+) -> Result<MailClientResponseV1, MailClientWireErrorV1> {
+    let response =
+        wire::MailAcceptedV1::decode(bytes).map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    let response_code =
+        u16::try_from(response.response_code).map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    if response.operation_id.trim().is_empty()
+        || !(200..600).contains(&response_code)
+        || encode_delivery_response(&response.operation_id, response_code) != bytes
+    {
+        return Err(MailClientWireErrorV1::InvalidPayload);
+    }
+    Ok(MailClientResponseV1::MailAccepted {
+        operation_id: response.operation_id,
+        response_code,
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_request, decode_response, encode_request, encode_response};
-    use crate::{
-        MailClientRequestV1, MailClientResponseV1, MailSendMailRequestV1, MailSyncInboxRequestV1,
-    };
+    use super::*;
+
     #[test]
-    fn preserves_sync_request_and_terminal_response() {
-        let request = MailClientRequestV1::SyncInbox(MailSyncInboxRequestV1 {
-            operation_id: "operation".into(),
-        });
-        assert_eq!(decode_request(&encode_request(&request)), Ok(request));
-        let smtp = MailClientRequestV1::SendMail(MailSendMailRequestV1 {
-            operation_id: "operation".into(),
-            provider_conversation_id: "conversation".into(),
-            recipients: vec!["owner@example.test".into()],
-            subject: "Subject".into(),
-            text_body: "Body".into(),
-        });
-        assert_eq!(decode_request(&encode_request(&smtp)), Ok(smtp));
-        let response = MailClientResponseV1::SyncInboxCompleted {
-            operation_id: "operation".into(),
-            observed_messages: 7,
+    fn preserves_each_exact_route_payload() {
+        let sync = MailSyncInboxRequestV1 {
+            operation_id: "sync-operation".to_owned(),
         };
-        assert_eq!(decode_response(&encode_response(&response)), Ok(response));
+        assert_eq!(decode_sync_request(&encode_sync_request(&sync)), Ok(sync));
+
+        let delivery = MailSendMailRequestV1 {
+            operation_id: "delivery-operation".to_owned(),
+            provider_conversation_id: "conversation".to_owned(),
+            recipients: vec!["recipient@example.com".to_owned()],
+            subject: "subject".to_owned(),
+            text_body: "body".to_owned(),
+        };
+        assert_eq!(
+            decode_delivery_request(&encode_delivery_request(&delivery)),
+            Ok(delivery)
+        );
+    }
+
+    #[test]
+    fn rejects_an_exact_delivery_payload_as_sync() {
+        let delivery = MailSendMailRequestV1 {
+            operation_id: "delivery-operation".to_owned(),
+            provider_conversation_id: "conversation".to_owned(),
+            recipients: vec!["recipient@example.com".to_owned()],
+            subject: "subject".to_owned(),
+            text_body: "body".to_owned(),
+        };
+
+        assert_eq!(
+            decode_sync_request(&encode_delivery_request(&delivery)),
+            Err(MailClientWireErrorV1::InvalidPayload)
+        );
     }
 }

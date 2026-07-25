@@ -22,6 +22,8 @@ use hermes_mail_persistence::{
 use hermes_runtime_protocol::v1::ContractReferenceV1;
 use prost::Message;
 
+use crate::admission::MAIL_MODULE_ID;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailAttachmentAnchorMappingErrorV1 {
     InvalidEnvelope,
@@ -135,7 +137,7 @@ fn validate_mail_source_observation(
         || envelope
             .source
             .as_ref()
-            .is_none_or(|source| source.module_id != "mail-runtime")
+            .is_none_or(|source| source.module_id != MAIL_MODULE_ID)
     {
         return Err(MailAttachmentAnchorMappingErrorV1::SourceObservationMismatch);
     }

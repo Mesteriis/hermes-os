@@ -44,6 +44,7 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::MailRuntimeAdmission;
+use crate::admission::MAIL_MODULE_ID;
 use crate::attachment_anchor_mapping::{
     MailAttachmentAnchorMappingErrorV1, consume_next_attachment_anchor_recorded_v1,
 };
@@ -555,13 +556,12 @@ impl MailAdmittedRuntime {
             .map_err(|_| MailBootstrapError::Admission)?;
         let record = build_observation_outbox_record_v1(
             &observation,
-            &ObservationEnvelopeContextV1 {
-                runtime_instance_id: self.runtime_instance_id.clone(),
-                runtime_generation: self.runtime_generation,
-                module_id: "mail-runtime".to_owned(),
-                recorded_at_unix_seconds: completed_at,
-                recorded_at_nanos: 0,
-            },
+            &observation_context(
+                &self.runtime_instance_id,
+                self.runtime_generation,
+                completed_at,
+                0,
+            ),
         )
         .map_err(|_| MailBootstrapError::Admission)?;
         self.durable
@@ -681,13 +681,12 @@ impl MailAdmittedRuntime {
             )?;
             let record = build_observation_outbox_record_v1(
                 &observation,
-                &ObservationEnvelopeContextV1 {
-                    runtime_instance_id: self.runtime_instance_id.clone(),
-                    runtime_generation: self.runtime_generation,
-                    module_id: "mail-runtime".to_owned(),
-                    recorded_at_unix_seconds: observed_at_unix_seconds,
-                    recorded_at_nanos: observed_at_nanos,
-                },
+                &observation_context(
+                    &self.runtime_instance_id,
+                    self.runtime_generation,
+                    observed_at_unix_seconds,
+                    observed_at_nanos,
+                ),
             )
             .map_err(|_| MailBootstrapError::Admission)?;
             self.durable
@@ -726,13 +725,12 @@ impl MailAdmittedRuntime {
                 .map_err(|_| MailBootstrapError::Provider)?;
                 let record = build_observation_outbox_record_v1(
                     &observation,
-                    &ObservationEnvelopeContextV1 {
-                        runtime_instance_id: self.runtime_instance_id.clone(),
-                        runtime_generation: self.runtime_generation,
-                        module_id: "mail-runtime".to_owned(),
-                        recorded_at_unix_seconds: observed_at_unix_seconds,
-                        recorded_at_nanos: observed_at_nanos,
-                    },
+                    &observation_context(
+                        &self.runtime_instance_id,
+                        self.runtime_generation,
+                        observed_at_unix_seconds,
+                        observed_at_nanos,
+                    ),
                 )
                 .map_err(|_| MailBootstrapError::Admission)?;
                 self.durable
@@ -977,13 +975,12 @@ impl MailAdmittedRuntime {
             records.push(
                 build_observation_outbox_record_v1(
                     &observation,
-                    &ObservationEnvelopeContextV1 {
-                        runtime_instance_id: self.runtime_instance_id.clone(),
-                        runtime_generation: self.runtime_generation,
-                        module_id: "mail-runtime".to_owned(),
-                        recorded_at_unix_seconds: observed_at_unix_seconds,
-                        recorded_at_nanos: observed_at_nanos,
-                    },
+                    &observation_context(
+                        &self.runtime_instance_id,
+                        self.runtime_generation,
+                        observed_at_unix_seconds,
+                        observed_at_nanos,
+                    ),
                 )
                 .map_err(|_| MailBootstrapError::Admission)?,
             );
@@ -1018,13 +1015,12 @@ impl MailAdmittedRuntime {
                 records.push(
                     build_observation_outbox_record_v1(
                         &observation,
-                        &ObservationEnvelopeContextV1 {
-                            runtime_instance_id: self.runtime_instance_id.clone(),
-                            runtime_generation: self.runtime_generation,
-                            module_id: "mail-runtime".to_owned(),
-                            recorded_at_unix_seconds: observed_at_unix_seconds,
-                            recorded_at_nanos: observed_at_nanos,
-                        },
+                        &observation_context(
+                            &self.runtime_instance_id,
+                            self.runtime_generation,
+                            observed_at_unix_seconds,
+                            observed_at_nanos,
+                        ),
                     )
                     .map_err(|_| MailBootstrapError::Admission)?,
                 );
@@ -1137,13 +1133,12 @@ impl MailAdmittedRuntime {
         else {
             return Ok(());
         };
-        let context = ObservationEnvelopeContextV1 {
-            runtime_instance_id: self.runtime_instance_id.clone(),
-            runtime_generation: self.runtime_generation,
-            module_id: "mail-runtime".to_owned(),
-            recorded_at_unix_seconds: observed_at_unix_seconds,
-            recorded_at_nanos: observed_at_nanos,
-        };
+        let context = observation_context(
+            &self.runtime_instance_id,
+            self.runtime_generation,
+            observed_at_unix_seconds,
+            observed_at_nanos,
+        );
         let requested = build_attachment_blob_admission_outbox_record_v1(
             &AttachmentBlobAdmissionFactV1 {
                 attachment_anchor_id: mapping.attachment_anchor_id,
@@ -1375,6 +1370,21 @@ fn hex_digest(value: &[u8]) -> String {
     value.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+fn observation_context(
+    runtime_instance_id: &str,
+    runtime_generation: u64,
+    recorded_at_unix_seconds: i64,
+    recorded_at_nanos: i32,
+) -> ObservationEnvelopeContextV1 {
+    ObservationEnvelopeContextV1 {
+        runtime_instance_id: runtime_instance_id.to_owned(),
+        runtime_generation,
+        module_id: MAIL_MODULE_ID.to_owned(),
+        recorded_at_unix_seconds,
+        recorded_at_nanos,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1389,12 +1399,12 @@ mod tests {
         )
         .expect("subject");
         let permit =
-            RuntimePublishPermitV1::new("mail-runtime", "mail-runtime-1", 1, 1, vec![expected])
+            RuntimePublishPermitV1::new(MAIL_MODULE_ID, "mail-runtime-1", 1, 1, vec![expected])
                 .expect("permit");
         assert!(attachment_blob_admission_publish_permitted(&permit).is_ok_and(|value| value));
 
         let observed_only = RuntimePublishPermitV1::new(
-            "mail-runtime",
+            MAIL_MODULE_ID,
             "mail-runtime-1",
             1,
             1,
@@ -1412,6 +1422,15 @@ mod tests {
         assert!(
             attachment_blob_admission_publish_permitted(&observed_only).is_ok_and(|value| !value)
         );
+    }
+
+    #[test]
+    fn observations_use_the_exact_admitted_mail_module_identity() {
+        let context = observation_context("mail-runtime-1", 7, 10, 11);
+
+        assert_eq!(context.module_id, MAIL_MODULE_ID);
+        assert_eq!(context.runtime_instance_id, "mail-runtime-1");
+        assert_eq!(context.runtime_generation, 7);
     }
 
     #[test]

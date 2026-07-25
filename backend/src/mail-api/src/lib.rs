@@ -5,6 +5,7 @@ pub const PACKAGE: &str = "hermes-mail-api";
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail.v1.rs"));
 }
+pub mod client_contract;
 pub mod client_wire;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
