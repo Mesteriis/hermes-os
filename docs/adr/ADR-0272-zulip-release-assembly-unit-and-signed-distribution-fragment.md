@@ -2,12 +2,12 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Частично реализовано в `81449906e`. Canonical Zulip
+Состояние реализации: Реализовано в `81449906e` и `ff2c53983`. Canonical Zulip
 runtime descriptor, settings schema и immutable owner-local Storage bundle
 материализуются отдельной `hermes-zulip-assembly` unit в exact unsigned
-двухэлементный fragment. Unit/Rust и architecture guards доказывают gates
-1–5 и 7. Generic signed distribution binding из gate 6 ещё не реализован и
-`zulip_integration_v1` не открыт.
+двухэлементный fragment. Generic compiler повторно проверяет и подписывает
+runtime/Storage bindings; Rust, distribution и architecture guards доказывают
+gates 1–7. `zulip_integration_v1` этим не открыт.
 
 Зависит от:
 
@@ -114,7 +114,9 @@ fences, live provider and event conformance остаются обязатель�
 
 - `cargo test -p hermes-zulip-persistence -p hermes-zulip-assembly`: 7 passed;
 - strict Clippy для Zulip persistence/runtime/assembly: passed;
-- backend architecture/policy/SRP/Cargo/fmt/evidence gates: 462 architecture
+- signed distribution compiler test materializes exact Zulip assembly output
+  and binds runtime/Storage digests: passed;
+- backend architecture/policy/SRP/Cargo/fmt/evidence gates: 463 architecture
   tests passed.
 
 ## Отклонённые варианты

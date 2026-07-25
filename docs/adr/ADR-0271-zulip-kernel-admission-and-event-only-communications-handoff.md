@@ -11,8 +11,8 @@ helpers и `MSG_PEEK` удалены, а вложенная client delivery по
 correlation-bound `RUNTIME_BUSY`. Generated command/query contracts, exact
 descriptor-set binding, canonical settings schema и `ModuleDescriptorV1` с
 раздельными client/platform capabilities реализованы. Immutable owner-local
-Storage bundle и отдельная unsigned release assembly unit реализованы. Generic
-signed distribution binding и live managed admission ещё не реализованы.
+Storage bundle, отдельная unsigned release assembly unit и generic signed
+distribution binding реализованы. Live managed admission ещё не реализован.
 
 Уточняет:
 
@@ -187,7 +187,8 @@ inventory, make integration a domain, or authorize WhatsApp/another provider.
 2. ~~Split generated command/query routes and build exact descriptor/settings.~~
    Реализовано в `6f9229ce3`.
 3. ~~Add immutable Storage bundle and separate release assembly unit.~~
-   Реализовано в `81449906e`.
+   Реализовано в `81449906e`; signed distribution binding доказан в
+   `ff2c53983`.
 4. Add signed managed launch, grant and revoke/generation conformance.
 5. Prove live provider command and event-only Communications delivery.
 6. Remove the frontend legacy REST surface in its own client slice.
