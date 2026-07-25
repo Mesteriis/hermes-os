@@ -1,7 +1,9 @@
-//! Live accepted-versus-terminal Mail delivery with SMTP and event-only handoff.
+//! Live Gmail API mutation with least-privilege admission and event-only handoff.
 
 use std::time::{Duration, Instant};
 
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hermes_events_protocol::validation::envelope::decode_envelope_v1;
 use hermes_mail_api::{
     MailClientRequestV1, MailClientResponseV1, MailSendMailRequestV1,
@@ -12,20 +14,21 @@ use crate::identity::device::signer::DeviceSigner;
 
 use super::*;
 
-const OPERATION_ID: &str = "managed-mail-smtp-delivery-1";
-const PRIVATE_BODY: &str = "private SMTP body must stay outside durable route metadata";
-const PRIVATE_RECIPIENT: &str = "recipient@example.test";
+const OPERATION_ID: &str = "managed-mail-gmail-delivery-1";
+const PROVIDER_THREAD_ID: &str = "gmail-thread-1";
+const PRIVATE_BODY: &str = "private Gmail body must stay outside durable event bytes";
+const PRIVATE_RECIPIENT: &str = "gmail-recipient@example.test";
+const GMAIL_ACCESS_TOKEN: &str = "managed-mail-gmail-access-token";
 
 #[test]
-#[ignore = "requires disposable Docker plus real managed Vault, Storage, Mail, SMTP and NATS"]
-fn managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event() {
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, Mail, Gmail TLS and NATS"]
+fn managed_mail_gmail_runtime_mutates_once_and_replays_event_without_private_payload() {
     assert_eq!(
         std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
         Ok("1")
     );
-    let imap = MailImapFixture::start();
-    let smtp = MailSmtpFixture::start();
-    let root = unique_target_root("hermes-managed-mail-smtp-delivery");
+    let gmail = MailGmailFixture::start();
+    let root = unique_target_root("hermes-managed-mail-gmail-delivery");
     let data = private_directory(short_communications_kernel_data_directory());
     let vault_dir = private_directory(data.join("vault"));
     initialize_vault(&vault_dir, &credential_directory());
@@ -44,7 +47,7 @@ fn managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event()
             owner_signer.public_key_sec1(),
         ))
         .expect("claim initial owner");
-    let admitted_mail = admit_mail_delivery_runtime(&store);
+    let admitted_mail = admit_mail_gmail_delivery_runtime(&store);
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
     configure_route_handler(&supervisor, &store, &data);
@@ -81,21 +84,20 @@ fn managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event()
     let admitted_mail = prepare_mail_runtime(&supervisor, &store, admitted_mail);
     configure_communications_jetstream(&store);
     start_communications_domain(&supervisor, &store, &root.join("runtime"));
-    let mail = start_mail_delivery_runtime(
+    let mail = start_mail_gmail_delivery_runtime(
         &supervisor,
         &store,
         &data,
         &root.join("runtime"),
         admitted_mail,
-        imap.port(),
-        MailSmtpFixtureSettingsV1 {
-            port: smtp.port(),
-            ca_certificate_pem: smtp.ca_certificate_pem().to_owned(),
+        MailGmailFixtureSettingsV1 {
+            port: gmail.port(),
+            ca_certificate_pem: gmail.ca_certificate_pem().to_owned(),
         },
     );
     wait_for_mail_ready(&supervisor, &mail);
 
-    let event_runtime = tokio::runtime::Runtime::new().expect("Mail delivery event runtime");
+    let event_runtime = tokio::runtime::Runtime::new().expect("Gmail delivery event runtime");
     let _event_runtime_context = event_runtime.enter();
     let durable = event_runtime.block_on(connect_postgres());
     event_runtime
@@ -110,56 +112,65 @@ fn managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event()
     let (client, mut observations, mut canonical_events) = event_runtime.block_on(async {
         let client = async_nats::connect(endpoint)
             .await
-            .expect("connect Mail delivery observer");
+            .expect("connect Gmail delivery observer");
         let observations = client
             .subscribe(MAIL_DELIVERY_OBSERVATION_SUBJECT)
             .await
-            .expect("subscribe Mail delivery observations");
+            .expect("subscribe Gmail delivery observations");
         let canonical_events = client
             .subscribe(MAIL_DELIVERY_CANONICAL_EVENT_SUBJECT)
             .await
-            .expect("subscribe Communications canonical events");
+            .expect("subscribe Gmail canonical events");
         client
             .flush()
             .await
-            .expect("activate Mail delivery observers");
+            .expect("activate Gmail delivery observers");
         (client, observations, canonical_events)
     });
 
     set_authenticated_nats_container_running(false);
-    assert_delivery_accepted(&store, &supervisor, &mail);
-    assert_delivery_completed(&store, &supervisor, &mail, OPERATION_ID, 250);
-    assert_eq!(smtp.accepted_messages(), 1);
-    let message = smtp.last_message();
+    assert_gmail_delivery_accepted(&store, &supervisor, &mail);
+    assert_delivery_completed(&store, &supervisor, &mail, OPERATION_ID, 200);
+    assert_eq!(gmail.accepted_mutations(), 1);
+    let request = gmail.last_request();
+    assert_eq!(request.path, "/gmail/v1/users/me/messages/send");
+    assert_eq!(
+        request.authorization,
+        format!("Bearer {GMAIL_ACCESS_TOKEN}")
+    );
+    assert_eq!(request.thread_id, PROVIDER_THREAD_ID);
+    let rfc822 = URL_SAFE_NO_PAD
+        .decode(&request.raw)
+        .expect("decode Gmail RFC822 body");
     assert!(
-        message
+        rfc822
             .windows(PRIVATE_BODY.len())
             .any(|bytes| bytes == PRIVATE_BODY.as_bytes())
     );
     assert!(
-        message
+        rfc822
             .windows(PRIVATE_RECIPIENT.len())
-            .any(|bytes| { bytes == PRIVATE_RECIPIENT.as_bytes() })
+            .any(|bytes| bytes == PRIVATE_RECIPIENT.as_bytes())
     );
 
-    assert_delivery_accepted(&store, &supervisor, &mail);
+    assert_gmail_delivery_accepted(&store, &supervisor, &mail);
     std::thread::sleep(Duration::from_millis(1_200));
     assert_eq!(
-        smtp.accepted_messages(),
+        gmail.accepted_mutations(),
         1,
-        "an exact idempotent command replay must not execute SMTP twice"
+        "an exact idempotent Gmail command must not mutate the provider twice"
     );
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let pending = event_runtime
             .block_on(durable.pending_communications_outbox(4))
-            .expect("read Mail delivery outbox");
+            .expect("read Gmail delivery outbox");
         if !pending.is_empty() {
             break;
         }
         assert!(
             Instant::now() < deadline,
-            "accepted SMTP delivery did not persist its neutral observation"
+            "accepted Gmail mutation did not persist its neutral observation"
         );
         std::thread::sleep(Duration::from_millis(25));
     }
@@ -167,37 +178,37 @@ fn managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event()
         supervisor
             .is_active(&mail.registration_id)
             .expect("read managed Mail state"),
-        "NATS outage must not stop Mail after provider completion"
+        "NATS outage must not stop Mail after Gmail provider completion"
     );
 
     set_authenticated_nats_container_running(true);
-    wait_for_authenticated_nats_reconnect(&event_runtime, &client, "Mail SMTP observer");
+    wait_for_authenticated_nats_reconnect(&event_runtime, &client, "Gmail delivery observer");
     let (observation, canonical) = event_runtime.block_on(async {
         let observation = tokio::time::timeout(Duration::from_secs(10), observations.next())
             .await
-            .expect("Mail SMTP observation timeout")
-            .expect("Mail SMTP observation");
+            .expect("Gmail observation timeout")
+            .expect("Gmail observation");
         let canonical = tokio::time::timeout(Duration::from_secs(10), canonical_events.next())
             .await
-            .expect("Mail SMTP canonical event timeout")
-            .expect("Mail SMTP canonical event");
+            .expect("Gmail canonical event timeout")
+            .expect("Gmail canonical event");
         (observation, canonical)
     });
     let observation_bytes = observation.payload.to_vec();
-    assert!(
-        !observation_bytes
-            .windows(PRIVATE_BODY.len())
-            .any(|bytes| bytes == PRIVATE_BODY.as_bytes()),
-        "Mail delivery observation must not contain the provider message body"
-    );
-    assert!(
-        !observation_bytes
-            .windows(PRIVATE_RECIPIENT.len())
-            .any(|bytes| bytes == PRIVATE_RECIPIENT.as_bytes()),
-        "Mail delivery observation must not contain the provider recipient"
-    );
-    let observation =
-        decode_envelope_v1(&observation_bytes).expect("Mail SMTP durable observation");
+    for private_value in [
+        PRIVATE_BODY,
+        PRIVATE_RECIPIENT,
+        GMAIL_ACCESS_TOKEN,
+        "gmail-sent-1",
+    ] {
+        assert!(
+            !observation_bytes
+                .windows(private_value.len())
+                .any(|bytes| bytes == private_value.as_bytes()),
+            "Gmail durable observation exposed provider-private bytes"
+        );
+    }
+    let observation = decode_envelope_v1(&observation_bytes).expect("Gmail durable observation");
     let canonical =
         decode_envelope_v1(canonical.payload.as_ref()).expect("Communications durable event");
     assert_eq!(canonical.causation_message_id, observation.message_id);
@@ -206,11 +217,11 @@ fn managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event()
     unsafe {
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
     }
-    std::fs::remove_dir_all(root).expect("remove Mail SMTP fixture");
+    std::fs::remove_dir_all(root).expect("remove Gmail fixture");
     std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
 }
 
-fn assert_delivery_accepted(
+fn assert_gmail_delivery_accepted(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     mail: &StartedMailRuntime,
@@ -220,12 +231,12 @@ fn assert_delivery_accepted(
         supervisor,
         mail,
         MailClientContractV1::Delivery,
-        71,
+        81,
         &MailClientRequestV1::SendMail(MailSendMailRequestV1 {
             operation_id: OPERATION_ID.to_owned(),
-            provider_conversation_id: "smtp-conversation-1".to_owned(),
+            provider_conversation_id: PROVIDER_THREAD_ID.to_owned(),
             recipients: vec![PRIVATE_RECIPIENT.to_owned()],
-            subject: "managed SMTP delivery".to_owned(),
+            subject: "managed Gmail delivery".to_owned(),
             text_body: PRIVATE_BODY.to_owned(),
         }),
     );
@@ -234,6 +245,6 @@ fn assert_delivery_accepted(
         MailClientResponseV1::MailAccepted {
             operation_id: OPERATION_ID.to_owned(),
         },
-        "provider acceptance must not be folded into the command receipt"
+        "Gmail provider acceptance must not be folded into the command receipt"
     );
 }

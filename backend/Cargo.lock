@@ -2127,6 +2127,7 @@ dependencies = [
  "async-std",
  "base64 0.22.1",
  "futures-util",
+ "hermes-mail-api",
  "serde",
  "serde_json",
 ]

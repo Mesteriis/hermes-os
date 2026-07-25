@@ -85,8 +85,8 @@ use hermes_communications_ingress::{
 };
 use hermes_mail_api::{
     MailCredentialPurpose, MailDeliveryOperationStatusV1, MailDeliveryOutcomeV1,
-    MailInboundTransportV1, MailSendMailRequestV1, OutgoingMailV1, valid_account_configuration,
-    valid_port,
+    MailGmailConfigurationV1, MailInboundTransportV1, MailSendMailRequestV1, OutgoingMailV1,
+    valid_account_configuration, valid_port,
 };
 use hermes_mail_core::rfc822::{
     AttachmentDispositionV1 as Rfc822AttachmentDispositionV1, attachment_metadata,
@@ -106,6 +106,7 @@ use hermes_mail_persistence::{
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
+const OUTBOX_RELAY_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub struct MailAdmittedRuntime {
     pub control_channel: ManagedControlChannelV2<UnixStream>,
@@ -588,8 +589,7 @@ impl MailAdmittedRuntime {
             }
             MailInboundTransportV1::Gmail(configuration) => {
                 self.send_mail_via_gmail(
-                    &configuration.user_id,
-                    &configuration.from_address,
+                    &configuration,
                     &message,
                     &queued,
                     completed_at_unix_seconds,
@@ -649,8 +649,7 @@ impl MailAdmittedRuntime {
 
     async fn send_mail_via_gmail(
         &self,
-        user_id: &str,
-        from_address: &str,
+        configuration: &MailGmailConfigurationV1,
         message: &OutgoingMailV1,
         queued: &MailQueuedDeliveryV1,
         completed_at_unix_seconds: i64,
@@ -663,12 +662,12 @@ impl MailAdmittedRuntime {
             .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         self.send_mail(
             message,
-            from_address,
+            &configuration.from_address,
             ProviderProvenanceV1::MailGmail,
             queued,
             completed_at_unix_seconds,
             |rfc822_message| async move {
-                let client = hermes_mail_gmail::GmailApiClientV1::new(user_id)
+                let client = gmail_api_client(configuration)
                     .map_err(|_| MailProviderDeliveryErrorV1::Rejected)?;
                 client
                     .send_raw_message(
@@ -758,13 +757,17 @@ impl MailAdmittedRuntime {
         &self,
         published_at_unix_seconds: i64,
     ) -> Result<usize, MailCommunicationsOutboxRelayError> {
-        relay_communications_outbox_once(
-            &self.durable,
-            &self.event_connection,
-            &self.event_publish_permit,
-            published_at_unix_seconds,
+        tokio::time::timeout(
+            OUTBOX_RELAY_TIMEOUT,
+            relay_communications_outbox_once(
+                &self.durable,
+                &self.event_connection,
+                &self.event_publish_permit,
+                published_at_unix_seconds,
+            ),
         )
         .await
+        .map_err(|_| MailCommunicationsOutboxRelayError::Unavailable)?
     }
 
     pub async fn relay_attachment_security_outbox(
@@ -774,13 +777,17 @@ impl MailAdmittedRuntime {
         if !self.attachment_security_scan_candidate_publish_permitted {
             return Ok(0);
         }
-        relay_attachment_security_outbox_once(
-            &self.durable,
-            &self.event_connection,
-            &self.event_publish_permit,
-            published_at_unix_seconds,
+        tokio::time::timeout(
+            OUTBOX_RELAY_TIMEOUT,
+            relay_attachment_security_outbox_once(
+                &self.durable,
+                &self.event_connection,
+                &self.event_publish_permit,
+                published_at_unix_seconds,
+            ),
         )
         .await
+        .map_err(|_| MailAttachmentSecurityOutboxRelayError::Unavailable)?
     }
 
     pub async fn sync_configured_inbox(
@@ -805,7 +812,7 @@ impl MailAdmittedRuntime {
                 self.sync_gmail_inbox(
                     &account.connection_id,
                     operation_id,
-                    &configuration.user_id,
+                    &configuration,
                     account.sync_window,
                     account.sync_windows,
                 )
@@ -946,7 +953,7 @@ impl MailAdmittedRuntime {
         &mut self,
         connection_id: &str,
         operation_id: &str,
-        user_id: &str,
+        configuration: &MailGmailConfigurationV1,
         window: u32,
         windows: u32,
     ) -> Result<usize, MailBootstrapError> {
@@ -961,7 +968,7 @@ impl MailAdmittedRuntime {
         let token = std::str::from_utf8(&token).map_err(|_| MailBootstrapError::Credential)?;
         let max_results =
             u16::try_from(plan.window.min(500)).map_err(|_| MailBootstrapError::Admission)?;
-        let client = GmailApiClientV1::new(user_id).map_err(|_| MailBootstrapError::Admission)?;
+        let client = gmail_api_client(configuration).map_err(|_| MailBootstrapError::Admission)?;
         let observed_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| MailBootstrapError::Provider)?;
@@ -1897,6 +1904,30 @@ fn hex_reference_id(reference_id: &[u8; 16]) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect()
+}
+
+fn gmail_api_client(
+    configuration: &MailGmailConfigurationV1,
+) -> Result<GmailApiClientV1, GmailAdapterErrorV1> {
+    #[cfg(feature = "conformance-test-support")]
+    {
+        GmailApiClientV1::for_conformance_endpoint(
+            &configuration.api_endpoint.host,
+            configuration.api_endpoint.port,
+            configuration.api_endpoint.ca_certificate_pem.clone(),
+            &configuration.user_id,
+        )
+    }
+    #[cfg(not(feature = "conformance-test-support"))]
+    {
+        if configuration.api_endpoint.host != hermes_mail_api::GMAIL_API_HOST
+            || configuration.api_endpoint.port != hermes_mail_api::GMAIL_API_HTTPS_PORT
+            || configuration.api_endpoint.ca_certificate_pem.is_some()
+        {
+            return Err(GmailAdapterErrorV1::InvalidRequest);
+        }
+        GmailApiClientV1::new(&configuration.user_id)
+    }
 }
 
 fn credential_revision(

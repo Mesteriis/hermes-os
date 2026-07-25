@@ -1,8 +1,8 @@
 //! Mail-owned decoding of one admitted generic settings snapshot.
 
 use hermes_mail_api::{
-    MailAccountConfigurationV1, MailGmailConfigurationV1, MailImapConfigurationV1,
-    MailInboundTransportV1, SmtpEndpointV1, valid_account_configuration,
+    GmailApiEndpointV1, MailAccountConfigurationV1, MailGmailConfigurationV1,
+    MailImapConfigurationV1, MailInboundTransportV1, SmtpEndpointV1, valid_account_configuration,
 };
 use hermes_runtime_protocol::v1::{
     SettingApplyModeV1, SettingClientVisibilityV1, SettingDefinitionV1, SettingMutationAuthorityV1,
@@ -28,12 +28,15 @@ const SMTP_USERNAME: &str = "mail.smtp.username";
 const SMTP_FROM_ADDRESS: &str = "mail.smtp.from_address";
 const SMTP_PASSWORD_REVISION: &str = "mail.smtp.password_revision";
 const INBOUND_KIND: &str = "mail.inbound.kind";
+const GMAIL_API_HOST: &str = "mail.gmail.api_host";
+const GMAIL_API_PORT: &str = "mail.gmail.api_port";
+const GMAIL_CA_CERTIFICATE_PEM: &str = "mail.gmail.ca_certificate_pem";
 const GMAIL_USER_ID: &str = "mail.gmail.user_id";
 const GMAIL_FROM_ADDRESS: &str = "mail.gmail.from_address";
 const GMAIL_ACCESS_TOKEN_REVISION: &str = "mail.gmail.access_token_revision";
 
 pub const MAIL_SETTINGS_SCHEMA_MAJOR_V1: u32 = 1;
-pub const MAIL_SETTINGS_SCHEMA_REVISION_V1: u32 = 2;
+pub const MAIL_SETTINGS_SCHEMA_REVISION_V1: u32 = 3;
 
 /// The Mail integration owns these configuration-instance settings. They are
 /// deliberately hidden from generic client reads: endpoint details and
@@ -49,6 +52,17 @@ pub fn mail_settings_schema_v1() -> SettingsSchemaV1 {
                 GMAIL_ACCESS_TOKEN_REVISION,
                 SettingValueTypeV1::UnsignedInteger,
                 "Gmail access-token revision",
+            ),
+            definition(GMAIL_API_HOST, SettingValueTypeV1::String, "Gmail API host"),
+            definition(
+                GMAIL_API_PORT,
+                SettingValueTypeV1::UnsignedInteger,
+                "Gmail API port",
+            ),
+            definition(
+                GMAIL_CA_CERTIFICATE_PEM,
+                SettingValueTypeV1::String,
+                "Gmail CA certificate",
             ),
             definition(
                 GMAIL_FROM_ADDRESS,
@@ -133,15 +147,32 @@ pub struct MailRuntimeSettingsV1 {
 
 pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, String> {
     let inbound = match required_string(snapshot, INBOUND_KIND)?.as_str() {
-        "imap" => MailInboundTransportV1::Imap(MailImapConfigurationV1 {
-            host: required_string(snapshot, IMAP_HOST)?,
-            port: u16::try_from(required_unsigned(snapshot, IMAP_PORT)?)
-                .map_err(|_| invalid_settings())?,
-            username: required_string(snapshot, IMAP_USERNAME)?,
-        }),
+        "imap" => {
+            for setting_id in [
+                GMAIL_API_HOST,
+                GMAIL_API_PORT,
+                GMAIL_CA_CERTIFICATE_PEM,
+                GMAIL_FROM_ADDRESS,
+                GMAIL_USER_ID,
+            ] {
+                absent(snapshot, setting_id)?;
+            }
+            MailInboundTransportV1::Imap(MailImapConfigurationV1 {
+                host: required_string(snapshot, IMAP_HOST)?,
+                port: u16::try_from(required_unsigned(snapshot, IMAP_PORT)?)
+                    .map_err(|_| invalid_settings())?,
+                username: required_string(snapshot, IMAP_USERNAME)?,
+            })
+        }
         "gmail" => MailInboundTransportV1::Gmail(MailGmailConfigurationV1 {
             user_id: required_string(snapshot, GMAIL_USER_ID)?,
             from_address: required_string(snapshot, GMAIL_FROM_ADDRESS)?,
+            api_endpoint: GmailApiEndpointV1 {
+                host: required_string(snapshot, GMAIL_API_HOST)?,
+                port: u16::try_from(required_unsigned(snapshot, GMAIL_API_PORT)?)
+                    .map_err(|_| invalid_settings())?,
+                ca_certificate_pem: optional_string(snapshot, GMAIL_CA_CERTIFICATE_PEM)?,
+            },
         }),
         _ => return Err(invalid_settings()),
     };
@@ -167,6 +198,9 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, St
             (Some(revision), None)
         }
         MailInboundTransportV1::Gmail(_) => {
+            for setting_id in [IMAP_HOST, IMAP_PORT, IMAP_USERNAME] {
+                absent(snapshot, setting_id)?;
+            }
             let revision = required_unsigned(snapshot, GMAIL_ACCESS_TOKEN_REVISION)?;
             if revision == 0 {
                 return Err(invalid_settings());
@@ -305,6 +339,12 @@ mod tests {
                 && definition.client_visibility == SettingClientVisibilityV1::Hidden as i32
                 && definition.fresh_owner_proof_required
         }));
-        assert_eq!(schema.definitions.len(), 18);
+        assert_eq!(schema.definitions.len(), 21);
+    }
+
+    #[test]
+    fn production_gmail_endpoint_defaults_are_canonical() {
+        assert_eq!(hermes_mail_api::GMAIL_API_HOST, "gmail.googleapis.com");
+        assert_eq!(hermes_mail_api::GMAIL_API_HTTPS_PORT, 443);
     }
 }

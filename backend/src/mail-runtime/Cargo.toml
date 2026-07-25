@@ -16,6 +16,7 @@ path = "src/lib.rs"
 default = []
 conformance-test-support = [
     "hermes-mail-api/conformance-test-support",
+    "hermes-mail-gmail/conformance-test-support",
     "hermes-mail-imap/conformance-test-support",
 ]
 

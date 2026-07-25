@@ -86,6 +86,14 @@ pub struct MailImapConfigurationV1 {
 pub struct MailGmailConfigurationV1 {
     pub user_id: String,
     pub from_address: String,
+    pub api_endpoint: GmailApiEndpointV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GmailApiEndpointV1 {
+    pub host: String,
+    pub port: u16,
+    pub ca_certificate_pem: Option<String>,
 }
 
 pub fn valid_account_configuration(configuration: &MailAccountConfigurationV1) -> bool {
@@ -116,7 +124,30 @@ pub fn valid_inbound_transport(transport: &MailInboundTransportV1) -> bool {
         MailInboundTransportV1::Gmail(configuration) => {
             valid_gmail_user_id(&configuration.user_id)
                 && valid_mailbox(&configuration.from_address)
+                && valid_gmail_api_endpoint(&configuration.api_endpoint)
         }
+    }
+}
+
+#[must_use]
+pub fn valid_gmail_api_endpoint(endpoint: &GmailApiEndpointV1) -> bool {
+    if !valid_host(&endpoint.host)
+        || endpoint
+            .ca_certificate_pem
+            .as_deref()
+            .is_some_and(|value| !valid_ca_certificate_pem(value))
+    {
+        return false;
+    }
+    #[cfg(feature = "conformance-test-support")]
+    {
+        endpoint.port > 0 && matches!(endpoint.host.as_str(), "127.0.0.1" | "localhost")
+    }
+    #[cfg(not(feature = "conformance-test-support"))]
+    {
+        endpoint.host == GMAIL_API_HOST
+            && endpoint.port == GMAIL_API_HTTPS_PORT
+            && endpoint.ca_certificate_pem.is_none()
     }
 }
 
@@ -162,6 +193,8 @@ pub enum MailContractError {
 /// Global constraints for the current slice.
 pub const IMAP_PORT: u16 = 993;
 pub const SMTP_IMPLICIT_TLS_PORT: u16 = 465;
+pub const GMAIL_API_HOST: &str = "gmail.googleapis.com";
+pub const GMAIL_API_HTTPS_PORT: u16 = 443;
 pub const MAX_HOST_LEN: usize = 253;
 pub const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 pub const MAX_PLAIN_TEXT_BYTES: usize = 256 * 1024;
@@ -342,9 +375,19 @@ mod conformance_port_tests {
 
     #[cfg(not(feature = "conformance-test-support"))]
     #[test]
-    fn production_imap_transport_accepts_only_implicit_tls_port() {
+    fn production_provider_transports_accept_only_their_exact_tls_endpoints() {
         assert!(valid_port(IMAP_PORT));
         assert!(!valid_port(19_993));
+        assert!(valid_gmail_api_endpoint(&GmailApiEndpointV1 {
+            host: GMAIL_API_HOST.to_owned(),
+            port: GMAIL_API_HTTPS_PORT,
+            ca_certificate_pem: None,
+        }));
+        assert!(!valid_gmail_api_endpoint(&GmailApiEndpointV1 {
+            host: "localhost".to_owned(),
+            port: 19_443,
+            ca_certificate_pem: None,
+        }));
     }
 
     #[cfg(feature = "conformance-test-support")]
@@ -353,5 +396,20 @@ mod conformance_port_tests {
         assert!(valid_port(IMAP_PORT));
         assert!(valid_port(19_993));
         assert!(!valid_port(0));
+        assert!(valid_gmail_api_endpoint(&GmailApiEndpointV1 {
+            host: "localhost".to_owned(),
+            port: 19_443,
+            ca_certificate_pem: None,
+        }));
+        assert!(!valid_gmail_api_endpoint(&GmailApiEndpointV1 {
+            host: "gmail.example.test".to_owned(),
+            port: 19_443,
+            ca_certificate_pem: None,
+        }));
+        assert!(!valid_gmail_api_endpoint(&GmailApiEndpointV1 {
+            host: "localhost".to_owned(),
+            port: 0,
+            ca_certificate_pem: None,
+        }));
     }
 }

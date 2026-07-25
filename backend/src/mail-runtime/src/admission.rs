@@ -32,11 +32,15 @@ use crate::settings::{
 
 pub const MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID: &str =
     "mail.attachment.scan-candidate.publish.v1";
+pub const MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID: &str = "mail.attachment-anchor.consume.v1";
+pub const MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID: &str =
+    "mail.attachment-blob-admission.publish.v1";
 pub const MAIL_BLOB_CAPABILITY_ID: &str = "mail.blob.v1";
+pub const MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID: &str =
+    "mail.communication-observed.publish.v1";
 pub const MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID: &str = "mail.gmail.credentials.v1";
 pub const MAIL_IMAP_CREDENTIALS_CAPABILITY_ID: &str = "mail.imap.credentials.v1";
 pub const MAIL_SMTP_CREDENTIALS_CAPABILITY_ID: &str = "mail.smtp.credentials.v1";
-pub const MAIL_EVENTS_CAPABILITY_ID: &str = "mail.events.v1";
 pub const MAIL_STORAGE_CAPABILITY_ID: &str = "mail.storage.v1";
 pub const MAIL_ATTACHMENT_BLOB_MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAIL_STORAGE_CONNECTION_BUDGET: u32 = 4;
@@ -48,11 +52,13 @@ pub const MAIL_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
 #[must_use]
 pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
+        mail_attachment_anchor_consume_capability_v1(),
+        mail_attachment_blob_admission_publish_capability_v1(),
         mail_attachment_scan_candidate_publish_capability_v1(),
         mail_blob_capability_v1(),
+        mail_communication_observed_publish_capability_v1(),
         mail_client_capability_v1(MailClientContractV1::DeliveryQuery),
         mail_client_capability_v1(MailClientContractV1::Delivery),
-        mail_events_capability_v1(),
         mail_provider_credential_capability_v1(
             MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID,
             "mail_gmail_access_token",
@@ -85,12 +91,7 @@ fn mail_client_capability_v1(contract: MailClientContractV1) -> CapabilityDescri
     CapabilityDescriptorV1 {
         capability_id: contract.capability_id().to_owned(),
         capability_revision: 1,
-        criticality: match contract {
-            MailClientContractV1::Sync => CapabilityCriticalityV1::Required,
-            MailClientContractV1::Delivery | MailClientContractV1::DeliveryQuery => {
-                CapabilityCriticalityV1::Optional
-            }
-        } as i32,
+        criticality: CapabilityCriticalityV1::Optional as i32,
         provides: vec![ProvidedSurfaceV1 {
             kind: ProvidedSurfaceKindV1::ClientRpc as i32,
             contract: Some(mail_client_contract_reference_v1(contract)),
@@ -119,7 +120,7 @@ pub fn mail_blob_capability_v1() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: MAIL_BLOB_CAPABILITY_ID.to_owned(),
         capability_revision: 1,
-        criticality: CapabilityCriticalityV1::Required as i32,
+        criticality: CapabilityCriticalityV1::Optional as i32,
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
                 max_bytes: MAIL_ATTACHMENT_BLOB_MAX_BYTES,
@@ -157,27 +158,45 @@ fn provider_credential_request_v1(purpose_id: &str) -> CapabilityRequestV1 {
 }
 
 #[must_use]
-pub fn mail_events_capability_v1() -> CapabilityDescriptorV1 {
-    let anchor_recorded = communication_attachment_anchor_recorded_contract_reference_v1();
+pub fn mail_communication_observed_publish_capability_v1() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
-        capability_id: MAIL_EVENTS_CAPABILITY_ID.to_owned(),
+        capability_id: MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
         capability_revision: 1,
         criticality: CapabilityCriticalityV1::Required as i32,
-        requests: vec![
-            communication_observed_publish_request_v1(),
-            communication_attachment_blob_admission_observed_publish_request_v1(),
-            CapabilityRequestV1 {
-                request: Some(Request::EventRoute(EventRouteRequestV1 {
-                    envelope_kind: DurableEnvelopeKindV1::Event as i32,
-                    contract: Some(anchor_recorded),
-                    direction: EventRouteDirectionV1::Consume as i32,
-                    max_in_flight: COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
-                    subscription_requirement: EventSubscriptionRequirementV1::Required as i32,
-                    max_deliver: MAIL_EVENT_MAX_DELIVER,
-                    ack_wait_millis: MAIL_EVENT_ACK_WAIT_MILLIS,
-                })),
-            },
-        ],
+        requests: vec![communication_observed_publish_request_v1()],
+        ..Default::default()
+    }
+}
+
+#[must_use]
+pub fn mail_attachment_blob_admission_publish_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![communication_attachment_blob_admission_observed_publish_request_v1()],
+        ..Default::default()
+    }
+}
+
+#[must_use]
+pub fn mail_attachment_anchor_consume_capability_v1() -> CapabilityDescriptorV1 {
+    let anchor_recorded = communication_attachment_anchor_recorded_contract_reference_v1();
+    CapabilityDescriptorV1 {
+        capability_id: MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::EventRoute(EventRouteRequestV1 {
+                envelope_kind: DurableEnvelopeKindV1::Event as i32,
+                contract: Some(anchor_recorded),
+                direction: EventRouteDirectionV1::Consume as i32,
+                max_in_flight: COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+                subscription_requirement: EventSubscriptionRequirementV1::Required as i32,
+                max_deliver: MAIL_EVENT_MAX_DELIVER,
+                ack_wait_millis: MAIL_EVENT_ACK_WAIT_MILLIS,
+            })),
+        }],
         ..Default::default()
     }
 }
@@ -204,7 +223,7 @@ pub fn mail_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
     let settings_schema = mail_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 1,
+        descriptor_revision: 2,
         module_id: MAIL_MODULE_ID.to_owned(),
         owner_id: MAIL_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Integration as i32,
@@ -251,11 +270,13 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
+                MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID,
                 MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID,
                 MAIL_BLOB_CAPABILITY_ID,
+                MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID,
                 MailClientContractV1::DeliveryQuery.capability_id(),
                 MailClientContractV1::Delivery.capability_id(),
-                MAIL_EVENTS_CAPABILITY_ID,
                 MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID,
                 MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
                 MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,
@@ -284,19 +305,23 @@ mod tests {
                     && route.envelope_kind == DurableEnvelopeKindV1::Observation as i32
         ));
 
-        let events = descriptor
-            .capabilities
-            .iter()
-            .find(|capability| capability.capability_id == MAIL_EVENTS_CAPABILITY_ID)
-            .expect("mail events capability");
-        assert_eq!(events.provides, []);
-        assert_eq!(events.requests.len(), 3);
-        assert!(
-            events
-                .requests
+        for capability_id in [
+            MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
+            MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID,
+            MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID,
+        ] {
+            let capability = descriptor
+                .capabilities
                 .iter()
-                .all(|request| matches!(request.request, Some(Request::EventRoute(_))))
-        );
+                .find(|capability| capability.capability_id == capability_id)
+                .expect("split Mail event capability");
+            assert_eq!(capability.provides, []);
+            assert_eq!(capability.requests.len(), 1);
+            assert!(matches!(
+                capability.requests[0].request,
+                Some(Request::EventRoute(_))
+            ));
+        }
 
         for contract in MailClientContractV1::ALL {
             let capability = descriptor
@@ -315,12 +340,7 @@ mod tests {
             );
             assert_eq!(
                 capability.criticality,
-                match contract {
-                    MailClientContractV1::Sync => CapabilityCriticalityV1::Required,
-                    MailClientContractV1::Delivery | MailClientContractV1::DeliveryQuery => {
-                        CapabilityCriticalityV1::Optional
-                    }
-                } as i32
+                CapabilityCriticalityV1::Optional as i32
             );
         }
 

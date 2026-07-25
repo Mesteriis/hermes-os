@@ -9,10 +9,12 @@ use hermes_mail_api::{
 use hermes_mail_persistence::{MAIL_STORAGE_BUNDLE_REVISION_V3, mail_storage_bundle_v1};
 use hermes_mail_runtime::{
     admission::{
+        MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
+        MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID,
         MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID, MAIL_BLOB_CAPABILITY_ID,
-        MAIL_CREDENTIAL_LEASE_TTL_SECONDS, MAIL_EVENTS_CAPABILITY_ID,
-        MAIL_IMAP_CREDENTIALS_CAPABILITY_ID, MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,
-        MAIL_STORAGE_CAPABILITY_ID, mail_module_descriptor_v1,
+        MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID, MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+        MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID, MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
+        MAIL_SMTP_CREDENTIALS_CAPABILITY_ID, MAIL_STORAGE_CAPABILITY_ID, mail_module_descriptor_v1,
     },
     settings::mail_settings_schema_bytes_v1,
 };
@@ -39,6 +41,26 @@ pub(super) struct StartedMailRuntime {
 pub(super) struct MailSmtpFixtureSettingsV1 {
     pub(super) port: u16,
     pub(super) ca_certificate_pem: String,
+}
+
+pub(super) struct MailGmailFixtureSettingsV1 {
+    pub(super) port: u16,
+    pub(super) ca_certificate_pem: String,
+}
+
+#[derive(Clone, Copy)]
+enum MailAdmissionProfileV1 {
+    ImapSync,
+    SmtpDelivery,
+    GmailDelivery,
+}
+
+enum MailSettingsProfileV1 {
+    Imap {
+        port: u16,
+        smtp: Option<MailSmtpFixtureSettingsV1>,
+    },
+    Gmail(MailGmailFixtureSettingsV1),
 }
 
 pub(super) fn installed_communications_mail_release(root: &Path) -> InstalledSignedBundle {
@@ -76,6 +98,10 @@ pub(super) fn seed_mail_vault(vault_dir: &Path) {
             MailCredentialPurpose::SmtpPassword,
             b"managed-mail-smtp-password".as_slice(),
         ),
+        (
+            MailCredentialPurpose::GmailAccessToken,
+            b"managed-mail-gmail-access-token".as_slice(),
+        ),
     ] {
         let request = VaultPurposeRequestV1::new(
             purpose.as_str().to_owned(),
@@ -99,45 +125,63 @@ pub(super) fn seed_mail_vault(vault_dir: &Path) {
 }
 
 pub(super) fn admit_mail_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
-    admit_mail_runtime_with_delivery(store, false)
+    admit_mail_runtime_profile(store, MailAdmissionProfileV1::ImapSync)
 }
 
 pub(super) fn admit_mail_delivery_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
-    admit_mail_runtime_with_delivery(store, true)
+    admit_mail_runtime_profile(store, MailAdmissionProfileV1::SmtpDelivery)
 }
 
-fn admit_mail_runtime_with_delivery(
+pub(super) fn admit_mail_gmail_delivery_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
+    admit_mail_runtime_profile(store, MailAdmissionProfileV1::GmailDelivery)
+}
+
+fn admit_mail_runtime_profile(
     store: &SqliteControlStore,
-    delivery: bool,
+    profile: MailAdmissionProfileV1,
 ) -> AdmittedMailRuntime {
     let descriptor = mail_module_descriptor_v1("managed-mail-live");
     let descriptor_bytes = descriptor.encode_to_vec();
     let registration = crate::modules::registration::registry::register(store, &descriptor_bytes)
         .expect("register exact Mail descriptor");
-    let mut capability_ids = vec![
-        MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID.to_owned(),
-        MAIL_BLOB_CAPABILITY_ID.to_owned(),
-        MAIL_EVENTS_CAPABILITY_ID.to_owned(),
-        MAIL_IMAP_CREDENTIALS_CAPABILITY_ID.to_owned(),
-        MAIL_STORAGE_CAPABILITY_ID.to_owned(),
-        MailClientContractV1::Sync.capability_id().to_owned(),
-    ];
-    if delivery {
-        capability_ids.extend([
+    let mut capability_ids = match profile {
+        MailAdmissionProfileV1::ImapSync => vec![
+            MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID.to_owned(),
+            MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_BLOB_CAPABILITY_ID.to_owned(),
+            MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_IMAP_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_STORAGE_CAPABILITY_ID.to_owned(),
+            MailClientContractV1::Sync.capability_id().to_owned(),
+        ],
+        MailAdmissionProfileV1::SmtpDelivery => vec![
+            MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_IMAP_CREDENTIALS_CAPABILITY_ID.to_owned(),
             MAIL_SMTP_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_STORAGE_CAPABILITY_ID.to_owned(),
             MailClientContractV1::Delivery.capability_id().to_owned(),
             MailClientContractV1::DeliveryQuery
                 .capability_id()
                 .to_owned(),
-        ]);
-        capability_ids.sort();
-    }
+        ],
+        MailAdmissionProfileV1::GmailDelivery => vec![
+            MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_STORAGE_CAPABILITY_ID.to_owned(),
+            MailClientContractV1::Delivery.capability_id().to_owned(),
+            MailClientContractV1::DeliveryQuery
+                .capability_id()
+                .to_owned(),
+        ],
+    };
+    capability_ids.sort();
     crate::modules::registration::registry::approve_after_owner_authorization(
         store,
         registration.registration_id(),
         &capability_ids,
     )
-    .expect("approve exact Mail IMAP sync capabilities");
+    .expect("approve exact Mail profile capabilities");
     let schema = mail_settings_schema_bytes_v1();
     store
         .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
@@ -215,8 +259,10 @@ pub(super) fn start_mail_runtime(
         kernel_data,
         runtime_dir,
         admitted,
-        imap_port,
-        None,
+        MailSettingsProfileV1::Imap {
+            port: imap_port,
+            smtp: None,
+        },
     )
 }
 
@@ -235,8 +281,28 @@ pub(super) fn start_mail_delivery_runtime(
         kernel_data,
         runtime_dir,
         admitted,
-        imap_port,
-        Some(smtp),
+        MailSettingsProfileV1::Imap {
+            port: imap_port,
+            smtp: Some(smtp),
+        },
+    )
+}
+
+pub(super) fn start_mail_gmail_delivery_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    admitted: AdmittedMailRuntime,
+    gmail: MailGmailFixtureSettingsV1,
+) -> StartedMailRuntime {
+    start_mail_runtime_with_settings(
+        supervisor,
+        store,
+        kernel_data,
+        runtime_dir,
+        admitted,
+        MailSettingsProfileV1::Gmail(gmail),
     )
 }
 
@@ -247,8 +313,7 @@ fn start_mail_runtime_with_settings(
     kernel_data: &Path,
     runtime_dir: &Path,
     admitted: AdmittedMailRuntime,
-    imap_port: u16,
-    smtp: Option<MailSmtpFixtureSettingsV1>,
+    settings: MailSettingsProfileV1,
 ) -> StartedMailRuntime {
     let reservation = managed_launch::load(supervisor, store, &admitted.registration_id)
         .expect("load Mail managed launch reservation");
@@ -296,8 +361,7 @@ fn start_mail_runtime_with_settings(
         reservation,
         managed_launch::ManagedIntegrationLaunchConfiguration {
             runtime: configuration,
-            settings_snapshot_bytes: mail_settings_snapshot(imap_port, smtp.as_ref())
-                .encode_to_vec(),
+            settings_snapshot_bytes: mail_settings_snapshot(settings).encode_to_vec(),
             granted_capability_ids: &admitted.capability_ids,
         },
     )
@@ -311,8 +375,7 @@ fn start_mail_runtime_with_settings(
 }
 
 fn mail_settings_snapshot(
-    imap_port: u16,
-    smtp: Option<&MailSmtpFixtureSettingsV1>,
+    profile: MailSettingsProfileV1,
 ) -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {
     use hermes_runtime_protocol::v1::{
         SettingValueV1, SettingsValueEntryV1, setting_value_v1::Value,
@@ -330,48 +393,79 @@ fn mail_settings_snapshot(
             "mail.connection_id",
             Value::StringValue(MAIL_ACCOUNT_ID.to_owned()),
         ),
-        entry("mail.imap.host", Value::StringValue("localhost".to_owned())),
-        entry(
-            "mail.imap.password_revision",
-            Value::UnsignedIntegerValue(1),
-        ),
-        entry(
-            "mail.imap.port",
-            Value::UnsignedIntegerValue(u64::from(imap_port)),
-        ),
-        entry(
-            "mail.imap.username",
-            Value::StringValue("owner@example.test".to_owned()),
-        ),
-        entry("mail.inbound.kind", Value::StringValue("imap".to_owned())),
-        entry("mail.smtp.enabled", Value::BooleanValue(smtp.is_some())),
         entry("mail.sync.window", Value::UnsignedIntegerValue(1)),
         entry("mail.sync.windows", Value::UnsignedIntegerValue(1)),
     ];
-    if let Some(smtp) = smtp {
-        values.extend([
+    match profile {
+        MailSettingsProfileV1::Imap { port, smtp } => {
+            values.extend([
+                entry("mail.imap.host", Value::StringValue("localhost".to_owned())),
+                entry(
+                    "mail.imap.password_revision",
+                    Value::UnsignedIntegerValue(1),
+                ),
+                entry(
+                    "mail.imap.port",
+                    Value::UnsignedIntegerValue(u64::from(port)),
+                ),
+                entry(
+                    "mail.imap.username",
+                    Value::StringValue("owner@example.test".to_owned()),
+                ),
+                entry("mail.inbound.kind", Value::StringValue("imap".to_owned())),
+                entry("mail.smtp.enabled", Value::BooleanValue(smtp.is_some())),
+            ]);
+            if let Some(smtp) = smtp {
+                values.extend([
+                    entry(
+                        "mail.smtp.ca_certificate_pem",
+                        Value::StringValue(smtp.ca_certificate_pem),
+                    ),
+                    entry(
+                        "mail.smtp.from_address",
+                        Value::StringValue("owner@example.test".to_owned()),
+                    ),
+                    entry("mail.smtp.host", Value::StringValue("localhost".to_owned())),
+                    entry(
+                        "mail.smtp.password_revision",
+                        Value::UnsignedIntegerValue(1),
+                    ),
+                    entry(
+                        "mail.smtp.port",
+                        Value::UnsignedIntegerValue(u64::from(smtp.port)),
+                    ),
+                    entry(
+                        "mail.smtp.username",
+                        Value::StringValue("owner@example.test".to_owned()),
+                    ),
+                ]);
+            }
+        }
+        MailSettingsProfileV1::Gmail(gmail) => values.extend([
             entry(
-                "mail.smtp.ca_certificate_pem",
-                Value::StringValue(smtp.ca_certificate_pem.clone()),
-            ),
-            entry(
-                "mail.smtp.from_address",
-                Value::StringValue("owner@example.test".to_owned()),
-            ),
-            entry("mail.smtp.host", Value::StringValue("localhost".to_owned())),
-            entry(
-                "mail.smtp.password_revision",
+                "mail.gmail.access_token_revision",
                 Value::UnsignedIntegerValue(1),
             ),
             entry(
-                "mail.smtp.port",
-                Value::UnsignedIntegerValue(u64::from(smtp.port)),
+                "mail.gmail.api_host",
+                Value::StringValue("localhost".to_owned()),
             ),
             entry(
-                "mail.smtp.username",
+                "mail.gmail.api_port",
+                Value::UnsignedIntegerValue(u64::from(gmail.port)),
+            ),
+            entry(
+                "mail.gmail.ca_certificate_pem",
+                Value::StringValue(gmail.ca_certificate_pem),
+            ),
+            entry(
+                "mail.gmail.from_address",
                 Value::StringValue("owner@example.test".to_owned()),
             ),
-        ]);
+            entry("mail.gmail.user_id", Value::StringValue("me".to_owned())),
+            entry("mail.inbound.kind", Value::StringValue("gmail".to_owned())),
+            entry("mail.smtp.enabled", Value::BooleanValue(false)),
+        ]),
     }
     values.sort_by(|left, right| left.setting_id.cmp(&right.setting_id));
     hermes_runtime_protocol::v1::SettingsSnapshotV1 {

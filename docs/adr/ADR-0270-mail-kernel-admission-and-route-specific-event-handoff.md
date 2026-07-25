@@ -2,12 +2,14 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Backend inbound gate и bounded plain-text SMTP delivery
-gate реализованы. Generated Mail API и descriptor теперь имеют независимые
+Состояние реализации: Backend inbound, bounded plain-text SMTP и Gmail delivery
+gates реализованы. Generated Mail API и descriptor теперь имеют независимые
 `mail.sync.v1`, `mail.delivery.v1` и `mail.delivery.query.v1` routes,
-три provider-purpose credential capabilities и один canonical module ID
-`hermes-mail-runtime` во всех Mail-produced envelopes. Umbrella `mail.client`
-удалён из production code; assembly повторно доказала signed exact descriptor.
+три provider-purpose credential capabilities, три route-specific event
+capabilities и один canonical module ID `hermes-mail-runtime` во всех
+Mail-produced envelopes. Umbrella `mail.client` и `mail.events.v1` удалены из
+production code; assembly повторно доказала signed exact descriptor revision 2
+и settings schema revision 3.
 Signed managed launch теперь проходит через exact Kernel registration,
 owner-approved IMAP sync subset и Kernel-issued Storage/Vault/Blob/Event Hub
 bindings. Kernel до relay отклоняет отсутствующий delivery grant и stale
@@ -19,8 +21,10 @@ replay. Live provider sync и attachment anchor → Mail mapping → Kernel-issu
 Blob write → terminal Communications CAS conformance теперь доказаны.
 `mail_runtime_admission_v1` открыт для exact inbound sync subset. Отдельный
 SMTP delivery gate доказывает durable acceptance, terminal query, один
-provider execution и event-only outage replay. Gmail mutation, outbound
-attachments и frontend cutover остаются отдельными закрытыми slices.
+provider execution и event-only outage replay. Отдельный Gmail delivery gate
+доказывает outbound-only GrantSet, bounded HTTPS mutation, один provider
+execution и event-only outage replay. Outbound attachments и frontend cutover
+остаются отдельными закрытыми slices.
 Frontend generator и раздельные `MailSyncService`,
 `MailDeliveryCommandService` и `MailDeliveryQueryService` Connect client units
 реализованы как prerequisite; legacy Mail surfaces ими ещё не заменены.
@@ -52,6 +56,11 @@ business-вызов Communications.
 Provider-neutral Mail evidence пересекает owner boundary только через durable
 typed events. Kernel проверяет grant, runtime generation и route metadata, но
 не декодирует Mail payload и не вызывает Communications.
+
+Один event capability также не может объединять разные authority. Publish
+neutral observation, consume Communications attachment anchor и publish
+attachment terminal observation имеют разные operational причины и выдаются
+как независимые approval units.
 
 Текущий Mail operational contract объединяет две независимые операции в одном
 `mail.client`:
@@ -165,6 +174,22 @@ Runtime не может расширить права через settings: setti
 revision, а Vault route дополнительно проверяет exact capability, purpose,
 configuration instance, runtime generation и grant epoch.
 
+### Event route capabilities
+
+Event authority разделена по функциональной ответственности:
+
+```text
+mail.communication-observed.publish.v1
+mail.attachment-anchor.consume.v1
+mail.attachment-blob-admission.publish.v1
+mail.attachment.scan-candidate.publish.v1
+```
+
+Каждый capability содержит ровно свой event route и может быть approved/revoked
+независимо. Outbound-only delivery получает только neutral observation
+publish; оно не получает attachment consume/publish или scan-candidate rights.
+Umbrella `mail.events.v1` отсутствует в descriptor и live GrantSet.
+
 ### Event-only handoff
 
 Inbound evidence:
@@ -211,7 +236,8 @@ Communications.
 Backend gate открывается атомарно только при наличии:
 
 1. route-specific generated Protobuf contracts и exact descriptor references;
-2. split sync/delivery and IMAP/Gmail/SMTP capability units;
+2. split sync/delivery, IMAP/Gmail/SMTP credential и event-route capability
+   units;
 3. signed Mail runtime/descriptor/settings/storage artifacts из ADR-0269;
 4. pending registration без прав и explicit owner-approved subset;
 5. managed launch с exact runtime generation/grant epoch;
@@ -226,7 +252,8 @@ Backend gate открывается атомарно только при нал�
 
 Delivery capability и frontend cutover не доказываются inbound sync gate.
 SMTP delivery включается только отдельным live provider mutation evidence;
-Gmail mutation, outbound attachments и frontend требуют собственных gates.
+Gmail delivery включается отдельным live HTTPS mutation evidence. Outbound
+attachments и frontend требуют собственных gates.
 Frontend не используется как proof backend admission.
 
 Открытие gate:
@@ -283,6 +310,8 @@ Clippy, architecture/SRP/Cargo boundaries и relevant live conformance.
   `RUNTIME_BUSY`, не потребляя ответ ожидающего platform operation;
 - provider credential lease запрашивает exact descriptor-bounded
   `MAIL_CREDENTIAL_LEASE_TTL_SECONDS`, а не общий Vault default;
+- Mail descriptor не содержит `mail.events.v1`: neutral observation publish,
+  attachment-anchor consume и attachment terminal publish выданы раздельно;
 - runtime подключается только к выданному PgBouncer `pool_alias` с
   `effective_budgets.max_connections`; миграцию применяет Storage Control,
   runtime DDL при bootstrap удалён;
@@ -361,8 +390,37 @@ scanner verdict producer или frontend.
 HERMES_STORAGE_MANAGED_TEST_FILTER=managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event node scripts/test-authenticated-storage.mjs 1.97.0
 ```
 
-Этот gate открывает только bounded plain-text SMTP delivery. Gmail mutation,
-outbound MIME attachments и frontend cutover остаются отдельными slices.
+Этот gate открывает только bounded plain-text SMTP delivery. Gmail delivery
+доказывается отдельным gate ниже; outbound MIME attachments и frontend cutover
+остаются отдельными slices.
+
+Реализованный live Gmail delivery slice:
+
+- Gmail profile получает только delivery command/query, Gmail credential,
+  Storage и neutral observation publish capabilities;
+- signed settings schema revision 3 содержит production-fixed
+  `gmail.googleapis.com:443`; custom CA/loopback endpoint доступны только в
+  conformance build;
+- `hermes-mail-gmail` выполняет bounded TLS/HTTP mutation и не зависит от Mail
+  persistence/runtime, Communications, Kernel или Vault implementation;
+- command receipt возвращается после Mail-owned persistence, terminal provider
+  result читается отдельно, а ambiguous HTTP outcome не retry-ится;
+- focused managed test проверяет exact Gmail path, Bearer access token, thread
+  ID, RFC822 bytes и ровно одну mutation для exact duplicate;
+- NATS останавливается до command: provider result и neutral outbox
+  фиксируются, Mail остаётся active, после восстановления NATS exact
+  observation доходит до Communications;
+- provider access token, recipient, body и Gmail receipt отсутствуют в durable
+  event bytes.
+
+Проверка:
+
+```text
+HERMES_STORAGE_MANAGED_TEST_FILTER=managed_mail_gmail_runtime_mutates_once_and_replays_event_without_private_payload node scripts/test-authenticated-storage.mjs 1.97.0
+```
+
+Gmail gate не открывает sync, IMAP, SMTP, Blob или attachment capabilities.
+Outbound MIME attachments и frontend cutover остаются отдельными slices.
 
 ## Отклонённые варианты
 

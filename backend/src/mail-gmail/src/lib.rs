@@ -3,22 +3,26 @@
 //! It exposes provider operations only. Communications evidence mapping, durable
 //! state and credential leasing stay in their respective owner packages.
 
-use std::{collections::BTreeSet, fmt};
+use std::{collections::BTreeSet, fmt, time::Duration};
 
-use async_native_tls::TlsConnector;
+use async_native_tls::{Certificate, TlsConnector};
 use async_std::net::TcpStream;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use futures_util::io::{AsyncReadExt, AsyncWriteExt};
+use hermes_mail_api::{GMAIL_API_HOST, GMAIL_API_HTTPS_PORT, valid_ca_certificate_pem};
 use serde::Deserialize;
 
-pub const GMAIL_API_HOST: &str = "gmail.googleapis.com";
 const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_MESSAGE_IDS: usize = 500;
+const MAX_BEARER_TOKEN_BYTES: usize = 16 * 1024;
+const GMAIL_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GmailApiClientV1 {
     host: String,
+    port: u16,
+    ca_certificate_pem: Option<String>,
     user_id: String,
 }
 
@@ -90,19 +94,46 @@ pub async fn refresh_access_token(
 
 impl GmailApiClientV1 {
     pub fn new(user_id: impl Into<String>) -> Result<Self, GmailAdapterErrorV1> {
-        Self::for_host(GMAIL_API_HOST, user_id)
+        Self::for_endpoint(GMAIL_API_HOST, GMAIL_API_HTTPS_PORT, None, user_id)
     }
 
-    pub fn for_host(
+    #[cfg(any(test, feature = "conformance-test-support"))]
+    pub fn for_conformance_endpoint(
         host: impl Into<String>,
+        port: u16,
+        ca_certificate_pem: Option<String>,
+        user_id: impl Into<String>,
+    ) -> Result<Self, GmailAdapterErrorV1> {
+        let host = host.into();
+        if !matches!(host.as_str(), "127.0.0.1" | "localhost") {
+            return Err(GmailAdapterErrorV1::InvalidRequest);
+        }
+        Self::for_endpoint(host, port, ca_certificate_pem, user_id)
+    }
+
+    fn for_endpoint(
+        host: impl Into<String>,
+        port: u16,
+        ca_certificate_pem: Option<String>,
         user_id: impl Into<String>,
     ) -> Result<Self, GmailAdapterErrorV1> {
         let host = host.into();
         let user_id = user_id.into();
-        if !valid_host(&host) || !valid_provider_id(&user_id) {
+        if !valid_host(&host)
+            || port == 0
+            || !valid_provider_id(&user_id)
+            || ca_certificate_pem
+                .as_deref()
+                .is_some_and(|value| !valid_ca_certificate_pem(value))
+        {
             return Err(GmailAdapterErrorV1::InvalidRequest);
         }
-        Ok(Self { host, user_id })
+        Ok(Self {
+            host,
+            port,
+            ca_certificate_pem,
+            user_id,
+        })
     }
 
     pub async fn list_labels(
@@ -267,17 +298,42 @@ impl GmailApiClientV1 {
         path: &str,
         body: Option<&[u8]>,
     ) -> Result<T, GmailAdapterErrorV1> {
-        if access_token.trim().is_empty()
+        async_std::future::timeout(
+            GMAIL_OPERATION_TIMEOUT,
+            self.request_json_inner(access_token, method, path, body),
+        )
+        .await
+        .map_err(|_| GmailAdapterErrorV1::Transport)?
+    }
+
+    async fn request_json_inner<T: for<'de> Deserialize<'de>>(
+        &self,
+        access_token: &str,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+    ) -> Result<T, GmailAdapterErrorV1> {
+        if !valid_bearer_token(access_token)
             || !path.starts_with('/')
             || path.contains('\r')
             || path.contains('\n')
         {
             return Err(GmailAdapterErrorV1::InvalidRequest);
         }
-        let stream = TcpStream::connect((self.host.as_str(), 443))
+        let stream = TcpStream::connect((self.host.as_str(), self.port))
             .await
             .map_err(|_| GmailAdapterErrorV1::Transport)?;
-        let mut stream = TlsConnector::new()
+        let connector = self
+            .ca_certificate_pem
+            .as_deref()
+            .map(|pem| {
+                Certificate::from_pem(pem.as_bytes())
+                    .map(|certificate| TlsConnector::new().add_root_certificate(certificate))
+                    .map_err(|_| GmailAdapterErrorV1::InvalidRequest)
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let mut stream = connector
             .connect(self.host.as_str(), stream)
             .await
             .map_err(|_| GmailAdapterErrorV1::Transport)?;
@@ -509,7 +565,7 @@ async fn request_oauth_token(
         .await
         .map_err(|_| GmailAdapterErrorV1::Transport)?;
     let token: GmailOAuthTokenResponseV1 = parse_json_response(&response)?;
-    if token.access_token.trim().is_empty() || token.expires_in == 0 {
+    if !valid_bearer_token(&token.access_token) || token.expires_in == 0 {
         return Err(GmailAdapterErrorV1::InvalidResponse);
     }
     Ok(token)
@@ -551,6 +607,14 @@ fn valid_provider_id(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'@'))
+}
+fn valid_bearer_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_BEARER_TOKEN_BYTES
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'+' | b'/' | b'=')
+        })
 }
 fn provider_id(value: &str) -> Result<String, GmailAdapterErrorV1> {
     valid_provider_id(value)
@@ -610,6 +674,37 @@ mod tests {
             https_endpoint("https://oauth2.googleapis.com\r/token"),
             Err(GmailAdapterErrorV1::InvalidRequest)
         );
+    }
+    #[test]
+    fn conformance_client_requires_a_bounded_tls_endpoint() {
+        let client = GmailApiClientV1::for_conformance_endpoint("localhost", 19_443, None, "me")
+            .expect("loopback Gmail endpoint");
+        assert_eq!(client.host, "localhost");
+        assert_eq!(client.port, 19_443);
+        assert_eq!(
+            GmailApiClientV1::for_conformance_endpoint("localhost", 0, None, "me"),
+            Err(GmailAdapterErrorV1::InvalidRequest)
+        );
+        assert_eq!(
+            GmailApiClientV1::for_conformance_endpoint("gmail.example.test", 19_443, None, "me",),
+            Err(GmailAdapterErrorV1::InvalidRequest)
+        );
+        assert_eq!(
+            GmailApiClientV1::for_conformance_endpoint(
+                "localhost",
+                19_443,
+                Some("not a certificate".to_owned()),
+                "me",
+            ),
+            Err(GmailAdapterErrorV1::InvalidRequest)
+        );
+    }
+    #[test]
+    fn bearer_tokens_are_header_safe_and_bounded() {
+        assert!(valid_bearer_token("token-._~+/="));
+        assert!(!valid_bearer_token(""));
+        assert!(!valid_bearer_token("token\r\nInjected: value"));
+        assert!(!valid_bearer_token(&"a".repeat(MAX_BEARER_TOKEN_BYTES + 1)));
     }
     #[test]
     fn history_collects_unique_valid_message_ids_from_supported_change_families() {

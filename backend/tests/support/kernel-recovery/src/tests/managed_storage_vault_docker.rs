@@ -99,8 +99,12 @@ mod attachment_security_managed_setup;
 mod attachment_security_persistence_fixture;
 #[path = "managed_storage_vault_docker/mail_attachment_flow.rs"]
 mod mail_attachment_flow;
+#[path = "managed_storage_vault_docker/mail_delivery_test_support.rs"]
+mod mail_delivery_test_support;
 #[path = "managed_storage_vault_docker/mail_event_flow.rs"]
 mod mail_event_flow;
+#[path = "managed_storage_vault_docker/mail_gmail_fixture.rs"]
+mod mail_gmail_fixture;
 #[path = "managed_storage_vault_docker/mail_imap_fixture.rs"]
 mod mail_imap_fixture;
 #[path = "managed_storage_vault_docker/mail_managed_setup.rs"]
@@ -108,7 +112,9 @@ mod mail_managed_setup;
 #[path = "managed_storage_vault_docker/mail_smtp_fixture.rs"]
 mod mail_smtp_fixture;
 use mail_attachment_flow::*;
+use mail_delivery_test_support::*;
 use mail_event_flow::*;
+use mail_gmail_fixture::*;
 use mail_imap_fixture::*;
 use mail_smtp_fixture::*;
 #[path = "managed_storage_vault_docker/telegram_managed_flow.rs"]
@@ -119,6 +125,8 @@ use attachment_security_managed_setup::*;
 use mail_managed_setup::*;
 #[path = "managed_storage_vault_docker/mail_delivery_flow.rs"]
 mod mail_delivery_flow;
+#[path = "managed_storage_vault_docker/mail_gmail_delivery_flow.rs"]
+mod mail_gmail_delivery_flow;
 #[path = "managed_storage_vault_docker/mail_managed_flow.rs"]
 mod mail_managed_flow;
 #[path = "managed_storage_vault_docker/zulip_https_fixture.rs"]
