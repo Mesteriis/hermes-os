@@ -7,9 +7,9 @@ export function useTimelineViewSurface() {
   return createPlannedScreenSurface({
     screenId: 'timeline',
     titleKey: 'Timeline',
-    descriptionKey: 'Timeline UI removed after logic extraction. Rebuild pending new design language.',
-    preservedLogicKey: 'Timeline logic is preserved',
-    detailKey: 'Timeline queries, message hydration and filter store state remain in the extracted surface. This screen stays empty until the new timeline UI is rebuilt.',
+    descriptionKey: 'Timeline projection is not admitted yet.',
+    preservedLogicKey: 'No compatibility data path is retained',
+    detailKey: 'This screen stays empty until the rebuildable Timeline projection is admitted outside business domains.',
     status: timeline.status,
     ownerLayer: 'domain',
     surfacePath: timeline.surfacePath,

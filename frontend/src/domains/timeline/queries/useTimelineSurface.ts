@@ -1,66 +1,62 @@
 import { createDomainSurface } from '../../domainSurface'
 
-const surfacePath = 'frontend/src/domains/timeline/queries/useTimelinePageSurface.ts'
+const surfacePath = 'frontend/src/domains/timeline/queries/useTimelineSurface.ts'
 
 export function useTimelineSurface() {
   return createDomainSurface({
     surfaceId: 'timeline',
     labelKey: 'Timeline',
-    status: 'facade',
+    status: 'planned',
     ownerLayer: 'domain',
     surfacePath,
     capabilities: [
       {
         id: 'timeline-events',
         labelKey: 'Event stream',
-        descriptionKey: 'Chronological owner memory, communication and system events.',
+        descriptionKey: 'A future rebuildable event projection admitted outside business domains.',
         icon: 'tabler:timeline',
-        status: 'active',
+        status: 'planned',
         kind: 'timeline',
-        contract: 'useTimelinePageSurface.timelineItems'
       },
       {
         id: 'timeline-filters',
         labelKey: 'Filters',
-        descriptionKey: 'Timeline filtering by source, entity, confidence and date.',
+        descriptionKey: 'Filtering remains unavailable until the Timeline projection is admitted.',
         icon: 'tabler:filter',
-        status: 'active',
+        status: 'planned',
         kind: 'search',
-        contract: 'useTimelinePageSurface.filterStore'
       },
       {
         id: 'timeline-hydration',
         labelKey: 'Source hydration',
-        descriptionKey: 'Source-backed message and event detail hydration.',
+        descriptionKey: 'Hydration will use owner contracts without a Communications compatibility path.',
         icon: 'tabler:database-import',
-        status: 'active',
+        status: 'planned',
         kind: 'projection',
-        contract: 'useTimelinePageSurface.messageHydrator'
       }
     ],
     childSurfaces: [
       {
         id: 'timeline-events',
         labelKey: 'Events',
-        status: 'facade',
+        status: 'planned',
         surfacePath,
         capabilityIds: ['timeline-events']
       },
       {
         id: 'timeline-filters',
         labelKey: 'Filters',
-        status: 'facade',
+        status: 'planned',
         surfacePath,
         capabilityIds: ['timeline-filters']
       },
       {
         id: 'timeline-sources',
         labelKey: 'Sources',
-        status: 'facade',
+        status: 'planned',
         surfacePath,
         capabilityIds: ['timeline-hydration']
       }
     ]
   })
 }
-

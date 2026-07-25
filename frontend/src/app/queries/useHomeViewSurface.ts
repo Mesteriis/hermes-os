@@ -7,9 +7,9 @@ export function useHomeViewSurface() {
   return createPlannedScreenSurface({
     screenId: 'home',
     titleKey: 'Home',
-    descriptionKey: 'Home UI removed after logic extraction. Rebuild pending new design language.',
-    preservedLogicKey: 'Home logic is preserved',
-    detailKey: 'Dashboard stats, message feed derivations and Persona summaries remain in the extracted surface. This screen stays empty until the new home UI is rebuilt.',
+    descriptionKey: 'Home projection is not admitted yet.',
+    preservedLogicKey: 'No compatibility data path is retained',
+    detailKey: 'This screen stays empty until an app-owned projection is admitted over public owner contracts and durable events.',
     status: home.status,
     ownerLayer: 'domain',
     surfacePath: home.surfacePath,

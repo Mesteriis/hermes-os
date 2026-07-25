@@ -1,4 +1,4 @@
-export type DomainSurfaceStatus = 'active' | 'facade'
+export type DomainSurfaceStatus = 'active' | 'facade' | 'planned'
 
 export type DomainSurfaceOwnerLayer = 'domain' | 'app'
 
@@ -47,4 +47,3 @@ export type DomainSurface = {
 export function createDomainSurface<T extends DomainSurface>(surface: T): T {
   return surface
 }
-

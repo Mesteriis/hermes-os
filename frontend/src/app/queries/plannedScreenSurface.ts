@@ -1,4 +1,4 @@
-export type PlannedScreenSurfaceStatus = 'active' | 'facade'
+export type PlannedScreenSurfaceStatus = 'active' | 'facade' | 'planned'
 
 export type PlannedChildSurface = {
   id: string

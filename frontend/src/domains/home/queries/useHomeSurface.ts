@@ -1,62 +1,59 @@
 import { createDomainSurface } from '../../domainSurface'
 
-const surfacePath = 'frontend/src/domains/home/queries/useHomePageSurface.ts'
+const surfacePath = 'frontend/src/domains/home/queries/useHomeSurface.ts'
 
 export function useHomeSurface() {
   return createDomainSurface({
     surfaceId: 'home',
     labelKey: 'Home',
-    status: 'facade',
+    status: 'planned',
     ownerLayer: 'domain',
     surfacePath,
     capabilities: [
       {
         id: 'home-dashboard-summary',
         labelKey: 'Dashboard summary',
-        descriptionKey: 'Owner-facing daily state, message pressure and memory activity.',
+        descriptionKey: 'A future app projection assembled from admitted owner events.',
         icon: 'tabler:home-stats',
-        status: 'active',
+        status: 'planned',
         kind: 'projection',
-        contract: 'useHomePageSurface.homeStats'
       },
       {
         id: 'home-attention-feed',
         labelKey: 'Attention feed',
-        descriptionKey: 'Priority signals that need review before they become durable truth.',
+        descriptionKey: 'A future Review projection; no Communications fallback is retained.',
         icon: 'tabler:alert-circle',
-        status: 'active',
+        status: 'planned',
         kind: 'review',
-        contract: 'useHomePageSurface.recentMessages'
       },
       {
         id: 'home-relationship-snapshot',
         labelKey: 'Relationship snapshot',
-        descriptionKey: 'Recent Personas and organizations surfaced from communications context.',
+        descriptionKey: 'A future cross-owner app composition backed by admitted public contracts.',
         icon: 'tabler:users',
-        status: 'active',
+        status: 'planned',
         kind: 'projection',
-        contract: 'useHomePageSurface.personasTalked'
       }
     ],
     childSurfaces: [
       {
         id: 'home-overview',
         labelKey: 'Overview',
-        status: 'facade',
+        status: 'planned',
         surfacePath,
         capabilityIds: ['home-dashboard-summary']
       },
       {
         id: 'home-attention',
         labelKey: 'Attention',
-        status: 'facade',
+        status: 'planned',
         surfacePath,
         capabilityIds: ['home-attention-feed']
       },
       {
         id: 'home-memory',
         labelKey: 'Memory',
-        status: 'facade',
+        status: 'planned',
         surfacePath,
         capabilityIds: ['home-relationship-snapshot']
       }

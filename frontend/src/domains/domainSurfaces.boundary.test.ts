@@ -68,7 +68,7 @@ describe('domain surface scaffolds', () => {
       const capabilityIds = new Set(surface.capabilities.map((capability) => capability.id))
       for (const child of surface.childSurfaces) {
         expect(child.labelKey).toBeTruthy()
-        expect(child.status === 'active' || child.status === 'facade').toBe(true)
+        expect(['active', 'facade', 'planned']).toContain(child.status)
 
         for (const capabilityId of child.capabilityIds ?? []) {
           expect(capabilityIds.has(capabilityId)).toBe(true)
