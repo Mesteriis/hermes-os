@@ -6,8 +6,7 @@ use hermes_events_protocol::validation::envelope::decode_envelope_v1;
 use hermes_telegram_api::{
     TelegramClientRequest, TelegramClientResponse, TelegramOperationState, TelegramProviderCommand,
     TelegramProviderQuery, TelegramProviderQueryResponse, TelegramRuntimeState,
-    TelegramSendMessage,
-    client_contract::TelegramClientContractV1,
+    TelegramSendMessage, client_contract::TelegramClientContractV1,
 };
 use hermes_telegram_runtime::client_port::{
     TelegramClientPortError, decode_module_response, encode_module_request,
@@ -167,6 +166,17 @@ fn managed_telegram_runtime_uses_kernel_leases_and_event_only_communications_han
             .await
             .expect("republish exact Telegram observation");
         client.flush().await.expect("flush duplicate observation");
+        let duplicate_observation =
+            tokio::time::timeout(Duration::from_secs(1), observations.next())
+                .await
+                .expect("duplicate Telegram observation timeout")
+                .expect("duplicate Telegram observation");
+        let duplicate_observation = decode_envelope_v1(duplicate_observation.payload.as_ref())
+            .expect("duplicate Telegram observation envelope");
+        assert_eq!(
+            duplicate_observation.message_id, observation.message_id,
+            "the observer must drain the exact duplicate before the outage replay"
+        );
         assert!(
             tokio::time::timeout(Duration::from_secs(1), canonical_events.next())
                 .await
@@ -174,8 +184,50 @@ fn managed_telegram_runtime_uses_kernel_leases_and_event_only_communications_han
             "duplicate Telegram observation must not create a second Communications event"
         );
     });
-    assert_communications_query_delivery(&store, &supervisor);
-    assert_telegram_command_completion(&store, &supervisor, &telegram);
+    let initial_evidence_id = assert_communications_query_delivery(&store, &supervisor);
+
+    set_nats_container_running(false);
+    const OUTAGE_OPERATION_ID: &str = "managed-telegram-outage-send-1";
+    assert_telegram_command_accepted(
+        &store,
+        &supervisor,
+        &telegram,
+        OUTAGE_OPERATION_ID,
+        "managed Telegram outage replay trigger",
+    );
+    assert_telegram_operation_completed(&store, &supervisor, &telegram, OUTAGE_OPERATION_ID);
+    std::thread::sleep(Duration::from_millis(2_500));
+    assert_telegram_operation_completed(&store, &supervisor, &telegram, OUTAGE_OPERATION_ID);
+    set_nats_container_running(true);
+
+    let (replayed_observation, replayed_canonical) = event_runtime.block_on(async {
+        let observation = tokio::time::timeout(Duration::from_secs(10), observations.next())
+            .await
+            .expect("replayed Telegram observation timeout")
+            .expect("replayed Telegram observation");
+        let canonical = tokio::time::timeout(Duration::from_secs(10), canonical_events.next())
+            .await
+            .expect("replayed Communications event timeout")
+            .expect("replayed Communications event");
+        (observation, canonical)
+    });
+    let replayed_observation = decode_envelope_v1(replayed_observation.payload.as_ref())
+        .expect("replayed Telegram observation envelope");
+    let replayed_canonical = decode_envelope_v1(replayed_canonical.payload.as_ref())
+        .expect("replayed Communications event envelope");
+    assert_eq!(
+        replayed_canonical.causation_message_id, replayed_observation.message_id,
+        "Communications replay must retain typed Telegram causation"
+    );
+    assert_ne!(
+        replayed_canonical.message_id, canonical.message_id,
+        "the outage replay must deliver the second provider observation"
+    );
+    let replayed_evidence_id = assert_communications_query_delivery(&store, &supervisor);
+    assert_ne!(
+        replayed_evidence_id, initial_evidence_id,
+        "Communications durable query must expose the replayed evidence"
+    );
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {
@@ -304,20 +356,43 @@ fn assert_telegram_account_started(
     }
 }
 
-fn assert_telegram_command_completion(
+fn set_nats_container_running(running: bool) {
+    let container = std::env::var("HERMES_STORAGE_AUTHENTICATED_NATS_CONTAINER")
+        .expect("authenticated NATS container");
+    assert!(
+        (12..=64).contains(&container.len())
+            && container.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "authenticated NATS container id is invalid"
+    );
+    let mut command = std::process::Command::new("docker");
+    if running {
+        command.args(["start", &container]);
+    } else {
+        command.args(["stop", "--timeout", "1", &container]);
+    }
+    assert!(
+        command
+            .status()
+            .expect("control authenticated NATS container")
+            .success(),
+        "authenticated NATS container state change failed"
+    );
+}
+
+fn assert_telegram_command_accepted(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     telegram: &StartedTelegramRuntime,
+    operation_id: &str,
+    text: &str,
 ) {
-    const OPERATION_ID: &str = "managed-telegram-send-1";
-
     let relay = supervisor.relay_port();
     let command =
         TelegramClientRequest::Command(TelegramProviderCommand::SendText(TelegramSendMessage {
-            operation_id: OPERATION_ID.to_owned(),
+            operation_id: operation_id.to_owned(),
             account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
             provider_chat_id: "9001".to_owned(),
-            text: "managed Telegram command".to_owned(),
+            text: text.to_owned(),
         }));
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     let response = loop {
@@ -343,13 +418,22 @@ fn assert_telegram_command_completion(
     let TelegramClientResponse::Operation(operation) = response else {
         panic!("Telegram command returned the wrong response type");
     };
-    assert_eq!(operation.operation_id, OPERATION_ID);
+    assert_eq!(operation.operation_id, operation_id);
     assert_eq!(
         operation.state,
         TelegramOperationState::Accepted,
         "accepted receipt is distinct from provider completion"
     );
+}
 
+fn assert_telegram_operation_completed(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    operation_id: &str,
+) {
+    let relay = supervisor.relay_port();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
     loop {
         let response = match route_telegram_client(
             store,
@@ -380,7 +464,7 @@ fn assert_telegram_command_completion(
         };
         if let Some(operation) = operations
             .iter()
-            .find(|operation| operation.operation_id == OPERATION_ID)
+            .find(|operation| operation.operation_id == operation_id)
         {
             match operation.state {
                 TelegramOperationState::Completed => return,

@@ -276,16 +276,26 @@ pub fn serve_admitted_provider_loop(
                 i64::try_from(duration.as_secs())
                     .map_err(|_| "Telegram runtime clock is unavailable".to_owned())
             })?;
-        executor
-            .block_on(
-                crate::communications_outbox::relay_communications_outbox_once(
-                    &durable,
-                    &event_connection,
-                    &event_publish_permit,
-                    published_at_unix_seconds,
-                ),
-            )
-            .map_err(|error| format!("Telegram runtime outbox relay failed: {error:?}"))?;
+        match executor.block_on(
+            crate::communications_outbox::relay_communications_outbox_once(
+                &durable,
+                &event_connection,
+                &event_publish_permit,
+                published_at_unix_seconds,
+            ),
+        ) {
+            Ok(_) => {}
+            Err(
+                crate::communications_outbox::TelegramCommunicationsOutboxRelayError::Unavailable,
+            ) => {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(
+                crate::communications_outbox::TelegramCommunicationsOutboxRelayError::Persistence,
+            ) => {
+                return Err("Telegram runtime outbox persistence failed".to_owned());
+            }
+        }
     }
 }
 

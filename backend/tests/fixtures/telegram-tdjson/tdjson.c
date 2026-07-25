@@ -82,6 +82,12 @@ void td_json_client_send(void *raw_client, const char *request) {
     if (written > 0 && (size_t)written < sizeof(response)) {
         enqueue(client, response);
     }
+    if (strstr(request, "outage replay trigger") != NULL) {
+        enqueue(
+            client,
+            "{\"@type\":\"updateNewMessage\",\"message\":{\"id\":7002,\"chat_id\":9001,\"sender_id\":{\"@type\":\"messageSenderUser\",\"user_id\":42},\"is_outgoing\":false,\"date\":1783024001,\"content\":{\"@type\":\"messageText\",\"text\":{\"@type\":\"formattedText\",\"text\":\"managed Telegram outage replay evidence\"}}}}"
+        );
+    }
 }
 
 const char *td_json_client_receive(void *raw_client, double timeout) {

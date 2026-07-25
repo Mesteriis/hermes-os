@@ -198,7 +198,7 @@ pub(super) fn start_communications_domain(
 pub(super) fn assert_communications_query_delivery(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
-) {
+) -> Vec<u8> {
     let payload = CommunicationsQueryRequestV1 {
         protocol_major: 1,
         operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
@@ -229,6 +229,7 @@ pub(super) fn assert_communications_query_delivery(
     assert!(evidence.causation_message_id.is_empty());
     assert!(evidence.recorded_at_unix_seconds > 0);
     assert!((0..1_000_000_000).contains(&evidence.recorded_at_nanos));
+    evidence.evidence_id
 }
 
 pub(super) fn assert_communications_search_query_delivery(
