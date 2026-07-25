@@ -124,6 +124,64 @@ test('Attachment Security persistence owns the durable join, bounded jobs and ex
   );
 });
 
+test('Attachment Security runtime is a managed engine with event-only business boundaries', async () => {
+  const [manifest, admission, runtime, scanner, decoder, outbox] = await Promise.all([
+    readFile(new URL('src/attachment-security-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-security-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-security-runtime/src/runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-security-runtime/src/scan.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-security-runtime/src/event_decode.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-security-runtime/src/outbox.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "attachment_security"/);
+  assert.match(manifest, /surface = "runtime"/);
+  for (const dependency of [
+    'hermes-attachment-security-contract',
+    'hermes-attachment-security-core',
+    'hermes-attachment-security-clamav',
+    'hermes-attachment-security-persistence',
+    'hermes-communications-attachment-contract',
+    'hermes-blob-client',
+    'hermes-events-jetstream',
+  ]) {
+    assert.match(manifest, new RegExp(`^${dependency} =`, 'm'));
+  }
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:communications-(?!attachment-contract)|mail|telegram|whatsapp|zulip|kernel)/,
+  );
+  assert.deepEqual(
+    [...admission.matchAll(
+      /pub const ATTACHMENT_SECURITY_[A-Z_]+_CAPABILITY_ID: &str =\s*"([^"]+)";/g,
+    )].map(([, capability]) => capability).sort(),
+    [
+      'attachment_security.blob.read.v1',
+      'attachment_security.candidate.observe.v1',
+      'attachment_security.communications-state.observe.v1',
+      'attachment_security.storage.v1',
+      'attachment_security.verdict.publish.v1',
+    ],
+  );
+  assert.match(admission, /ModuleKindV1::Engine/);
+  assert.match(runtime, /ManagedControlChannelV2/);
+  assert.match(runtime, /request_managed_runtime_event_access_v2/);
+  assert.match(scanner, /receipt_sha256: Some\(&claimed\.job\.blob_receipt_sha256\)/);
+  assert.match(scanner, /scan_clamav_loopback_v1/);
+  assert.match(runtime, /retry_scan_job/);
+  assert.match(runtime, /complete_scan_job_with_outbox/);
+  assert.match(decoder, /Semantics::Observation/);
+  assert.match(decoder, /Semantics::Event/);
+  assert.match(decoder, /BlobPending/);
+  assert.match(decoder, /BlobAdmitted/);
+  assert.match(outbox, /publish_exact\(permit, record\.exact_bytes\(\)\)/);
+  assert.doesNotMatch(
+    `${runtime}\n${scanner}\n${decoder}\n${outbox}`,
+    /hermes_(?:communications_(?:domain|runtime|persistence|api)|mail|telegram|whatsapp|zulip|kernel)/,
+  );
+});
+
 test('Attachment Security Blob reads are one-use and receipt-bound below the engine', async () => {
   const [protocol, client, kernelSession, serviceSession, service] = await Promise.all([
     readFile(

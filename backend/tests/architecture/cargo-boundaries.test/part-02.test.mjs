@@ -284,6 +284,45 @@ test('allows an engine to use only the exact Communications attachment contract'
   );
 });
 
+test('allows an engine runtime to use only the shared Event Hub transport implementation', () => {
+  const eventTransport = workspacePackage('hermes-events-jetstream', {
+    role: 'platform',
+    owner: 'events',
+    surface: 'implementation',
+  });
+  const allowed = [
+    kernel(),
+    eventTransport,
+    workspacePackage(
+      'hermes-attachment-security-runtime',
+      { role: 'engine', owner: 'attachment_security', surface: 'runtime' },
+      [dependency('hermes-events-jetstream')],
+    ),
+  ];
+
+  assert.deepEqual(validateCargoMetadata(canonicalPolicyForTests(), metadata(allowed)), []);
+
+  const eventAuthority = workspacePackage('hermes-events-authority', {
+    role: 'platform',
+    owner: 'events',
+    surface: 'implementation',
+  });
+  const forbidden = [
+    kernel(),
+    eventAuthority,
+    workspacePackage(
+      'hermes-attachment-security-runtime',
+      { role: 'engine', owner: 'attachment_security', surface: 'runtime' },
+      [dependency('hermes-events-authority')],
+    ),
+  ];
+
+  assert.ok(
+    codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(forbidden)))
+      .has('implementation_dependency'),
+  );
+});
+
 test('forbids a domain from importing an engine contract', () => {
   const engineContract = workspacePackage('hermes-attachment-security-contract', {
     role: 'engine',

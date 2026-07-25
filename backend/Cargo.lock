@@ -1599,6 +1599,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-attachment-security-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-security-clamav",
+ "hermes-attachment-security-contract",
+ "hermes-attachment-security-core",
+ "hermes-attachment-security-persistence",
+ "hermes-blob-client",
+ "hermes-communications-attachment-contract",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "prost-types 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-blob-client"
 version = "0.1.0"
 dependencies = [
