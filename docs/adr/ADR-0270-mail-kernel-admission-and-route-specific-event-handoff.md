@@ -12,9 +12,10 @@ owner-approved IMAP sync subset и Kernel-issued Storage/Vault/Blob/Event Hub
 bindings. Kernel до relay отклоняет отсутствующий delivery grant и stale
 runtime generation. Owner-authorized revoke повышает grant epoch, выполняет
 exact Storage/Vault/PgBouncer/PostgreSQL fence, останавливает только Mail worker
-и оставляет Communications активным. Live provider sync, event/outage replay и
-attachment conformance ещё не реализованы, поэтому `mail_runtime_admission_v1`
-закрыт.
+и оставляет Communications активным. Live Mail-owned outbox → NATS →
+Communications delivery теперь доказана вместе с inbox deduplication и outage
+replay. Live provider sync и attachment conformance ещё не реализованы, поэтому
+`mail_runtime_admission_v1` закрыт.
 
 Уточняет:
 
@@ -258,18 +259,42 @@ Clippy, architecture/SRP/Cargo boundaries и relevant live conformance.
 - Communications worker остаётся активным, а прежний Mail sync route после
   revoke отклоняется до runtime relay.
 
+Реализованный event-only handoff slice:
+
+- Mail runtime использует один `ManagedControlChannelV2` для lifecycle,
+  provider credentials, Storage/Vault, Event Hub, Blob и client delivery;
+  `UnixStream::try_clone`, `MSG_PEEK` и V1 request helpers удалены;
+- nested client delivery во время platform request получает correlated
+  `RUNTIME_BUSY`, не потребляя ответ ожидающего platform operation;
+- provider credential lease запрашивает exact descriptor-bounded
+  `MAIL_CREDENTIAL_LEASE_TTL_SECONDS`, а не общий Vault default;
+- runtime подключается только к выданному PgBouncer `pool_alias` с
+  `effective_budgets.max_connections`; миграцию применяет Storage Control,
+  runtime DDL при bootstrap удалён;
+- live managed Mail process публикует exact Mail-owned outbox envelope в NATS,
+  Communications создаёт canonical evidence с исходным causation;
+- повторная публикация тех же exact bytes доставляется подписчику как исходное
+  observation, но Communications inbox не создаёт второй canonical event;
+- при остановленном NATS второй exact envelope остаётся pending, Mail runtime
+  остаётся active без recorded failure, а после возврата NATS envelope и
+  canonical Communications event воспроизводятся;
+- transient недоступность attachment-anchor subscription теперь является
+  retryable transport outage, а malformed payload и persistence failure
+  остаются fatal.
+
 Проверки:
 
 ```text
 HERMES_STORAGE_MANAGED_TEST_FILTER=managed_mail_runtime_uses_kernel_leases_and_route_specific_admission node scripts/test-authenticated-storage.mjs 1.97.0
-cargo +1.97.0 test --locked -p hermes-gateway-protocol -p hermes-storage-runtime -p hermes-kernel-recovery-testkit
-cargo +1.97.0 clippy --locked -p hermes-gateway-protocol -p hermes-storage-runtime -p hermes-kernel-recovery-testkit --all-targets -- -D warnings
-make -C backend architecture-policy-check architecture-evidence-check srp-policy-check cargo-boundaries-check test-architecture fmt-check
+cargo +1.97.0 test -p hermes-mail-runtime -p hermes-mail-persistence
+cargo +1.97.0 test -p hermes-kernel-recovery-testkit --no-run
+cargo +1.97.0 clippy -p hermes-mail-runtime -p hermes-mail-persistence -p hermes-kernel-recovery-testkit --all-targets -- -D warnings
+make -C backend architecture-policy-check srp-policy-check cargo-boundaries-check test-architecture
 ```
 
 Evidence не открывает gate: active sync route не вызывался против provider
-fixture, Mail observation не прошла live NATS/Communications/outage replay,
-attachment continuation не выполнен.
+fixture, а attachment anchor → Mail mapping → Blob terminal observation →
+Communications CAS continuation ещё не выполнен.
 
 ## Отклонённые варианты
 

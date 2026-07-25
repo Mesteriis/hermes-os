@@ -4,12 +4,14 @@
 Дата: 2026-07-24
 Состояние реализации: В работе. Correlated frame/channel, Kernel V2 pump,
 Communications runtime, Blob/owner-key clients и provider-credential resolve
-client реализованы. Telegram runtime переведён на один V2 frame pump вместе с
-descriptor/ready, Storage/Vault, provider credential, Event и Blob/client
-delivery operations. Mail, Zulip и остальные выбранные managed runtimes ещё
-должны быть переведены атомарно с их signed descriptors; Telegram всё ещё
-требует managed-launch generation/revoke и live concurrency conformance. До
-этого ADR не считается полностью реализованным.
+client реализованы. Telegram и Mail runtimes переведены на один V2 frame pump
+вместе с descriptor/ready, Storage/Vault, provider credential, Event и
+Blob/client delivery operations. Mail live managed conformance доказывает
+correlated nested client delivery, Kernel-issued leases, event publication,
+outage replay и revoke fencing без клонирования inherited control FD. Zulip и
+остальные выбранные managed runtimes ещё должны быть переведены атомарно с их
+signed descriptors; Telegram всё ещё требует полного live concurrency
+conformance. До этого ADR не считается полностью реализованным.
 
 Зависит от:
 
