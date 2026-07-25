@@ -172,6 +172,7 @@ async function run_conformance(secrets) {
 }
 
 async function run_managed_process_conformance(secrets) {
+  const tdjsonFixture = await compile_tdjson_fixture(secrets);
   await run('cargo', [
     `+${toolchain}`,
     '--config',
@@ -186,6 +187,8 @@ async function run_managed_process_conformance(secrets) {
     'hermes-scheduler-runtime',
     '-p',
     'hermes-communications-runtime',
+    '-p',
+    'hermes-telegram-runtime',
     '-p',
     'hermes-blob-service',
   ]);
@@ -216,6 +219,8 @@ async function run_managed_process_conformance(secrets) {
       HERMES_SCHEDULER_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-scheduler-runtime`,
       HERMES_SCHEDULER_LIVE_NATS_ENDPOINT: 'nats://127.0.0.1:43225',
       HERMES_COMMUNICATIONS_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-communications-runtime`,
+      HERMES_TELEGRAM_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-telegram-runtime`,
+      HERMES_TELEGRAM_TDJSON_FIXTURE: tdjsonFixture,
       HERMES_BLOB_SERVICE_BIN: `${process.cwd()}/target/debug/hermes-blob-service`,
       HERMES_COMMUNICATIONS_LIVE_NATS_ENDPOINT: 'nats://127.0.0.1:43225',
     },
@@ -224,6 +229,29 @@ async function run_managed_process_conformance(secrets) {
       await stop_contour(secrets);
     }
   }
+}
+
+async function compile_tdjson_fixture(secrets) {
+  const source = join(
+    process.cwd(),
+    'tests',
+    'fixtures',
+    'telegram-tdjson',
+    'tdjson.c',
+  );
+  const output = join(secrets.directory, 'libhermes-telegram-tdjson-fixture.dylib');
+  const linkMode = process.platform === 'darwin' ? '-dynamiclib' : '-shared';
+  await run('cc', [
+    linkMode,
+    '-fPIC',
+    '-Wall',
+    '-Wextra',
+    '-Werror',
+    source,
+    '-o',
+    output,
+  ]);
+  return output;
 }
 
 function authenticated_environment(secrets) {

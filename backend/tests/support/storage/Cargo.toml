@@ -17,6 +17,7 @@ hermes-storage-pgbouncer = { path = "../../../src/platform/storage/pgbouncer" }
 hermes-storage-postgres = { path = "../../../src/platform/storage/postgres" }
 hermes-storage-protocol = { path = "../../../src/platform/storage/protocol" }
 hermes-storage-vault = { path = "../../../src/platform/storage/vault" }
+hermes-telegram-persistence = { path = "../../../src/telegram-persistence" }
 hermes-runtime-protocol = { path = "../../../src/platform/runtime_protocol" }
 hermes-vault-protocol = { path = "../../../src/platform/vault/protocol" }
 getrandom = { version = "=0.4.3", default-features = false }

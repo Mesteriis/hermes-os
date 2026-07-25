@@ -1,0 +1,345 @@
+//! Exact admission, storage, Vault and release assembly for managed Telegram conformance.
+
+use super::*;
+
+use hermes_telegram_api::{
+    TelegramAccount, TelegramAccountState, TelegramCredentialBinding, TelegramCredentialPurpose,
+    TelegramProviderKind, TelegramRuntimeState,
+    client_contract::{TELEGRAM_MODULE_ID, TELEGRAM_OWNER_ID},
+};
+use hermes_telegram_core::credential_lease_purpose_for_purpose;
+use hermes_telegram_persistence::{
+    TELEGRAM_STORAGE_BUNDLE_REVISION_V1, TelegramDurablePersistence,
+    TelegramPersistenceConformanceV1, telegram_storage_bundle_v1,
+};
+use hermes_telegram_runtime::{
+    admission::{
+        TELEGRAM_STORAGE_CAPABILITY_ID, TELEGRAM_TDJSON_ARTIFACT_ID, telegram_module_descriptor_v1,
+    },
+    settings::telegram_settings_schema_bytes_v1,
+};
+use hermes_vault_key_provider::WrappingKeyProvider;
+use hermes_vault_key_provider_file::FileWrappingKeyProvider;
+use hermes_vault_protocol::SecretClassV1;
+use hermes_vault_store_sqlcipher::{SecretRecordScope, VaultStore};
+use zeroize::Zeroizing;
+
+const TELEGRAM_RELEASE_ARTIFACT_ID: &str = "integration.telegram";
+pub(super) const TELEGRAM_ACCOUNT_ID: &str = "telegram-account-1";
+
+pub(super) struct AdmittedTelegramRuntime {
+    registration_id: String,
+    capability_ids: Vec<String>,
+}
+
+pub(super) struct StartedTelegramRuntime {
+    pub(super) registration_id: String,
+    pub(super) runtime_instance_id: String,
+    pub(super) runtime_generation: u64,
+    pub(super) grant_epoch: u64,
+}
+
+pub(super) fn installed_communications_telegram_release(root: &Path) -> InstalledSignedBundle {
+    let mut artifacts = communications_release_artifacts();
+    artifacts.push(
+        SignedRuntimeArtifact::new(
+            TELEGRAM_RELEASE_ARTIFACT_ID,
+            telegram_binary(),
+            telegram_module_descriptor_v1("managed-telegram-live").encode_to_vec(),
+        )
+        .with_settings_schema(telegram_settings_schema_bytes_v1()),
+    );
+    InstalledSignedBundle::install_with_native_dependencies(
+        root,
+        &artifacts,
+        &[SignedNativeDependency::new(
+            TELEGRAM_TDJSON_ARTIFACT_ID,
+            telegram_tdjson_fixture(),
+            TELEGRAM_MODULE_ID,
+        )],
+    )
+    .expect("install signed Communications and Telegram release")
+}
+
+pub(super) fn seed_telegram_vault(vault_dir: &Path) {
+    let key = FileWrappingKeyProvider::new(&vault_dir.join("platform-wrapping-key.bin"))
+        .load_or_create()
+        .expect("open Vault wrapping key");
+    let store = VaultStore::open(
+        &vault_dir.join("vault.db"),
+        &vault_dir.join("vault.anchor"),
+        &key,
+    )
+    .expect("open initialized Vault");
+    store_telegram_secret(
+        &store,
+        TelegramCredentialPurpose::ApiHash,
+        SecretClassV1::ProviderCredential,
+        b"managed-telegram-api-hash",
+    );
+    store_telegram_secret(
+        &store,
+        TelegramCredentialPurpose::SessionEncryptionKey,
+        SecretClassV1::SessionStoreKey,
+        &[31_u8; 32],
+    );
+}
+
+fn store_telegram_secret(
+    store: &VaultStore,
+    purpose: TelegramCredentialPurpose,
+    secret_class: SecretClassV1,
+    payload: &[u8],
+) {
+    let request = credential_lease_purpose_for_purpose(TELEGRAM_ACCOUNT_ID, purpose)
+        .expect("Telegram credential purpose");
+    let scope = SecretRecordScope::new(TELEGRAM_OWNER_ID.to_owned(), &request, secret_class, 1)
+        .expect("Telegram secret scope");
+    store
+        .store_secret(&scope, payload)
+        .expect("store Telegram test credential");
+}
+
+pub(super) fn admit_telegram_runtime(store: &SqliteControlStore) -> AdmittedTelegramRuntime {
+    let descriptor = telegram_module_descriptor_v1("managed-telegram-live");
+    let descriptor_bytes = descriptor.encode_to_vec();
+    let registration = crate::modules::registration::registry::register(store, &descriptor_bytes)
+        .expect("register exact Telegram descriptor");
+    let capability_ids = descriptor
+        .capabilities
+        .iter()
+        .map(|capability| capability.capability_id.clone())
+        .collect::<Vec<_>>();
+    crate::modules::registration::registry::approve_after_owner_authorization(
+        store,
+        registration.registration_id(),
+        &capability_ids,
+    )
+    .expect("approve exact Telegram capabilities");
+    let schema = telegram_settings_schema_bytes_v1();
+    store
+        .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
+            registration.registration_id(),
+            1,
+            "hermes-managed-runtime-conformance",
+            TELEGRAM_RELEASE_ARTIFACT_ID,
+            Sha256::digest(
+                std::fs::read(telegram_binary()).expect("Telegram runtime binary bytes"),
+            )
+            .into(),
+            Sha256::digest(&descriptor_bytes).into(),
+            Some(Sha256::digest(&schema).into()),
+        ))
+        .expect("record Telegram release binding");
+    let bundle = telegram_storage_bundle_v1().encode_to_vec();
+    store
+        .record_platform_storage_bundle(
+            &PlatformStorageBundleV1::new(
+                TELEGRAM_OWNER_ID,
+                u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V1),
+                Sha256::digest(&bundle).into(),
+                bundle,
+            )
+            .expect("record Telegram Storage bundle"),
+        )
+        .expect("persist Telegram Storage bundle");
+    AdmittedTelegramRuntime {
+        registration_id: registration.registration_id().to_owned(),
+        capability_ids,
+    }
+}
+
+pub(super) fn prepare_telegram_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    admitted: AdmittedTelegramRuntime,
+) -> AdmittedTelegramRuntime {
+    let reservation = managed_launch::reserve(supervisor, store, &admitted.registration_id)
+        .expect("reserve Telegram managed launch");
+    let runtime_instance_id = reservation.runtime_instance_id().to_owned();
+    let runtime_generation = reservation.runtime_generation();
+    let bundle = store
+        .platform_storage_bundle(
+            TELEGRAM_OWNER_ID,
+            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V1),
+        )
+        .expect("read Telegram Storage bundle")
+        .expect("Telegram Storage bundle");
+    let binding = issue_managed(
+        store,
+        &admitted.registration_id,
+        &runtime_instance_id,
+        runtime_generation,
+        TELEGRAM_STORAGE_CAPABILITY_ID,
+        StorageBindingIssueV1::new(
+            1,
+            1,
+            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V1),
+            *bundle.digest(),
+        )
+        .expect("Telegram Storage binding issue"),
+    )
+    .expect("issue Telegram Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision Telegram Storage binding");
+    seed_telegram_account();
+    admitted
+}
+
+pub(super) fn start_telegram_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    admitted: AdmittedTelegramRuntime,
+) -> StartedTelegramRuntime {
+    let reservation = managed_launch::load(supervisor, store, &admitted.registration_id)
+        .expect("load Telegram managed launch reservation");
+    let runtime_instance_id = reservation.runtime_instance_id().to_owned();
+    let runtime_generation = reservation.runtime_generation();
+    let grant_epoch = reservation.grant_epoch();
+    let binding = store
+        .platform_storage_binding(&admitted.registration_id, TELEGRAM_STORAGE_CAPABILITY_ID)
+        .expect("read Telegram Storage binding")
+        .expect("Telegram Storage binding");
+    let topology =
+        crate::platform::storage::topology::current(store).expect("read Storage topology");
+    let vault = vault_status::read_current(store, &supervisor.relay_port())
+        .expect("read live Vault status");
+    let storage = crate::platform::storage::topology::to_managed_runtime_configuration(
+        &topology,
+        &binding,
+        store.snapshot().instance_id(),
+        vault.runtime_generation(),
+        vault.hpke_public_key_x25519(),
+    )
+    .expect("build Telegram Storage configuration");
+    let events = store
+        .platform_event_hub_topology()
+        .expect("read Event Hub topology")
+        .expect("Event Hub topology");
+    let settings_snapshot = telegram_settings_snapshot().encode_to_vec();
+    let configuration = hermes_runtime_protocol::v1::ManagedIntegrationRuntimeConfigurationV1 {
+        major: 1,
+        logical_owner_id: TELEGRAM_OWNER_ID.to_owned(),
+        registration_id: admitted.registration_id.clone(),
+        runtime_instance_id: runtime_instance_id.clone(),
+        runtime_generation,
+        grant_epoch,
+        storage: Some(storage),
+        event_hub_endpoint: events.nats_endpoint().to_owned(),
+        event_credential_revision: events.credential_revision(),
+        configuration_instance_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+        runtime_artifacts: Vec::new(),
+        integration_state_root: None,
+    };
+    managed_launch::start_reserved_integration(
+        supervisor,
+        kernel_data,
+        runtime_dir,
+        reservation,
+        managed_launch::ManagedIntegrationLaunchConfiguration {
+            runtime: configuration,
+            settings_snapshot_bytes: settings_snapshot,
+            granted_capability_ids: &admitted.capability_ids,
+        },
+    )
+    .expect("start managed Telegram integration");
+    StartedTelegramRuntime {
+        registration_id: admitted.registration_id,
+        runtime_instance_id,
+        runtime_generation,
+        grant_epoch,
+    }
+}
+
+fn telegram_settings_snapshot() -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {
+    use hermes_runtime_protocol::v1::{
+        SettingValueV1, SettingsValueEntryV1, setting_value_v1::Value,
+    };
+
+    hermes_runtime_protocol::v1::SettingsSnapshotV1 {
+        target_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+        revision: 1,
+        values: vec![
+            SettingsValueEntryV1 {
+                setting_id: "telegram.account_id".to_owned(),
+                value: Some(SettingValueV1 {
+                    value: Some(Value::StringValue(TELEGRAM_ACCOUNT_ID.to_owned())),
+                }),
+            },
+            SettingsValueEntryV1 {
+                setting_id: "telegram.api_id".to_owned(),
+                value: Some(SettingValueV1 {
+                    value: Some(Value::SignedIntegerValue(42)),
+                }),
+            },
+        ],
+    }
+}
+
+fn seed_telegram_account() {
+    tokio::runtime::Runtime::new()
+        .expect("Telegram seed runtime")
+        .block_on(async {
+            let durable = telegram_admin_persistence().await;
+            durable
+                .initialize()
+                .await
+                .expect("initialize Telegram persistence");
+            durable
+                .upsert_account(
+                    &TelegramAccount {
+                        account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                        provider_kind: TelegramProviderKind::User,
+                        display_name: "Managed Telegram".to_owned(),
+                        external_account_id: "telegram-owner-account".to_owned(),
+                        state: TelegramAccountState::Ready,
+                        runtime_state: TelegramRuntimeState::Stopped,
+                        runtime_epoch: 1,
+                    },
+                    &[
+                        TelegramCredentialBinding {
+                            purpose: TelegramCredentialPurpose::ApiHash,
+                            revision: 1,
+                        },
+                        TelegramCredentialBinding {
+                            purpose: TelegramCredentialPurpose::SessionEncryptionKey,
+                            revision: 1,
+                        },
+                    ],
+                )
+                .await
+                .expect("seed Telegram account");
+        });
+}
+
+async fn telegram_admin_persistence() -> TelegramDurablePersistence {
+    let password = Zeroizing::new(
+        std::fs::read_to_string(required(
+            "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",
+        ))
+        .expect("read disposable PostgreSQL credential")
+        .trim()
+        .to_owned(),
+    );
+    TelegramPersistenceConformanceV1::connect(
+        &required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST"),
+        required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")
+            .parse()
+            .expect("valid PostgreSQL port"),
+        "hermes_postgres_admin",
+        password.as_str(),
+        "hermes_storage_authenticated",
+    )
+    .await
+    .expect("connect Telegram conformance persistence")
+}
+
+fn telegram_binary() -> PathBuf {
+    binary("HERMES_TELEGRAM_RUNTIME_BIN")
+}
+
+fn telegram_tdjson_fixture() -> PathBuf {
+    binary("HERMES_TELEGRAM_TDJSON_FIXTURE")
+}

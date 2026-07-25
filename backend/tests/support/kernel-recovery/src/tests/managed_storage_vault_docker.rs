@@ -38,9 +38,12 @@ use prost::Message;
 
 use super::common::*;
 use crate::identity::device::signer::FileDeviceSigner;
-use crate::platform::managed::signed_bundle::{InstalledSignedBundle, SignedRuntimeArtifact};
+use crate::platform::managed::signed_bundle::{
+    InstalledSignedBundle, SignedNativeDependency, SignedRuntimeArtifact,
+};
 use crate::platform::vault::managed_route::KernelManagedVaultRouteHandler;
 use crate::platform::vault::owner_derived_key::OwnerDerivedKeyHandlerV1;
+use crate::platform::vault::provider_credential::ProviderCredentialHandlerV1;
 use crate::platform::vault::status as vault_status;
 use crate::platform::vault::{binding as vault_binding, launch as vault_launch};
 use crate::platform::{
@@ -72,6 +75,11 @@ use communications_backup::*;
 #[path = "managed_storage_vault_docker/telegram_event_flow.rs"]
 mod telegram_event_flow;
 use telegram_event_flow::*;
+#[path = "managed_storage_vault_docker/telegram_managed_setup.rs"]
+mod telegram_managed_setup;
+use telegram_managed_setup::*;
+#[path = "managed_storage_vault_docker/telegram_managed_flow.rs"]
+mod telegram_managed_flow;
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault and Storage binaries"]
@@ -174,7 +182,6 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     supervisor
         .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
             Arc::clone(&store),
-            "communications",
         )))
         .expect("configure Communications Event credential handler");
     start_vault(&supervisor, &store, &data, release.kernel());
@@ -347,7 +354,7 @@ impl SchedulerRecoveryFixture {
         configure_route_handler(&supervisor, &store, &data);
         supervisor
             .configure_event_credential_handler(Arc::new(
-                UnauthenticatedNatsCredentialHandler::new(Arc::clone(&store), "scheduler"),
+                UnauthenticatedNatsCredentialHandler::new(Arc::clone(&store)),
             ))
             .expect("configure Scheduler Event credential handler");
         start_vault(&supervisor, &store, &data, release.kernel());
@@ -513,6 +520,13 @@ fn configure_route_handler(
         .configure_vault_route_handler(vault_handler)
         .expect("Vault route handler");
     supervisor
+        .configure_provider_credential_handler(Arc::new(ProviderCredentialHandlerV1::new(
+            Arc::clone(store),
+            supervisor.relay_port(),
+            Arc::clone(&vault_route),
+        )))
+        .expect("provider credential handler");
+    supervisor
         .configure_owner_derived_key_handler(Arc::new(OwnerDerivedKeyHandlerV1::new(
             Arc::clone(store),
             supervisor.relay_port(),
@@ -648,15 +662,11 @@ fn wait_for_scheduler_generation(
 
 struct UnauthenticatedNatsCredentialHandler {
     store: Arc<SqliteControlStore>,
-    logical_owner_id: &'static str,
 }
 
 impl UnauthenticatedNatsCredentialHandler {
-    fn new(store: Arc<SqliteControlStore>, logical_owner_id: &'static str) -> Self {
-        Self {
-            store,
-            logical_owner_id,
-        }
+    fn new(store: Arc<SqliteControlStore>) -> Self {
+        Self { store }
     }
 }
 
@@ -666,6 +676,11 @@ impl ManagedRuntimeEventCredentialHandler for UnauthenticatedNatsCredentialHandl
         expectation: &ManagedRuntimeExpectation,
         request: ManagedRuntimeEventCredentialRequestV1,
     ) -> Result<ManagedRuntimeEventCredentialDeliveryV1, String> {
+        let registration = self
+            .store
+            .module_registration(expectation.registration_id())
+            .map_err(|_| "Event registration is unavailable".to_owned())?
+            .ok_or_else(|| "Event registration is unavailable".to_owned())?;
         let request_id: [u8; 16] = request
             .request_id
             .as_slice()
@@ -681,7 +696,7 @@ impl ManagedRuntimeEventCredentialHandler for UnauthenticatedNatsCredentialHandl
         .map_err(|_| "Scheduler Event request is invalid".to_owned())?;
         let binding = NatsRuntimeCredentialDeliveryBindingV1::new(
             NatsRuntimeCredentialDeliveryBindingInputV1 {
-                logical_owner_id: self.logical_owner_id.to_owned(),
+                logical_owner_id: registration.owner_id().to_owned(),
                 registration_id: expectation.registration_id().to_owned(),
                 runtime_instance_id: expectation.runtime_instance_id().to_owned(),
                 runtime_generation: expectation.runtime_generation(),

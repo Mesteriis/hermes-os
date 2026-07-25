@@ -29,8 +29,9 @@ use hermes_telegram_api::{
 use hermes_telegram_core::credential_lease_purpose_for_purpose;
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{TdJsonLibrary, TdlibAuthorizationParameters, TdlibError};
-use hermes_vault_protocol::{DEFAULT_LEASE_TTL_SECONDS, SecretClassV1};
+use hermes_vault_protocol::SecretClassV1;
 
+use crate::admission::TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS;
 use crate::communications_outbox::{
     TelegramCommunicationsOutboxRelayError, relay_communications_outbox_once,
 };
@@ -159,7 +160,10 @@ pub async fn open_admitted_runtime(
     let (storage_password, returned_control_channel) =
         resolve_storage_credential_v2(control_channel, &storage_binding, storage_vault_context)
             .await
-            .map_err(|_| {
+            .map_err(|error| {
+                if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                    eprintln!("developer_telegram_storage_credential_error={error:?}");
+                }
                 TelegramBootstrapError::CredentialRoute(TelegramCredentialRouteError::Unavailable)
             })?;
     control_channel = returned_control_channel;
@@ -175,10 +179,6 @@ pub async fn open_admitted_runtime(
     )
     .await
     .map_err(TelegramBootstrapError::Persistence)?;
-    durable
-        .initialize()
-        .await
-        .map_err(TelegramBootstrapError::Persistence)?;
     let (persisted_account, credential_bindings) = durable
         .account(account_id)
         .await
@@ -217,7 +217,7 @@ pub async fn open_admitted_runtime(
                     configuration_instance_id: &admission.configuration_instance_id,
                     purpose_id: api_hash_purpose.purpose_id(),
                     credential_revision: admission.api_hash_revision,
-                    ttl_seconds: DEFAULT_LEASE_TTL_SECONDS,
+                    ttl_seconds: TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS,
                     secret_class: SecretClassV1::ProviderCredential,
                 },
             )
@@ -235,7 +235,7 @@ pub async fn open_admitted_runtime(
                     configuration_instance_id: &admission.configuration_instance_id,
                     purpose_id: session_purpose.purpose_id(),
                     credential_revision: admission.session_encryption_key_revision,
-                    ttl_seconds: DEFAULT_LEASE_TTL_SECONDS,
+                    ttl_seconds: TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS,
                     secret_class: SecretClassV1::SessionStoreKey,
                 },
             )
@@ -292,6 +292,9 @@ pub async fn open_admitted_runtime(
         TelegramRuntimeComposition::new_with_account_setup(library, account_setup, parameters)
             .map_err(TelegramBootstrapError::Provider)?;
     composition.set_admission(admission.clone());
+    identity
+        .signal_ready(&mut control_channel)
+        .map_err(TelegramBootstrapError::ManagedRuntime)?;
     control_channel
         .inner_mut()
         .set_nonblocking(true)
@@ -366,6 +369,9 @@ fn provider_credential_context(
 fn map_provider_credential_error(
     error: ManagedProviderCredentialErrorV1,
 ) -> TelegramBootstrapError {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_telegram_provider_credential_error={error:?}");
+    }
     let route_error = match error {
         ManagedProviderCredentialErrorV1::Unavailable => TelegramCredentialRouteError::Unavailable,
         ManagedProviderCredentialErrorV1::InvalidContext

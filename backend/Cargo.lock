@@ -2274,6 +2274,7 @@ dependencies = [
  "hermes-storage-postgres",
  "hermes-storage-protocol",
  "hermes-storage-vault",
+ "hermes-telegram-persistence",
  "hermes-vault-protocol",
  "libc",
  "prost 0.14.4",

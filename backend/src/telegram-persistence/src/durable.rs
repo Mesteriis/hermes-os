@@ -14,11 +14,14 @@ use hermes_telegram_api::{
     provider_command_kind, provider_command_message_id,
 };
 use serde_json::Value;
-use sqlx::{PgPool, Row, postgres::PgConnectOptions};
+use sqlx::{
+    PgPool, Row,
+    postgres::{PgConnectOptions, PgPoolOptions},
+};
 use std::collections::HashSet;
 
 pub const TELEGRAM_SCHEMA_V1: &str = r#"
-CREATE TABLE IF NOT EXISTS telegram_runtime_operations (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_runtime_operations (
     operation_id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
     command_kind TEXT NOT NULL,
@@ -44,10 +47,10 @@ CREATE TABLE IF NOT EXISTS telegram_runtime_operations (
     CHECK (lease_epoch >= 0)
 );
 CREATE INDEX IF NOT EXISTS telegram_runtime_operations_due_idx
-    ON telegram_runtime_operations (account_id, state, next_attempt_at, operation_id);
+    ON hermes_data.telegram_runtime_operations (account_id, state, next_attempt_at, operation_id);
 CREATE INDEX IF NOT EXISTS telegram_runtime_operations_lease_idx
-    ON telegram_runtime_operations (account_id, lease_epoch, state);
-CREATE TABLE IF NOT EXISTS telegram_provider_event_journal (
+    ON hermes_data.telegram_runtime_operations (account_id, lease_epoch, state);
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_provider_event_journal (
     account_id TEXT NOT NULL,
     sequence BIGINT NOT NULL,
     provider_cursor TEXT,
@@ -57,14 +60,14 @@ CREATE TABLE IF NOT EXISTS telegram_provider_event_journal (
     CHECK (sequence > 0)
 );
 CREATE INDEX IF NOT EXISTS telegram_provider_event_journal_cursor_idx
-    ON telegram_provider_event_journal (account_id, provider_cursor);
-CREATE TABLE IF NOT EXISTS telegram_accounts (
+    ON hermes_data.telegram_provider_event_journal (account_id, provider_cursor);
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_accounts (
     account_id TEXT PRIMARY KEY,
     account_payload JSONB NOT NULL,
     credentials_payload JSONB NOT NULL,
     CHECK (length(trim(account_id)) > 0)
 );
-CREATE TABLE IF NOT EXISTS telegram_chat_projections (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_chat_projections (
     account_id TEXT NOT NULL,
     provider_chat_id TEXT NOT NULL,
     projection_payload JSONB NOT NULL,
@@ -72,7 +75,7 @@ CREATE TABLE IF NOT EXISTS telegram_chat_projections (
     CHECK (length(trim(account_id)) > 0),
     CHECK (length(trim(provider_chat_id)) > 0)
 );
-CREATE TABLE IF NOT EXISTS telegram_chat_avatar_projections (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_chat_avatar_projections (
     account_id TEXT NOT NULL,
     provider_chat_id TEXT NOT NULL,
     projection_payload JSONB NOT NULL,
@@ -80,7 +83,7 @@ CREATE TABLE IF NOT EXISTS telegram_chat_avatar_projections (
     CHECK (length(trim(account_id)) > 0),
     CHECK (length(trim(provider_chat_id)) > 0)
 );
-CREATE TABLE IF NOT EXISTS telegram_chat_folder_projections (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_chat_folder_projections (
     account_id TEXT NOT NULL,
     provider_folder_id BIGINT NOT NULL,
     projection_payload JSONB NOT NULL,
@@ -88,7 +91,7 @@ CREATE TABLE IF NOT EXISTS telegram_chat_folder_projections (
     CHECK (length(trim(account_id)) > 0),
     CHECK (provider_folder_id > 0)
 );
-CREATE TABLE IF NOT EXISTS telegram_chat_position_projections (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_chat_position_projections (
     account_id TEXT NOT NULL,
     provider_chat_id TEXT NOT NULL,
     list_kind TEXT NOT NULL,
@@ -99,7 +102,7 @@ CREATE TABLE IF NOT EXISTS telegram_chat_position_projections (
     CHECK (length(trim(provider_chat_id)) > 0),
     CHECK (length(trim(list_kind)) > 0)
 );
-CREATE TABLE IF NOT EXISTS telegram_chat_operational_states (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_chat_operational_states (
     account_id TEXT NOT NULL,
     provider_chat_id TEXT NOT NULL,
     projection_payload JSONB NOT NULL,
@@ -107,7 +110,7 @@ CREATE TABLE IF NOT EXISTS telegram_chat_operational_states (
     CHECK (length(trim(account_id)) > 0),
     CHECK (length(trim(provider_chat_id)) > 0)
 );
-CREATE TABLE IF NOT EXISTS telegram_message_projections (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_message_projections (
     message_id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
     provider_chat_id TEXT NOT NULL,
@@ -118,8 +121,8 @@ CREATE TABLE IF NOT EXISTS telegram_message_projections (
     CHECK (length(trim(provider_chat_id)) > 0)
 );
 CREATE INDEX IF NOT EXISTS telegram_message_projections_chat_idx
-    ON telegram_message_projections (account_id, provider_chat_id, observed_at DESC, message_id);
-CREATE TABLE IF NOT EXISTS telegram_attachment_projections (
+    ON hermes_data.telegram_message_projections (account_id, provider_chat_id, observed_at DESC, message_id);
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_attachment_projections (
     attachment_id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
     provider_chat_id TEXT NOT NULL,
@@ -133,8 +136,8 @@ CREATE TABLE IF NOT EXISTS telegram_attachment_projections (
     CHECK (length(trim(provider_file_id)) > 0)
 );
 CREATE INDEX IF NOT EXISTS telegram_attachment_projections_file_idx
-    ON telegram_attachment_projections (account_id, provider_file_id);
-CREATE TABLE IF NOT EXISTS telegram_file_projections (
+    ON hermes_data.telegram_attachment_projections (account_id, provider_file_id);
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_file_projections (
     account_id TEXT NOT NULL,
     provider_file_id TEXT NOT NULL,
     projection_payload JSONB NOT NULL,
@@ -142,7 +145,7 @@ CREATE TABLE IF NOT EXISTS telegram_file_projections (
     CHECK (length(trim(account_id)) > 0),
     CHECK (length(trim(provider_file_id)) > 0)
 );
-CREATE TABLE IF NOT EXISTS telegram_participant_projections (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_participant_projections (
     account_id TEXT NOT NULL,
     provider_chat_id TEXT NOT NULL,
     participant_filter TEXT NOT NULL,
@@ -152,7 +155,7 @@ CREATE TABLE IF NOT EXISTS telegram_participant_projections (
     CHECK (length(trim(provider_chat_id)) > 0),
     CHECK (length(trim(participant_filter)) > 0)
 );
-CREATE TABLE IF NOT EXISTS telegram_topic_projections (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_topic_projections (
     account_id TEXT NOT NULL,
     provider_chat_id TEXT NOT NULL,
     provider_topic_id TEXT NOT NULL,
@@ -162,7 +165,7 @@ CREATE TABLE IF NOT EXISTS telegram_topic_projections (
     CHECK (length(trim(provider_chat_id)) > 0),
     CHECK (length(trim(provider_topic_id)) > 0)
 );
-CREATE TABLE IF NOT EXISTS telegram_message_versions (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_message_versions (
     version_id TEXT NOT NULL,
     message_id TEXT NOT NULL,
     account_id TEXT NOT NULL,
@@ -174,7 +177,7 @@ CREATE TABLE IF NOT EXISTS telegram_message_versions (
     UNIQUE (message_id, version_number),
     CHECK (version_number > 0)
 );
-CREATE TABLE IF NOT EXISTS telegram_message_tombstones (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_message_tombstones (
     tombstone_id TEXT PRIMARY KEY,
     message_id TEXT NOT NULL,
     account_id TEXT NOT NULL,
@@ -183,22 +186,22 @@ CREATE TABLE IF NOT EXISTS telegram_message_tombstones (
     projection_payload JSONB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS telegram_message_tombstones_message_idx
-    ON telegram_message_tombstones (message_id, tombstone_id);
-CREATE TABLE IF NOT EXISTS telegram_message_reactions (
+    ON hermes_data.telegram_message_tombstones (message_id, tombstone_id);
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_message_reactions (
     message_id TEXT PRIMARY KEY,
     projection_payload JSONB NOT NULL
 );
-CREATE TABLE IF NOT EXISTS telegram_message_mutations (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_message_mutations (
     message_id TEXT PRIMARY KEY,
     projection_payload JSONB NOT NULL
 );
-CREATE TABLE IF NOT EXISTS telegram_chat_states (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_chat_states (
     account_id TEXT NOT NULL,
     provider_chat_id TEXT NOT NULL,
     projection_payload JSONB NOT NULL,
     PRIMARY KEY (account_id, provider_chat_id)
 );
-CREATE TABLE IF NOT EXISTS telegram_communications_outbox (
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_communications_outbox (
     message_id BYTEA PRIMARY KEY,
     envelope_sha256 BYTEA NOT NULL,
     exact_envelope_bytes BYTEA NOT NULL,
@@ -209,7 +212,7 @@ CREATE TABLE IF NOT EXISTS telegram_communications_outbox (
     CHECK (octet_length(exact_envelope_bytes) > 0)
 );
 CREATE INDEX IF NOT EXISTS telegram_communications_outbox_pending_idx
-    ON telegram_communications_outbox (created_at_unix_seconds, message_id)
+    ON hermes_data.telegram_communications_outbox (created_at_unix_seconds, message_id)
     WHERE published_at_unix_seconds IS NULL;
 "#;
 
@@ -247,8 +250,12 @@ impl TelegramDurablePersistence {
             .port(port)
             .username(binding.access().runtime_principal())
             .password(password)
-            .database(database_id);
-        let pool = PgPool::connect_with(options)
+            .database(binding.access().pool_alias());
+        let pool = PgPoolOptions::new()
+            .max_connections(u32::from(
+                binding.access().effective_budgets().max_connections(),
+            ))
+            .connect_with(options)
             .await
             .map_err(|_| TelegramDurablePersistenceError::Database)?;
         Ok(Self::new(pool))
@@ -274,7 +281,7 @@ impl TelegramDurablePersistence {
     ) -> Result<(), TelegramDurablePersistenceError> {
         sqlx::query(
             r#"
-            INSERT INTO telegram_communications_outbox
+            INSERT INTO hermes_data.telegram_communications_outbox
                 (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (message_id) DO NOTHING
@@ -297,7 +304,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT exact_envelope_bytes
-            FROM telegram_communications_outbox
+            FROM hermes_data.telegram_communications_outbox
             WHERE published_at_unix_seconds IS NULL
             ORDER BY created_at_unix_seconds ASC, message_id ASC
             LIMIT $1
@@ -325,7 +332,7 @@ impl TelegramDurablePersistence {
     ) -> Result<bool, TelegramDurablePersistenceError> {
         sqlx::query(
             r#"
-            UPDATE telegram_communications_outbox
+            UPDATE hermes_data.telegram_communications_outbox
             SET published_at_unix_seconds = $2
             WHERE message_id = $1 AND published_at_unix_seconds IS NULL
             "#,
@@ -349,7 +356,7 @@ impl TelegramDurablePersistence {
             .map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_accounts (account_id, account_payload, credentials_payload)
+            INSERT INTO hermes_data.telegram_accounts (account_id, account_payload, credentials_payload)
             VALUES ($1, $2, $3)
             ON CONFLICT (account_id) DO UPDATE SET
                 account_payload = EXCLUDED.account_payload,
@@ -373,7 +380,7 @@ impl TelegramDurablePersistence {
         TelegramDurablePersistenceError,
     > {
         let row = sqlx::query(
-            "SELECT account_payload, credentials_payload FROM telegram_accounts WHERE account_id = $1",
+            "SELECT account_payload, credentials_payload FROM hermes_data.telegram_accounts WHERE account_id = $1",
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
@@ -396,11 +403,12 @@ impl TelegramDurablePersistence {
     }
 
     pub async fn accounts(&self) -> Result<Vec<TelegramAccount>, TelegramDurablePersistenceError> {
-        let rows =
-            sqlx::query("SELECT account_payload FROM telegram_accounts ORDER BY account_id ASC")
-                .fetch_all(&self.pool)
-                .await
-                .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        let rows = sqlx::query(
+            "SELECT account_payload FROM hermes_data.telegram_accounts ORDER BY account_id ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
         rows.into_iter()
             .map(|row| {
                 let payload: Value = row
@@ -419,7 +427,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(chat).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_chat_projections
+            INSERT INTO hermes_data.telegram_chat_projections
                 (account_id, provider_chat_id, projection_payload)
             VALUES ($1, $2, $3)
             ON CONFLICT (account_id, provider_chat_id) DO UPDATE SET
@@ -443,7 +451,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(avatar).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_chat_avatar_projections
+            INSERT INTO hermes_data.telegram_chat_avatar_projections
                 (account_id, provider_chat_id, projection_payload)
             VALUES ($1, $2, $3)
             ON CONFLICT (account_id, provider_chat_id) DO UPDATE SET
@@ -465,7 +473,7 @@ impl TelegramDurablePersistence {
         provider_chat_id: &str,
     ) -> Result<Option<TelegramChatAvatar>, TelegramDurablePersistenceError> {
         let row = sqlx::query(
-            "SELECT projection_payload FROM telegram_chat_avatar_projections WHERE account_id = $1 AND provider_chat_id = $2",
+            "SELECT projection_payload FROM hermes_data.telegram_chat_avatar_projections WHERE account_id = $1 AND provider_chat_id = $2",
         )
         .bind(account_id)
         .bind(provider_chat_id)
@@ -490,7 +498,7 @@ impl TelegramDurablePersistence {
                 serde_json::to_value(folder).map_err(|_| TelegramDurablePersistenceError::Codec)?;
             sqlx::query(
                 r#"
-                INSERT INTO telegram_chat_folder_projections
+                INSERT INTO hermes_data.telegram_chat_folder_projections
                     (account_id, provider_folder_id, projection_payload)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (account_id, provider_folder_id) DO UPDATE SET
@@ -515,7 +523,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(position).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_chat_position_projections
+            INSERT INTO hermes_data.telegram_chat_position_projections
                 (account_id, provider_chat_id, list_kind, provider_folder_id, projection_payload)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (account_id, provider_chat_id, list_kind, provider_folder_id) DO UPDATE SET
@@ -543,7 +551,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(state).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_chat_operational_states
+            INSERT INTO hermes_data.telegram_chat_operational_states
                 (account_id, provider_chat_id, projection_payload)
             VALUES ($1, $2, $3)
             ON CONFLICT (account_id, provider_chat_id) DO UPDATE SET
@@ -566,7 +574,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT projection_payload
-            FROM telegram_chat_folder_projections
+            FROM hermes_data.telegram_chat_folder_projections
             WHERE account_id = $1
             ORDER BY provider_folder_id ASC
             "#,
@@ -593,7 +601,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT projection_payload
-            FROM telegram_chat_position_projections
+            FROM hermes_data.telegram_chat_position_projections
             WHERE account_id = $1 AND provider_chat_id = $2
             ORDER BY list_kind ASC, provider_folder_id ASC
             "#,
@@ -620,7 +628,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT projection_payload
-            FROM telegram_chat_position_projections
+            FROM hermes_data.telegram_chat_position_projections
             WHERE account_id = $1
             ORDER BY provider_chat_id ASC, list_kind ASC, provider_folder_id ASC
             "#,
@@ -647,7 +655,7 @@ impl TelegramDurablePersistence {
         let row = sqlx::query(
             r#"
             SELECT provider_chat_id, projection_payload
-            FROM telegram_chat_operational_states
+            FROM hermes_data.telegram_chat_operational_states
             WHERE account_id = $1 AND provider_chat_id = $2
             "#,
         )
@@ -672,7 +680,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT provider_chat_id, projection_payload
-            FROM telegram_chat_operational_states
+            FROM hermes_data.telegram_chat_operational_states
             WHERE account_id = $1
             ORDER BY provider_chat_id ASC
             "#,
@@ -704,7 +712,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT projection_payload
-            FROM telegram_chat_projections
+            FROM hermes_data.telegram_chat_projections
             WHERE account_id = $1
             ORDER BY provider_chat_id ASC
             LIMIT $2
@@ -730,7 +738,7 @@ impl TelegramDurablePersistence {
         account_id: &str,
     ) -> Result<Vec<TelegramChatAvatar>, TelegramDurablePersistenceError> {
         let rows = sqlx::query(
-            "SELECT projection_payload FROM telegram_chat_avatar_projections WHERE account_id = $1 ORDER BY provider_chat_id ASC",
+            "SELECT projection_payload FROM hermes_data.telegram_chat_avatar_projections WHERE account_id = $1 ORDER BY provider_chat_id ASC",
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -754,7 +762,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(message).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_message_projections
+            INSERT INTO hermes_data.telegram_message_projections
                 (message_id, account_id, provider_chat_id, observed_at, projection_payload)
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (message_id) DO UPDATE SET
@@ -784,7 +792,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT projection_payload
-            FROM telegram_message_projections
+            FROM hermes_data.telegram_message_projections
             WHERE account_id = $1 AND provider_chat_id = $2
             ORDER BY observed_at DESC, message_id DESC
             LIMIT $3
@@ -814,7 +822,7 @@ impl TelegramDurablePersistence {
         limit: i64,
     ) -> Result<Vec<String>, TelegramDurablePersistenceError> {
         let rows = sqlx::query(
-            "SELECT projection_payload FROM telegram_message_projections WHERE account_id = $1 AND provider_chat_id = $2 ORDER BY observed_at DESC, message_id ASC",
+            "SELECT projection_payload FROM hermes_data.telegram_message_projections WHERE account_id = $1 AND provider_chat_id = $2 ORDER BY observed_at DESC, message_id ASC",
         )
         .bind(account_id)
         .bind(provider_chat_id)
@@ -847,7 +855,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(command).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         let result = sqlx::query(
             r#"
-            INSERT INTO telegram_runtime_operations (
+            INSERT INTO hermes_data.telegram_runtime_operations (
                 operation_id, account_id, command_kind, idempotency_key,
                 command_payload, state, retry_count, max_retries, lease_epoch,
                 reconciliation, last_error, next_attempt_at, locked_at, locked_by,
@@ -887,7 +895,7 @@ impl TelegramDurablePersistence {
     ) -> Result<(), TelegramDurablePersistenceError> {
         sqlx::query(
             r#"
-            UPDATE telegram_runtime_operations
+            UPDATE hermes_data.telegram_runtime_operations
             SET state = $2, retry_count = $3, max_retries = $4, lease_epoch = $5,
                 reconciliation = $6, last_error = $7, next_attempt_at = $8,
                 locked_at = $9, locked_by = $10, provider_observed_at = $11,
@@ -922,7 +930,7 @@ impl TelegramDurablePersistence {
         limit: i64,
     ) -> Result<Vec<TelegramOperation>, TelegramDurablePersistenceError> {
         let rows = sqlx::query(
-            "SELECT * FROM telegram_runtime_operations WHERE account_id = $1 ORDER BY operation_id ASC LIMIT $2",
+            "SELECT * FROM hermes_data.telegram_runtime_operations WHERE account_id = $1 ORDER BY operation_id ASC LIMIT $2",
         )
         .bind(account_id)
         .bind(limit)
@@ -938,11 +946,13 @@ impl TelegramDurablePersistence {
         &self,
         operation_id: &str,
     ) -> Result<Option<TelegramOperation>, TelegramDurablePersistenceError> {
-        let row = sqlx::query("SELECT * FROM telegram_runtime_operations WHERE operation_id = $1")
-            .bind(operation_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        let row = sqlx::query(
+            "SELECT * FROM hermes_data.telegram_runtime_operations WHERE operation_id = $1",
+        )
+        .bind(operation_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
         row.map(|row| row_to_operation(row).map(|(operation, _)| operation))
             .transpose()
     }
@@ -956,7 +966,7 @@ impl TelegramDurablePersistence {
         limit: i64,
     ) -> Result<Vec<TelegramCommandRecord>, TelegramDurablePersistenceError> {
         let rows = sqlx::query(
-            "SELECT * FROM telegram_runtime_operations WHERE account_id = $1 ORDER BY operation_id ASC",
+            "SELECT * FROM hermes_data.telegram_runtime_operations WHERE account_id = $1 ORDER BY operation_id ASC",
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -1003,7 +1013,7 @@ impl TelegramDurablePersistence {
             r#"
             WITH due AS (
                 SELECT operation_id
-                FROM telegram_runtime_operations
+                FROM hermes_data.telegram_runtime_operations
                 WHERE account_id = $1
                   AND state IN ('accepted', 'retry_scheduled')
                   AND retry_count < max_retries
@@ -1012,7 +1022,7 @@ impl TelegramDurablePersistence {
                 LIMIT $3
                 FOR UPDATE SKIP LOCKED
             )
-            UPDATE telegram_runtime_operations operation
+            UPDATE hermes_data.telegram_runtime_operations operation
             SET state = 'running', retry_count = operation.retry_count + 1,
                 locked_at = $2, locked_by = $4, next_attempt_at = NULL,
                 last_error = NULL
@@ -1045,7 +1055,7 @@ impl TelegramDurablePersistence {
             .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
         let result = sqlx::query(
             r#"
-            INSERT INTO telegram_provider_event_journal
+            INSERT INTO hermes_data.telegram_provider_event_journal
                 (account_id, sequence, provider_cursor, event_payload)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (account_id, sequence) DO NOTHING
@@ -1072,7 +1082,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT account_id, sequence, provider_cursor, event_payload
-            FROM telegram_provider_event_journal
+            FROM hermes_data.telegram_provider_event_journal
             WHERE account_id = $1 AND sequence > $2
             ORDER BY sequence ASC
             LIMIT $3
@@ -1116,7 +1126,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(file).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_file_projections
+            INSERT INTO hermes_data.telegram_file_projections
                 (account_id, provider_file_id, projection_payload)
             VALUES ($1, $2, $3)
             ON CONFLICT (account_id, provider_file_id) DO UPDATE SET
@@ -1140,7 +1150,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(attachment).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_attachment_projections
+            INSERT INTO hermes_data.telegram_attachment_projections
                 (attachment_id, account_id, provider_chat_id, provider_message_id,
                  provider_file_id, projection_payload)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -1165,7 +1175,7 @@ impl TelegramDurablePersistence {
         attachment_id: &str,
     ) -> Result<Option<TelegramAttachmentProjection>, TelegramDurablePersistenceError> {
         let row = sqlx::query(
-            "SELECT projection_payload FROM telegram_attachment_projections WHERE attachment_id = $1",
+            "SELECT projection_payload FROM hermes_data.telegram_attachment_projections WHERE attachment_id = $1",
         )
         .bind(attachment_id)
         .fetch_optional(&self.pool)
@@ -1187,7 +1197,7 @@ impl TelegramDurablePersistence {
         provider_message_id: &str,
     ) -> Result<Option<TelegramAttachmentProjection>, TelegramDurablePersistenceError> {
         let row = sqlx::query(
-            "SELECT projection_payload FROM telegram_attachment_projections WHERE account_id = $1 AND provider_chat_id = $2 AND provider_message_id = $3 ORDER BY attachment_id ASC LIMIT 1",
+            "SELECT projection_payload FROM hermes_data.telegram_attachment_projections WHERE account_id = $1 AND provider_chat_id = $2 AND provider_message_id = $3 ORDER BY attachment_id ASC LIMIT 1",
         )
         .bind(account_id)
         .bind(provider_chat_id)
@@ -1210,7 +1220,7 @@ impl TelegramDurablePersistence {
         provider_file_id: &str,
     ) -> Result<Option<TelegramFileSnapshot>, TelegramDurablePersistenceError> {
         let row = sqlx::query(
-            "SELECT projection_payload FROM telegram_file_projections WHERE account_id = $1 AND provider_file_id = $2",
+            "SELECT projection_payload FROM hermes_data.telegram_file_projections WHERE account_id = $1 AND provider_file_id = $2",
         )
         .bind(account_id)
         .bind(provider_file_id)
@@ -1232,7 +1242,7 @@ impl TelegramDurablePersistence {
         file: &TelegramFileSnapshot,
     ) -> Result<Vec<TelegramAttachmentProjection>, TelegramDurablePersistenceError> {
         let rows = sqlx::query(
-            "SELECT attachment_id, projection_payload FROM telegram_attachment_projections WHERE account_id = $1 AND provider_file_id = $2",
+            "SELECT attachment_id, projection_payload FROM hermes_data.telegram_attachment_projections WHERE account_id = $1 AND provider_file_id = $2",
         )
         .bind(account_id)
         .bind(&file.provider_file_id)
@@ -1261,7 +1271,7 @@ impl TelegramDurablePersistence {
             let payload = serde_json::to_value(&attachment)
                 .map_err(|_| TelegramDurablePersistenceError::Codec)?;
             sqlx::query(
-                "UPDATE telegram_attachment_projections SET projection_payload = $2 WHERE attachment_id = $1",
+                "UPDATE hermes_data.telegram_attachment_projections SET projection_payload = $2 WHERE attachment_id = $1",
             )
             .bind(attachment_id)
             .bind(payload)
@@ -1281,7 +1291,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(page).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_participant_projections
+            INSERT INTO hermes_data.telegram_participant_projections
                 (account_id, provider_chat_id, participant_filter, projection_payload)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (account_id, provider_chat_id, participant_filter) DO UPDATE SET
@@ -1337,7 +1347,7 @@ impl TelegramDurablePersistence {
         let row = sqlx::query(
             r#"
             SELECT projection_payload
-            FROM telegram_participant_projections
+            FROM hermes_data.telegram_participant_projections
             WHERE account_id = $1 AND provider_chat_id = $2 AND participant_filter = $3
             "#,
         )
@@ -1364,7 +1374,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(topic).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_topic_projections
+            INSERT INTO hermes_data.telegram_topic_projections
                 (account_id, provider_chat_id, provider_topic_id, projection_payload)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (account_id, provider_chat_id, provider_topic_id) DO UPDATE SET
@@ -1390,7 +1400,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT projection_payload
-            FROM telegram_topic_projections
+            FROM hermes_data.telegram_topic_projections
             WHERE account_id = $1 AND provider_chat_id = $2
             ORDER BY provider_topic_id ASC
             LIMIT $3
@@ -1420,7 +1430,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(version).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_message_versions
+            INSERT INTO hermes_data.telegram_message_versions
                 (version_id, message_id, account_id, provider_chat_id,
                  provider_message_id, version_number, projection_payload)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -1449,7 +1459,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(tombstone).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_message_tombstones
+            INSERT INTO hermes_data.telegram_message_tombstones
                 (tombstone_id, message_id, account_id, provider_chat_id,
                  provider_message_id, projection_payload)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -1478,7 +1488,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(reactions).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_message_reactions (message_id, projection_payload)
+            INSERT INTO hermes_data.telegram_message_reactions (message_id, projection_payload)
             VALUES ($1, $2)
             ON CONFLICT (message_id) DO UPDATE SET
                 projection_payload = EXCLUDED.projection_payload
@@ -1501,7 +1511,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(mutations).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_message_mutations (message_id, projection_payload)
+            INSERT INTO hermes_data.telegram_message_mutations (message_id, projection_payload)
             VALUES ($1, $2)
             ON CONFLICT (message_id) DO UPDATE SET
                 projection_payload = EXCLUDED.projection_payload
@@ -1520,7 +1530,7 @@ impl TelegramDurablePersistence {
         message_id: &str,
     ) -> Result<Vec<TelegramMessageMutation>, TelegramDurablePersistenceError> {
         let row = sqlx::query(
-            "SELECT projection_payload FROM telegram_message_mutations WHERE message_id = $1",
+            "SELECT projection_payload FROM hermes_data.telegram_message_mutations WHERE message_id = $1",
         )
         .bind(message_id)
         .fetch_optional(&self.pool)
@@ -1543,7 +1553,7 @@ impl TelegramDurablePersistence {
         TelegramDurablePersistenceError,
     > {
         let row = sqlx::query(
-            "SELECT projection_payload FROM telegram_message_projections WHERE message_id = $1",
+            "SELECT projection_payload FROM hermes_data.telegram_message_projections WHERE message_id = $1",
         )
         .bind(message_id)
         .fetch_optional(&self.pool)
@@ -1609,7 +1619,7 @@ impl TelegramDurablePersistence {
     ) -> Result<Vec<hermes_telegram_api::TelegramMessageProjection>, TelegramDurablePersistenceError>
     {
         let rows = sqlx::query(
-            "SELECT projection_payload FROM telegram_message_projections WHERE account_id = $1",
+            "SELECT projection_payload FROM hermes_data.telegram_message_projections WHERE account_id = $1",
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -1665,7 +1675,7 @@ impl TelegramDurablePersistence {
             serde_json::to_value(state).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
-            INSERT INTO telegram_chat_states
+            INSERT INTO hermes_data.telegram_chat_states
                 (account_id, provider_chat_id, projection_payload)
             VALUES ($1, $2, $3)
             ON CONFLICT (account_id, provider_chat_id) DO UPDATE SET
@@ -1687,7 +1697,7 @@ impl TelegramDurablePersistence {
         provider_chat_id: &str,
     ) -> Result<Option<TelegramChatStateProjection>, TelegramDurablePersistenceError> {
         let row = sqlx::query(
-            "SELECT projection_payload FROM telegram_chat_states WHERE account_id = $1 AND provider_chat_id = $2",
+            "SELECT projection_payload FROM hermes_data.telegram_chat_states WHERE account_id = $1 AND provider_chat_id = $2",
         )
         .bind(account_id)
         .bind(provider_chat_id)
@@ -1710,7 +1720,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT projection_payload
-            FROM telegram_message_versions
+            FROM hermes_data.telegram_message_versions
             WHERE message_id = $1
             ORDER BY version_number ASC
             "#,
@@ -1736,7 +1746,7 @@ impl TelegramDurablePersistence {
         let rows = sqlx::query(
             r#"
             SELECT projection_payload
-            FROM telegram_message_tombstones
+            FROM hermes_data.telegram_message_tombstones
             WHERE message_id = $1
             ORDER BY tombstone_id ASC
             "#,
@@ -1760,7 +1770,7 @@ impl TelegramDurablePersistence {
         message_id: &str,
     ) -> Result<Vec<TelegramReactionObservation>, TelegramDurablePersistenceError> {
         let row = sqlx::query(
-            "SELECT projection_payload FROM telegram_message_reactions WHERE message_id = $1",
+            "SELECT projection_payload FROM hermes_data.telegram_message_reactions WHERE message_id = $1",
         )
         .bind(message_id)
         .fetch_optional(&self.pool)

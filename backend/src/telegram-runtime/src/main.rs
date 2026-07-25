@@ -90,9 +90,13 @@ where
             &configuration.event_hub_endpoint,
             configuration.event_credential_revision,
         ))
-        .map_err(|_| "Telegram runtime admission was rejected".to_owned())?;
-    drop(runtime);
-    process::serve_admitted_provider_loop(admitted)
+        .map_err(|error| {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_telegram_runtime_admission_error={error:?}");
+            }
+            "Telegram runtime admission was rejected".to_owned()
+        })?;
+    process::serve_admitted_provider_loop(admitted, &runtime)
 }
 
 fn parse_paths<I>(arguments: &mut std::iter::Peekable<I>) -> Result<InheritedPaths, String>

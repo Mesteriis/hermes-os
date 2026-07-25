@@ -1911,31 +1911,31 @@ fn communications_event_hub_topology() -> PlatformEventHubTopologyV1 {
 }
 
 pub(super) fn installed_communications_release(root: &Path) -> InstalledSignedBundle {
-    let schema = communications_settings_schema_bytes_v1();
-    InstalledSignedBundle::install(
-        root,
-        &[
-            SignedRuntimeArtifact::new(
-                "platform.storage",
-                storage_binary(),
-                descriptor("storage").encode_to_vec(),
-            ),
-            SignedRuntimeArtifact::new(
-                "platform.vault",
-                vault_binary(),
-                descriptor("vault").encode_to_vec(),
-            ),
-            SignedRuntimeArtifact::new("platform.blob", blob_binary(), blob_descriptor())
-                .with_settings_schema(blob_settings_schema()),
-            SignedRuntimeArtifact::new(
-                "domain.communications",
-                communications_binary(),
-                communications_module_descriptor_v1("managed-communications-live").encode_to_vec(),
-            )
-            .with_settings_schema(schema),
-        ],
-    )
-    .expect("install signed Communications release")
+    InstalledSignedBundle::install(root, &communications_release_artifacts())
+        .expect("install signed Communications release")
+}
+
+pub(super) fn communications_release_artifacts() -> Vec<SignedRuntimeArtifact> {
+    vec![
+        SignedRuntimeArtifact::new(
+            "platform.storage",
+            storage_binary(),
+            descriptor("storage").encode_to_vec(),
+        ),
+        SignedRuntimeArtifact::new(
+            "platform.vault",
+            vault_binary(),
+            descriptor("vault").encode_to_vec(),
+        ),
+        SignedRuntimeArtifact::new("platform.blob", blob_binary(), blob_descriptor())
+            .with_settings_schema(blob_settings_schema()),
+        SignedRuntimeArtifact::new(
+            "domain.communications",
+            communications_binary(),
+            communications_module_descriptor_v1("managed-communications-live").encode_to_vec(),
+        )
+        .with_settings_schema(communications_settings_schema_bytes_v1()),
+    ]
 }
 
 fn communications_binary() -> PathBuf {

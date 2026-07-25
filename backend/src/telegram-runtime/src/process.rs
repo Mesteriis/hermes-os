@@ -196,12 +196,11 @@ impl TelegramProcessLoop {
 
 /// Runs the provider side of an admitted runtime without exposing a private
 /// provider client socket. Core capability routing owns client request delivery.
-pub fn serve_admitted_provider_loop(admitted: TelegramAdmittedRuntime) -> Result<(), String> {
+pub fn serve_admitted_provider_loop(
+    admitted: TelegramAdmittedRuntime,
+    executor: &tokio::runtime::Runtime,
+) -> Result<(), String> {
     let admitted = admitted.into_provider_loop();
-    let executor = tokio::runtime::Builder::new_current_thread()
-        .enable_time()
-        .build()
-        .map_err(|error| format!("failed to build Telegram runtime executor: {error}"))?;
     let TelegramAdmittedProviderLoop {
         mut control_channel,
         account_id,
@@ -214,7 +213,7 @@ pub fn serve_admitted_provider_loop(admitted: TelegramAdmittedRuntime) -> Result
     let mut restored = false;
 
     loop {
-        handle_client_delivery(&mut control_channel, &mut process, &durable, &executor)?;
+        handle_client_delivery(&mut control_channel, &mut process, &durable, executor)?;
         let poll = {
             let mut body_admitter =
                 |plaintext: &[u8]| admit_telegram_plaintext(&mut control_channel, plaintext);

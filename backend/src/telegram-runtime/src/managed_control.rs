@@ -61,18 +61,6 @@ impl TelegramManagedRuntimeIdentity {
         let registration_id = response.registration_id;
         let runtime_generation = response.runtime_generation;
         let grant_epoch = response.grant_epoch;
-        channel
-            .signal_ready(ManagedRuntimeReadyRequestV1 {
-                registration_id: registration_id.clone(),
-                runtime_generation,
-                grant_epoch,
-            })
-            .map_err(|_| "Telegram managed-runtime readiness was rejected".to_owned())?;
-        channel
-            .inner_mut()
-            .set_read_timeout(None)
-            .and_then(|_| channel.inner_mut().set_write_timeout(None))
-            .map_err(|_| "Telegram managed-runtime channel is unavailable".to_owned())?;
         Ok((
             Self {
                 registration_id,
@@ -82,6 +70,25 @@ impl TelegramManagedRuntimeIdentity {
             },
             channel,
         ))
+    }
+
+    pub fn signal_ready(
+        &self,
+        channel: &mut ManagedControlChannelV2<UnixStream>,
+    ) -> Result<(), String> {
+        channel
+            .signal_ready(ManagedRuntimeReadyRequestV1 {
+                registration_id: self.registration_id.clone(),
+                runtime_generation: self.runtime_generation,
+                grant_epoch: self.grant_epoch,
+            })
+            .map_err(|_| "Telegram managed-runtime readiness was rejected".to_owned())?;
+        channel
+            .inner_mut()
+            .set_read_timeout(None)
+            .and_then(|_| channel.inner_mut().set_write_timeout(None))
+            .map_err(|_| "Telegram managed-runtime channel is unavailable".to_owned())?;
+        Ok(())
     }
 
     #[must_use]
@@ -154,7 +161,7 @@ mod tests {
             wait_for_client.recv().expect("client completed");
         });
 
-        let (identity, _channel): (
+        let (identity, mut channel): (
             TelegramManagedRuntimeIdentity,
             ManagedControlChannelV2<UnixStream>,
         ) = TelegramManagedRuntimeIdentity::authenticate(
@@ -167,6 +174,9 @@ mod tests {
         assert_eq!(identity.registration_id(), "telegram");
         assert_eq!(identity.runtime_generation(), 7);
         assert_eq!(identity.grant_epoch(), 11);
+        identity
+            .signal_ready(&mut channel)
+            .expect("managed runtime ready");
         release_server.send(()).expect("release server");
         server.join().expect("server join");
     }
