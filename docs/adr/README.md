@@ -219,3 +219,7 @@ ADR-0269 применяет ту же authority boundary к Mail как к от�
 owner: Mail-owned assembly unit материализует canonical
 descriptor/settings/storage bytes и unsigned fragment без native dependency,
 а Kernel/Communications/Gateway и Mail runtime не зависят от этой build unit.
+ADR-0270 разделяет Mail operational sync/delivery и provider credential
+purposes на независимые capability units: integration использует Kernel/Core
+для admission и opaque routing, а Communications получает Mail evidence
+только через durable typed events.
