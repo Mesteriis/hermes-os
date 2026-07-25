@@ -42,5 +42,14 @@ mod tests {
         assert_eq!(bundle.bundle_id, "mail_state");
         assert_eq!(bundle.revision, MAIL_STORAGE_BUNDLE_REVISION_V1);
         assert_eq!(validate_storage_bundle(&bundle), Ok(()));
+        let sql = std::str::from_utf8(&bundle.steps[0].forward_sql_utf8)
+            .expect("Mail Storage SQL is UTF-8");
+        assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 8);
+        assert_eq!(
+            sql.matches("CREATE TABLE IF NOT EXISTS hermes_data.")
+                .count(),
+            8,
+            "every Mail table belongs to the owner-scoped hermes_data schema"
+        );
     }
 }

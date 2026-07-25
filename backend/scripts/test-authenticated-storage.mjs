@@ -201,6 +201,8 @@ async function run_managed_process_conformance(secrets) {
     '-p',
     'hermes-communications-runtime',
     '-p',
+    'hermes-mail-runtime',
+    '-p',
     'hermes-telegram-runtime',
     '-p',
     'hermes-blob-service',
@@ -209,6 +211,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_storage_binary_bootstraps_through_live_vault',
     'managed_scheduler_crash_uses_storage_control_successor_provisioning',
     'managed_communications_domain_starts_with_owner_local_storage_and_events',
+    'managed_mail_runtime_uses_kernel_leases_and_route_specific_admission',
   ]) {
     await start_contour(secrets);
     try {
@@ -232,6 +235,7 @@ async function run_managed_process_conformance(secrets) {
       HERMES_SCHEDULER_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-scheduler-runtime`,
       HERMES_SCHEDULER_LIVE_NATS_ENDPOINT: 'nats://127.0.0.1:43225',
       HERMES_COMMUNICATIONS_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-communications-runtime`,
+      HERMES_MAIL_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-mail-runtime`,
       HERMES_TELEGRAM_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-telegram-runtime`,
       HERMES_TELEGRAM_TDJSON_FIXTURE: tdjsonFixture,
       HERMES_BLOB_SERVICE_BIN: `${process.cwd()}/target/debug/hermes-blob-service`,

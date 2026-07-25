@@ -79,8 +79,13 @@ use telegram_event_flow::*;
 #[path = "managed_storage_vault_docker/telegram_managed_setup.rs"]
 mod telegram_managed_setup;
 use telegram_managed_setup::*;
+#[path = "managed_storage_vault_docker/mail_managed_setup.rs"]
+mod mail_managed_setup;
 #[path = "managed_storage_vault_docker/telegram_managed_flow.rs"]
 mod telegram_managed_flow;
+use mail_managed_setup::*;
+#[path = "managed_storage_vault_docker/mail_managed_flow.rs"]
+mod mail_managed_flow;
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault and Storage binaries"]
