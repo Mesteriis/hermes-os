@@ -239,7 +239,7 @@ mod foundation {
         );
         assert_eq!(
             leases.consume_once(lease.lease_id(), &audience, 102),
-            Err(LeaseError::AlreadyResolved)
+            Err(LeaseError::UnknownOrInvalidatedLease)
         );
         assert_lease_fences(&mut leases, &audience, &lease);
         assert_lease_expiration(&mut leases, &audience);

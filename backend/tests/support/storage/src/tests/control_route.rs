@@ -3,8 +3,8 @@ use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeResponseV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, ManagedRuntimeVaultRouteRequestV1,
-    ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1, VaultCiphertextRouteV1,
+    ManagedRuntimeControlResponseV1, ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1,
+    VaultCiphertextRouteV1, managed_runtime_control_request_v1::Operation as ControlOperation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use hermes_storage_protocol::v1::{
@@ -285,18 +285,26 @@ fn port(listener: &std::net::TcpListener) -> u16 {
 }
 
 fn serve_one_route(mut stream: UnixStream) {
-    let request = ManagedRuntimeVaultRouteRequestV1::decode(read_frame(&mut stream).as_slice())
-        .expect("managed route request");
+    let request = ManagedRuntimeControlRequestV1::decode(read_frame(&mut stream).as_slice())
+        .expect("managed control request");
+    let Some(ControlOperation::RouteVaultCiphertext(request)) = request.operation else {
+        panic!("managed route request");
+    };
     assert_eq!(
         request.route.expect("route").registration_id,
         "storage-control"
     );
-    let response = ManagedRuntimeVaultRouteResponseV1 {
-        response: Some(VaultCiphertextResponseV1 {
-            request_id: vec![7; 16],
-            caller_runtime_generation: 1,
-            ..Default::default()
-        }),
+    let response = ManagedRuntimeControlResponseV1 {
+        result: Some(ControlResult::VaultRoute(
+            ManagedRuntimeVaultRouteResponseV1 {
+                response: Some(VaultCiphertextResponseV1 {
+                    request_id: vec![7; 16],
+                    caller_runtime_generation: 1,
+                    ..Default::default()
+                }),
+                error_code: String::new(),
+            },
+        )),
         error_code: String::new(),
     };
     write_frame(&mut stream, &response.encode_to_vec());

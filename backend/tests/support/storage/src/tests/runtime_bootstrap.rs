@@ -3,8 +3,9 @@ use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeResponseV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, ManagedRuntimeVaultRouteRequestV1,
-    ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1, VaultCiphertextRouteDirectionV1,
+    ManagedRuntimeControlResponseV1, ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1,
+    VaultCiphertextRouteDirectionV1,
+    managed_runtime_control_request_v1::Operation as ControlOperation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use hermes_storage_protocol::v1::{
@@ -266,7 +267,7 @@ fn write_vault_response(
         response: Some(encrypt_response(route, plaintext)),
         error_code: String::new(),
     };
-    write_frame(kernel, &response.encode_to_vec());
+    write_control_vault_response(kernel, response);
 }
 
 fn respond_denied(kernel: &mut UnixStream, vault: &VaultResponseRecipientV1) {
@@ -275,21 +276,36 @@ fn respond_denied(kernel: &mut UnixStream, vault: &VaultResponseRecipientV1) {
         command_from_route(vault, &route),
         VaultTransportCommandV1::ResolveLease { .. }
     ));
-    write_frame(
+    write_control_vault_response(
         kernel,
-        &ManagedRuntimeVaultRouteResponseV1 {
+        ManagedRuntimeVaultRouteResponseV1 {
             response: None,
             error_code: "missing_credential".to_owned(),
-        }
-        .encode_to_vec(),
+        },
     );
 }
 
 fn read_route(kernel: &mut UnixStream) -> hermes_runtime_protocol::v1::VaultCiphertextRouteV1 {
-    ManagedRuntimeVaultRouteRequestV1::decode(read_frame(kernel).as_slice())
-        .expect("Vault route request")
-        .route
-        .expect("Vault route")
+    let request = ManagedRuntimeControlRequestV1::decode(read_frame(kernel).as_slice())
+        .expect("managed control request");
+    let Some(ControlOperation::RouteVaultCiphertext(request)) = request.operation else {
+        panic!("Vault route request");
+    };
+    request.route.expect("Vault route")
+}
+
+fn write_control_vault_response(
+    kernel: &mut UnixStream,
+    response: ManagedRuntimeVaultRouteResponseV1,
+) {
+    write_frame(
+        kernel,
+        &ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::VaultRoute(response)),
+            error_code: String::new(),
+        }
+        .encode_to_vec(),
+    );
 }
 
 fn command_from_route(

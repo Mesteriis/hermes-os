@@ -5,8 +5,9 @@ use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeResponseV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, ManagedRuntimeVaultRouteRequestV1,
-    ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1, VaultCiphertextRouteDirectionV1,
+    ManagedRuntimeControlResponseV1, ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1,
+    VaultCiphertextRouteDirectionV1,
+    managed_runtime_control_request_v1::Operation as ControlOperation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use hermes_storage_postgres::{
@@ -351,14 +352,23 @@ fn write_response(
         }),
         error_code: String::new(),
     };
-    write_frame(kernel, &response.encode_to_vec());
+    write_frame(
+        kernel,
+        &ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::VaultRoute(response)),
+            error_code: String::new(),
+        }
+        .encode_to_vec(),
+    );
 }
 
 fn read_route(kernel: &mut UnixStream) -> hermes_runtime_protocol::v1::VaultCiphertextRouteV1 {
-    ManagedRuntimeVaultRouteRequestV1::decode(read_frame(kernel).as_slice())
-        .expect("Vault route request")
-        .route
-        .expect("Vault route")
+    let request = ManagedRuntimeControlRequestV1::decode(read_frame(kernel).as_slice())
+        .expect("managed control request");
+    let Some(ControlOperation::RouteVaultCiphertext(request)) = request.operation else {
+        panic!("Vault route request");
+    };
+    request.route.expect("Vault route")
 }
 
 fn transport_binding(

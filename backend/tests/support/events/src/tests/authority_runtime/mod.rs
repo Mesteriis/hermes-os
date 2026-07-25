@@ -249,8 +249,11 @@ fn answer_signer_resolution(kernel: &mut UnixStream, account_seed: &str) {
 }
 
 fn answer_vault_request(kernel: &mut UnixStream, payload: Vec<u8>) {
-    let request = ManagedRuntimeVaultRouteRequestV1::decode(read_frame(kernel).as_slice())
-        .expect("Vault route request");
+    let request = ManagedRuntimeControlRequestV1::decode(read_frame(kernel).as_slice())
+        .expect("managed control request");
+    let Some(ManagedOperation::RouteVaultCiphertext(request)) = request.operation else {
+        panic!("Vault route request");
+    };
     respond_to_vault_route(kernel, request, payload);
 }
 
@@ -287,8 +290,13 @@ fn respond_to_vault_route(
     let response = encrypted_response(&route, payload).expect("encrypted Vault response");
     write_frame(
         kernel,
-        &ManagedRuntimeVaultRouteResponseV1 {
-            response: Some(response),
+        &ManagedRuntimeControlResponseV1 {
+            result: Some(ManagedResult::VaultRoute(
+                ManagedRuntimeVaultRouteResponseV1 {
+                    response: Some(response),
+                    error_code: String::new(),
+                },
+            )),
             error_code: String::new(),
         }
         .encode_to_vec(),
