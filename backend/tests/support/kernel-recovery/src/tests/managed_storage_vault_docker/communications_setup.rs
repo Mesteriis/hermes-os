@@ -796,6 +796,13 @@ pub(super) fn assert_communications_transferred_body_projection(
         2,
         "Storage restart binds the successor Vault generation",
     );
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    assert!(
+        supervisor
+            .is_active(COMMUNICATIONS_REGISTRATION)
+            .expect("read Communications process state during Blob outage"),
+        "pending custody must not stop Communications while Blob remains unavailable",
+    );
     assert_eq!(
         crate::platform::blob::launch::start_from_kernel(
             supervisor,
