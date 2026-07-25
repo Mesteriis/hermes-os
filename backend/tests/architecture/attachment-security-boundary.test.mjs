@@ -216,6 +216,50 @@ test('Attachment Security Blob reads are one-use and receipt-bound below the eng
   );
 });
 
+test('Attachment Security release assembly is a separate unsigned engine unit', async () => {
+  const [manifest, assembly, command] = await Promise.all([
+    readFile(new URL('src/attachment-security-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-security-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-security-assembly/src/main.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+  const dependencySection = manifest.split('[dependencies]\n')[1] ?? '';
+  const dependencies = [...dependencySection.matchAll(/^([a-z0-9_-]+)\s*=/gm)]
+    .map(([, dependency]) => dependency)
+    .sort();
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "attachment_security"/);
+  assert.match(manifest, /surface = "assembly"/);
+  assert.deepEqual(dependencies, [
+    'hermes-attachment-security-persistence',
+    'hermes-attachment-security-runtime',
+    'hermes-runtime-protocol',
+    'hermes-storage-protocol',
+    'prost',
+    'serde',
+    'serde_json',
+  ]);
+  for (const file of [
+    'attachment-security.runtime.descriptor.pb',
+    'attachment-security.runtime.settings.pb',
+    'attachment-security.storage.bundle.pb',
+    'attachment-security.release-artifacts.json',
+  ]) {
+    assert.ok(assembly.includes(file), `assembly must materialize ${file}`);
+  }
+  assert.match(assembly, /validate_descriptor_v1/);
+  assert.match(assembly, /validate_settings_schema_v1/);
+  assert.match(assembly, /validate_storage_bundle/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.match(command, /--build-id/);
+  assert.match(command, /--output-dir/);
+  assert.match(command, /--runtime/);
+  assert.doesNotMatch(
+    `${manifest}\n${assembly}\n${command}`,
+    /hermes-(?:communications|mail|telegram|whatsapp|zulip|kernel|blob|events)|SigningKey|sign_manifest|ed25519|p256/,
+  );
+});
+
 test('staged Attachment Security packages do not open the production engine gate', async () => {
   const policy = JSON.parse(await readFile(POLICY_PATH, 'utf8'));
   const productionPackages = policy.implementation.productionPackages;

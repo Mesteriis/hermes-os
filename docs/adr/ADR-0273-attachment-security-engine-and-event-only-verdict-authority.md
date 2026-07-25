@@ -2,18 +2,21 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Решение принято. Attachment-specific Communications
-schemas выделены без facade/duplicate source в
+Состояние реализации: staged backend slice реализован. Attachment-specific
+Communications schemas выделены без facade/duplicate source в
 `hermes-communications-attachment-contract`; executable dependency policy и
 отдельный managed Engine launch path реализованы. Engine-owned typed candidate
 contract, pure join/verdict core и bounded loopback ClamAV `INSTREAM` adapter
 реализованы отдельными Cargo units с unit и architecture coverage. Owner-local
-PostgreSQL persistence также реализован отдельным unit: exact inbox ID/hash,
-anchor-serialized order-independent join, bounded attempt/lease-fenced scan
-jobs, quarantine evidence и exact verdict outbox. Production gate
-`attachment_security_engine_v1` остаётся закрыт до реализации runtime, release
-assembly и live ClamAV/Blob/Event conformance. До открытия gate состояние
-`safe_for_delivery` остаётся недостижимым.
+PostgreSQL persistence владеет exact inbox ID/hash, anchor-serialized
+order-independent join, bounded attempt/lease-fenced scan jobs, quarantine
+evidence и exact verdict outbox. Отдельный managed runtime получает только
+Kernel-issued Storage/Blob/Event capabilities, а отдельная assembly unit
+материализует canonical descriptor/settings/Storage bytes и unsigned release
+fragment для generic distribution compiler. Production gate
+`attachment_security_engine_v1` остаётся закрыт до signed admission и live
+ClamAV/Blob/Event conformance, включая failure/replay/revoke matrix. До открытия
+gate состояние `safe_for_delivery` остаётся недостижимым.
 
 Зависит от:
 
