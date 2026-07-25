@@ -7,7 +7,6 @@ use hermes_attachment_security_contract::{
     AttachmentSecurityObservationContextV1, AttachmentSecurityScanCandidateFactV1,
     build_attachment_security_scan_candidate_outbox_record_v1,
 };
-use hermes_attachment_security_persistence::AttachmentSecurityPersistenceConformanceV1;
 use hermes_attachment_security_runtime::admission::ATTACHMENT_SECURITY_MODULE_ID;
 use hermes_communications_attachment_contract::{
     AttachmentBlobAdmissionFactV1, AttachmentBlobAdmissionTransitionV1,
@@ -28,6 +27,10 @@ use zeroize::Zeroizing;
 
 use super::attachment_security_clamav_fixture::{
     AttachmentSecurityClamAvFixture, ClamAvFixtureOutcomeV1,
+};
+use super::attachment_security_persistence_fixture::{
+    AttachmentSecurityPersistenceConformanceV1, AttachmentSecurityPersistenceDiagnosticsV1,
+    AttachmentSecurityScanJobDiagnosticsV1,
 };
 use super::*;
 
@@ -510,6 +513,7 @@ pub(super) fn assert_attachment_security_outbox_replays_after_nats_outage_and_re
     blob: &AttachmentSecurityFixtureBlobV1,
     clamav: &AttachmentSecurityClamAvFixture,
     stop_runtime: impl FnOnce(),
+    restart_communications: impl FnOnce(),
     restart_runtime: impl FnOnce() -> Started,
 ) -> Started {
     let candidate = build_attachment_security_candidate(attachment, blob);
@@ -561,6 +565,7 @@ pub(super) fn assert_attachment_security_outbox_replays_after_nats_outage_and_re
         (client, verdicts, states)
     });
     let replay_context = async_nats::jetstream::new(replay_client);
+    restart_communications();
     let restarted = restart_runtime();
     runtime.block_on(async {
         let verdict = tokio::time::timeout(Duration::from_secs(15), verdicts.next())
@@ -787,7 +792,7 @@ async fn wait_for_failed_scan_attempt(
     clamav: &AttachmentSecurityClamAvFixture,
     scanner_outcome: ClamAvFixtureOutcomeV1,
     scanner_count_before: usize,
-) -> hermes_attachment_security_persistence::AttachmentSecurityScanJobDiagnosticsV1 {
+) -> AttachmentSecurityScanJobDiagnosticsV1 {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let job = attachment_security_scan_job_diagnostics(attachment_anchor_id).await;
@@ -811,7 +816,7 @@ async fn wait_for_custody_failure(
     clamav: &AttachmentSecurityClamAvFixture,
     scanner_probe: ClamAvFixtureOutcomeV1,
     scanner_count_before: usize,
-) -> hermes_attachment_security_persistence::AttachmentSecurityScanJobDiagnosticsV1 {
+) -> AttachmentSecurityScanJobDiagnosticsV1 {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let job = attachment_security_scan_job_diagnostics(attachment_anchor_id).await;
@@ -893,24 +898,23 @@ fn current_unix_seconds() -> i64 {
         .expect("runtime clock seconds")
 }
 
-async fn attachment_security_persistence_diagnostics()
--> hermes_attachment_security_persistence::AttachmentSecurityPersistenceDiagnosticsV1 {
+async fn attachment_security_persistence_diagnostics() -> AttachmentSecurityPersistenceDiagnosticsV1
+{
     let persistence = attachment_security_conformance_persistence().await;
-    AttachmentSecurityPersistenceConformanceV1::diagnostics(&persistence)
+    persistence
+        .diagnostics()
         .await
         .expect("read Attachment Security persistence diagnostics")
 }
 
 async fn attachment_security_scan_job_diagnostics(
     attachment_anchor_id: [u8; 16],
-) -> Option<hermes_attachment_security_persistence::AttachmentSecurityScanJobDiagnosticsV1> {
+) -> Option<AttachmentSecurityScanJobDiagnosticsV1> {
     let persistence = attachment_security_conformance_persistence().await;
-    AttachmentSecurityPersistenceConformanceV1::scan_job_diagnostics(
-        &persistence,
-        attachment_anchor_id,
-    )
-    .await
-    .expect("read Attachment Security scan job diagnostics")
+    persistence
+        .scan_job_diagnostics(attachment_anchor_id)
+        .await
+        .expect("read Attachment Security scan job diagnostics")
 }
 
 async fn attachment_security_pending_verdict_outbox()
@@ -922,8 +926,8 @@ async fn attachment_security_pending_verdict_outbox()
         .expect("read pending Attachment Security verdict outbox")
 }
 
-async fn attachment_security_conformance_persistence()
--> hermes_attachment_security_persistence::AttachmentSecurityPersistenceV1 {
+async fn attachment_security_conformance_persistence() -> AttachmentSecurityPersistenceConformanceV1
+{
     let password = Zeroizing::new(
         std::fs::read_to_string(required(
             "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",

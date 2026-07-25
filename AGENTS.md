@@ -144,8 +144,9 @@ truth, если текущие ADR и реализация явно не зад�
 использует:
 
 - clean-room Cargo workspace в `backend/` с private module control plane,
-  открытыми platform gates и exact `first_owner_v1` Communications inventory;
-  отдельное Kernel state `ready` ещё не реализовано;
+  открытыми platform gates и exact `attachment_security_engine_v1` inventory:
+  Communications domain плюс отдельный Attachment Security engine; отдельное
+  Kernel state `ready` ещё не реализовано;
 - полный предыдущий Rust workspace только как reference в
   `references/backend-legacy/`;
 - Vue 3 + Vite frontend в `frontend/`;
@@ -302,9 +303,11 @@ host_bridge
   automatic rollback, fallback или repin;
 - Kernel process и minimal local recovery surface запускаются без PostgreSQL,
   PgBouncer, Storage Control, NATS, Vault, Blob, Scheduler и module runtimes;
-- текущий production inventory открыт как exact `first_owner_v1`: platform
-  packages плюс шесть Communications packages; integrations остаются отдельными
-  units, а Kernel пока не заявляет отдельное состояние `ready`;
+- текущий production inventory открыт как exact
+  `attachment_security_engine_v1`: platform packages, шесть Communications
+  packages и шесть отдельных Attachment Security engine packages;
+  integrations остаются отдельными units, а Kernel пока не заявляет отдельное
+  состояние `ready`;
 - обязательного bootstrap configuration file и Hermes-specific environment
   overlay нет; data directory выбирается через OS-standard location либо
   explicit `--data-dir`;

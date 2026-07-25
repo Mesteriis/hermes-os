@@ -12,14 +12,17 @@ target-owned read, clean ClamAV verdict, Communications CAS, exact replay без
 доказывает threat quarantine и fail-closed malformed/disconnect/timeout без
 verdict/outbox и без перевода Communications из `blob_admitted`. NATS outage
 после scan сохраняет exact verdict в owner outbox; после остановки Engine и
-fenced Storage successor generation 2 публикует те же bytes без повторного
-custody/scan, а stale Communications CAS не меняет terminal state. Phase gate
+fenced Communications consumer/Storage successor Engine generation 2 публикует
+те же bytes без повторного custody/scan, а stale Communications CAS не меняет
+terminal state. Phase gate
 теперь дополнительно имеет live fail-closed evidence для stale source runtime,
 revoked source/target registrations и недоступных Blob/Vault: retryable job
 остаётся без target receipt/outbox/verdict, scanner не вызывается, а
 Communications остаётся в `blob_admitted`. Exact replay не обходит authority
-fence. `attachment_security_engine_v1` остаётся закрыт только до production
-inventory admission и полного финального backend gate.
+fence. Exact `attachment_security_engine_v1` production inventory теперь
+допущен executable policy после architecture/SRP/Cargo/full backend gates;
+никакой integration или Communications implementation package не добавлен в
+engine build unit.
 ADR-0275 определяет stable target-bound proof для этого cross-owner handoff.
 
 Зависит от:

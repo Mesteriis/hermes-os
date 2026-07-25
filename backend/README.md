@@ -1,20 +1,15 @@
 # Hermes backend clean room
 
-The production backend rewrite starts here. The virtual workspace contains the
-six Kernel foundation packages, the five-package `vault_v1`, two-package
-`clock_v1` inventory, `scheduler_persistence_foundation_v1` contract,
-and `gateway_session_foundation_v1` fenced browser/native session core
-catalog and PostgreSQL claim foundation accepted by executable policy. With a trustworthy Control Store it
-reaches the private module control plane; without one it fails closed to
-`recovery_only`. `vault_v1` is open for the file-backed baseline: the current
-Vault packages provide the file key, SQLCipher store, isolated runtime, HPKE
-lease-to-scope delivery and classified component recovery. `clock_v1` provides
-UTC/monotonic contracts and a deterministic fake. Scheduler fixes JobKind,
-opaque shared concurrency keys, bounded policies and run fences; its foundation
-persists revisioned schedule configuration in canonical policy bytes and
-atomically reserves a PostgreSQL concurrency slot before creating a fire-keyed
-run. It is not yet a Scheduler runtime, and there are no normal public
-listeners or business routes.
+The current exact production policy slice is
+`attachment_security_engine_v1`. It contains the admitted platform/Core
+packages, the six-package Communications domain owner, and the six-package
+Attachment Security engine owner. Attachment Security is neither a domain nor
+an integration: it receives typed durable observations, owns its PostgreSQL
+join/jobs/outbox, uses Kernel-issued Storage/Blob/Event capabilities, and emits
+only the typed verdict fact consumed by Communications. Provider integrations
+and workflows remain outside production inventory. With a trustworthy Control
+Store Kernel reaches `module_control_plane`; without one it fails closed to
+`recovery_only`, and no separate Kernel `ready` state is claimed.
 
 The previous implementation is available at
 `references/backend-legacy/`, but it is not a dependency and is not an

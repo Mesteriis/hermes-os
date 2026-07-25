@@ -1,7 +1,5 @@
 //! Attachment Security owner-local inbox, join, scan-job and exact outbox persistence.
 
-#[cfg(feature = "conformance-test-support")]
-mod conformance;
 mod jobs;
 mod observation;
 mod schema;
@@ -13,11 +11,6 @@ use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 
-#[cfg(feature = "conformance-test-support")]
-pub use conformance::{
-    AttachmentSecurityPersistenceConformanceV1, AttachmentSecurityPersistenceDiagnosticsV1,
-    AttachmentSecurityScanJobDiagnosticsV1,
-};
 pub use jobs::{
     AttachmentSecurityTargetBlobReceiptV1, ClaimedAttachmentSecurityScanJobV1,
     RetryAttachmentSecurityScanJobOutcomeV1, attachment_security_scan_job_id_v1,

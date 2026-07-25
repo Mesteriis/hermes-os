@@ -24,7 +24,7 @@ hermes-events-protocol = { path = "../../../src/platform/events" }
 hermes-events-jetstream = { path = "../../../src/platform/events/jetstream" }
 hermes-blob-client = { path = "../../../src/platform/blob/client" }
 hermes-attachment-security-contract = { path = "../../../src/attachment-security-contract" }
-hermes-attachment-security-persistence = { path = "../../../src/attachment-security-persistence", features = ["conformance-test-support"] }
+hermes-attachment-security-persistence = { path = "../../../src/attachment-security-persistence" }
 hermes-attachment-security-runtime = { path = "../../../src/attachment-security-runtime" }
 hermes-communications-persistence = { path = "../../../src/communications-persistence" }
 hermes-communications-runtime = { path = "../../../src/communications-runtime" }
@@ -74,6 +74,7 @@ sha2 = { version = "=0.11.0", default-features = false }
 rusqlite = { version = "=0.32.0", default-features = false, features = ["bundled"] }
 serde_cbor_2 = "=0.13.0"
 serde_json = "=1.0.150"
+sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }
 tokio = { version = "=1.52.4", default-features = false, features = ["io-util", "net", "rt-multi-thread", "sync", "time"] }
 tokio-rustls = "=0.26.4"
 webauthn-rs-core = "=0.5.5"

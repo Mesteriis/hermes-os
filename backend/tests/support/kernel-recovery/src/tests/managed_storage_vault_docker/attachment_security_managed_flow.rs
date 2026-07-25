@@ -140,6 +140,15 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
                 .expect("stop Attachment Security runtime with pending verdict");
         },
         || {
+            supervisor
+                .stop(COMMUNICATIONS_REGISTRATION)
+                .expect("stop Communications before deterministic NATS recovery");
+            assert_eq!(
+                restart_communications_domain(&supervisor, &store, &root.join("runtime")),
+                2
+            );
+        },
+        || {
             restart_attachment_security_runtime(
                 &supervisor,
                 &store,
@@ -392,7 +401,7 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
     );
     assert_eq!(
         restart_communications_domain(&supervisor, &store, &root.join("runtime")),
-        2
+        3
     );
     attachment_security = restart_attachment_security_runtime(
         &supervisor,

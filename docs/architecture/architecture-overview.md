@@ -342,12 +342,15 @@ Contacts, Organizations, Tasks, Calendar, Documents и AI. Relationships,
 Projects, Obligations, Decisions, Knowledge и Review остаются
 зарегистрированными, но заблокированными.
 
-Этот allowlist не является фактическим package inventory. В текущем
-В `first_owner_v1` owner inventory содержит только домен `communications` и
-capabilities `communications.blob.v1`, `communications.events.v1`,
-`communications.observe.v1`, `communications.query.v1`,
-`communications.storage.v1`. Integrations, workflows и engines не входят в
-owner inventory; provider runtimes остаются отдельными units.
+Этот allowlist не является фактическим package inventory. Текущий exact
+`attachment_security_engine_v1` inventory содержит домен `communications` и
+отдельный engine `attachment_security`. Communications сохраняет свои
+capabilities, а engine имеет только exact
+`attachment_security.blob.v1`, `attachment_security.candidate.observe.v1`,
+`attachment_security.communications-state.observe.v1`,
+`attachment_security.storage.v1` и
+`attachment_security.verdict.publish.v1`. Integrations и workflows в owner
+inventory не входят; provider runtimes остаются отдельными units.
 
 Все product projections, включая Graph, Timeline, Search и Context,
 заблокированы. Допустимы только canonical state владельца, обычные database
@@ -492,10 +495,13 @@ tests реализованы.
 
 ## Durable и Derived State
 
-В текущем `first_owner_v1` durable business state принадлежит только
-Communications. Integrations, workflows и engines не входят в owner inventory.
-Development allowlist не является production admission; остальные domains и
-все derived projections остаются заблокированы до отдельных gates.
+В текущем `attachment_security_engine_v1` durable business state принадлежит
+только Communications. Отдельный Attachment Security engine владеет лишь
+bounded scan candidate/state join, retry jobs, quarantine evidence и exact
+verdict outbox; это не business domain truth. Integrations и workflows не
+входят в owner inventory. Development allowlist не является production
+admission; остальные domains и все derived projections остаются заблокированы
+до отдельных gates.
 
 Следующие категории derived rebuildable state архитектурно распознаны, но
 полностью заблокированы ADR-0208:

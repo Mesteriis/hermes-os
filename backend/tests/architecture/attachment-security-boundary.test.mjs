@@ -115,6 +115,7 @@ test('Attachment Security persistence owns the durable join, bounded jobs and ex
   assert.match(manifest, /surface = "persistence"/);
   assert.match(manifest, /hermes-attachment-security-core/);
   assert.match(manifest, /hermes-communications-attachment-contract/);
+  assert.doesNotMatch(manifest, /\[features\]/);
   assert.doesNotMatch(
     manifest,
     /hermes-(?:communications-(?!attachment-contract)|blob|kernel|attachment-security-clamav)/,
@@ -409,7 +410,7 @@ test('Attachment Security managed conformance launches the signed Engine through
     eventFlow,
     clamav,
     blobFixture,
-    persistence,
+    persistenceFixture,
   ] = await Promise.all([
     readFile(
       new URL('tests/support/kernel-recovery/Cargo.toml', BACKEND_ROOT),
@@ -457,12 +458,17 @@ test('Attachment Security managed conformance launches the signed Engine through
       'utf8',
     ),
     readFile(
-      new URL('src/attachment-security-persistence/src/conformance.rs', BACKEND_ROOT),
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/'
+          + 'attachment_security_persistence_fixture.rs',
+        BACKEND_ROOT,
+      ),
       'utf8',
     ),
   ]);
 
   assert.match(manifest, /^hermes-attachment-security-runtime =/m);
+  assert.match(manifest, /^sqlx =/m);
   assert.match(script, /'-p',\s*'hermes-attachment-security-runtime'/);
   assert.match(script, /HERMES_ATTACHMENT_SECURITY_RUNTIME_BIN:/);
   assert.match(
@@ -484,6 +490,8 @@ test('Attachment Security managed conformance launches the signed Engine through
     flow,
     /assert_attachment_security_outbox_replays_after_nats_outage_and_restart\(/,
   );
+  assert.match(flow, /stop\(COMMUNICATIONS_REGISTRATION\)/);
+  assert.match(flow, /restart_communications_domain\(/);
   assert.match(flow, /runtime_generation,\s*2/);
   assert.match(flow, /runtime_generation,\s*3/);
   assert.match(flow, /blob_source\.advance_runtime_generation\(/);
@@ -527,26 +535,56 @@ test('Attachment Security managed conformance launches the signed Engine through
   assert.match(eventFlow, /custody failure must not create a verdict/);
   assert.match(eventFlow, /!first_job\.target_blob_receipt_present/);
   assert.match(eventFlow, /!first_job\.outbox_message_id_present/);
-  assert.match(persistence, /WHERE attachment_anchor_id = \$1/);
+  assert.match(persistenceFixture, /WHERE attachment_anchor_id = \$1/);
   assert.doesNotMatch(
     `${setup}\n${flow}`,
     /hermes_communications_(?:domain|persistence|runtime)/,
   );
 });
 
-test('staged Attachment Security packages do not open the production engine gate', async () => {
+test('Attachment Security production admission is one exact engine inventory', async () => {
   const policy = JSON.parse(await readFile(POLICY_PATH, 'utf8'));
   const productionPackages = policy.implementation.productionPackages;
 
-  assert.deepEqual(policy.implementation.ownerInventory.engines, []);
-  assert.equal(
-    productionPackages.some(({ name }) => name.startsWith('hermes-attachment-security-')),
-    false,
+  assert.equal(policy.implementation.currentSlice, 'attachment_security_engine_v1');
+  assert.deepEqual(policy.implementation.ownerInventory.engines, ['attachment_security']);
+  assert.deepEqual(
+    productionPackages
+      .filter(({ name }) => name.startsWith('hermes-attachment-security-'))
+      .map(({ name }) => name),
+    [
+      'hermes-attachment-security-contract',
+      'hermes-attachment-security-core',
+      'hermes-attachment-security-clamav',
+      'hermes-attachment-security-persistence',
+      'hermes-attachment-security-runtime',
+      'hermes-attachment-security-assembly',
+    ],
   );
-  assert.equal(
-    policy.implementation.ownerInventory.businessCapabilities.some(
+  assert.deepEqual(
+    policy.implementation.ownerInventory.businessCapabilities.filter(
       (capability) => capability.startsWith('attachment_security.'),
     ),
+    [
+      'attachment_security.blob.v1',
+      'attachment_security.candidate.observe.v1',
+      'attachment_security.communications-state.observe.v1',
+      'attachment_security.storage.v1',
+      'attachment_security.verdict.publish.v1',
+    ],
+  );
+  assert.deepEqual(
+    policy.phaseGates.requires.attachment_security_engine_v1,
+    [
+      'managed_launch_trust_v1',
+      'vault_v1',
+      'storage_control_v1',
+      'nats_data_plane_v1',
+      'blob_v1',
+    ],
+  );
+  assert.equal(
+    policy.phaseGates.notAuthorized.includes('attachment_security_engine_v1'),
     false,
   );
 });

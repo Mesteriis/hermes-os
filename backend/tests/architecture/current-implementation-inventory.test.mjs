@@ -125,9 +125,9 @@ test('allows staged integration and engine sources outside the active owner inve
     owner: 'mail',
     surface: 'implementation',
   });
-  const engine = workspacePackage('hermes-attachment-security-core', {
+  const engine = workspacePackage('hermes-content-security-core', {
     role: 'engine',
-    owner: 'attachment_security',
+    owner: 'content_security',
     surface: 'implementation',
   });
   const extraDomain = workspacePackage('hermes-extra-domain', {
@@ -153,12 +153,12 @@ test('allows staged integration and engine sources outside the active owner inve
   );
   assert.deepEqual(
     validateCurrentImplementationSourceCoverage(policy, [
-      { path: 'src/attachment-security-core/Cargo.toml', isDirectory: false },
-      { path: 'src/attachment-security-core/src/lib.rs', isDirectory: false },
+      { path: 'src/content-security-core/Cargo.toml', isDirectory: false },
+      { path: 'src/content-security-core/src/lib.rs', isDirectory: false },
     ], [{
-      name: 'hermes-attachment-security-core',
+      name: 'hermes-content-security-core',
       role: 'engine',
-      root: 'src/attachment-security-core',
+      root: 'src/content-security-core',
     }]),
     [],
   );

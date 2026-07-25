@@ -290,6 +290,16 @@ const FIRST_OWNER_PRODUCTION_PACKAGES = [
   { name: 'hermes-communications-runtime', role: 'domain', owner: 'communications', surface: 'runtime' },
 ];
 
+const ATTACHMENT_SECURITY_ENGINE_PRODUCTION_PACKAGES = [
+  ...FIRST_OWNER_PRODUCTION_PACKAGES,
+  { name: 'hermes-attachment-security-contract', role: 'engine', owner: 'attachment_security', surface: 'contract' },
+  { name: 'hermes-attachment-security-core', role: 'engine', owner: 'attachment_security', surface: 'implementation' },
+  { name: 'hermes-attachment-security-clamav', role: 'engine', owner: 'attachment_security', surface: 'implementation' },
+  { name: 'hermes-attachment-security-persistence', role: 'engine', owner: 'attachment_security', surface: 'persistence' },
+  { name: 'hermes-attachment-security-runtime', role: 'engine', owner: 'attachment_security', surface: 'runtime' },
+  { name: 'hermes-attachment-security-assembly', role: 'engine', owner: 'attachment_security', surface: 'assembly' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -564,6 +574,46 @@ const FIRST_OWNER_WORKSPACE_DEPENDENCY_ALLOWLIST = Object.fromEntries(
     MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST[name],
   ]),
 );
+
+const ATTACHMENT_SECURITY_ENGINE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...FIRST_OWNER_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-security-contract': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-attachment-security-core': [
+    { name: 'hermes-attachment-security-contract', kind: 'normal' },
+  ],
+  'hermes-attachment-security-clamav': [
+    { name: 'hermes-attachment-security-contract', kind: 'normal' },
+    { name: 'hermes-attachment-security-core', kind: 'normal' },
+  ],
+  'hermes-attachment-security-persistence': [
+    { name: 'hermes-attachment-security-core', kind: 'normal' },
+    { name: 'hermes-communications-attachment-contract', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+  'hermes-attachment-security-runtime': [
+    { name: 'hermes-attachment-security-clamav', kind: 'normal' },
+    { name: 'hermes-attachment-security-contract', kind: 'normal' },
+    { name: 'hermes-attachment-security-core', kind: 'normal' },
+    { name: 'hermes-attachment-security-persistence', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communications-attachment-contract', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+  'hermes-attachment-security-assembly': [
+    { name: 'hermes-attachment-security-persistence', kind: 'normal' },
+    { name: 'hermes-attachment-security-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
 
 const PROTOCOL_THIRD_PARTY_DEPENDENCIES = [
   {
@@ -1045,6 +1095,41 @@ const FIRST_OWNER_THIRD_PARTY_DEPENDENCY_ALLOWLIST = Object.fromEntries(
   ]),
 );
 
+const ATTACHMENT_SECURITY_ENGINE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...FIRST_OWNER_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-security-contract': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-security-core': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-security-clamav': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-security-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+  'hermes-attachment-security-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-attachment-security-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -1208,6 +1293,21 @@ const FIRST_OWNER_INVENTORY = {
   ],
 };
 
+const ATTACHMENT_SECURITY_ENGINE_INVENTORY = {
+  domains: ['communications'],
+  integrations: [],
+  workflows: [],
+  engines: ['attachment_security'],
+  businessCapabilities: [
+    'attachment_security.blob.v1',
+    'attachment_security.candidate.observe.v1',
+    'attachment_security.communications-state.observe.v1',
+    'attachment_security.storage.v1',
+    'attachment_security.verdict.publish.v1',
+    ...FIRST_OWNER_INVENTORY.businessCapabilities,
+  ],
+};
+
 const CLOCK_KEYS = ['wallTime', 'elapsedTime', 'testTime', 'moduleCapabilityEnabled'];
 
 const EXIT_GATES = [
@@ -1360,9 +1460,12 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-ingress',
       'hermes-communications-attachment-contract',
       'hermes-communications-api',
+      'hermes-attachment-security-contract',
     ].includes(packageName);
     return hasExactKeys(target, ['primaryKind', 'customBuildAllowed'])
-      && target.primaryKind === (packageDescriptor?.surface === 'runtime' ? 'bin' : 'lib')
+      && target.primaryKind === (
+        ['runtime', 'assembly'].includes(packageDescriptor?.surface) ? 'bin' : 'lib'
+      )
       && target.customBuildAllowed === protocolPackage;
   });
 }
@@ -1483,6 +1586,16 @@ function expectedSlice(currentSlice) {
       packages: FIRST_OWNER_PRODUCTION_PACKAGES,
       workspaceDependencies: FIRST_OWNER_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: FIRST_OWNER_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_security_engine_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_SECURITY_ENGINE_INVENTORY,
+      packages: ATTACHMENT_SECURITY_ENGINE_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_SECURITY_ENGINE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_SECURITY_ENGINE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

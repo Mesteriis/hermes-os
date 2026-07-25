@@ -102,6 +102,7 @@ test('requires the exact Storage Control topology and fail-closed lifecycle poli
   assert.ok(canonical.bindingFields.includes('storage_bundle_digest'));
   assert.deepEqual(canonical.testSupportPostgresClientAllowlist, [
     'hermes-events-jetstream-testkit:dev:sqlx',
+    'hermes-kernel-recovery-testkit:dev:sqlx',
     'hermes-scheduler-testkit:dev:sqlx',
   ]);
 

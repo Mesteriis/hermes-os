@@ -1,40 +1,42 @@
-//! Explicit disposable-database access for live conformance only.
+//! Test-only direct PostgreSQL diagnostics for the disposable Attachment Security contour.
 
+use hermes_attachment_security_persistence::AttachmentSecurityPersistenceErrorV1;
+use hermes_events_protocol::delivery::OutboxRecordV1;
 use sqlx::{
-    Row,
+    PgPool, Row,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 
-use crate::{AttachmentSecurityPersistenceErrorV1, AttachmentSecurityPersistenceV1};
+pub(super) struct AttachmentSecurityPersistenceConformanceV1 {
+    pool: PgPool,
+}
 
-pub struct AttachmentSecurityPersistenceConformanceV1;
-
-pub struct AttachmentSecurityPersistenceDiagnosticsV1 {
-    pub candidates: i64,
-    pub canonical_states: i64,
-    pub jobs: i64,
-    pub attempts: i64,
-    pub target_blob_receipts: i64,
-    pub outbox: i64,
+pub(super) struct AttachmentSecurityPersistenceDiagnosticsV1 {
+    pub(super) candidates: i64,
+    pub(super) canonical_states: i64,
+    pub(super) jobs: i64,
+    pub(super) attempts: i64,
+    pub(super) target_blob_receipts: i64,
+    pub(super) outbox: i64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AttachmentSecurityScanJobDiagnosticsV1 {
-    pub state: i16,
-    pub attempt_count: u32,
-    pub target_blob_receipt_present: bool,
-    pub outbox_message_id_present: bool,
-    pub claimed: bool,
+pub(super) struct AttachmentSecurityScanJobDiagnosticsV1 {
+    pub(super) state: i16,
+    pub(super) attempt_count: u32,
+    pub(super) target_blob_receipt_present: bool,
+    pub(super) outbox_message_id_present: bool,
+    pub(super) claimed: bool,
 }
 
 impl AttachmentSecurityPersistenceConformanceV1 {
-    pub async fn connect(
+    pub(super) async fn connect(
         host: &str,
         port: u16,
         username: &str,
         password: &str,
         database_id: &str,
-    ) -> Result<AttachmentSecurityPersistenceV1, AttachmentSecurityPersistenceErrorV1> {
+    ) -> Result<Self, AttachmentSecurityPersistenceErrorV1> {
         if host.trim().is_empty()
             || port == 0
             || username.trim().is_empty()
@@ -54,11 +56,11 @@ impl AttachmentSecurityPersistenceConformanceV1 {
             .connect_with(options)
             .await
             .map_err(|_| AttachmentSecurityPersistenceErrorV1::StorageUnavailable)?;
-        Ok(AttachmentSecurityPersistenceV1 { pool })
+        Ok(Self { pool })
     }
 
-    pub async fn diagnostics(
-        persistence: &AttachmentSecurityPersistenceV1,
+    pub(super) async fn diagnostics(
+        &self,
     ) -> Result<AttachmentSecurityPersistenceDiagnosticsV1, AttachmentSecurityPersistenceErrorV1>
     {
         let row = sqlx::query(
@@ -70,7 +72,7 @@ impl AttachmentSecurityPersistenceConformanceV1 {
              (SELECT count(*) FROM hermes_data.attachment_security_scan_jobs WHERE target_blob_reference_id IS NOT NULL) AS target_blob_receipts, \
              (SELECT count(*) FROM hermes_data.attachment_security_verdict_outbox) AS outbox",
         )
-        .fetch_one(&persistence.pool)
+        .fetch_one(&self.pool)
         .await
         .map_err(|_| AttachmentSecurityPersistenceErrorV1::StorageUnavailable)?;
         Ok(AttachmentSecurityPersistenceDiagnosticsV1 {
@@ -95,8 +97,8 @@ impl AttachmentSecurityPersistenceConformanceV1 {
         })
     }
 
-    pub async fn scan_job_diagnostics(
-        persistence: &AttachmentSecurityPersistenceV1,
+    pub(super) async fn scan_job_diagnostics(
+        &self,
         attachment_anchor_id: [u8; 16],
     ) -> Result<Option<AttachmentSecurityScanJobDiagnosticsV1>, AttachmentSecurityPersistenceErrorV1>
     {
@@ -109,7 +111,7 @@ impl AttachmentSecurityPersistenceConformanceV1 {
              WHERE attachment_anchor_id = $1",
         )
         .bind(attachment_anchor_id.to_vec())
-        .fetch_optional(&persistence.pool)
+        .fetch_optional(&self.pool)
         .await
         .map_err(|_| AttachmentSecurityPersistenceErrorV1::StorageUnavailable)?;
         row.map(|row| {
@@ -139,5 +141,33 @@ impl AttachmentSecurityPersistenceConformanceV1 {
             })
         })
         .transpose()
+    }
+
+    pub(super) async fn pending_verdict_outbox(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<OutboxRecordV1>, AttachmentSecurityPersistenceErrorV1> {
+        if !(1..=256).contains(&limit) {
+            return Err(AttachmentSecurityPersistenceErrorV1::InvalidInput);
+        }
+        let rows = sqlx::query(
+            "SELECT exact_envelope_bytes \
+             FROM hermes_data.attachment_security_verdict_outbox \
+             WHERE published_at_unix_seconds IS NULL \
+             ORDER BY created_at_unix_seconds ASC, message_id ASC LIMIT $1",
+        )
+        .bind(i64::from(limit))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| AttachmentSecurityPersistenceErrorV1::StorageUnavailable)?;
+        rows.into_iter()
+            .map(|row| {
+                let bytes = row
+                    .try_get::<Vec<u8>, _>("exact_envelope_bytes")
+                    .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidRow)?;
+                OutboxRecordV1::accept(bytes)
+                    .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidRow)
+            })
+            .collect()
     }
 }

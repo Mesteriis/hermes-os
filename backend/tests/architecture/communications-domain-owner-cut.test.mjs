@@ -36,7 +36,7 @@ test('Communications domain does not import integration or Blob implementations'
   }
 });
 
-test('Communications first owner inventory is exact and owner-local implementations stay provider-free', async () => {
+test('Communications remains the exact domain owner after Engine admission', async () => {
   const [
     policySource,
     ingressSources,
@@ -56,13 +56,18 @@ test('Communications first owner inventory is exact and owner-local implementati
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'first_owner_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_security_engine_v1');
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications'],
     integrations: [],
     workflows: [],
-    engines: [],
+    engines: ['attachment_security'],
     businessCapabilities: [
+      'attachment_security.blob.v1',
+      'attachment_security.candidate.observe.v1',
+      'attachment_security.communications-state.observe.v1',
+      'attachment_security.storage.v1',
+      'attachment_security.verdict.publish.v1',
       'communications.attachment.blob-admission.observe.v1',
       'communications.attachment.safety-verdict.observe.v1',
       'communications.blob.v1',
@@ -78,7 +83,7 @@ test('Communications first owner inventory is exact and owner-local implementati
       .filter((entry) => entry.role === 'integration')
       .map((entry) => entry.name),
     [],
-    'first_owner_v1 must not carry integration build units in its production inventory',
+    'Engine admission must not carry integration build units in production inventory',
   );
 
   for (const source of [

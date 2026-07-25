@@ -2,7 +2,8 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: staged backend slice реализован. Attachment-specific
+Состояние реализации: production gate `attachment_security_engine_v1` открыт
+атомарно. Attachment-specific
 Communications schemas выделены без facade/duplicate source в
 `hermes-communications-attachment-contract`; executable dependency policy и
 отдельный managed Engine launch path реализованы. Engine-owned typed candidate
@@ -31,18 +32,22 @@ fail-closed malformed response, disconnect/I/O и timeout: Communications
 остаётся в `blob_admitted`, verdict/outbox не создаётся, а exact replay не
 дублирует первую custody/scan attempt. Дополнительный live contour удерживает
 clean scan до NATS outage, сохраняет exact verdict в owner outbox, останавливает
-Engine, fences predecessor Storage binding и запускает generation 2 с новым
-runtime/Storage fence; новый relay публикует те же bytes без повторного scan.
+Engine, перезапускает Communications consumer через fenced Storage successor и
+запускает Engine generation 2 с новым runtime/Storage fence; новый relay
+публикует те же bytes без повторного scan.
 Отдельный stale-CAS verdict не изменяет terminal Communications state.
 Тот же authenticated contour теперь доказывает fail-closed custody authority:
 stale source runtime generation, revoked source registration, revoked target
 registration, остановленный Vault и остановленный Blob сохраняют retryable
 engine job без target receipt/outbox/verdict, не запускают scanner и оставляют
 Communications в `blob_admitted`; exact candidate replay также не создаёт
-terminal fact. Production gate `attachment_security_engine_v1` остаётся закрыт
-только до атомарного production inventory admission и полного финального
-backend gate. `safe_for_delivery` доказан только в disposable conformance
-contour и ещё не объявлен production-ready.
+terminal fact. Executable policy теперь допускает один exact Engine inventory:
+contract, core, ClamAV adapter, persistence, runtime и assembly; owner inventory
+содержит `attachment_security` только в `engines`, а пять capabilities совпадают
+с descriptor. Production persistence не имеет Cargo feature switches;
+admin-only diagnostics перенесены в test-only recovery harness.
+`safe_for_delivery` допускается только через этот signed managed Engine path;
+невалидный или недоступный scanner/Vault/Blob оставляет его fail closed.
 ADR-0274 фиксирует обязательный custody path, а ADR-0275 — стабильную target
 identity без зависимости от динамического Kernel registration ID.
 
@@ -320,8 +325,10 @@ Gate открывается атомарно только после:
     settings endpoint или private socket path;
 14. architecture/SRP/Cargo/full backend gates.
 
-Gate не расширяет `first_owner_v1` автоматически. После закрытия gate owner
-может быть добавлен только в отдельный exact production inventory revision.
+Gate открыт отдельной exact production inventory revision
+`attachment_security_engine_v1`. Она сохраняет Communications единственным
+доменом, добавляет только engine owner и не допускает integration или workflow
+packages.
 
 ## Отклонённые варианты
 

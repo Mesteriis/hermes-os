@@ -20,7 +20,9 @@ replay и прямой source-read denial. Live authority matrix дополни�
 revoked target registration и недоступность Blob/Vault: transfer остаётся
 retryable, scanner и verdict не запускаются. Вместе с unit evidence для
 wrong-target/current-runtime fences это закрывает stale/revoke/outage evidence
-этого решения; production inventory admission остаётся отдельным phase gate.
+этого решения. Exact `attachment_security_engine_v1` inventory теперь
+допущен отдельным production phase gate; Communications остаётся доменом,
+Attachment Security — engine, а integrations в inventory не добавлены.
 
 Зависит от:
 

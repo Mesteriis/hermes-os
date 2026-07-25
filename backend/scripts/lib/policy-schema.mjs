@@ -897,6 +897,7 @@ export function validatePolicy(policy) {
       storage?.testSupportPostgresClientAllowlist,
       [
         'hermes-events-jetstream-testkit:dev:sqlx',
+        'hermes-kernel-recovery-testkit:dev:sqlx',
         'hermes-scheduler-testkit:dev:sqlx',
       ],
     )
