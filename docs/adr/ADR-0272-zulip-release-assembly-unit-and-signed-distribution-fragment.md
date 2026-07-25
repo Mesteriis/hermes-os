@@ -2,10 +2,12 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Не реализовано. Canonical Zulip runtime descriptor и
-settings schema существуют; owner-local Storage bundle, отдельная Zulip-owned
-assembly unit, artifact materialization и signed distribution evidence ещё
-отсутствуют.
+Состояние реализации: Частично реализовано в `81449906e`. Canonical Zulip
+runtime descriptor, settings schema и immutable owner-local Storage bundle
+материализуются отдельной `hermes-zulip-assembly` unit в exact unsigned
+двухэлементный fragment. Unit/Rust и architecture guards доказывают gates
+1–5 и 7. Generic signed distribution binding из gate 6 ещё не реализован и
+`zulip_integration_v1` не открыт.
 
 Зависит от:
 
@@ -107,6 +109,13 @@ runtime lifecycle или authority.
 
 Наличие assembly не открывает `zulip_integration_v1`: managed launch, grants,
 fences, live provider and event conformance остаются обязательными по ADR-0271.
+
+Текущее evidence:
+
+- `cargo test -p hermes-zulip-persistence -p hermes-zulip-assembly`: 7 passed;
+- strict Clippy для Zulip persistence/runtime/assembly: passed;
+- backend architecture/policy/SRP/Cargo/fmt/evidence gates: 462 architecture
+  tests passed.
 
 ## Отклонённые варианты
 
