@@ -75,12 +75,10 @@ void td_json_client_send(void *raw_client, const char *request) {
         !extract_extra(request, extra, sizeof(extra))) {
         return;
     }
-    int written = snprintf(
-        response,
-        sizeof(response),
-        "{\"@type\":\"ok\",\"@extra\":\"%s\"}",
-        extra
-    );
+    const char *format = strstr(request, "\"@type\":\"sendMessage\"") == NULL
+        ? "{\"@type\":\"ok\",\"@extra\":\"%s\"}"
+        : "{\"@type\":\"message\",\"id\":8001,\"@extra\":\"%s\"}";
+    int written = snprintf(response, sizeof(response), format, extra);
     if (written > 0 && (size_t)written < sizeof(response)) {
         enqueue(client, response);
     }

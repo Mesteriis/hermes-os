@@ -4,9 +4,35 @@ use super::*;
 
 use hermes_events_protocol::validation::envelope::decode_envelope_v1;
 use hermes_telegram_api::{
-    TelegramClientRequest, TelegramClientResponse, client_contract::TelegramClientContractV1,
+    TelegramClientRequest, TelegramClientResponse, TelegramOperationState, TelegramProviderCommand,
+    TelegramProviderQuery, TelegramProviderQueryResponse, TelegramRuntimeState,
+    TelegramSendMessage,
+    client_contract::TelegramClientContractV1,
 };
-use hermes_telegram_runtime::client_port::{decode_module_response, encode_module_request};
+use hermes_telegram_runtime::client_port::{
+    TelegramClientPortError, decode_module_response, encode_module_request,
+};
+
+#[derive(Debug)]
+enum TelegramClientRouteError {
+    Kernel(String),
+    Client(TelegramClientPortError),
+}
+
+impl TelegramClientRouteError {
+    fn is_retryable(&self) -> bool {
+        match self {
+            Self::Client(TelegramClientPortError::Protocol(code)) => code == "RUNTIME_BUSY",
+            Self::Kernel(error) => matches!(
+                error.as_str(),
+                "managed runtime V2 relay response is invalid"
+                    | "managed runtime relay timed out"
+                    | "managed runtime relay is unavailable"
+            ),
+            Self::Client(_) => false,
+        }
+    }
+}
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Communications and Telegram binaries"]
@@ -100,6 +126,7 @@ fn managed_telegram_runtime_uses_kernel_leases_and_event_only_communications_han
         admitted_telegram,
     );
     assert_telegram_lifecycle_query(&store, &supervisor, &telegram);
+    assert_telegram_account_started(&store, &supervisor, &telegram);
 
     let (observation, canonical) = event_runtime.block_on(async {
         let observation = tokio::time::timeout(Duration::from_secs(10), observations.next())
@@ -112,8 +139,9 @@ fn managed_telegram_runtime_uses_kernel_leases_and_event_only_communications_han
             .expect("canonical Communications event");
         (observation, canonical)
     });
+    let observation_bytes = observation.payload.to_vec();
     let observation =
-        decode_envelope_v1(observation.payload.as_ref()).expect("Telegram observation envelope");
+        decode_envelope_v1(&observation_bytes).expect("Telegram observation envelope");
     assert_eq!(
         observation
             .source
@@ -127,7 +155,27 @@ fn managed_telegram_runtime_uses_kernel_leases_and_event_only_communications_han
         canonical.causation_message_id, observation.message_id,
         "Communications must derive canonical evidence only from the typed Telegram observation"
     );
+    event_runtime.block_on(async {
+        let client = async_nats::connect(events.nats_endpoint())
+            .await
+            .expect("connect duplicate observation publisher");
+        client
+            .publish(
+                "hermes.observation.v1.communications.communication_observed.v1",
+                observation_bytes.into(),
+            )
+            .await
+            .expect("republish exact Telegram observation");
+        client.flush().await.expect("flush duplicate observation");
+        assert!(
+            tokio::time::timeout(Duration::from_secs(1), canonical_events.next())
+                .await
+                .is_err(),
+            "duplicate Telegram observation must not create a second Communications event"
+        );
+    });
     assert_communications_query_delivery(&store, &supervisor);
+    assert_telegram_command_completion(&store, &supervisor, &telegram);
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {
@@ -135,6 +183,37 @@ fn managed_telegram_runtime_uses_kernel_leases_and_event_only_communications_han
     }
     std::fs::remove_dir_all(root).expect("remove fixture");
     std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
+}
+
+fn route_telegram_client(
+    store: &SqliteControlStore,
+    relay: &crate::runtime::lifecycle::supervisor::ManagedRuntimeRelayPort,
+    telegram: &StartedTelegramRuntime,
+    contract: TelegramClientContractV1,
+    request_id: u64,
+    request: &TelegramClientRequest,
+) -> Result<TelegramClientResponse, TelegramClientRouteError> {
+    let request =
+        encode_module_request(request_id, request).map_err(TelegramClientRouteError::Client)?;
+    let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+        &telegram.registration_id,
+        &telegram.runtime_instance_id,
+        telegram.runtime_generation,
+        telegram.grant_epoch,
+        contract.capability_id(),
+        &request,
+    );
+    let bytes =
+        crate::modules::capability::router::route_managed_client_request(store, relay, &route)
+            .map_err(TelegramClientRouteError::Kernel)?;
+    let (response_request_id, response) =
+        decode_module_response(contract, &bytes).map_err(TelegramClientRouteError::Client)?;
+    if response_request_id != request_id {
+        return Err(TelegramClientRouteError::Kernel(format!(
+            "Telegram response request ID mismatch: expected {request_id}, got {response_request_id}"
+        )));
+    }
+    Ok(response)
 }
 
 fn assert_telegram_lifecycle_query(
@@ -152,41 +231,168 @@ fn assert_telegram_lifecycle_query(
         );
         std::thread::sleep(Duration::from_millis(25));
     }
-    let request = encode_module_request(71, &TelegramClientRequest::ListAccounts)
-        .expect("encode Telegram lifecycle query");
-    let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
-        &telegram.registration_id,
-        &telegram.runtime_instance_id,
-        telegram.runtime_generation,
-        telegram.grant_epoch,
-        TelegramClientContractV1::Lifecycle.capability_id(),
-        &request,
-    );
     loop {
-        let last_error = match crate::modules::capability::router::route_managed_client_request(
-            store, &relay, &route,
+        let last_error = match route_telegram_client(
+            store,
+            &relay,
+            telegram,
+            TelegramClientContractV1::Lifecycle,
+            71,
+            &TelegramClientRequest::ListAccounts,
         ) {
-            Ok(bytes) => {
-                match decode_module_response(TelegramClientContractV1::Lifecycle, &bytes) {
-                    Ok((request_id, TelegramClientResponse::Accounts(accounts))) => {
-                        assert_eq!(request_id, 71);
-                        assert!(
-                            accounts
-                                .iter()
-                                .any(|account| account.account_id == TELEGRAM_ACCOUNT_ID)
-                        );
-                        return;
-                    }
-                    Ok(_) => "Telegram returned the wrong response type".to_owned(),
-                    Err(error) => format!("decode Telegram lifecycle response: {error:?}"),
-                }
+            Ok(TelegramClientResponse::Accounts(accounts)) => {
+                assert!(
+                    accounts
+                        .iter()
+                        .any(|account| account.account_id == TELEGRAM_ACCOUNT_ID)
+                );
+                return;
             }
-            Err(error) => format!("route Telegram lifecycle query: {error}"),
+            Ok(_) => "Telegram returned the wrong lifecycle response type".to_owned(),
+            Err(error) => format!("{error:?}"),
         };
         assert!(
             std::time::Instant::now() < deadline,
             "managed Telegram lifecycle query is unavailable: {last_error}; child failure: {:?}",
             supervisor.last_failure(&telegram.registration_id),
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn assert_telegram_account_started(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+) {
+    let relay = supervisor.relay_port();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let now_unix_seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Telegram lifecycle clock")
+        .as_secs();
+    let request = TelegramClientRequest::StartAccount {
+        account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+        topology: "managed-local".to_owned(),
+        holder: telegram.runtime_instance_id.clone(),
+        expires_at_unix_seconds: now_unix_seconds.saturating_add(60),
+        now_unix_seconds,
+    };
+    loop {
+        match route_telegram_client(
+            store,
+            &relay,
+            telegram,
+            TelegramClientContractV1::Lifecycle,
+            72,
+            &request,
+        ) {
+            Ok(TelegramClientResponse::Account(account)) => {
+                assert_eq!(account.runtime_state, TelegramRuntimeState::Running);
+                return;
+            }
+            Ok(_) => panic!("Telegram lifecycle start returned the wrong response type"),
+            Err(error) if error.is_retryable() => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Telegram lifecycle start remained busy"
+                );
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(error) => panic!("Telegram lifecycle start failed: {error:?}"),
+        }
+    }
+}
+
+fn assert_telegram_command_completion(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+) {
+    const OPERATION_ID: &str = "managed-telegram-send-1";
+
+    let relay = supervisor.relay_port();
+    let command =
+        TelegramClientRequest::Command(TelegramProviderCommand::SendText(TelegramSendMessage {
+            operation_id: OPERATION_ID.to_owned(),
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            provider_chat_id: "9001".to_owned(),
+            text: "managed Telegram command".to_owned(),
+        }));
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let response = loop {
+        match route_telegram_client(
+            store,
+            &relay,
+            telegram,
+            TelegramClientContractV1::Command,
+            73,
+            &command,
+        ) {
+            Ok(response) => break response,
+            Err(error) if error.is_retryable() => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Telegram command route remained busy"
+                );
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(error) => panic!("Telegram command route failed: {error:?}"),
+        }
+    };
+    let TelegramClientResponse::Operation(operation) = response else {
+        panic!("Telegram command returned the wrong response type");
+    };
+    assert_eq!(operation.operation_id, OPERATION_ID);
+    assert_eq!(
+        operation.state,
+        TelegramOperationState::Accepted,
+        "accepted receipt is distinct from provider completion"
+    );
+
+    loop {
+        let response = match route_telegram_client(
+            store,
+            &relay,
+            telegram,
+            TelegramClientContractV1::Query,
+            74,
+            &TelegramClientRequest::Query(TelegramProviderQuery::Operations {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                limit: 16,
+            }),
+        ) {
+            Ok(response) => response,
+            Err(error) if error.is_retryable() => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Telegram operation query remained busy"
+                );
+                std::thread::sleep(Duration::from_millis(25));
+                continue;
+            }
+            Err(error) => panic!("Telegram operation query failed: {error:?}"),
+        };
+        let TelegramClientResponse::Query(TelegramProviderQueryResponse::Operations(operations)) =
+            response
+        else {
+            panic!("Telegram operation query returned the wrong response type");
+        };
+        if let Some(operation) = operations
+            .iter()
+            .find(|operation| operation.operation_id == OPERATION_ID)
+        {
+            match operation.state {
+                TelegramOperationState::Completed => return,
+                TelegramOperationState::Failed | TelegramOperationState::DeadLetter => {
+                    panic!("Telegram provider command reached a failure terminal state")
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Telegram provider command did not reach a terminal result"
         );
         std::thread::sleep(Duration::from_millis(25));
     }

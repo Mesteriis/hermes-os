@@ -36,9 +36,9 @@ use hermes_telegram_api::{
 use hermes_telegram_core::{
     TelegramLifecycle, accept_operation, credential_lease_purposes, event_chat_state,
     event_message_mutation, observation_draft, operation_awaiting_provider, operation_completed,
-    operation_failed, operation_retry_scheduled, operation_running, project_message,
-    provider_event_draft, qr_login_password_required, qr_login_password_submitted,
-    qr_login_preparing, qr_login_qr_issued, qr_login_ready,
+    operation_failed, operation_retry_scheduled, project_message, provider_event_draft,
+    qr_login_password_required, qr_login_password_submitted, qr_login_preparing,
+    qr_login_qr_issued, qr_login_ready,
 };
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{
@@ -1319,63 +1319,8 @@ where
             return Ok(accepted);
         }
         self.persistence.put_operation_if_absent(accepted.clone());
-        self.persistence.put_command(command.clone());
-        let running = operation_running(&accepted);
-        self.persistence.update_operation(running.clone());
-        durable
-            .save_operation(&running)
-            .await
-            .map_err(TelegramDurableExecutionError::Persistence)?;
-
-        let next = if self.apply_local_command(&command) {
-            operation_completed(&running)
-        } else {
-            let response: Result<TdlibResponse, ()> = match &command {
-                TelegramProviderCommand::SendMedia(media) => {
-                    match self.media_materializer.as_mut() {
-                        Some(materializer) => {
-                            match materializer.materialize(&media.blob.blob_ref) {
-                                Ok(path) => {
-                                    let response = self
-                                        .transport
-                                        .request(TdlibRequest::SendMediaMaterialized {
-                                            command: media.clone(),
-                                            materialized_path: path.clone(),
-                                        })
-                                        .map_err(|_| ());
-                                    materializer.release(&path);
-                                    response
-                                }
-                                Err(_) => Err(()),
-                            }
-                        }
-                        None => Err(()),
-                    }
-                }
-                _ => self
-                    .transport
-                    .request(TdlibRequest::ProviderCommand(command))
-                    .map_err(|_| ()),
-            };
-            match response {
-                Ok(TdlibResponse::Accepted { .. }) => operation_awaiting_provider(&running),
-                Ok(TdlibResponse::History(messages)) => {
-                    for message in messages {
-                        self.ingest_message(message)
-                            .map_err(|_| TelegramDurableExecutionError::Provider)?;
-                    }
-                    operation_completed(&running)
-                }
-                Ok(_) => operation_completed(&running),
-                Err(_) => operation_failed(&running, "provider request failed"),
-            }
-        };
-        self.persistence.update_operation(next.clone());
-        durable
-            .save_operation(&next)
-            .await
-            .map_err(TelegramDurableExecutionError::Persistence)?;
-        Ok(next)
+        self.persistence.put_command(command);
+        Ok(accepted)
     }
 
     pub fn retry_operation(

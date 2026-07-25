@@ -788,15 +788,6 @@ impl TelegramRuntimeProjectionCache {
         records
     }
 
-    pub fn update_operation(&mut self, operation: TelegramOperation) -> bool {
-        let operation_id = operation.operation_id.clone();
-        if !self.operations.contains_key(&operation_id) {
-            return false;
-        }
-        self.operations.insert(operation_id, operation);
-        true
-    }
-
     pub fn schedule_operation_retry(
         &mut self,
         operation_id: &str,
