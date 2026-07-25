@@ -232,3 +232,9 @@ ADR-0272 выделяет Zulip release composition в отдельную integr
 assembly unit с exact runtime/settings/storage artifacts и двухэлементным
 unsigned fragment. Она не имеет signing authority и не входит в Kernel,
 Gateway или Communications.
+ADR-0273 вводит отдельный `attachment_security` engine owner: integration
+публикует provider-neutral scan candidate, engine durably join-ит его с
+canonical Communications `blob_admitted`, читает bytes только через one-use
+Blob lease и публикует typed safety verdict из собственного outbox. Kernel/Core
+получает отдельный managed Engine launch contract и остаётся control plane, а
+Communications не импортирует scanner implementation.
