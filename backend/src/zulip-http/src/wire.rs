@@ -98,11 +98,11 @@ async fn execute_once(
     let endpoint = endpoint(&config.account.realm_url)?;
     let tcp = TcpStream::connect((endpoint.host.as_str(), endpoint.port))
         .await
-        .map_err(|error| unavailable("tcp_connect", &error))?;
+        .map_err(|_| unavailable("tcp_connect"))?;
     let mut stream = tls_connector(&endpoint.host)?
         .connect(&endpoint.host, tcp)
         .await
-        .map_err(|error| unavailable("tls_connect", &error))?;
+        .map_err(|_| unavailable("tls_connect"))?;
     let authorization = basic_authorization(&config.account.bot_email, &config.api_key);
     let mut request_bytes = format!(
         "{} {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Basic {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -117,32 +117,32 @@ async fn execute_once(
     stream
         .write_all(&request_bytes)
         .await
-        .map_err(|error| unavailable("write_request", &error))?;
+        .map_err(|_| unavailable("write_request"))?;
     stream
         .flush()
         .await
-        .map_err(|error| unavailable("flush_request", &error))?;
+        .map_err(|_| unavailable("flush_request"))?;
     let mut bytes = Vec::new();
     stream
         .take(MAX_RESPONSE_BYTES)
         .read_to_end(&mut bytes)
         .await
-        .map_err(|error| unavailable("read_response", &error))?;
+        .map_err(|_| unavailable("read_response"))?;
     (bytes.len() < usize::try_from(MAX_RESPONSE_BYTES).unwrap_or(usize::MAX))
         .then_some(())
         .ok_or(ZulipHttpErrorV1::Protocol)?;
     Ok(bytes)
 }
 
-fn unavailable(stage: &str, error: &impl std::fmt::Display) -> ZulipHttpErrorV1 {
+fn unavailable(stage: &str) -> ZulipHttpErrorV1 {
     #[cfg(feature = "conformance-test-support")]
     if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
-        let diagnostic = format!("developer_zulip_http_unavailable stage={stage} error={error}\n");
+        let diagnostic = format!("developer_zulip_http_unavailable stage={stage}\n");
         let mut stderr = std::io::stderr().lock();
         let _ = std::io::Write::write_all(&mut stderr, diagnostic.as_bytes());
     }
     #[cfg(not(feature = "conformance-test-support"))]
-    let _ = (stage, error);
+    let _ = stage;
     ZulipHttpErrorV1::Unavailable
 }
 

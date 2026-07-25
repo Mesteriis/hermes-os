@@ -24,7 +24,7 @@ impl Debug for ZulipHttpConfigV1 {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("ZulipHttpConfigV1")
-            .field("account", &self.account)
+            .field("account", &"<redacted>")
             .field("api_key", &"<redacted>")
             .finish()
     }
@@ -136,7 +136,10 @@ mod tests {
 
     #[test]
     fn redacts_api_key_and_rejects_other_realm_uploads() {
-        assert!(!format!("{:?}", config()).contains("secret"));
+        let diagnostic = format!("{:?}", config());
+        for private_value in ["secret", "https://zulip.test/", "bot@zulip.test"] {
+            assert!(!diagnostic.contains(private_value));
+        }
         assert!(is_same_realm_upload_url(
             "https://zulip.test/",
             "https://zulip.test/user_uploads/a"
