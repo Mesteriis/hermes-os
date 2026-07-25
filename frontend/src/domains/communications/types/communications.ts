@@ -1,5 +1,4 @@
 // --- Re-exported API types from Svelte reference ---
-import type { MailCertificate } from "./certificates";
 import type { CommunicationAiState } from "./aiState";
 import type { MailReadSyncStatus } from "./mailSync";
 export type {
@@ -521,36 +520,7 @@ export type CommunicationMessageInsight = {
   translation: TranslationResponse | null;
 };
 
-export type CommunicationResourceSnapshot = {
-  subscriptions: SubscriptionSource[];
-  duplicates: DuplicateAttachmentGroup[];
-  invoices: unknown[];
-  legalDocuments: unknown[];
-  certificates: MailCertificate[];
-  expiringCertificates: MailCertificate[];
-  personas: unknown[];
-  templates: unknown[];
-  blockers: unknown[];
-};
-
-export type CommunicationResourceSummary = {
-  subscriptions: number;
-  duplicates: number;
-  invoices: number;
-  legalDocuments: number;
-  certificates: number;
-  expiringCertificates: number;
-  personas: number;
-  templates: number;
-  blockers: number;
-};
-
 export type { CommunicationPersona } from "./personas";
-export type {
-  MailCertificate,
-  MailCertificateCreateRequest,
-  MailCertificateListResponse,
-} from "./certificates";
 export type {
   BulkMessageAction,
   BulkMessageActionRequest,

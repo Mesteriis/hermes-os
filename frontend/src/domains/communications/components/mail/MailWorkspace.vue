@@ -22,7 +22,6 @@ const props = defineProps<{
   inspector: MailInspectorModel
   hasMoreItems?: boolean
   isActionRunning?: boolean
-  isImporting?: boolean
   isLoadingMore?: boolean
   composeOpen?: boolean
   composeForm?: ComposeFormModel
@@ -36,7 +35,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'close-compose': []
-  'import-mail-file': [file: File]
   'attach-compose-files': [files: File[]]
   'load-more': []
   'new-message': []
@@ -130,11 +128,9 @@ function handleComposeDrop(event: DragEvent): void {
 			:items="items"
 			:has-more-items="hasMoreItems"
 			:is-loading-more="isLoadingMore"
-			:is-importing="isImporting"
 			:search-query="searchQuery"
 			:sync-status="syncStatus"
 			@compose="emit('new-message')"
-			@import-mail-file="emit('import-mail-file', $event)"
 			@load-more="emit('load-more')"
 			@refresh="emit('refresh')"
 			@select-item="emit('select-message', $event)"

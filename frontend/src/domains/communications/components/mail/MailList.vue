@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, useId } from 'vue'
+import { useId } from 'vue'
 import { useI18n } from '@/platform/i18n'
 import { Button, Combobox, DropdownMenu, DropdownMenuItem, Icon, NoSearchResultsState, Popover, ToggleGroup, TreeSelect } from '@/shared/ui'
 import '../communicationDomainElements.css'
@@ -13,7 +13,6 @@ import type { MailSyncStatus } from '../../types/communications'
 const props = defineProps<{
   items: readonly MailListItemModel[]
   hasMoreItems?: boolean
-  isImporting?: boolean
   isLoadingMore?: boolean
   searchQuery?: string
   syncStatus?: MailSyncStatus | null
@@ -21,7 +20,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   compose: []
-  'import-mail-file': [file: File]
   'load-more': []
   refresh: []
   'select-item': [item: MailListItemModel]
@@ -33,13 +31,11 @@ const { t } = useI18n()
 const plainSearchInputId = `mail-plain-search-${useId()}`
 const searchBuilderValueInputId = `mail-search-builder-value-${useId()}`
 const searchBuilderFilterNameInputId = `mail-search-builder-filter-name-${useId()}`
-const mailImportInput = ref<HTMLInputElement | null>(null)
 const controller = useMailListController(
   props,
   {
     loadMore: () => emit('load-more'),
     refresh: () => emit('refresh'),
-    importMailFile: (file) => emit('import-mail-file', file),
     selectItem: (item) => emit('select-item', item),
     updateSearchQuery: (query) => emit('update-search-query', query),
     visibleItemsChange: (itemIds) => emit('visible-items-change', itemIds),
@@ -96,21 +92,8 @@ const {
   selectItem,
   refresh,
   loadMore,
-  importMailFile,
   builderSearchQuery,
 } = controller
-
-function requestMailImport(): void {
-  mailImportInput.value?.click()
-}
-
-function handleMailImportFile(event: Event): void {
-  if (!(event.target instanceof HTMLInputElement)) return
-  const input = event.target
-  const file = input.files?.[0]
-  input.value = ''
-  if (file) importMailFile(file)
-}
 
 function updatePlainSearchQuery(event: Event): void {
   if (!(event.target instanceof HTMLInputElement)) return
@@ -124,13 +107,6 @@ function clearPlainSearchQuery(): void {
 
 <template>
 	<div :class="['mail-list-stack', syncProgressVisible && 'mail-list-stack--sync-visible']">
-		<input
-			ref="mailImportInput"
-			type="file"
-			accept=".eml,.mbox,message/rfc822,application/mbox"
-			class="mail-list-action-card__file-input"
-			@change="handleMailImportFile"
-		>
 		<section class="mail-list-action-card" :aria-label="t('Mail actions')">
 			<Button class="mail-list-action-card__compose" icon="tabler:edit" size="sm" @click="emit('compose')">
 				{{ t('Compose') }}
@@ -140,21 +116,11 @@ function clearPlainSearchQuery(): void {
 					class="mail-list-action-card__tool hermes-icon-button"
 					variant="outline"
 					size="sm"
-					icon="tabler:file-import"
-					:loading="isImporting"
-					:aria-label="t('Import EML or MBOX')"
-					:title="t('Import EML or MBOX')"
-					@click="requestMailImport"
+					icon="tabler:refresh"
+					:aria-label="t('Refresh')"
+					:title="t('Refresh')"
+					@click="refresh"
 				/>
-						<Button
-							class="mail-list-action-card__tool hermes-icon-button"
-							variant="outline"
-							size="sm"
-							icon="tabler:refresh"
-							:aria-label="t('Refresh')"
-							:title="t('Refresh')"
-							@click="refresh"
-						/>
 				<DropdownMenu
 					align="end"
 					:side-offset="8"

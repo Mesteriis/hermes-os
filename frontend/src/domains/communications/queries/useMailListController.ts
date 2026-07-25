@@ -52,7 +52,6 @@ export interface MailListControllerProps {
 export interface MailListControllerActions {
   loadMore: () => void
   refresh: () => void
-  importMailFile: (file: File) => void
   selectItem: (item: MailListItemModel) => void
   updateSearchQuery: (query: string) => void
   visibleItemsChange: (itemIds: string[]) => void
@@ -267,10 +266,6 @@ export function useMailListController(
     actions.loadMore()
   }
 
-  function importMailFile(file: File): void {
-    actions.importMailFile(file)
-  }
-
   return {
     activeDensity,
     activeMailViewId,
@@ -322,6 +317,5 @@ export function useMailListController(
     selectItem,
     refresh,
     loadMore,
-    importMailFile,
   }
 }

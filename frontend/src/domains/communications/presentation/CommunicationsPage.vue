@@ -25,10 +25,6 @@ function handleCloseCompose(): void {
 	props.actions.closeCompose()
 }
 
-function handleImportMailFile(file: File): void {
-	void props.actions.importMailFile(file)
-}
-
 function handleLoadMoreMail(): void {
 	void props.actions.loadMoreMail()
 }
@@ -115,7 +111,6 @@ function handleMarkMessengerMessagesVisible(): void {
 			:conversation="props.model.conversation"
 			:has-more-items="props.model.hasMoreItems"
 			:inspector="props.model.inspector"
-			:is-importing="props.model.isImporting"
 			:compose-error="props.model.composeError"
 			:compose-account-options="props.model.composeAccountOptions"
 			:compose-form="props.model.composeForm"
@@ -128,7 +123,6 @@ function handleMarkMessengerMessagesVisible(): void {
 			:sync-status="props.model.syncStatus"
 			@attach-compose-files="handleAttachComposeFiles"
 			@close-compose="handleCloseCompose"
-			@import-mail-file="handleImportMailFile"
 			@load-more="handleLoadMoreMail"
 			@new-message="handleNewMailMessage"
 			@refresh="handleRefreshMail"

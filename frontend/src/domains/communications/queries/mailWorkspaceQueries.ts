@@ -2,7 +2,6 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteD
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import {
   copyMessageToFolder,
-  createMailCertificate,
   createCommunicationFolder,
   createSavedSearch,
   deleteCommunicationFolder,
@@ -12,8 +11,6 @@ import {
   fetchAttachmentExtractedText,
   fetchFolderMessages,
   fetchCommunicationBlockers,
-  fetchExpiringMailCertificates,
-  fetchMailCertificates,
   fetchCommunicationFolders,
   fetchRichTemplates,
   fetchSavedSearches,
@@ -45,10 +42,6 @@ import type {
   SubscriptionListResponse,
   SubscriptionSource
 } from '../types/communications'
-import type {
-  MailCertificate,
-  MailCertificateCreateRequest
-} from '../types/certificates'
 import type {
   AttachmentArchiveInspectionResponse,
   AttachmentExtractedTextResponse,
@@ -142,39 +135,6 @@ export function useCommunicationBlockersQuery() {
     queryKey: ['communications-mail-blockers'],
     queryFn: async () => fetchCommunicationBlockers(),
     ...communicationReferenceQueryOptions
-  })
-}
-
-export function useMailCertificatesQuery() {
-  return useQuery<MailCertificate[]>({
-    queryKey: ['communications-certificates'],
-    queryFn: async () => {
-      const res = await fetchMailCertificates()
-      return res.items
-    },
-    ...communicationReferenceQueryOptions
-  })
-}
-
-export function useExpiringMailCertificatesQuery(days: QueryParam<number> = 90) {
-  return useQuery<MailCertificate[]>({
-    queryKey: computed(() => ['communications-certificates-expiring', toValue(days)]),
-    queryFn: async () => {
-      const res = await fetchExpiringMailCertificates(toValue(days))
-      return res.items
-    },
-    ...communicationReferenceQueryOptions
-  })
-}
-
-export function useCreateMailCertificateMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<MailCertificate, Error, MailCertificateCreateRequest>({
-    mutationFn: async (request) => createMailCertificate(request),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['communications-certificates'] })
-      queryClient.invalidateQueries({ queryKey: ['communications-certificates-expiring'] })
-    }
   })
 }
 

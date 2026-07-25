@@ -179,7 +179,7 @@ The domain is considered migrated only when all of the following are true:
 | Criterion | State | Evidence |
 |---|---|---|
 | 1-4: typed owner model, durable owner state and event-only integration ingress | Complete | Exact six-package Communications inventory, typed lifecycle contracts, owner-local PostgreSQL inbox/outbox and live Mail/Telegram replay evidence. |
-| 5: generated Gateway/client owner contract | Backend and canonical client adapter complete; legacy frontend residue pending | Generated Communications Connect client and canonical search/evidence adapters are present; `legacyCommunicationsRestInventory.boundary.test.ts` keeps the remaining 12 REST callers exact and bounded. |
+| 5: generated Gateway/client owner contract | Backend and canonical client adapter complete; legacy frontend residue pending | Generated Communications Connect client and canonical search/evidence adapters are present; `legacyCommunicationsRestInventory.boundary.test.ts` keeps the remaining 8 REST callers exact and bounded after removing unsupported account, certificate, mail-import and read-receipt surfaces. |
 | 6: no legacy facade or cross-owner backend edge | Backend complete; repository pending | Architecture and Cargo guards reject backend facades, cross-owner SQL and direct owner edges. Frontend legacy REST source must still be removed. |
 | 7: complete validation | Backend complete; frontend pending | `make -C backend ci` passes, including 484 architecture tests, 731 workspace tests, integration profile, dependency policy and SBOM. Full frontend validation follows the legacy-client cutover. |
 

@@ -20,7 +20,6 @@ export type CommunicationsPageModel =
 		conversation: CommunicationConversationModel
 		inspector: MailInspectorModel
 		hasMoreItems: boolean
-		isImporting: boolean
 		composeError: string
 		composeAccountOptions: readonly CommunicationAccountOption[]
 		composeForm: ComposeFormModel
@@ -48,7 +47,6 @@ export type CommunicationsPageModel =
 
 export type CommunicationsPageActions = {
 	closeCompose(): void
-	importMailFile(file: File): void | Promise<void>
 	attachComposeFiles(files: File[]): void
 	loadMoreMail(): void | Promise<void>
 	newMailMessage(): void
