@@ -215,3 +215,7 @@ ADR-0268 выделяет Telegram release composition в отдельную int
 assembly unit: она материализует canonical descriptor/settings/storage bytes и
 неподписанный exact artifact fragment, а generic distribution compiler
 подписывает только полный release без передачи signing authority integration.
+ADR-0269 применяет ту же authority boundary к Mail как к отдельному integration
+owner: Mail-owned assembly unit материализует canonical
+descriptor/settings/storage bytes и unsigned fragment без native dependency,
+а Kernel/Communications/Gateway и Mail runtime не зависят от этой build unit.
