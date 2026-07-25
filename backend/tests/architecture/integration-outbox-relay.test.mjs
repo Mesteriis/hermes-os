@@ -7,14 +7,29 @@ import { fileURLToPath } from 'node:url';
 const backendRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 test('every Communications integration relay publishes exact durable envelopes', () => {
+  const canonicalRelay = readFileSync(
+    join(backendRoot, 'src', 'platform', 'events', 'src', 'delivery', 'relay.rs'),
+    'utf8',
+  );
+  assert.match(canonicalRelay, /publisher\.publish_exact\(entry\.record\(\)\)\.await/);
+  assert.match(canonicalRelay, /store\.mark_published\(&entry, &receipt\)\.await/);
+
   for (const owner of ['mail', 'telegram', 'zulip', 'whatsapp']) {
     const source = readFileSync(
       join(backendRoot, 'src', `${owner}-runtime`, 'src', 'communications_outbox.rs'),
       'utf8',
     );
 
-    assert.match(source, /publish_exact\(permit, record\.exact_bytes\(\)\)/);
-    assert.match(source, /mark_communications_outbox_published\(record\.message_id\(\), published_at_unix_seconds\)/);
+    const publishesInline =
+      /publish_exact\(permit, record\.exact_bytes\(\)\)/.test(source)
+      && /mark_communications_outbox_published\(record\.message_id\(\), published_at_unix_seconds\)/.test(source);
+    const delegatesToCanonicalRelay =
+      /RuntimeOutboxPublisherV1::new\(connection, permit\)/.test(source)
+      && /relay_once\(&mut store, &publisher\)\.await/.test(source);
+    assert.ok(
+      publishesInline || delegatesToCanonicalRelay,
+      `${owner} relay neither publishes exact bytes inline nor delegates to the canonical exact relay`,
+    );
   }
 });
 
