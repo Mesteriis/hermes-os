@@ -225,6 +225,67 @@ test('allows an integration to publish only through Communications ingress', () 
   assert.ok(codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(forbidden))).has('integration_domain_contract_dependency'));
 });
 
+test('allows an engine to use only the exact Communications attachment contract', () => {
+  const attachmentContract = workspacePackage('hermes-communications-attachment-contract', {
+    role: 'domain',
+    owner: 'communications',
+    surface: 'contract',
+  });
+  const allowed = [
+    kernel(),
+    attachmentContract,
+    workspacePackage(
+      'hermes-attachment-security-runtime',
+      { role: 'engine', owner: 'attachment_security', surface: 'runtime' },
+      [dependency('hermes-communications-attachment-contract')],
+    ),
+  ];
+
+  assert.deepEqual(validateCargoMetadata(canonicalPolicyForTests(), metadata(allowed)), []);
+
+  const communicationsApi = workspacePackage('hermes-communications-api', {
+    role: 'domain',
+    owner: 'communications',
+    surface: 'contract',
+  });
+  const forbidden = [
+    kernel(),
+    communicationsApi,
+    workspacePackage(
+      'hermes-attachment-security-runtime',
+      { role: 'engine', owner: 'attachment_security', surface: 'runtime' },
+      [dependency('hermes-communications-api')],
+    ),
+  ];
+
+  assert.ok(
+    codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(forbidden)))
+      .has('engine_domain_contract_dependency'),
+  );
+});
+
+test('forbids a domain from importing an engine contract', () => {
+  const engineContract = workspacePackage('hermes-attachment-security-contract', {
+    role: 'engine',
+    owner: 'attachment_security',
+    surface: 'contract',
+  });
+  const packages = [
+    kernel(),
+    engineContract,
+    workspacePackage(
+      'hermes-communications-runtime',
+      { role: 'domain', owner: 'communications', surface: 'runtime' },
+      [dependency('hermes-attachment-security-contract')],
+    ),
+  ];
+
+  assert.ok(
+    codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages)))
+      .has('forbidden_dependency'),
+  );
+});
+
 
 
 for (const packageName of [

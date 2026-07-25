@@ -8,13 +8,15 @@ use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
     managed_control::select_managed_control_transport,
     v1::{
-        ManagedDomainRuntimeConfigurationV1, ManagedIntegrationHostBridgeConfigurationV1,
-        ManagedIntegrationRuntimeConfigurationV1, ManagedStorageRuntimeConfigurationV1,
+        ManagedDomainRuntimeConfigurationV1, ManagedEngineRuntimeConfigurationV1,
+        ManagedIntegrationHostBridgeConfigurationV1, ManagedIntegrationRuntimeConfigurationV1,
+        ManagedStorageRuntimeConfigurationV1, ModuleKindV1,
     },
     validation::{
         descriptor::decode_descriptor_v1,
         integration_host_bridge::validate_managed_integration_host_bridge_configuration,
         managed_domain_runtime::validate_managed_domain_runtime_configuration,
+        managed_engine_runtime::validate_managed_engine_runtime_configuration,
         managed_integration_runtime::validate_managed_integration_runtime_configuration,
     },
 };
@@ -52,6 +54,7 @@ struct PreparedRuntimeContractInput {
     settings_snapshot_bytes: Option<Vec<u8>>,
     host_bridge_configuration: Option<ManagedIntegrationHostBridgeConfigurationV1>,
     cleanup: Option<Box<dyn FnOnce() + Send>>,
+    expected_module_kind: ModuleKindV1,
 }
 
 impl ManagedLaunchReservation {
@@ -215,6 +218,7 @@ pub(crate) fn start_reserved_integration(
             settings_snapshot_bytes: Some(settings_snapshot_bytes),
             host_bridge_configuration: None,
             cleanup: staged_runtime_artifact_cleanup(staged_runtime_artifacts),
+            expected_module_kind: ModuleKindV1::Integration,
         },
     )
 }
@@ -246,6 +250,40 @@ pub(crate) fn start_reserved_domain(
             settings_snapshot_bytes: None,
             host_bridge_configuration: None,
             cleanup: None,
+            expected_module_kind: ModuleKindV1::Domain,
+        },
+    )
+}
+
+/// Starts one already-reserved engine from a Kernel-staged engine
+/// configuration and typed settings snapshot. Provider configuration,
+/// integration state and host bridges are not representable on this path.
+pub(crate) fn start_reserved_engine(
+    supervisor: &ManagedRuntimeSupervisor,
+    runtime_dir: &Path,
+    reservation: ManagedLaunchReservation,
+    configuration: ManagedEngineRuntimeConfigurationV1,
+    settings_snapshot_bytes: Vec<u8>,
+) -> Result<u64, String> {
+    validate_managed_engine_runtime_configuration(&configuration)
+        .map_err(|_| "managed engine runtime configuration is invalid".to_owned())?;
+    if configuration.registration_id != reservation.registration_id()
+        || configuration.runtime_instance_id != reservation.runtime_instance_id()
+        || configuration.runtime_generation != reservation.runtime_generation()
+        || configuration.grant_epoch != reservation.grant_epoch()
+    {
+        return Err("managed engine runtime configuration is stale".to_owned());
+    }
+    start_staged_with_configuration_bytes(
+        supervisor,
+        runtime_dir,
+        reservation,
+        PreparedRuntimeContractInput {
+            runtime_configuration_bytes: configuration.encode_to_vec(),
+            settings_snapshot_bytes: Some(settings_snapshot_bytes),
+            host_bridge_configuration: None,
+            cleanup: None,
+            expected_module_kind: ModuleKindV1::Engine,
         },
     )
 }
@@ -310,6 +348,7 @@ pub(crate) fn start_staged_with_host_bridge_configuration(
             settings_snapshot_bytes: Some(settings_snapshot_bytes),
             host_bridge_configuration: Some(host_bridge_configuration),
             cleanup,
+            expected_module_kind: ModuleKindV1::Integration,
         },
     )
 }
@@ -330,6 +369,7 @@ fn start_staged_with_configurations(
             settings_snapshot_bytes: None,
             host_bridge_configuration,
             cleanup: None,
+            expected_module_kind: ModuleKindV1::Platform,
         },
     )
 }
@@ -369,14 +409,16 @@ fn start_prepared_with_configuration_bytes(
         settings_snapshot_bytes,
         host_bridge_configuration,
         cleanup,
+        expected_module_kind,
     } = input;
     let preflight = (|| {
-        let control_transport = decode_descriptor_v1(prepared.descriptor_bytes())
-            .map_err(|_| "managed runtime descriptor is invalid".to_owned())
-            .and_then(|descriptor| {
-                select_managed_control_transport(&descriptor)
-                    .map_err(|_| "managed runtime control transport is not exact".to_owned())
-            })?;
+        let descriptor = decode_descriptor_v1(prepared.descriptor_bytes())
+            .map_err(|_| "managed runtime descriptor is invalid".to_owned())?;
+        if descriptor.module_kind != expected_module_kind as i32 {
+            return Err("managed runtime module kind does not match launch path".to_owned());
+        }
+        let control_transport = select_managed_control_transport(&descriptor)
+            .map_err(|_| "managed runtime control transport is not exact".to_owned())?;
         let host_bridge_configuration_bytes = host_bridge_configuration
             .as_ref()
             .map(prost::Message::encode_to_vec);

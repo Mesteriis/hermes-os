@@ -27,6 +27,7 @@ fn main() {
                 "proto/hermes/runtime/v1/scheduler_runtime.proto",
                 "proto/hermes/runtime/v1/managed_storage_runtime.proto",
                 "proto/hermes/runtime/v1/managed_domain_runtime.proto",
+                "proto/hermes/runtime/v1/managed_engine_runtime.proto",
                 "proto/hermes/runtime/v1/managed_integration_runtime.proto",
                 "proto/hermes/runtime/v1/vault_runtime.proto",
                 "proto/hermes/runtime/v1/managed_runtime_control.proto",

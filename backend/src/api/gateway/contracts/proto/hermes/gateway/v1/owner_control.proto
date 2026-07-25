@@ -170,6 +170,20 @@ message StartReservedDomainRuntimeResponseV1 {
   string launch_state = 3;
 }
 
+// Engines have their own managed launch contour. They receive applied typed
+// settings, but never provider configuration, runtime artifacts, integration
+// state roots or host-bridge routes.
+message StartReservedEngineRuntimeRequestV1 {
+  string registration_id = 1;
+  string storage_capability_id = 2;
+  string owner_session_id = 3;
+}
+message StartReservedEngineRuntimeResponseV1 {
+  string registration_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+}
+
 // Crash recovery composes a new durable Scheduler identity, its matching
 // Storage binding and one exact managed-child launch. It never reuses the
 // predecessor's runtime identity, credential lease or Storage binding.
@@ -532,6 +546,7 @@ message OwnerControlRequestV1 {
     BeginBrowserPairingRequestV1 begin_browser_pairing = 35;
     StartReservedIntegrationRuntimeRequestV1 start_reserved_integration_runtime = 36;
     StartReservedDomainRuntimeRequestV1 start_reserved_domain_runtime = 37;
+    StartReservedEngineRuntimeRequestV1 start_reserved_engine_runtime = 38;
   }
 }
 
@@ -574,6 +589,7 @@ message OwnerControlResponseV1 {
     BeginBrowserPairingResponseV1 begin_browser_pairing = 36;
     StartReservedIntegrationRuntimeResponseV1 start_reserved_integration_runtime = 37;
     StartReservedDomainRuntimeResponseV1 start_reserved_domain_runtime = 38;
+    StartReservedEngineRuntimeResponseV1 start_reserved_engine_runtime = 39;
   }
 
   // Sanitized stable code; details and private data remain local to Kernel.

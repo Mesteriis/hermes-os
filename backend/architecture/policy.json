@@ -2953,6 +2953,9 @@
     "test": "test"
   },
   "dependencies": {
+    "engineDomainContractPackages": [
+      "hermes-communications-attachment-contract"
+    ],
     "integrationDomainContractPackages": [
       "hermes-communications-ingress"
     ]

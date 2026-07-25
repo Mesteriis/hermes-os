@@ -18,6 +18,7 @@ use hermes_gateway_protocol::v1::{
     ReserveBundledManagedRuntimeRequestV1, ReserveBundledManagedRuntimeResponseV1,
     StartBundledManagedRuntimeRequestV1, StartBundledManagedRuntimeResponseV1,
     StartReservedDomainRuntimeRequestV1, StartReservedDomainRuntimeResponseV1,
+    StartReservedEngineRuntimeRequestV1, StartReservedEngineRuntimeResponseV1,
     StartReservedIntegrationRuntimeRequestV1, StartReservedIntegrationRuntimeResponseV1,
     TransitionModuleRegistrationRequestV1, TransitionModuleRegistrationResponseV1,
     UpdateOperatorSettingsRequestV1, UpdateOperatorSettingsResponseV1,
@@ -28,13 +29,14 @@ use hermes_kernel_control_store::{
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
     v1::{
-        ManagedDomainRuntimeConfigurationV1, ManagedIntegrationHostBridgeConfigurationV1,
-        ManagedIntegrationRuntimeConfigurationV1,
+        ManagedDomainRuntimeConfigurationV1, ManagedEngineRuntimeConfigurationV1,
+        ManagedIntegrationHostBridgeConfigurationV1, ManagedIntegrationRuntimeConfigurationV1,
     },
     validation::{
         descriptor::decode_settings_snapshot_v1,
         integration_host_bridge::validate_managed_integration_host_bridge_configuration,
         managed_domain_runtime::validate_managed_domain_runtime_configuration,
+        managed_engine_runtime::validate_managed_engine_runtime_configuration,
         managed_integration_runtime::validate_managed_integration_runtime_configuration,
     },
 };
@@ -48,6 +50,11 @@ use crate::platform::macos::managed_launch as macos_managed_runtime_launch;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 pub(super) type OwnerResult = hermes_gateway_protocol::v1::owner_control_response_v1::Result;
+
+struct AdmittedSettingsSnapshotV1 {
+    revision: u64,
+    bytes: Vec<u8>,
+}
 
 pub(super) fn handle(
     store: &SqliteControlStore,
@@ -138,6 +145,9 @@ fn route_operation(
         ),
         Operation::StartReservedDomainRuntime(request) => {
             start_reserved_domain_runtime(store, runtime_dir, supervisor, sessions, request)
+        }
+        Operation::StartReservedEngineRuntime(request) => {
+            start_reserved_engine_runtime(store, runtime_dir, supervisor, sessions, request)
         }
         Operation::StartReservedSchedulerRuntime(request) => {
             scheduler::start_reserved(store, runtime_dir, supervisor, sessions, request)
@@ -240,7 +250,7 @@ fn start_reserved_integration_runtime(
             .platform_event_hub_topology()
             .map_err(|_| "Event Hub topology is unavailable".to_owned())?
             .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
-        let settings_snapshot_bytes = admitted_settings_snapshot(store, &request.registration_id)?;
+        let settings_snapshot = admitted_settings_snapshot(store, &request.registration_id)?;
         let configuration = ManagedIntegrationRuntimeConfigurationV1 {
             major: 1,
             logical_owner_id: registration.owner_id().to_owned(),
@@ -270,7 +280,7 @@ fn start_reserved_integration_runtime(
         let launch_configuration =
             macos_managed_runtime_launch::ManagedIntegrationLaunchConfiguration {
                 runtime: configuration,
-                settings_snapshot_bytes,
+                settings_snapshot_bytes: settings_snapshot.bytes,
                 granted_capability_ids: &granted_capability_ids,
             };
         let runtime_generation = match host_bridge_configuration {
@@ -366,6 +376,71 @@ fn start_reserved_domain_runtime(
     })
 }
 
+fn start_reserved_engine_runtime(
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    supervisor: &ManagedRuntimeSupervisor,
+    sessions: &mut OwnerControlSessions,
+    request: StartReservedEngineRuntimeRequestV1,
+) -> Result<OwnerResult, String> {
+    (|| {
+        sessions.authorize(store, &request.owner_session_id)?;
+        let reservation =
+            macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
+        let registration = store
+            .module_registration(&request.registration_id)
+            .map_err(|_| "managed engine registration is unavailable".to_owned())?
+            .ok_or_else(|| "managed engine registration is unavailable".to_owned())?;
+        let binding = store
+            .platform_storage_binding(&request.registration_id, &request.storage_capability_id)
+            .map_err(|_| "managed engine Storage binding is unavailable".to_owned())?
+            .filter(|value| value.state() == PlatformStorageBindingStateV1::Active)
+            .ok_or_else(|| "managed engine Storage binding is unavailable".to_owned())?;
+        let storage_topology = crate::platform::storage::topology::current(store)?;
+        let vault = crate::platform::vault::status::read_current(store, &supervisor.relay_port())?;
+        let storage = crate::platform::storage::topology::to_managed_runtime_configuration(
+            &storage_topology,
+            &binding,
+            store.snapshot().instance_id(),
+            vault.runtime_generation(),
+            vault.hpke_public_key_x25519(),
+        )?;
+        let event_topology = store
+            .platform_event_hub_topology()
+            .map_err(|_| "Event Hub topology is unavailable".to_owned())?
+            .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
+        let settings_snapshot = admitted_settings_snapshot(store, &request.registration_id)?;
+        let configuration = ManagedEngineRuntimeConfigurationV1 {
+            major: 1,
+            logical_owner_id: registration.owner_id().to_owned(),
+            registration_id: request.registration_id.clone(),
+            runtime_instance_id: reservation.runtime_instance_id().to_owned(),
+            runtime_generation: reservation.runtime_generation(),
+            grant_epoch: reservation.grant_epoch(),
+            storage: Some(storage),
+            event_hub_endpoint: event_topology.nats_endpoint().to_owned(),
+            event_credential_revision: event_topology.credential_revision(),
+            settings_revision: settings_snapshot.revision,
+        };
+        validate_managed_engine_runtime_configuration(&configuration)
+            .map_err(|_| "managed engine runtime configuration is invalid".to_owned())?;
+        macos_managed_runtime_launch::start_reserved_engine(
+            supervisor,
+            runtime_dir,
+            reservation,
+            configuration,
+            settings_snapshot.bytes,
+        )
+    })()
+    .map(|runtime_generation| {
+        OwnerResult::StartReservedEngineRuntime(StartReservedEngineRuntimeResponseV1 {
+            registration_id: request.registration_id,
+            runtime_generation,
+            launch_state: "accepted".to_owned(),
+        })
+    })
+}
+
 fn host_bridge_configuration(
     requested: bool,
     runtime_dir: &Path,
@@ -439,30 +514,30 @@ fn host_bridge_configuration(
 fn admitted_settings_snapshot(
     store: &SqliteControlStore,
     registration_id: &str,
-) -> Result<Vec<u8>, String> {
+) -> Result<AdmittedSettingsSnapshotV1, String> {
     let binding = store
         .settings_schema_binding(registration_id)
-        .map_err(|_| "managed integration settings are unavailable".to_owned())?
-        .ok_or_else(|| "managed integration settings are unavailable".to_owned())?;
+        .map_err(|_| "managed module settings are unavailable".to_owned())?
+        .ok_or_else(|| "managed module settings are unavailable".to_owned())?;
     if binding.desired_revision() == 0
         || binding.desired_revision() != binding.effective_revision()
         || binding.apply_state() != SettingsApplyState::Current
     {
-        return Err("managed integration settings are not current".to_owned());
+        return Err("managed module settings are not current".to_owned());
     }
     let (revision, bytes) = store
         .desired_settings_snapshot(registration_id)
-        .map_err(|_| "managed integration settings are unavailable".to_owned())?
-        .ok_or_else(|| "managed integration settings are unavailable".to_owned())?;
+        .map_err(|_| "managed module settings are unavailable".to_owned())?
+        .ok_or_else(|| "managed module settings are unavailable".to_owned())?;
     let snapshot = decode_settings_snapshot_v1(&bytes)
-        .map_err(|_| "managed integration settings are unavailable".to_owned())?;
+        .map_err(|_| "managed module settings are unavailable".to_owned())?;
     if revision != binding.desired_revision()
         || snapshot.target_id != registration_id
         || snapshot.revision != binding.desired_revision()
     {
-        return Err("managed integration settings are stale".to_owned());
+        return Err("managed module settings are stale".to_owned());
     }
-    Ok(bytes)
+    Ok(AdmittedSettingsSnapshotV1 { revision, bytes })
 }
 
 fn status(

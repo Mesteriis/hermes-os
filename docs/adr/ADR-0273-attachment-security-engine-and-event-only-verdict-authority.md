@@ -212,7 +212,7 @@ Runtime protocol получает отдельный
 - runtime generation и grant epoch;
 - owner-local Storage binding;
 - Event Hub topology revision;
-- settings configuration instance.
+- exact applied settings revision.
 
 В нём нет provider credentials, integration artifacts/state root, host bridge
 или business payload. Gateway owner control получает отдельную

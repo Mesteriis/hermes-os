@@ -48,7 +48,7 @@ function isAllowedDependency(policy, source, target, targetPackageName) {
 
   switch (source.role) {
     case 'domain':
-      return ['platform', 'engine'].includes(target.role);
+      return target.role === 'platform';
     case 'integration':
       return ['platform', 'engine'].includes(target.role)
         || (target.role === 'domain'
@@ -56,7 +56,9 @@ function isAllowedDependency(policy, source, target, targetPackageName) {
     case 'workflow':
       return ['domain', 'integration', 'platform', 'engine', 'api'].includes(target.role);
     case 'engine':
-      return target.role === 'platform';
+      return target.role === 'platform'
+        || (target.role === 'domain'
+          && policy.dependencies.engineDomainContractPackages.includes(targetPackageName));
     case 'platform':
       return target.role === 'platform';
     case 'api':
@@ -360,6 +362,18 @@ export function validateDependencyEdges(policy, packages, descriptors) {
           'integration_domain_contract_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
           'integrations may publish domain-neutral evidence only through an explicitly allowed ingress package',
+        ));
+        continue;
+      }
+
+      if (source.role === 'engine'
+        && target.role === 'domain'
+        && target.surface === 'contract'
+        && !policy.dependencies.engineDomainContractPackages.includes(dependency.name)) {
+        violations.push(violation(
+          'engine_domain_contract_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'engines may consume or publish domain facts only through an explicitly allowed contract package',
         ));
         continue;
       }

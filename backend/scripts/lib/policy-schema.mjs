@@ -783,14 +783,18 @@ export function validatePolicy(policy) {
     violations.push(violation('telemetry_policy', 'telemetry', 'Telemetry Collector forbidden dependencies must be explicit'));
   }
   const packagePrefix = policy?.cargo?.packagePrefix;
+  const engineDomainContracts = list(policy?.dependencies?.engineDomainContractPackages);
   const integrationDomainContracts = list(policy?.dependencies?.integrationDomainContractPackages);
-  if (!integrationDomainContracts.length
+  if (!engineDomainContracts.length
+    || engineDomainContracts.some((packageName) => typeof packagePrefix !== 'string'
+      || !packageName.startsWith(packagePrefix))
+    || !integrationDomainContracts.length
     || integrationDomainContracts.some((packageName) => typeof packagePrefix !== 'string'
       || !packageName.startsWith(packagePrefix))) {
     violations.push(violation(
       'dependency_policy',
-      'dependencies.integrationDomainContractPackages',
-      'integration domain contracts must be an explicit package allowlist',
+      'dependencies',
+      'engine and integration domain contracts must use explicit package allowlists',
     ));
   }
   const forbiddenAggregatePackages = list(policy?.compileIsolation?.forbiddenAggregatePackages);
