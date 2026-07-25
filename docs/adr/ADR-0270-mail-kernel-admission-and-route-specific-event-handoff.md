@@ -7,8 +7,12 @@
 provider-purpose credential capabilities и один canonical module ID
 `hermes-mail-runtime` во всех Mail-produced envelopes. Umbrella `mail.client`
 удалён из production code; assembly повторно доказала signed exact descriptor.
-Managed launch, Kernel fence и live event/attachment conformance ещё не
-реализованы, поэтому `mail_runtime_admission_v1` закрыт.
+Signed managed launch теперь проходит через exact Kernel registration,
+owner-approved IMAP sync subset и Kernel-issued Storage/Vault/Blob/Event Hub
+bindings. Kernel до relay отклоняет отсутствующий delivery grant и stale
+runtime generation. Revoke, live provider sync, event/outage replay и
+attachment conformance ещё не реализованы, поэтому
+`mail_runtime_admission_v1` закрыт.
 
 Уточняет:
 
@@ -225,6 +229,35 @@ Frontend не используется как proof backend admission.
 
 Каждый крупный slice является отдельным commit и проходит owner tests,
 Clippy, architecture/SRP/Cargo boundaries и relevant live conformance.
+
+## Evidence 2026-07-24
+
+Реализованный managed admission slice:
+
+- signed Mail executable/descriptor/settings binding проверяется при managed
+  launch;
+- explicit approved subset содержит только Blob, Events, Storage, IMAP
+  credential и sync; delivery/Gmail/SMTP остаются без grant;
+- Mail Storage bundle и все runtime SQL используют owner-scoped
+  `hermes_data.mail_*`;
+- Mail получает IMAP credential только через exact Vault purpose
+  `mail_imap_password` для своей configuration instance;
+- focused live test поднимает disposable PostgreSQL, PgBouncer, NATS и реальные
+  managed Vault, Storage, Blob, Communications и Mail processes;
+- Kernel отклоняет ungranted delivery и stale sync generation до runtime relay.
+
+Проверки:
+
+```text
+HERMES_STORAGE_MANAGED_TEST_FILTER=managed_mail_runtime_uses_kernel_leases_and_route_specific_admission node scripts/test-authenticated-storage.mjs 1.97.0
+cargo +1.97.0 clippy --locked -p hermes-mail-persistence -p hermes-mail-runtime -p hermes-kernel-recovery-testkit --all-targets -- -D warnings
+cargo +1.97.0 test --locked -p hermes-mail-runtime -p hermes-mail-persistence
+make -C backend architecture-policy-check architecture-evidence-check srp-policy-check cargo-boundaries-check test-architecture fmt-check
+```
+
+Evidence не открывает gate: active sync route не вызывался против provider
+fixture, revoke/worker stop не доказан, Mail observation не прошла live
+NATS/Communications/outage replay, attachment continuation не выполнен.
 
 ## Отклонённые варианты
 
