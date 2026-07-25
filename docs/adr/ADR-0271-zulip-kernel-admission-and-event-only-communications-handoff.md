@@ -5,11 +5,12 @@
 Состояние реализации: Phase gate; `zulip_integration_v1` не открыт. Пять
 Zulip-owned packages, provider anti-corruption mapper, HTTPS adapter,
 owner-local PostgreSQL state и exact-byte Communications outbox уже существуют.
-Exact `ModuleDescriptorV1`, route-specific generated client contracts,
-canonical settings schema, immutable Storage bundle, release assembly и live
-managed admission ещё не реализованы. Runtime всё ещё использует несколько
-читателей cloned control FD, V1 platform helpers и `MSG_PEEK`; до admission
-этот transport должен быть заменён одним correlated V2 frame pump.
+Runtime использует один `ManagedControlChannelV2<UnixStream>` для descriptor,
+Storage/Vault, Blob, Event Hub и client delivery; cloned readers, V1 platform
+helpers и `MSG_PEEK` удалены, а вложенная client delivery получает
+correlation-bound `RUNTIME_BUSY`. Exact `ModuleDescriptorV1`, route-specific
+generated client contracts, canonical settings schema, immutable Storage
+bundle, release assembly и live managed admission ещё не реализованы.
 
 Уточняет:
 
@@ -179,7 +180,8 @@ inventory, make integration a domain, or authorize WhatsApp/another provider.
 
 ## Порядок реализации
 
-1. Replace the shared control FD readers with one correlated V2 frame pump.
+1. ~~Replace the shared control FD readers with one correlated V2 frame pump.~~
+   Реализовано в `8bc3acc73`.
 2. Split generated command/query routes and build exact descriptor/settings.
 3. Add immutable Storage bundle and separate release assembly unit.
 4. Add signed managed launch, grant and revoke/generation conformance.
