@@ -13,8 +13,8 @@ use std::time::Duration;
 use hermes_kernel_control_store::{PlatformStorageBindingStateV1, PlatformStorageBindingV1};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 
-use super::{launch, restart};
-use crate::platform::storage::issuance::StorageBindingIssueV1;
+use super::launch;
+use crate::platform::storage::successor;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 const IDLE_POLL_INTERVAL: Duration = Duration::from_millis(250);
@@ -85,8 +85,8 @@ fn reconcile_once(
     if supervisor.is_active(binding.registration_id())? {
         return Ok(ReconcileOutcome::Active);
     }
-    let issue = successor_issue(&binding)?;
-    let (reservation, successor) = restart::reserve_successor(
+    let issue = successor::issue_after(&binding)?;
+    let (reservation, successor) = successor::reserve(
         supervisor,
         store,
         binding.registration_id(),
@@ -145,23 +145,4 @@ pub(crate) fn active_scheduler_binding(
         1 => Ok(bindings.pop()),
         _ => Err("Scheduler lifecycle has multiple active Storage bindings".to_owned()),
     }
-}
-
-pub(crate) fn successor_issue(
-    binding: &PlatformStorageBindingV1,
-) -> Result<StorageBindingIssueV1, String> {
-    let role_epoch = binding
-        .role_epoch()
-        .checked_add(1)
-        .ok_or_else(|| "Scheduler Storage role epoch overflowed".to_owned())?;
-    let credential_lease_revision = binding
-        .credential_lease_revision()
-        .checked_add(1)
-        .ok_or_else(|| "Scheduler Storage credential revision overflowed".to_owned())?;
-    StorageBindingIssueV1::new(
-        role_epoch,
-        credential_lease_revision,
-        binding.storage_bundle_revision(),
-        *binding.storage_bundle_digest(),
-    )
 }

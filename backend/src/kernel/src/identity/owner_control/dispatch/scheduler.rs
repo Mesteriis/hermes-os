@@ -19,10 +19,9 @@ use prost::Message;
 
 use super::{OwnerControlSessions, OwnerResult};
 use crate::platform::macos::managed_launch;
-use crate::platform::scheduler::{
-    admission as scheduler_admission, launch as scheduler_launch, restart as scheduler_restart,
-};
+use crate::platform::scheduler::{admission as scheduler_admission, launch as scheduler_launch};
 use crate::platform::storage::issuance::StorageBindingIssueV1;
+use crate::platform::storage::successor as storage_successor;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 pub(super) fn start_reserved(
@@ -71,7 +70,7 @@ pub(super) fn restart(
                 .try_into()
                 .map_err(|_| "Scheduler Storage binding is unavailable".to_owned())?,
         )?;
-        let (reservation, binding) = scheduler_restart::reserve_successor(
+        let (reservation, binding) = storage_successor::reserve(
             supervisor,
             store,
             &request.registration_id,

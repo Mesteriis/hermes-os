@@ -7,4 +7,5 @@ pub(crate) mod launch;
 pub(crate) mod provisioning;
 pub(crate) mod revocation;
 pub(crate) mod status;
+pub(crate) mod successor;
 pub(crate) mod topology;

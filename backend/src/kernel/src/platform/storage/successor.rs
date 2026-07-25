@@ -1,4 +1,4 @@
-//! Durable successor identity and Storage binding for a crashed Scheduler runtime.
+//! Fenced successor identity and Storage binding for a managed module runtime.
 
 use hermes_kernel_control_store::{PlatformStorageBindingStateV1, PlatformStorageBindingV1};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
@@ -8,8 +8,8 @@ use crate::platform::storage::issuance::{StorageBindingIssueV1, issue_managed};
 use crate::platform::storage::revocation;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
-/// Fences a predecessor before reserving the fresh Scheduler identity bound to its successor.
-pub(crate) fn reserve_successor(
+/// Fences a predecessor before reserving a fresh managed identity and Storage binding.
+pub(crate) fn reserve(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,
     registration_id: &str,
@@ -29,6 +29,25 @@ pub(crate) fn reserve_successor(
     Ok((reservation, binding))
 }
 
+pub(crate) fn issue_after(
+    binding: &PlatformStorageBindingV1,
+) -> Result<StorageBindingIssueV1, String> {
+    let role_epoch = binding
+        .role_epoch()
+        .checked_add(1)
+        .ok_or_else(|| "Storage role epoch overflowed".to_owned())?;
+    let credential_lease_revision = binding
+        .credential_lease_revision()
+        .checked_add(1)
+        .ok_or_else(|| "Storage credential revision overflowed".to_owned())?;
+    StorageBindingIssueV1::new(
+        role_epoch,
+        credential_lease_revision,
+        binding.storage_bundle_revision(),
+        *binding.storage_bundle_digest(),
+    )
+}
+
 fn revoke_predecessor(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,
@@ -37,7 +56,7 @@ fn revoke_predecessor(
 ) -> Result<(), String> {
     let predecessor = store
         .platform_storage_binding(registration_id, storage_capability_id)
-        .map_err(|_| "Scheduler Storage binding is unavailable".to_owned())?;
+        .map_err(|_| "Storage binding is unavailable".to_owned())?;
     if let Some(predecessor) = predecessor {
         let revoking = match predecessor.state() {
             PlatformStorageBindingStateV1::Active => store
@@ -46,9 +65,7 @@ fn revoke_predecessor(
                     storage_capability_id,
                     predecessor.binding_revision(),
                 )
-                .map_err(|_| {
-                    "Scheduler Storage binding cannot be reserved for revocation".to_owned()
-                })?,
+                .map_err(|_| "Storage binding cannot be reserved for revocation".to_owned())?,
             PlatformStorageBindingStateV1::Revoking => predecessor,
         };
         revocation::fence_reserved_binding(supervisor, store, &revoking)?;

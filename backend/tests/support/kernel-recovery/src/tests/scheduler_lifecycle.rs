@@ -28,8 +28,8 @@ fn active_scheduler_binding_is_the_only_automatic_restart_intent() {
         .expect("resolve automatic Scheduler restart intent")
         .expect("active binding is desired state");
     assert_eq!(selected, binding);
-    let successor =
-        scheduler_lifecycle::successor_issue(&selected).expect("derive fresh successor fences");
+    let successor = crate::platform::storage::successor::issue_after(&selected)
+        .expect("derive fresh successor fences");
     assert_eq!(successor.role_epoch(), 2);
     assert_eq!(successor.credential_lease_revision(), 2);
     assert_eq!(successor.storage_bundle_revision(), 1);

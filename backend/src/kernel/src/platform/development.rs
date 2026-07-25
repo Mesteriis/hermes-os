@@ -258,7 +258,7 @@ fn ensure_scheduler(
         .platform_storage_binding(REGISTRATION_ID, STORAGE_CAPABILITY)
         .map_err(|_| "developer Scheduler Storage binding is unavailable".to_owned())?
     {
-        Some(binding) => crate::platform::scheduler::lifecycle::successor_issue(&binding)?,
+        Some(binding) => crate::platform::storage::successor::issue_after(&binding)?,
         None => StorageBindingIssueV1::new(1, 1, 7, digest)?,
     };
     let binding = issue_managed(

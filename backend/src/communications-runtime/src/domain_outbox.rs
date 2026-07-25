@@ -18,7 +18,12 @@ pub async fn relay_domain_outbox_once(
         connection
             .publish_exact(permit, record.exact_bytes())
             .await
-            .map_err(|_| CommunicationsDomainOutboxRelayErrorV1::Unavailable)?;
+            .map_err(|error| {
+                if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                    eprintln!("developer_communications_domain_outbox_publish_error={error}");
+                }
+                CommunicationsDomainOutboxRelayErrorV1::Unavailable
+            })?;
         persistence
             .mark_domain_outbox_published(record.message_id(), published_at_unix_seconds)
             .await
@@ -32,4 +37,37 @@ pub async fn relay_domain_outbox_once(
 pub enum CommunicationsDomainOutboxRelayErrorV1 {
     Persistence(CommunicationsPersistenceError),
     Unavailable,
+}
+
+impl CommunicationsDomainOutboxRelayErrorV1 {
+    #[must_use]
+    pub const fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            Self::Unavailable
+                | Self::Persistence(CommunicationsPersistenceError::StorageUnavailable)
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_transient_infrastructure_failures_are_retryable() {
+        assert!(CommunicationsDomainOutboxRelayErrorV1::Unavailable.is_retryable());
+        assert!(
+            CommunicationsDomainOutboxRelayErrorV1::Persistence(
+                CommunicationsPersistenceError::StorageUnavailable,
+            )
+            .is_retryable()
+        );
+        assert!(
+            !CommunicationsDomainOutboxRelayErrorV1::Persistence(
+                CommunicationsPersistenceError::InvalidRow,
+            )
+            .is_retryable()
+        );
+    }
 }

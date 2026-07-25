@@ -52,6 +52,7 @@ use crate::platform::{
     macos::managed_launch,
     scheduler::{launch as scheduler_launch, lifecycle as scheduler_lifecycle},
     storage::issuance::{StorageBindingIssueV1, issue_managed},
+    storage::successor as storage_successor,
 };
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,

@@ -347,6 +347,7 @@ impl CommunicationsEventRuntimeV1 {
             .map_err(|_| unavailable_at("search_projection"))?;
         let search_access = CommunicationsSearchAccessV1::open(admission, &storage_configuration)
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
+        signal_managed_runtime_ready(&mut control_channel, admission)?;
         control_channel
             .inner_mut()
             .set_nonblocking(true)
@@ -676,11 +677,18 @@ fn authenticate_managed_runtime_v2(
     {
         return Err(CommunicationsEventRuntimeErrorV1::Admission);
     }
+    Ok(())
+}
+
+fn signal_managed_runtime_ready(
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
+    admission: &CommunicationsRuntimeAdmissionV1,
+) -> Result<(), CommunicationsEventRuntimeErrorV1> {
     control_channel
         .signal_ready(ManagedRuntimeReadyRequestV1 {
-            registration_id,
-            runtime_generation,
-            grant_epoch,
+            registration_id: admission.registration_id.clone(),
+            runtime_generation: admission.runtime_generation,
+            grant_epoch: admission.grant_epoch,
         })
         .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
     control_channel

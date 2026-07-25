@@ -160,6 +160,40 @@ pub(super) fn start_communications_domain(
     let reservation = managed_launch::load(supervisor, store, COMMUNICATIONS_REGISTRATION)
         .expect("load Communications reservation");
     let binding = communications_storage_binding(store);
+    start_reserved_communications_domain(supervisor, store, runtime_dir, reservation, binding)
+}
+
+fn restart_communications_domain(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+) -> u64 {
+    let predecessor = communications_storage_binding(store);
+    let issue = storage_successor::issue_after(&predecessor)
+        .expect("derive Communications successor fences");
+    let (reservation, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_STORAGE_CAPABILITY_ID,
+        issue,
+    )
+    .expect("reserve successor Communications launch and Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision successor Communications Storage binding");
+    start_reserved_communications_domain(supervisor, store, runtime_dir, reservation, binding)
+}
+
+fn start_reserved_communications_domain(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    reservation: managed_launch::ManagedLaunchReservation,
+    binding: hermes_kernel_control_store::PlatformStorageBindingV1,
+) -> u64 {
+    let runtime_instance_id = reservation.runtime_instance_id().to_owned();
+    let runtime_generation = reservation.runtime_generation();
+    let grant_epoch = reservation.grant_epoch();
     let topology =
         crate::platform::storage::topology::current(store).expect("read Storage topology");
     let vault = vault_status::read_current(store, &supervisor.relay_port())
@@ -176,7 +210,7 @@ pub(super) fn start_communications_domain(
         .platform_event_hub_topology()
         .expect("read Event Hub topology")
         .expect("Event Hub topology");
-    managed_launch::start_reserved_domain(
+    let generation = managed_launch::start_reserved_domain(
         supervisor,
         runtime_dir,
         reservation,
@@ -184,15 +218,19 @@ pub(super) fn start_communications_domain(
             major: 1,
             logical_owner_id: COMMUNICATIONS_OWNER_ID.to_owned(),
             registration_id: COMMUNICATIONS_REGISTRATION.to_owned(),
-            runtime_instance_id: COMMUNICATIONS_RUNTIME_INSTANCE_ID.to_owned(),
-            runtime_generation: 1,
-            grant_epoch: binding.grant_epoch(),
+            runtime_instance_id,
+            runtime_generation,
+            grant_epoch,
             storage: Some(storage),
             event_hub_endpoint: events.nats_endpoint().to_owned(),
             event_credential_revision: events.credential_revision(),
         },
     )
-    .expect("start Communications domain")
+    .expect("start Communications domain");
+    supervisor
+        .wait_until_ready(COMMUNICATIONS_REGISTRATION)
+        .expect("wait for Communications readiness");
+    generation
 }
 
 pub(super) fn assert_communications_query_delivery(
@@ -699,8 +737,8 @@ pub(super) fn assert_communications_transferred_body_projection(
         .nats_endpoint()
         .to_owned();
     supervisor
-        .stop("blob")
-        .expect("stop Blob for custody outage");
+        .stop("vault")
+        .expect("stop Vault for custody outage");
     tokio::runtime::Runtime::new()
         .expect("Tokio runtime")
         .block_on(async move {
@@ -733,8 +771,30 @@ pub(super) fn assert_communications_transferred_body_projection(
     assert!(
         supervisor
             .is_active(COMMUNICATIONS_REGISTRATION)
-            .expect("read Communications process state during Blob outage"),
-        "a transient Blob outage must not stop the Communications owner runtime",
+            .expect("read Communications process state during Vault outage"),
+        "a transient Vault outage must not stop the Communications owner runtime",
+    );
+    assert!(
+        supervisor
+            .is_active("blob")
+            .expect("read Blob process state during Vault outage"),
+        "Vault unavailability must fail the Blob key route without stopping Blob",
+    );
+    supervisor
+        .stop("blob")
+        .expect("stop Blob before rebinding the successor Vault generation");
+    supervisor
+        .stop("storage")
+        .expect("stop Storage before rebinding the successor Vault generation");
+    assert_eq!(
+        start_vault(supervisor, store, kernel_data, kernel),
+        2,
+        "Vault restart uses a successor managed runtime generation",
+    );
+    assert_eq!(
+        start_storage(supervisor, store, kernel, &storage_runtime_directory(),),
+        2,
+        "Storage restart binds the successor Vault generation",
     );
     assert_eq!(
         crate::platform::blob::launch::start_from_kernel(
@@ -747,6 +807,11 @@ pub(super) fn assert_communications_transferred_body_projection(
         .expect("restart signed Blob runtime after custody outage"),
         2,
         "Blob restart uses a successor managed runtime generation",
+    );
+    assert_eq!(
+        restart_communications_domain(supervisor, store, runtime_dir),
+        2,
+        "Communications restart uses a successor managed runtime and Storage generation",
     );
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);

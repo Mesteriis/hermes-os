@@ -19,5 +19,8 @@ pub(crate) mod revocation;
 #[path = "../../../../../../src/kernel/src/platform/storage/status.rs"]
 pub(crate) mod status;
 
+#[path = "../../../../../../src/kernel/src/platform/storage/successor.rs"]
+pub(crate) mod successor;
+
 #[path = "../../../../../../src/kernel/src/platform/storage/topology.rs"]
 pub(crate) mod topology;

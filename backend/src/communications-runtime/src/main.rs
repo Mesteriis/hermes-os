@@ -157,9 +157,17 @@ where
             .map_err(|_| "Communications runtime clock is unavailable".to_owned())?;
         let now = i64::try_from(now.as_secs())
             .map_err(|_| "Communications runtime clock is unavailable".to_owned())?;
-        executor
-            .block_on(runtime.relay_domain_outbox(now))
-            .map_err(|_| "Communications runtime outbox relay failed".to_owned())?;
+        if let Err(error) = executor.block_on(runtime.relay_domain_outbox(now)) {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_communications_runtime_outbox_error={error:?}");
+            }
+            if !error.is_retryable() {
+                if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                    eprintln!("developer_communications_runtime_outbox_terminal=true");
+                }
+                return Err("Communications runtime outbox relay failed".to_owned());
+            }
+        }
     }
 }
 

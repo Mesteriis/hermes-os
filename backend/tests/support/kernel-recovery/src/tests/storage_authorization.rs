@@ -8,9 +8,10 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, atomic::AtomicBool};
 
 use crate::platform::macos::managed_launch;
-use crate::platform::scheduler::{launch as scheduler_launch, restart as scheduler_restart};
+use crate::platform::scheduler::launch as scheduler_launch;
 use crate::platform::storage::authorization::{authorize_binding, authorize_managed_binding};
 use crate::platform::storage::issuance::{StorageBindingIssueV1, issue_external, issue_managed};
+use crate::platform::storage::successor as storage_successor;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 use super::common::unique_target_root;
@@ -186,7 +187,7 @@ fn scheduler_restart_reserves_successor_and_issues_its_exact_storage_binding() {
     let (root, store, grants) = approved_store(true);
     prepare_managed_binding_store(&store, grants.grant_epoch());
     let supervisor = ManagedRuntimeSupervisor::new(Arc::new(AtomicBool::new(false)));
-    let (reservation, binding) = scheduler_restart::reserve_successor(
+    let (reservation, binding) = storage_successor::reserve(
         &supervisor,
         &store,
         "registration_notes",
@@ -223,7 +224,7 @@ fn assert_successor_scheduler_binding(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,
 ) {
-    let (successor, binding) = scheduler_restart::reserve_successor(
+    let (successor, binding) = storage_successor::reserve(
         supervisor,
         store,
         "registration_notes",
