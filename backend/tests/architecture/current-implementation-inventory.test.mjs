@@ -118,11 +118,16 @@ test('requires every production source file to belong to an authorized package r
   }
 });
 
-test('allows registered integration sources outside the active owner inventory only', () => {
+test('allows staged integration and engine sources outside the active owner inventory only', () => {
   const policy = canonicalPolicyForTests();
   const integration = workspacePackage('hermes-mail-core', {
     role: 'integration',
     owner: 'mail',
+    surface: 'implementation',
+  });
+  const engine = workspacePackage('hermes-attachment-security-core', {
+    role: 'engine',
+    owner: 'attachment_security',
     surface: 'implementation',
   });
   const extraDomain = workspacePackage('hermes-extra-domain', {
@@ -136,10 +141,25 @@ test('allows registered integration sources outside the active owner inventory o
     [],
   );
   assert.deepEqual(
+    validateCurrentImplementationInventory(policy, metadata([...recoveryOnlyPackages(), engine])),
+    [],
+  );
+  assert.deepEqual(
     validateCurrentImplementationSourceCoverage(policy, [
       { path: 'src/mail-core/Cargo.toml', isDirectory: false },
       { path: 'src/mail-core/src/lib.rs', isDirectory: false },
     ], [{ name: 'hermes-mail-core', role: 'integration', root: 'src/mail-core' }]),
+    [],
+  );
+  assert.deepEqual(
+    validateCurrentImplementationSourceCoverage(policy, [
+      { path: 'src/attachment-security-core/Cargo.toml', isDirectory: false },
+      { path: 'src/attachment-security-core/src/lib.rs', isDirectory: false },
+    ], [{
+      name: 'hermes-attachment-security-core',
+      role: 'engine',
+      root: 'src/attachment-security-core',
+    }]),
     [],
   );
   assert.ok(codes(validateCurrentImplementationInventory(

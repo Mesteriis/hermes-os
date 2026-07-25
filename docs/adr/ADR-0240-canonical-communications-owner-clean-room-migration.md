@@ -42,6 +42,10 @@ only these opaque audit identifiers and timestamps.
 The canonical evidence event retains the ingress correlation ID and names the
 direct ingress message as its causation; it never creates a replacement
 cross-owner correlation.
+Attachment anchor, Blob-admission, safety-verdict and lifecycle schemas now
+have one domain-owned source in `hermes-communications-attachment-contract`;
+the former ingress/API schema locations were removed without a facade or
+duplicate re-export.
 
 Depends on:
 
@@ -66,6 +70,7 @@ The owner is composed only from these packages:
 
 ```text
 hermes-communications-ingress
+hermes-communications-attachment-contract
 hermes-communications-api
 hermes-communications-domain
 hermes-communications-persistence
@@ -77,6 +82,7 @@ Their responsibilities are exact:
 | Package | Responsibility |
 |---|---|
 | ingress | Versioned typed neutral observation accepted from integrations. |
+| attachment contract | Versioned typed attachment lifecycle events and observations shared only through exact public contracts. |
 | api | Public typed query and command contracts for Gateway/client adapters. |
 | domain | Validation, deterministic identity, idempotency decisions and canonical state transitions. |
 | persistence | Owner-local PostgreSQL schema, inbox/outbox and implementations of domain ports. |

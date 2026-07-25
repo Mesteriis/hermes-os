@@ -5,11 +5,12 @@
 Состояние реализации: Решение принято. Attachment-specific Communications
 schemas выделены без facade/duplicate source в
 `hermes-communications-attachment-contract`; executable dependency policy и
-отдельный managed Engine launch path реализованы. Production gate
-`attachment_security_engine_v1` закрыт до реализации engine contracts/core/
-ClamAV adapter, owner-local persistence/runtime, release assembly и live
-ClamAV/Blob/Event conformance. До открытия gate состояние `safe_for_delivery`
-остаётся недостижимым.
+отдельный managed Engine launch path реализованы. Engine-owned typed candidate
+contract, pure join/verdict core и bounded loopback ClamAV `INSTREAM` adapter
+реализованы отдельными Cargo units с unit и architecture coverage. Production
+gate `attachment_security_engine_v1` остаётся закрыт до реализации owner-local
+persistence/runtime, release assembly и live ClamAV/Blob/Event conformance. До
+открытия gate состояние `safe_for_delivery` остаётся недостижимым.
 
 Зависит от:
 

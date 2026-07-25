@@ -86,12 +86,12 @@ export function validateCurrentImplementationInventory(policy, cargoMetadata) {
   const resolveById = new Map(
     list(cargoMetadata?.resolve?.nodes).map((node) => [node.id, node]),
   );
-  const inactiveIntegrationPackages = productionPackages.filter((pkg) => (
-    pkg?.metadata?.[metadataKey]?.role === 'integration'
+  const inactiveModulePackages = productionPackages.filter((pkg) => (
+    ['integration', 'engine'].includes(pkg?.metadata?.[metadataKey]?.role)
     && !expectedByName.has(pkg.name)
   ));
   const activePackages = productionPackages.filter(
-    (pkg) => !inactiveIntegrationPackages.includes(pkg),
+    (pkg) => !inactiveModulePackages.includes(pkg),
   );
   const actualByName = new Map(activePackages.map((pkg) => [pkg.name, pkg]));
   const violations = [];
@@ -324,7 +324,7 @@ export function validateCurrentImplementationSourceCoverage(
   );
   const productionRoots = list(packageRoots).filter(({ name, role, root }) => (
     role !== policy?.owners?.test
-    && (expectedNames.has(name) || role === 'integration')
+    && (expectedNames.has(name) || ['integration', 'engine'].includes(role))
     && typeof root === 'string'
     && root !== ''
   ));
@@ -335,6 +335,6 @@ export function validateCurrentImplementationSourceCoverage(
     .map(({ path }) => violation(
       'implementation_source_coverage',
       path,
-      'every production source file must belong to an authorized current-slice or registered integration Cargo package root',
+      'every production source file must belong to an authorized current-slice or staged integration/engine Cargo package root',
     ));
 }
