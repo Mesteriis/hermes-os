@@ -375,7 +375,11 @@ requested by module
 `pending`, `suspended`, `revoked` и `blocked_incompatible` registrations не
 получают PostgreSQL, NATS, Vault, Blob, Job Platform или business RPC rights.
 Изменение approval повышает `grant_epoch`, закрывает старую session и fences
-downstream credentials до canonical mutation.
+downstream credentials до canonical mutation. Для завершения уже
+зарезервированного Storage revoke текущий verified Storage runtime может после
+этой mutation передать в Vault только exact `RevokeAudience` по durable
+`revoking` binding; это узкий lifecycle route, а не восстановление data-plane
+прав target module.
 
 `managed` module запускается и перезапускается Kernel через private inherited
 control channel только после проверки exact-byte `ManagedLaunchBinding` перед

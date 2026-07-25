@@ -10,9 +10,11 @@ provider-purpose credential capabilities и один canonical module ID
 Signed managed launch теперь проходит через exact Kernel registration,
 owner-approved IMAP sync subset и Kernel-issued Storage/Vault/Blob/Event Hub
 bindings. Kernel до relay отклоняет отсутствующий delivery grant и stale
-runtime generation. Revoke, live provider sync, event/outage replay и
-attachment conformance ещё не реализованы, поэтому
-`mail_runtime_admission_v1` закрыт.
+runtime generation. Owner-authorized revoke повышает grant epoch, выполняет
+exact Storage/Vault/PgBouncer/PostgreSQL fence, останавливает только Mail worker
+и оставляет Communications активным. Live provider sync, event/outage replay и
+attachment conformance ещё не реализованы, поэтому `mail_runtime_admission_v1`
+закрыт.
 
 Уточняет:
 
@@ -244,20 +246,30 @@ Clippy, architecture/SRP/Cargo boundaries и relevant live conformance.
   `mail_imap_password` для своей configuration instance;
 - focused live test поднимает disposable PostgreSQL, PgBouncer, NATS и реальные
   managed Vault, Storage, Blob, Communications и Mail processes;
-- Kernel отклоняет ungranted delivery и stale sync generation до runtime relay.
+- Kernel отклоняет ungranted delivery и stale sync generation до runtime relay;
+- owner-control использует реальную ES256 owner session и production dispatcher
+  для перевода exact Mail registration в `revoked`;
+- revoke сначала повышает grant epoch и резервирует Mail Storage binding как
+  `revoking`, затем завершает exact Vault/PgBouncer/PostgreSQL fence и
+  останавливает Mail worker;
+- current Storage generation может вызвать только exact `RevokeAudience` для
+  durable revoking binding; другая operation и stale Storage generation
+  отклоняются;
+- Communications worker остаётся активным, а прежний Mail sync route после
+  revoke отклоняется до runtime relay.
 
 Проверки:
 
 ```text
 HERMES_STORAGE_MANAGED_TEST_FILTER=managed_mail_runtime_uses_kernel_leases_and_route_specific_admission node scripts/test-authenticated-storage.mjs 1.97.0
-cargo +1.97.0 clippy --locked -p hermes-mail-persistence -p hermes-mail-runtime -p hermes-kernel-recovery-testkit --all-targets -- -D warnings
-cargo +1.97.0 test --locked -p hermes-mail-runtime -p hermes-mail-persistence
+cargo +1.97.0 test --locked -p hermes-gateway-protocol -p hermes-storage-runtime -p hermes-kernel-recovery-testkit
+cargo +1.97.0 clippy --locked -p hermes-gateway-protocol -p hermes-storage-runtime -p hermes-kernel-recovery-testkit --all-targets -- -D warnings
 make -C backend architecture-policy-check architecture-evidence-check srp-policy-check cargo-boundaries-check test-architecture fmt-check
 ```
 
 Evidence не открывает gate: active sync route не вызывался против provider
-fixture, revoke/worker stop не доказан, Mail observation не прошла live
-NATS/Communications/outage replay, attachment continuation не выполнен.
+fixture, Mail observation не прошла live NATS/Communications/outage replay,
+attachment continuation не выполнен.
 
 ## Отклонённые варианты
 

@@ -117,9 +117,12 @@ bootstrap secret вне Vault запрещено.
 Lease expiry прекращает новую выдачу, но сам по себе не завершает уже открытую
 PostgreSQL session. Storage revoke поэтому координирует runtime quiesce,
 `NOLOGIN`, PgBouncer alias drain/kill, termination PostgreSQL backends, rotation
-credential и повышение epochs до нового binding. Полный lifecycle и ограничения
-topology, где PgBouncer является единственным runtime front door, описаны в
-[Storage Control Plane](storage-control-plane.md).
+credential и повышение epochs до нового binding. После durable target
+grant-epoch fence Vault принимает только exact `RevokeAudience` для уже
+зарезервированного `revoking` binding и только от текущего verified Storage
+generation; target module не получает обратно никакие Vault права. Полный
+lifecycle и ограничения topology, где PgBouncer является единственным runtime
+front door, описаны в [Storage Control Plane](storage-control-plane.md).
 
 ## CredentialLeaseV1
 
