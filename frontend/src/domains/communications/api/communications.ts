@@ -91,10 +91,6 @@ export {
   translateAttachment
 } from './attachmentApi'
 export {
-  fetchMessageAiState,
-  updateMessageAiState
-} from './aiState'
-export {
   generateAiReply,
   generateAiReplyVariants,
   extractMessageTasks,

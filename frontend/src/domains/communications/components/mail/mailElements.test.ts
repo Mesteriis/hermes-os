@@ -5,7 +5,7 @@ import {
   type MailListItemModel,
 } from './mailElements'
 
-function failedAiItem(): MailListItemModel {
+function mailItem(): MailListItemModel {
   return {
     id: 'msg:1',
     accountLabel: 'account-1',
@@ -15,26 +15,26 @@ function failedAiItem(): MailListItemModel {
     snippet: 'Preview',
     timestampLabel: 'now',
     workflowState: 'new',
-    aiState: 'FAILED',
+    aiCategory: 'priority',
   }
 }
 
 describe('mailListItemAiIndicator', () => {
-  it('does not present every failed AI state as a retry', () => {
-    const indicator = mailListItemAiIndicator(failedAiItem())
+  it('presents an available AI-derived category without owning its processing state', () => {
+    const indicator = mailListItemAiIndicator(mailItem())
 
     expect(indicator).toMatchObject({
-      label: 'AI attention',
-      tone: 'warning',
+      label: 'AI',
+      tone: 'info',
     })
-    expect(indicator?.detail).toContain('retry or review state')
+    expect(indicator?.detail).toContain('summary, category, and evidence')
   })
 })
 
 describe('mailListItemStatusChipClass', () => {
   it('only shows the workflow chip for new items', () => {
-    expect(mailListItemStatusChipClass(failedAiItem())).toContain('--visible')
-    expect(mailListItemStatusChipClass({ ...failedAiItem(), workflowState: 'done' }))
+    expect(mailListItemStatusChipClass(mailItem())).toContain('--visible')
+    expect(mailListItemStatusChipClass({ ...mailItem(), workflowState: 'done' }))
       .toBe('mail-list-item__status-chip')
   })
 })

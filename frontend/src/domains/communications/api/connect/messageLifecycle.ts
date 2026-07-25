@@ -25,7 +25,6 @@ import type {
 } from "../../types/communications";
 import type { MailReadSyncStatus } from "../../types/mailSync";
 import {
-  normalizeAiState,
   mapAttachment,
   mapMessageSummary,
   mapMessageSummaryContract,
@@ -102,7 +101,6 @@ export async function fetchCommunicationMessageConnect(
       ai_category: response.item?.aiCategory ?? null,
       ai_summary: response.item?.aiSummary ?? null,
       ai_summary_generated_at: response.item?.aiSummaryGeneratedAt ?? null,
-      ai_state: normalizeAiState(response.item?.aiState),
       message_metadata: parseJsonObject(response.item?.messageMetadataJson),
       local_state: normalizeLocalState(response.item?.localState),
       local_state_changed_at: response.item?.localStateChangedAt ?? null,

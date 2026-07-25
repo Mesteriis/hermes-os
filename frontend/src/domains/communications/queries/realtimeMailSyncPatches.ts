@@ -1,7 +1,5 @@
-import type { CommunicationAiStateRecord } from '../types/aiState'
 import type { MailSyncStatus } from '../types/communications'
 import {
-  aiStateValue,
   isRecord,
   nullableNumberValue,
   nullableStringValue,
@@ -15,48 +13,6 @@ import {
 type AvailableMailRealtimePatchQueryClient = Required<
   Pick<MailRealtimePatchQueryClient, 'getQueriesData' | 'setQueryData'>
 >
-
-export function applyAiStateRealtimePatch(
-  eventData: string,
-  queryClient: AvailableMailRealtimePatchQueryClient
-): boolean {
-  const envelope = storedEventEnvelope(eventData)
-  if (envelope?.event?.event_type !== 'mail.ai_state.changed') return false
-
-	const payload = isRecord(envelope.event.payload) ? envelope.event.payload : undefined
-  const messageId = stringValue(payload?.message_id)
-  const aiState = aiStateValue(payload?.ai_state)
-  if (!messageId || !aiState) return false
-
-  queryClient.setQueryData<CommunicationAiStateRecord | null | undefined>(
-    ['communications-ai-state', messageId],
-    (data) => ({
-      message_id: messageId,
-      ai_state: aiState,
-      review_reason:
-        typeof payload?.review_required === 'boolean' && payload.review_required
-          ? data?.review_reason ?? null
-          : data?.review_reason ?? null,
-      last_error:
-        typeof payload?.failed === 'boolean' && payload.failed
-          ? data?.last_error ?? null
-          : data?.last_error ?? null,
-      retry_count: numberValue(payload?.retry_count) ?? data?.retry_count ?? 0,
-      next_attempt_at:
-        typeof payload?.next_attempt_at === 'undefined'
-          ? data?.next_attempt_at ?? null
-          : nullableStringValue(payload.next_attempt_at),
-      processing_lease_expires_at:
-        typeof payload?.processing_lease_expires_at === 'undefined'
-          ? data?.processing_lease_expires_at ?? null
-          : nullableStringValue(payload.processing_lease_expires_at),
-      created_at: data?.created_at ?? new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-  )
-
-  return true
-}
 
 export function applySyncRealtimePatch(
   eventData: string,

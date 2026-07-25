@@ -13,14 +13,6 @@ import {
   updateMailSyncSettings,
 } from './syncApi'
 import {
-  fetchMailProviderCommandDiagnostics,
-  retryMailProviderCommand,
-} from './providerCommandDiagnostics'
-import type {
-  MailProviderCommandDiagnostics,
-  MailProviderCommandRetryResponse,
-} from './providerCommandDiagnostics'
-import {
   fetchMailProviderResources,
   updateMailProviderResourceMapping,
 } from './providerResources'
@@ -145,40 +137,6 @@ export function useDeleteMailSensitiveForwardingPolicyMutation() {
     onSuccess: (_value, variables) => {
       queryClient.invalidateQueries({
         queryKey: ['communications', 'mail', 'sensitive-forwarding-policies', variables.accountId],
-      })
-    },
-  })
-}
-
-export function useMailProviderCommandDiagnosticsQuery(
-  accountId: NullableQueryParam<string>,
-  status: NullableQueryParam<string>
-) {
-  return useQuery<MailProviderCommandDiagnostics | null>({
-    queryKey: computed(() => [
-      'communications',
-      'mail',
-      'provider-command-diagnostics',
-      toValue(accountId) ?? null,
-      toValue(status) ?? null
-    ] as const),
-    queryFn: async () => {
-      const id = toValue(accountId)
-      if (!id) return null
-      return fetchMailProviderCommandDiagnostics(id, toValue(status) ?? undefined)
-    },
-    enabled: computed(() => Boolean(toValue(accountId))),
-    refetchInterval: 10_000
-  })
-}
-
-export function useRetryMailProviderCommandMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<MailProviderCommandRetryResponse, Error, string>({
-    mutationFn: async (commandId) => retryMailProviderCommand(commandId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['communications', 'mail', 'provider-command-diagnostics'],
       })
     },
   })

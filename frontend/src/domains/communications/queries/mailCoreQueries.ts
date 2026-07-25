@@ -12,7 +12,6 @@ import {
   fetchThreads,
   updateMailSyncSettings
 } from '../api/communications'
-import { fetchMessageAiState } from '../api/aiState'
 import type {
   CommunicationMessageSummary,
   CommunicationPersona,
@@ -29,7 +28,6 @@ import type {
   WorkflowState,
   WorkflowStateCountItem
 } from '../types/communications'
-import type { CommunicationAiStateRecord } from '../types/aiState'
 import { communicationListQueryKey, communicationMessageQueryKey, threadMessagesQueryKey } from './communicationPrefetch'
 import {
   communicationDetailQueryOptions,
@@ -88,22 +86,6 @@ export function useMessageQuery(messageId: NullableQueryParam<string>) {
     },
     enabled: computed(() => !!toValue(messageId)),
     ...communicationDetailQueryOptions
-  })
-}
-
-export function useMessageAiStateQuery(messageId: NullableQueryParam<string>) {
-  return useQuery<CommunicationAiStateRecord | null>({
-    queryKey: computed(() => {
-      const id = toValue(messageId)
-      return id ? ['communications-ai-state', id] as const : ['communications-ai-state', null] as const
-    }),
-    queryFn: async () => {
-      const id = toValue(messageId)
-      if (!id) return null
-      return fetchMessageAiState(id)
-    },
-    enabled: computed(() => !!toValue(messageId)),
-    ...communicationRealtimeQueryOptions
   })
 }
 

@@ -7,14 +7,11 @@ import { describe, expect, it } from 'vitest'
 const SOURCE_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const LEGACY_ROUTE_PREFIX = ['/api/v1', 'communications'].join('/')
 const EXACT_PENDING_FILES = [
-	'domains/communications/api/aiState.ts',
 	'domains/communications/api/attachmentImportApi.ts',
-	'domains/communications/api/bilingualReplyFlow.ts',
 	'domains/home/api/home.ts',
 	'domains/timeline/api/timeline.ts',
 	'integrations/telegram/api/telegramBusiness.ts',
 	'integrations/whatsapp/api/whatsappBusiness.ts',
-	'shared/mailSync/providerCommandDiagnostics.ts',
 ] as const
 
 describe('legacy Communications REST inventory', () => {

@@ -5,8 +5,6 @@ import {
   useMailSensitiveForwardingPoliciesQuery,
   useMailSyncSettingsQuery,
   useMailLocalFoldersQuery,
-  useMailProviderCommandDiagnosticsQuery,
-  useRetryMailProviderCommandMutation,
   useMailProviderResourcesQuery,
   useSyncStatusesQuery,
   useUpdateMailContentEgressSettingsMutation,
@@ -60,17 +58,11 @@ export function useCommunicationsSettingsSurface({
   const batchSizeDraft = ref('')
   const pollIntervalDraft = ref('')
   const windowsDraft = ref('')
-  const commandDiagnosticsStatus = ref('')
   const syncSettingsQuery = useMailSyncSettingsQuery(() => selectedMailAccountId.value)
   const contentEgressQuery = useMailContentEgressSettingsQuery(() => selectedMailAccountId.value)
   const sensitiveForwardingPoliciesQuery = useMailSensitiveForwardingPoliciesQuery(
     () => selectedMailAccountId.value
   )
-  const commandDiagnosticsQuery = useMailProviderCommandDiagnosticsQuery(
-    () => selectedMailAccountId.value,
-    () => commandDiagnosticsStatus.value || null
-  )
-  const retryProviderCommand = useRetryMailProviderCommandMutation()
   const providerResourcesQuery = useMailProviderResourcesQuery(() => selectedMailAccountId.value)
   const localFoldersQuery = useMailLocalFoldersQuery(() => selectedMailAccountId.value)
   const syncStatusesQuery = useSyncStatusesQuery()
@@ -122,7 +114,6 @@ export function useCommunicationsSettingsSurface({
   const selectedSyncStatus = computed(() =>
     (syncStatusesQuery.data.value ?? []).find((status) => status.account_id === selectedMailAccountId.value) ?? null
   )
-  const commandDiagnostics = computed(() => commandDiagnosticsQuery.data.value ?? null)
   const providerResources = computed(() => providerResourcesQuery.data.value?.items ?? [])
   const localFolders = computed(() => localFoldersQuery.data.value ?? [])
   const degradationThresholdSetting = computed(() =>
@@ -297,14 +288,6 @@ export function useCommunicationsSettingsSurface({
     }
   }
 
-  async function refreshCommandDiagnostics() {
-    await commandDiagnosticsQuery.refetch()
-  }
-
-  async function retryMailProviderCommand(commandId: string) {
-    await retryProviderCommand.mutateAsync(commandId)
-  }
-
   async function saveProviderResourceMapping(
     resource: MailProviderResource,
     update: MailProviderResourceMappingUpdate
@@ -339,9 +322,7 @@ export function useCommunicationsSettingsSurface({
 
   return {
     batchSizeDraft,
-    commandDiagnostics,
     windowsDraft,
-    commandDiagnosticsStatus,
     degradationThresholdDraft,
     degradationThresholdSetting,
     telegramReadReceiptReportsSetting,
@@ -353,8 +334,6 @@ export function useCommunicationsSettingsSurface({
     providerResources,
     providerResourcesLoading: providerResourcesQuery.isLoading,
     providerResourcesSaving: updateProviderResourceMapping.isPending,
-    refreshCommandDiagnostics,
-    retryMailProviderCommand,
     saveDegradationThreshold,
     updateTelegramReadReceiptReports,
     saveSelectedMailSyncSettings,
@@ -372,9 +351,6 @@ export function useCommunicationsSettingsSurface({
     sensitiveForwardingPoliciesLoading: sensitiveForwardingPoliciesQuery.isLoading,
     sensitiveForwardingSaving: upsertSensitiveForwardingPolicy.isPending,
     sensitiveForwardingDeleting: deleteSensitiveForwardingPolicy.isPending,
-    commandDiagnosticsLoading: commandDiagnosticsQuery.isLoading,
-    commandDiagnosticsRefreshing: commandDiagnosticsQuery.isFetching,
-    commandDiagnosticsRetrying: retryProviderCommand.isPending,
     syncSaving: updateSyncSettings.isPending,
     contentEgressLoading: contentEgressQuery.isLoading,
     contentEgressSaving: updateContentEgressSettings.isPending,

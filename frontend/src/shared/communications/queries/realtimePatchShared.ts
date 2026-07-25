@@ -13,7 +13,6 @@ type BulkMessageAction =
 	| 'add_label'
 	| 'remove_label'
 	| 'snooze'
-type CommunicationAiState = 'NEW' | 'PROCESSING' | 'PROCESSED' | 'REVIEW_REQUIRED' | 'FAILED' | 'ARCHIVED'
 
 type CommunicationOutboxItem = {
 	status: 'queued' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'canceled'
@@ -113,16 +112,6 @@ export type OutboxPatchPayload = {
 	read_at?: unknown
 }
 
-export type AiStatePatchPayload = {
-  message_id?: unknown
-  ai_state?: unknown
-  review_required?: unknown
-  failed?: unknown
-  retry_count?: unknown
-  next_attempt_at?: unknown
-  processing_lease_expires_at?: unknown
-}
-
 export type DraftPatchPayload = {
 	draft_id?: unknown
 	account_id?: unknown
@@ -209,11 +198,6 @@ export function outboxStatusValue(value: unknown): CommunicationOutboxItem['stat
 	return null
 }
 
-export function aiStateValue(value: unknown): CommunicationAiState | null {
-	if (typeof value !== 'string') return null
-	return isCommunicationAiState(value) ? value : null
-}
-
 function workflowStateValue(value: unknown): WorkflowState | null {
 	if (value === null || typeof value === 'undefined') return null
 	if (typeof value !== 'string') return null
@@ -228,11 +212,6 @@ function localMessageStateValue(value: unknown): LocalMessageState | null {
 export function normalizeBulkAction(value: unknown): BulkMessageAction | null {
 	if (typeof value !== 'string') return null
 	return isBulkMessageAction(value) ? value : null
-}
-
-function isCommunicationAiState(value: string): value is CommunicationAiState {
-	return value === 'NEW' || value === 'PROCESSING' || value === 'PROCESSED' ||
-		value === 'REVIEW_REQUIRED' || value === 'FAILED' || value === 'ARCHIVED'
 }
 
 function isWorkflowState(value: string): value is WorkflowState {

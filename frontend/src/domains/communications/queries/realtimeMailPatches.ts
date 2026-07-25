@@ -33,8 +33,7 @@ import {
 	type MailRealtimePatchQueryClient,
 	type OutboxPatchPayload
 } from './realtimePatchShared'
-import { applyMailProviderCommandDiagnosticsRealtimePatch } from './realtimeMailProviderCommandPatches'
-import { applyAiStateRealtimePatch, applySyncRealtimePatch } from './realtimeMailSyncPatches'
+import { applySyncRealtimePatch } from './realtimeMailSyncPatches'
 
 export type { MailRealtimePatchQueryClient } from './realtimePatchShared'
 
@@ -53,8 +52,6 @@ export function applyMailRealtimePatch(
 		setQueryData
 	}
 
-	if (applyAiStateRealtimePatch(eventData, availableQueryClient)) return true
-	if (applyMailProviderCommandDiagnosticsRealtimePatch(eventData, availableQueryClient)) return true
 	if (applyOutboxRealtimePatch(eventData, availableQueryClient)) return true
 	if (applyDraftRealtimePatch(eventData, availableQueryClient)) return true
 	if (applyFolderRealtimePatch(eventData, availableQueryClient)) return true

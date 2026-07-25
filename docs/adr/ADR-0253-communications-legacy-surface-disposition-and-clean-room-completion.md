@@ -10,6 +10,10 @@ Engine реализованы и допущены exact production inventory. Le
 ADR-0240 пока не объявляется полностью завершённым на уровне репозитория:
 secondary frontend всё ещё содержит старые `/api/v1/communications/*` callers,
 которые должны быть удалены или заменены контрактами их настоящих owners.
+Exact inventory сокращён до пяти production callers: dead AI-state,
+bilingual-reply и Mail provider-command-diagnostics chains удалены вместе с
+DTO, query/realtime и UI-обвязкой. Эти возможности остаются явными gaps своих
+будущих owners/workflows и не реализуются внутри Communications.
 
 Зависит от:
 

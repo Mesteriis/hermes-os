@@ -10,14 +10,11 @@ import {
   sendEmail,
   undoOutboxItem
 } from '../api/communications'
-import { updateMessageAiState } from '../api/aiState'
-import { prepareBilingualReplyFlow } from '../api/bilingualReplyFlow'
 import {
   importCommunicationAttachment,
   type CommunicationAttachmentImportRequest,
   type CommunicationAttachmentImportResponse
 } from '../api/attachmentImportApi'
-import type { BilingualReplyFlowRequest, BilingualReplyFlowResponse } from '../types/bilingualReplyFlow'
 import type {
   BulkMessageActionRequest,
   BulkMessageActionResponse,
@@ -32,10 +29,6 @@ import type {
   SendCommunicationRequest,
   SendCommunicationResponse
 } from '../types/communications'
-import type {
-  CommunicationAiStateRecord,
-  CommunicationAiStateTransitionRequest
-} from '../types/aiState'
 import {
   applyBulkMessageActionToMailDetail,
   applyBulkMessageActionToMailList,
@@ -220,18 +213,6 @@ export function useUndoOutboxMutation() {
         queryClient.setQueryData(queryKey, upsertOutboxItemInOutboxPage(data, queryKey, item))
       }
       queryClient.invalidateQueries({ queryKey: ['communications-outbox'] })
-    }
-  })
-}
-
-export function usePrepareBilingualReplyFlowMutation() {
-  return useMutation<
-    BilingualReplyFlowResponse,
-    Error,
-    { messageId: string; request: BilingualReplyFlowRequest }
-  >({
-    mutationFn: async ({ messageId, request }) => {
-      return prepareBilingualReplyFlow(messageId, request)
     }
   })
 }
@@ -432,23 +413,6 @@ function outboxQueryMatches(queryKey: readonly unknown[], item: CommunicationOut
   if (typeof queryAccountId === 'string' && queryAccountId !== item.account_id) return false
   if (typeof queryStatus === 'string' && queryStatus !== item.status) return false
   return true
-}
-
-export function useUpdateMessageAiStateMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<
-    CommunicationAiStateRecord,
-    Error,
-    { messageId: string; request: CommunicationAiStateTransitionRequest }
-  >({
-    mutationFn: async ({ messageId, request }) => updateMessageAiState(messageId, request),
-    onSuccess: (record) => {
-      queryClient.setQueryData(['communications-ai-state', record.message_id], record)
-      queryClient.invalidateQueries({ queryKey: ['communications-ai-state', record.message_id] })
-      queryClient.invalidateQueries({ queryKey: ['communications-message', record.message_id] })
-      queryClient.invalidateQueries({ queryKey: ['communications-list'] })
-    }
-  })
 }
 
 export function useBulkMessageActionMutation() {

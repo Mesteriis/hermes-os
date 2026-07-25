@@ -47,7 +47,6 @@ const REALTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
 	['communications-outbox'],
 	['communications-threads'],
 	['communications-message'],
-	['communications-ai-state'],
 	['communications-saved-searches'],
 	['communications-folders'],
 	['communications-folder-messages'],
@@ -249,13 +248,6 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 
 	if (eventType.startsWith('signal.')) {
 		return SIGNAL_HUB_QUERY_KEYS
-	}
-	if (eventType.startsWith('communication.provider_command.')) {
-		return [['communications', 'mail', 'provider-command-diagnostics']]
-	}
-
-	if (eventType === 'mail.ai_state.changed') {
-		return [['communications-ai-state'], ['communications-message'], ['communications-list']]
 	}
 	if (eventType === 'mail.read_receipt.recorded') {
 		return [['communications-outbox'], ['communications-message'], ['communications-list']]

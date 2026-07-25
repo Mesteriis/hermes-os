@@ -44,8 +44,6 @@ const {
   handleBodyTemplateInput,
   handleResourceRoleInput,
   handleResourceLocalFolderInput,
-  handleRefreshCommandDiagnostics,
-  handleRetryCommand,
   handleSaveDegradationThreshold,
   handleSaveSelectedMailSyncSettings,
   handleSaveSensitiveForwardingPolicy,
@@ -53,16 +51,6 @@ const {
 } = useCommunicationsSettingsPanelController({
   surface: props.surface,
 })
-
-function commandCount(status: string): number {
-  return props.surface.commandDiagnostics.value?.counts.find((item) => item.status === status)?.count ?? 0
-}
-
-function formatTimestamp(value: string | null): string {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isFinite(date.getTime()) ? date.toLocaleString() : value
-}
 
 const semanticRoles: Array<{ value: string; label: string }> = [
   { value: 'inbox', label: 'Inbox' },
@@ -456,88 +444,5 @@ function mappingSourceLabel(source: string): string {
       </div>
     </section>
 
-    <section class="settings-communications-panel settings-command-diagnostics">
-      <header>
-        <div>
-          <span>{{ t('Provider commands') }}</span>
-          <strong>{{ t('Mail command queue diagnostics') }}</strong>
-        </div>
-        <button
-          type="button"
-          class="secondary-button"
-          :disabled="surface.commandDiagnosticsRefreshing.value || !surface.selectedMailAccount.value"
-          @click="handleRefreshCommandDiagnostics"
-        >
-          <Icon :icon="surface.commandDiagnosticsRefreshing.value ? 'tabler:loader-2' : 'tabler:refresh'" />
-          {{ t('Refresh') }}
-        </button>
-      </header>
-
-      <div class="settings-command-diagnostics__counts" aria-label="Mail provider command status counts">
-        <span v-for="status in ['queued', 'executing', 'retrying', 'completed', 'dead_letter']" :key="status">
-          <strong>{{ commandCount(status) }}</strong>
-          {{ status }}
-        </span>
-      </div>
-
-      <label class="settings-command-diagnostics__filter">
-        <span>{{ t('Status filter') }}</span>
-        <select v-model="surface.commandDiagnosticsStatus.value">
-          <option value="">{{ t('All statuses') }}</option>
-          <option value="queued">queued</option>
-          <option value="executing">executing</option>
-          <option value="retrying">retrying</option>
-          <option value="completed">completed</option>
-          <option value="dead_letter">dead_letter</option>
-        </select>
-      </label>
-
-      <div v-if="surface.commandDiagnosticsLoading.value" class="settings-empty-state">
-        <Icon icon="tabler:loader-2" />
-        <strong>{{ t('Loading command diagnostics') }}</strong>
-      </div>
-      <div v-else-if="!surface.commandDiagnostics.value?.items.length" class="settings-empty-state">
-        <Icon icon="tabler:circle-check" />
-        <strong>{{ t('No provider commands match this filter') }}</strong>
-      </div>
-      <div v-else class="settings-command-diagnostics__table-wrap">
-        <table class="settings-command-diagnostics__table">
-          <thead>
-            <tr>
-              <th>{{ t('Command') }}</th>
-              <th>{{ t('Status') }}</th>
-              <th>{{ t('Attempts') }}</th>
-              <th>{{ t('Reconciliation') }}</th>
-              <th>{{ t('Updated') }}</th>
-              <th>{{ t('Last error') }}</th>
-              <th>{{ t('Recovery') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="command in surface.commandDiagnostics.value.items" :key="command.command_id">
-              <td><strong>{{ command.command_kind }}</strong><small>{{ command.command_id }}</small></td>
-              <td><span :data-status="command.status">{{ command.status }}</span></td>
-              <td>{{ command.retry_count }} / {{ command.max_retries }}</td>
-              <td>{{ command.reconciliation_status }}</td>
-              <td><time :datetime="command.updated_at">{{ formatTimestamp(command.updated_at) }}</time></td>
-              <td>{{ command.last_error || '—' }}</td>
-              <td>
-                <button
-                  v-if="command.status === 'dead_letter'"
-                  type="button"
-                  class="secondary-button"
-                  :disabled="surface.commandDiagnosticsRetrying.value"
-                  @click="handleRetryCommand(command.command_id)"
-                >
-                  <Icon :icon="surface.commandDiagnosticsRetrying.value ? 'tabler:loader-2' : 'tabler:refresh'" />
-                  {{ t('Retry') }}
-                </button>
-                <span v-else>—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
   </section>
 </template>

@@ -94,7 +94,7 @@ const mailActionResponseControlDefinitions = [
     id: 'reply',
     actionId: 'reply',
     menuLabel: 'Open reply actions',
-    itemIds: ['ai-reply', 'ai-reply-variants', 'bilingual-reply-flow', 'smart-cc']
+    itemIds: ['ai-reply', 'ai-reply-variants', 'smart-cc']
   },
   {
     kind: 'button',
@@ -116,7 +116,7 @@ const mailActionGroupDefinitions: readonly MailActionGroupDefinition[] = [
     label: 'Reply actions',
     menuLabel: 'Open reply actions',
     icon: 'tabler:corner-up-left',
-    actionIds: ['reply', 'reply-all', 'ai-reply', 'ai-reply-variants', 'bilingual-reply-flow', 'smart-cc']
+    actionIds: ['reply', 'reply-all', 'ai-reply', 'ai-reply-variants', 'smart-cc']
   },
   {
     id: 'forwarding',
@@ -157,7 +157,7 @@ const mailActionGroupDefinitions: readonly MailActionGroupDefinition[] = [
     menuLabel: 'Open Hermes actions',
     icon: 'tabler:sparkles',
     tone: 'accent',
-    actionIds: ['analyze', 'explain', 'update-ai-state', 'translate', 'extract-tasks', 'extract-notes']
+    actionIds: ['analyze', 'explain', 'translate', 'extract-tasks', 'extract-notes']
   },
   {
     id: 'create',

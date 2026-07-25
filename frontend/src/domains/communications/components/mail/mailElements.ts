@@ -6,7 +6,7 @@ import type { MailReadSyncStatus } from '../../types/mailSync'
 export type MailListItemConfidence = 'high' | 'medium' | 'low'
 export type MailListItemCounterKind = 'attachments' | 'messages' | 'insights' | 'calendar'
 export type MailListItemDensity = 'compact' | 'comfortable' | 'cozy'
-export type MailListItemMarker = 'spam' | 'phishing' | 'starred' | 'important' | 'blocked' | 'archived' | 'ai-processed'
+export type MailListItemMarker = 'spam' | 'phishing' | 'starred' | 'important' | 'blocked' | 'archived'
 export type MailListSearchField = 'subject' | 'body' | 'sender' | 'all'
 export type MailListSearchBuilderField = 'all' | 'from' | 'subject' | 'body'
 export type MailListSearchBuilderOperator = 'contains' | 'equals'
@@ -85,7 +85,6 @@ export type MailListItemModel = {
   readSyncStatus?: MailReadSyncStatus
   localState?: string
   deliveryState?: string
-  aiState?: string
   aiCategory?: string
   importanceScore?: number
   unreadCount?: number
@@ -207,11 +206,6 @@ const markerPresentation: Record<MailListItemMarker, MailListItemMarkerPresentat
     label: 'Archived',
     tone: 'neutral'
   },
-  'ai-processed': {
-    icon: 'tabler:sparkles',
-    label: 'AI processed',
-    tone: 'info'
-  }
 }
 
 const signalMarkers = new Set<MailListItemMarker>(['spam', 'phishing', 'blocked'])
@@ -281,17 +275,7 @@ export function mailListItemMarkers(item: MailListItemModel): readonly MailListI
 export function mailListItemAiIndicator(
   item: MailListItemModel
 ): MailListItemAiIndicatorPresentation | null {
-  if (item.aiState === 'FAILED') {
-    return {
-      icon: 'tabler:alert-triangle',
-      label: 'AI attention',
-      detail: 'AI processing needs attention. Open the message to see its retry or review state.',
-      tone: 'warning'
-    }
-  }
-
   if (
-    item.aiState === 'PROCESSED' ||
     typeof item.aiCategory === 'string' ||
     item.importanceScore !== undefined
   ) {

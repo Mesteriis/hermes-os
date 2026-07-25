@@ -142,14 +142,6 @@ export function useCommunicationsSettingsPanelController(
     surface.updateProviderResourceLocalFolder(resource, nullableLocalFolder(eventValue(event)))
   }
 
-  function handleRefreshCommandDiagnostics(): void {
-    void surface.refreshCommandDiagnostics()
-  }
-
-  function handleRetryCommand(commandId: string): void {
-    void surface.retryMailProviderCommand(commandId)
-  }
-
   return {
     handleDegradationThresholdInput,
     handleTelegramReadReceiptReportsChange,
@@ -178,8 +170,6 @@ export function useCommunicationsSettingsPanelController(
     handleBodyTemplateInput,
     handleResourceRoleInput,
     handleResourceLocalFolderInput,
-    handleRefreshCommandDiagnostics,
-    handleRetryCommand,
     handleSaveDegradationThreshold: surface.saveDegradationThreshold,
     handleSaveSelectedMailSyncSettings: surface.saveSelectedMailSyncSettings,
     handleSaveSensitiveForwardingPolicy: surface.saveSensitiveForwardingPolicy,

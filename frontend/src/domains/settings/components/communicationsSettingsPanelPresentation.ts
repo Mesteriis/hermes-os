@@ -35,13 +35,6 @@ export function nullableLocalFolder(value: string): string | null {
   return value || null
 }
 
-export function commandStatusCount(
-  counts: Array<{ status: string; count: number }> | undefined,
-  status: string
-): number {
-  return counts?.find((item) => item.status === status)?.count ?? 0
-}
-
 export function formatCommunicationTimestamp(value: string | null): string {
   if (!value) return '—'
   const date = new Date(value)

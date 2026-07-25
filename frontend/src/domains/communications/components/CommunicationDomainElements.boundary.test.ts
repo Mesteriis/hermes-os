@@ -954,7 +954,6 @@ describe('Communication domain elements', () => {
     expect(mailElementsSource).toContain('hermesEntities')
     expect(mailElementsSource).toContain('evidenceKinds')
     expect(mailElementsSource).toContain('importanceScore')
-    expect(mailElementsSource).toContain('aiState')
     expect(mailSearchSource).toContain('mailListSearchFieldGroups')
     expect(mailSearchFieldsSource).toContain('Mail attrs')
     expect(mailSearchFieldsSource).toContain('Hermes')
@@ -976,7 +975,6 @@ describe('Communication domain elements', () => {
     expect(mailElementsSource).toContain('tabler:sparkles')
     expect(mailElementsSource).toContain('tabler:shield-exclamation')
     expect(mailElementsSource).toContain("'spam'")
-    expect(mailElementsSource).toContain("'ai-processed'")
     expect(mailElementsSource).toContain("'phishing'")
     expect(mailElementsSource).toContain("label: 'AI'")
     expect(mailElementsSource).not.toContain('CommunicationInboxItemModel')
@@ -1013,7 +1011,7 @@ describe('Communication domain elements', () => {
     expect(mailActionsSource).toContain('mailActionResponseControls')
     expect(mailActionsSource).toContain('mailActionToolbarSections')
     expect(mailActionsSource).toContain(
-      "itemIds: ['ai-reply', 'ai-reply-variants', 'bilingual-reply-flow', 'smart-cc']"
+      "itemIds: ['ai-reply', 'ai-reply-variants', 'smart-cc']"
     )
     expect(mailActionsSource).toContain("itemIds: ['forward-eml', 'redirect']")
     expect(mailActionSource).not.toContain('Dialog')
@@ -1036,12 +1034,10 @@ describe('Communication domain elements', () => {
     expect(mailActionsSource).toContain('forward-eml')
     expect(mailActionsSource).toContain('redirect')
     expect(mailActionsSource).toContain('ai-reply-variants')
-    expect(mailActionsSource).toContain('bilingual-reply-flow')
     expect(mailActionsSource).toContain('mark-unread')
     expect(mailActionsSource).toContain('restore-trash')
     expect(mailActionsSource).toContain('bulk-actions')
     expect(mailActionsSource).toContain('remove-label')
-    expect(mailActionsSource).toContain('update-ai-state')
     expect(mailActionsSource).toContain('spf-dkim')
     expect(mailActionsSource).toContain('export-md')
     expect(mailActionsSource).toContain('Danger zone')
@@ -1051,9 +1047,6 @@ describe('Communication domain elements', () => {
     expect(mailActionQueriesSource).toContain('useMarkMessageSpamMutation')
     expect(mailActionQueriesSource).toContain('useMarkMessageUnreadMutation')
     expect(mailActionQueriesSource).toContain('useRemoveMessageLabelMutation')
-    expect(mailOperationQueriesSource).toContain(
-      'useUpdateMessageAiStateMutation'
-    )
     expect(mailOperationQueriesSource).toContain('useBulkMessageActionMutation')
     expect(messageApiSource).toContain('restoreMessage')
     expect(mailActionQueriesSource).toContain(

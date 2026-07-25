@@ -1,5 +1,3 @@
-// --- Re-exported API types from Svelte reference ---
-import type { CommunicationAiState } from "./aiState";
 import type { MailReadSyncStatus } from "./mailSync";
 export type {
   EmailAccountCapabilities,
@@ -47,7 +45,6 @@ export type CommunicationMessageSummary = {
   ai_category: string | null;
   ai_summary: string | null;
   ai_summary_generated_at: string | null;
-  ai_state?: CommunicationAiState | null;
   message_metadata: Record<string, unknown>;
   attachment_count: number;
   local_state: LocalMessageState;
@@ -107,7 +104,6 @@ export type CommunicationMessageDetailItem = {
   ai_category: string | null;
   ai_summary: string | null;
   ai_summary_generated_at: string | null;
-  ai_state?: CommunicationAiState | null;
   message_metadata: Record<string, unknown>;
   local_state: LocalMessageState;
   local_state_changed_at: string | null;
