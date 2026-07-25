@@ -243,3 +243,8 @@ integration-owned Blob остаётся запрещён, revision-2 candidate �
 bounded source custody proof, а engine выполняет evidence-bound transfer в
 собственную Blob custody перед one-use read. Kernel не декодирует candidate и
 не переносит bytes/verdict.
+ADR-0275 устраняет скрытое смешение module owner и human owner в Blob custody:
+same-owner proof сохраняет прежний fence, а cross-owner delegation обязана
+криптографически bind-ить exact target owner/registration/capability. Audience
+принадлежит public owner contract, поэтому integration не импортирует target
+runtime implementation, а Kernel не выбирает recipient по business event.

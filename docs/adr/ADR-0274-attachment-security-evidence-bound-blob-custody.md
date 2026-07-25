@@ -6,7 +6,9 @@
 доказал, что прямой read integration-owned Blob правильно отклоняется
 registration/capability fence. Contract revision 2, engine-owned custody
 transfer и conformance matrix ещё не реализованы. До их реализации phase gate
-`attachment_security_engine_v1` остаётся закрыт.
+`attachment_security_engine_v1` остаётся закрыт. ADR-0275 дополнительно
+определяет target-bound proof, необходимый для безопасного transfer между
+module owners `mail` и `attachment_security`.
 
 Зависит от:
 
@@ -14,7 +16,8 @@ transfer и conformance matrix ещё не реализованы. До их р�
 - [ADR-0230: Blob opaque references](ADR-0230-blob-platform-opaque-references-and-owner-local-metadata.md);
 - [ADR-0231: private Blob data sessions](ADR-0231-private-blob-data-session-and-vault-route.md);
 - [ADR-0257: event-backed Blob custody transfer](ADR-0257-event-backed-blob-custody-transfer-for-canonical-evidence.md);
-- [ADR-0273: Attachment Security engine](ADR-0273-attachment-security-engine-and-event-only-verdict-authority.md).
+- [ADR-0273: Attachment Security engine](ADR-0273-attachment-security-engine-and-event-only-verdict-authority.md);
+- [ADR-0275: target-bound cross-owner Blob custody](ADR-0275-target-bound-cross-owner-blob-custody-delegation.md).
 
 ## Контекст
 

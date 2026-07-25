@@ -2,9 +2,14 @@
 
 Статус: Принято
 Дата: 2026-07-23
-Состояние реализации: Реализованы source slice и managed runtime conformance.
-The fixture integration writes a Blob reference under its own producer
-registration and publishes only a typed opaque receipt. Communications persists
+Состояние реализации: Реализованы owner-local source slice и managed runtime
+conformance. Fixture integration использует owner `communications`, поэтому
+доказан transfer между разными registrations одного module owner, но не
+реальный cross-owner `mail/telegram/zulip -> communications` handoff.
+ADR-0275 вводит обязательную target-bound delegation; до её реализации этот
+production gap остаётся открытым. Fixture integration writes a Blob reference
+under its own producer registration and publishes only a typed opaque receipt.
+Communications persists
 the receipt in a private leased work queue, asks Kernel for an evidence-bound
 target custody grant, and commits the target-owned receipt only after Blob
 Platform completes its internal rewrap. Communications derived search may read
@@ -26,7 +31,8 @@ Storage/NATS outbox failures retain the exact pending bytes for retry.
 - [ADR-0230: Blob ownership and opaque references](ADR-0230-blob-platform-opaque-references-and-owner-local-metadata.md);
 - [ADR-0231: private Blob data sessions](ADR-0231-private-blob-data-session-and-vault-route.md);
 - [ADR-0240: Communications canonical owner](ADR-0240-canonical-communications-owner-clean-room-migration.md);
-- [ADR-0254: derived Communications search](ADR-0254-communications-derived-search-index-and-private-content-boundary.md).
+- [ADR-0254: derived Communications search](ADR-0254-communications-derived-search-index-and-private-content-boundary.md);
+- [ADR-0275: target-bound cross-owner Blob custody](ADR-0275-target-bound-cross-owner-blob-custody-delegation.md).
 
 ## Context
 
