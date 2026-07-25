@@ -254,3 +254,11 @@ routing; WhatsApp evidence пересекает Communications boundary толь
 owner-local outbox, NATS и Communications inbox. Host bridge, command и query
 являются разными capability units, а runtime обязан использовать один
 correlated V2 control reader без cloned FD.
+ADR-0277 открывает отдельный Gmail delivery gate внутри Mail integration:
+outbound-only GrantSet разрешает bounded Gmail HTTPS mutation, owner-local
+durable acceptance/query и neutral event replay без IMAP/SMTP/attachment
+capabilities или Communications facade.
+ADR-0278 задаёт Mail-owned Gmail OAuth setup/refresh gate: Core/Kernel
+переносит только opaque owner routes и action-specific Vault ciphertext,
+Mail владеет PKCE/operation/binding state, а access и refresh credentials
+остаются разными secret classes и capability responsibilities.

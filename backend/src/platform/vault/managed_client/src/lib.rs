@@ -101,7 +101,7 @@ impl ManagedProviderCredentialClientV1 {
         payload: &[u8],
     ) -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
         let audience = audience(context)?;
-        if payload.is_empty() || payload.len() > MAX_FRAME_BYTES {
+        if !valid_mutation_payload(payload) {
             return Err(ManagedProviderCredentialErrorV1::InvalidContext);
         }
         let lease_id =
@@ -129,7 +129,7 @@ impl ManagedProviderCredentialClientV1 {
         payload: &[u8],
     ) -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
         let audience = audience(context)?;
-        if payload.is_empty() || payload.len() > MAX_FRAME_BYTES {
+        if !valid_mutation_payload(payload) {
             return Err(ManagedProviderCredentialErrorV1::InvalidContext);
         }
         let lease_id = self.issue_action_lease(
@@ -372,6 +372,76 @@ impl<'a> ManagedProviderCredentialClientV2<'a> {
         )
     }
 
+    pub fn store_once(
+        &mut self,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+        context: &ManagedProviderCredentialContextV1,
+        request: ManagedProviderCredentialRequestV1<'_>,
+        payload: &[u8],
+    ) -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
+        let audience = audience(context)?;
+        if !valid_mutation_payload(payload) {
+            return Err(ManagedProviderCredentialErrorV1::InvalidContext);
+        }
+        let lease_id = self.issue_action_lease(
+            dispatcher,
+            context,
+            audience.clone(),
+            &request,
+            VaultActionV1::Create,
+        )?;
+        let response = self.execute_command(
+            dispatcher,
+            context,
+            audience,
+            VaultTransportCommandV1::StoreLease {
+                lease_id,
+                secret_class: request.secret_class,
+                payload: payload.to_vec(),
+            },
+        )?;
+        response
+            .as_slice()
+            .try_into()
+            .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
+    }
+
+    pub fn replace_once(
+        &mut self,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+        context: &ManagedProviderCredentialContextV1,
+        request: ManagedProviderCredentialRequestV1<'_>,
+        prior_record_id: [u8; 16],
+        payload: &[u8],
+    ) -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
+        let audience = audience(context)?;
+        if !valid_mutation_payload(payload) {
+            return Err(ManagedProviderCredentialErrorV1::InvalidContext);
+        }
+        let lease_id = self.issue_action_lease(
+            dispatcher,
+            context,
+            audience.clone(),
+            &request,
+            VaultActionV1::ReplaceCas,
+        )?;
+        let response = self.execute_command(
+            dispatcher,
+            context,
+            audience,
+            VaultTransportCommandV1::ReplaceLease {
+                lease_id,
+                secret_class: request.secret_class,
+                prior_record_id,
+                payload: payload.to_vec(),
+            },
+        )?;
+        response
+            .as_slice()
+            .try_into()
+            .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
+    }
+
     fn issue_action_lease(
         &mut self,
         dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
@@ -563,6 +633,10 @@ fn audience(
     .map_err(|_| ManagedProviderCredentialErrorV1::InvalidContext)
 }
 
+fn valid_mutation_payload(payload: &[u8]) -> bool {
+    !payload.is_empty() && payload.len() <= MAX_FRAME_BYTES
+}
+
 fn issue_request(
     context: &ManagedProviderCredentialContextV1,
     audience: LeaseAudienceV1,
@@ -701,10 +775,23 @@ mod tests {
     };
     use hermes_vault_protocol::{SecretClassV1, VaultActionV1};
 
-    use super::{ManagedProviderCredentialClientV2, ManagedProviderCredentialRequestV1};
+    use super::{
+        MAX_FRAME_BYTES, ManagedProviderCredentialClientV2, ManagedProviderCredentialErrorV1,
+        ManagedProviderCredentialRequestV1, valid_mutation_payload,
+    };
 
     #[test]
-    fn correlated_provider_credential_request_dispatches_an_opposite_direction_request() {
+    fn correlated_provider_credential_actions_dispatch_an_opposite_direction_request() {
+        for action in [
+            VaultActionV1::Resolve,
+            VaultActionV1::Create,
+            VaultActionV1::ReplaceCas,
+        ] {
+            assert_correlated_provider_credential_action(action);
+        }
+    }
+
+    fn assert_correlated_provider_credential_action(action: VaultActionV1) {
         let (client, server) = UnixStream::pair().expect("control pair");
         let server = thread::spawn(move || {
             let mut channel = ManagedControlChannelV2::new(server);
@@ -712,7 +799,8 @@ mod tests {
                 channel.receive_request().expect("provider request");
             assert!(matches!(
                 provider_request.operation,
-                Some(Operation::IssueProviderCredential(_))
+                Some(Operation::IssueProviderCredential(request))
+                    if request.action == action.code() as u32
             ));
             channel
                 .write_request(
@@ -756,10 +844,55 @@ mod tests {
                     ttl_seconds: 60,
                     secret_class: SecretClassV1::ProviderCredential,
                 },
-                VaultActionV1::Resolve,
+                action,
                 &[7; 32],
             )
             .expect("correlated provider delivery");
         server.join().expect("server join");
+    }
+
+    #[test]
+    fn correlated_credential_mutations_reject_unbounded_payloads_before_control_io() {
+        assert!(!valid_mutation_payload(&[]));
+        assert!(valid_mutation_payload(&[1]));
+        assert!(valid_mutation_payload(&vec![1; MAX_FRAME_BYTES]));
+        assert!(!valid_mutation_payload(&vec![1; MAX_FRAME_BYTES + 1]));
+
+        let (client, _server) = UnixStream::pair().expect("control pair");
+        let mut channel = ManagedControlChannelV2::new(client);
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let mut client = ManagedProviderCredentialClientV2::new(&mut channel);
+        let context = super::ManagedProviderCredentialContextV1 {
+            vault_instance_id: "vault-runtime".to_owned(),
+            vault_runtime_generation: 1,
+            vault_public_key_x25519: [7; 32],
+            logical_owner_id: "owner-1".to_owned(),
+            registration_id: "mail-registration".to_owned(),
+            runtime_instance_id: "mail-runtime".to_owned(),
+            runtime_generation: 1,
+            grant_epoch: 1,
+        };
+        let request = || ManagedProviderCredentialRequestV1 {
+            configuration_instance_id: "mail-account",
+            purpose_id: "mail.oauth",
+            credential_revision: 1,
+            ttl_seconds: 60,
+            secret_class: SecretClassV1::ProviderCredential,
+        };
+
+        assert_eq!(
+            client.store_once(&mut dispatcher, &context, request(), &[]),
+            Err(ManagedProviderCredentialErrorV1::InvalidContext)
+        );
+        assert_eq!(
+            client.replace_once(
+                &mut dispatcher,
+                &context,
+                request(),
+                [1; 16],
+                &vec![1; MAX_FRAME_BYTES + 1],
+            ),
+            Err(ManagedProviderCredentialErrorV1::InvalidContext)
+        );
     }
 }
