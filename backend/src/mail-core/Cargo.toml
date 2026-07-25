@@ -16,3 +16,4 @@ surface = "implementation"
 base64 = "=0.22.1"
 hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-mail-api = { path = "../mail-api" }
+sha2 = { version = "=0.11.0", default-features = false }

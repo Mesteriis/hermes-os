@@ -137,7 +137,7 @@ CREATE INDEX IF NOT EXISTS mail_delivery_queue_pending_idx
 "#;
 
 pub struct MailDurablePersistence {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -149,14 +149,6 @@ pub enum MailDurablePersistenceError {
     ConflictingEventInbox,
     MissingAttachmentAdmission,
     InvalidAttachmentAdmissionState,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GmailOAuthCredentialBindingV1 {
-    pub access_token_record_id: [u8; 16],
-    pub access_token_revision: u64,
-    pub refresh_credential_record_id: [u8; 16],
-    pub refresh_credential_revision: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -265,6 +257,14 @@ impl MailDurablePersistence {
             .await
             .map_err(|_| MailDurablePersistenceError::Database)?;
         sqlx::raw_sql(MAIL_SCHEMA_V2)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        sqlx::raw_sql(MAIL_SCHEMA_V3)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        sqlx::raw_sql(crate::MAIL_SCHEMA_V4)
             .execute(&self.pool)
             .await
             .map(|_| ())
@@ -596,62 +596,6 @@ impl MailDurablePersistence {
                 row.try_get("next_page_token").map_err(|_| MailDurablePersistenceError::InvalidRow)?,
             )))
             .transpose()
-    }
-
-    pub async fn gmail_oauth_credential_binding(
-        &self,
-        connection_id: &str,
-    ) -> Result<Option<GmailOAuthCredentialBindingV1>, MailDurablePersistenceError> {
-        if connection_id.trim().is_empty() {
-            return Err(MailDurablePersistenceError::InvalidRow);
-        }
-        sqlx::query("SELECT access_token_record_id, access_token_revision, refresh_credential_record_id, refresh_credential_revision FROM hermes_data.mail_gmail_oauth_credential_bindings WHERE connection_id = $1")
-            .bind(connection_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|_| MailDurablePersistenceError::Database)?
-            .map(|row| {
-                let access_token_record_id: Vec<u8> = row.try_get("access_token_record_id").map_err(|_| MailDurablePersistenceError::InvalidRow)?;
-                let refresh_credential_record_id: Vec<u8> = row.try_get("refresh_credential_record_id").map_err(|_| MailDurablePersistenceError::InvalidRow)?;
-                Ok(GmailOAuthCredentialBindingV1 {
-                    access_token_record_id: access_token_record_id.as_slice().try_into().map_err(|_| MailDurablePersistenceError::InvalidRow)?,
-                    access_token_revision: u64::try_from(row.try_get::<i64, _>("access_token_revision").map_err(|_| MailDurablePersistenceError::InvalidRow)?).map_err(|_| MailDurablePersistenceError::InvalidRow)?,
-                    refresh_credential_record_id: refresh_credential_record_id.as_slice().try_into().map_err(|_| MailDurablePersistenceError::InvalidRow)?,
-                    refresh_credential_revision: u64::try_from(row.try_get::<i64, _>("refresh_credential_revision").map_err(|_| MailDurablePersistenceError::InvalidRow)?).map_err(|_| MailDurablePersistenceError::InvalidRow)?,
-                })
-            })
-            .transpose()
-    }
-
-    pub async fn store_gmail_oauth_credential_binding(
-        &self,
-        connection_id: &str,
-        binding: &GmailOAuthCredentialBindingV1,
-        updated_at_unix_seconds: i64,
-    ) -> Result<(), MailDurablePersistenceError> {
-        if connection_id.trim().is_empty()
-            || binding.access_token_record_id.iter().all(|byte| *byte == 0)
-            || binding.access_token_revision == 0
-            || binding
-                .refresh_credential_record_id
-                .iter()
-                .all(|byte| *byte == 0)
-            || binding.refresh_credential_revision == 0
-            || updated_at_unix_seconds <= 0
-        {
-            return Err(MailDurablePersistenceError::InvalidRow);
-        }
-        sqlx::query("INSERT INTO hermes_data.mail_gmail_oauth_credential_bindings (connection_id, access_token_record_id, access_token_revision, refresh_credential_record_id, refresh_credential_revision, updated_at_unix_seconds) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (connection_id) DO UPDATE SET access_token_record_id = EXCLUDED.access_token_record_id, access_token_revision = EXCLUDED.access_token_revision, refresh_credential_record_id = EXCLUDED.refresh_credential_record_id, refresh_credential_revision = EXCLUDED.refresh_credential_revision, updated_at_unix_seconds = EXCLUDED.updated_at_unix_seconds")
-            .bind(connection_id)
-            .bind(binding.access_token_record_id.as_slice())
-            .bind(i64::try_from(binding.access_token_revision).map_err(|_| MailDurablePersistenceError::InvalidRow)?)
-            .bind(binding.refresh_credential_record_id.as_slice())
-            .bind(i64::try_from(binding.refresh_credential_revision).map_err(|_| MailDurablePersistenceError::InvalidRow)?)
-            .bind(updated_at_unix_seconds)
-            .execute(&self.pool)
-            .await
-            .map(|_| ())
-            .map_err(|_| MailDurablePersistenceError::Database)
     }
 
     pub async fn enqueue_communications_outbox_and_store_gmail_sync_progress(

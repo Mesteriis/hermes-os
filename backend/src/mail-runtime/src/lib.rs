@@ -5,15 +5,15 @@ pub mod attachment_anchor_mapping;
 pub mod attachment_security_outbox;
 pub mod client_port;
 pub mod communications_outbox;
+pub mod gmail_oauth;
 pub mod managed;
 pub mod settings;
 
-use hermes_mail_api::MailAccountConfigurationV1;
+use hermes_mail_api::{GmailOAuthConfigurationV1, MailAccountConfigurationV1};
 
 #[derive(Clone)]
 pub struct MailCredentialRevisionsV1 {
     pub imap_password: Option<u64>,
-    pub gmail_access_token: Option<u64>,
     pub smtp_password: Option<u64>,
 }
 
@@ -26,6 +26,8 @@ pub struct MailRuntimeAdmission {
     pub runtime_generation: u64,
     pub grant_epoch: u64,
     pub vault_runtime_generation: u64,
+    pub settings_revision: u64,
     pub account: MailAccountConfigurationV1,
+    pub gmail_oauth: Option<GmailOAuthConfigurationV1>,
     pub credential_revisions: MailCredentialRevisionsV1,
 }

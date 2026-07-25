@@ -9,7 +9,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use hermes_mail_runtime::managed::MailDeliveryDispatchErrorV1;
 use hermes_mail_runtime::{
     MailRuntimeAdmission, attachment_security_outbox::MailAttachmentSecurityOutboxRelayError,
-    communications_outbox::MailCommunicationsOutboxRelayError, managed, settings,
+    communications_outbox::MailCommunicationsOutboxRelayError,
+    gmail_oauth::MailGmailOAuthDispatchErrorV1, managed, settings,
 };
 use hermes_runtime_protocol::{
     v1::ManagedIntegrationRuntimeConfigurationV1,
@@ -77,7 +78,9 @@ where
         runtime_generation: configuration.runtime_generation,
         grant_epoch: configuration.grant_epoch,
         vault_runtime_generation: storage.vault_runtime_generation,
+        settings_revision: snapshot.revision,
         account: settings.account,
+        gmail_oauth: settings.gmail_oauth,
         credential_revisions: settings.credential_revisions,
     };
     let control_channel = inherited_control_channel()?;
@@ -106,6 +109,23 @@ where
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
         let now = i64::try_from(now.as_secs())
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
+        match runtime.block_on(admitted.execute_next_gmail_oauth_operation(now, now)) {
+            Ok(_) => {}
+            Err(MailGmailOAuthDispatchErrorV1::Rejected) => {
+                developer_diagnostic("developer_mail_gmail_oauth_rejected");
+            }
+            Err(MailGmailOAuthDispatchErrorV1::OutcomeUnknown) => {
+                developer_diagnostic("developer_mail_gmail_oauth_outcome_unknown");
+            }
+            Err(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation) => {
+                developer_diagnostic("developer_mail_gmail_oauth_operation_invalid");
+                return Err("Mail runtime Gmail OAuth operation is invalid".to_owned());
+            }
+            Err(MailGmailOAuthDispatchErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_gmail_oauth_persistence_failed");
+                return Err("Mail runtime Gmail OAuth persistence failed".to_owned());
+            }
+        }
         match runtime.block_on(admitted.execute_next_delivery(now, now)) {
             Ok(_) => {}
             Err(MailDeliveryDispatchErrorV1::ProviderRejected) => {

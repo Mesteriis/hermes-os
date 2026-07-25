@@ -3,11 +3,12 @@
 use hermes_storage_protocol::v1::{StorageBundleV1, StorageMigrationStepV1};
 use sha2::{Digest, Sha256};
 
-use crate::{MAIL_SCHEMA_V1, MAIL_SCHEMA_V2, MAIL_SCHEMA_V3};
+use crate::{MAIL_SCHEMA_V1, MAIL_SCHEMA_V2, MAIL_SCHEMA_V3, MAIL_SCHEMA_V4};
 
 pub const MAIL_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V2: u32 = 2;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V3: u32 = 3;
+pub const MAIL_STORAGE_BUNDLE_REVISION_V4: u32 = 4;
 
 /// Returns the complete Mail schema as one immutable initial Storage bundle.
 ///
@@ -18,7 +19,7 @@ pub const MAIL_STORAGE_BUNDLE_REVISION_V3: u32 = 3;
 pub fn mail_storage_bundle_v1() -> StorageBundleV1 {
     StorageBundleV1 {
         major: 1,
-        revision: MAIL_STORAGE_BUNDLE_REVISION_V3,
+        revision: MAIL_STORAGE_BUNDLE_REVISION_V4,
         bundle_id: "mail_state".to_owned(),
         owner_id: "mail".to_owned(),
         steps: vec![
@@ -40,6 +41,12 @@ pub fn mail_storage_bundle_v1() -> StorageBundleV1 {
                 forward_sql_utf8: MAIL_SCHEMA_V3.as_bytes().to_vec(),
                 sha256: Sha256::digest(MAIL_SCHEMA_V3.as_bytes()).to_vec(),
             },
+            StorageMigrationStepV1 {
+                revision: MAIL_STORAGE_BUNDLE_REVISION_V4,
+                migration_id: "mail_gmail_oauth_operations".to_owned(),
+                forward_sql_utf8: MAIL_SCHEMA_V4.as_bytes().to_vec(),
+                sha256: Sha256::digest(MAIL_SCHEMA_V4.as_bytes()).to_vec(),
+            },
         ],
     }
 }
@@ -56,9 +63,9 @@ mod tests {
 
         assert_eq!(bundle.owner_id, "mail");
         assert_eq!(bundle.bundle_id, "mail_state");
-        assert_eq!(bundle.revision, MAIL_STORAGE_BUNDLE_REVISION_V3);
+        assert_eq!(bundle.revision, MAIL_STORAGE_BUNDLE_REVISION_V4);
         assert_eq!(validate_storage_bundle(&bundle), Ok(()));
-        assert_eq!(bundle.steps.len(), 3);
+        assert_eq!(bundle.steps.len(), 4);
         let sql = bundle
             .steps
             .iter()
@@ -67,15 +74,17 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 10);
+        assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 12);
         assert_eq!(
             sql.matches("CREATE TABLE IF NOT EXISTS hermes_data.")
                 .count(),
-            10,
+            12,
             "every Mail table belongs to the owner-scoped hermes_data schema"
         );
         assert!(sql.contains("mail_attachment_security_outbox"));
         assert!(sql.contains("mail_delivery_queue"));
+        assert!(sql.contains("mail_gmail_oauth_attempts"));
+        assert!(sql.contains("mail_gmail_oauth_operations"));
         assert!(!sql.contains("hermes_data.attachment_security_"));
     }
 }

@@ -24,6 +24,43 @@ message MailDeliveryOperationStatusV1 {
 message GetMailDeliveryStatusResponseV1 {
   optional MailDeliveryOperationStatusV1 status = 1;
 }
+message StartGmailOAuthRequestV1 { string operation_id = 1; }
+message GmailOAuthStartedV1 {
+  string operation_id = 1;
+  string setup_id = 2;
+  string authorization_url = 3;
+  int64 expires_at_unix_seconds = 4;
+}
+message CompleteGmailOAuthRequestV1 {
+  string operation_id = 1;
+  string setup_id = 2;
+  string state = 3;
+  string authorization_code = 4;
+}
+message RefreshGmailOAuthRequestV1 { string operation_id = 1; }
+message GetGmailOAuthStatusRequestV1 { string operation_id = 1; }
+enum GmailOAuthOperationKindV1 {
+  GMAIL_OAUTH_OPERATION_KIND_UNSPECIFIED = 0;
+  GMAIL_OAUTH_OPERATION_KIND_COMPLETE = 1;
+  GMAIL_OAUTH_OPERATION_KIND_REFRESH = 2;
+}
+enum GmailOAuthOutcomeV1 {
+  GMAIL_OAUTH_OUTCOME_UNSPECIFIED = 0;
+  GMAIL_OAUTH_OUTCOME_PENDING = 1;
+  GMAIL_OAUTH_OUTCOME_COMPLETED = 2;
+  GMAIL_OAUTH_OUTCOME_REJECTED = 3;
+  GMAIL_OAUTH_OUTCOME_UNKNOWN = 4;
+}
+message GmailOAuthOperationStatusV1 {
+  string operation_id = 1;
+  GmailOAuthOperationKindV1 kind = 2;
+  GmailOAuthOutcomeV1 outcome = 3;
+  int64 requested_at_unix_seconds = 4;
+  optional int64 completed_at_unix_seconds = 5;
+}
+message GetGmailOAuthStatusResponseV1 {
+  optional GmailOAuthOperationStatusV1 status = 1;
+}
 
 // Provider-specific operational contracts. Core Gateway authenticates and
 // routes each exact contract but does not translate its payload.
@@ -37,4 +74,20 @@ service MailDeliveryCommandService {
 
 service MailDeliveryQueryService {
   rpc GetOperationStatus(GetMailDeliveryStatusRequestV1) returns (GetMailDeliveryStatusResponseV1);
+}
+
+service GmailOAuthStartService {
+  rpc Start(StartGmailOAuthRequestV1) returns (GmailOAuthStartedV1);
+}
+
+service GmailOAuthCompleteService {
+  rpc Complete(CompleteGmailOAuthRequestV1) returns (MailAcceptedV1);
+}
+
+service GmailOAuthRefreshService {
+  rpc Refresh(RefreshGmailOAuthRequestV1) returns (MailAcceptedV1);
+}
+
+service GmailOAuthQueryService {
+  rpc GetOperationStatus(GetGmailOAuthStatusRequestV1) returns (GetGmailOAuthStatusResponseV1);
 }

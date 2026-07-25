@@ -10,13 +10,23 @@ use async_std::net::TcpStream;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use futures_util::io::{AsyncReadExt, AsyncWriteExt};
-use hermes_mail_api::{GMAIL_API_HOST, GMAIL_API_HTTPS_PORT, valid_ca_certificate_pem};
+use hermes_mail_api::{
+    GMAIL_API_HOST, GMAIL_API_HTTPS_PORT, GmailOAuthConfigurationV1, GmailOAuthEndpointV1,
+    valid_ca_certificate_pem, valid_gmail_oauth_configuration,
+};
 use serde::Deserialize;
 
 const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_MESSAGE_IDS: usize = 500;
 const MAX_BEARER_TOKEN_BYTES: usize = 16 * 1024;
+const MAX_OAUTH_RESPONSE_BYTES: usize = 1024 * 1024;
 const GMAIL_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
+const GMAIL_OAUTH_SCOPES: [&str; 4] = [
+    "openid",
+    "email",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GmailApiClientV1 {
@@ -35,25 +45,20 @@ pub fn decode_raw_rfc822(raw: &str) -> Result<Vec<u8>, GmailAdapterErrorV1> {
         .map_err(|_| GmailAdapterErrorV1::InvalidResponse)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct GmailAuthorizationCodeExchangeV1 {
-    pub token_endpoint: String,
+    pub configuration: GmailOAuthConfigurationV1,
     pub authorization_code: String,
-    pub client_id: String,
-    pub client_secret: Option<String>,
-    pub redirect_uri: String,
     pub code_verifier: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct GmailRefreshTokenRequestV1 {
-    pub token_endpoint: String,
+    pub configuration: GmailOAuthConfigurationV1,
     pub refresh_token: String,
-    pub client_id: String,
-    pub client_secret: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize)]
 pub struct GmailOAuthTokenResponseV1 {
     pub access_token: String,
     pub refresh_token: Option<String>,
@@ -62,34 +67,113 @@ pub struct GmailOAuthTokenResponseV1 {
     pub scope: Option<String>,
 }
 
+impl fmt::Debug for GmailAuthorizationCodeExchangeV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GmailAuthorizationCodeExchangeV1")
+            .field("configuration", &self.configuration)
+            .field("authorization_code", &"[redacted]")
+            .field("code_verifier", &"[redacted]")
+            .finish()
+    }
+}
+
+impl fmt::Debug for GmailRefreshTokenRequestV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GmailRefreshTokenRequestV1")
+            .field("configuration", &self.configuration)
+            .field("refresh_token", &"[redacted]")
+            .finish()
+    }
+}
+
+impl fmt::Debug for GmailOAuthTokenResponseV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GmailOAuthTokenResponseV1")
+            .field("access_token", &"[redacted]")
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "[redacted]"),
+            )
+            .field("expires_in", &self.expires_in)
+            .field("token_type", &self.token_type)
+            .field("scope", &self.scope)
+            .finish()
+    }
+}
+
 pub async fn exchange_authorization_code(
     request: &GmailAuthorizationCodeExchangeV1,
 ) -> Result<GmailOAuthTokenResponseV1, GmailAdapterErrorV1> {
-    let mut form = vec![
+    if !valid_gmail_oauth_configuration(&request.configuration) {
+        return Err(GmailAdapterErrorV1::InvalidRequest);
+    }
+    let form = vec![
         ("grant_type", "authorization_code".to_owned()),
         ("code", request.authorization_code.clone()),
-        ("client_id", request.client_id.clone()),
-        ("redirect_uri", request.redirect_uri.clone()),
+        ("client_id", request.configuration.client_id.clone()),
+        ("redirect_uri", request.configuration.redirect_uri.clone()),
         ("code_verifier", request.code_verifier.clone()),
     ];
-    if let Some(client_secret) = &request.client_secret {
-        form.push(("client_secret", client_secret.clone()));
-    }
-    request_oauth_token(&request.token_endpoint, &form).await
+    request_oauth_token(&request.configuration.token_endpoint, &form).await
 }
 
 pub async fn refresh_access_token(
     request: &GmailRefreshTokenRequestV1,
 ) -> Result<GmailOAuthTokenResponseV1, GmailAdapterErrorV1> {
-    let mut form = vec![
+    if !valid_gmail_oauth_configuration(&request.configuration)
+        || !valid_bearer_token(&request.refresh_token)
+    {
+        return Err(GmailAdapterErrorV1::InvalidRequest);
+    }
+    let form = vec![
         ("grant_type", "refresh_token".to_owned()),
         ("refresh_token", request.refresh_token.clone()),
-        ("client_id", request.client_id.clone()),
+        ("client_id", request.configuration.client_id.clone()),
     ];
-    if let Some(client_secret) = &request.client_secret {
-        form.push(("client_secret", client_secret.clone()));
+    request_oauth_token(&request.configuration.token_endpoint, &form).await
+}
+
+pub fn gmail_authorization_url(
+    configuration: &GmailOAuthConfigurationV1,
+    state: &str,
+    code_challenge: &str,
+) -> Result<String, GmailAdapterErrorV1> {
+    if !valid_gmail_oauth_configuration(configuration)
+        || !valid_oauth_carrier(state)
+        || !valid_oauth_carrier(code_challenge)
+    {
+        return Err(GmailAdapterErrorV1::InvalidRequest);
     }
-    request_oauth_token(&request.token_endpoint, &form).await
+    let endpoint = &configuration.authorization_endpoint;
+    let scopes = GMAIL_OAUTH_SCOPES.join(" ");
+    let query = [
+        ("client_id", configuration.client_id.as_str()),
+        ("redirect_uri", configuration.redirect_uri.as_str()),
+        ("response_type", "code"),
+        ("code_challenge", code_challenge),
+        ("code_challenge_method", "S256"),
+        ("access_type", "offline"),
+        ("prompt", "consent"),
+        ("scope", scopes.as_str()),
+        ("state", state),
+    ]
+    .into_iter()
+    .map(|(name, value)| {
+        Ok(format!(
+            "{}={}",
+            percent_encode(name)?,
+            percent_encode(value)?
+        ))
+    })
+    .collect::<Result<Vec<_>, GmailAdapterErrorV1>>()?
+    .join("&");
+    Ok(format!(
+        "https://{}:{}{}?{query}",
+        endpoint.host, endpoint.port, endpoint.path
+    ))
 }
 
 impl GmailApiClientV1 {
@@ -517,10 +601,21 @@ fn parse_json_response<T: for<'de> Deserialize<'de>>(
 }
 
 async fn request_oauth_token(
-    token_endpoint: &str,
+    token_endpoint: &GmailOAuthEndpointV1,
     form: &[(&str, String)],
 ) -> Result<GmailOAuthTokenResponseV1, GmailAdapterErrorV1> {
-    let (host, path) = https_endpoint(token_endpoint)?;
+    async_std::future::timeout(
+        GMAIL_OPERATION_TIMEOUT,
+        request_oauth_token_inner(token_endpoint, form),
+    )
+    .await
+    .map_err(|_| GmailAdapterErrorV1::Transport)?
+}
+
+async fn request_oauth_token_inner(
+    token_endpoint: &GmailOAuthEndpointV1,
+    form: &[(&str, String)],
+) -> Result<GmailOAuthTokenResponseV1, GmailAdapterErrorV1> {
     if form
         .iter()
         .any(|(name, value)| name.is_empty() || value.trim().is_empty() || value.len() > 8192)
@@ -536,15 +631,27 @@ async fn request_oauth_token(
         })
         .collect::<Result<Vec<_>, GmailAdapterErrorV1>>()?
         .join("&");
-    let stream = TcpStream::connect((host.as_str(), 443))
+    let stream = TcpStream::connect((token_endpoint.host.as_str(), token_endpoint.port))
         .await
         .map_err(|_| GmailAdapterErrorV1::Transport)?;
-    let mut stream = TlsConnector::new()
-        .connect(host.as_str(), stream)
+    let connector = token_endpoint
+        .ca_certificate_pem
+        .as_deref()
+        .map(|pem| {
+            Certificate::from_pem(pem.as_bytes())
+                .map(|certificate| TlsConnector::new().add_root_certificate(certificate))
+                .map_err(|_| GmailAdapterErrorV1::InvalidRequest)
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let mut stream = connector
+        .connect(token_endpoint.host.as_str(), stream)
         .await
         .map_err(|_| GmailAdapterErrorV1::Transport)?;
     let request = format!(
-        "POST {path} HTTP/1.1\r\nHost: {host}\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        token_endpoint.path,
+        token_endpoint.host,
         body.len(),
     );
     stream
@@ -561,37 +668,28 @@ async fn request_oauth_token(
         .map_err(|_| GmailAdapterErrorV1::Transport)?;
     let mut response = Vec::new();
     stream
+        .take(u64::try_from(MAX_OAUTH_RESPONSE_BYTES + 1).unwrap_or(u64::MAX))
         .read_to_end(&mut response)
         .await
         .map_err(|_| GmailAdapterErrorV1::Transport)?;
+    if response.len() > MAX_OAUTH_RESPONSE_BYTES {
+        return Err(GmailAdapterErrorV1::InvalidResponse);
+    }
     let token: GmailOAuthTokenResponseV1 = parse_json_response(&response)?;
-    if !valid_bearer_token(&token.access_token) || token.expires_in == 0 {
+    if !valid_bearer_token(&token.access_token)
+        || token
+            .refresh_token
+            .as_deref()
+            .is_some_and(|value| !valid_bearer_token(value))
+        || token.expires_in == 0
+        || token
+            .token_type
+            .as_deref()
+            .is_some_and(|value| value != "Bearer")
+    {
         return Err(GmailAdapterErrorV1::InvalidResponse);
     }
     Ok(token)
-}
-
-fn https_endpoint(value: &str) -> Result<(String, String), GmailAdapterErrorV1> {
-    let Some(endpoint) = value.strip_prefix("https://") else {
-        return Err(GmailAdapterErrorV1::InvalidRequest);
-    };
-    let (host, path) = endpoint.split_once('/').unwrap_or((endpoint, ""));
-    if !valid_host(host)
-        || host.len() > 253
-        || path.contains('\r')
-        || path.contains('\n')
-        || path.len() > 4096
-    {
-        return Err(GmailAdapterErrorV1::InvalidRequest);
-    }
-    Ok((
-        host.to_owned(),
-        if path.is_empty() {
-            "/".to_owned()
-        } else {
-            format!("/{path}")
-        },
-    ))
 }
 
 fn valid_host(host: &str) -> bool {
@@ -615,6 +713,12 @@ fn valid_bearer_token(value: &str) -> bool {
             byte.is_ascii_alphanumeric()
                 || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'+' | b'/' | b'=')
         })
+}
+fn valid_oauth_carrier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 8192
+        && value.is_ascii()
+        && !value.contains(['\r', '\n', '\0'])
 }
 fn provider_id(value: &str) -> Result<String, GmailAdapterErrorV1> {
     valid_provider_id(value)
@@ -640,6 +744,25 @@ fn percent_encode(value: &str) -> Result<String, GmailAdapterErrorV1> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn oauth_configuration() -> GmailOAuthConfigurationV1 {
+        GmailOAuthConfigurationV1 {
+            client_id: "client-id.apps.googleusercontent.com".to_owned(),
+            redirect_uri: "http://127.0.0.1:38123/oauth/callback".to_owned(),
+            authorization_endpoint: GmailOAuthEndpointV1 {
+                host: hermes_mail_api::GMAIL_OAUTH_AUTHORIZATION_HOST.to_owned(),
+                port: hermes_mail_api::GMAIL_OAUTH_HTTPS_PORT,
+                path: hermes_mail_api::GMAIL_OAUTH_AUTHORIZATION_PATH.to_owned(),
+                ca_certificate_pem: None,
+            },
+            token_endpoint: GmailOAuthEndpointV1 {
+                host: hermes_mail_api::GMAIL_OAUTH_TOKEN_HOST.to_owned(),
+                port: hermes_mail_api::GMAIL_OAUTH_HTTPS_PORT,
+                path: hermes_mail_api::GMAIL_OAUTH_TOKEN_PATH.to_owned(),
+                ca_certificate_pem: None,
+            },
+        }
+    }
     #[test]
     fn parses_a_bounded_success_response() {
         let value: GmailLabelsResponse =
@@ -661,19 +784,45 @@ mod tests {
         );
     }
     #[test]
-    fn accepts_only_safe_https_oauth_endpoints() {
-        assert_eq!(
-            https_endpoint("https://oauth2.googleapis.com/token"),
-            Ok(("oauth2.googleapis.com".to_owned(), "/token".to_owned()))
-        );
-        assert_eq!(
-            https_endpoint("http://oauth2.googleapis.com/token"),
-            Err(GmailAdapterErrorV1::InvalidRequest)
-        );
-        assert_eq!(
-            https_endpoint("https://oauth2.googleapis.com\r/token"),
-            Err(GmailAdapterErrorV1::InvalidRequest)
-        );
+    fn authorization_url_uses_fixed_scopes_and_pkce() {
+        let url = gmail_authorization_url(&oauth_configuration(), "state-value", "challenge-value")
+            .expect("authorization URL");
+        assert!(url.starts_with("https://accounts.google.com:443/o/oauth2/v2/auth?"));
+        assert!(url.contains("code_challenge=challenge-value"));
+        assert!(url.contains("code_challenge_method=S256"));
+        assert!(url.contains("state=state-value"));
+        assert!(url.contains("gmail.readonly"));
+        assert!(url.contains("gmail.send"));
+        assert!(!url.contains("client_secret"));
+    }
+    #[test]
+    fn oauth_adapter_debug_redacts_every_credential_carrier() {
+        let exchange = GmailAuthorizationCodeExchangeV1 {
+            configuration: oauth_configuration(),
+            authorization_code: "authorization-code-secret".to_owned(),
+            code_verifier: "pkce-verifier-secret".to_owned(),
+        };
+        let refresh = GmailRefreshTokenRequestV1 {
+            configuration: oauth_configuration(),
+            refresh_token: "refresh-token-secret".to_owned(),
+        };
+        let response = GmailOAuthTokenResponseV1 {
+            access_token: "access-token-secret".to_owned(),
+            refresh_token: Some("rotated-refresh-secret".to_owned()),
+            expires_in: 3600,
+            token_type: Some("Bearer".to_owned()),
+            scope: None,
+        };
+        let debug = format!("{exchange:?}\n{refresh:?}\n{response:?}");
+        for secret in [
+            "authorization-code-secret",
+            "pkce-verifier-secret",
+            "refresh-token-secret",
+            "access-token-secret",
+            "rotated-refresh-secret",
+        ] {
+            assert!(!debug.contains(secret));
+        }
     }
     #[test]
     fn conformance_client_requires_a_bounded_tls_endpoint() {

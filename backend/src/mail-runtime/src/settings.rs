@@ -1,8 +1,10 @@
 //! Mail-owned decoding of one admitted generic settings snapshot.
 
 use hermes_mail_api::{
-    GmailApiEndpointV1, MailAccountConfigurationV1, MailGmailConfigurationV1,
-    MailImapConfigurationV1, MailInboundTransportV1, SmtpEndpointV1, valid_account_configuration,
+    GmailApiEndpointV1, GmailOAuthConfigurationV1, GmailOAuthEndpointV1,
+    MailAccountConfigurationV1, MailGmailConfigurationV1, MailImapConfigurationV1,
+    MailInboundTransportV1, SmtpEndpointV1, valid_account_configuration,
+    valid_gmail_oauth_configuration,
 };
 use hermes_runtime_protocol::v1::{
     SettingApplyModeV1, SettingClientVisibilityV1, SettingDefinitionV1, SettingMutationAuthorityV1,
@@ -33,10 +35,32 @@ const GMAIL_API_PORT: &str = "mail.gmail.api_port";
 const GMAIL_CA_CERTIFICATE_PEM: &str = "mail.gmail.ca_certificate_pem";
 const GMAIL_USER_ID: &str = "mail.gmail.user_id";
 const GMAIL_FROM_ADDRESS: &str = "mail.gmail.from_address";
-const GMAIL_ACCESS_TOKEN_REVISION: &str = "mail.gmail.access_token_revision";
+const GMAIL_OAUTH_AUTHORIZATION_CA_CERTIFICATE_PEM: &str =
+    "mail.gmail.oauth.authorization_ca_certificate_pem";
+const GMAIL_OAUTH_AUTHORIZATION_HOST: &str = "mail.gmail.oauth.authorization_host";
+const GMAIL_OAUTH_AUTHORIZATION_PATH: &str = "mail.gmail.oauth.authorization_path";
+const GMAIL_OAUTH_AUTHORIZATION_PORT: &str = "mail.gmail.oauth.authorization_port";
+const GMAIL_OAUTH_CLIENT_ID: &str = "mail.gmail.oauth.client_id";
+const GMAIL_OAUTH_REDIRECT_URI: &str = "mail.gmail.oauth.redirect_uri";
+const GMAIL_OAUTH_TOKEN_CA_CERTIFICATE_PEM: &str = "mail.gmail.oauth.token_ca_certificate_pem";
+const GMAIL_OAUTH_TOKEN_HOST: &str = "mail.gmail.oauth.token_host";
+const GMAIL_OAUTH_TOKEN_PATH: &str = "mail.gmail.oauth.token_path";
+const GMAIL_OAUTH_TOKEN_PORT: &str = "mail.gmail.oauth.token_port";
+const GMAIL_OAUTH_SETTING_IDS: [&str; 10] = [
+    GMAIL_OAUTH_AUTHORIZATION_CA_CERTIFICATE_PEM,
+    GMAIL_OAUTH_AUTHORIZATION_HOST,
+    GMAIL_OAUTH_AUTHORIZATION_PATH,
+    GMAIL_OAUTH_AUTHORIZATION_PORT,
+    GMAIL_OAUTH_CLIENT_ID,
+    GMAIL_OAUTH_REDIRECT_URI,
+    GMAIL_OAUTH_TOKEN_CA_CERTIFICATE_PEM,
+    GMAIL_OAUTH_TOKEN_HOST,
+    GMAIL_OAUTH_TOKEN_PATH,
+    GMAIL_OAUTH_TOKEN_PORT,
+];
 
 pub const MAIL_SETTINGS_SCHEMA_MAJOR_V1: u32 = 1;
-pub const MAIL_SETTINGS_SCHEMA_REVISION_V1: u32 = 3;
+pub const MAIL_SETTINGS_SCHEMA_REVISION_V1: u32 = 4;
 
 /// The Mail integration owns these configuration-instance settings. They are
 /// deliberately hidden from generic client reads: endpoint details and
@@ -48,11 +72,6 @@ pub fn mail_settings_schema_v1() -> SettingsSchemaV1 {
         revision: MAIL_SETTINGS_SCHEMA_REVISION_V1,
         definitions: vec![
             definition(CONNECTION_ID, SettingValueTypeV1::String, "Connection ID"),
-            definition(
-                GMAIL_ACCESS_TOKEN_REVISION,
-                SettingValueTypeV1::UnsignedInteger,
-                "Gmail access-token revision",
-            ),
             definition(GMAIL_API_HOST, SettingValueTypeV1::String, "Gmail API host"),
             definition(
                 GMAIL_API_PORT,
@@ -68,6 +87,56 @@ pub fn mail_settings_schema_v1() -> SettingsSchemaV1 {
                 GMAIL_FROM_ADDRESS,
                 SettingValueTypeV1::String,
                 "Gmail from address",
+            ),
+            definition(
+                GMAIL_OAUTH_AUTHORIZATION_CA_CERTIFICATE_PEM,
+                SettingValueTypeV1::String,
+                "Gmail OAuth authorization CA certificate",
+            ),
+            definition(
+                GMAIL_OAUTH_AUTHORIZATION_HOST,
+                SettingValueTypeV1::String,
+                "Gmail OAuth authorization host",
+            ),
+            definition(
+                GMAIL_OAUTH_AUTHORIZATION_PATH,
+                SettingValueTypeV1::String,
+                "Gmail OAuth authorization path",
+            ),
+            definition(
+                GMAIL_OAUTH_AUTHORIZATION_PORT,
+                SettingValueTypeV1::UnsignedInteger,
+                "Gmail OAuth authorization port",
+            ),
+            definition(
+                GMAIL_OAUTH_CLIENT_ID,
+                SettingValueTypeV1::String,
+                "Gmail OAuth client ID",
+            ),
+            definition(
+                GMAIL_OAUTH_REDIRECT_URI,
+                SettingValueTypeV1::String,
+                "Gmail OAuth redirect URI",
+            ),
+            definition(
+                GMAIL_OAUTH_TOKEN_CA_CERTIFICATE_PEM,
+                SettingValueTypeV1::String,
+                "Gmail OAuth token CA certificate",
+            ),
+            definition(
+                GMAIL_OAUTH_TOKEN_HOST,
+                SettingValueTypeV1::String,
+                "Gmail OAuth token host",
+            ),
+            definition(
+                GMAIL_OAUTH_TOKEN_PATH,
+                SettingValueTypeV1::String,
+                "Gmail OAuth token path",
+            ),
+            definition(
+                GMAIL_OAUTH_TOKEN_PORT,
+                SettingValueTypeV1::UnsignedInteger,
+                "Gmail OAuth token port",
             ),
             definition(GMAIL_USER_ID, SettingValueTypeV1::String, "Gmail user ID"),
             definition(IMAP_HOST, SettingValueTypeV1::String, "IMAP host"),
@@ -142,6 +211,7 @@ fn definition(
 
 pub struct MailRuntimeSettingsV1 {
     pub account: MailAccountConfigurationV1,
+    pub gmail_oauth: Option<GmailOAuthConfigurationV1>,
     pub credential_revisions: MailCredentialRevisionsV1,
 }
 
@@ -155,6 +225,9 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, St
                 GMAIL_FROM_ADDRESS,
                 GMAIL_USER_ID,
             ] {
+                absent(snapshot, setting_id)?;
+            }
+            for setting_id in GMAIL_OAUTH_SETTING_IDS {
                 absent(snapshot, setting_id)?;
             }
             MailInboundTransportV1::Imap(MailImapConfigurationV1 {
@@ -188,26 +261,25 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, St
     if !valid_account_configuration(&account) {
         return Err(invalid_settings());
     }
-    let (imap_password, gmail_access_token) = match &account.inbound {
+    let imap_password = match &account.inbound {
         MailInboundTransportV1::Imap(_) => {
             let revision = required_unsigned(snapshot, IMAP_PASSWORD_REVISION)?;
             if revision == 0 {
                 return Err(invalid_settings());
             }
-            absent(snapshot, GMAIL_ACCESS_TOKEN_REVISION)?;
-            (Some(revision), None)
+            Some(revision)
         }
         MailInboundTransportV1::Gmail(_) => {
             for setting_id in [IMAP_HOST, IMAP_PORT, IMAP_USERNAME] {
                 absent(snapshot, setting_id)?;
             }
-            let revision = required_unsigned(snapshot, GMAIL_ACCESS_TOKEN_REVISION)?;
-            if revision == 0 {
-                return Err(invalid_settings());
-            }
             absent(snapshot, IMAP_PASSWORD_REVISION)?;
-            (None, Some(revision))
+            None
         }
+    };
+    let gmail_oauth = match &account.inbound {
+        MailInboundTransportV1::Gmail(_) => optional_gmail_oauth_configuration(snapshot)?,
+        MailInboundTransportV1::Imap(_) => None,
     };
     let smtp_password = if account.smtp_endpoint.is_some() {
         let revision = required_unsigned(snapshot, SMTP_PASSWORD_REVISION)?;
@@ -225,12 +297,47 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, St
     }
     Ok(MailRuntimeSettingsV1 {
         account,
+        gmail_oauth,
         credential_revisions: MailCredentialRevisionsV1 {
             imap_password,
-            gmail_access_token,
             smtp_password,
         },
     })
+}
+
+fn optional_gmail_oauth_configuration(
+    snapshot: &SettingsSnapshotV1,
+) -> Result<Option<GmailOAuthConfigurationV1>, String> {
+    if GMAIL_OAUTH_SETTING_IDS
+        .iter()
+        .all(|setting_id| !has_value(snapshot, setting_id))
+    {
+        return Ok(None);
+    }
+    let configuration = GmailOAuthConfigurationV1 {
+        client_id: required_string(snapshot, GMAIL_OAUTH_CLIENT_ID)?,
+        redirect_uri: required_string(snapshot, GMAIL_OAUTH_REDIRECT_URI)?,
+        authorization_endpoint: GmailOAuthEndpointV1 {
+            host: required_string(snapshot, GMAIL_OAUTH_AUTHORIZATION_HOST)?,
+            port: u16::try_from(required_unsigned(snapshot, GMAIL_OAUTH_AUTHORIZATION_PORT)?)
+                .map_err(|_| invalid_settings())?,
+            path: required_string(snapshot, GMAIL_OAUTH_AUTHORIZATION_PATH)?,
+            ca_certificate_pem: optional_string(
+                snapshot,
+                GMAIL_OAUTH_AUTHORIZATION_CA_CERTIFICATE_PEM,
+            )?,
+        },
+        token_endpoint: GmailOAuthEndpointV1 {
+            host: required_string(snapshot, GMAIL_OAUTH_TOKEN_HOST)?,
+            port: u16::try_from(required_unsigned(snapshot, GMAIL_OAUTH_TOKEN_PORT)?)
+                .map_err(|_| invalid_settings())?,
+            path: required_string(snapshot, GMAIL_OAUTH_TOKEN_PATH)?,
+            ca_certificate_pem: optional_string(snapshot, GMAIL_OAUTH_TOKEN_CA_CERTIFICATE_PEM)?,
+        },
+    };
+    valid_gmail_oauth_configuration(&configuration)
+        .then_some(Some(configuration))
+        .ok_or_else(invalid_settings)
 }
 
 fn smtp_endpoint(snapshot: &SettingsSnapshotV1) -> Result<Option<SmtpEndpointV1>, String> {
@@ -305,6 +412,13 @@ fn absent(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<(), String>
     .ok_or_else(invalid_settings)
 }
 
+fn has_value(snapshot: &SettingsSnapshotV1, setting_id: &str) -> bool {
+    snapshot
+        .values
+        .iter()
+        .any(|entry| entry.setting_id == setting_id)
+}
+
 fn value<'a>(snapshot: &'a SettingsSnapshotV1, setting_id: &str) -> Result<&'a Value, String> {
     let mut selected = None;
     for entry in &snapshot.values {
@@ -339,7 +453,7 @@ mod tests {
                 && definition.client_visibility == SettingClientVisibilityV1::Hidden as i32
                 && definition.fresh_owner_proof_required
         }));
-        assert_eq!(schema.definitions.len(), 21);
+        assert_eq!(schema.definitions.len(), 30);
     }
 
     #[test]

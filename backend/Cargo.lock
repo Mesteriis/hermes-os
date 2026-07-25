@@ -2117,6 +2117,7 @@ dependencies = [
  "base64 0.22.1",
  "hermes-communications-ingress",
  "hermes-mail-api",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -2152,6 +2153,7 @@ dependencies = [
  "hermes-storage-protocol",
  "sha2 0.11.0",
  "sqlx",
+ "zeroize",
 ]
 
 [[package]]

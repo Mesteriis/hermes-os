@@ -7,12 +7,27 @@ pub mod wire {
 }
 pub mod client_contract;
 pub mod client_wire;
+pub mod oauth;
+pub mod oauth_wire;
+
+pub use oauth::{
+    GMAIL_OAUTH_ATTEMPT_TTL_SECONDS, GMAIL_OAUTH_AUTHORIZATION_HOST,
+    GMAIL_OAUTH_AUTHORIZATION_PATH, GMAIL_OAUTH_HTTPS_PORT, GMAIL_OAUTH_TOKEN_HOST,
+    GMAIL_OAUTH_TOKEN_PATH, GmailOAuthCompleteRequestV1, GmailOAuthConfigurationV1,
+    GmailOAuthEndpointV1, GmailOAuthOperationKindV1, GmailOAuthOperationStatusV1,
+    GmailOAuthOutcomeV1, GmailOAuthRefreshRequestV1, GmailOAuthStartRequestV1, GmailOAuthStartedV1,
+    GmailOAuthStatusRequestV1, valid_gmail_oauth_configuration,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MailClientRequestV1 {
     SyncInbox(MailSyncInboxRequestV1),
     SendMail(MailSendMailRequestV1),
     DeliveryStatus(MailDeliveryStatusRequestV1),
+    GmailOAuthStart(GmailOAuthStartRequestV1),
+    GmailOAuthComplete(GmailOAuthCompleteRequestV1),
+    GmailOAuthRefresh(GmailOAuthRefreshRequestV1),
+    GmailOAuthStatus(GmailOAuthStatusRequestV1),
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailSyncInboxRequestV1 {
@@ -40,6 +55,11 @@ pub enum MailClientResponseV1 {
         operation_id: String,
     },
     DeliveryStatus(Option<MailDeliveryOperationStatusV1>),
+    GmailOAuthStarted(GmailOAuthStartedV1),
+    GmailOAuthAccepted {
+        operation_id: String,
+    },
+    GmailOAuthStatus(Option<GmailOAuthOperationStatusV1>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -212,6 +232,7 @@ pub type MailOperationId = String;
 pub enum MailCredentialPurpose {
     ImapPassword,
     GmailAccessToken,
+    GmailRefreshCredential,
     SmtpPassword,
 }
 
@@ -220,6 +241,7 @@ impl MailCredentialPurpose {
         match self {
             Self::ImapPassword => "mail_imap_password",
             Self::GmailAccessToken => "mail_gmail_access_token",
+            Self::GmailRefreshCredential => "mail_gmail_refresh_credential",
             Self::SmtpPassword => "mail_smtp_password",
         }
     }

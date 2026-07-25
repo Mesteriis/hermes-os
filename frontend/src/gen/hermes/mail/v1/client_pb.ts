@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file hermes/mail/v1/client.proto.
  */
 export const file_hermes_mail_v1_client: GenFile = /*@__PURE__*/
-  fileDesc("ChtoZXJtZXMvbWFpbC92MS9jbGllbnQucHJvdG8SDmhlcm1lcy5tYWlsLnYxIioKElN5bmNJbmJveFJlcXVlc3RWMRIUCgxvcGVyYXRpb25faWQYASABKAkiggEKEVNlbmRNYWlsUmVxdWVzdFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoCRIgChhwcm92aWRlcl9jb252ZXJzYXRpb25faWQYAiABKAkSEQoJcmVjaXBpZW50GAMgAygJEg8KB3N1YmplY3QYBCABKAkSEQoJdGV4dF9ib2R5GAUgASgJIjYKHkdldE1haWxEZWxpdmVyeVN0YXR1c1JlcXVlc3RWMRIUCgxvcGVyYXRpb25faWQYASABKAkiRwoUU3luY0luYm94Q29tcGxldGVkVjESFAoMb3BlcmF0aW9uX2lkGAEgASgJEhkKEW9ic2VydmVkX21lc3NhZ2VzGAIgASgNIiYKDk1haWxBY2NlcHRlZFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoCSKbAgodTWFpbERlbGl2ZXJ5T3BlcmF0aW9uU3RhdHVzVjESFAoMb3BlcmF0aW9uX2lkGAEgASgJEhUKDWNvbm5lY3Rpb25faWQYAiABKAkSNgoHb3V0Y29tZRgDIAEoDjIlLmhlcm1lcy5tYWlsLnYxLk1haWxEZWxpdmVyeU91dGNvbWVWMRIhChlyZXF1ZXN0ZWRfYXRfdW5peF9zZWNvbmRzGAQgASgDEiYKGWNvbXBsZXRlZF9hdF91bml4X3NlY29uZHMYBSABKANIAIgBARIaCg1yZXNwb25zZV9jb2RlGAYgASgNSAGIAQFCHAoaX2NvbXBsZXRlZF9hdF91bml4X3NlY29uZHNCEAoOX3Jlc3BvbnNlX2NvZGUicAofR2V0TWFpbERlbGl2ZXJ5U3RhdHVzUmVzcG9uc2VWMRJCCgZzdGF0dXMYASABKAsyLS5oZXJtZXMubWFpbC52MS5NYWlsRGVsaXZlcnlPcGVyYXRpb25TdGF0dXNWMUgAiAEBQgkKB19zdGF0dXMqzAEKFU1haWxEZWxpdmVyeU91dGNvbWVWMRIlCiFNQUlMX0RFTElWRVJZX09VVENPTUVfVU5TUEVDSUZJRUQQABIhCh1NQUlMX0RFTElWRVJZX09VVENPTUVfUEVORElORxABEiIKHk1BSUxfREVMSVZFUllfT1VUQ09NRV9BQ0NFUFRFRBACEiIKHk1BSUxfREVMSVZFUllfT1VUQ09NRV9SRUpFQ1RFRBADEiEKHU1BSUxfREVMSVZFUllfT1VUQ09NRV9VTktOT1dOEAQyYwoPTWFpbFN5bmNTZXJ2aWNlElAKBFN5bmMSIi5oZXJtZXMubWFpbC52MS5TeW5jSW5ib3hSZXF1ZXN0VjEaJC5oZXJtZXMubWFpbC52MS5TeW5jSW5ib3hDb21wbGV0ZWRWMTJnChpNYWlsRGVsaXZlcnlDb21tYW5kU2VydmljZRJJCgRTZW5kEiEuaGVybWVzLm1haWwudjEuU2VuZE1haWxSZXF1ZXN0VjEaHi5oZXJtZXMubWFpbC52MS5NYWlsQWNjZXB0ZWRWMTKRAQoYTWFpbERlbGl2ZXJ5UXVlcnlTZXJ2aWNlEnUKEkdldE9wZXJhdGlvblN0YXR1cxIuLmhlcm1lcy5tYWlsLnYxLkdldE1haWxEZWxpdmVyeVN0YXR1c1JlcXVlc3RWMRovLmhlcm1lcy5tYWlsLnYxLkdldE1haWxEZWxpdmVyeVN0YXR1c1Jlc3BvbnNlVjFiBnByb3RvMw");
+  fileDesc("ChtoZXJtZXMvbWFpbC92MS9jbGllbnQucHJvdG8SDmhlcm1lcy5tYWlsLnYxIioKElN5bmNJbmJveFJlcXVlc3RWMRIUCgxvcGVyYXRpb25faWQYASABKAkiggEKEVNlbmRNYWlsUmVxdWVzdFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoCRIgChhwcm92aWRlcl9jb252ZXJzYXRpb25faWQYAiABKAkSEQoJcmVjaXBpZW50GAMgAygJEg8KB3N1YmplY3QYBCABKAkSEQoJdGV4dF9ib2R5GAUgASgJIjYKHkdldE1haWxEZWxpdmVyeVN0YXR1c1JlcXVlc3RWMRIUCgxvcGVyYXRpb25faWQYASABKAkiRwoUU3luY0luYm94Q29tcGxldGVkVjESFAoMb3BlcmF0aW9uX2lkGAEgASgJEhkKEW9ic2VydmVkX21lc3NhZ2VzGAIgASgNIiYKDk1haWxBY2NlcHRlZFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoCSKbAgodTWFpbERlbGl2ZXJ5T3BlcmF0aW9uU3RhdHVzVjESFAoMb3BlcmF0aW9uX2lkGAEgASgJEhUKDWNvbm5lY3Rpb25faWQYAiABKAkSNgoHb3V0Y29tZRgDIAEoDjIlLmhlcm1lcy5tYWlsLnYxLk1haWxEZWxpdmVyeU91dGNvbWVWMRIhChlyZXF1ZXN0ZWRfYXRfdW5peF9zZWNvbmRzGAQgASgDEiYKGWNvbXBsZXRlZF9hdF91bml4X3NlY29uZHMYBSABKANIAIgBARIaCg1yZXNwb25zZV9jb2RlGAYgASgNSAGIAQFCHAoaX2NvbXBsZXRlZF9hdF91bml4X3NlY29uZHNCEAoOX3Jlc3BvbnNlX2NvZGUicAofR2V0TWFpbERlbGl2ZXJ5U3RhdHVzUmVzcG9uc2VWMRJCCgZzdGF0dXMYASABKAsyLS5oZXJtZXMubWFpbC52MS5NYWlsRGVsaXZlcnlPcGVyYXRpb25TdGF0dXNWMUgAiAEBQgkKB19zdGF0dXMiMAoYU3RhcnRHbWFpbE9BdXRoUmVxdWVzdFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoCSJ5ChNHbWFpbE9BdXRoU3RhcnRlZFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoCRIQCghzZXR1cF9pZBgCIAEoCRIZChFhdXRob3JpemF0aW9uX3VybBgDIAEoCRIfChdleHBpcmVzX2F0X3VuaXhfc2Vjb25kcxgEIAEoAyJwChtDb21wbGV0ZUdtYWlsT0F1dGhSZXF1ZXN0VjESFAoMb3BlcmF0aW9uX2lkGAEgASgJEhAKCHNldHVwX2lkGAIgASgJEg0KBXN0YXRlGAMgASgJEhoKEmF1dGhvcml6YXRpb25fY29kZRgEIAEoCSIyChpSZWZyZXNoR21haWxPQXV0aFJlcXVlc3RWMRIUCgxvcGVyYXRpb25faWQYASABKAkiNAocR2V0R21haWxPQXV0aFN0YXR1c1JlcXVlc3RWMRIUCgxvcGVyYXRpb25faWQYASABKAkiiwIKG0dtYWlsT0F1dGhPcGVyYXRpb25TdGF0dXNWMRIUCgxvcGVyYXRpb25faWQYASABKAkSNwoEa2luZBgCIAEoDjIpLmhlcm1lcy5tYWlsLnYxLkdtYWlsT0F1dGhPcGVyYXRpb25LaW5kVjESNAoHb3V0Y29tZRgDIAEoDjIjLmhlcm1lcy5tYWlsLnYxLkdtYWlsT0F1dGhPdXRjb21lVjESIQoZcmVxdWVzdGVkX2F0X3VuaXhfc2Vjb25kcxgEIAEoAxImChljb21wbGV0ZWRfYXRfdW5peF9zZWNvbmRzGAUgASgDSACIAQFCHAoaX2NvbXBsZXRlZF9hdF91bml4X3NlY29uZHMibAodR2V0R21haWxPQXV0aFN0YXR1c1Jlc3BvbnNlVjESQAoGc3RhdHVzGAEgASgLMisuaGVybWVzLm1haWwudjEuR21haWxPQXV0aE9wZXJhdGlvblN0YXR1c1YxSACIAQFCCQoHX3N0YXR1cyrMAQoVTWFpbERlbGl2ZXJ5T3V0Y29tZVYxEiUKIU1BSUxfREVMSVZFUllfT1VUQ09NRV9VTlNQRUNJRklFRBAAEiEKHU1BSUxfREVMSVZFUllfT1VUQ09NRV9QRU5ESU5HEAESIgoeTUFJTF9ERUxJVkVSWV9PVVRDT01FX0FDQ0VQVEVEEAISIgoeTUFJTF9ERUxJVkVSWV9PVVRDT01FX1JFSkVDVEVEEAMSIQodTUFJTF9ERUxJVkVSWV9PVVRDT01FX1VOS05PV04QBCqYAQoZR21haWxPQXV0aE9wZXJhdGlvbktpbmRWMRIqCiZHTUFJTF9PQVVUSF9PUEVSQVRJT05fS0lORF9VTlNQRUNJRklFRBAAEicKI0dNQUlMX09BVVRIX09QRVJBVElPTl9LSU5EX0NPTVBMRVRFEAESJgoiR01BSUxfT0FVVEhfT1BFUkFUSU9OX0tJTkRfUkVGUkVTSBACKsEBChNHbWFpbE9BdXRoT3V0Y29tZVYxEiMKH0dNQUlMX09BVVRIX09VVENPTUVfVU5TUEVDSUZJRUQQABIfChtHTUFJTF9PQVVUSF9PVVRDT01FX1BFTkRJTkcQARIhCh1HTUFJTF9PQVVUSF9PVVRDT01FX0NPTVBMRVRFRBACEiAKHEdNQUlMX09BVVRIX09VVENPTUVfUkVKRUNURUQQAxIfChtHTUFJTF9PQVVUSF9PVVRDT01FX1VOS05PV04QBDJjCg9NYWlsU3luY1NlcnZpY2USUAoEU3luYxIiLmhlcm1lcy5tYWlsLnYxLlN5bmNJbmJveFJlcXVlc3RWMRokLmhlcm1lcy5tYWlsLnYxLlN5bmNJbmJveENvbXBsZXRlZFYxMmcKGk1haWxEZWxpdmVyeUNvbW1hbmRTZXJ2aWNlEkkKBFNlbmQSIS5oZXJtZXMubWFpbC52MS5TZW5kTWFpbFJlcXVlc3RWMRoeLmhlcm1lcy5tYWlsLnYxLk1haWxBY2NlcHRlZFYxMpEBChhNYWlsRGVsaXZlcnlRdWVyeVNlcnZpY2USdQoSR2V0T3BlcmF0aW9uU3RhdHVzEi4uaGVybWVzLm1haWwudjEuR2V0TWFpbERlbGl2ZXJ5U3RhdHVzUmVxdWVzdFYxGi8uaGVybWVzLm1haWwudjEuR2V0TWFpbERlbGl2ZXJ5U3RhdHVzUmVzcG9uc2VWMTJwChZHbWFpbE9BdXRoU3RhcnRTZXJ2aWNlElYKBVN0YXJ0EiguaGVybWVzLm1haWwudjEuU3RhcnRHbWFpbE9BdXRoUmVxdWVzdFYxGiMuaGVybWVzLm1haWwudjEuR21haWxPQXV0aFN0YXJ0ZWRWMTJ0ChlHbWFpbE9BdXRoQ29tcGxldGVTZXJ2aWNlElcKCENvbXBsZXRlEisuaGVybWVzLm1haWwudjEuQ29tcGxldGVHbWFpbE9BdXRoUmVxdWVzdFYxGh4uaGVybWVzLm1haWwudjEuTWFpbEFjY2VwdGVkVjEycQoYR21haWxPQXV0aFJlZnJlc2hTZXJ2aWNlElUKB1JlZnJlc2gSKi5oZXJtZXMubWFpbC52MS5SZWZyZXNoR21haWxPQXV0aFJlcXVlc3RWMRoeLmhlcm1lcy5tYWlsLnYxLk1haWxBY2NlcHRlZFYxMosBChZHbWFpbE9BdXRoUXVlcnlTZXJ2aWNlEnEKEkdldE9wZXJhdGlvblN0YXR1cxIsLmhlcm1lcy5tYWlsLnYxLkdldEdtYWlsT0F1dGhTdGF0dXNSZXF1ZXN0VjEaLS5oZXJtZXMubWFpbC52MS5HZXRHbWFpbE9BdXRoU3RhdHVzUmVzcG9uc2VWMWIGcHJvdG8z");
 
 /**
  * @generated from message hermes.mail.v1.SyncInboxRequestV1
@@ -182,6 +182,175 @@ export const GetMailDeliveryStatusResponseV1Schema: GenMessage<GetMailDeliverySt
   messageDesc(file_hermes_mail_v1_client, 6);
 
 /**
+ * @generated from message hermes.mail.v1.StartGmailOAuthRequestV1
+ */
+export type StartGmailOAuthRequestV1 = Message<"hermes.mail.v1.StartGmailOAuthRequestV1"> & {
+  /**
+   * @generated from field: string operation_id = 1;
+   */
+  operationId: string;
+};
+
+/**
+ * Describes the message hermes.mail.v1.StartGmailOAuthRequestV1.
+ * Use `create(StartGmailOAuthRequestV1Schema)` to create a new message.
+ */
+export const StartGmailOAuthRequestV1Schema: GenMessage<StartGmailOAuthRequestV1> = /*@__PURE__*/
+  messageDesc(file_hermes_mail_v1_client, 7);
+
+/**
+ * @generated from message hermes.mail.v1.GmailOAuthStartedV1
+ */
+export type GmailOAuthStartedV1 = Message<"hermes.mail.v1.GmailOAuthStartedV1"> & {
+  /**
+   * @generated from field: string operation_id = 1;
+   */
+  operationId: string;
+
+  /**
+   * @generated from field: string setup_id = 2;
+   */
+  setupId: string;
+
+  /**
+   * @generated from field: string authorization_url = 3;
+   */
+  authorizationUrl: string;
+
+  /**
+   * @generated from field: int64 expires_at_unix_seconds = 4;
+   */
+  expiresAtUnixSeconds: bigint;
+};
+
+/**
+ * Describes the message hermes.mail.v1.GmailOAuthStartedV1.
+ * Use `create(GmailOAuthStartedV1Schema)` to create a new message.
+ */
+export const GmailOAuthStartedV1Schema: GenMessage<GmailOAuthStartedV1> = /*@__PURE__*/
+  messageDesc(file_hermes_mail_v1_client, 8);
+
+/**
+ * @generated from message hermes.mail.v1.CompleteGmailOAuthRequestV1
+ */
+export type CompleteGmailOAuthRequestV1 = Message<"hermes.mail.v1.CompleteGmailOAuthRequestV1"> & {
+  /**
+   * @generated from field: string operation_id = 1;
+   */
+  operationId: string;
+
+  /**
+   * @generated from field: string setup_id = 2;
+   */
+  setupId: string;
+
+  /**
+   * @generated from field: string state = 3;
+   */
+  state: string;
+
+  /**
+   * @generated from field: string authorization_code = 4;
+   */
+  authorizationCode: string;
+};
+
+/**
+ * Describes the message hermes.mail.v1.CompleteGmailOAuthRequestV1.
+ * Use `create(CompleteGmailOAuthRequestV1Schema)` to create a new message.
+ */
+export const CompleteGmailOAuthRequestV1Schema: GenMessage<CompleteGmailOAuthRequestV1> = /*@__PURE__*/
+  messageDesc(file_hermes_mail_v1_client, 9);
+
+/**
+ * @generated from message hermes.mail.v1.RefreshGmailOAuthRequestV1
+ */
+export type RefreshGmailOAuthRequestV1 = Message<"hermes.mail.v1.RefreshGmailOAuthRequestV1"> & {
+  /**
+   * @generated from field: string operation_id = 1;
+   */
+  operationId: string;
+};
+
+/**
+ * Describes the message hermes.mail.v1.RefreshGmailOAuthRequestV1.
+ * Use `create(RefreshGmailOAuthRequestV1Schema)` to create a new message.
+ */
+export const RefreshGmailOAuthRequestV1Schema: GenMessage<RefreshGmailOAuthRequestV1> = /*@__PURE__*/
+  messageDesc(file_hermes_mail_v1_client, 10);
+
+/**
+ * @generated from message hermes.mail.v1.GetGmailOAuthStatusRequestV1
+ */
+export type GetGmailOAuthStatusRequestV1 = Message<"hermes.mail.v1.GetGmailOAuthStatusRequestV1"> & {
+  /**
+   * @generated from field: string operation_id = 1;
+   */
+  operationId: string;
+};
+
+/**
+ * Describes the message hermes.mail.v1.GetGmailOAuthStatusRequestV1.
+ * Use `create(GetGmailOAuthStatusRequestV1Schema)` to create a new message.
+ */
+export const GetGmailOAuthStatusRequestV1Schema: GenMessage<GetGmailOAuthStatusRequestV1> = /*@__PURE__*/
+  messageDesc(file_hermes_mail_v1_client, 11);
+
+/**
+ * @generated from message hermes.mail.v1.GmailOAuthOperationStatusV1
+ */
+export type GmailOAuthOperationStatusV1 = Message<"hermes.mail.v1.GmailOAuthOperationStatusV1"> & {
+  /**
+   * @generated from field: string operation_id = 1;
+   */
+  operationId: string;
+
+  /**
+   * @generated from field: hermes.mail.v1.GmailOAuthOperationKindV1 kind = 2;
+   */
+  kind: GmailOAuthOperationKindV1;
+
+  /**
+   * @generated from field: hermes.mail.v1.GmailOAuthOutcomeV1 outcome = 3;
+   */
+  outcome: GmailOAuthOutcomeV1;
+
+  /**
+   * @generated from field: int64 requested_at_unix_seconds = 4;
+   */
+  requestedAtUnixSeconds: bigint;
+
+  /**
+   * @generated from field: optional int64 completed_at_unix_seconds = 5;
+   */
+  completedAtUnixSeconds?: bigint | undefined;
+};
+
+/**
+ * Describes the message hermes.mail.v1.GmailOAuthOperationStatusV1.
+ * Use `create(GmailOAuthOperationStatusV1Schema)` to create a new message.
+ */
+export const GmailOAuthOperationStatusV1Schema: GenMessage<GmailOAuthOperationStatusV1> = /*@__PURE__*/
+  messageDesc(file_hermes_mail_v1_client, 12);
+
+/**
+ * @generated from message hermes.mail.v1.GetGmailOAuthStatusResponseV1
+ */
+export type GetGmailOAuthStatusResponseV1 = Message<"hermes.mail.v1.GetGmailOAuthStatusResponseV1"> & {
+  /**
+   * @generated from field: optional hermes.mail.v1.GmailOAuthOperationStatusV1 status = 1;
+   */
+  status?: GmailOAuthOperationStatusV1 | undefined;
+};
+
+/**
+ * Describes the message hermes.mail.v1.GetGmailOAuthStatusResponseV1.
+ * Use `create(GetGmailOAuthStatusResponseV1Schema)` to create a new message.
+ */
+export const GetGmailOAuthStatusResponseV1Schema: GenMessage<GetGmailOAuthStatusResponseV1> = /*@__PURE__*/
+  messageDesc(file_hermes_mail_v1_client, 13);
+
+/**
  * @generated from enum hermes.mail.v1.MailDeliveryOutcomeV1
  */
 export enum MailDeliveryOutcomeV1 {
@@ -216,6 +385,68 @@ export enum MailDeliveryOutcomeV1 {
  */
 export const MailDeliveryOutcomeV1Schema: GenEnum<MailDeliveryOutcomeV1> = /*@__PURE__*/
   enumDesc(file_hermes_mail_v1_client, 0);
+
+/**
+ * @generated from enum hermes.mail.v1.GmailOAuthOperationKindV1
+ */
+export enum GmailOAuthOperationKindV1 {
+  /**
+   * @generated from enum value: GMAIL_OAUTH_OPERATION_KIND_UNSPECIFIED = 0;
+   */
+  GMAIL_OAUTH_OPERATION_KIND_UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: GMAIL_OAUTH_OPERATION_KIND_COMPLETE = 1;
+   */
+  GMAIL_OAUTH_OPERATION_KIND_COMPLETE = 1,
+
+  /**
+   * @generated from enum value: GMAIL_OAUTH_OPERATION_KIND_REFRESH = 2;
+   */
+  GMAIL_OAUTH_OPERATION_KIND_REFRESH = 2,
+}
+
+/**
+ * Describes the enum hermes.mail.v1.GmailOAuthOperationKindV1.
+ */
+export const GmailOAuthOperationKindV1Schema: GenEnum<GmailOAuthOperationKindV1> = /*@__PURE__*/
+  enumDesc(file_hermes_mail_v1_client, 1);
+
+/**
+ * @generated from enum hermes.mail.v1.GmailOAuthOutcomeV1
+ */
+export enum GmailOAuthOutcomeV1 {
+  /**
+   * @generated from enum value: GMAIL_OAUTH_OUTCOME_UNSPECIFIED = 0;
+   */
+  GMAIL_OAUTH_OUTCOME_UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: GMAIL_OAUTH_OUTCOME_PENDING = 1;
+   */
+  GMAIL_OAUTH_OUTCOME_PENDING = 1,
+
+  /**
+   * @generated from enum value: GMAIL_OAUTH_OUTCOME_COMPLETED = 2;
+   */
+  GMAIL_OAUTH_OUTCOME_COMPLETED = 2,
+
+  /**
+   * @generated from enum value: GMAIL_OAUTH_OUTCOME_REJECTED = 3;
+   */
+  GMAIL_OAUTH_OUTCOME_REJECTED = 3,
+
+  /**
+   * @generated from enum value: GMAIL_OAUTH_OUTCOME_UNKNOWN = 4;
+   */
+  GMAIL_OAUTH_OUTCOME_UNKNOWN = 4,
+}
+
+/**
+ * Describes the enum hermes.mail.v1.GmailOAuthOutcomeV1.
+ */
+export const GmailOAuthOutcomeV1Schema: GenEnum<GmailOAuthOutcomeV1> = /*@__PURE__*/
+  enumDesc(file_hermes_mail_v1_client, 2);
 
 /**
  * Provider-specific operational contracts. Core Gateway authenticates and
@@ -264,4 +495,64 @@ export const MailDeliveryQueryService: GenService<{
   },
 }> = /*@__PURE__*/
   serviceDesc(file_hermes_mail_v1_client, 2);
+
+/**
+ * @generated from service hermes.mail.v1.GmailOAuthStartService
+ */
+export const GmailOAuthStartService: GenService<{
+  /**
+   * @generated from rpc hermes.mail.v1.GmailOAuthStartService.Start
+   */
+  start: {
+    methodKind: "unary";
+    input: typeof StartGmailOAuthRequestV1Schema;
+    output: typeof GmailOAuthStartedV1Schema;
+  },
+}> = /*@__PURE__*/
+  serviceDesc(file_hermes_mail_v1_client, 3);
+
+/**
+ * @generated from service hermes.mail.v1.GmailOAuthCompleteService
+ */
+export const GmailOAuthCompleteService: GenService<{
+  /**
+   * @generated from rpc hermes.mail.v1.GmailOAuthCompleteService.Complete
+   */
+  complete: {
+    methodKind: "unary";
+    input: typeof CompleteGmailOAuthRequestV1Schema;
+    output: typeof MailAcceptedV1Schema;
+  },
+}> = /*@__PURE__*/
+  serviceDesc(file_hermes_mail_v1_client, 4);
+
+/**
+ * @generated from service hermes.mail.v1.GmailOAuthRefreshService
+ */
+export const GmailOAuthRefreshService: GenService<{
+  /**
+   * @generated from rpc hermes.mail.v1.GmailOAuthRefreshService.Refresh
+   */
+  refresh: {
+    methodKind: "unary";
+    input: typeof RefreshGmailOAuthRequestV1Schema;
+    output: typeof MailAcceptedV1Schema;
+  },
+}> = /*@__PURE__*/
+  serviceDesc(file_hermes_mail_v1_client, 5);
+
+/**
+ * @generated from service hermes.mail.v1.GmailOAuthQueryService
+ */
+export const GmailOAuthQueryService: GenService<{
+  /**
+   * @generated from rpc hermes.mail.v1.GmailOAuthQueryService.GetOperationStatus
+   */
+  getOperationStatus: {
+    methodKind: "unary";
+    input: typeof GetGmailOAuthStatusRequestV1Schema;
+    output: typeof GetGmailOAuthStatusResponseV1Schema;
+  },
+}> = /*@__PURE__*/
+  serviceDesc(file_hermes_mail_v1_client, 6);
 

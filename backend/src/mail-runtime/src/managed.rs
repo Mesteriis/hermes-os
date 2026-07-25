@@ -118,7 +118,11 @@ pub struct MailAdmittedRuntime {
     attachment_anchor_subscribe_permit: Option<RuntimeSubscribePermitV1>,
     attachment_blob_admission_publish_permitted: bool,
     attachment_security_scan_candidate_publish_permitted: bool,
-    account: hermes_mail_api::MailAccountConfigurationV1,
+    pub(crate) account: hermes_mail_api::MailAccountConfigurationV1,
+    pub(crate) configuration_instance_id: String,
+    pub(crate) gmail_oauth: Option<hermes_mail_api::GmailOAuthConfigurationV1>,
+    pub(crate) provider_credential_context: ManagedProviderCredentialContextV1,
+    pub(crate) settings_revision: u64,
     runtime_instance_id: String,
     runtime_generation: u64,
 }
@@ -133,7 +137,7 @@ struct MailAttachmentBlobWriteV1 {
 
 enum MailInboundCredentialV1 {
     ImapPassword(Zeroizing<Vec<u8>>),
-    GmailAccessToken(Zeroizing<Vec<u8>>),
+    Gmail,
 }
 
 enum GmailHistorySyncError {
@@ -249,26 +253,7 @@ pub async fn open_admitted_runtime(
                         .map_err(map_provider_credential_error)?,
                 )
             }
-            MailInboundTransportV1::Gmail(_) => {
-                let revision =
-                    credential_revision(admission, MailCredentialPurpose::GmailAccessToken)?
-                        .ok_or(MailBootstrapError::Admission)?;
-                MailInboundCredentialV1::GmailAccessToken(
-                    provider_credentials
-                        .resolve(
-                            &mut dispatcher,
-                            &provider_context,
-                            ManagedProviderCredentialRequestV1 {
-                                configuration_instance_id: &admission.configuration_instance_id,
-                                purpose_id: MailCredentialPurpose::GmailAccessToken.as_str(),
-                                credential_revision: revision,
-                                ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
-                                secret_class: SecretClassV1::ProviderCredential,
-                            },
-                        )
-                        .map_err(map_provider_credential_error)?,
-                )
-            }
+            MailInboundTransportV1::Gmail(_) => MailInboundCredentialV1::Gmail,
         };
         let smtp_password =
             match credential_revision(admission, MailCredentialPurpose::SmtpPassword)? {
@@ -410,6 +395,10 @@ pub async fn open_admitted_runtime(
         attachment_blob_admission_publish_permitted,
         attachment_security_scan_candidate_publish_permitted,
         account: admission.account.clone(),
+        configuration_instance_id: admission.configuration_instance_id.clone(),
+        gmail_oauth: admission.gmail_oauth.clone(),
+        provider_credential_context: provider_context,
+        settings_revision: admission.settings_revision,
         runtime_instance_id: admission.runtime_instance_id.clone(),
         runtime_generation: admission.runtime_generation,
     })
@@ -648,17 +637,23 @@ impl MailAdmittedRuntime {
     }
 
     async fn send_mail_via_gmail(
-        &self,
+        &mut self,
         configuration: &MailGmailConfigurationV1,
         message: &OutgoingMailV1,
         queued: &MailQueuedDeliveryV1,
         completed_at_unix_seconds: i64,
     ) -> Result<u16, MailDeliveryDispatchErrorV1> {
-        let MailInboundCredentialV1::GmailAccessToken(access_token) = &self.inbound_credential
-        else {
-            return Err(MailDeliveryDispatchErrorV1::InvalidStoredCommand);
-        };
-        let access_token = std::str::from_utf8(access_token)
+        let access_token =
+            self.resolve_gmail_access_token()
+                .await
+                .map_err(|error| match error {
+                    MailBootstrapError::Persistence => MailDeliveryDispatchErrorV1::Persistence,
+                    MailBootstrapError::Credential => {
+                        MailDeliveryDispatchErrorV1::ProviderOutcomeUnknown
+                    }
+                    _ => MailDeliveryDispatchErrorV1::InvalidStoredCommand,
+                })?;
+        let access_token = std::str::from_utf8(&access_token)
             .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         self.send_mail(
             message,
@@ -961,10 +956,10 @@ impl MailAdmittedRuntime {
             return Err(MailBootstrapError::Admission);
         }
         let plan = bounded_window(window, windows).map_err(|_| MailBootstrapError::Admission)?;
-        let MailInboundCredentialV1::GmailAccessToken(token) = &self.inbound_credential else {
+        if !matches!(self.inbound_credential, MailInboundCredentialV1::Gmail) {
             return Err(MailBootstrapError::Credential);
-        };
-        let token = Zeroizing::new(token.to_vec());
+        }
+        let token = self.resolve_gmail_access_token().await?;
         let token = std::str::from_utf8(&token).map_err(|_| MailBootstrapError::Credential)?;
         let max_results =
             u16::try_from(plan.window.min(500)).map_err(|_| MailBootstrapError::Admission)?;
@@ -1936,8 +1931,8 @@ fn credential_revision(
 ) -> Result<Option<u64>, MailBootstrapError> {
     let revision = match purpose {
         MailCredentialPurpose::ImapPassword => admission.credential_revisions.imap_password,
-        MailCredentialPurpose::GmailAccessToken => {
-            admission.credential_revisions.gmail_access_token
+        MailCredentialPurpose::GmailAccessToken | MailCredentialPurpose::GmailRefreshCredential => {
+            None
         }
         MailCredentialPurpose::SmtpPassword => admission.credential_revisions.smtp_password,
     };

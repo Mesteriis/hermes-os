@@ -33,7 +33,10 @@ and the managed Vault client can execute one encrypted `StoreLease` or
 `ReplaceLease` after the matching action lease is issued. The Gmail adapter
 implements typed HTTPS authorization-code exchange and refresh requests.
 
-Mail descriptor distribution, Mail-owned OAuth binding persistence, and the
-admitted Mail setup/refresh workflow are not implemented yet. No setting,
+ADR-0278 now implements the generated Mail OAuth routes, signed descriptor and
+settings/storage revisions, Mail-owned one-use PKCE/operation persistence,
+action-specific Vault admission and runtime orchestration. The production gate
+remains closed until live provider/Vault conformance proves exact exchange,
+rotation, revoke/fence and negative-output behavior. No setting,
 provider-local secret store, or fallback access-token path is accepted as a
 substitute.

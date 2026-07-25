@@ -14,6 +14,7 @@ use hermes_mail_api::{
     valid_message_bytes, valid_port, valid_window,
 };
 
+pub mod oauth;
 pub mod rfc822;
 
 pub use hermes_mail_api::{

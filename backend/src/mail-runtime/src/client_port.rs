@@ -2,7 +2,7 @@ use hermes_mail_api::client_contract::{
     MAIL_CLIENT_CONTRACT_MAJOR, MAIL_CLIENT_CONTRACT_REVISION, MAIL_CLIENT_DESCRIPTOR_SET_V1,
     MAIL_MODULE_ID, MAIL_OWNER_ID, MailClientContractV1,
 };
-use hermes_mail_api::{MailClientRequestV1, MailClientResponseV1, client_wire};
+use hermes_mail_api::{MailClientRequestV1, MailClientResponseV1, client_wire, oauth_wire};
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
@@ -45,6 +45,10 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
         MailClientRequestV1::SyncInbox(_) => MailClientContractV1::Sync,
         MailClientRequestV1::SendMail(_) => MailClientContractV1::Delivery,
         MailClientRequestV1::DeliveryStatus(_) => MailClientContractV1::DeliveryQuery,
+        MailClientRequestV1::GmailOAuthStart(_) => MailClientContractV1::GmailOAuthStart,
+        MailClientRequestV1::GmailOAuthComplete(_) => MailClientContractV1::GmailOAuthComplete,
+        MailClientRequestV1::GmailOAuthRefresh(_) => MailClientContractV1::GmailOAuthRefresh,
+        MailClientRequestV1::GmailOAuthStatus(_) => MailClientContractV1::GmailOAuthQuery,
     }
 }
 
@@ -55,6 +59,12 @@ fn encode_request_payload(request: &MailClientRequestV1) -> Vec<u8> {
         MailClientRequestV1::DeliveryStatus(value) => {
             client_wire::encode_delivery_status_request(value)
         }
+        MailClientRequestV1::GmailOAuthStart(value) => oauth_wire::encode_start_request(value),
+        MailClientRequestV1::GmailOAuthComplete(value) => {
+            oauth_wire::encode_complete_request(value)
+        }
+        MailClientRequestV1::GmailOAuthRefresh(value) => oauth_wire::encode_refresh_request(value),
+        MailClientRequestV1::GmailOAuthStatus(value) => oauth_wire::encode_status_request(value),
     }
 }
 
@@ -71,6 +81,18 @@ fn decode_request_payload(
             .map_err(|_| MailClientPortErrorV1::Protocol),
         MailClientContractV1::DeliveryQuery => client_wire::decode_delivery_status_request(bytes)
             .map(MailClientRequestV1::DeliveryStatus)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::GmailOAuthStart => oauth_wire::decode_start_request(bytes)
+            .map(MailClientRequestV1::GmailOAuthStart)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::GmailOAuthComplete => oauth_wire::decode_complete_request(bytes)
+            .map(MailClientRequestV1::GmailOAuthComplete)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::GmailOAuthRefresh => oauth_wire::decode_refresh_request(bytes)
+            .map(MailClientRequestV1::GmailOAuthRefresh)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::GmailOAuthQuery => oauth_wire::decode_status_request(bytes)
+            .map(MailClientRequestV1::GmailOAuthStatus)
             .map_err(|_| MailClientPortErrorV1::Protocol),
     }
 }
@@ -148,6 +170,26 @@ pub async fn handle_client_request(
             .await
             .map(MailClientResponseV1::DeliveryStatus)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::GmailOAuthStart(value) => runtime
+            .start_gmail_oauth(&value.operation_id, requested_at_unix_seconds)
+            .await
+            .map(MailClientResponseV1::GmailOAuthStarted)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::GmailOAuthComplete(value) => runtime
+            .submit_gmail_oauth_complete(&value, requested_at_unix_seconds)
+            .await
+            .map(|operation_id| MailClientResponseV1::GmailOAuthAccepted { operation_id })
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::GmailOAuthRefresh(value) => runtime
+            .submit_gmail_oauth_refresh(&value.operation_id, requested_at_unix_seconds)
+            .await
+            .map(|operation_id| MailClientResponseV1::GmailOAuthAccepted { operation_id })
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::GmailOAuthStatus(value) => runtime
+            .gmail_oauth_operation_status(&value.operation_id)
+            .await
+            .map(MailClientResponseV1::GmailOAuthStatus)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
     };
     encode_module_response(request_id, contract, &response)
 }
@@ -173,6 +215,17 @@ fn encode_module_response(
         }
         (MailClientContractV1::DeliveryQuery, MailClientResponseV1::DeliveryStatus(status)) => {
             client_wire::encode_delivery_status_response(status.as_ref())
+        }
+        (
+            MailClientContractV1::GmailOAuthStart,
+            MailClientResponseV1::GmailOAuthStarted(response),
+        ) => oauth_wire::encode_start_response(response),
+        (
+            MailClientContractV1::GmailOAuthComplete | MailClientContractV1::GmailOAuthRefresh,
+            MailClientResponseV1::GmailOAuthAccepted { operation_id },
+        ) => oauth_wire::encode_accepted_response(operation_id),
+        (MailClientContractV1::GmailOAuthQuery, MailClientResponseV1::GmailOAuthStatus(status)) => {
+            oauth_wire::encode_status_response(status.as_ref())
         }
         _ => return Err(MailClientPortErrorV1::Protocol),
     };
@@ -205,6 +258,15 @@ pub fn decode_module_response(
         }
         MailClientContractV1::DeliveryQuery => {
             client_wire::decode_delivery_status_response(&envelope.response_payload)
+        }
+        MailClientContractV1::GmailOAuthStart => {
+            oauth_wire::decode_start_response(&envelope.response_payload)
+        }
+        MailClientContractV1::GmailOAuthComplete | MailClientContractV1::GmailOAuthRefresh => {
+            oauth_wire::decode_accepted_response(&envelope.response_payload)
+        }
+        MailClientContractV1::GmailOAuthQuery => {
+            oauth_wire::decode_status_response(&envelope.response_payload)
         }
     }
     .map_err(|_| MailClientPortErrorV1::Protocol)?;

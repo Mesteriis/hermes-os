@@ -2,12 +2,14 @@
 
 Статус: Принято
 Дата: 2026-07-25
-Состояние реализации: В работе. Typed Gmail HTTPS exchange и Mail-owned
-credential binding persistence существуют. Correlated managed Vault client
-получает action-specific `Create`/`ReplaceCas` operations как platform
-prerequisite. Generated setup/complete/refresh routes, durable PKCE operation,
-signed capability admission и live provider/Vault conformance ещё не
-реализованы; до этого `mail_gmail_oauth_v1` закрыт.
+Состояние реализации: В работе. Generated start/complete/refresh/query routes,
+Mail-owned PKCE attempts и durable operations, descriptor revision 3, settings
+schema revision 4, Storage bundle revision 4, action-specific Vault admission,
+typed Gmail HTTPS exchange и runtime orchestration реализованы. Gmail
+sync/delivery теперь резолвят access credential on demand по Mail-owned opaque
+binding, а не по settings revision. Static package, Clippy и architecture gates
+зелёные. Live provider/Vault conformance, revoke/fence и negative-output
+evidence ещё не реализованы; до этого `mail_gmail_oauth_v1` закрыт.
 
 Уточняет:
 
@@ -137,11 +139,12 @@ mail_gmail_refresh_credential
 Approval units:
 
 ```text
-mail.gmail.oauth-setup.v1
+mail.gmail.oauth-setup.credentials.v1
   Create access-token revision 1
   Create refresh-credential revision 1
+  ReplaceCas both credentials for explicit re-authorization
 
-mail.gmail.oauth-refresh.v1
+mail.gmail.oauth-refresh.credentials.v1
   Resolve current refresh credential
   ReplaceCas access token at current + 1
   ReplaceCas refresh credential only when provider rotates it
