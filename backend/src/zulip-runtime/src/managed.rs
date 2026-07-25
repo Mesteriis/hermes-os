@@ -3,39 +3,45 @@
 //! This module owns process admission and integration resources only. It does
 //! not reach Communications persistence or construct business state.
 
-use std::io::{Read, Write};
-use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use hermes_blob_client::{BlobDataClient, request_managed_blob_session};
+use hermes_blob_client::{
+    BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
+};
 use hermes_communications_ingress::{BodyAdmissionFailureV1, BodyBlobReceiptV1};
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
-    request_managed_runtime_event_access,
+    request_managed_runtime_event_access_v2,
 };
 use hermes_managed_vault_client::{
-    ManagedProviderCredentialClientV1, ManagedProviderCredentialContextV1,
-    ManagedProviderCredentialErrorV1,
+    ManagedProviderCredentialClientV2, ManagedProviderCredentialContextV1,
+    ManagedProviderCredentialErrorV1, ManagedProviderCredentialRequestV1,
 };
-use hermes_runtime_protocol::v1::BlobDataOperationV1;
 use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeRequestV1, ManagedRuntimeClientDeliveryRequestV1,
-    ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlRequestV1,
+    BlobDataOperationV1, ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
-    ManagedStorageRuntimeConfigurationV1, managed_runtime_control_request_v1::Operation,
+    ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
+    managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use hermes_runtime_protocol::validation::module_client::{
     validate_module_client_request_v1, validate_module_client_response_v1,
+};
+use hermes_runtime_protocol::{
+    managed_control::{
+        ManagedControlChannelV2, ManagedControlRequestDispatcherV2, ManagedControlTransportErrorV2,
+        RejectManagedControlRequestsV2,
+    },
+    validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES,
 };
 use hermes_storage_protocol::{
     StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1, StorageBindingV1,
     StorageEffectiveBudgetsV1,
 };
 use hermes_storage_vault::{
-    InheritedKernelVaultRouteV1, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
+    InheritedKernelVaultRouteV2, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
 };
 use hermes_vault_protocol::{DEFAULT_LEASE_TTL_SECONDS, SecretClassV1};
 use hermes_zulip_api::{
@@ -54,11 +60,11 @@ use crate::{
 };
 use zeroize::Zeroizing;
 
-const MAX_FRAME_BYTES: usize = 512 * 1024;
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
+const ZULIP_BLOB_CAPABILITY_ID: &str = "zulip.blob.v1";
 
 pub struct ZulipAdmittedRuntimeV1 {
-    pub control_channel: UnixStream,
+    pub control_channel: ManagedControlChannelV2<UnixStream>,
     pub durable: ZulipDurablePersistence,
     http: ZulipHttpConfigV1,
     event_connection: RuntimeJetStreamConnection,
@@ -94,7 +100,7 @@ pub enum ZulipRuntimeTickErrorV1 {
 
 #[allow(clippy::too_many_arguments)]
 pub async fn open_admitted_runtime(
-    mut control_channel: UnixStream,
+    control_channel: UnixStream,
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
     admission: &ZulipRuntimeAdmissionV1,
@@ -118,55 +124,19 @@ pub async fn open_admitted_runtime(
         .set_read_timeout(Some(CONTROL_TIMEOUT))
         .and_then(|_| control_channel.set_write_timeout(Some(CONTROL_TIMEOUT)))
         .map_err(|_| ZulipBootstrapErrorV1::Control)?;
-    write_frame(
-        &mut control_channel,
-        &ManagedRuntimeControlRequestV1 {
-            operation: Some(Operation::Describe(DescribeManagedRuntimeRequestV1 {
-                descriptor_bytes,
-                settings_schema_bytes,
-            })),
-        }
-        .encode_to_vec(),
-    )?;
-    let response =
-        ManagedRuntimeControlResponseV1::decode(read_frame(&mut control_channel)?.as_slice())
-            .map_err(|_| ZulipBootstrapErrorV1::Control)?;
-    let (registration_id, runtime_generation, grant_epoch) = match response.result {
-        Some(ControlResult::Describe(value))
-            if response.error_code.is_empty()
-                && !value.registration_id.is_empty()
-                && value.runtime_generation != 0
-                && value.grant_epoch != 0 =>
-        {
-            (
-                value.registration_id,
-                value.runtime_generation,
-                value.grant_epoch,
-            )
-        }
-        _ => return Err(ZulipBootstrapErrorV1::Admission),
-    };
+    let mut control_channel = ManagedControlChannelV2::new(control_channel);
+    let identity = control_channel
+        .describe_managed_runtime(descriptor_bytes, settings_schema_bytes)
+        .map_err(|_| ZulipBootstrapErrorV1::Control)?;
+    let registration_id = identity.registration_id;
+    let runtime_generation = identity.runtime_generation;
+    let grant_epoch = identity.grant_epoch;
     if registration_id != admission.module_registration_id
         || runtime_generation != admission.runtime_generation
         || grant_epoch != admission.grant_epoch
     {
         return Err(ZulipBootstrapErrorV1::Admission);
     }
-    write_frame(
-        &mut control_channel,
-        &ManagedRuntimeControlRequestV1 {
-            operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1 {
-                registration_id,
-                runtime_generation,
-                grant_epoch,
-            })),
-        }
-        .encode_to_vec(),
-    )?;
-    control_channel
-        .set_read_timeout(None)
-        .and_then(|_| control_channel.set_write_timeout(None))
-        .map_err(|_| ZulipBootstrapErrorV1::Control)?;
 
     let provider_context = provider_credential_context(admission, &storage_configuration)?;
     let api_key_revision =
@@ -177,20 +147,23 @@ pub async fn open_admitted_runtime(
         api_key_revision,
     )
     .map_err(|_| ZulipBootstrapErrorV1::Admission)?;
-    let api_key = ManagedProviderCredentialClientV1::new(
-        control_channel
-            .try_clone()
-            .map_err(|_| ZulipBootstrapErrorV1::Control)?,
-    )
-    .resolve(
-        &provider_context,
-        &admission.configuration_instance_id,
-        purpose.purpose_id(),
-        api_key_revision,
-        DEFAULT_LEASE_TTL_SECONDS,
-        SecretClassV1::ProviderCredential,
-    )
-    .map_err(map_provider_credential_error)?;
+    let api_key = {
+        let mut provider_credentials = ManagedProviderCredentialClientV2::new(&mut control_channel);
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        provider_credentials
+            .resolve(
+                &mut dispatcher,
+                &provider_context,
+                ManagedProviderCredentialRequestV1 {
+                    configuration_instance_id: &admission.configuration_instance_id,
+                    purpose_id: purpose.purpose_id(),
+                    credential_revision: api_key_revision,
+                    ttl_seconds: DEFAULT_LEASE_TTL_SECONDS,
+                    secret_class: SecretClassV1::ProviderCredential,
+                },
+            )
+            .map_err(map_provider_credential_error)?
+    };
     let http = http_config_from_resolved_api_key(account, api_key)
         .map_err(|_| ZulipBootstrapErrorV1::Credential)?;
 
@@ -206,11 +179,7 @@ pub async fn open_admitted_runtime(
     )
     .map_err(|_| ZulipBootstrapErrorV1::Storage)?;
     let mut storage_leases = StorageVaultLeaseAdapterV1::new(
-        InheritedKernelVaultRouteV1::new(
-            control_channel
-                .try_clone()
-                .map_err(|_| ZulipBootstrapErrorV1::Control)?,
-        ),
+        InheritedKernelVaultRouteV2::new(control_channel),
         storage_context,
     );
     let lease_id = storage_leases
@@ -221,6 +190,7 @@ pub async fn open_admitted_runtime(
         .resolve_runtime_credential(&binding, lease_id)
         .await
         .map_err(|_| ZulipBootstrapErrorV1::Credential)?;
+    let mut control_channel = storage_leases.into_route_port().into_channel();
     let password = std::str::from_utf8(&password).map_err(|_| ZulipBootstrapErrorV1::Credential)?;
     let durable = ZulipDurablePersistence::connect_runtime(
         &binding,
@@ -236,7 +206,7 @@ pub async fn open_admitted_runtime(
         .await
         .map_err(|_| ZulipBootstrapErrorV1::Persistence)?;
 
-    let event_access = request_managed_runtime_event_access(
+    let event_access = request_managed_runtime_event_access_v2(
         &mut control_channel,
         &admission.logical_owner_id,
         &admission.module_registration_id,
@@ -268,7 +238,17 @@ pub async fn open_admitted_runtime(
     .await
     .map_err(|_| ZulipBootstrapErrorV1::EventHub)?;
     control_channel
-        .set_nonblocking(true)
+        .signal_ready(ManagedRuntimeReadyRequestV1 {
+            registration_id,
+            runtime_generation,
+            grant_epoch,
+        })
+        .map_err(|_| ZulipBootstrapErrorV1::Control)?;
+    control_channel
+        .inner_mut()
+        .set_read_timeout(None)
+        .and_then(|_| control_channel.inner_mut().set_write_timeout(None))
+        .and_then(|_| control_channel.inner_mut().set_nonblocking(true))
         .map_err(|_| ZulipBootstrapErrorV1::Control)?;
     Ok(ZulipAdmittedRuntimeV1 {
         control_channel,
@@ -331,17 +311,34 @@ impl ZulipAdmittedRuntimeV1 {
         &mut self,
         requested_at_unix_seconds: i64,
     ) -> Result<bool, ZulipBootstrapErrorV1> {
-        let Some(frame) = peek_complete_frame(&self.control_channel)? else {
+        let Some((correlation_id, control_request)) = self
+            .control_channel
+            .try_receive_request()
+            .map_err(|_| ZulipBootstrapErrorV1::Control)?
+        else {
             return Ok(false);
         };
-        let request = ManagedRuntimeClientDeliveryRequestV1::decode(frame.as_slice())
-            .map_err(|_| ZulipBootstrapErrorV1::Control)?
-            .request
-            .ok_or(ZulipBootstrapErrorV1::Control)?;
-        validate_module_client_request_v1(&request).map_err(|_| ZulipBootstrapErrorV1::Control)?;
-        if read_frame(&mut self.control_channel)? != frame {
-            return Err(ZulipBootstrapErrorV1::Control);
-        }
+        let request = match control_request.operation {
+            Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+                Some(request) if validate_module_client_request_v1(&request).is_ok() => request,
+                _ => {
+                    write_control_error(
+                        &mut self.control_channel,
+                        correlation_id,
+                        "managed_runtime_control_invalid_client_delivery",
+                    )?;
+                    return Ok(true);
+                }
+            },
+            _ => {
+                write_control_error(
+                    &mut self.control_channel,
+                    correlation_id,
+                    "managed_runtime_control_unexpected_request",
+                )?;
+                return Ok(true);
+            }
+        };
         let payload = crate::client_port::handle_client_request(
             self,
             &request.encode_to_vec(),
@@ -349,18 +346,11 @@ impl ZulipAdmittedRuntimeV1 {
         )
         .await
         .map_err(|_| ZulipBootstrapErrorV1::Admission)?;
-        let response =
-            hermes_runtime_protocol::v1::ModuleClientResponseV1::decode(payload.as_slice())
-                .map_err(|_| ZulipBootstrapErrorV1::Admission)?;
+        let response = ModuleClientResponseV1::decode(payload.as_slice())
+            .map_err(|_| ZulipBootstrapErrorV1::Admission)?;
         validate_module_client_response_v1(&response)
             .map_err(|_| ZulipBootstrapErrorV1::Admission)?;
-        write_frame(
-            &mut self.control_channel,
-            &ManagedRuntimeClientDeliveryResponseV1 {
-                response: Some(response),
-            }
-            .encode_to_vec(),
-        )?;
+        write_client_delivery_response(&mut self.control_channel, correlation_id, response)?;
         Ok(true)
     }
 
@@ -475,7 +465,7 @@ impl ZulipAdmittedRuntimeV1 {
 }
 
 fn admit_inbound_plaintext(
-    control_channel: &mut UnixStream,
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
     plaintext: &[u8],
 ) -> Result<BodyBlobReceiptV1, BodyAdmissionFailureV1> {
     if plaintext.is_empty() || plaintext.len() > 256 * 1024 {
@@ -488,18 +478,24 @@ fn admit_inbound_plaintext(
     }
     let sha256: [u8; 32] = Sha256::digest(plaintext).into();
     control_channel
+        .inner_mut()
         .set_nonblocking(false)
         .map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
-    let delivery = request_managed_blob_session(
+    let mut dispatcher = ZulipBusyControlDispatcher;
+    let delivery = request_managed_blob_session_v2(
         control_channel,
-        "blob.content",
-        BlobDataOperationV1::BlobDataOperationWriteV1,
-        &reference_id,
-        u64::try_from(plaintext.len()).map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
-        1,
-        Some(&sha256),
+        &mut dispatcher,
+        ManagedBlobSessionRequestV1 {
+            capability_id: ZULIP_BLOB_CAPABILITY_ID,
+            operation: BlobDataOperationV1::BlobDataOperationWriteV1,
+            reference_id: &reference_id,
+            declared_size: u64::try_from(plaintext.len())
+                .map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
+            backup_class: 1,
+            receipt_sha256: Some(&sha256),
+        },
     );
-    let restored = control_channel.set_nonblocking(true);
+    let restored = control_channel.inner_mut().set_nonblocking(true);
     let delivery = delivery.map_err(|_| BodyAdmissionFailureV1::PolicyRejected)?;
     restored.map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
     let custody_transfer_source_proof = delivery.custody_transfer_source_proof;
@@ -525,23 +521,33 @@ fn admit_inbound_plaintext(
 }
 
 fn authorize_blob_session(
-    control_channel: &mut UnixStream,
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
     reader: &Mutex<Option<crate::blob::ZulipBlobMaterializer<BlobDataClient>>>,
     writer: &Mutex<Option<crate::blob::ZulipBlobWriteMaterializer<BlobDataClient>>>,
     command: &ZulipCommandV1,
     operation: BlobDataOperationV1,
 ) -> Result<(), super::ZulipRuntimeErrorV1> {
     let blob = command_blob_intent(command).ok_or(super::ZulipRuntimeErrorV1::Credential)?;
-    let delivery = request_managed_blob_session(
+    control_channel
+        .inner_mut()
+        .set_nonblocking(false)
+        .map_err(|_| super::ZulipRuntimeErrorV1::Credential)?;
+    let mut dispatcher = ZulipBusyControlDispatcher;
+    let delivery = request_managed_blob_session_v2(
         control_channel,
-        "blob.content",
-        operation,
-        &blob.reference_id,
-        blob.declared_size,
-        blob.backup_class,
-        None,
-    )
-    .map_err(|_| super::ZulipRuntimeErrorV1::Credential)?;
+        &mut dispatcher,
+        ManagedBlobSessionRequestV1 {
+            capability_id: ZULIP_BLOB_CAPABILITY_ID,
+            operation,
+            reference_id: &blob.reference_id,
+            declared_size: blob.declared_size,
+            backup_class: blob.backup_class,
+            receipt_sha256: None,
+        },
+    );
+    let restored = control_channel.inner_mut().set_nonblocking(true);
+    let delivery = delivery.map_err(|_| super::ZulipRuntimeErrorV1::Credential)?;
+    restored.map_err(|_| super::ZulipRuntimeErrorV1::Credential)?;
     let session = crate::blob::ZulipBlobSessionV1 {
         blob_ref: blob.blob_ref.clone(),
         grant: delivery.grant,
@@ -637,103 +643,167 @@ fn storage_binding(
     StorageBindingV1::new(identity, fences, access).map_err(|_| ZulipBootstrapErrorV1::Storage)
 }
 
-fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), ZulipBootstrapErrorV1> {
-    if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES {
-        return Err(ZulipBootstrapErrorV1::Control);
+struct ZulipBusyControlDispatcher;
+
+impl ManagedControlRequestDispatcherV2<UnixStream> for ZulipBusyControlDispatcher {
+    fn dispatch_request(
+        &mut self,
+        channel: &mut ManagedControlChannelV2<UnixStream>,
+        correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+        request: ManagedRuntimeControlRequestV1,
+    ) -> Result<(), ManagedControlTransportErrorV2> {
+        let response = match request.operation {
+            Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+                Some(request) if validate_module_client_request_v1(&request).is_ok() => {
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::ClientDelivery(
+                            ManagedRuntimeClientDeliveryResponseV1 {
+                                response: Some(ModuleClientResponseV1 {
+                                    protocol_major: 1,
+                                    request_id: request.request_id,
+                                    response_payload: Vec::new(),
+                                    error_code: "RUNTIME_BUSY".to_owned(),
+                                }),
+                            },
+                        )),
+                        error_code: String::new(),
+                    }
+                }
+                _ => ManagedRuntimeControlResponseV1 {
+                    result: None,
+                    error_code: "managed_runtime_control_invalid_client_delivery".to_owned(),
+                },
+            },
+            _ => ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: "managed_runtime_control_unexpected_request".to_owned(),
+            },
+        };
+        channel.write_response(correlation_id, response)
     }
-    let mut length = u32::try_from(bytes.len()).map_err(|_| ZulipBootstrapErrorV1::Control)?;
-    let mut prefix = Vec::with_capacity(5);
-    while length >= 0x80 {
-        prefix.push((length as u8 & 0x7f) | 0x80);
-        length >>= 7;
-    }
-    prefix.push(length as u8);
+}
+
+fn write_client_delivery_response(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+    response: ModuleClientResponseV1,
+) -> Result<(), ZulipBootstrapErrorV1> {
     channel
-        .write_all(&prefix)
-        .and_then(|_| channel.write_all(bytes))
-        .and_then(|_| channel.flush())
+        .write_response(
+            correlation_id,
+            ManagedRuntimeControlResponseV1 {
+                result: Some(ControlResult::ClientDelivery(
+                    ManagedRuntimeClientDeliveryResponseV1 {
+                        response: Some(response),
+                    },
+                )),
+                error_code: String::new(),
+            },
+        )
         .map_err(|_| ZulipBootstrapErrorV1::Control)
 }
 
-fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, ZulipBootstrapErrorV1> {
-    let length =
-        usize::try_from(read_varint(channel)?).map_err(|_| ZulipBootstrapErrorV1::Control)?;
-    if length == 0 || length > MAX_FRAME_BYTES {
-        return Err(ZulipBootstrapErrorV1::Control);
-    }
-    let mut bytes = vec![0_u8; length];
+fn write_control_error(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+    error_code: &str,
+) -> Result<(), ZulipBootstrapErrorV1> {
     channel
-        .read_exact(&mut bytes)
-        .map_err(|_| ZulipBootstrapErrorV1::Control)?;
-    Ok(bytes)
-}
-
-fn peek_complete_frame(channel: &UnixStream) -> Result<Option<Vec<u8>>, ZulipBootstrapErrorV1> {
-    let mut header = [0_u8; 5];
-    let length = unsafe {
-        libc::recv(
-            channel.as_raw_fd(),
-            header.as_mut_ptr().cast(),
-            header.len(),
-            libc::MSG_PEEK,
+        .write_response(
+            correlation_id,
+            ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: error_code.to_owned(),
+            },
         )
-    };
-    if length < 0 {
-        return if std::io::Error::last_os_error().kind() == std::io::ErrorKind::WouldBlock {
-            Ok(None)
-        } else {
-            Err(ZulipBootstrapErrorV1::Control)
-        };
-    }
-    if length == 0 {
-        return Err(ZulipBootstrapErrorV1::Control);
-    }
-    let (payload_length, prefix_length) = decode_peeked_length(
-        &header[..usize::try_from(length).map_err(|_| ZulipBootstrapErrorV1::Control)?],
-    )?;
-    if payload_length == 0 || payload_length > MAX_FRAME_BYTES {
-        return Err(ZulipBootstrapErrorV1::Control);
-    }
-    let mut framed = vec![0_u8; prefix_length + payload_length];
-    let received = unsafe {
-        libc::recv(
-            channel.as_raw_fd(),
-            framed.as_mut_ptr().cast(),
-            framed.len(),
-            libc::MSG_PEEK,
-        )
-    };
-    if received < 0 {
-        return Err(ZulipBootstrapErrorV1::Control);
-    }
-    if usize::try_from(received).map_err(|_| ZulipBootstrapErrorV1::Control)? < framed.len() {
-        return Ok(None);
-    }
-    Ok(Some(framed[prefix_length..].to_vec()))
+        .map_err(|_| ZulipBootstrapErrorV1::Control)
 }
 
-fn decode_peeked_length(bytes: &[u8]) -> Result<(usize, usize), ZulipBootstrapErrorV1> {
-    let mut value = 0_usize;
-    for (index, byte) in bytes.iter().copied().enumerate() {
-        value |= usize::from(byte & 0x7f) << (index * 7);
-        if byte & 0x80 == 0 {
-            return Ok((value, index + 1));
-        }
-    }
-    Err(ZulipBootstrapErrorV1::Control)
-}
+#[cfg(test)]
+mod control_dispatch_tests {
+    use std::os::unix::net::UnixStream;
+    use std::thread;
 
-fn read_varint(channel: &mut UnixStream) -> Result<u64, ZulipBootstrapErrorV1> {
-    let mut value = 0_u64;
-    for index in 0..5 {
-        let mut byte = [0_u8; 1];
-        channel
-            .read_exact(&mut byte)
-            .map_err(|_| ZulipBootstrapErrorV1::Control)?;
-        value |= u64::from(byte[0] & 0x7f) << (index * 7);
-        if byte[0] & 0x80 == 0 {
-            return Ok(value);
-        }
+    use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
+    use hermes_runtime_protocol::v1::{
+        ContractReferenceV1, ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeControlAckV1,
+        ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
+        ManagedRuntimeReadyRequestV1, ModuleClientRequestV1,
+        managed_runtime_control_frame_v2::Frame, managed_runtime_control_request_v1::Operation,
+        managed_runtime_control_response_v1::Result as ControlResult,
+    };
+    use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
+
+    use super::ZulipBusyControlDispatcher;
+
+    #[test]
+    fn nested_client_delivery_gets_a_correlated_busy_response_without_stealing_platform_reply() {
+        let (runtime, kernel) = UnixStream::pair().expect("control pair");
+        let kernel = thread::spawn(move || {
+            let mut channel = ManagedControlChannelV2::new(kernel);
+            let (platform_id, _) = channel.receive_request().expect("platform request");
+            channel
+                .write_request(
+                    [7; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+                    ManagedRuntimeControlRequestV1 {
+                        operation: Some(Operation::ClientDelivery(
+                            ManagedRuntimeClientDeliveryRequestV1 {
+                                request: Some(ModuleClientRequestV1 {
+                                    protocol_major: 1,
+                                    module_id: "hermes-zulip-runtime".to_owned(),
+                                    owner_id: "zulip".to_owned(),
+                                    contract: Some(ContractReferenceV1 {
+                                        owner: "zulip".to_owned(),
+                                        name: "query".to_owned(),
+                                        major: 1,
+                                        revision: 1,
+                                        schema_sha256: vec![1; 32],
+                                    }),
+                                    request_id: 41,
+                                    request_payload: vec![1],
+                                }),
+                            },
+                        )),
+                    },
+                )
+                .expect("client delivery");
+            let nested = channel.read_frame().expect("busy response");
+            assert_eq!(
+                nested.correlation_id,
+                vec![7; MANAGED_CONTROL_CORRELATION_ID_BYTES]
+            );
+            let Some(Frame::Response(response)) = nested.frame else {
+                panic!("nested response");
+            };
+            let Some(ControlResult::ClientDelivery(delivery)) = response.result else {
+                panic!("client delivery response");
+            };
+            assert_eq!(
+                delivery.response.expect("module response").error_code,
+                "RUNTIME_BUSY"
+            );
+            channel
+                .write_response(
+                    platform_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::Ack(ManagedRuntimeControlAckV1 {})),
+                        error_code: String::new(),
+                    },
+                )
+                .expect("platform response");
+        });
+
+        let mut channel = ManagedControlChannelV2::new(runtime);
+        let mut dispatcher = ZulipBusyControlDispatcher;
+        let response = channel
+            .request_next_with_dispatch(
+                ManagedRuntimeControlRequestV1 {
+                    operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1::default())),
+                },
+                &mut dispatcher,
+            )
+            .expect("correlated platform response");
+        assert!(matches!(response.result, Some(ControlResult::Ack(_))));
+        kernel.join().expect("kernel join");
     }
-    Err(ZulipBootstrapErrorV1::Control)
 }
