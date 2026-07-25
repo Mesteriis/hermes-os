@@ -223,3 +223,12 @@ ADR-0270 разделяет Mail operational sync/delivery и provider credentia
 purposes на независимые capability units: integration использует Kernel/Core
 для admission и opaque routing, а Communications получает Mail evidence
 только через durable typed events.
+ADR-0271 задаёт отдельный Zulip phase gate: Kernel/Core владеет только
+platform admission, leases, fencing и opaque client routing; Zulip provider
+evidence пересекает Communications boundary только через owner-local outbox,
+NATS и Communications inbox. Command и operation query становятся разными
+capability units, а runtime обязан перейти на один correlated V2 frame pump.
+ADR-0272 выделяет Zulip release composition в отдельную integration-owned
+assembly unit с exact runtime/settings/storage artifacts и двухэлементным
+unsigned fragment. Она не имеет signing authority и не входит в Kernel,
+Gateway или Communications.
