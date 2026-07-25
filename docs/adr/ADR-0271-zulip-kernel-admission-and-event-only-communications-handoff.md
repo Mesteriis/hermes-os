@@ -2,9 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-24
-Состояние реализации: Phase gate; `zulip_integration_v1` не открыт. Пять
+Состояние реализации: backend phase gate `zulip_integration_v1` открыт. Пять
 Zulip-owned packages, provider anti-corruption mapper, HTTPS adapter,
-owner-local PostgreSQL state и exact-byte Communications outbox уже существуют.
+owner-local PostgreSQL state и exact-byte Communications outbox существуют.
 Runtime использует один `ManagedControlChannelV2<UnixStream>` для descriptor,
 Storage/Vault, Blob, Event Hub и client delivery; cloned readers, V1 platform
 helpers и `MSG_PEEK` удалены, а вложенная client delivery получает
@@ -16,8 +16,11 @@ distribution binding реализованы. Signed managed launch и live
 grant/query/revoke/generation/Storage fencing conformance реализованы в
 `bfef3e1df`. Live provider command, event-only Communications delivery,
 duplicate suppression и NATS outage replay реализованы в `5deac37fa`; gates
-1–10 закрыты. Privacy evidence для subjects, routes, errors, logs и health ещё
-не завершён, поэтому `zulip_integration_v1` остаётся закрыт.
+1–10 закрыты. Privacy boundary и live negative-output evidence реализованы в
+`890b8418e`; gate 11 закрыт. Открытие gate разрешает только explicit
+owner-approved Zulip admission с текущими fences, не расширяет
+`first_owner_v1`, не активирует runtime автоматически и не закрывает отдельный
+frontend cutover.
 
 Уточняет:
 
@@ -229,10 +232,21 @@ Clippy, architecture/SRP/Cargo boundary gates и relevant live conformance.
 - повтор exact observation не создал второе Communications event; второй
   provider event был принят при остановленном NATS, Zulip runtime остался
   активным без `last_failure`, а outbox доставил observation после reconnect;
-- architecture tests: 465 passed, включая event-only/outage executable guard.
+- `890b8418e` redacts account/realm identity from `ZulipHttpConfigV1` debug,
+  удаляет transport error из diagnostic API и оставляет только closed
+  stage/error-class diagnostics;
+- `zulip-privacy-boundary.test.mjs` доказывает typed permit-derived subject,
+  отсутствие dynamic subject literals, generic route error codes, hidden
+  non-secret settings references и отсутствие Zulip-owned health surface;
+- live managed conformance с `HERMES_DEVELOPER_VERBOSE=1` и fail-closed output
+  scanner не обнаружил API key, queue ID, bot/sender identity, realm URL или
+  provider bodies в stdout/stderr;
+- Zulip HTTP tests: 7 passed; architecture tests: 466 passed, включая
+  event-only/outage и privacy executable guards.
 
-Gate 11 и `zulip_integration_v1` остаются закрыты: эти проверки не являются
-полным privacy evidence для subjects, routes, errors, logs и health.
+Все gates 1–11 закрыты; backend `zulip_integration_v1` открыт. Legacy frontend
+REST removal остаётся отдельным secondary client slice и не вводит backend
+facade или fallback.
 
 ## Отклонённые варианты
 
