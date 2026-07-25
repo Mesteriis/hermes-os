@@ -17,7 +17,11 @@ fragment для generic distribution compiler. Первый реальный pro
 managed Mail runtime — после owner-local Blob commit атомарно сохраняет typed
 candidate в отдельном Mail outbox и публикует exact bytes по отдельной
 owner-approved capability; live contour доказывает replay и privacy boundary.
-Production gate
+Отдельный live managed contour также доказывает signed Engine
+executable/descriptor/settings/Storage binding, exact five-capability GrantSet,
+owner-local PostgreSQL, Event Hub credentials и readiness при loopback ClamAV
+endpoint из typed settings snapshot. Scanner payload/verdict и failure matrix
+этот smoke-контур не доказывает. Production gate
 `attachment_security_engine_v1` остаётся закрыт до signed admission и live
 ClamAV/Blob/Event conformance, включая failure/replay/revoke matrix. До открытия
 gate состояние `safe_for_delivery` остаётся недостижимым.

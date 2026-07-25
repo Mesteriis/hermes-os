@@ -37,16 +37,18 @@ pub(super) struct StartedMailRuntime {
 
 pub(super) fn installed_communications_mail_release(root: &Path) -> InstalledSignedBundle {
     let mut artifacts = communications_release_artifacts();
-    artifacts.push(
-        SignedRuntimeArtifact::new(
-            MAIL_RELEASE_ARTIFACT_ID,
-            mail_binary(),
-            mail_module_descriptor_v1("managed-mail-live").encode_to_vec(),
-        )
-        .with_settings_schema(mail_settings_schema_bytes_v1()),
-    );
+    artifacts.push(mail_release_artifact());
     InstalledSignedBundle::install(root, &artifacts)
         .expect("install signed Communications and Mail release")
+}
+
+pub(super) fn mail_release_artifact() -> SignedRuntimeArtifact {
+    SignedRuntimeArtifact::new(
+        MAIL_RELEASE_ARTIFACT_ID,
+        mail_binary(),
+        mail_module_descriptor_v1("managed-mail-live").encode_to_vec(),
+    )
+    .with_settings_schema(mail_settings_schema_bytes_v1())
 }
 
 pub(super) fn seed_mail_vault(vault_dir: &Path) {

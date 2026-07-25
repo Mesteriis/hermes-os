@@ -2009,6 +2009,8 @@ dependencies = [
  "h3",
  "h3-quinn",
  "hermes-attachment-security-contract",
+ "hermes-attachment-security-persistence",
+ "hermes-attachment-security-runtime",
  "hermes-blob-client",
  "hermes-communications-api",
  "hermes-communications-attachment-contract",

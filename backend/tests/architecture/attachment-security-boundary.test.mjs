@@ -305,6 +305,61 @@ test('Attachment Security release assembly is a separate unsigned engine unit', 
   );
 });
 
+test('Attachment Security managed conformance launches the signed Engine through typed settings', async () => {
+  const [manifest, script, setup, flow, clamav] = await Promise.all([
+    readFile(
+      new URL('tests/support/kernel-recovery/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/'
+          + 'attachment_security_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/'
+          + 'attachment_security_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/'
+          + 'attachment_security_clamav_fixture.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(manifest, /^hermes-attachment-security-runtime =/m);
+  assert.match(script, /'-p',\s*'hermes-attachment-security-runtime'/);
+  assert.match(script, /HERMES_ATTACHMENT_SECURITY_RUNTIME_BIN:/);
+  assert.match(
+    script,
+    /managed_attachment_security_engine_starts_with_exact_signed_contracts/,
+  );
+  assert.match(setup, /SignedRuntimeArtifact::new\(/);
+  assert.match(setup, /attachment_security_module_descriptor_v1\(/);
+  assert.match(setup, /start_reserved_engine\(/);
+  assert.doesNotMatch(setup, /start_reserved_(?:domain|integration)\(/);
+  assert.match(setup, /ManagedEngineRuntimeConfigurationV1/);
+  assert.match(setup, /attachment_security_settings_snapshot\(/);
+  assert.match(flow, /supervisor\s*\.is_active\(&attachment_security\.registration_id\)/);
+  assert.match(clamav, /Ipv4Addr::LOCALHOST/);
+  assert.match(clamav, /b"zINSTREAM\\0"/);
+  assert.doesNotMatch(
+    `${setup}\n${flow}`,
+    /hermes_communications_(?:domain|persistence|runtime)/,
+  );
+});
+
 test('staged Attachment Security packages do not open the production engine gate', async () => {
   const policy = JSON.parse(await readFile(POLICY_PATH, 'utf8'));
   const productionPackages = policy.implementation.productionPackages;
