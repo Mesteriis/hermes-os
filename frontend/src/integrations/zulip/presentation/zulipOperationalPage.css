@@ -1,0 +1,174 @@
+.zulip-operational-page {
+	display: grid;
+	gap: var(--h-space-5);
+	min-height: 100%;
+	padding: var(--h-space-5);
+	color: var(--h-color-text);
+	background:
+		radial-gradient(circle at 10% 0%, color-mix(in srgb, #6542c4 13%, transparent), transparent 34rem),
+		var(--h-color-bg);
+}
+
+.zulip-operational-page > header {
+	max-width: 54rem;
+}
+
+.zulip-operational-page > header > span,
+.zulip-operational-card > div > span {
+	display: block;
+	margin-bottom: var(--h-space-2);
+	color: #6542c4;
+	font-size: var(--h-font-size-xs);
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.zulip-operational-page h1,
+.zulip-operational-page h2,
+.zulip-operational-page p {
+	margin: 0;
+}
+
+.zulip-operational-page h1 {
+	font-size: clamp(1.75rem, 2.8vw, 2.6rem);
+	letter-spacing: -0.045em;
+}
+
+.zulip-operational-page h2 {
+	font-size: var(--h-font-size-lg);
+}
+
+.zulip-operational-page > header p,
+.zulip-operational-card > div p,
+.zulip-operational-empty,
+.zulip-operational-card small {
+	margin-top: var(--h-space-2);
+	color: var(--h-color-text-muted);
+}
+
+.zulip-operational-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--h-space-4);
+}
+
+.zulip-operational-card {
+	display: grid;
+	align-content: start;
+	gap: var(--h-space-4);
+	padding: var(--h-space-5);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-sm);
+}
+
+.zulip-operational-card label,
+.zulip-status-loader {
+	display: grid;
+	gap: var(--h-space-2);
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	font-weight: 650;
+}
+
+.zulip-operational-card input,
+.zulip-operational-card textarea,
+.zulip-operational-card button {
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+}
+
+.zulip-operational-card input,
+.zulip-operational-card textarea {
+	width: 100%;
+	padding: var(--h-space-3);
+	color: var(--h-color-text);
+	background: var(--h-color-bg);
+}
+
+.zulip-operational-card textarea {
+	resize: vertical;
+}
+
+.zulip-operational-card button {
+	min-height: 2.6rem;
+	padding: 0 var(--h-space-4);
+	color: var(--h-color-bg);
+	font-weight: 700;
+	background: #6542c4;
+}
+
+.zulip-operational-card button:disabled {
+	opacity: 0.5;
+}
+
+.zulip-destination-selector {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--h-space-2);
+}
+
+.zulip-destination-selector button {
+	color: var(--h-color-text-muted);
+	background: var(--h-color-bg);
+}
+
+.zulip-destination-selector button[aria-pressed='true'] {
+	color: var(--h-color-bg);
+	background: #6542c4;
+}
+
+.zulip-status-loader > div {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: var(--h-space-2);
+}
+
+.zulip-operation-status {
+	display: grid;
+	margin: 0;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	overflow: hidden;
+}
+
+.zulip-operation-status > div {
+	display: grid;
+	grid-template-columns: minmax(8rem, 0.38fr) minmax(0, 1fr);
+	gap: var(--h-space-3);
+	padding: var(--h-space-3);
+}
+
+.zulip-operation-status > div + div {
+	border-top: 1px solid var(--h-color-border);
+}
+
+.zulip-operation-status dt {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+}
+
+.zulip-operation-status dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+	font-weight: 650;
+}
+
+.zulip-operational-notice {
+	padding: var(--h-space-3) var(--h-space-4);
+	border: 1px solid color-mix(in srgb, #6542c4 45%, var(--h-color-border));
+	border-radius: var(--h-radius-md);
+	background: color-mix(in srgb, #6542c4 8%, var(--h-color-surface));
+}
+
+@media (max-width: 800px) {
+	.zulip-operational-page {
+		padding: var(--h-space-3);
+	}
+
+	.zulip-operational-grid {
+		grid-template-columns: 1fr;
+	}
+}

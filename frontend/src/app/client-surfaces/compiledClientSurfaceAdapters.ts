@@ -8,6 +8,7 @@ export const compiledClientSurfaceAdapterIds: readonly ClientSurfaceAdapterId[] 
 	'mail-integration',
 	'telegram-integration',
 	'whatsapp-integration',
+	'zulip-integration',
 	'system-control',
 ]
 

@@ -4,12 +4,14 @@
 Дата: 2026-07-26
 Состояние реализации: выполняется по атомарным frontend slices. Exact
 client-surface admission, app-owned compiled-adapter registry и active canonical
-Communications page реализованы. Active Mail, Telegram и WhatsApp operational
-pages используют только свои generated contracts; mutation и sync controls
-проверяют exact capabilities. WhatsApp browser page не обходит host-only
-provider execution. Provider gates остаются закрыты до provider-owned settings
-и удаления scoped legacy REST. Zulip и Settings composition остаются закрыты
-до собственных executable gates ниже.
+Communications page реализованы. Active Mail, Telegram, WhatsApp и Zulip
+operational pages используют только свои generated contracts; mutation и sync
+controls проверяют exact capabilities. WhatsApp browser page не обходит
+host-only provider execution. Zulip page экспонирует только доказанные
+stream/direct commands и terminal status, не создавая общий chat projection.
+Provider gates остаются закрыты до provider-owned settings и удаления scoped
+legacy REST. Settings composition остаётся закрыта до собственного executable
+gate ниже.
 
 Зависит от:
 

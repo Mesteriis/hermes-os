@@ -12,6 +12,7 @@ import TelegramOperationalRoute from '../../integrations/telegram/views/Telegram
 import { hasClientModuleCapability } from '../client-surfaces/clientModuleCapabilities'
 import WhatsAppOperationalRoute from '../../integrations/whatsapp/views/WhatsAppOperationalRoute.vue'
 import MailOperationalRoute from '../../integrations/mail/views/MailOperationalRoute.vue'
+import ZulipOperationalRoute from '../../integrations/zulip/views/ZulipOperationalRoute.vue'
 
 const props = defineProps<{ gatewayAccessMode: BrowserGatewayAccessModeV1 }>()
 
@@ -40,6 +41,9 @@ const mailDeliveryAvailable = computed(() =>
 )
 const mailSyncAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.sync.v1'),
+)
+const zulipCommandAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'zulip.command.v1'),
 )
 
 watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mode]) => {
@@ -103,6 +107,10 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 				<WhatsAppOperationalRoute
 					v-else-if="selectedRouteId === 'communications-whatsapp'"
 					:can-send="whatsAppCommandAvailable"
+				/>
+				<ZulipOperationalRoute
+					v-else-if="selectedRouteId === 'communications-zulip'"
+					:can-command="zulipCommandAvailable"
 				/>
 				<SystemControlPage
 					v-else-if="selectedTopLevelRouteId === 'settings'"
