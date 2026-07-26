@@ -10,7 +10,48 @@
       "role": "integration",
       "owner": "telegram",
       "state": "planned",
+      "dependsOn": [
+        "telegram_core_operational_v1",
+        "telegram_runtime_reconfiguration_v1",
+        "telegram_folder_reassignment_v1",
+        "telegram_automation_v1",
+        "telegram_calls_operational_v1"
+      ]
+    },
+    {
+      "gate": "telegram_core_operational_v1",
+      "role": "integration",
+      "owner": "telegram",
+      "state": "planned",
       "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
+    },
+    {
+      "gate": "telegram_runtime_reconfiguration_v1",
+      "role": "integration",
+      "owner": "telegram",
+      "state": "planned",
+      "dependsOn": ["telegram_core_operational_v1"]
+    },
+    {
+      "gate": "telegram_folder_reassignment_v1",
+      "role": "integration",
+      "owner": "telegram",
+      "state": "planned",
+      "dependsOn": ["telegram_core_operational_v1"]
+    },
+    {
+      "gate": "telegram_automation_v1",
+      "role": "integration",
+      "owner": "telegram",
+      "state": "planned",
+      "dependsOn": ["telegram_core_operational_v1", "scheduler_v1"]
+    },
+    {
+      "gate": "telegram_calls_operational_v1",
+      "role": "integration",
+      "owner": "telegram",
+      "state": "planned",
+      "dependsOn": ["telegram_core_operational_v1"]
     },
     {
       "gate": "whatsapp_full_operational_v1",

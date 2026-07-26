@@ -121,7 +121,7 @@ source owner query/event
 |---|---|---|
 | Canonical accounts, conversations, messages, participants, references, attachment anchors and evidence search | `communications` domain | Только provider-neutral evidence и provenance |
 | Mail folders, threads, drafts, compose, templates, signatures, mailbox lifecycle, sync and provider delivery | `mail` integration | Mail-specific operational truth |
-| Telegram authorization, chats, topics, folders, history, search, media and mutations | `telegram` integration | Telegram operational truth |
+| Telegram authorization, chats, topics, folders, history, search, media, mutations, automation and calls | `telegram` integration | Telegram operational truth; runtime reconfiguration, folder reassignment, automation and calls remain separate capability slices |
 | WhatsApp host lifecycle, dialogs, history, search, media, status and mutations | `whatsapp` integration | WhatsApp operational truth; execution remains host-only |
 | Zulip authorization, streams, topics, direct messages, history, search, files and mutations | `zulip` integration | Zulip operational truth |
 | Cross-provider delivery intent, delayed send, undo/outbox orchestration and bulk/cross-channel action | distinct use-case workflow | Не хранит provider operational truth |
@@ -387,7 +387,12 @@ runtime не является domain, а app composition не становитс
 | Mail accounts/sync/folders/threads/messages | Mail | `mail_operational_read_v1` |
 | Mail drafts/compose/templates/signatures | Mail | `mail_composition_v1` |
 | Mail mutations and delivery | Mail | `mail_operational_command_v1` |
-| Telegram full operational client | Telegram | `telegram_full_operational_v1` |
+| Telegram authorization, history, search, media, mutations and operation audit | Telegram | `telegram_core_operational_v1` |
+| Telegram atomic runtime restart/reconfiguration | Telegram | `telegram_runtime_reconfiguration_v1` |
+| Telegram folder reassignment | Telegram | `telegram_folder_reassignment_v1` |
+| Telegram automation policies, templates and dry-run | Telegram | `telegram_automation_v1` |
+| Telegram provider calls and call history | Telegram | `telegram_calls_operational_v1` |
+| Telegram full operational client closure | Telegram | `telegram_full_operational_v1` after all Telegram gates above |
 | WhatsApp public operational queries/client | WhatsApp | `whatsapp_full_operational_v1` |
 | Zulip lifecycle/history/search/client | Zulip | `zulip_full_operational_v1` |
 | Provider-neutral delivery intent | `communication_delivery_intent` workflow | `communication_delivery_intent_v1` |
@@ -426,8 +431,15 @@ release.
 
 1. `communications_capability_reconstruction_inventory_v1` — этот ADR,
    executable inventory assertions и gap ledger.
-2. `telegram_full_operational_v1` — использовать уже существующий typed
-   backend contract и закрыть полный vertical client slice.
+2. Telegram проходит независимые gates:
+   `telegram_core_operational_v1`,
+   `telegram_runtime_reconfiguration_v1`,
+   `telegram_folder_reassignment_v1`,
+   `telegram_automation_v1`,
+   `telegram_calls_operational_v1`. Только их совокупное evidence закрывает
+   umbrella gate `telegram_full_operational_v1`; существующий typed backend и
+   frontend не считаются полным переносом, пока отсутствует хотя бы один из
+   этих контрактов.
 3. `whatsapp_full_operational_v1` — отдельно admitted public queries, runtime
    handler и client.
 4. `zulip_full_operational_v1` — lifecycle/read projection/storage/runtime и

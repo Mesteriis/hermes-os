@@ -93,6 +93,30 @@ test('provider operational slices remain separate integrations', async () => {
   }
 });
 
+test('Telegram completion remains closed behind its independent capability slices', async () => {
+  const inventory = JSON.parse(await readFile(INVENTORY_PATH, 'utf8'));
+  const telegramSlices = new Map(
+    inventory.slices
+      .filter(({ owner }) => owner === 'telegram')
+      .map((slice) => [slice.gate, slice]),
+  );
+  const requiredTelegramGates = [
+    'telegram_automation_v1',
+    'telegram_calls_operational_v1',
+    'telegram_core_operational_v1',
+    'telegram_folder_reassignment_v1',
+    'telegram_runtime_reconfiguration_v1',
+  ];
+  const fullGate = telegramSlices.get('telegram_full_operational_v1');
+
+  assert.deepEqual(
+    [...telegramSlices.keys()].filter((gate) => gate !== 'telegram_full_operational_v1').sort(),
+    requiredTelegramGates,
+  );
+  assert.deepEqual([...fullGate.dependsOn].sort(), requiredTelegramGates);
+  assert.ok([...telegramSlices.values()].every(({ role, state }) => role === 'integration' && state === 'planned'));
+});
+
 test('cross-owner and AI use cases are distinct workflow units', async () => {
   const inventory = JSON.parse(await readFile(INVENTORY_PATH, 'utf8'));
   const workflowOwners = inventory.slices
