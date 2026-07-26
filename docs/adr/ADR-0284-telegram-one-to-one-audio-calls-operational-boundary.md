@@ -7,8 +7,12 @@
 projection, owner-local PostgreSQL history/replay и exact managed-runtime
 route с restart/stale-fence conformance. `telegram_call_signaling_v1`,
 `telegram_call_media_v1` и umbrella `telegram_calls_operational_v1` остаются
-не реализованы. Historical fixture transcript не является evidence ни для
-одного gate этого ADR.
+закрыты. Для media реализованы отдельные typed contract и
+`hermes-telegram-call-media-tgcalls`, exact-source build script, native C ABI,
+system-audio implementation patch и exact dylib loader. Это ещё не доказывает
+assembly/runtime binding, TDLib ready/signaling wiring, teardown/fence
+conformance, real audio loop или authorized live call. Historical fixture
+transcript не является evidence ни для одного gate этого ADR.
 
 Уточняет:
 
@@ -250,6 +254,25 @@ Encryption key, raw config and native debug log:
 The exact tgcalls library version and native bytes are release artifacts pinned
 by the Telegram assembly fragment. Runtime path settings, arbitrary native
 library lookup and fallback to unverified system bytes are forbidden.
+
+Pinned native release inputs для первой реализации:
+
+- Telegram-iOS
+  `6ad963e5b62d354da79040f388ae2b9132fb17b8`;
+- tgcalls `e3069322a3d1e16ecb11a5e302242e59ddd7f09e`, LGPL-3.0 license bytes
+  `da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768`;
+- WebRTC `3817e906cb6c22ec9cc62023b073e1a668d9cb33`;
+- Bazel 8.4.2 bytes
+  `45e9388abf21d1107e146ea366ad080eb93cb6a5f3a4a3b048f78de0bc3faffa`;
+- Xcode 26.2, как требует pinned Telegram-iOS `versions.json`.
+
+Telegram-iOS `tgcalls_core` не включает macOS
+`AudioDeviceModule::Create` implementation в final consumer. Exact source
+patch добавляет отдельный CoreAudio target из pinned WebRTC sources; production
+bridge не линкует `FakeAudioDeviceModule`, synthetic recorder или no-op
+renderer. Локальная сборка другим Xcode может использоваться только как
+development evidence ABI/loader; release artifact обязан собираться exact
+script с toolchain check и provenance manifest.
 
 The media adapter reports typed connected/disconnected state, selected
 connection identity, monotonic duration and sanitized failure category. These

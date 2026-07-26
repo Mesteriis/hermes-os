@@ -2479,6 +2479,18 @@ dependencies = [
 [[package]]
 name = "hermes-telegram-call-media-contract"
 version = "0.1.0"
+dependencies = [
+ "zeroize",
+]
+
+[[package]]
+name = "hermes-telegram-call-media-tgcalls"
+version = "0.1.0"
+dependencies = [
+ "hermes-telegram-call-media-contract",
+ "libloading",
+ "zeroize",
+]
 
 [[package]]
 name = "hermes-telegram-calls-api"

@@ -1,0 +1,63 @@
+diff --git a/third-party/webrtc/BUILD b/third-party/webrtc/BUILD
+index f9949f82b..1f2927fc4 100644
+--- a/third-party/webrtc/BUILD
++++ b/third-party/webrtc/BUILD
+@@ -3261,3 +3261,58 @@ objc_library(
+     ],
+     visibility = ["//visibility:public"],
+ )
++
++# Hermes production tgcalls bridge uses the platform-default macOS audio
++# device. The upstream tgcalls_core target references AudioDeviceModule::Create
++# but intentionally omits the non-iOS platform implementation sources.
++cc_library(
++    name = "hermes_portaudio_ringbuffer",
++    srcs = [
++        "webrtc/modules/third_party/portaudio/pa_ringbuffer.c",
++    ],
++    hdrs = [
++        "webrtc/modules/third_party/portaudio/pa_memorybarrier.h",
++        "webrtc/modules/third_party/portaudio/pa_ringbuffer.h",
++    ],
++    copts = [
++        "-Ithird-party/webrtc/webrtc",
++        "-DWEBRTC_MAC",
++        "-DWEBRTC_POSIX",
++    ],
++    visibility = ["//visibility:private"],
++)
++
++cc_library(
++    name = "hermes_macos_audio_device",
++    srcs = [
++        "webrtc/modules/audio_device/audio_device_impl.cc",
++        "webrtc/modules/audio_device/mac/audio_device_mac.cc",
++        "webrtc/modules/audio_device/mac/audio_mixer_manager_mac.cc",
++    ],
++    hdrs = [
++        "webrtc/modules/audio_device/audio_device_impl.h",
++        "webrtc/modules/audio_device/mac/audio_device_mac.h",
++        "webrtc/modules/audio_device/mac/audio_mixer_manager_mac.h",
++    ],
++    copts = [
++        "-Ithird-party/webrtc/webrtc",
++        "-Ithird-party/webrtc/dependencies",
++        "-Ithird-party/webrtc/absl",
++        "-DWEBRTC_MAC",
++        "-DWEBRTC_POSIX",
++        "-DWEBRTC_INCLUDE_INTERNAL_AUDIO_DEVICE",
++        "-std=c++17",
++        "-w",
++    ],
++    deps = [
++        ":hermes_portaudio_ringbuffer",
++        ":webrtc",
++    ],
++    linkopts = [
++        "-framework ApplicationServices",
++        "-framework AudioToolbox",
++        "-framework CoreAudio",
++        "-framework CoreGraphics",
++    ],
++    visibility = ["//visibility:public"],
++)

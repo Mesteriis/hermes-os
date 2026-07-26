@@ -100,3 +100,59 @@ test('Telegram Calls history keeps volatile TDLib identity scoped to runtime gen
   assert.match(schema, /telegram_call_state_history/);
   assert.match(schema, /telegram_call_realtime_frames/);
 });
+
+test('Telegram call media contract and tgcalls adapter remain separate integration units', async () => {
+  const [contractManifest, adapterManifest, contract, adapter] = await Promise.all([
+    source('src/telegram-call-media-contract/Cargo.toml'),
+    source('src/telegram-call-media-tgcalls/Cargo.toml'),
+    source('src/telegram-call-media-contract/src/lib.rs'),
+    source('src/telegram-call-media-tgcalls/src/lib.rs'),
+  ]);
+
+  for (const manifest of [contractManifest, adapterManifest]) {
+    assert.match(manifest, /role = "integration"/);
+    assert.match(manifest, /owner = "telegram"/);
+    assert.doesNotMatch(manifest, /communications-domain|kernel|gateway|sqlx|prost/);
+  }
+  assert.doesNotMatch(contractManifest, /libloading|telegram-runtime|telegram-tdlib/);
+  assert.match(adapterManifest, /hermes-telegram-call-media-contract/);
+  assert.match(adapterManifest, /libloading/);
+  assert.doesNotMatch(
+    adapterManifest,
+    /telegram-runtime|telegram-tdlib|telegram-persistence|telegram-assembly/,
+  );
+  assert.match(contract, /TelegramCallReadyPlanV1/);
+  assert.match(contract, /TelegramCallSecretBytesV1/);
+  assert.match(contract, /TelegramCallMediaEventV1/);
+  assert.match(adapter, /TgCallsMediaAdapter/);
+  assert.match(adapter, /load_exact/);
+  assert.doesNotMatch(adapter, /Library::new\(["'][^"']+["']\)/);
+});
+
+test('Telegram tgcalls native build is pinned, system-audio backed and secret-negative', async () => {
+  const [bridge, bridgeBuild, patch, buildScript] = await Promise.all([
+    source('src/telegram-call-media-tgcalls/native/bridge.cpp'),
+    source('src/telegram-call-media-tgcalls/native/BUILD.bazel'),
+    source(
+      'src/telegram-call-media-tgcalls/native/patches/telegram-ios-macos-audio-device.patch',
+    ),
+    source('scripts/build-telegram-tgcalls-bridge-macos.sh'),
+  ]);
+
+  assert.match(bridgeBuild, /\/\/submodules\/TgVoipWebrtc:tgcalls_core/);
+  assert.match(bridgeBuild, /\/\/third-party\/webrtc:hermes_macos_audio_device/);
+  assert.doesNotMatch(bridgeBuild, /FakeAudioDeviceModule|SineRecorder|NoOpRenderer/);
+  assert.match(bridge, /createAudioDeviceModule = \{\}/);
+  assert.match(bridge, /SetLoggingFunction/);
+  assert.match(bridge, /std::fill\(typed->key->begin\(\), typed->key->end\(\), 0\)/);
+  assert.doesNotMatch(bridge, /fprintf|std::cout|std::cerr|printf\(/);
+  assert.match(patch, /audio_device_impl\.cc/);
+  assert.match(patch, /audio_device_mac\.cc/);
+  assert.match(buildScript, /6ad963e5b62d354da79040f388ae2b9132fb17b8/);
+  assert.match(buildScript, /e3069322a3d1e16ecb11a5e302242e59ddd7f09e/);
+  assert.match(buildScript, /3817e906cb6c22ec9cc62023b073e1a668d9cb33/);
+  assert.match(buildScript, /45e9388abf21d1107e146ea366ad080eb93cb6a5f3a4a3b048f78de0bc3faffa/);
+  assert.match(buildScript, /da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768/);
+  assert.match(buildScript, /readonly XCODE_VERSION="26\.2"/);
+  assert.doesNotMatch(buildScript, /submodule update --remote|--branch\s/);
+});

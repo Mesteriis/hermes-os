@@ -69,6 +69,7 @@ members = [
   "src/telegram-calls-core",
   "src/telegram-calls-persistence",
   "src/telegram-call-media-contract",
+  "src/telegram-call-media-tgcalls",
   "src/telegram-core",
   "src/telegram-tdlib",
   "src/telegram-persistence",
