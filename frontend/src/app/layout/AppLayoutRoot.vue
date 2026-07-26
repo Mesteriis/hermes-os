@@ -7,6 +7,7 @@ import AppLayout from '../../shared/ui/shell/AppLayout.vue'
 import AppNavbar from '../../shared/ui/shell/AppNavbar.vue'
 import { BrowserGatewayAccessModeV1 } from '../../gen/hermes/gateway/v1/browser_session_pb'
 import { compiledClientSurfaceAdapterIds } from '../client-surfaces/compiledClientSurfaceAdapters'
+import CanonicalCommunicationsRoute from '../../domains/communications/views/CanonicalCommunicationsRoute.vue'
 
 const props = defineProps<{ gatewayAccessMode: BrowserGatewayAccessModeV1 }>()
 
@@ -71,8 +72,11 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					/>
 				</template>
 
+				<CanonicalCommunicationsRoute
+					v-if="selectedRouteId === 'communications-all'"
+				/>
 				<SystemControlPage
-					v-if="selectedTopLevelRouteId === 'settings'"
+					v-else-if="selectedTopLevelRouteId === 'settings'"
 					:bootstrap="bootstrap"
 					:route-downgrade-reason="routeDowngradeReason"
 					:developer-mode="props.gatewayAccessMode === BrowserGatewayAccessModeV1.LAN_DEVELOPMENT"

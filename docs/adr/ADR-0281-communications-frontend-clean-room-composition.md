@@ -3,8 +3,8 @@
 Статус: Принято
 Дата: 2026-07-26
 Состояние реализации: выполняется по атомарным frontend slices. Exact
-client-surface admission и app-owned compiled-adapter registry реализованы;
-canonical Communications page, provider operational pages и Settings
+client-surface admission, app-owned compiled-adapter registry и active canonical
+Communications page реализованы. Provider operational pages и Settings
 composition остаются закрыты до собственных executable gates ниже.
 
 Зависит от:

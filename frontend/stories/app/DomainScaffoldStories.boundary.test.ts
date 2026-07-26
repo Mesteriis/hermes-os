@@ -19,11 +19,6 @@ const domainScaffoldStories: readonly DomainScaffoldStoryExpectation[] = [
     modelKey: 'calendar'
   },
   {
-    fileName: 'Communications.stories.ts',
-    storyTitle: 'Hermes App/Communications/Scaffold',
-    modelKey: 'communications'
-  },
-  {
     fileName: 'Documents.stories.ts',
     storyTitle: 'Hermes App/Documents/Scaffold',
     modelKey: 'documents'
@@ -124,5 +119,14 @@ describe('domain scaffold Storybook coverage', () => {
     expect(componentSource).toContain('directoryFilter')
     expect(componentSource).toContain('toggleAddressBook')
     expect(componentSource).toContain('is_address_book')
+  })
+
+  it('keeps Communications on the canonical owner story instead of the scaffold placeholder', () => {
+    const source = readFileSync(new URL('./Communications.stories.ts', import.meta.url), 'utf8')
+
+    expect(source).toContain("title: 'Hermes App/Communications/Canonical'")
+    expect(source).toContain('CanonicalCommunicationsPage')
+    expect(source).not.toContain('createDomainScaffoldStory')
+    expect(source).not.toContain('domainScaffoldModels.communications')
   })
 })

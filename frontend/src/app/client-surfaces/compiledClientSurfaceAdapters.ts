@@ -4,6 +4,7 @@ import type {
 } from '../../platform/client-runtime/clientSurfaces'
 
 export const compiledClientSurfaceAdapterIds: readonly ClientSurfaceAdapterId[] = [
+	'communications-owner',
 	'system-control',
 ]
 

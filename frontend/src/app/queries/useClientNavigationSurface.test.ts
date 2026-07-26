@@ -13,10 +13,34 @@ describe('compiled client navigation', () => {
 
 		expect(productRoutes.every((item) => item.disabled)).toBe(true)
 		expect(tree.find((item) => item.id === 'settings')?.disabled).toBe(false)
-		expect(compiledClientSurfaceAdapterIds).toEqual(['system-control'])
+		expect(compiledClientSurfaceAdapterIds).toEqual(['communications-owner', 'system-control'])
 	})
 
-	it('fails closed when Gateway marks a route available without a compiled owner adapter', () => {
+	it('enables only the admitted canonical Communications child', () => {
+		const bootstrap = Object.assign(new Map(recoveryClientBootstrap()), {
+			modules: [] as const,
+			systemStatus: [] as const,
+		})
+		bootstrap.set('communications-all', {
+			state: ClientSurfaceAvailabilityStateV1.AVAILABLE,
+			reasonCode: '',
+			available: true,
+		})
+
+		const communications = buildClientRouteTree(bootstrap).find(
+			(item) => item.id === 'communications',
+		)
+
+		expect(communications?.disabled).toBe(false)
+		expect(communications?.children?.find((item) => item.id === 'communications-all')).toMatchObject({
+			disabled: false,
+			disabledReason: '',
+		})
+		expect(communications?.children?.filter((item) => item.id !== 'communications-all')
+			.every((item) => item.disabled)).toBe(true)
+	})
+
+	it('enables only routes with exact compiled adapters when Gateway marks every route available', () => {
 		const bootstrap = Object.assign(new Map(recoveryClientBootstrap()), { modules: [] as const, systemStatus: [] as const })
 		for (const surface of clientSurfaceCatalog) {
 			if (surface.routeId === 'settings') continue
@@ -28,10 +52,21 @@ describe('compiled client navigation', () => {
 		}
 
 		const tree = buildClientRouteTree(bootstrap)
-		const productRoutes = flattenNavigationTree(tree).filter((item) => item.id !== 'settings')
+		const productRoutes = flattenNavigationTree(tree).filter(
+			(item) => item.id !== 'settings' && item.id !== 'communications',
+		)
+		const canonicalCommunications = productRoutes.find(
+			(item) => item.id === 'communications-all',
+		)
+		const uncompiledRoutes = productRoutes.filter(
+			(item) => item.id !== 'communications-all',
+		)
 
-		expect(productRoutes.every((item) => item.disabled)).toBe(true)
-		expect(productRoutes.every((item) => item.disabledReason === 'client_route_adapter_unavailable')).toBe(true)
+		expect(canonicalCommunications).toMatchObject({ disabled: false, disabledReason: '' })
+		expect(uncompiledRoutes.every((item) => item.disabled)).toBe(true)
+		expect(uncompiledRoutes.every(
+			(item) => item.disabledReason === 'client_route_adapter_unavailable',
+		)).toBe(true)
 	})
 
 	it('does not retain the legacy navbar or Communications facade as an active fallback', () => {
