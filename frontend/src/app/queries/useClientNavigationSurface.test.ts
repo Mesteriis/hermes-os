@@ -13,15 +13,24 @@ describe('compiled client navigation', () => {
 
 		expect(productRoutes.every((item) => item.disabled)).toBe(true)
 		expect(tree.find((item) => item.id === 'settings')?.disabled).toBe(false)
-		expect(compiledClientSurfaceAdapterIds).toEqual(['communications-owner', 'system-control'])
+		expect(compiledClientSurfaceAdapterIds).toEqual([
+			'communications-owner',
+			'telegram-integration',
+			'system-control',
+		])
 	})
 
-	it('enables only the admitted canonical Communications child', () => {
+	it('enables only the admitted Communications children', () => {
 		const bootstrap = Object.assign(new Map(recoveryClientBootstrap()), {
 			modules: [] as const,
 			systemStatus: [] as const,
 		})
 		bootstrap.set('communications-all', {
+			state: ClientSurfaceAvailabilityStateV1.AVAILABLE,
+			reasonCode: '',
+			available: true,
+		})
+		bootstrap.set('communications-telegram', {
 			state: ClientSurfaceAvailabilityStateV1.AVAILABLE,
 			reasonCode: '',
 			available: true,
@@ -36,7 +45,13 @@ describe('compiled client navigation', () => {
 			disabled: false,
 			disabledReason: '',
 		})
-		expect(communications?.children?.filter((item) => item.id !== 'communications-all')
+		expect(communications?.children?.find((item) => item.id === 'communications-telegram')).toMatchObject({
+			disabled: false,
+			disabledReason: '',
+		})
+		expect(communications?.children?.filter(
+			(item) => item.id !== 'communications-all' && item.id !== 'communications-telegram',
+		)
 			.every((item) => item.disabled)).toBe(true)
 	})
 
@@ -55,14 +70,15 @@ describe('compiled client navigation', () => {
 		const productRoutes = flattenNavigationTree(tree).filter(
 			(item) => item.id !== 'settings' && item.id !== 'communications',
 		)
-		const canonicalCommunications = productRoutes.find(
-			(item) => item.id === 'communications-all',
+		const compiledRoutes = productRoutes.filter(
+			(item) => item.id === 'communications-all' || item.id === 'communications-telegram',
 		)
 		const uncompiledRoutes = productRoutes.filter(
-			(item) => item.id !== 'communications-all',
+			(item) => item.id !== 'communications-all' && item.id !== 'communications-telegram',
 		)
 
-		expect(canonicalCommunications).toMatchObject({ disabled: false, disabledReason: '' })
+		expect(compiledRoutes).toHaveLength(2)
+		expect(compiledRoutes.every((item) => !item.disabled && item.disabledReason === '')).toBe(true)
 		expect(uncompiledRoutes.every((item) => item.disabled)).toBe(true)
 		expect(uncompiledRoutes.every(
 			(item) => item.disabledReason === 'client_route_adapter_unavailable',

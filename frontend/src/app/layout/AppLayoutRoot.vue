@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import Toast from '../../shared/ui/Toast.vue'
 import SystemControlPage from '../../platform/system-control/SystemControlPage.vue'
 import { useClientNavigationSurface } from '../queries/useClientNavigationSurface'
@@ -8,6 +8,8 @@ import AppNavbar from '../../shared/ui/shell/AppNavbar.vue'
 import { BrowserGatewayAccessModeV1 } from '../../gen/hermes/gateway/v1/browser_session_pb'
 import { compiledClientSurfaceAdapterIds } from '../client-surfaces/compiledClientSurfaceAdapters'
 import CanonicalCommunicationsRoute from '../../domains/communications/views/CanonicalCommunicationsRoute.vue'
+import TelegramOperationalRoute from '../../integrations/telegram/views/TelegramOperationalRoute.vue'
+import { hasClientModuleCapability } from '../client-surfaces/clientModuleCapabilities'
 
 const props = defineProps<{ gatewayAccessMode: BrowserGatewayAccessModeV1 }>()
 
@@ -25,6 +27,9 @@ const selectedRouteId = navbar.selectedRouteId
 const selectedTopLevelRouteId = navbar.selectedTopLevelRouteId
 const bootstrap = navbar.bootstrap
 const routeDowngradeReason = navbar.routeDowngradeReason
+const telegramCommandAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'telegram.command.v1'),
+)
 
 watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mode]) => {
 	document.documentElement.setAttribute('data-ui-theme', theme)
@@ -74,6 +79,10 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 
 				<CanonicalCommunicationsRoute
 					v-if="selectedRouteId === 'communications-all'"
+				/>
+				<TelegramOperationalRoute
+					v-else-if="selectedRouteId === 'communications-telegram'"
+					:can-send="telegramCommandAvailable"
 				/>
 				<SystemControlPage
 					v-else-if="selectedTopLevelRouteId === 'settings'"

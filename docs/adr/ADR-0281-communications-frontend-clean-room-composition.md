@@ -4,8 +4,11 @@
 Дата: 2026-07-26
 Состояние реализации: выполняется по атомарным frontend slices. Exact
 client-surface admission, app-owned compiled-adapter registry и active canonical
-Communications page реализованы. Provider operational pages и Settings
-composition остаются закрыты до собственных executable gates ниже.
+Communications page реализованы. Active Telegram operational page использует
+generated query/command contracts и отдельно проверяет command capability.
+Telegram gate остаётся закрыт до provider-owned settings и удаления scoped
+legacy REST. Остальные provider operational pages и Settings composition
+остаются закрыты до собственных executable gates ниже.
 
 Зависит от:
 

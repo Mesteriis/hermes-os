@@ -5,6 +5,7 @@ import type {
 
 export const compiledClientSurfaceAdapterIds: readonly ClientSurfaceAdapterId[] = [
 	'communications-owner',
+	'telegram-integration',
 	'system-control',
 ]
 
