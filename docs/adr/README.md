@@ -91,6 +91,7 @@ policy через ссылки из новых документов.
 - [ADR-0280: Mail event-gated outbound MIME attachments](ADR-0280-mail-event-gated-outbound-mime-attachments.md)
 - [ADR-0281: Communications frontend clean-room composition](ADR-0281-communications-frontend-clean-room-composition.md)
 - [ADR-0282: Full Communications and Settings capability reconstruction](ADR-0282-full-communications-and-settings-capability-reconstruction.md)
+- [ADR-0283: Telegram automation management and preview boundary](ADR-0283-telegram-automation-management-and-preview-boundary.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также

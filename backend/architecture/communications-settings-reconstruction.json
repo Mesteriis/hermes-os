@@ -44,7 +44,7 @@
       "role": "integration",
       "owner": "telegram",
       "state": "planned",
-      "dependsOn": ["telegram_core_operational_v1", "scheduler_v1"]
+      "dependsOn": ["telegram_core_operational_v1"]
     },
     {
       "gate": "telegram_calls_operational_v1",

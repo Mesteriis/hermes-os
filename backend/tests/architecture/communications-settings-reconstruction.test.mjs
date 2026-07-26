@@ -13,6 +13,10 @@ const ADR_PATH = new URL(
   'docs/adr/ADR-0282-full-communications-and-settings-capability-reconstruction.md',
   PROJECT_ROOT,
 );
+const TELEGRAM_AUTOMATION_ADR_PATH = new URL(
+  'docs/adr/ADR-0283-telegram-automation-management-and-preview-boundary.md',
+  PROJECT_ROOT,
+);
 
 const ALLOWED_ROLES = new Set(['app', 'domain', 'engine', 'integration', 'platform', 'workflow']);
 const BUSINESS_OWNER_ROLES = new Set(['domain', 'engine', 'integration', 'workflow']);
@@ -94,7 +98,11 @@ test('provider operational slices remain separate integrations', async () => {
 });
 
 test('Telegram completion remains closed behind its independent capability slices', async () => {
-  const inventory = JSON.parse(await readFile(INVENTORY_PATH, 'utf8'));
+  const [inventorySource, automationAdrSource] = await Promise.all([
+    readFile(INVENTORY_PATH, 'utf8'),
+    readFile(TELEGRAM_AUTOMATION_ADR_PATH, 'utf8'),
+  ]);
+  const inventory = JSON.parse(inventorySource);
   const telegramSlices = new Map(
     inventory.slices
       .filter(({ owner }) => owner === 'telegram')
@@ -115,6 +123,15 @@ test('Telegram completion remains closed behind its independent capability slice
   );
   assert.deepEqual([...fullGate.dependsOn].sort(), requiredTelegramGates);
   assert.ok([...telegramSlices.values()].every(({ role, state }) => role === 'integration' && state === 'planned'));
+
+  const automationGate = telegramSlices.get('telegram_automation_v1');
+  assert.deepEqual(automationGate.dependsOn, ['telegram_core_operational_v1']);
+  assert.match(automationAdrSource, /hermes-telegram-automation-api/);
+  assert.match(automationAdrSource, /hermes-telegram-automation-core/);
+  assert.match(automationAdrSource, /hermes-telegram-automation-persistence/);
+  assert.match(automationAdrSource, /telegram\.automation\.query\.v1/);
+  assert.match(automationAdrSource, /telegram\.automation\.command\.v1/);
+  assert.match(automationAdrSource, /telegram_automation_execution_v1/);
 });
 
 test('cross-owner and AI use cases are distinct workflow units', async () => {
