@@ -90,6 +90,7 @@ policy через ссылки из новых документов.
 - [ADR-0279: Durable Blob custody scope and operation-scoped grants](ADR-0279-durable-blob-custody-scope-and-operation-scoped-grants.md)
 - [ADR-0280: Mail event-gated outbound MIME attachments](ADR-0280-mail-event-gated-outbound-mime-attachments.md)
 - [ADR-0281: Communications frontend clean-room composition](ADR-0281-communications-frontend-clean-room-composition.md)
+- [ADR-0282: Full Communications and Settings capability reconstruction](ADR-0282-full-communications-and-settings-capability-reconstruction.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -282,3 +283,8 @@ ADR-0279 разделяет ephemeral Blob access fence и durable at-rest custo
 descriptor объявляет exact custody scope и operation set, Kernel выдаёт только
 operation-scoped session, а ciphertext, Vault content-key revision и technical
 quota ledger переживают restart/re-registration без generic read/write grant.
+ADR-0282 расширяет завершённый frontend ownership/transport cutover до полного
+capability reconstruction: Communications остаётся provider-neutral domain,
+Mail/Telegram/WhatsApp/Zulip — независимыми integrations, Settings —
+app-composition, а cross-owner и AI use cases получают отдельные workflow
+units и atomic admission gates.

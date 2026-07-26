@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "adr": "ADR-0282",
+  "status": "incomplete",
+  "completionGate": "communications_settings_reconstruction_complete_v1",
+  "legacyAuthorityAllowed": false,
+  "slices": [
+    {
+      "gate": "telegram_full_operational_v1",
+      "role": "integration",
+      "owner": "telegram",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
+    },
+    {
+      "gate": "whatsapp_full_operational_v1",
+      "role": "integration",
+      "owner": "whatsapp",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
+    },
+    {
+      "gate": "zulip_full_operational_v1",
+      "role": "integration",
+      "owner": "zulip",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
+    },
+    {
+      "gate": "mail_operational_read_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1", "mail_account_lifecycle_v1", "mail.sync.v1"]
+    },
+    {
+      "gate": "mail_account_lifecycle_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1", "vault_v1"]
+    },
+    {
+      "gate": "mail_sync_health_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "planned",
+      "dependsOn": ["mail_account_lifecycle_v1", "mail.sync.v1"]
+    },
+    {
+      "gate": "mail_composition_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1", "mail.delivery.v1"]
+    },
+    {
+      "gate": "mail_operational_command_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "planned",
+      "dependsOn": ["mail_operational_read_v1", "mail.delivery.v1"]
+    },
+    {
+      "gate": "communications_canonical_read_v2",
+      "role": "domain",
+      "owner": "communications",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1", "communications.query.v1"]
+    },
+    {
+      "gate": "communications_content_read_v1",
+      "role": "domain",
+      "owner": "communications",
+      "state": "planned",
+      "dependsOn": ["communications_canonical_read_v2", "communications.blob.v1"]
+    },
+    {
+      "gate": "communications_saved_search_v1",
+      "role": "domain",
+      "owner": "communications",
+      "state": "planned",
+      "dependsOn": ["communications_canonical_read_v2", "communications.search.index.v1"]
+    },
+    {
+      "gate": "communications_sender_insights_v1",
+      "role": "domain",
+      "owner": "communications",
+      "state": "planned",
+      "dependsOn": ["communications_canonical_read_v2", "communications.search.index.v1"]
+    },
+    {
+      "gate": "communications_export_v1",
+      "role": "workflow",
+      "owner": "communications_export",
+      "state": "planned",
+      "dependsOn": ["communications_content_read_v1", "blob_v1"]
+    },
+    {
+      "gate": "communication_delivery_intent_v1",
+      "role": "workflow",
+      "owner": "communication_delivery_intent",
+      "state": "planned",
+      "dependsOn": ["communications_canonical_read_v2"]
+    },
+    {
+      "gate": "communication_delayed_delivery_v1",
+      "role": "workflow",
+      "owner": "communication_delayed_delivery",
+      "state": "planned",
+      "dependsOn": ["communication_delivery_intent_v1", "scheduler_v1"]
+    },
+    {
+      "gate": "communication_bulk_action_v1",
+      "role": "workflow",
+      "owner": "communication_bulk_action",
+      "state": "planned",
+      "dependsOn": ["communication_delivery_intent_v1"]
+    },
+    {
+      "gate": "communication_cross_channel_forward_v1",
+      "role": "workflow",
+      "owner": "communication_cross_channel_forward",
+      "state": "planned",
+      "dependsOn": ["communication_delivery_intent_v1"]
+    },
+    {
+      "gate": "communication_reply_suggestion_v1",
+      "role": "workflow",
+      "owner": "communication_reply_suggestion",
+      "state": "planned",
+      "dependsOn": ["communications_content_read_v1"]
+    },
+    {
+      "gate": "communication_summary_v1",
+      "role": "workflow",
+      "owner": "communication_summary",
+      "state": "planned",
+      "dependsOn": ["communications_content_read_v1"]
+    },
+    {
+      "gate": "communication_translation_v1",
+      "role": "workflow",
+      "owner": "communication_translation",
+      "state": "planned",
+      "dependsOn": ["communications_content_read_v1"]
+    },
+    {
+      "gate": "communication_explanation_v1",
+      "role": "workflow",
+      "owner": "communication_explanation",
+      "state": "planned",
+      "dependsOn": ["communications_content_read_v1"]
+    },
+    {
+      "gate": "communication_recipient_suggestion_v1",
+      "role": "workflow",
+      "owner": "communication_recipient_suggestion",
+      "state": "planned",
+      "dependsOn": ["communications_content_read_v1"]
+    },
+    {
+      "gate": "communication_task_candidate_extraction_v1",
+      "role": "workflow",
+      "owner": "communication_task_candidate_extraction",
+      "state": "planned",
+      "dependsOn": ["communications_content_read_v1"]
+    },
+    {
+      "gate": "communication_note_candidate_extraction_v1",
+      "role": "workflow",
+      "owner": "communication_note_candidate_extraction",
+      "state": "planned",
+      "dependsOn": ["communications_content_read_v1"]
+    },
+    {
+      "gate": "attachment_text_extraction_v1",
+      "role": "workflow",
+      "owner": "attachment_text_extraction",
+      "state": "planned",
+      "dependsOn": ["blob_v1", "attachment_security_engine_v1"]
+    },
+    {
+      "gate": "attachment_preview_v1",
+      "role": "workflow",
+      "owner": "attachment_preview",
+      "state": "planned",
+      "dependsOn": ["blob_v1", "attachment_security_engine_v1"]
+    },
+    {
+      "gate": "attachment_archive_inspection_v1",
+      "role": "engine",
+      "owner": "attachment_archive_inspection",
+      "state": "planned",
+      "dependsOn": ["blob_v1", "attachment_security_engine_v1"]
+    },
+    {
+      "gate": "attachment_translation_v1",
+      "role": "workflow",
+      "owner": "attachment_translation",
+      "state": "planned",
+      "dependsOn": ["attachment_text_extraction_v1"]
+    },
+    {
+      "gate": "communications_call_evidence_v1",
+      "role": "domain",
+      "owner": "communications",
+      "state": "planned",
+      "dependsOn": ["communications_canonical_read_v2"]
+    },
+    {
+      "gate": "call_transcription_v1",
+      "role": "workflow",
+      "owner": "call_transcription",
+      "state": "planned",
+      "dependsOn": ["communications_call_evidence_v1", "blob_v1"]
+    },
+    {
+      "gate": "review_communications_attention_v1",
+      "role": "domain",
+      "owner": "review",
+      "state": "planned",
+      "dependsOn": ["communications_canonical_read_v2"]
+    },
+    {
+      "gate": "mail_contacts_sync_v1",
+      "role": "workflow",
+      "owner": "mail_contacts_sync",
+      "state": "planned",
+      "dependsOn": ["mail_account_lifecycle_v1"]
+    },
+    {
+      "gate": "application_preferences_v1",
+      "role": "app",
+      "owner": "first_party_client",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1"]
+    },
+    {
+      "gate": "scheduler_settings_surface_v1",
+      "role": "platform",
+      "owner": "scheduler",
+      "state": "planned",
+      "dependsOn": ["scheduler_v1", "client_gateway_v1"]
+    },
+    {
+      "gate": "telemetry_diagnostics_surface_v1",
+      "role": "platform",
+      "owner": "telemetry",
+      "state": "planned",
+      "dependsOn": ["telemetry_v1", "client_gateway_v1"]
+    },
+    {
+      "gate": "platform_maintenance_surface_v1",
+      "role": "app",
+      "owner": "platform_maintenance_composition",
+      "state": "planned",
+      "dependsOn": ["whole_instance_backup_v1", "client_gateway_v1"]
+    },
+    {
+      "gate": "system_architecture_status_surface_v1",
+      "role": "app",
+      "owner": "system_architecture_status_composition",
+      "state": "planned",
+      "dependsOn": ["telemetry_diagnostics_surface_v1", "client_gateway_v1"]
+    },
+    {
+      "gate": "calendar_account_settings_composition_v1",
+      "role": "app",
+      "owner": "calendar_account_settings_composition",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1"]
+    },
+    {
+      "gate": "ai_settings_surface_v1",
+      "role": "domain",
+      "owner": "ai",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1"]
+    },
+    {
+      "gate": "signal_hub_composition_v1",
+      "role": "app",
+      "owner": "signal_hub_composition",
+      "state": "planned",
+      "dependsOn": [
+        "telemetry_diagnostics_surface_v1",
+        "review_communications_attention_v1"
+      ]
+    }
+  ],
+  "historicalFacades": [
+    "discord_channels",
+    "google_meet_calls",
+    "mattermost_channels",
+    "microsoft_teams_calls",
+    "phone_calls_without_admitted_provider",
+    "slack_channels",
+    "telemost_calls",
+    "zoom_calls"
+  ]
+}
