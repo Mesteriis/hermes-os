@@ -15,6 +15,10 @@ use hermes_whatsapp_api::{
         WhatsAppHostObservationV1,
     },
     operational::{WhatsAppOperationalQueryResponseV1, WhatsAppOperationalQueryV1},
+    realtime::{
+        MAX_OPERATIONAL_REPLAY_LIMIT, WhatsAppOperationalReplayRequestV1,
+        WhatsAppOperationalReplayResponseV1,
+    },
 };
 use hermes_whatsapp_runtime::client_port::{decode_module_response, encode_module_request};
 use prost::Message as _;
@@ -472,6 +476,7 @@ fn assert_whatsapp_operational_read(contour: &mut ManagedWhatsAppContour) {
                 && page.items[0].provider_message_id == "provider-message-restart"
                 && page.items[0].delivery_state.as_deref() == Some("delivered")
     ));
+    let replay_cursor = assert_whatsapp_operational_replay(contour);
     let predecessor_generation = contour.whatsapp.runtime_generation;
     contour.whatsapp = restart_whatsapp_runtime(
         &contour.supervisor,
@@ -525,7 +530,132 @@ fn assert_whatsapp_operational_read(contour: &mut ManagedWhatsAppContour) {
         ),
         WhatsAppOperationalQueryResponseV1::Participants(page) if page.items.is_empty()
     ));
+    assert_whatsapp_operational_replay_after_restart(contour, replay_cursor);
     assert_cross_account_operational_query_is_rejected(contour);
+    assert_cross_account_operational_replay_is_rejected(contour);
+}
+
+fn assert_whatsapp_operational_replay(contour: &ManagedWhatsAppContour) -> u64 {
+    let first = operational_replay(
+        contour,
+        55,
+        WhatsAppOperationalReplayRequestV1 {
+            account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+            after_sequence: 0,
+            limit: 4,
+        },
+    );
+    assert_eq!(first.account_id, WHATSAPP_ACCOUNT_ID);
+    assert!(!first.reset_required);
+    assert_eq!(first.frames.len(), 4, "replay page must honor its limit");
+    assert!(
+        first
+            .frames
+            .windows(2)
+            .all(|pair| pair[0].sequence < pair[1].sequence),
+        "replay frames must be strictly ascending",
+    );
+    let first_cursor = first.next_sequence;
+    let earliest = first
+        .earliest_available_sequence
+        .expect("earliest replay sequence");
+    let latest = first
+        .latest_available_sequence
+        .expect("latest replay sequence");
+    assert_eq!(
+        first.frames.first().map(|frame| frame.sequence),
+        Some(earliest)
+    );
+
+    let remainder = operational_replay(
+        contour,
+        56,
+        WhatsAppOperationalReplayRequestV1 {
+            account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+            after_sequence: first_cursor,
+            limit: MAX_OPERATIONAL_REPLAY_LIMIT,
+        },
+    );
+    assert!(!remainder.reset_required);
+    assert!(
+        remainder
+            .frames
+            .iter()
+            .all(|frame| frame.sequence > first_cursor),
+        "next page must not duplicate the previous cursor",
+    );
+    assert_eq!(
+        remainder.frames.last().map(|frame| frame.sequence),
+        Some(latest)
+    );
+    assert!(remainder.frames.iter().any(|frame| {
+        matches!(
+            frame.event,
+            WhatsAppProviderEvent::ParticipantRemoved { .. }
+        )
+    }));
+    assert!(
+        remainder
+            .frames
+            .iter()
+            .any(|frame| { matches!(frame.event, WhatsAppProviderEvent::ReceiptChanged { .. }) })
+    );
+    assert!(
+        !format!("{first:?}{remainder:?}").contains(PRIVATE_COMMAND_TEXT),
+        "provider command payload must not leak into operational replay",
+    );
+
+    let stale = operational_replay(
+        contour,
+        57,
+        WhatsAppOperationalReplayRequestV1 {
+            account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+            after_sequence: latest + 1_000,
+            limit: 10,
+        },
+    );
+    assert!(stale.reset_required);
+    assert!(stale.frames.is_empty());
+    assert_eq!(stale.next_sequence, 0);
+    assert_eq!(stale.earliest_available_sequence, Some(earliest));
+    assert_eq!(stale.latest_available_sequence, Some(latest));
+    latest
+}
+
+fn assert_whatsapp_operational_replay_after_restart(
+    contour: &ManagedWhatsAppContour,
+    replay_cursor: u64,
+) {
+    let caught_up = operational_replay(
+        contour,
+        58,
+        WhatsAppOperationalReplayRequestV1 {
+            account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+            after_sequence: replay_cursor,
+            limit: 10,
+        },
+    );
+    assert!(!caught_up.reset_required);
+    assert!(caught_up.frames.is_empty());
+    assert_eq!(caught_up.next_sequence, replay_cursor);
+    assert_eq!(caught_up.latest_available_sequence, Some(replay_cursor));
+
+    let restarted = operational_replay(
+        contour,
+        59,
+        WhatsAppOperationalReplayRequestV1 {
+            account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+            after_sequence: 0,
+            limit: MAX_OPERATIONAL_REPLAY_LIMIT,
+        },
+    );
+    assert!(!restarted.reset_required);
+    assert_eq!(
+        restarted.frames.last().map(|frame| frame.sequence),
+        Some(replay_cursor),
+        "successor runtime must replay the persisted predecessor journal",
+    );
+    assert!(restarted.frames.len() >= 11);
 }
 
 fn assert_cross_account_operational_query_is_rejected(contour: &ManagedWhatsAppContour) {
@@ -563,6 +693,38 @@ fn assert_cross_account_operational_query_is_rejected(contour: &ManagedWhatsAppC
     );
 }
 
+fn assert_cross_account_operational_replay_is_rejected(contour: &ManagedWhatsAppContour) {
+    let request_id = 60;
+    let request = encode_module_request(
+        request_id,
+        &WhatsAppPublicClientRequestV1::OperationalReplay(WhatsAppOperationalReplayRequestV1 {
+            account_id: "another-whatsapp-account".to_owned(),
+            after_sequence: 0,
+            limit: 10,
+        }),
+    )
+    .expect("encode cross-account WhatsApp operational replay");
+    let route = ManagedCapabilityRouteRequest::new(
+        &contour.whatsapp.registration_id,
+        &contour.whatsapp.runtime_instance_id,
+        contour.whatsapp.runtime_generation,
+        contour.whatsapp.grant_epoch,
+        WhatsAppClientContractV1::OperationalRealtime.capability_id(),
+        &request,
+    );
+    let response = route_managed_client_request(
+        contour.store.as_ref(),
+        &contour.supervisor.relay_port(),
+        &route,
+    )
+    .expect("route admitted cross-account WhatsApp replay to owner runtime");
+    let response =
+        ModuleClientResponseV1::decode(response.as_slice()).expect("decode WhatsApp module error");
+    assert_eq!(response.request_id, request_id);
+    assert_eq!(response.error_code, "RUNTIME_UNAVAILABLE");
+    assert!(response.response_payload.is_empty());
+}
+
 fn operational_query(
     contour: &ManagedWhatsAppContour,
     request_id: u64,
@@ -576,6 +738,22 @@ fn operational_query(
     ) {
         WhatsAppPublicClientResponseV1::OperationalQuery(response) => response,
         response => panic!("unexpected WhatsApp operational response: {response:?}"),
+    }
+}
+
+fn operational_replay(
+    contour: &ManagedWhatsAppContour,
+    request_id: u64,
+    request: WhatsAppOperationalReplayRequestV1,
+) -> WhatsAppOperationalReplayResponseV1 {
+    match route_whatsapp_client(
+        contour,
+        WhatsAppClientContractV1::OperationalRealtime,
+        request_id,
+        &WhatsAppPublicClientRequestV1::OperationalReplay(request),
+    ) {
+        WhatsAppPublicClientResponseV1::OperationalReplay(response) => response,
+        response => panic!("unexpected WhatsApp operational replay response: {response:?}"),
     }
 }
 

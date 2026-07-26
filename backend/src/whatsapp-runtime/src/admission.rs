@@ -42,6 +42,7 @@ pub fn whatsapp_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         whatsapp_events_capability_v1(),
         whatsapp_host_bridge_capability_v1(),
         whatsapp_client_capability_v1(WhatsAppClientContractV1::OperationalQuery),
+        whatsapp_client_capability_v1(WhatsAppClientContractV1::OperationalRealtime),
         whatsapp_client_capability_v1(WhatsAppClientContractV1::Query),
         whatsapp_storage_capability_v1(),
     ]
@@ -194,6 +195,7 @@ mod tests {
                 WHATSAPP_EVENTS_CAPABILITY_ID,
                 HOST_BRIDGE_CONTRACT_NAME,
                 WhatsAppClientContractV1::OperationalQuery.capability_id(),
+                WhatsAppClientContractV1::OperationalRealtime.capability_id(),
                 WhatsAppClientContractV1::Query.capability_id(),
                 WHATSAPP_STORAGE_CAPABILITY_ID,
             ]

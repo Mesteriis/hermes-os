@@ -123,6 +123,11 @@ fn granted_capability_ids(grant_profile: WhatsAppGrantProfileV1) -> Vec<String> 
                 .capability_id()
                 .to_owned(),
         );
+        capability_ids.push(
+            WhatsAppClientContractV1::OperationalRealtime
+                .capability_id()
+                .to_owned(),
+        );
     }
     capability_ids.extend([
         WhatsAppClientContractV1::Query.capability_id().to_owned(),

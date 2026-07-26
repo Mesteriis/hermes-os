@@ -203,7 +203,7 @@ test('WhatsApp completion remains closed behind independent read and realtime sl
   assert.equal(whatsappSlices.get('whatsapp_integration_v1').state, 'implemented');
   assert.equal(whatsappSlices.get('whatsapp_full_operational_v1').state, 'planned');
   assert.equal(whatsappSlices.get('whatsapp_operational_read_v1').state, 'implemented');
-  assert.equal(whatsappSlices.get('whatsapp_operational_realtime_v1').state, 'planned');
+  assert.equal(whatsappSlices.get('whatsapp_operational_realtime_v1').state, 'implemented');
   assert.deepEqual(whatsappSlices.get('whatsapp_operational_read_v1').dependsOn, [
     'whatsapp_integration_v1',
   ]);

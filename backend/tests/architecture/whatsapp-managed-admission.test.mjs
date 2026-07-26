@@ -92,6 +92,45 @@ test('WhatsApp managed read conformance covers projection, cursors and access fe
   assert.match(managedFlow, /assert_stale_whatsapp_query_generation_is_rejected/);
 });
 
+test('WhatsApp managed replay conformance covers restart, reset, grants and privacy', async () => {
+  const [eventFlow, managedFlow, setup] = await Promise.all([
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/whatsapp_event_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/whatsapp_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/whatsapp_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+  ]);
+
+  for (const evidence of [
+    'assert_whatsapp_operational_replay',
+    'assert_whatsapp_operational_replay_after_restart',
+    'strictly ascending',
+    'reset_required',
+    'assert_cross_account_operational_replay_is_rejected',
+    'provider command payload must not leak',
+  ]) {
+    assert.ok(eventFlow.includes(evidence), `missing managed WhatsApp replay evidence: ${evidence}`);
+  }
+  assert.match(managedFlow, /assert_ungranted_whatsapp_operational_replay_is_rejected/);
+  assert.match(setup, /WhatsAppClientContractV1::OperationalRealtime/);
+});
+
 test('WhatsApp managed launch receives an exact Kernel-fenced private host route', async () => {
   const [setup, managedRuntime, persistence] = await Promise.all([
     readFile(

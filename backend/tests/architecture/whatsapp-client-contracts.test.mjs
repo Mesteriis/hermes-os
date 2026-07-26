@@ -4,10 +4,11 @@ import test from 'node:test';
 
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 
-test('WhatsApp host, command, status and operational read use separate exact contracts', async () => {
+test('WhatsApp host, command, status, read and replay use separate exact contracts', async () => {
   const [
     proto,
     operationalProto,
+    realtimeProto,
     contracts,
     hostContract,
     publicPort,
@@ -27,6 +28,13 @@ test('WhatsApp host, command, status and operational read use separate exact con
       readFile(
         new URL(
           'src/whatsapp-api/proto/hermes/whatsapp/operational/v1/client.proto',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/whatsapp-api/proto/hermes/whatsapp/operational/realtime/v1/client.proto',
           BACKEND_ROOT,
         ),
         'utf8',
@@ -94,24 +102,35 @@ test('WhatsApp host, command, status and operational read use separate exact con
     operationalProto,
     /google\.protobuf\.Any|\bbytes\b|\bmap\s*</,
   );
+  assert.match(realtimeProto, /service WhatsAppOperationalRealtimeService/);
+  assert.match(realtimeProto, /rpc Replay\s*\(/);
+  assert.match(realtimeProto, /reset_required/);
+  assert.doesNotMatch(
+    realtimeProto,
+    /google\.protobuf\.Any|\bbytes\b|\bmap\s*</,
+  );
 
   assert.match(contracts, /"whatsapp\.command\.v1"/);
   assert.match(contracts, /"whatsapp\.query\.v1"/);
   assert.match(contracts, /"whatsapp\.operational\.query\.v1"/);
+  assert.match(contracts, /"whatsapp\.operational\.realtime\.v1"/);
   assert.match(
     contracts,
     /\/hermes\.whatsapp\.operational\.v1\.WhatsAppOperationalQueryService\/Query/,
   );
   assert.match(contracts, /WHATSAPP_OPERATIONAL_DESCRIPTOR_SET_V1/);
+  assert.match(contracts, /WHATSAPP_OPERATIONAL_REALTIME_DESCRIPTOR_SET_V1/);
   assert.doesNotMatch(contracts, /=>\s*"whatsapp\.client"/);
   assert.match(hostContract, /HOST_BRIDGE_CONTRACT_NAME[^=]*=\s*"whatsapp\.host_bridge\.v1"/);
 
   assert.match(publicPort, /WhatsAppClientContractV1::Command/);
   assert.match(publicPort, /WhatsAppClientContractV1::Query/);
   assert.match(publicPort, /WhatsAppClientContractV1::OperationalQuery/);
+  assert.match(publicPort, /WhatsAppClientContractV1::OperationalRealtime/);
   assert.match(publicPort, /submit_command/);
   assert.match(publicPort, /command_operation_status/);
   assert.match(publicPort, /operational_query/);
+  assert.match(publicPort, /operational_replay/);
   assert.doesNotMatch(publicPort, /ClaimPendingCommands/);
   assert.doesNotMatch(publicPort, /HostObservation/);
 

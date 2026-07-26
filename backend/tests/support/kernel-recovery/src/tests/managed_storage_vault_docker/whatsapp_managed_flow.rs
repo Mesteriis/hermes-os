@@ -11,6 +11,7 @@ use hermes_whatsapp_api::{
         decode_host_bridge_handshake_accepted, encode_host_bridge_handshake,
     },
     operational::WhatsAppOperationalQueryV1,
+    realtime::WhatsAppOperationalReplayRequestV1,
 };
 use hermes_whatsapp_runtime::{
     admission::WHATSAPP_STORAGE_CAPABILITY_ID,
@@ -34,6 +35,11 @@ fn managed_whatsapp_runtime_uses_signed_kernel_admission_and_host_route_fencing(
         &contour.whatsapp,
     );
     assert_ungranted_whatsapp_operational_query_is_rejected(
+        &contour.store,
+        &contour.supervisor,
+        &contour.whatsapp,
+    );
+    assert_ungranted_whatsapp_operational_replay_is_rejected(
         &contour.store,
         &contour.supervisor,
         &contour.whatsapp,
@@ -63,6 +69,35 @@ fn managed_whatsapp_runtime_uses_signed_kernel_admission_and_host_route_fencing(
         .expect("join owner control server")
         .expect("owner control server");
     contour.finish();
+}
+
+fn assert_ungranted_whatsapp_operational_replay_is_rejected(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    whatsapp: &StartedWhatsAppRuntime,
+) {
+    let request = encode_module_request(
+        25,
+        &WhatsAppPublicClientRequestV1::OperationalReplay(WhatsAppOperationalReplayRequestV1 {
+            account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+            after_sequence: 0,
+            limit: 10,
+        }),
+    )
+    .expect("encode ungranted WhatsApp operational replay");
+    let route = ManagedCapabilityRouteRequest::new(
+        &whatsapp.registration_id,
+        &whatsapp.runtime_instance_id,
+        whatsapp.runtime_generation,
+        whatsapp.grant_epoch,
+        WhatsAppClientContractV1::OperationalRealtime.capability_id(),
+        &request,
+    );
+    assert_eq!(
+        route_managed_client_request(store, &supervisor.relay_port(), &route)
+            .expect_err("ungranted WhatsApp operational replay route"),
+        "capability is not granted to this registration"
+    );
 }
 
 fn assert_ungranted_whatsapp_operational_query_is_rejected(

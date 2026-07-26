@@ -10,7 +10,13 @@ use hermes_whatsapp_api::{
         WhatsAppOperationalRuntimeStatusV1, validate_operational_query,
     },
     operational_wire::{decode_provider_event, encode_provider_event},
-    provider_event_account_id, provider_event_chat_id, provider_event_kind, validate_event,
+    provider_event_account_id, provider_event_chat_id, provider_event_kind,
+    realtime::{
+        WhatsAppOperationalReplayFrameV1, WhatsAppOperationalReplayRequestV1,
+        WhatsAppOperationalReplayResponseV1, validate_operational_replay_request,
+        validate_operational_replay_response,
+    },
+    validate_event,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{Postgres, QueryBuilder, Row, Transaction};
@@ -186,6 +192,70 @@ impl WhatsAppDurablePersistence {
                 self.operational_runtime_status(account_id).await
             }
         }
+    }
+
+    pub async fn replay_operational_events(
+        &self,
+        request: &WhatsAppOperationalReplayRequestV1,
+    ) -> Result<WhatsAppOperationalReplayResponseV1, WhatsAppDurablePersistenceError> {
+        validate_operational_replay_request(request)
+            .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
+        let bounds = sqlx::query(
+            "SELECT MIN(sequence) AS earliest_sequence, MAX(sequence) AS latest_sequence FROM hermes_data.whatsapp_operational_events WHERE account_id = $1",
+        )
+        .bind(&request.account_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
+        let earliest = row_optional_i64(&bounds, "earliest_sequence")?;
+        let latest = row_optional_i64(&bounds, "latest_sequence")?;
+        let after_sequence = i64::try_from(request.after_sequence)
+            .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
+        let cursor_exists = if request.after_sequence == 0 {
+            true
+        } else {
+            sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM hermes_data.whatsapp_operational_events WHERE account_id = $1 AND sequence = $2)",
+            )
+            .bind(&request.account_id)
+            .bind(after_sequence)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|_| WhatsAppDurablePersistenceError::Database)?
+        };
+        let reset_required = request.after_sequence != 0 && !cursor_exists;
+        if reset_required {
+            return replay_response(&request.account_id, earliest, latest, Vec::new(), 0, true);
+        }
+        let rows = sqlx::query(
+            "SELECT sequence, exact_event_bytes, event_sha256 FROM hermes_data.whatsapp_operational_events WHERE account_id = $1 AND sequence > $2 ORDER BY sequence ASC LIMIT $3",
+        )
+        .bind(&request.account_id)
+        .bind(after_sequence)
+        .bind(i64::from(request.limit))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
+        let mut frames = Vec::with_capacity(rows.len());
+        for row in rows {
+            frames.push(WhatsAppOperationalReplayFrameV1 {
+                sequence: u64::try_from(row_i64(&row, "sequence")?)
+                    .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?,
+                event: event_from_row(&row, &request.account_id)?,
+            });
+        }
+        let next_sequence = frames
+            .last()
+            .map(|frame| frame.sequence)
+            .unwrap_or(request.after_sequence);
+        replay_response(
+            &request.account_id,
+            earliest,
+            latest,
+            frames,
+            next_sequence,
+            false,
+        )
     }
 
     async fn record_operational_resync_control(
@@ -483,21 +553,7 @@ impl WhatsAppDurablePersistence {
         let mut last_sequence = None;
         for row in rows {
             last_sequence = Some(row_i64(&row, "sequence")?);
-            let exact_event_bytes: Vec<u8> = row
-                .try_get("exact_event_bytes")
-                .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
-            let event_sha256: Vec<u8> = row
-                .try_get("event_sha256")
-                .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
-            if event_sha256.as_slice() != Sha256::digest(&exact_event_bytes).as_slice() {
-                return Err(WhatsAppDurablePersistenceError::InvalidRow);
-            }
-            let event = decode_provider_event(&exact_event_bytes)
-                .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
-            if provider_event_account_id(&event) != account_id {
-                return Err(WhatsAppDurablePersistenceError::InvalidRow);
-            }
-            items.push(event);
+            items.push(event_from_row(&row, account_id)?);
         }
         Ok(WhatsAppOperationalQueryResponseV1::Events(
             WhatsAppOperationalPageV1 {
@@ -542,6 +598,54 @@ impl WhatsAppDurablePersistence {
             },
         ))
     }
+}
+
+fn replay_response(
+    account_id: &str,
+    earliest: Option<i64>,
+    latest: Option<i64>,
+    frames: Vec<WhatsAppOperationalReplayFrameV1>,
+    next_sequence: u64,
+    reset_required: bool,
+) -> Result<WhatsAppOperationalReplayResponseV1, WhatsAppDurablePersistenceError> {
+    let response = WhatsAppOperationalReplayResponseV1 {
+        account_id: account_id.to_owned(),
+        earliest_available_sequence: earliest
+            .map(u64::try_from)
+            .transpose()
+            .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?,
+        latest_available_sequence: latest
+            .map(u64::try_from)
+            .transpose()
+            .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?,
+        frames,
+        next_sequence,
+        reset_required,
+    };
+    validate_operational_replay_response(&response)
+        .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
+    Ok(response)
+}
+
+fn event_from_row(
+    row: &sqlx::postgres::PgRow,
+    account_id: &str,
+) -> Result<WhatsAppProviderEvent, WhatsAppDurablePersistenceError> {
+    let exact_event_bytes: Vec<u8> = row
+        .try_get("exact_event_bytes")
+        .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
+    let event_sha256: Vec<u8> = row
+        .try_get("event_sha256")
+        .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
+    if event_sha256.as_slice() != Sha256::digest(&exact_event_bytes).as_slice() {
+        return Err(WhatsAppDurablePersistenceError::InvalidRow);
+    }
+    let event = decode_provider_event(&exact_event_bytes)
+        .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
+    if provider_event_account_id(&event) != account_id {
+        return Err(WhatsAppDurablePersistenceError::InvalidRow);
+    }
+    Ok(event)
 }
 
 async fn verify_existing_observation(
@@ -1006,6 +1110,14 @@ fn row_i64(
     row: &sqlx::postgres::PgRow,
     column: &str,
 ) -> Result<i64, WhatsAppDurablePersistenceError> {
+    row.try_get(column)
+        .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)
+}
+
+fn row_optional_i64(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<Option<i64>, WhatsAppDurablePersistenceError> {
     row.try_get(column)
         .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)
 }

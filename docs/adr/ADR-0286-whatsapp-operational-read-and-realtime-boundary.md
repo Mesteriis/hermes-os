@@ -2,10 +2,10 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: `whatsapp_operational_read_v1` реализован;
-`whatsapp_operational_realtime_v1` и `whatsapp_full_operational_v1` остаются
-запланированными. ADR разделяет full gate на независимые backend gates;
-реализация read gate не является evidence realtime, provider extractor,
+Состояние реализации: `whatsapp_operational_read_v1` и
+`whatsapp_operational_realtime_v1` реализованы; `whatsapp_full_operational_v1`
+остаётся запланированным. ADR разделяет full gate на независимые backend gates;
+реализация обоих backend gates не является evidence provider extractor,
 generated frontend client или UI cutover.
 
 Уточняет:
@@ -271,6 +271,29 @@ generation и revoke/grant-epoch fencing.
 4. duplicate-safe and restart-safe replay;
 5. managed host-to-replay live conformance;
 6. negative stale cursor, grant and privacy evidence.
+
+Gate реализован отдельными units:
+
+- `hermes-whatsapp-api` публикует отдельный protobuf package, descriptor set,
+  route и capability `whatsapp.operational.realtime.v1`;
+- `hermes-whatsapp-persistence::operational` читает append-only typed event
+  journal по exact account, сохраняет monotonic sequence и проверяет hash
+  каждого события до replay;
+- `hermes-whatsapp-runtime::client_port` принимает replay только под отдельным
+  granted contract, а managed composition дополнительно проверяет configured
+  account;
+- ответ содержит account, earliest/latest sequence, bounded ascending frames,
+  next cursor и explicit `reset_required`;
+- нулевой cursor начинает replay, exact ранее выданный cursor продолжает его,
+  а неизвестный, удалённый или future cursor fail-closed требует reset без
+  payload.
+
+Live conformance использует те же disposable managed contours, что и read gate.
+Положительный contour доказывает bounded multi-page replay, строгий порядок,
+duplicate safety, persisted replay после successor runtime/storage generation,
+future/stale cursor reset и отсутствие command payload в journal. Отрицательный
+contour доказывает отдельный grant, а положительный contour — cross-account
+privacy fence.
 
 ### `whatsapp_full_operational_v1`
 

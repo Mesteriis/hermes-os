@@ -9,6 +9,7 @@ use hermes_whatsapp_api::client_contract::{
 };
 use hermes_whatsapp_api::{
     WhatsAppPublicClientRequestV1, WhatsAppPublicClientResponseV1, client_wire, operational_wire,
+    realtime_wire,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -51,6 +52,9 @@ fn request_contract(request: &WhatsAppPublicClientRequestV1) -> WhatsAppClientCo
         WhatsAppPublicClientRequestV1::OperationalQuery(_) => {
             WhatsAppClientContractV1::OperationalQuery
         }
+        WhatsAppPublicClientRequestV1::OperationalReplay(_) => {
+            WhatsAppClientContractV1::OperationalRealtime
+        }
     }
 }
 
@@ -64,6 +68,10 @@ fn encode_request_payload(
         }
         WhatsAppPublicClientRequestV1::OperationalQuery(query) => {
             operational_wire::encode_operational_query(query)
+                .map_err(|_| WhatsAppClientPortErrorV1::Protocol)?
+        }
+        WhatsAppPublicClientRequestV1::OperationalReplay(request) => {
+            realtime_wire::encode_operational_replay_request(request)
                 .map_err(|_| WhatsAppClientPortErrorV1::Protocol)?
         }
     })
@@ -83,6 +91,11 @@ fn decode_request_payload(
         WhatsAppClientContractV1::OperationalQuery => {
             operational_wire::decode_operational_query(bytes)
                 .map(WhatsAppPublicClientRequestV1::OperationalQuery)
+                .map_err(|_| WhatsAppClientPortErrorV1::Protocol)
+        }
+        WhatsAppClientContractV1::OperationalRealtime => {
+            realtime_wire::decode_operational_replay_request(bytes)
+                .map(WhatsAppPublicClientRequestV1::OperationalReplay)
                 .map_err(|_| WhatsAppClientPortErrorV1::Protocol)
         }
     }
@@ -156,6 +169,11 @@ pub async fn handle_client_request(
             .await
             .map(WhatsAppPublicClientResponseV1::OperationalQuery)
             .map_err(|_| WhatsAppClientPortErrorV1::Runtime)?,
+        WhatsAppPublicClientRequestV1::OperationalReplay(request) => runtime
+            .operational_replay(&request)
+            .await
+            .map(WhatsAppPublicClientResponseV1::OperationalReplay)
+            .map_err(|_| WhatsAppClientPortErrorV1::Runtime)?,
     };
     encode_module_response(request_id, contract, &response)
 }
@@ -181,6 +199,11 @@ fn encode_module_response(
             WhatsAppClientContractV1::OperationalQuery,
             WhatsAppPublicClientResponseV1::OperationalQuery(response),
         ) => operational_wire::encode_operational_query_response(response),
+        (
+            WhatsAppClientContractV1::OperationalRealtime,
+            WhatsAppPublicClientResponseV1::OperationalReplay(response),
+        ) => realtime_wire::encode_operational_replay_response(response)
+            .map_err(|_| WhatsAppClientPortErrorV1::Protocol)?,
         _ => return Err(WhatsAppClientPortErrorV1::Protocol),
     };
     Ok(ModuleClientResponseV1 {
@@ -217,6 +240,10 @@ pub fn decode_module_response(
             operational_wire::decode_operational_query_response(&envelope.response_payload)
                 .map(WhatsAppPublicClientResponseV1::OperationalQuery)
         }
+        WhatsAppClientContractV1::OperationalRealtime => {
+            realtime_wire::decode_operational_replay_response(&envelope.response_payload)
+                .map(WhatsAppPublicClientResponseV1::OperationalReplay)
+        }
     }
     .map_err(|_| WhatsAppClientPortErrorV1::Protocol)?;
     Ok((envelope.request_id, response))
@@ -231,6 +258,7 @@ mod tests {
             WhatsAppOperationalQueryResponseV1, WhatsAppOperationalQueryV1,
             WhatsAppOperationalRuntimeStatusV1,
         },
+        realtime::{WhatsAppOperationalReplayRequestV1, WhatsAppOperationalReplayResponseV1},
     };
 
     use super::*;
@@ -258,6 +286,14 @@ mod tests {
         )
     }
 
+    fn operational_replay_request() -> WhatsAppPublicClientRequestV1 {
+        WhatsAppPublicClientRequestV1::OperationalReplay(WhatsAppOperationalReplayRequestV1 {
+            account_id: "account".to_owned(),
+            after_sequence: 0,
+            limit: 10,
+        })
+    }
+
     #[test]
     fn each_request_uses_only_its_exact_route_contract() {
         for (request, expected) in [
@@ -266,6 +302,10 @@ mod tests {
             (
                 operational_query_request(),
                 WhatsAppClientContractV1::OperationalQuery,
+            ),
+            (
+                operational_replay_request(),
+                WhatsAppClientContractV1::OperationalRealtime,
             ),
         ] {
             let encoded = encode_module_request(1, &request).expect("module request");
@@ -364,6 +404,32 @@ mod tests {
         );
         assert_eq!(
             decode_module_response(WhatsAppClientContractV1::Query, &encoded),
+            Err(WhatsAppClientPortErrorV1::Protocol)
+        );
+    }
+
+    #[test]
+    fn realtime_response_round_trips_only_with_realtime_contract() {
+        let response = WhatsAppPublicClientResponseV1::OperationalReplay(
+            WhatsAppOperationalReplayResponseV1 {
+                account_id: "account".to_owned(),
+                earliest_available_sequence: None,
+                latest_available_sequence: None,
+                frames: Vec::new(),
+                next_sequence: 0,
+                reset_required: false,
+            },
+        );
+        let encoded =
+            encode_module_response(1, WhatsAppClientContractV1::OperationalRealtime, &response)
+                .expect("realtime response");
+
+        assert_eq!(
+            decode_module_response(WhatsAppClientContractV1::OperationalRealtime, &encoded),
+            Ok((1, response))
+        );
+        assert_eq!(
+            decode_module_response(WhatsAppClientContractV1::OperationalQuery, &encoded),
             Err(WhatsAppClientPortErrorV1::Protocol)
         );
     }

@@ -76,6 +76,12 @@ pub enum WhatsAppOperationalQueryError {
     Persistence(WhatsAppDurablePersistenceError),
 }
 
+#[derive(Debug)]
+pub enum WhatsAppOperationalReplayError {
+    AccountScope,
+    Persistence(WhatsAppDurablePersistenceError),
+}
+
 impl WhatsAppRuntimeIdentity {
     pub fn observation_context(
         &self,

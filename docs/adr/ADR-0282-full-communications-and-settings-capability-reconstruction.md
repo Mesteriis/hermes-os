@@ -4,11 +4,12 @@
 Дата: 2026-07-26
 Состояние реализации: решение и capability inventory приняты; implementation
 не завершена. Exact inventory уже открывает независимо доказанные slices,
-включая `whatsapp_operational_read_v1`, но planned realtime/full gates нельзя
-вывести из состояния read gate. Этот ADR не открывает новые production
-capabilities сам по себе. Каждый описанный ниже slice требует отдельного exact
-admission в policy, реализации backend vertical slice, executable evidence и
-только затем frontend activation.
+включая `whatsapp_operational_read_v1` и
+`whatsapp_operational_realtime_v1`, но planned
+`whatsapp_full_operational_v1` нельзя вывести из состояния backend gates. Этот
+ADR не открывает новые production capabilities сам по себе. Каждый описанный
+ниже slice требует отдельного exact admission в policy, реализации backend
+vertical slice, executable evidence и только затем frontend activation.
 
 Зависит от:
 

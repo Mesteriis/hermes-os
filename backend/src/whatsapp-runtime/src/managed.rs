@@ -34,10 +34,10 @@ use hermes_storage_vault::{
 };
 
 use crate::{
-    WhatsAppCommandQueueError, WhatsAppOperationalQueryError, WhatsAppRuntimeAdmission,
-    WhatsAppRuntimeIdentity, accept_host_observation, claim_provider_commands,
-    enqueue_provider_command, provider_command_status, relay_communications_outbox_once,
-    settings::WhatsAppRuntimeSettingsV1,
+    WhatsAppCommandQueueError, WhatsAppOperationalQueryError, WhatsAppOperationalReplayError,
+    WhatsAppRuntimeAdmission, WhatsAppRuntimeIdentity, accept_host_observation,
+    claim_provider_commands, enqueue_provider_command, provider_command_status,
+    relay_communications_outbox_once, settings::WhatsAppRuntimeSettingsV1,
 };
 use hermes_whatsapp_api::{
     WhatsAppProviderCommand, WhatsAppProviderCommandStatusV1,
@@ -47,6 +47,7 @@ use hermes_whatsapp_api::{
         operational_query_account_id,
     },
     provider_command_account_id, provider_command_operation_id,
+    realtime::{WhatsAppOperationalReplayRequestV1, WhatsAppOperationalReplayResponseV1},
 };
 use hermes_whatsapp_persistence::WhatsAppDurablePersistence;
 use prost::Message;
@@ -307,6 +308,19 @@ impl WhatsAppAdmittedRuntime {
             .execute_operational_query(query)
             .await
             .map_err(WhatsAppOperationalQueryError::Persistence)
+    }
+
+    pub async fn operational_replay(
+        &self,
+        request: &WhatsAppOperationalReplayRequestV1,
+    ) -> Result<WhatsAppOperationalReplayResponseV1, WhatsAppOperationalReplayError> {
+        if request.account_id != self.account_id {
+            return Err(WhatsAppOperationalReplayError::AccountScope);
+        }
+        self.durable
+            .replay_operational_events(request)
+            .await
+            .map_err(WhatsAppOperationalReplayError::Persistence)
     }
 
     /// Binds the exact host bridge endpoint staged by Kernel. The caller owns

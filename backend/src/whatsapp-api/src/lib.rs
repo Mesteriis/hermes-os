@@ -8,6 +8,8 @@ pub mod client_wire;
 pub mod host_bridge;
 pub mod operational;
 pub mod operational_wire;
+pub mod realtime;
+pub mod realtime_wire;
 
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/hermes.whatsapp.v1.rs"));
@@ -17,6 +19,13 @@ pub mod operational_wire_generated {
     include!(concat!(
         env!("OUT_DIR"),
         "/hermes.whatsapp.operational.v1.rs"
+    ));
+}
+
+pub mod realtime_wire_generated {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.whatsapp.operational.realtime.v1.rs"
     ));
 }
 
@@ -786,6 +795,7 @@ pub enum WhatsAppPublicClientRequestV1 {
     Command(WhatsAppProviderCommand),
     OperationStatus { operation_id: WhatsAppOperationId },
     OperationalQuery(operational::WhatsAppOperationalQueryV1),
+    OperationalReplay(realtime::WhatsAppOperationalReplayRequestV1),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -793,6 +803,7 @@ pub enum WhatsAppPublicClientResponseV1 {
     Accepted { operation_id: WhatsAppOperationId },
     OperationStatus(Option<WhatsAppProviderCommandStatusV1>),
     OperationalQuery(operational::WhatsAppOperationalQueryResponseV1),
+    OperationalReplay(realtime::WhatsAppOperationalReplayResponseV1),
 }
 
 pub fn validate_provider_query(query: &WhatsAppProviderQuery) -> Result<(), WhatsAppContractError> {

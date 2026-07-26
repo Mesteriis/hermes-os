@@ -24,4 +24,16 @@ fn main() {
             &["proto"],
         )
         .expect("WhatsApp operational client protocol must compile");
+
+    let mut realtime_config = prost_build::Config::new();
+    realtime_config.file_descriptor_set_path(
+        output_directory.join("hermes.whatsapp.operational.realtime.v1.bin"),
+    );
+    realtime_config.extern_path(".hermes.whatsapp.v1", "crate::wire");
+    realtime_config
+        .compile_protos(
+            &["proto/hermes/whatsapp/operational/realtime/v1/client.proto"],
+            &["proto"],
+        )
+        .expect("WhatsApp operational realtime client protocol must compile");
 }

@@ -4,6 +4,10 @@ pub const WHATSAPP_OPERATIONAL_DESCRIPTOR_SET_V1: &[u8] = include_bytes!(concat!
     env!("OUT_DIR"),
     "/hermes.whatsapp.operational.v1.bin"
 ));
+pub const WHATSAPP_OPERATIONAL_REALTIME_DESCRIPTOR_SET_V1: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/hermes.whatsapp.operational.realtime.v1.bin"
+));
 pub const WHATSAPP_CLIENT_CONTRACT_MAJOR: u32 = 1;
 pub const WHATSAPP_CLIENT_CONTRACT_REVISION: u32 = 1;
 pub const WHATSAPP_MODULE_ID: &str = "hermes-whatsapp-runtime";
@@ -14,10 +18,16 @@ pub enum WhatsAppClientContractV1 {
     Command,
     Query,
     OperationalQuery,
+    OperationalRealtime,
 }
 
 impl WhatsAppClientContractV1 {
-    pub const ALL: [Self; 3] = [Self::Command, Self::Query, Self::OperationalQuery];
+    pub const ALL: [Self; 4] = [
+        Self::Command,
+        Self::Query,
+        Self::OperationalQuery,
+        Self::OperationalRealtime,
+    ];
 
     #[must_use]
     pub const fn capability_id(self) -> &'static str {
@@ -25,6 +35,7 @@ impl WhatsAppClientContractV1 {
             Self::Command => "whatsapp.command.v1",
             Self::Query => "whatsapp.query.v1",
             Self::OperationalQuery => "whatsapp.operational.query.v1",
+            Self::OperationalRealtime => "whatsapp.operational.realtime.v1",
         }
     }
 
@@ -41,6 +52,9 @@ impl WhatsAppClientContractV1 {
             Self::OperationalQuery => {
                 "/hermes.whatsapp.operational.v1.WhatsAppOperationalQueryService/Query"
             }
+            Self::OperationalRealtime => {
+                "/hermes.whatsapp.operational.realtime.v1.WhatsAppOperationalRealtimeService/Replay"
+            }
         }
     }
 
@@ -49,6 +63,7 @@ impl WhatsAppClientContractV1 {
         match self {
             Self::Command | Self::Query => WHATSAPP_DESCRIPTOR_SET_V1,
             Self::OperationalQuery => WHATSAPP_OPERATIONAL_DESCRIPTOR_SET_V1,
+            Self::OperationalRealtime => WHATSAPP_OPERATIONAL_REALTIME_DESCRIPTOR_SET_V1,
         }
     }
 
@@ -70,9 +85,14 @@ mod tests {
     fn client_contracts_have_unique_capabilities_names_and_routes() {
         assert!(!WHATSAPP_DESCRIPTOR_SET_V1.is_empty());
         assert!(!WHATSAPP_OPERATIONAL_DESCRIPTOR_SET_V1.is_empty());
+        assert!(!WHATSAPP_OPERATIONAL_REALTIME_DESCRIPTOR_SET_V1.is_empty());
         assert_ne!(
             WHATSAPP_DESCRIPTOR_SET_V1,
             WHATSAPP_OPERATIONAL_DESCRIPTOR_SET_V1
+        );
+        assert_ne!(
+            WHATSAPP_OPERATIONAL_DESCRIPTOR_SET_V1,
+            WHATSAPP_OPERATIONAL_REALTIME_DESCRIPTOR_SET_V1
         );
         assert_eq!(
             WhatsAppClientContractV1::ALL
