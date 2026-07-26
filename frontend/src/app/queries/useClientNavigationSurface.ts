@@ -8,11 +8,11 @@ import {
 
 import {
 	clientSurfaceCatalog,
-	hasCompiledClientSurfaceAdapter,
 	type ClientSurfaceIconTone,
 	type ClientSurfaceRouteId,
 	unavailableClientSurface,
 } from '../../platform/client-runtime/clientSurfaces'
+import { hasCompiledClientSurfaceAdapter } from '../client-surfaces/compiledClientSurfaceAdapters'
 import {
 	fetchClientBootstrap,
 	recoveryClientBootstrap,
@@ -268,9 +268,11 @@ function readInterfaceLanguage(): 'ru' | 'en' {
 
 export function buildClientRouteTree(bootstrap: ClientBootstrapSnapshot): readonly NavigationNode[] {
 	const communicationsChildren = [
+		toNavigationNode('communications-all', bootstrap),
 		toNavigationNode('communications-mail', bootstrap),
 		toNavigationNode('communications-telegram', bootstrap),
 		toNavigationNode('communications-whatsapp', bootstrap),
+		toNavigationNode('communications-zulip', bootstrap),
 	]
 	const allCommunicationsChildrenDisabled = communicationsChildren.every((item) => item.disabled)
 

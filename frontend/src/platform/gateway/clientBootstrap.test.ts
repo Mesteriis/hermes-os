@@ -19,7 +19,7 @@ describe('validateClientBootstrap', () => {
 		const bootstrap = validateClientBootstrap(responseWithSurfaces())
 
 		expect(bootstrap.get('settings')).toMatchObject({ available: true })
-		expect(bootstrap.get('communications-mail')).toMatchObject({
+		expect(bootstrap.get('communications-all')).toMatchObject({
 			available: false,
 			reasonCode: 'surface_not_admitted',
 		})
@@ -32,7 +32,7 @@ describe('validateClientBootstrap', () => {
 		expect(() => validateClientBootstrap(response)).toThrow('Incomplete client surface catalog')
 	})
 
-	it('fans out the owner-neutral Communications surface to integration routes', () => {
+	it('does not fan out the owner-neutral Communications surface to integration routes', () => {
 		const response = responseWithSurfaces()
 		const communications = response.surfaces.find(
 			(surface) => surface.surfaceId === ClientSurfaceIdV1.COMMUNICATIONS,
@@ -42,8 +42,17 @@ describe('validateClientBootstrap', () => {
 
 		const bootstrap = validateClientBootstrap(response)
 
-		for (const routeId of ['communications-mail', 'communications-telegram', 'communications-whatsapp'] as const) {
-			expect(bootstrap.get(routeId)).toMatchObject({ available: true, reasonCode: '' })
+		expect(bootstrap.get('communications-all')).toMatchObject({ available: true, reasonCode: '' })
+		for (const routeId of [
+			'communications-mail',
+			'communications-telegram',
+			'communications-whatsapp',
+			'communications-zulip',
+		] as const) {
+			expect(bootstrap.get(routeId)).toMatchObject({
+				available: false,
+				reasonCode: 'surface_not_admitted',
+			})
 		}
 	})
 

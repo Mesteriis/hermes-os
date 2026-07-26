@@ -121,6 +121,8 @@ impl ClientSystemComponentStatusProjectionV1 {
 pub enum ClientSurfaceIdV1 {
     Dashboard,
     Communications,
+    Mail,
+    Telegram,
     Review,
     Personas,
     Knowledge,
@@ -128,6 +130,8 @@ pub enum ClientSurfaceIdV1 {
     Calendar,
     Documents,
     Settings,
+    WhatsApp,
+    Zulip,
 }
 
 impl ClientSurfaceIdV1 {
@@ -139,6 +143,8 @@ impl ClientSurfaceIdV1 {
         match self {
             Self::Dashboard => Some("client.surface.dashboard.v1"),
             Self::Communications => Some("communications.query.v1"),
+            Self::Mail => Some("mail.delivery.query.v1"),
+            Self::Telegram => Some("telegram.query.v1"),
             Self::Review => Some("client.surface.review.v1"),
             Self::Personas => Some("client.surface.personas.v1"),
             Self::Knowledge => Some("client.surface.knowledge.v1"),
@@ -146,6 +152,8 @@ impl ClientSurfaceIdV1 {
             Self::Calendar => Some("client.surface.calendar.v1"),
             Self::Documents => Some("client.surface.documents.v1"),
             Self::Settings => None,
+            Self::WhatsApp => Some("whatsapp.query.v1"),
+            Self::Zulip => Some("zulip.query.v1"),
         }
     }
 }
@@ -377,4 +385,33 @@ pub trait ClientBootstrapAuthority {
         owner_id: &str,
         device_id: &str,
     ) -> Result<ClientBootstrapProjectionV1, String>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ClientSurfaceIdV1;
+
+    #[test]
+    fn provider_surfaces_require_their_own_exact_query_capability() {
+        assert_eq!(
+            ClientSurfaceIdV1::Communications.admission_capability_id(),
+            Some("communications.query.v1")
+        );
+        assert_eq!(
+            ClientSurfaceIdV1::Mail.admission_capability_id(),
+            Some("mail.delivery.query.v1")
+        );
+        assert_eq!(
+            ClientSurfaceIdV1::Telegram.admission_capability_id(),
+            Some("telegram.query.v1")
+        );
+        assert_eq!(
+            ClientSurfaceIdV1::WhatsApp.admission_capability_id(),
+            Some("whatsapp.query.v1")
+        );
+        assert_eq!(
+            ClientSurfaceIdV1::Zulip.admission_capability_id(),
+            Some("zulip.query.v1")
+        );
+    }
 }

@@ -1,15 +1,30 @@
 import { describe, expect, it } from 'vitest'
 
-import { clientSurfaceCatalog, hasCompiledClientSurfaceAdapter } from './clientSurfaces'
+import { ClientSurfaceIdV1 } from '../../gen/hermes/gateway/v1/client_bootstrap_pb'
+import { clientSurfaceCatalog } from './clientSurfaces'
 
 describe('compiled client surface catalog', () => {
-	it('keeps the recovery surface mountable while owner contract pages stay fail-closed', () => {
-		const settings = clientSurfaceCatalog.find((surface) => surface.routeId === 'settings')
-		const productSurfaces = clientSurfaceCatalog.filter((surface) => surface.routeId !== 'settings')
+	it('binds Communications and every provider route to its own wire surface', () => {
+		const communications = clientSurfaceCatalog.filter(
+			(surface) => surface.parentRouteId === 'communications',
+		)
 
-		expect(settings).toBeDefined()
-		expect(hasCompiledClientSurfaceAdapter(settings!)).toBe(true)
-		expect(productSurfaces).not.toHaveLength(0)
-		expect(productSurfaces.every((surface) => !hasCompiledClientSurfaceAdapter(surface))).toBe(true)
+		expect(communications.map((surface) => surface.surfaceId)).toEqual([
+			ClientSurfaceIdV1.COMMUNICATIONS,
+			ClientSurfaceIdV1.MAIL,
+			ClientSurfaceIdV1.TELEGRAM,
+			ClientSurfaceIdV1.WHATSAPP,
+			ClientSurfaceIdV1.ZULIP,
+		])
+		expect(new Set(communications.map((surface) => surface.surfaceId)).size).toBe(
+			communications.length,
+		)
+		expect(communications.map((surface) => surface.adapterId)).toEqual([
+			'communications-owner',
+			'mail-integration',
+			'telegram-integration',
+			'whatsapp-integration',
+			'zulip-integration',
+		])
 	})
 })

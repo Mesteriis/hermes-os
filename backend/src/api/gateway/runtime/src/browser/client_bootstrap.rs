@@ -171,6 +171,8 @@ fn surface_id(value: ProjectionSurfaceId) -> WireSurfaceId {
     match value {
         ProjectionSurfaceId::Dashboard => WireSurfaceId::Dashboard,
         ProjectionSurfaceId::Communications => WireSurfaceId::Communications,
+        ProjectionSurfaceId::Mail => WireSurfaceId::Mail,
+        ProjectionSurfaceId::Telegram => WireSurfaceId::Telegram,
         ProjectionSurfaceId::Review => WireSurfaceId::Review,
         ProjectionSurfaceId::Personas => WireSurfaceId::Personas,
         ProjectionSurfaceId::Knowledge => WireSurfaceId::Knowledge,
@@ -178,6 +180,8 @@ fn surface_id(value: ProjectionSurfaceId) -> WireSurfaceId {
         ProjectionSurfaceId::Calendar => WireSurfaceId::Calendar,
         ProjectionSurfaceId::Documents => WireSurfaceId::Documents,
         ProjectionSurfaceId::Settings => WireSurfaceId::Settings,
+        ProjectionSurfaceId::WhatsApp => WireSurfaceId::Whatsapp,
+        ProjectionSurfaceId::Zulip => WireSurfaceId::Zulip,
     }
 }
 

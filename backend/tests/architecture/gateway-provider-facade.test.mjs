@@ -112,7 +112,7 @@ test('Gateway route composition is owner-neutral and has no owner schema build e
   }
 });
 
-test('Core client bootstrap exposes a Communications owner surface, not provider surfaces', async () => {
+test('Core client bootstrap admits Communications and provider surfaces independently', async () => {
   const [sessionContract, kernelBootstrap, gatewayProto] = await Promise.all([
     readFile(GATEWAY_SESSION_CONTRACT, 'utf8'),
     readFile(KERNEL_BROWSER_GATEWAY, 'utf8'),
@@ -123,8 +123,27 @@ test('Core client bootstrap exposes a Communications owner surface, not provider
     assert.doesNotMatch(source, /Communications(Mail|Telegram|Whatsapp)|COMMUNICATIONS_(MAIL|TELEGRAM|WHATSAPP)/);
   }
   assert.match(sessionContract, /Self::Communications => Some\("communications\.query\.v1"\)/);
-  assert.match(kernelBootstrap, /\bCommunications\b/);
-  assert.match(gatewayProto, /CLIENT_SURFACE_ID_V1_COMMUNICATIONS = 2;/);
+  for (const [surface, capability] of [
+    ['Mail', 'mail.delivery.query.v1'],
+    ['Telegram', 'telegram.query.v1'],
+    ['WhatsApp', 'whatsapp.query.v1'],
+    ['Zulip', 'zulip.query.v1'],
+  ]) {
+    assert.match(
+      sessionContract,
+      new RegExp(`Self::${surface} => Some\\("${capability.replaceAll('.', '\\.')}\"\\)`),
+    );
+    assert.match(kernelBootstrap, new RegExp(`\\b${surface}\\b`));
+  }
+  for (const declaration of [
+    'CLIENT_SURFACE_ID_V1_COMMUNICATIONS = 2;',
+    'CLIENT_SURFACE_ID_V1_MAIL = 3;',
+    'CLIENT_SURFACE_ID_V1_TELEGRAM = 4;',
+    'CLIENT_SURFACE_ID_V1_WHATSAPP = 12;',
+    'CLIENT_SURFACE_ID_V1_ZULIP = 13;',
+  ]) {
+    assert.ok(gatewayProto.includes(declaration), `missing exact surface declaration ${declaration}`);
+  }
 });
 
 async function rustSources(directory) {

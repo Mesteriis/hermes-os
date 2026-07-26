@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import Icon from '../../shared/ui/Icon.vue'
 import ToggleGroup from '../../shared/ui/ToggleGroup.vue'
 import { clientSurfaceCatalog } from '../client-runtime/clientSurfaces'
+import type { ClientSurfaceAdapterId } from '../client-runtime/clientSurfaces'
 import { recoveryClientBootstrap, type ClientBootstrapSnapshot } from '../gateway/clientBootstrap'
 import {
 	eventComponents,
@@ -23,6 +24,7 @@ const props = withDefaults(defineProps<{
 	developerMode?: boolean
 	currentLanguage?: string
 	languageOptions?: readonly { value: string; label: string }[]
+	compiledAdapterIds: readonly ClientSurfaceAdapterId[]
 }>(), { developerMode: false, currentLanguage: 'ru', languageOptions: () => [] })
 const emit = defineEmits<{ languageChange: [value: string] }>()
 type SystemControlSection = 'system' | 'registry' | 'scheduler' | 'events' | 'composition' | 'interface'
@@ -30,7 +32,10 @@ type SystemControlSection = 'system' | 'registry' | 'scheduler' | 'events' | 'co
 const selectedSection = ref<SystemControlSection>('system')
 const bootstrap = computed(() => props.bootstrap ?? recoveryClientBootstrap())
 const availableSurfaceCount = computed(() => systemControlAvailableSurfaceCount(bootstrap.value))
-const compositionRows = computed(() => systemControlSurfaceRows(bootstrap.value))
+const compositionRows = computed(() => systemControlSurfaceRows(
+	bootstrap.value,
+	props.compiledAdapterIds,
+))
 const moduleRows = computed(() => systemControlModuleRows(bootstrap.value.modules))
 const schedulerRows = computed(() => systemControlComponentRows(schedulerComponents, bootstrap.value.systemStatus))
 const eventRows = computed(() => systemControlComponentRows(eventComponents, bootstrap.value.systemStatus))

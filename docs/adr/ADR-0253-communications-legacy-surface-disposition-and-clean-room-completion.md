@@ -2,17 +2,17 @@
 
 Статус: Принято
 Дата: 2026-07-23
-Состояние реализации: backend disposition выполнен, repository cutover
-продолжается. Канонический evidence owner, typed ingress, owner-local
+Состояние реализации: backend disposition и удаление legacy
+`/api/v1/communications/*` frontend callers выполнены. Канонический evidence
+owner, typed ingress, owner-local
 projections, inbox/outbox, managed runtime и отдельный Attachment Security
 Engine реализованы и допущены exact production inventory. Legacy HTTP surface
 не является совместимым контрактом и не восстановлен в clean-room backend.
-ADR-0240 пока не объявляется полностью завершённым на уровне репозитория:
-secondary frontend всё ещё содержит старые `/api/v1/communications/*` callers,
-которые должны быть удалены или заменены контрактами их настоящих owners.
-Exact inventory сокращён до двух production callers: Communications attachment
-import и WhatsApp business facade. Telegram Communications REST/query/inspector
-chain удалён вместе с Communications-prefixed provider realtime cache patchers;
+ADR-0240 завершён для backend owner и его frontend REST cutover. Оставшиеся
+provider-specific `/api/v1/integrations/*` поверхности не принадлежат
+Communications и мигрируют независимыми integration gates по ADR-0265 и
+ADR-0281. Telegram Communications REST/query/inspector chain удалён вместе с
+Communications-prefixed provider realtime cache patchers;
 единственным допустимым будущим provider-operation seam остаётся generated
 Telegram Connect client. Dead AI-state, bilingual-reply и Mail
 provider-command-diagnostics chains также удалены вместе с DTO, query/realtime

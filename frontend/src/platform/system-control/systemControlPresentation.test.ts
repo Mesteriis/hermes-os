@@ -10,9 +10,9 @@ import {
 describe('system control presentation', () => {
   it('projects recovery surface availability and labels', () => {
     const bootstrap = recoveryClientBootstrap()
-    const rows = systemControlSurfaceRows(bootstrap)
+    const rows = systemControlSurfaceRows(bootstrap, ['system-control'])
 
-    expect(rows).toHaveLength(11)
+    expect(rows).toHaveLength(13)
     expect(systemControlAvailableSurfaceCount(bootstrap)).toBe(1)
     expect(rows.find((row) => row.routeId === 'settings')?.available).toBe(true)
     expect(systemControlSurfaceStateLabel('dashboard', ClientSurfaceAvailabilityStateV1.BLOCKED, false)).toBe('Blocked')

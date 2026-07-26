@@ -448,6 +448,10 @@ body {
 	--app-navbar-route-icon-color: #25d366;
 }
 
+.app-navbar-route-breadcrumbs__item-icon--zulip {
+	--app-navbar-route-icon-color: #6492fe;
+}
+
 .app-navbar-route-breadcrumbs__chevron {
 	color: var(--h-color-text-muted);
 	opacity: 0.72;

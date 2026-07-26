@@ -6,6 +6,7 @@ import { useClientNavigationSurface } from '../queries/useClientNavigationSurfac
 import AppLayout from '../../shared/ui/shell/AppLayout.vue'
 import AppNavbar from '../../shared/ui/shell/AppNavbar.vue'
 import { BrowserGatewayAccessModeV1 } from '../../gen/hermes/gateway/v1/browser_session_pb'
+import { compiledClientSurfaceAdapterIds } from '../client-surfaces/compiledClientSurfaceAdapters'
 
 const props = defineProps<{ gatewayAccessMode: BrowserGatewayAccessModeV1 }>()
 
@@ -77,6 +78,7 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					:developer-mode="props.gatewayAccessMode === BrowserGatewayAccessModeV1.LAN_DEVELOPMENT"
 					:current-language="navbar.currentLanguage.value"
 					:language-options="navbar.languageOptions"
+					:compiled-adapter-ids="compiledClientSurfaceAdapterIds"
 					@language-change="navbar.selectLanguage"
 				/>
 			</AppLayout>

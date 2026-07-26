@@ -5,7 +5,7 @@ import {
 } from '../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import {
   clientSurfaceCatalog,
-  hasCompiledClientSurfaceAdapter,
+  type ClientSurfaceAdapterId,
   type ClientSurfaceRouteId,
 } from '../client-runtime/clientSurfaces'
 import type { ClientBootstrapSnapshot } from '../gateway/clientBootstrap'
@@ -34,7 +34,8 @@ export function systemControlAvailableSurfaceCount(bootstrap: ClientBootstrapSna
 }
 
 export function systemControlSurfaceRows(
-  bootstrap: ClientBootstrapSnapshot
+  bootstrap: ClientBootstrapSnapshot,
+  compiledAdapterIds: readonly ClientSurfaceAdapterId[]
 ): readonly SystemControlSurfaceRow[] {
   return clientSurfaceCatalog.map((surface) => {
     const availability = surface.routeId === 'settings'
@@ -44,7 +45,11 @@ export function systemControlSurfaceRows(
         reasonCode: 'bootstrap_unavailable',
         state: ClientSurfaceAvailabilityStateV1.UNAVAILABLE,
       }
-    return { ...surface, ...availability, compiledAdapterReady: hasCompiledClientSurfaceAdapter(surface) }
+    return {
+      ...surface,
+      ...availability,
+      compiledAdapterReady: compiledAdapterIds.includes(surface.adapterId),
+    }
   })
 }
 

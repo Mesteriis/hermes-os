@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { ClientSurfaceAvailabilityStateV1 } from '../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import { clientSurfaceCatalog } from '../../platform/client-runtime/clientSurfaces'
 import { recoveryClientBootstrap } from '../../platform/gateway/clientBootstrap'
+import { compiledClientSurfaceAdapterIds } from '../client-surfaces/compiledClientSurfaceAdapters'
 import { buildClientRouteTree } from './useClientNavigationSurface'
 
 describe('compiled client navigation', () => {
@@ -12,6 +13,7 @@ describe('compiled client navigation', () => {
 
 		expect(productRoutes.every((item) => item.disabled)).toBe(true)
 		expect(tree.find((item) => item.id === 'settings')?.disabled).toBe(false)
+		expect(compiledClientSurfaceAdapterIds).toEqual(['system-control'])
 	})
 
 	it('fails closed when Gateway marks a route available without a compiled owner adapter', () => {

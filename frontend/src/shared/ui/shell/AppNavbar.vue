@@ -31,6 +31,7 @@ type AppNavbarNavigationIconTone =
 	| 'tasks'
 	| 'telegram'
 	| 'whatsapp'
+	| 'zulip'
 
 type AppNavbarNavigationItem = AppNavbarBreadcrumb & {
 	icon?: string

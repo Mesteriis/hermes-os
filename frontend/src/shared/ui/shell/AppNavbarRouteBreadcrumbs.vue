@@ -33,6 +33,7 @@ type AppNavbarRouteBreadcrumbIconTone =
 	| 'tasks'
 	| 'telegram'
 	| 'whatsapp'
+	| 'zulip'
 
 const props = withDefaults(defineProps<{
 	levels?: readonly AppNavbarRouteBreadcrumbLevel[]

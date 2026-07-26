@@ -3,7 +3,7 @@
 Статус: Принято
 Дата: 2026-07-24
 Состояние реализации: frontend generator выпускает exact owner-specific Mail,
-Telegram и Zulip contracts, а provider frontend владеет отдельными
+Telegram, WhatsApp и Zulip contracts, а provider frontend владеет отдельными
 service-specific Connect client units поверх общего Gateway transport.
 Telegram `/api/v1/communications/*` business facade, его query/inspector chain
 и Communications-prefixed provider realtime caches удалены. Telegram phase gate
