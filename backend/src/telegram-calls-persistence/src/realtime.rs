@@ -49,7 +49,8 @@ pub(crate) async fn persist_call_event(
     .fetch_one(&mut **transaction)
     .await
     .map_err(database_error)?;
-    from_i64(row.try_get("event_sequence").map_err(database_error)?)
+    let event_sequence = row.try_get("event_sequence").map_err(database_error)?;
+    persist_replay_order(transaction, event_sequence).await
 }
 
 pub(crate) async fn persist_operation_event(
@@ -70,7 +71,36 @@ pub(crate) async fn persist_operation_event(
     .fetch_one(&mut **transaction)
     .await
     .map_err(database_error)?;
-    from_i64(row.try_get("event_sequence").map_err(database_error)?)
+    let event_sequence = row.try_get("event_sequence").map_err(database_error)?;
+    persist_replay_order(transaction, event_sequence).await
+}
+
+async fn persist_replay_order(
+    transaction: &mut Transaction<'_, Postgres>,
+    event_sequence: i64,
+) -> Result<u64, TelegramCallsPersistenceError> {
+    let replay_sequence: i64 = sqlx::query_scalar(
+        "UPDATE hermes_data.telegram_call_realtime_replay_cursor \
+         SET next_sequence = next_sequence + 1 \
+         WHERE cursor_scope = 'owner' \
+         RETURNING next_sequence - 1",
+    )
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(database_error)?
+    .ok_or(TelegramCallsPersistenceError::InvalidRow)?;
+    sqlx::query(
+        "INSERT INTO hermes_data.telegram_call_realtime_replay_order (\
+             replay_sequence, event_sequence\
+         ) \
+         VALUES ($1, $2)",
+    )
+    .bind(replay_sequence)
+    .bind(event_sequence)
+    .execute(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    from_i64(replay_sequence)
 }
 
 pub(crate) async fn load_events(
@@ -83,7 +113,7 @@ pub(crate) async fn load_events(
     let after_sequence = i64::try_from(after_sequence)
         .map_err(|_| TelegramCallsPersistenceError::InvalidRequest("after_sequence"))?;
     let rows = sqlx::query(
-        "SELECT e.event_sequence, e.event_kind, e.local_muted, \
+        "SELECT replay.replay_sequence AS event_sequence, e.event_kind, e.local_muted, \
          s.call_session_id, s.account_id, s.runtime_generation, s.tdlib_call_id, \
          s.provider_call_unique_id, s.provider_user_id, s.direction, \
          ch.provider_state, ch.pending_created, ch.pending_received, ch.discard_reason, \
@@ -99,7 +129,9 @@ pub(crate) async fn load_events(
          oh.revision AS operation_revision, o.accepted_at_unix_seconds, \
          oh.updated_at_unix_seconds AS operation_updated_at_unix_seconds, \
          oh.completed_at_unix_seconds, oh.failure_category AS operation_failure_category \
-         FROM hermes_data.telegram_call_realtime_events e \
+         FROM hermes_data.telegram_call_realtime_replay_order replay \
+         JOIN hermes_data.telegram_call_realtime_events e \
+           ON e.event_sequence = replay.event_sequence \
          LEFT JOIN hermes_data.telegram_call_sessions s \
            ON e.event_kind = 'call' AND s.call_session_id = e.call_session_id \
          LEFT JOIN hermes_data.telegram_call_state_history ch \
@@ -108,8 +140,8 @@ pub(crate) async fn load_events(
            ON e.event_kind = 'operation' AND o.operation_id = e.operation_id \
          LEFT JOIN hermes_data.telegram_call_operation_history oh \
            ON oh.operation_id = e.operation_id AND oh.revision = e.operation_revision \
-         WHERE e.account_id = $1 AND e.event_sequence > $2 \
-         ORDER BY e.event_sequence ASC LIMIT $3",
+         WHERE e.account_id = $1 AND replay.replay_sequence > $2 \
+         ORDER BY replay.replay_sequence ASC LIMIT $3",
     )
     .bind(account_id)
     .bind(after_sequence)

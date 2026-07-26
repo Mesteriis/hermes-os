@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,6 +12,7 @@ const project = `hermes-storage-authenticated-${process.pid}`;
 const compose = ['compose', '--project-name', project, '-f', 'development/authenticated/compose.yaml'];
 const focusedTest = process.env.HERMES_STORAGE_AUTHENTICATED_TEST_FILTER?.trim();
 const managedTest = process.env.HERMES_STORAGE_MANAGED_TEST_FILTER?.trim();
+const telegramCallsTest = process.env.HERMES_TELEGRAM_CALLS_POSTGRES_TEST_FILTER?.trim();
 const keepContour = process.env.HERMES_STORAGE_KEEP_CONTOUR === '1';
 const authenticatedTests = [
   'authenticated_revoke_fences_the_real_pool_and_postgres_role',
@@ -179,6 +180,10 @@ async function stop_contour(secrets) {
 
 async function run_conformance(secrets) {
   try {
+    if (telegramCallsTest) {
+      await run_telegram_calls_conformance(secrets, telegramCallsTest);
+      return;
+    }
     for (const test of focusedTest ? [focusedTest] : managedTest ? [] : authenticatedTests) {
       await start_contour(secrets);
       try {
@@ -219,6 +224,39 @@ async function run_conformance(secrets) {
   } catch (error) {
     print_test_diagnostics(error);
     throw error;
+  }
+}
+
+async function run_telegram_calls_conformance(secrets, test) {
+  await start_contour(secrets);
+  try {
+    const password = (await readFile(secrets.postgresPath, 'utf8')).trim();
+    const databaseUrl = new URL('postgres://hermes_postgres_admin@127.0.0.1/hermes_storage_authenticated');
+    databaseUrl.password = password;
+    databaseUrl.port = String(secrets.postgresPort);
+    databaseUrl.searchParams.set('sslmode', 'disable');
+    await run('cargo', [
+      `+${toolchain}`,
+      '--config',
+      'build.rustc-wrapper=""',
+      'test',
+      '--locked',
+      '-p',
+      'hermes-telegram-calls-testkit',
+      '--test',
+      'postgres_live',
+      '--',
+      '--ignored',
+      test,
+      '--test-threads=1',
+    ], {
+      env: {
+        ...process.env,
+        HERMES_TELEGRAM_CALLS_POSTGRES_URL: databaseUrl.toString(),
+      },
+    });
+  } finally {
+    await stop_contour(secrets);
   }
 }
 

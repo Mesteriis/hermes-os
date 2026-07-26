@@ -443,6 +443,7 @@ fn managed_telegram_automation_route_is_durable_and_provider_side_effect_free() 
 fn managed_telegram_call_history_route_is_durable_and_replayable() {
     let mut fixture = prepare_managed_telegram_fixture();
     let store = Arc::clone(&fixture.store);
+    seed_telegram_legacy_call_frame();
     let telegram = fixture.start_telegram();
     assert_telegram_lifecycle_query(&store, &fixture.supervisor, &telegram);
 
@@ -465,8 +466,12 @@ fn managed_telegram_call_history_route_is_durable_and_replayable() {
     else {
         panic!("Telegram Calls list response is unexpected");
     };
-    assert_eq!(list.calls.len(), 1);
-    let call = list.calls.first().expect("Telegram call");
+    assert_eq!(list.calls.len(), 2);
+    let call = list
+        .calls
+        .iter()
+        .find(|call| call.provider_call_unique_id == Some(5001))
+        .expect("managed provider Telegram call");
     assert_eq!(call.provider_call_unique_id, Some(5001));
     assert_eq!(call.provider_user_id, "42");
     assert_eq!(call.state, CallStateV1::Ended as i32);
@@ -479,6 +484,11 @@ fn managed_telegram_call_history_route_is_durable_and_replayable() {
         telegram_call_media_state(),
         "active",
         "managed TDLib ready/signaling must drive the signed tgcalls artifact into a durable media state"
+    );
+    assert_eq!(
+        telegram_calls_backfill_state(),
+        ("succeeded".to_owned(), 1, 1),
+        "managed runtime must finish the owner-local V3-to-V4 backfill before readiness"
     );
 
     let replay = route_telegram_calls_until_ready(
@@ -495,21 +505,27 @@ fn managed_telegram_call_history_route_is_durable_and_replayable() {
         .encode_to_vec(),
     );
     let replay = decode_calls_replay_response(&replay);
-    assert_eq!(replay.frames.len(), 3);
-    let Some(call_frame_v1::Event::Call(pending_call)) = replay.frames[0].event.as_ref() else {
+    assert_eq!(replay.frames.len(), 4);
+    let Some(call_frame_v1::Event::Call(legacy_call)) = replay.frames[0].event.as_ref() else {
+        panic!("legacy call frame is unexpected");
+    };
+    let Some(call_frame_v1::Event::Call(pending_call)) = replay.frames[1].event.as_ref() else {
         panic!("pending call frame is unexpected");
     };
-    let Some(call_frame_v1::Event::Call(ready_call)) = replay.frames[1].event.as_ref() else {
+    let Some(call_frame_v1::Event::Call(ready_call)) = replay.frames[2].event.as_ref() else {
         panic!("ready call frame is unexpected");
     };
-    let Some(call_frame_v1::Event::Call(ended_call)) = replay.frames[2].event.as_ref() else {
+    let Some(call_frame_v1::Event::Call(ended_call)) = replay.frames[3].event.as_ref() else {
         panic!("ended call frame is unexpected");
     };
+    assert_eq!(legacy_call.provider_call_unique_id, Some(4001));
+    assert_eq!(legacy_call.revision, 1);
     assert_eq!(pending_call.revision, 1);
     assert_eq!(ready_call.revision, 2);
     assert_eq!(ended_call.revision, 3);
     assert!(replay.frames[0].sequence < replay.frames[1].sequence);
     assert!(replay.frames[1].sequence < replay.frames[2].sequence);
+    assert!(replay.frames[2].sequence < replay.frames[3].sequence);
     assert!(!replay.reset_required);
 
     let stale_runtime = telegram.clone();

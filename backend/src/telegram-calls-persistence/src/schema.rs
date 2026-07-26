@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 pub const TELEGRAM_CALLS_STORAGE_REVISION_V1: u32 = 3;
 pub const TELEGRAM_CALLS_STORAGE_REVISION_V2: u32 = 4;
 pub const TELEGRAM_CALLS_STORAGE_REVISION_V3: u32 = 5;
+pub const TELEGRAM_CALLS_STORAGE_REVISION_V4: u32 = 6;
 
 pub const TELEGRAM_CALLS_SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS hermes_data.telegram_call_sessions (
@@ -196,6 +197,119 @@ CREATE INDEX IF NOT EXISTS telegram_call_media_projection_account_idx
     ON hermes_data.telegram_call_media_projection (account_id, call_session_id);
 "#;
 
+pub const TELEGRAM_CALLS_SCHEMA_V4: &str = r#"
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_call_realtime_replay_order (
+    replay_sequence BIGINT PRIMARY KEY CHECK (replay_sequence > 0),
+    event_sequence BIGINT NOT NULL UNIQUE
+        REFERENCES hermes_data.telegram_call_realtime_events(event_sequence)
+);
+
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_call_realtime_replay_cursor (
+    cursor_scope TEXT PRIMARY KEY CHECK (cursor_scope = 'owner'),
+    next_sequence BIGINT NOT NULL CHECK (next_sequence > 0)
+);
+
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_call_realtime_backfill_jobs (
+    job_run_id BYTEA PRIMARY KEY CHECK (octet_length(job_run_id) = 16),
+    job_owner TEXT NOT NULL CHECK (job_owner = 'telegram'),
+    job_name TEXT NOT NULL CHECK (job_name = 'calls_realtime_backfill'),
+    job_major INTEGER NOT NULL CHECK (job_major = 1),
+    scope_id TEXT NOT NULL CHECK (scope_id = 'owner'),
+    command_message_id BYTEA NOT NULL UNIQUE
+        CHECK (octet_length(command_message_id) = 16),
+    command_envelope_bytes BYTEA NOT NULL
+        CHECK (
+            octet_length(command_envelope_bytes) > 0
+            AND octet_length(command_envelope_bytes) <= 262144
+        ),
+    command_envelope_sha256 BYTEA NOT NULL
+        CHECK (octet_length(command_envelope_sha256) = 32),
+    execution_state TEXT NOT NULL
+        CHECK (execution_state IN ('accepted', 'running', 'succeeded')),
+    execution_phase TEXT NOT NULL
+        CHECK (execution_phase IN ('pending', 'rebase', 'backfill', 'complete')),
+    execution_runtime_generation BIGINT NULL
+        CHECK (
+            execution_runtime_generation IS NULL
+            OR execution_runtime_generation > 0
+        ),
+    lease_epoch BIGINT NOT NULL CHECK (lease_epoch >= 0),
+    lease_expires_at_unix_millis BIGINT NULL
+        CHECK (
+            lease_expires_at_unix_millis IS NULL
+            OR lease_expires_at_unix_millis > 0
+        ),
+    checkpoint_frame_sequence BIGINT NOT NULL DEFAULT 0
+        CHECK (checkpoint_frame_sequence >= 0),
+    processed_frame_count BIGINT NOT NULL DEFAULT 0
+        CHECK (processed_frame_count >= 0),
+    backfilled_frame_count BIGINT NOT NULL DEFAULT 0
+        CHECK (
+            backfilled_frame_count >= 0
+            AND backfilled_frame_count <= processed_frame_count
+        ),
+    rebase_original_max_event_sequence BIGINT NULL
+        CHECK (
+            rebase_original_max_event_sequence IS NULL
+            OR rebase_original_max_event_sequence >= 0
+        ),
+    rebase_offset BIGINT NULL
+        CHECK (rebase_offset IS NULL OR rebase_offset > 0),
+    rebase_mapped_event_count BIGINT NOT NULL DEFAULT 0
+        CHECK (rebase_mapped_event_count >= 0),
+    attempt_count BIGINT NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+    accepted_at_unix_millis BIGINT NOT NULL CHECK (accepted_at_unix_millis > 0),
+    updated_at_unix_millis BIGINT NOT NULL CHECK (updated_at_unix_millis > 0),
+    completed_at_unix_millis BIGINT NULL
+        CHECK (
+            completed_at_unix_millis IS NULL
+            OR completed_at_unix_millis > 0
+        ),
+    CHECK (
+        (
+            execution_state = 'accepted'
+            AND execution_phase = 'pending'
+            AND execution_runtime_generation IS NULL
+            AND lease_epoch = 0
+            AND lease_expires_at_unix_millis IS NULL
+            AND attempt_count = 0
+            AND rebase_original_max_event_sequence IS NULL
+            AND rebase_offset IS NULL
+            AND rebase_mapped_event_count = 0
+            AND completed_at_unix_millis IS NULL
+        )
+        OR (
+            execution_state = 'running'
+            AND execution_phase IN ('rebase', 'backfill')
+            AND execution_runtime_generation IS NOT NULL
+            AND lease_epoch > 0
+            AND lease_expires_at_unix_millis IS NOT NULL
+            AND attempt_count > 0
+            AND rebase_original_max_event_sequence IS NOT NULL
+            AND rebase_offset IS NOT NULL
+            AND completed_at_unix_millis IS NULL
+        )
+        OR (
+            execution_state = 'succeeded'
+            AND execution_phase = 'complete'
+            AND execution_runtime_generation IS NOT NULL
+            AND lease_epoch > 0
+            AND lease_expires_at_unix_millis IS NOT NULL
+            AND attempt_count > 0
+            AND rebase_original_max_event_sequence IS NOT NULL
+            AND rebase_offset IS NOT NULL
+            AND completed_at_unix_millis IS NOT NULL
+        )
+    )
+);
+
+CREATE INDEX IF NOT EXISTS telegram_call_realtime_backfill_state_idx
+    ON hermes_data.telegram_call_realtime_backfill_jobs (
+        execution_state,
+        updated_at_unix_millis
+    );
+"#;
+
 pub fn telegram_calls_storage_migration_v1() -> StorageMigrationStepV1 {
     StorageMigrationStepV1 {
         revision: TELEGRAM_CALLS_STORAGE_REVISION_V1,
@@ -220,6 +334,15 @@ pub fn telegram_calls_storage_migration_v3() -> StorageMigrationStepV1 {
         migration_id: "telegram_call_media_projection".to_owned(),
         forward_sql_utf8: TELEGRAM_CALLS_SCHEMA_V3.as_bytes().to_vec(),
         sha256: Sha256::digest(TELEGRAM_CALLS_SCHEMA_V3.as_bytes()).to_vec(),
+    }
+}
+
+pub fn telegram_calls_storage_migration_v4() -> StorageMigrationStepV1 {
+    StorageMigrationStepV1 {
+        revision: TELEGRAM_CALLS_STORAGE_REVISION_V4,
+        migration_id: "telegram_call_realtime_backfill_job".to_owned(),
+        forward_sql_utf8: TELEGRAM_CALLS_SCHEMA_V4.as_bytes().to_vec(),
+        sha256: Sha256::digest(TELEGRAM_CALLS_SCHEMA_V4.as_bytes()).to_vec(),
     }
 }
 
@@ -251,5 +374,15 @@ mod tests {
         assert!(TELEGRAM_CALLS_SCHEMA_V3.contains("telegram_call_media_projection"));
         assert!(TELEGRAM_CALLS_SCHEMA_V3.contains("telegram_call_media_state_history"));
         assert!(!TELEGRAM_CALLS_SCHEMA_V3.contains("INSERT INTO"));
+
+        let backfill = telegram_calls_storage_migration_v4();
+        assert_eq!(backfill.revision, 6);
+        assert_eq!(backfill.migration_id, "telegram_call_realtime_backfill_job");
+        assert!(TELEGRAM_CALLS_SCHEMA_V4.contains("telegram_call_realtime_replay_order"));
+        assert!(TELEGRAM_CALLS_SCHEMA_V4.contains("telegram_call_realtime_replay_cursor"));
+        assert!(TELEGRAM_CALLS_SCHEMA_V4.contains("telegram_call_realtime_backfill_jobs"));
+        assert!(!TELEGRAM_CALLS_SCHEMA_V4.contains("INSERT INTO"));
+        assert!(!TELEGRAM_CALLS_SCHEMA_V4.contains("UPDATE "));
+        assert!(!TELEGRAM_CALLS_SCHEMA_V4.contains("DELETE "));
     }
 }

@@ -297,5 +297,7 @@ composition/workflow units.
 ADR-0285 вводит owner-local upgrade job без fake Scheduler schedule:
 owner-neutral Job Platform protocol несёт exact upgrade command, а Telegram
 Calls persistence владеет durable execution, lease и checkpoint для
-restart-safe V3-to-V4 realtime backfill. Storage migration остаётся DDL-only,
-Kernel/Scheduler/Communications не получают Telegram handler или owner SQL.
+restart-safe V3-to-V4 realtime backfill. Реализованный V6 bundle остаётся
+DDL-only; owner executor сохраняет прежние cursors через отдельный replay-order
+mapping, а Kernel/Scheduler/Communications не получают Telegram handler или
+owner SQL.

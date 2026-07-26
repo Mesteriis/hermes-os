@@ -34,6 +34,7 @@ use hermes_telegram_tdlib::{TdJsonLibrary, TdlibAuthorizationParameters, TdlibEr
 use hermes_vault_protocol::SecretClassV1;
 
 use crate::admission::TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS;
+use crate::calls_backfill::complete_calls_realtime_backfill_v1;
 use crate::communications_outbox::{
     TelegramCommunicationsOutboxRelayError, relay_communications_outbox_once,
 };
@@ -52,6 +53,7 @@ pub enum TelegramBootstrapError {
     UnsupportedProvider,
     MissingApiHash,
     EventHub,
+    CallsBackfill,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -188,6 +190,9 @@ pub async fn open_admitted_runtime(
     .map_err(TelegramBootstrapError::Persistence)?;
     let automation = TelegramAutomationPersistence::new(durable.shared_owner_pool());
     let calls = TelegramCallsPersistence::new(durable.shared_owner_pool());
+    complete_calls_realtime_backfill_v1(&calls, &identity)
+        .await
+        .map_err(|_| TelegramBootstrapError::CallsBackfill)?;
     let (persisted_account, credential_bindings) = durable
         .account(account_id)
         .await

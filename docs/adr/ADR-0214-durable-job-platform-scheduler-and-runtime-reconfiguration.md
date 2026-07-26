@@ -13,8 +13,10 @@ equal revision и сохраняет active lease при update future schedule.
 ADR-0285 расширяет owner-neutral protocol отдельным exact
 `OwnerJobCommandV1`/`UpgradeReconciliation` contract для owner-local Job
 Executor. Этот тип не имеет schedule identity или Scheduler policy и
-валидационно не взаимозаменяем с `ScheduledJobCommandV1`; Telegram-specific
-executor остаётся следующим отдельным implementation gate.
+валидационно не взаимозаменяем с `ScheduledJobCommandV1`. Первый
+Telegram-specific owner-local executor реализован по ADR-0285 с exact durable
+command, bounded checkpoint, runtime-generation/lease fencing и managed
+conformance; он не добавляет Telegram handler в Scheduler.
 `hermes-scheduler-persistence` предоставляет exact `StorageBundleV1` для
 `hermes_platform.scheduler_schedules`, `scheduler_runs`, `scheduler_dispatches`
 и bounded `scheduler_concurrency` slots; bundle проходит canonical digest и PostgreSQL

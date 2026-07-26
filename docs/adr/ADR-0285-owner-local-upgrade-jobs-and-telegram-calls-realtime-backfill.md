@@ -2,12 +2,19 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: частично реализовано. `hermes-scheduler-protocol` уже
-предоставляет отдельные `OwnerJobCommandV1`,
+Состояние реализации: реализовано. `hermes-scheduler-protocol` предоставляет
+отдельные `OwnerJobCommandV1`,
 `OwnerJobTriggerKindV1::UpgradeReconciliation`, owner-local lease/scope builder,
 exact descriptor set и отрицательную scheduled/upgrade interchange
-conformance. Telegram storage execution/checkpoint, runtime orchestration и
-managed backfill evidence ещё не реализованы.
+conformance. Telegram V6 storage bundle содержит только additive DDL для
+execution/checkpoint и replay-order projections. Telegram-owned executor
+принимает exact durable command, bounded-batches старые frames, сохраняет
+checkpoint, fences runtime generation/lease и завершает backfill до readiness.
+Disposable PostgreSQL conformance подтверждает 257-frame batching,
+crash/restart resume, newer-generation takeover, stale-lease rejection,
+duplicate command idempotency и cursor-preserving mixed V3/V4 replay. Managed
+signed Telegram conformance подтверждает backfill legacy frame до provider
+polling/client delivery и terminal replay после restart.
 
 Уточняет:
 
@@ -81,9 +88,9 @@ trigger: upgrade_reconciliation
 
 ### Storage и execution
 
-Следующий Telegram storage bundle revision добавляет только DDL для одной
-owner-local execution/checkpoint table. Storage migration не содержит
-`INSERT`, `UPDATE`, `DELETE` или copy DML.
+Telegram storage bundle revision 6 добавляет только DDL для owner-local
+execution/checkpoint table, replay-order mapping и replay cursor allocator.
+Storage migration не содержит `INSERT`, `UPDATE`, `DELETE` или copy DML.
 
 После успешного Storage admission Telegram runtime:
 
@@ -91,18 +98,31 @@ owner-local execution/checkpoint table. Storage migration не содержит
    command envelope;
 2. atomically claims execution current runtime generation и повышает lease
    epoch;
-3. копирует старые frames bounded batches в порядке legacy
+3. materializes отсутствующий внешний replay order для уже существующих V4
+   events bounded batches;
+4. копирует старые frames bounded batches в порядке legacy
    `frame_sequence`;
-4. вставляет call references в unified realtime events idempotently по
+5. вставляет call references в unified realtime events idempotently по
    `(call_session_id, call_revision)`;
-5. в той же transaction двигает durable source checkpoint и проверяет current
+6. в той же transaction двигает durable source checkpoint и проверяет current
    runtime generation/lease epoch;
-6. помечает execution `succeeded`, когда за checkpoint больше нет source rows.
+7. помечает execution `succeeded`, когда за checkpoint больше нет source rows,
+   и открывает allocator для следующих provider/operation events.
 
 Revision 3 не имела local mute commands, поэтому backfilled call events получают
 `local_muted = false`. Call payload по-прежнему восстанавливается join-ом с
 owner-local append-only call state history; private media material не
 копируется.
+
+`event_sequence` остаётся внутренней identity unified projection и никогда не
+переписывается. Для внешнего replay используется отдельный
+`telegram_call_realtime_replay_order`. Если до V6 клиент уже получил cursor
+`E`, executor выбирает offset строго выше `E + source_count`, помещает
+отсутствующие V3 frames в `(E, offset)`, а уже существующие V4 events отображает
+после offset с сохранением их внутреннего порядка. Поэтому любой прежний cursor
+`<= E` получает сначала backfill, затем безопасный повтор уже виденных V4
+events, но не silent gap. После terminal success один owner-local cursor row
+атомарно выдаёт sequence новым call/operation events.
 
 Provider polling и Calls client delivery не начинаются до terminal success
 backfill. Поэтому новые realtime events не могут обогнать старые frames, а
@@ -140,7 +160,7 @@ SRP определяется этими причинами изменения, �
 
 ## Admission evidence
 
-До закрытия backfill gate обязательны:
+Backfill gate закрыт следующими evidence:
 
 1. protocol tests для exact upgrade command и negative scheduled/upgrade
    interchange;
@@ -153,8 +173,8 @@ SRP определяется этими причинами изменения, �
 6. architecture tests, запрещающие Scheduler/Kernel/Communications dependency
    на Telegram job implementation.
 
-Только после этих evidence ADR-0284 может считать backfill prerequisite
-выполненным. Calls Command и real media gates остаются отдельными.
+Backfill prerequisite ADR-0284 выполнен. Calls Command и real media gates
+остаются отдельными.
 
 ## Отклонённые варианты
 

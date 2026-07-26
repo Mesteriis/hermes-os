@@ -1,3 +1,7 @@
+mod backfill;
+
+pub use backfill::*;
+
 pub const PACKAGE: &str = "hermes-telegram-calls-core";
 pub const MAX_CALL_ID_BYTES: usize = 256;
 

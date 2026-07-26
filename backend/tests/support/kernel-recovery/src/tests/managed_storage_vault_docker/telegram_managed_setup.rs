@@ -8,7 +8,7 @@ use hermes_telegram_api::{
     client_contract::{TELEGRAM_MODULE_ID, TELEGRAM_OWNER_ID},
 };
 use hermes_telegram_assembly::{
-    TELEGRAM_STORAGE_BUNDLE_REVISION_V5, telegram_storage_bundle_with_call_media_v5,
+    TELEGRAM_STORAGE_BUNDLE_REVISION_V6, telegram_storage_bundle_with_calls_backfill_v6,
 };
 use hermes_telegram_core::credential_lease_purpose_for_purpose;
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramPersistenceConformanceV1};
@@ -141,12 +141,12 @@ pub(super) fn admit_telegram_runtime(store: &SqliteControlStore) -> AdmittedTele
             Some(Sha256::digest(&schema).into()),
         ))
         .expect("record Telegram release binding");
-    let bundle = telegram_storage_bundle_with_call_media_v5().encode_to_vec();
+    let bundle = telegram_storage_bundle_with_calls_backfill_v6().encode_to_vec();
     store
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 TELEGRAM_OWNER_ID,
-                u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V5),
+                u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V6),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -171,7 +171,7 @@ pub(super) fn prepare_telegram_runtime(
     let bundle = store
         .platform_storage_bundle(
             TELEGRAM_OWNER_ID,
-            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V5),
+            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V6),
         )
         .expect("read Telegram Storage bundle")
         .expect("Telegram Storage bundle");
@@ -184,7 +184,7 @@ pub(super) fn prepare_telegram_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V5),
+            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V6),
             *bundle.digest(),
         )
         .expect("Telegram Storage binding issue"),
@@ -367,6 +367,68 @@ fn seed_telegram_account() {
         });
 }
 
+pub(super) fn seed_telegram_legacy_call_frame() {
+    tokio::runtime::Runtime::new()
+        .expect("Telegram legacy call seed runtime")
+        .block_on(async {
+            let pool = telegram_admin_pool().await;
+            let mut transaction = pool.begin().await.expect("begin legacy call seed");
+            sqlx::query(
+                "INSERT INTO hermes_data.telegram_call_sessions (\
+                 call_session_id, account_id, runtime_generation, tdlib_call_id, \
+                 provider_call_unique_id, provider_user_id, direction, provider_state, \
+                 pending_created, pending_received, discard_reason, failure_category, revision, \
+                 created_at_unix_seconds, updated_at_unix_seconds, ended_at_unix_seconds\
+                 ) VALUES (\
+                 'legacy-call-before-v4', $1, 1, 941, 4001, '41', 'incoming', 'discarded', \
+                 FALSE, FALSE, 'missed', NULL, 1, 10, 10, 10\
+                 )",
+            )
+            .bind(TELEGRAM_ACCOUNT_ID)
+            .execute(&mut *transaction)
+            .await
+            .expect("seed legacy call projection");
+            sqlx::query(
+                "INSERT INTO hermes_data.telegram_call_state_history (\
+                 call_session_id, revision, provider_state, pending_created, pending_received, \
+                 discard_reason, failure_category, observed_at_unix_seconds\
+                 ) VALUES (\
+                 'legacy-call-before-v4', 1, 'discarded', FALSE, FALSE, 'missed', NULL, 10\
+                 )",
+            )
+            .execute(&mut *transaction)
+            .await
+            .expect("seed legacy call history");
+            sqlx::query(
+                "INSERT INTO hermes_data.telegram_call_realtime_frames (\
+                 account_id, call_session_id, call_revision, provider_state, pending_created, \
+                 pending_received, discard_reason, failure_category, observed_at_unix_seconds\
+                 ) VALUES (\
+                 $1, 'legacy-call-before-v4', 1, 'discarded', FALSE, FALSE, 'missed', NULL, 10\
+                 )",
+            )
+            .bind(TELEGRAM_ACCOUNT_ID)
+            .execute(&mut *transaction)
+            .await
+            .expect("seed legacy realtime frame");
+            transaction.commit().await.expect("commit legacy call seed");
+        });
+}
+
+pub(super) fn telegram_calls_backfill_state() -> (String, i64, i64) {
+    tokio::runtime::Runtime::new()
+        .expect("Telegram Calls backfill query runtime")
+        .block_on(async {
+            sqlx::query_as::<_, (String, i64, i64)>(
+                "SELECT execution_state, processed_frame_count, backfilled_frame_count \
+                 FROM hermes_data.telegram_call_realtime_backfill_jobs",
+            )
+            .fetch_one(&telegram_admin_pool().await)
+            .await
+            .expect("read Telegram Calls backfill execution")
+        })
+}
+
 async fn telegram_admin_persistence() -> TelegramDurablePersistence {
     let password = Zeroizing::new(
         std::fs::read_to_string(required(
@@ -387,6 +449,33 @@ async fn telegram_admin_persistence() -> TelegramDurablePersistence {
     )
     .await
     .expect("connect Telegram conformance persistence")
+}
+
+async fn telegram_admin_pool() -> sqlx::PgPool {
+    let password = Zeroizing::new(
+        std::fs::read_to_string(required(
+            "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",
+        ))
+        .expect("read disposable PostgreSQL credential")
+        .trim()
+        .to_owned(),
+    );
+    let options = sqlx::postgres::PgConnectOptions::new()
+        .host(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST"))
+        .port(
+            required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")
+                .parse()
+                .expect("valid PostgreSQL port"),
+        )
+        .username("hermes_postgres_admin")
+        .password(password.as_str())
+        .database("hermes_storage_authenticated")
+        .ssl_mode(sqlx::postgres::PgSslMode::Disable);
+    sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .expect("connect Telegram conformance database")
 }
 
 pub(super) fn telegram_call_media_state() -> String {

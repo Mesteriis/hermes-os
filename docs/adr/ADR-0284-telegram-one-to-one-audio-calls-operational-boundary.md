@@ -12,12 +12,15 @@ route с restart/stale-fence conformance. `telegram_call_signaling_v1`,
 system-audio implementation patch, exact dylib loader и Kernel-staged
 assembly/runtime binding. TDLib `callStateReady` и bidirectional signaling
 преобразуются в secret-safe media plan, исполняются через pinned tgcalls port и
-дают отдельную durable media projection. Exact V5 storage bundle проходит
+дают отдельную durable media projection. Exact V6 storage bundle проходит
 additive DDL admission, disposable PostgreSQL test и managed-runtime fixture
 conformance для ready/signaling, terminal teardown, revoke/restart и stale
-runtime generation. Исторические V3 realtime frames нельзя копировать
-запрещённым DML внутри Storage migration; их restart-safe owner-local backfill
-через Job Platform остаётся обязательным до открытия signaling gate.
+runtime generation. Исторические V3 realtime frames копируются только
+restart-safe owner-local Job Platform executor после additive DDL admission:
+257-frame PostgreSQL и signed managed-runtime conformance подтверждают bounded
+checkpoint/resume, cursor-preserving V3/V4 order, generation/lease fencing и
+terminal replay до readiness. Backfill prerequisite signaling gate выполнен;
+exact Calls Command/provider-result conformance остаётся следующим gate.
 Реализованное всё ещё не доказывает real input/output audio loop, upstream
 tgcalls memory/thread conformance или authorized live one-to-one call.
 Historical fixture transcript не является evidence ни для одного gate этого

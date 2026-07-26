@@ -24,6 +24,9 @@ test('Telegram Calls contract, core and persistence are separate integration bui
   assert.doesNotMatch(apiManifest, /telegram-calls-core|sqlx|telegram-runtime/);
   assert.doesNotMatch(coreManifest, /sqlx|prost|telegram-runtime|telegram-tdlib/);
   assert.match(persistenceManifest, /hermes-telegram-calls-core/);
+  assert.match(coreManifest, /hermes-scheduler-protocol/);
+  assert.match(persistenceManifest, /hermes-scheduler-protocol/);
+  assert.match(persistenceManifest, /hermes-events-protocol/);
   assert.doesNotMatch(persistenceManifest, /hermes-telegram-calls-api|telegram-tdlib/);
   assert.match(runtimeManifest, /hermes-telegram-calls-api/);
   assert.match(runtimeManifest, /hermes-telegram-calls-core/);
@@ -49,10 +52,59 @@ test('Telegram Call history admits query and replay without opening signaling co
   );
   assert.match(runtimePort, /Telegram Calls command route is not admitted/);
   assert.doesNotMatch(runtimePort, /hermes_communications|hermes_telegram_tdlib/);
-  assert.match(assembly, /telegram_storage_bundle_with_calls_v3/);
+  assert.match(assembly, /telegram_storage_bundle_with_calls_backfill_v6/);
   assert.match(assembly, /telegram_calls_storage_migration_v1/);
+  assert.match(assembly, /telegram_calls_storage_migration_v4/);
   assert.match(fixture, /updateCall/);
   assert.match(fixture, /callStateDiscarded/);
+});
+
+test('Telegram Calls upgrade job is owner-local, DDL-only and cursor preserving', async () => {
+  const [
+    schedulerProto,
+    schedulerManifest,
+    core,
+    persistenceManifest,
+    persistence,
+    runtime,
+    schema,
+    communicationsManifest,
+  ] = await Promise.all([
+    source('src/platform/scheduler/protocol/proto/hermes/scheduler/v1/job_command.proto'),
+    source('src/platform/scheduler/implementation/Cargo.toml'),
+    source('src/telegram-calls-core/src/backfill.rs'),
+    source('src/telegram-calls-persistence/Cargo.toml'),
+    source('src/telegram-calls-persistence/src/backfill/executor.rs'),
+    source('src/telegram-runtime/src/calls_backfill.rs'),
+    source('src/telegram-calls-persistence/src/schema.rs'),
+    source('src/communications-runtime/Cargo.toml'),
+  ]);
+
+  const ownerCommand = schedulerProto.match(/message OwnerJobCommandV1 \{(?<body>.*?)\n\}/s);
+  assert.ok(ownerCommand?.groups?.body);
+  assert.match(schedulerProto, /OWNER_JOB_TRIGGER_KIND_V1_UPGRADE_RECONCILIATION/);
+  assert.doesNotMatch(ownerCommand.groups.body, /schedule_id|schedule_revision/);
+  assert.match(core, /calls_realtime_backfill/);
+  assert.match(core, /BATCH_SIZE_V1: u32 = 256/);
+  assert.match(persistenceManifest, /hermes-events-protocol/);
+  assert.match(persistenceManifest, /hermes-scheduler-protocol/);
+  assert.doesNotMatch(persistenceManifest, /communications-runtime|hermes-kernel/);
+  assert.match(persistence, /telegram_call_realtime_replay_order/);
+  assert.match(persistence, /telegram_call_realtime_replay_cursor/);
+  assert.match(persistence, /StaleLease/);
+  assert.match(runtime, /DurableEnvelopeV1/);
+  assert.match(runtime, /complete_calls_realtime_backfill_v1/);
+  assert.match(runtime, /ExecutionPolicyExhausted/);
+  assert.doesNotMatch(schedulerManifest, /telegram/);
+  assert.doesNotMatch(communicationsManifest, /telegram-calls/);
+
+  const migration = schema.match(
+    /pub const TELEGRAM_CALLS_SCHEMA_V4: &str = r#"(?<body>.*?)"#;/s,
+  );
+  assert.ok(migration?.groups?.body);
+  assert.match(migration.groups.body, /telegram_call_realtime_replay_order/);
+  assert.match(migration.groups.body, /telegram_call_realtime_backfill_jobs/);
+  assert.doesNotMatch(migration.groups.body, /\b(?:INSERT|UPDATE|DELETE)\b/i);
 });
 
 test('Telegram Calls contracts are typed and do not expose media secrets', async () => {

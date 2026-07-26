@@ -10,6 +10,12 @@ owner = "test"
 surface = "test_support"
 
 [dev-dependencies]
+hermes-clock-protocol = { path = "../../../src/platform/clock/protocol" }
+hermes-events-protocol = { path = "../../../src/platform/events" }
+hermes-scheduler-protocol = { path = "../../../src/platform/scheduler/protocol" }
 hermes-telegram-calls-core = { path = "../../../src/telegram-calls-core" }
 hermes-telegram-calls-persistence = { path = "../../../src/telegram-calls-persistence", features = ["conformance-test-support"] }
+prost = "=0.14.4"
+prost-types = "=0.14.4"
+sha2 = { version = "=0.10.9", default-features = false }
 tokio = { version = "=1.52.4", default-features = false, features = ["macros", "rt-multi-thread"] }

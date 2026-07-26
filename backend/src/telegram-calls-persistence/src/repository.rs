@@ -45,6 +45,10 @@ impl TelegramCallsPersistence {
         Self { pool }
     }
 
+    pub(crate) fn owner_pool(&self) -> &PgPool {
+        &self.pool
+    }
+
     #[cfg(feature = "conformance-test-support")]
     pub async fn connect_for_conformance(
         database_url: &str,
@@ -74,11 +78,20 @@ impl TelegramCallsPersistence {
     }
 
     #[cfg(feature = "conformance-test-support")]
-    pub async fn apply_schema_for_conformance(&self) -> Result<(), TelegramCallsPersistenceError> {
+    pub async fn apply_call_history_schema_for_conformance(
+        &self,
+    ) -> Result<(), TelegramCallsPersistenceError> {
         sqlx::raw_sql(crate::schema::TELEGRAM_CALLS_SCHEMA_V1)
             .execute(&self.pool)
             .await
             .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "conformance-test-support")]
+    pub async fn apply_calls_upgrade_schemas_for_conformance(
+        &self,
+    ) -> Result<(), TelegramCallsPersistenceError> {
         sqlx::raw_sql(crate::schema::TELEGRAM_CALLS_SCHEMA_V2)
             .execute(&self.pool)
             .await
@@ -87,7 +100,102 @@ impl TelegramCallsPersistence {
             .execute(&self.pool)
             .await
             .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        sqlx::raw_sql(crate::schema::TELEGRAM_CALLS_SCHEMA_V4)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| TelegramCallsPersistenceError::Database)?;
         Ok(())
+    }
+
+    #[cfg(feature = "conformance-test-support")]
+    pub async fn apply_schema_for_conformance(&self) -> Result<(), TelegramCallsPersistenceError> {
+        self.apply_call_history_schema_for_conformance().await?;
+        self.apply_calls_upgrade_schemas_for_conformance().await
+    }
+
+    #[cfg(feature = "conformance-test-support")]
+    pub async fn ingest_legacy_provider_update_for_conformance(
+        &self,
+        new_call_session_id: &str,
+        update: &TelegramProviderCallUpdate,
+    ) -> Result<PersistedCallUpdate, TelegramCallsPersistenceError> {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        let current = load_for_update(&mut transaction, update).await?;
+        let projected =
+            project_provider_call_update(current.as_ref(), new_call_session_id, update)?;
+        if !projected.changed {
+            transaction
+                .commit()
+                .await
+                .map_err(|_| TelegramCallsPersistenceError::Database)?;
+            return Ok(PersistedCallUpdate {
+                session: projected.session,
+                frame_sequence: None,
+                replayed: true,
+            });
+        }
+        persist_session(&mut transaction, current.as_ref(), &projected.session).await?;
+        persist_history(&mut transaction, &projected.session).await?;
+        persist_legacy_frame(&mut transaction, &projected.session).await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        Ok(PersistedCallUpdate {
+            session: projected.session,
+            frame_sequence: None,
+            replayed: false,
+        })
+    }
+
+    #[cfg(feature = "conformance-test-support")]
+    pub async fn ingest_pre_backfill_provider_update_for_conformance(
+        &self,
+        new_call_session_id: &str,
+        update: &TelegramProviderCallUpdate,
+    ) -> Result<PersistedCallUpdate, TelegramCallsPersistenceError> {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        let current = load_for_update(&mut transaction, update).await?;
+        let projected =
+            project_provider_call_update(current.as_ref(), new_call_session_id, update)?;
+        if !projected.changed {
+            return Err(TelegramCallsPersistenceError::InvalidRequest(
+                "pre_backfill_fixture",
+            ));
+        }
+        persist_session(&mut transaction, current.as_ref(), &projected.session).await?;
+        persist_history(&mut transaction, &projected.session).await?;
+        persist_legacy_frame(&mut transaction, &projected.session).await?;
+        let event_sequence: i64 = sqlx::query_scalar(
+            "INSERT INTO hermes_data.telegram_call_realtime_events (\
+             account_id, event_kind, call_session_id, call_revision, local_muted, \
+             observed_at_unix_seconds\
+             ) VALUES ($1, 'call', $2, $3, FALSE, $4) RETURNING event_sequence",
+        )
+        .bind(&projected.session.account_id)
+        .bind(&projected.session.call_session_id)
+        .bind(as_i64(projected.session.revision)?)
+        .bind(as_i64(projected.session.updated_at_unix_seconds)?)
+        .fetch_one(&mut *transaction)
+        .await
+        .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        Ok(PersistedCallUpdate {
+            session: projected.session,
+            frame_sequence: Some(from_i64(event_sequence)?),
+            replayed: false,
+        })
     }
 
     pub async fn ingest_provider_update(
