@@ -22,12 +22,21 @@ pub(super) struct MailSmtpFixture {
     ca_certificate_pem: String,
     accepted_messages: Arc<AtomicUsize>,
     last_message: Arc<Mutex<Vec<u8>>>,
+    disconnect_after_data: bool,
     shutdown: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
 
 impl MailSmtpFixture {
     pub(super) fn start() -> Self {
+        Self::start_with_disconnect_after_data(false)
+    }
+
+    pub(super) fn start_outcome_unknown() -> Self {
+        Self::start_with_disconnect_after_data(true)
+    }
+
+    fn start_with_disconnect_after_data(disconnect_after_data: bool) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let certified = generate_simple_self_signed(vec!["localhost".to_owned()])
             .expect("generate SMTP fixture certificate");
@@ -68,7 +77,12 @@ impl MailSmtpFixture {
                         let connection =
                             ServerConnection::new(Arc::clone(&server)).expect("SMTP TLS session");
                         let mut stream = StreamOwned::new(connection, stream);
-                        serve_connection(&mut stream, &worker_accepted, &worker_message);
+                        serve_connection(
+                            &mut stream,
+                            &worker_accepted,
+                            &worker_message,
+                            disconnect_after_data,
+                        );
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(10));
@@ -82,6 +96,7 @@ impl MailSmtpFixture {
             ca_certificate_pem,
             accepted_messages,
             last_message,
+            disconnect_after_data,
             shutdown,
             worker: Some(worker),
         }
@@ -105,6 +120,10 @@ impl MailSmtpFixture {
             .expect("lock SMTP fixture message")
             .clone()
     }
+
+    pub(super) fn disconnects_after_data(&self) -> bool {
+        self.disconnect_after_data
+    }
 }
 
 impl Drop for MailSmtpFixture {
@@ -123,6 +142,7 @@ fn serve_connection(
     stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>,
     accepted_messages: &AtomicUsize,
     last_message: &Mutex<Vec<u8>>,
+    disconnect_after_data: bool,
 ) {
     write_response(stream, b"220 localhost ESMTP Hermes fixture\r\n");
     expect_prefix(stream, b"EHLO ");
@@ -145,6 +165,9 @@ fn serve_connection(
     }
     *last_message.lock().expect("lock SMTP fixture message") = message;
     accepted_messages.fetch_add(1, Ordering::SeqCst);
+    if disconnect_after_data {
+        return;
+    }
     write_response(stream, b"250 2.0.0 queued\r\n");
     assert_eq!(read_line(stream), b"QUIT\r\n");
     write_response(stream, b"221 2.0.0 closing\r\n");

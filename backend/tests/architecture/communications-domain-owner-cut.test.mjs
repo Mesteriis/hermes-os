@@ -36,7 +36,7 @@ test('Communications domain does not import integration or Blob implementations'
   }
 });
 
-test('Communications remains the exact domain owner after Engine admission', async () => {
+test('Communications remains the exact domain owner after Mail integration admission', async () => {
   const [
     policySource,
     ingressSources,
@@ -56,10 +56,10 @@ test('Communications remains the exact domain owner after Engine admission', asy
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'attachment_security_engine_v1');
+  assert.equal(policy.implementation.currentSlice, 'mail_outbound_mime_attachments_v1');
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications'],
-    integrations: [],
+    integrations: ['mail'],
     workflows: [],
     engines: ['attachment_security'],
     businessCapabilities: [
@@ -76,14 +76,42 @@ test('Communications remains the exact domain owner after Engine admission', asy
       'communications.query.v1',
       'communications.search.index.v1',
       'communications.storage.v1',
+      'mail.attachment-anchor.consume.v1',
+      'mail.attachment-blob-admission.publish.v1',
+      'mail.attachment-safety-state.consume.v1',
+      'mail.attachment.scan-candidate.publish.v1',
+      'mail.blob.v1',
+      'mail.communication-observed.publish.v1',
+      'mail.delivery.query.v1',
+      'mail.delivery.v1',
+      'mail.gmail.credentials.v1',
+      'mail.gmail.oauth-refresh.credentials.v1',
+      'mail.gmail.oauth-setup.credentials.v1',
+      'mail.imap.credentials.v1',
+      'mail.oauth.complete.v1',
+      'mail.oauth.query.v1',
+      'mail.oauth.refresh.v1',
+      'mail.oauth.start.v1',
+      'mail.smtp.credentials.v1',
+      'mail.storage.v1',
+      'mail.sync.v1',
     ],
   });
   assert.deepEqual(
     policy.implementation.productionPackages
       .filter((entry) => entry.role === 'integration')
       .map((entry) => entry.name),
-    [],
-    'Engine admission must not carry integration build units in production inventory',
+    [
+      'hermes-mail-api',
+      'hermes-mail-core',
+      'hermes-mail-imap',
+      'hermes-mail-gmail',
+      'hermes-mail-smtp',
+      'hermes-mail-persistence',
+      'hermes-mail-runtime',
+      'hermes-mail-assembly',
+    ],
+    'Mail admission must add exactly one integration build-unit family',
   );
 
   for (const source of [

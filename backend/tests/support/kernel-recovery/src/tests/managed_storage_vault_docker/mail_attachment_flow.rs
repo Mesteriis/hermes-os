@@ -23,6 +23,7 @@ use hermes_communications_attachment_contract::{
         AttachmentSafetyStateChangedV1, AttachmentSafetyStateV1 as AttachmentSafetyStateWireV1,
     },
 };
+use hermes_communications_ingress::v1::CommunicationObservationV1;
 use hermes_events_protocol::validation::envelope::decode_envelope_v1;
 use hermes_mail_api::{
     MailClientRequestV1, MailClientResponseV1, MailSyncInboxRequestV1,
@@ -43,7 +44,7 @@ pub(super) fn assert_mail_attachment_lifecycle(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     mail: &StartedMailRuntime,
-) {
+) -> [u8; 16] {
     let endpoint = store
         .platform_event_hub_topology()
         .expect("read Event Hub topology")
@@ -53,11 +54,15 @@ pub(super) fn assert_mail_attachment_lifecycle(
     let runtime = tokio::runtime::Runtime::new().expect("Mail attachment observer runtime");
     let _runtime_context = runtime.enter();
     let durable = runtime.block_on(connect_postgres());
-    let (client, mut anchors, mut admissions, mut candidates, mut state_changes) = runtime
-        .block_on(async {
+    let (client, mut observations, mut anchors, mut admissions, mut candidates, mut state_changes) =
+        runtime.block_on(async {
             let client = async_nats::connect(endpoint)
                 .await
                 .expect("connect Mail attachment observer");
+            let observations = client
+                .subscribe("hermes.observation.v1.communications.communication_observed.v1")
+                .await
+                .expect("subscribe Mail attachment observations");
             let anchors = client
                 .subscribe(
                     "hermes.event.v1.communications.communication_attachment_anchor_recorded.v1",
@@ -89,7 +94,14 @@ pub(super) fn assert_mail_attachment_lifecycle(
                 .flush()
                 .await
                 .expect("activate Mail attachment observers");
-            (client, anchors, admissions, candidates, state_changes)
+            (
+                client,
+                observations,
+                anchors,
+                admissions,
+                candidates,
+                state_changes,
+            )
         });
 
     assert_mail_sync(
@@ -99,6 +111,26 @@ pub(super) fn assert_mail_attachment_lifecycle(
         31,
         "managed-mail-attachment-source",
     );
+    let attachment_observation = runtime
+        .block_on(async {
+            tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    let observation = observations
+                        .next()
+                        .await
+                        .expect("Mail attachment observation");
+                    let envelope = decode_envelope_v1(observation.payload.as_ref())
+                        .expect("Mail observation durable envelope");
+                    let payload = CommunicationObservationV1::decode(envelope.payload.as_slice())
+                        .expect("Mail observation payload");
+                    if payload.attachment_descriptor.is_some() {
+                        return envelope;
+                    }
+                }
+            })
+            .await
+        })
+        .expect("Mail attachment observation timeout");
     let anchor = runtime
         .block_on(async { tokio::time::timeout(Duration::from_secs(10), anchors.next()).await })
         .expect("Mail attachment anchor timeout")
@@ -120,6 +152,7 @@ pub(super) fn assert_mail_attachment_lifecycle(
         .as_slice()
         .try_into()
         .expect("Mail source observation id");
+    assert_eq!(attachment_observation.message_id, source_observation_id);
     let attachment_anchor_id: [u8; 16] = anchor_payload
         .attachment_anchor_id
         .as_slice()
@@ -332,6 +365,7 @@ pub(super) fn assert_mail_attachment_lifecycle(
         AttachmentSafetyStateWireV1::BlobAdmitted as u32,
         "CAS conflict must leave the terminal Communications state unchanged"
     );
+    attachment_anchor_id
 }
 
 fn assert_mail_sync(

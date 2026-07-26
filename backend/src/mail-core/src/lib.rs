@@ -10,12 +10,18 @@ use hermes_communications_ingress::{
 };
 use hermes_mail_api::{
     DEFAULT_WINDOW, MAX_PLAIN_TEXT_BYTES, MAX_WINDOWS, MailContractError::WindowLimitExceeded,
-    OutgoingMailV1, SYNC_DEADLINE_SECONDS, WINDOW_DEADLINE_SECONDS, valid_host, valid_mailbox,
+    OutgoingMailV1, SYNC_DEADLINE_SECONDS, WINDOW_DEADLINE_SECONDS, valid_host,
     valid_message_bytes, valid_port, valid_window,
 };
 
 pub mod oauth;
+pub mod outbound_mime;
 pub mod rfc822;
+
+pub use outbound_mime::{
+    MAX_OUTBOUND_ATTACHMENT_BYTES, MAX_OUTBOUND_RFC822_BYTES, OutboundAttachmentDispositionV1,
+    OutboundAttachmentV1, compose_rfc822_with_attachments,
+};
 
 pub use hermes_mail_api::{
     MailConnection, MailConnectionId, MailConnectionState, MailContractError, MailOperation,
@@ -145,28 +151,8 @@ pub fn compose_rfc822(
     from_address: &str,
     message: &OutgoingMailV1,
 ) -> Result<String, MailContractError> {
-    if message.operation_id.trim().is_empty()
-        || message.connection_id.trim().is_empty()
-        || message.provider_conversation_id.trim().is_empty()
-        || !valid_mailbox(from_address)
-        || message.recipients.is_empty()
-        || message
-            .recipients
-            .iter()
-            .any(|recipient| !valid_mailbox(recipient))
-        || invalid_header(&message.subject)
-        || message.subject.len() > 998
-        || !valid_message_bytes(message.text_body.len())
-    {
-        return Err(MailContractError::InvalidPayload);
-    }
-    let recipients = message.recipients.join(", ");
-    Ok(format!(
-        "From: {}\r\nTo: {recipients}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{}",
-        from_address,
-        message.subject,
-        normalize_crlf(&message.text_body),
-    ))
+    outbound_mime::validate_message(from_address, message)?;
+    Ok(outbound_mime::plain_text_message(from_address, message))
 }
 
 pub fn draft_delivery_observation(
@@ -209,17 +195,6 @@ pub fn draft_delivery_observation(
         None,
     )
     .map_err(|_| MailContractError::InvalidPayload)
-}
-
-fn invalid_header(value: &str) -> bool {
-    value.is_empty() || value.contains(['\r', '\n', '\0'])
-}
-
-fn normalize_crlf(value: &str) -> String {
-    value
-        .replace("\r\n", "\n")
-        .replace('\r', "\n")
-        .replace('\n', "\r\n")
 }
 
 pub fn draft_ingress_observation(

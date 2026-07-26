@@ -7,12 +7,13 @@ use hermes_mail_api::{
     client_contract::{MAIL_MODULE_ID, MAIL_OWNER_ID, MailClientContractV1},
 };
 use hermes_mail_persistence::{
-    GmailOAuthCredentialBindingV1, MAIL_STORAGE_BUNDLE_REVISION_V4, mail_storage_bundle_v1,
+    GmailOAuthCredentialBindingV1, MAIL_STORAGE_BUNDLE_REVISION_V6, mail_storage_bundle_v1,
 };
 use hermes_mail_runtime::{
     admission::{
         MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
         MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID,
+        MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID,
         MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID, MAIL_BLOB_CAPABILITY_ID,
         MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID, MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
         MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID, MAIL_GMAIL_OAUTH_REFRESH_CREDENTIALS_CAPABILITY_ID,
@@ -39,6 +40,7 @@ pub(super) struct StartedMailRuntime {
     pub(super) runtime_instance_id: String,
     pub(super) runtime_generation: u64,
     pub(super) grant_epoch: u64,
+    capability_ids: Vec<String>,
 }
 
 pub(super) struct MailSmtpFixtureSettingsV1 {
@@ -80,7 +82,9 @@ impl SeededGmailCredentialBindingV1 {
 enum MailAdmissionProfileV1 {
     ImapSync,
     SmtpDelivery,
+    SmtpAttachmentDelivery,
     GmailDelivery,
+    GmailAttachmentDelivery,
     GmailOAuth,
 }
 
@@ -195,8 +199,20 @@ pub(super) fn admit_mail_delivery_runtime(store: &SqliteControlStore) -> Admitte
     admit_mail_runtime_profile(store, MailAdmissionProfileV1::SmtpDelivery)
 }
 
+pub(super) fn admit_mail_attachment_delivery_runtime(
+    store: &SqliteControlStore,
+) -> AdmittedMailRuntime {
+    admit_mail_runtime_profile(store, MailAdmissionProfileV1::SmtpAttachmentDelivery)
+}
+
 pub(super) fn admit_mail_gmail_delivery_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
     admit_mail_runtime_profile(store, MailAdmissionProfileV1::GmailDelivery)
+}
+
+pub(super) fn admit_mail_gmail_attachment_delivery_runtime(
+    store: &SqliteControlStore,
+) -> AdmittedMailRuntime {
+    admit_mail_runtime_profile(store, MailAdmissionProfileV1::GmailAttachmentDelivery)
 }
 
 pub(super) fn admit_mail_gmail_oauth_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
@@ -232,6 +248,22 @@ fn admit_mail_runtime_profile(
                 .capability_id()
                 .to_owned(),
         ],
+        MailAdmissionProfileV1::SmtpAttachmentDelivery => vec![
+            MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID.to_owned(),
+            MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID.to_owned(),
+            MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_BLOB_CAPABILITY_ID.to_owned(),
+            MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_IMAP_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_SMTP_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_STORAGE_CAPABILITY_ID.to_owned(),
+            MailClientContractV1::Delivery.capability_id().to_owned(),
+            MailClientContractV1::DeliveryQuery
+                .capability_id()
+                .to_owned(),
+            MailClientContractV1::Sync.capability_id().to_owned(),
+        ],
         MailAdmissionProfileV1::GmailDelivery => vec![
             MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
             MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID.to_owned(),
@@ -240,6 +272,21 @@ fn admit_mail_runtime_profile(
             MailClientContractV1::DeliveryQuery
                 .capability_id()
                 .to_owned(),
+        ],
+        MailAdmissionProfileV1::GmailAttachmentDelivery => vec![
+            MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID.to_owned(),
+            MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID.to_owned(),
+            MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_BLOB_CAPABILITY_ID.to_owned(),
+            MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_STORAGE_CAPABILITY_ID.to_owned(),
+            MailClientContractV1::Delivery.capability_id().to_owned(),
+            MailClientContractV1::DeliveryQuery
+                .capability_id()
+                .to_owned(),
+            MailClientContractV1::Sync.capability_id().to_owned(),
         ],
         MailAdmissionProfileV1::GmailOAuth => vec![
             MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
@@ -284,7 +331,7 @@ fn admit_mail_runtime_profile(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 MAIL_OWNER_ID,
-                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V4),
+                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V6),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -307,7 +354,7 @@ pub(super) fn prepare_mail_runtime(
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
     let bundle = store
-        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V4))
+        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V6))
         .expect("read Mail Storage bundle")
         .expect("Mail Storage bundle");
     let binding = issue_managed(
@@ -319,7 +366,7 @@ pub(super) fn prepare_mail_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V4),
+            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V6),
             *bundle.digest(),
         )
         .expect("Mail Storage binding issue"),
@@ -371,6 +418,54 @@ pub(super) fn start_mail_delivery_runtime(
             smtp: Some(smtp),
         },
     )
+}
+
+pub(super) fn restart_mail_delivery_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    predecessor: StartedMailRuntime,
+    imap_port: u16,
+    smtp: MailSmtpFixtureSettingsV1,
+) -> StartedMailRuntime {
+    let predecessor_generation = predecessor.runtime_generation;
+    let predecessor_binding = store
+        .platform_storage_binding(&predecessor.registration_id, MAIL_STORAGE_CAPABILITY_ID)
+        .expect("read predecessor Mail Storage binding")
+        .expect("predecessor Mail Storage binding");
+    let issue = storage_successor::issue_after(&predecessor_binding)
+        .expect("derive Mail successor storage fences");
+    let (_, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        &predecessor.registration_id,
+        MAIL_STORAGE_CAPABILITY_ID,
+        issue,
+    )
+    .expect("reserve successor Mail launch and Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision successor Mail Storage binding");
+    let successor = start_mail_runtime_with_settings(
+        supervisor,
+        store,
+        kernel_data,
+        runtime_dir,
+        AdmittedMailRuntime {
+            registration_id: predecessor.registration_id,
+            capability_ids: predecessor.capability_ids,
+        },
+        MailSettingsProfileV1::Imap {
+            port: imap_port,
+            smtp: Some(smtp),
+        },
+    );
+    assert_eq!(
+        successor.runtime_generation,
+        predecessor_generation + 1,
+        "Mail restart must use the next managed runtime generation",
+    );
+    successor
 }
 
 pub(super) fn start_mail_gmail_delivery_runtime(
@@ -456,6 +551,7 @@ fn start_mail_runtime_with_settings(
         runtime_instance_id,
         runtime_generation,
         grant_epoch,
+        capability_ids: admitted.capability_ids,
     }
 }
 

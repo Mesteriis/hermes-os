@@ -201,6 +201,7 @@ fn assert_ungranted_delivery_is_rejected(
             recipients: vec!["recipient@example.test".to_owned()],
             subject: "must not be delivered".to_owned(),
             text_body: "Kernel rejects this route before Mail receives it".to_owned(),
+            attachment_anchor_ids: Vec::new(),
         }),
     )
     .expect("encode exact Mail delivery module request");

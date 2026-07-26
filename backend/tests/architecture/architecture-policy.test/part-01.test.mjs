@@ -46,6 +46,8 @@ test('keeps the current implementation slice closed to undeclared production pac
     (implementation) => { implementation.forbiddenDependencies.pop(); },
     (implementation) => { implementation.forbiddenDependencyPrefixes.push('hermes-ai-'); },
     (implementation) => { implementation.cargoFeaturesEnabled = true; },
+    (implementation) => { implementation.cargoFeatureAllowlist['hermes-mail-api'].default.push('runtime-capability'); },
+    (implementation) => { delete implementation.cargoFeatureAllowlist['hermes-mail-runtime']; },
     (implementation) => { implementation.developmentProfile.networkListenerEnabled = false; },
     (implementation) => { implementation.developmentProfile.productionGateEvidenceAllowed = true; },
     (implementation) => { implementation.developmentProfile.privateKeyStorage = 'unprotected_file'; },

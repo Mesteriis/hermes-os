@@ -150,6 +150,9 @@ where
             Err(MailDeliveryDispatchErrorV1::ProviderRejected) => {
                 developer_diagnostic("developer_mail_delivery_rejected");
             }
+            Err(MailDeliveryDispatchErrorV1::AttachmentRejected) => {
+                developer_diagnostic("developer_mail_delivery_attachment_rejected");
+            }
             Err(MailDeliveryDispatchErrorV1::ProviderOutcomeUnknown) => {
                 developer_diagnostic("developer_mail_delivery_outcome_unknown");
             }
@@ -167,6 +170,12 @@ where
             .map_err(|_| {
                 developer_diagnostic("developer_mail_attachment_anchor_handoff_failed");
                 "Mail runtime attachment-anchor handoff failed".to_owned()
+            })?;
+        runtime
+            .block_on(admitted.try_consume_attachment_safety_state(now))
+            .map_err(|_| {
+                developer_diagnostic("developer_mail_attachment_safety_projection_failed");
+                "Mail runtime attachment safety projection failed".to_owned()
             })?;
         match runtime.block_on(admitted.relay_communications_outbox(now)) {
             Ok(_) => {}

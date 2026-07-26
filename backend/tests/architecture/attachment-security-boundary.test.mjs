@@ -542,11 +542,11 @@ test('Attachment Security managed conformance launches the signed Engine through
   );
 });
 
-test('Attachment Security production admission is one exact engine inventory', async () => {
+test('Attachment Security remains one exact engine after Mail integration admission', async () => {
   const policy = JSON.parse(await readFile(POLICY_PATH, 'utf8'));
   const productionPackages = policy.implementation.productionPackages;
 
-  assert.equal(policy.implementation.currentSlice, 'attachment_security_engine_v1');
+  assert.equal(policy.implementation.currentSlice, 'mail_outbound_mime_attachments_v1');
   assert.deepEqual(policy.implementation.ownerInventory.engines, ['attachment_security']);
   assert.deepEqual(
     productionPackages

@@ -40,6 +40,7 @@ pub struct MailSendMailRequestV1 {
     pub recipients: Vec<String>,
     pub subject: String,
     pub text_body: String,
+    pub attachment_anchor_ids: Vec<[u8; 16]>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailDeliveryStatusRequestV1 {
@@ -218,6 +219,7 @@ pub const GMAIL_API_HTTPS_PORT: u16 = 443;
 pub const MAX_HOST_LEN: usize = 253;
 pub const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 pub const MAX_PLAIN_TEXT_BYTES: usize = 256 * 1024;
+pub const MAX_DELIVERY_ATTACHMENTS: usize = 16;
 pub const MAX_CA_CERTIFICATE_PEM_BYTES: usize = 64 * 1024;
 pub const DEFAULT_WINDOW: u32 = 5_000;
 pub const MAX_WINDOW: u32 = 1_000_000;

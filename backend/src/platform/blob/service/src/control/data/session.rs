@@ -455,6 +455,7 @@ mod tests {
                 declared_size: 4,
                 receipt_sha256: vec![2; 32],
                 backup_class: WireBackupClass::BlobBackupClassRequiredV1 as i32,
+                custody_scope_id: "mail-attachments".to_owned(),
                 ..Default::default()
             }),
             target_owner_id: "attachment_security".to_owned(),
@@ -466,6 +467,7 @@ mod tests {
             target_key_revision: 4,
             target_quota_max_bytes: 1024,
             target_reference_id: vec![3; 16],
+            target_custody_scope_id: "attachment-security-scan".to_owned(),
             ..Default::default()
         };
 

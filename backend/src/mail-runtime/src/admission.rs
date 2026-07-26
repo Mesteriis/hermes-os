@@ -7,6 +7,7 @@ use hermes_attachment_security_contract::admission::attachment_security_scan_can
 use hermes_communications_attachment_contract::admission::{
     communication_attachment_anchor_recorded_contract_reference_v1,
     communication_attachment_blob_admission_observed_publish_request_v1,
+    communication_attachment_safety_state_changed_contract_reference_v1,
 };
 use hermes_communications_ingress::admission::{
     COMMUNICATION_OBSERVED_MAX_IN_FLIGHT, communication_observed_publish_request_v1,
@@ -33,6 +34,8 @@ use crate::settings::{
 pub const MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID: &str =
     "mail.attachment.scan-candidate.publish.v1";
 pub const MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID: &str = "mail.attachment-anchor.consume.v1";
+pub const MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID: &str =
+    "mail.attachment-safety-state.consume.v1";
 pub const MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID: &str =
     "mail.attachment-blob-admission.publish.v1";
 pub const MAIL_BLOB_CAPABILITY_ID: &str = "mail.blob.v1";
@@ -59,6 +62,7 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
         mail_attachment_anchor_consume_capability_v1(),
         mail_attachment_blob_admission_publish_capability_v1(),
+        mail_attachment_safety_state_consume_capability_v1(),
         mail_attachment_scan_candidate_publish_capability_v1(),
         mail_blob_capability_v1(),
         mail_communication_observed_publish_capability_v1(),
@@ -136,7 +140,10 @@ pub fn mail_blob_capability_v1() -> CapabilityDescriptorV1 {
             request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
                 max_bytes: MAIL_ATTACHMENT_BLOB_MAX_BYTES,
                 custody_scope_id: MAIL_ATTACHMENT_BLOB_CUSTODY_SCOPE_ID.to_owned(),
-                allowed_operations: vec![BlobQuotaOperationV1::Write as i32],
+                allowed_operations: vec![
+                    BlobQuotaOperationV1::Write as i32,
+                    BlobQuotaOperationV1::ReadRange as i32,
+                ],
             })),
         }],
         ..Default::default()
@@ -274,6 +281,29 @@ pub fn mail_attachment_anchor_consume_capability_v1() -> CapabilityDescriptorV1 
 }
 
 #[must_use]
+pub fn mail_attachment_safety_state_consume_capability_v1() -> CapabilityDescriptorV1 {
+    let safety_state_changed =
+        communication_attachment_safety_state_changed_contract_reference_v1();
+    CapabilityDescriptorV1 {
+        capability_id: MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::EventRoute(EventRouteRequestV1 {
+                envelope_kind: DurableEnvelopeKindV1::Event as i32,
+                contract: Some(safety_state_changed),
+                direction: EventRouteDirectionV1::Consume as i32,
+                max_in_flight: COMMUNICATION_OBSERVED_MAX_IN_FLIGHT,
+                subscription_requirement: EventSubscriptionRequirementV1::Required as i32,
+                max_deliver: MAIL_EVENT_MAX_DELIVER,
+                ack_wait_millis: MAIL_EVENT_ACK_WAIT_MILLIS,
+            })),
+        }],
+        ..Default::default()
+    }
+}
+
+#[must_use]
 pub fn mail_storage_capability_v1() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: MAIL_STORAGE_CAPABILITY_ID.to_owned(),
@@ -344,6 +374,7 @@ mod tests {
             [
                 MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
                 MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID,
+                MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID,
                 MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID,
                 MAIL_BLOB_CAPABILITY_ID,
                 MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID,
@@ -386,6 +417,7 @@ mod tests {
         for capability_id in [
             MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
             MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID,
+            MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID,
             MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID,
         ] {
             let capability = descriptor

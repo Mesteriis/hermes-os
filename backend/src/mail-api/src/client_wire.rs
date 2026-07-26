@@ -1,8 +1,9 @@
 use prost::Message;
 
 use crate::{
-    MailClientResponseV1, MailDeliveryOperationStatusV1, MailDeliveryOutcomeV1,
-    MailDeliveryStatusRequestV1, MailSendMailRequestV1, MailSyncInboxRequestV1, wire,
+    MAX_DELIVERY_ATTACHMENTS, MailClientResponseV1, MailDeliveryOperationStatusV1,
+    MailDeliveryOutcomeV1, MailDeliveryStatusRequestV1, MailSendMailRequestV1,
+    MailSyncInboxRequestV1, wire,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -38,6 +39,11 @@ pub fn encode_delivery_request(request: &MailSendMailRequestV1) -> Vec<u8> {
         recipient: request.recipients.clone(),
         subject: request.subject.clone(),
         text_body: request.text_body.clone(),
+        attachment_anchor_id: request
+            .attachment_anchor_ids
+            .iter()
+            .map(|anchor_id| anchor_id.to_vec())
+            .collect(),
     }
     .encode_to_vec()
 }
@@ -47,12 +53,26 @@ pub fn decode_delivery_request(
 ) -> Result<MailSendMailRequestV1, MailClientWireErrorV1> {
     let request = wire::SendMailRequestV1::decode(bytes)
         .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    let attachment_anchor_ids = request
+        .attachment_anchor_id
+        .iter()
+        .map(|anchor_id| {
+            let anchor_id: [u8; 16] = anchor_id
+                .as_slice()
+                .try_into()
+                .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+            (!anchor_id.iter().all(|byte| *byte == 0))
+                .then_some(anchor_id)
+                .ok_or(MailClientWireErrorV1::InvalidPayload)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let request = MailSendMailRequestV1 {
         operation_id: request.operation_id,
         provider_conversation_id: request.provider_conversation_id,
         recipients: request.recipient,
         subject: request.subject,
         text_body: request.text_body,
+        attachment_anchor_ids,
     };
     if request.operation_id.trim().is_empty()
         || request.recipients.is_empty()
@@ -60,6 +80,12 @@ pub fn decode_delivery_request(
             .recipients
             .iter()
             .any(|recipient| recipient.trim().is_empty())
+        || request.attachment_anchor_ids.len() > MAX_DELIVERY_ATTACHMENTS
+        || request
+            .attachment_anchor_ids
+            .iter()
+            .enumerate()
+            .any(|(index, anchor_id)| request.attachment_anchor_ids[..index].contains(anchor_id))
         || encode_delivery_request(&request) != bytes
     {
         return Err(MailClientWireErrorV1::InvalidPayload);
@@ -254,6 +280,7 @@ mod tests {
             recipients: vec!["recipient@example.com".to_owned()],
             subject: "subject".to_owned(),
             text_body: "body".to_owned(),
+            attachment_anchor_ids: Vec::new(),
         };
         assert_eq!(
             decode_delivery_request(&encode_delivery_request(&delivery)),
@@ -288,11 +315,39 @@ mod tests {
             recipients: vec!["recipient@example.com".to_owned()],
             subject: "subject".to_owned(),
             text_body: "body".to_owned(),
+            attachment_anchor_ids: Vec::new(),
         };
 
         assert_eq!(
             decode_sync_request(&encode_delivery_request(&delivery)),
             Err(MailClientWireErrorV1::InvalidPayload)
         );
+    }
+
+    #[test]
+    fn rejects_noncanonical_or_unbounded_attachment_anchor_ids() {
+        let request = |attachment_anchor_id: Vec<Vec<u8>>| {
+            wire::SendMailRequestV1 {
+                operation_id: "delivery-operation".to_owned(),
+                provider_conversation_id: "conversation".to_owned(),
+                recipient: vec!["recipient@example.com".to_owned()],
+                subject: "subject".to_owned(),
+                text_body: "body".to_owned(),
+                attachment_anchor_id,
+            }
+            .encode_to_vec()
+        };
+
+        for invalid in [
+            vec![vec![0; 16]],
+            vec![vec![1; 15]],
+            vec![vec![1; 16], vec![1; 16]],
+            (1_u8..=17).map(|value| vec![value; 16]).collect(),
+        ] {
+            assert_eq!(
+                decode_delivery_request(&request(invalid)),
+                Err(MailClientWireErrorV1::InvalidPayload)
+            );
+        }
     }
 }

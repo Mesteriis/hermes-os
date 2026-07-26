@@ -72,6 +72,9 @@ use crate::admission::{
 use crate::attachment_anchor_mapping::{
     MailAttachmentAnchorMappingErrorV1, consume_next_attachment_anchor_recorded_v1,
 };
+use crate::attachment_safety_projection::{
+    MailAttachmentSafetyProjectionErrorV1, consume_next_attachment_safety_state_changed_v1,
+};
 use crate::attachment_security_outbox::{
     MailAttachmentSecurityOutboxRelayError, relay_attachment_security_outbox_once,
 };
@@ -90,18 +93,23 @@ use hermes_mail_api::{
 };
 use hermes_mail_core::rfc822::{
     AttachmentDispositionV1 as Rfc822AttachmentDispositionV1, attachment_metadata,
-    direct_plain_text_body,
+    direct_plain_text_body, extract_attachment_part,
 };
 use hermes_mail_core::{
-    bounded_window, compose_rfc822, draft_attachment_ingress_observation,
-    draft_delivery_observation, draft_ingress_observation_with_body, validate_sync_request,
+    MAX_OUTBOUND_ATTACHMENT_BYTES, OutboundAttachmentDispositionV1, OutboundAttachmentV1,
+    bounded_window, compose_rfc822, compose_rfc822_with_attachments,
+    draft_attachment_ingress_observation, draft_delivery_observation,
+    draft_ingress_observation_with_body, validate_sync_request,
 };
 use hermes_mail_gmail::{
     GmailAdapterErrorV1, GmailApiClientV1, GmailListMessagesRequestV1, decode_raw_rfc822,
     history_message_ids,
 };
 use hermes_mail_persistence::{
-    MailDeliveryAttemptOutcomeV1, MailDurablePersistence, MailQueuedDeliveryV1,
+    MailAttachmentBlobAdmissionCompletionV1,
+    MailAttachmentDispositionV1 as PersistedAttachmentDispositionV1,
+    MailAttachmentMaterializationV1, MailDeliveryAttemptOutcomeV1, MailDeliveryEnqueueRequestV1,
+    MailDurablePersistence, MailQueuedDeliveryV1,
 };
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
@@ -116,6 +124,7 @@ pub struct MailAdmittedRuntime {
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
     attachment_anchor_subscribe_permit: Option<RuntimeSubscribePermitV1>,
+    attachment_safety_subscribe_permit: Option<RuntimeSubscribePermitV1>,
     attachment_blob_admission_publish_permitted: bool,
     attachment_security_scan_candidate_publish_permitted: bool,
     pub(crate) account: hermes_mail_api::MailAccountConfigurationV1,
@@ -167,6 +176,25 @@ struct GmailHistorySyncRequestV1<'a> {
     observed_at_nanos: i32,
 }
 
+struct MailProviderDeliveryRequestV1<'a> {
+    message: &'a OutgoingMailV1,
+    attachments: &'a [OutboundAttachmentV1],
+    from_address: &'a str,
+    provider: ProviderProvenanceV1,
+    queued: &'a MailQueuedDeliveryV1,
+    completed_at_unix_seconds: i64,
+}
+
+struct MailAttachmentBlobAdmissionRequestV1<'a> {
+    source_observation_id: [u8; 16],
+    bytes: &'a [u8],
+    filename: Option<String>,
+    media_type: String,
+    disposition: PersistedAttachmentDispositionV1,
+    observed_at_unix_seconds: i64,
+    observed_at_nanos: i32,
+}
+
 #[derive(Debug)]
 pub enum MailBootstrapError {
     Admission,
@@ -182,6 +210,7 @@ pub enum MailBootstrapError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailDeliveryDispatchErrorV1 {
     InvalidStoredCommand,
+    AttachmentRejected,
     Persistence,
     ProviderRejected,
     ProviderOutcomeUnknown,
@@ -346,7 +375,7 @@ pub async fn open_admitted_runtime(
             admission.grant_epoch,
         )
         .map_err(|_| mail_event_hub_error("publish_permit"))?;
-    let attachment_anchor_subscribe_permit = bind_attachment_anchor_subscribe_permit(
+    let subscribe_permits = bind_attachment_subscribe_permits(
         event_access
             .subscribe_permits(
                 &admission.module_registration_id,
@@ -392,7 +421,8 @@ pub async fn open_admitted_runtime(
         smtp_password,
         event_connection,
         event_publish_permit,
-        attachment_anchor_subscribe_permit,
+        attachment_anchor_subscribe_permit: subscribe_permits.anchor,
+        attachment_safety_subscribe_permit: subscribe_permits.safety,
         attachment_blob_admission_publish_permitted,
         attachment_security_scan_candidate_publish_permitted,
         account: admission.account.clone(),
@@ -463,6 +493,31 @@ impl MailAdmittedRuntime {
         }
     }
 
+    pub async fn try_consume_attachment_safety_state(
+        &self,
+        consumed_at_unix_seconds: i64,
+    ) -> Result<bool, MailBootstrapError> {
+        let Some(permit) = &self.attachment_safety_subscribe_permit else {
+            return Ok(false);
+        };
+        match tokio::time::timeout(
+            Duration::from_millis(25),
+            consume_next_attachment_safety_state_changed_v1(
+                &self.durable,
+                &self.event_connection,
+                permit,
+                consumed_at_unix_seconds,
+            ),
+        )
+        .await
+        {
+            Ok(Ok(_)) => Ok(true),
+            Ok(Err(MailAttachmentSafetyProjectionErrorV1::Unavailable)) => Ok(false),
+            Ok(Err(error)) => Err(map_attachment_safety_projection_error(error)),
+            Err(_) => Ok(false),
+        }
+    }
+
     pub async fn try_handle_client_delivery(&mut self) -> Result<bool, MailBootstrapError> {
         let Some((correlation_id, control_request)) = self
             .control_channel
@@ -492,15 +547,26 @@ impl MailAdmittedRuntime {
                 return Ok(true);
             }
         };
-        let payload = crate::client_port::handle_client_request(
+        let response = match crate::client_port::handle_client_request(
             self,
             &request.encode_to_vec(),
             current_unix_seconds()?,
         )
         .await
-        .map_err(|_| MailBootstrapError::Provider)?;
-        let response = ModuleClientResponseV1::decode(payload.as_slice())
-            .map_err(|_| MailBootstrapError::Provider)?;
+        {
+            Ok(payload) => ModuleClientResponseV1::decode(payload.as_slice())
+                .map_err(|_| MailBootstrapError::Provider)?,
+            Err(error) => ModuleClientResponseV1 {
+                protocol_major: 1,
+                request_id: request.request_id,
+                response_payload: Vec::new(),
+                error_code: match error {
+                    crate::client_port::MailClientPortErrorV1::Protocol => "INVALID_ARGUMENT",
+                    crate::client_port::MailClientPortErrorV1::Runtime => "REJECTED",
+                }
+                .to_owned(),
+            },
+        };
         validate_module_client_response_v1(&response).map_err(|_| MailBootstrapError::Provider)?;
         write_client_delivery_response(&mut self.control_channel, correlation_id, response)?;
         Ok(true)
@@ -523,15 +589,20 @@ impl MailAdmittedRuntime {
         };
         let rfc822_message =
             compose_rfc822(from_address, &message).map_err(|_| MailBootstrapError::Admission)?;
-        let rfc822_sha256: [u8; 32] = Sha256::digest(rfc822_message.as_bytes()).into();
+        let _ = rfc822_message;
+        let exact_command_bytes = hermes_mail_api::client_wire::encode_delivery_request(request);
+        let request_sha256: [u8; 32] = Sha256::digest(&exact_command_bytes).into();
         self.durable
-            .enqueue_delivery_command(
-                &message.operation_id,
-                &message.connection_id,
-                &rfc822_sha256,
-                &hermes_mail_api::client_wire::encode_delivery_request(request),
+            .enqueue_delivery_command(MailDeliveryEnqueueRequestV1 {
+                operation_id: &message.operation_id,
+                connection_id: &message.connection_id,
+                request_sha256: &request_sha256,
+                exact_command_bytes: &exact_command_bytes,
+                attachment_anchor_ids: &request.attachment_anchor_ids,
+                max_attachment_bytes: u64::try_from(MAX_OUTBOUND_ATTACHMENT_BYTES)
+                    .map_err(|_| MailBootstrapError::Admission)?,
                 requested_at_unix_seconds,
-            )
+            })
             .await
             .map_err(|_| MailBootstrapError::Persistence)?;
         Ok(message.operation_id)
@@ -590,11 +661,29 @@ impl MailAdmittedRuntime {
             hermes_mail_api::client_wire::decode_delivery_request(&queued.exact_command_bytes)
                 .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         let message = self.outgoing_message(&request);
+        let request_sha256: [u8; 32] = Sha256::digest(&queued.exact_command_bytes).into();
         if queued.operation_id != message.operation_id
             || queued.connection_id != message.connection_id
+            || queued.request_sha256 != request_sha256
+            || request.attachment_anchor_ids
+                != queued
+                    .attachments
+                    .iter()
+                    .map(|attachment| attachment.attachment_anchor_id)
+                    .collect::<Vec<_>>()
         {
             return Err(MailDeliveryDispatchErrorV1::InvalidStoredCommand);
         }
+        let attachments = match self.materialize_delivery_attachments(&queued) {
+            Ok(attachments) => attachments,
+            Err(_) => {
+                self.durable
+                    .complete_delivery_rejected(&message.operation_id, completed_at_unix_seconds)
+                    .await
+                    .map_err(|_| MailDeliveryDispatchErrorV1::Persistence)?;
+                return Err(MailDeliveryDispatchErrorV1::AttachmentRejected);
+            }
+        };
         let account = self.account.clone();
         match account.inbound {
             MailInboundTransportV1::Imap(_) => {
@@ -604,6 +693,7 @@ impl MailAdmittedRuntime {
                         .as_ref()
                         .ok_or(MailDeliveryDispatchErrorV1::InvalidStoredCommand)?,
                     &message,
+                    &attachments,
                     &queued,
                     completed_at_unix_seconds,
                 )
@@ -613,6 +703,7 @@ impl MailAdmittedRuntime {
                 self.send_mail_via_gmail(
                     &configuration,
                     &message,
+                    &attachments,
                     &queued,
                     completed_at_unix_seconds,
                 )
@@ -633,10 +724,80 @@ impl MailAdmittedRuntime {
         }
     }
 
+    fn materialize_delivery_attachments(
+        &mut self,
+        queued: &MailQueuedDeliveryV1,
+    ) -> Result<Vec<OutboundAttachmentV1>, MailDeliveryDispatchErrorV1> {
+        let mut total_bytes = 0_u64;
+        let mut attachments = Vec::with_capacity(queued.attachments.len());
+        for manifest in &queued.attachments {
+            total_bytes = total_bytes
+                .checked_add(manifest.declared_size)
+                .filter(|total| {
+                    *total
+                        <= u64::try_from(MAX_OUTBOUND_ATTACHMENT_BYTES)
+                            .expect("bounded attachment limit")
+                })
+                .ok_or(MailDeliveryDispatchErrorV1::AttachmentRejected)?;
+            self.control_channel
+                .inner_mut()
+                .set_nonblocking(false)
+                .map_err(|_| MailDeliveryDispatchErrorV1::AttachmentRejected)?;
+            let mut dispatcher = MailBusyControlDispatcher;
+            let session = request_managed_blob_session_v2(
+                &mut self.control_channel,
+                &mut dispatcher,
+                ManagedBlobSessionRequestV1 {
+                    capability_id: MAIL_BLOB_CAPABILITY_ID,
+                    operation: BlobDataOperationV1::BlobDataOperationReadRangeV1,
+                    reference_id: &manifest.blob_reference_id,
+                    declared_size: manifest.declared_size,
+                    backup_class: 1,
+                    receipt_sha256: Some(&manifest.receipt_sha256),
+                    custody_target: None,
+                },
+            );
+            let restored = self.control_channel.inner_mut().set_nonblocking(true);
+            let session = session.map_err(|_| MailDeliveryDispatchErrorV1::AttachmentRejected)?;
+            restored.map_err(|_| MailDeliveryDispatchErrorV1::AttachmentRejected)?;
+            let bytes = BlobDataClient::new(session.data_socket_path)
+                .and_then(|client| {
+                    client.read_range(
+                        session.grant,
+                        session.channel_binding,
+                        0,
+                        manifest.declared_size,
+                    )
+                })
+                .map_err(|_| MailDeliveryDispatchErrorV1::AttachmentRejected)?;
+            if u64::try_from(bytes.len()).ok() != Some(manifest.declared_size)
+                || <[u8; 32]>::from(Sha256::digest(&bytes)) != manifest.receipt_sha256
+            {
+                return Err(MailDeliveryDispatchErrorV1::AttachmentRejected);
+            }
+            attachments.push(OutboundAttachmentV1 {
+                anchor_id: manifest.attachment_anchor_id,
+                filename: manifest.filename.clone(),
+                media_type: manifest.media_type.clone(),
+                disposition: match manifest.disposition {
+                    PersistedAttachmentDispositionV1::Attachment => {
+                        OutboundAttachmentDispositionV1::Attachment
+                    }
+                    PersistedAttachmentDispositionV1::Inline => {
+                        OutboundAttachmentDispositionV1::Inline
+                    }
+                },
+                bytes,
+            });
+        }
+        Ok(attachments)
+    }
+
     async fn send_mail_via_smtp(
         &mut self,
         endpoint: &hermes_mail_api::SmtpEndpointV1,
         message: &OutgoingMailV1,
+        attachments: &[OutboundAttachmentV1],
         queued: &MailQueuedDeliveryV1,
         completed_at_unix_seconds: i64,
     ) -> Result<u16, MailDeliveryDispatchErrorV1> {
@@ -647,11 +808,14 @@ impl MailAdmittedRuntime {
         let password = std::str::from_utf8(password)
             .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         self.send_mail(
-            message,
-            &endpoint.from_address,
-            ProviderProvenanceV1::MailSmtp,
-            queued,
-            completed_at_unix_seconds,
+            MailProviderDeliveryRequestV1 {
+                message,
+                attachments,
+                from_address: &endpoint.from_address,
+                provider: ProviderProvenanceV1::MailSmtp,
+                queued,
+                completed_at_unix_seconds,
+            },
             |rfc822_message| async move {
                 hermes_mail_smtp::send_implicit_tls(endpoint, message, password, &rfc822_message)
                     .await
@@ -673,6 +837,7 @@ impl MailAdmittedRuntime {
         &mut self,
         configuration: &MailGmailConfigurationV1,
         message: &OutgoingMailV1,
+        attachments: &[OutboundAttachmentV1],
         queued: &MailQueuedDeliveryV1,
         completed_at_unix_seconds: i64,
     ) -> Result<u16, MailDeliveryDispatchErrorV1> {
@@ -689,11 +854,14 @@ impl MailAdmittedRuntime {
         let access_token = std::str::from_utf8(&access_token)
             .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         self.send_mail(
-            message,
-            &configuration.from_address,
-            ProviderProvenanceV1::MailGmail,
-            queued,
-            completed_at_unix_seconds,
+            MailProviderDeliveryRequestV1 {
+                message,
+                attachments,
+                from_address: &configuration.from_address,
+                provider: ProviderProvenanceV1::MailGmail,
+                queued,
+                completed_at_unix_seconds,
+            },
             |rfc822_message| async move {
                 let client = gmail_api_client(configuration)
                     .map_err(|_| MailProviderDeliveryErrorV1::Rejected)?;
@@ -722,32 +890,48 @@ impl MailAdmittedRuntime {
 
     async fn send_mail<F, Fut>(
         &self,
-        message: &OutgoingMailV1,
-        from_address: &str,
-        provider: ProviderProvenanceV1,
-        queued: &MailQueuedDeliveryV1,
-        completed_at_unix_seconds: i64,
+        request: MailProviderDeliveryRequestV1<'_>,
         execute: F,
     ) -> Result<u16, MailDeliveryDispatchErrorV1>
     where
         F: FnOnce(String) -> Fut,
         Fut: std::future::Future<Output = Result<u16, MailProviderDeliveryErrorV1>>,
     {
-        let rfc822_message = compose_rfc822(from_address, message)
+        let MailProviderDeliveryRequestV1 {
+            message,
+            attachments,
+            from_address,
+            provider,
+            queued,
+            completed_at_unix_seconds,
+        } = request;
+        let rfc822_message = compose_rfc822_with_attachments(from_address, message, attachments)
             .map_err(|_| MailDeliveryDispatchErrorV1::InvalidStoredCommand)?;
         let rfc822_sha256: [u8; 32] = Sha256::digest(rfc822_message.as_bytes()).into();
-        if rfc822_sha256 != queued.rfc822_sha256 {
+        if queued
+            .legacy_rfc822_sha256
+            .is_some_and(|expected| expected != rfc822_sha256)
+            || queued
+                .rendered_rfc822_sha256
+                .is_some_and(|expected| expected != rfc822_sha256)
+        {
             return Err(MailDeliveryDispatchErrorV1::InvalidStoredCommand);
+        }
+        if queued.legacy_rfc822_sha256.is_none() {
+            self.durable
+                .record_delivery_rendered_rfc822(
+                    &message.operation_id,
+                    &queued.request_sha256,
+                    &rfc822_sha256,
+                )
+                .await
+                .map_err(|_| MailDeliveryDispatchErrorV1::Persistence)?;
         }
         let response_code = match execute(rfc822_message).await {
             Ok(response_code) => response_code,
             Err(MailProviderDeliveryErrorV1::Rejected) => {
                 self.durable
-                    .complete_delivery_rejected(
-                        &message.operation_id,
-                        &rfc822_sha256,
-                        completed_at_unix_seconds,
-                    )
+                    .complete_delivery_rejected(&message.operation_id, completed_at_unix_seconds)
                     .await
                     .map_err(|_| MailDeliveryDispatchErrorV1::Persistence)?;
                 return Err(MailDeliveryDispatchErrorV1::ProviderRejected);
@@ -965,12 +1149,22 @@ impl MailAdmittedRuntime {
                     .enqueue_communications_outbox(&record, observed_at_unix_seconds)
                     .await
                     .map_err(|_| MailBootstrapError::Persistence)?;
-                self.try_admit_imap_attachment_blob(
-                    *record.message_id(),
-                    attachment.bytes(),
+                self.try_admit_attachment_blob(MailAttachmentBlobAdmissionRequestV1 {
+                    source_observation_id: *record.message_id(),
+                    bytes: attachment.bytes(),
+                    filename: attachment.filename.clone(),
+                    media_type: attachment.media_type.clone(),
+                    disposition: match attachment.disposition {
+                        hermes_mail_imap::ImapAttachmentDisposition::Attachment => {
+                            PersistedAttachmentDispositionV1::Attachment
+                        }
+                        hermes_mail_imap::ImapAttachmentDisposition::Inline => {
+                            PersistedAttachmentDispositionV1::Inline
+                        }
+                    },
                     observed_at_unix_seconds,
                     observed_at_nanos,
-                )
+                })
                 .await?;
             }
         }
@@ -1213,6 +1407,8 @@ impl MailAdmittedRuntime {
                 .map_err(|_| MailBootstrapError::Admission)?,
             );
             for attachment in attachment_metadata(&bytes) {
+                let attachment_bytes = extract_attachment_part(&bytes, attachment.part_id)
+                    .map_err(|_| MailBootstrapError::Provider)?;
                 let source_id = format!("{connection_id}:{provider_record_id}");
                 let media_id = format!("{}:{}", provider_record_id, attachment.part_id);
                 let disposition = match attachment.disposition {
@@ -1233,25 +1429,41 @@ impl MailAdmittedRuntime {
                         account_id: connection_id.to_owned(),
                         message_source_id: source_id,
                         media_id,
-                        filename: attachment.filename,
-                        media_type: attachment.media_type,
+                        filename: attachment.filename.clone(),
+                        media_type: attachment.media_type.clone(),
                         declared_bytes: attachment.declared_bytes,
                         disposition,
                     },
                 )
                 .map_err(|_| MailBootstrapError::Provider)?;
-                records.push(
-                    build_observation_outbox_record_v1(
-                        &observation,
-                        &observation_context(
-                            &self.runtime_instance_id,
-                            self.runtime_generation,
-                            observed_at_unix_seconds,
-                            observed_at_nanos,
-                        ),
-                    )
-                    .map_err(|_| MailBootstrapError::Admission)?,
-                );
+                let record = build_observation_outbox_record_v1(
+                    &observation,
+                    &observation_context(
+                        &self.runtime_instance_id,
+                        self.runtime_generation,
+                        observed_at_unix_seconds,
+                        observed_at_nanos,
+                    ),
+                )
+                .map_err(|_| MailBootstrapError::Admission)?;
+                self.try_admit_attachment_blob(MailAttachmentBlobAdmissionRequestV1 {
+                    source_observation_id: *record.message_id(),
+                    bytes: &attachment_bytes,
+                    filename: attachment.filename,
+                    media_type: attachment.media_type,
+                    disposition: match attachment.disposition {
+                        Rfc822AttachmentDispositionV1::Attachment => {
+                            PersistedAttachmentDispositionV1::Attachment
+                        }
+                        Rfc822AttachmentDispositionV1::Inline => {
+                            PersistedAttachmentDispositionV1::Inline
+                        }
+                    },
+                    observed_at_unix_seconds,
+                    observed_at_nanos,
+                })
+                .await?;
+                records.push(record);
             }
         }
         Ok((records, observed_history_id))
@@ -1353,13 +1565,19 @@ impl MailAdmittedRuntime {
         })
     }
 
-    async fn try_admit_imap_attachment_blob(
+    async fn try_admit_attachment_blob(
         &mut self,
-        source_observation_id: [u8; 16],
-        bytes: &[u8],
-        observed_at_unix_seconds: i64,
-        observed_at_nanos: i32,
+        request: MailAttachmentBlobAdmissionRequestV1<'_>,
     ) -> Result<(), MailBootstrapError> {
+        let MailAttachmentBlobAdmissionRequestV1 {
+            source_observation_id,
+            bytes,
+            filename,
+            media_type,
+            disposition,
+            observed_at_unix_seconds,
+            observed_at_nanos,
+        } = request;
         if !self.attachment_blob_admission_publish_permitted {
             return Ok(());
         }
@@ -1456,15 +1674,29 @@ impl MailAdmittedRuntime {
                 .map_err(|_| MailBootstrapError::Admission)
             })
             .transpose()?;
-        self.durable
-            .complete_attachment_blob_admission(
+        let materialization = write
+            .as_ref()
+            .ok()
+            .map(|write| MailAttachmentMaterializationV1 {
                 source_observation_id,
-                mapping.attachment_anchor_id,
-                terminal.0,
-                &terminal_record,
-                attachment_security_record.as_ref(),
-                observed_at_unix_seconds,
-            )
+                attachment_anchor_id: mapping.attachment_anchor_id,
+                blob_reference_id: write.reference_id,
+                receipt_sha256: write.receipt_sha256,
+                declared_size: write.declared_size,
+                filename,
+                media_type,
+                disposition,
+            });
+        self.durable
+            .complete_attachment_blob_admission(MailAttachmentBlobAdmissionCompletionV1 {
+                source_observation_id,
+                attachment_anchor_id: mapping.attachment_anchor_id,
+                terminal_state: terminal.0,
+                terminal_record: &terminal_record,
+                attachment_security_record: attachment_security_record.as_ref(),
+                materialization: materialization.as_ref(),
+                completed_at_unix_seconds: observed_at_unix_seconds,
+            })
             .await
             .map_err(|_| MailBootstrapError::Persistence)?;
         Ok(())
@@ -1639,33 +1871,59 @@ fn attachment_security_scan_candidate_publish_permitted(
     Ok(permit.permits_subject(&subject))
 }
 
-fn bind_attachment_anchor_subscribe_permit(
+struct MailAttachmentSubscribePermitsV1 {
+    anchor: Option<RuntimeSubscribePermitV1>,
+    safety: Option<RuntimeSubscribePermitV1>,
+}
+
+fn bind_attachment_subscribe_permits(
     permits: Vec<RuntimeSubscribePermitV1>,
-) -> Result<Option<RuntimeSubscribePermitV1>, MailBootstrapError> {
-    let expected = hermes_communications_attachment_contract::admission::communication_attachment_anchor_recorded_contract_reference_v1();
+) -> Result<MailAttachmentSubscribePermitsV1, MailBootstrapError> {
+    let expected_anchor = hermes_communications_attachment_contract::admission::
+        communication_attachment_anchor_recorded_contract_reference_v1();
+    let expected_safety = hermes_communications_attachment_contract::admission::
+        communication_attachment_safety_state_changed_contract_reference_v1();
     let mut anchor = None;
+    let mut safety = None;
     for permit in permits {
         let Some(contract) = permit.contract() else {
             return Err(MailBootstrapError::EventHub);
         };
-        if contract.owner == expected.owner
-            && contract.name == expected.name
-            && contract.major == expected.major
-            && contract.revision == expected.revision
-            && contract.schema_sha256 == expected.schema_sha256
-        {
+        if exact_runtime_contract(contract, &expected_anchor) {
             if anchor.replace(permit).is_some() {
+                return Err(MailBootstrapError::EventHub);
+            }
+        } else if exact_runtime_contract(contract, &expected_safety) {
+            if safety.replace(permit).is_some() {
                 return Err(MailBootstrapError::EventHub);
             }
         } else {
             return Err(MailBootstrapError::EventHub);
         }
     }
-    Ok(anchor)
+    Ok(MailAttachmentSubscribePermitsV1 { anchor, safety })
+}
+
+fn exact_runtime_contract(
+    actual: &hermes_runtime_protocol::v1::ContractReferenceV1,
+    expected: &hermes_runtime_protocol::v1::ContractReferenceV1,
+) -> bool {
+    actual.owner == expected.owner
+        && actual.name == expected.name
+        && actual.major == expected.major
+        && actual.revision == expected.revision
+        && actual.schema_sha256 == expected.schema_sha256
 }
 
 fn map_attachment_anchor_mapping_error(
     error: MailAttachmentAnchorMappingErrorV1,
+) -> MailBootstrapError {
+    let _ = error;
+    MailBootstrapError::AttachmentAnchorMapping
+}
+
+fn map_attachment_safety_projection_error(
+    error: MailAttachmentSafetyProjectionErrorV1,
 ) -> MailBootstrapError {
     let _ = error;
     MailBootstrapError::AttachmentAnchorMapping

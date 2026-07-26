@@ -2,9 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: Решение принято, implementation gate ещё не открыт.
-Наличие этого ADR не является доказательством работающего outbound attachment
-path.
+Состояние реализации: Реализовано; phase gate
+`mail_outbound_mime_attachments_v1` открыт на exact inventory одного integration
+owner `mail`.
 
 Зависит от:
 
@@ -222,6 +222,20 @@ Gate открывается атомарно только при наличии:
 11. architecture/SRP/Cargo/Clippy/full backend gates.
 
 Frontend не является proof этого gate.
+
+### Текущее implementation evidence
+
+| Критерий | Состояние | Evidence |
+|---|---|---|
+| Exact owner/package inventory | Complete | `backend/architecture/policy.json` допускает ровно domain `communications`, engine `attachment_security` и integration `mail`; Mail состоит из восьми самостоятельных API/core/provider/persistence/runtime/assembly Cargo units. |
+| Generated bounded client contract | Complete | `SendMailRequestV1` переносит только ordered non-zero unique 16-byte canonical anchor IDs, максимум 16; Blob references, bytes, paths, provider locators и safety flags отсутствуют. |
+| Event-only canonical safety | Complete | Mail имеет отдельный durable consume capability для `communication_attachment_safety_state_changed.v1`; projection проверяет exact contract/source/partition/lineage и применяет owner-local CAS без Communications query/runtime/storage edge. |
+| Mail Blob custody | Complete | Descriptor запрашивает только `Write` и `ReadRange` для `mail.attachment.content.v1`; delivery сверяет persisted reference, declared size и receipt SHA-256 до MIME/provider call. |
+| Durable Mail state | Complete | Immutable Storage bundle V5 добавляет materialization, safety projection и delivery manifest; V6 вводит monotonic `causal_sequence`, чтобы body observation всегда предшествовал attachment update при одинаковом wall-clock timestamp. |
+| Deterministic MIME and adapter SRP | Complete | `hermes-mail-core::outbound_mime` владеет bounded RFC822/MIME, injection/metadata/hash/size validation; SMTP и Gmail получают только готовые bytes и не импортируют Communications/Blob/persistence. |
+| Live SMTP and Gmail conformance | Complete | `managed_mail_delivers_only_canonical_safe_attachment_from_its_blob_custody` и `managed_gmail_materializes_then_delivers_canonical_safe_attachment` проходят через managed Vault, Blob, Storage, NATS, Communications CAS и exact decoded provider attachment. |
+| Failure/replay matrix | Complete | Live evidence покрывает unknown/stale/quarantined safety, exact duplicate, successor Mail runtime restart, NATS outage, post-DATA provider ambiguity и отсутствие автоматической повторной provider mutation. |
+| Executable architecture and quality gates | Complete | Policy schema, exact Cargo dependency/feature inventory, Communications/domain isolation, Mail SRP boundary, Cargo/Clippy/workspace/integration/full backend gates являются обязательной commit evidence. |
 
 ## Последствия
 

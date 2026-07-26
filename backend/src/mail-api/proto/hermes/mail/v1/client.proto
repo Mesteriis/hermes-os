@@ -2,7 +2,14 @@ syntax = "proto3";
 package hermes.mail.v1;
 
 message SyncInboxRequestV1 { string operation_id = 1; }
-message SendMailRequestV1 { string operation_id = 1; string provider_conversation_id = 2; repeated string recipient = 3; string subject = 4; string text_body = 5; }
+message SendMailRequestV1 {
+  string operation_id = 1;
+  string provider_conversation_id = 2;
+  repeated string recipient = 3;
+  string subject = 4;
+  string text_body = 5;
+  repeated bytes attachment_anchor_id = 6;
+}
 message GetMailDeliveryStatusRequestV1 { string operation_id = 1; }
 message SyncInboxCompletedV1 { string operation_id = 1; uint32 observed_messages = 2; }
 message MailAcceptedV1 { string operation_id = 1; }

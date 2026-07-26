@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_security_engine_v1",
+    "currentSlice": "mail_outbound_mime_attachments_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -377,6 +377,54 @@
         "name": "hermes-attachment-security-assembly",
         "role": "engine",
         "owner": "attachment_security",
+        "surface": "assembly"
+      },
+      {
+        "name": "hermes-mail-api",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-mail-core",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-mail-imap",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-mail-gmail",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-mail-smtp",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-mail-persistence",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "persistence"
+      },
+      {
+        "name": "hermes-mail-runtime",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "runtime"
+      },
+      {
+        "name": "hermes-mail-assembly",
+        "role": "integration",
+        "owner": "mail",
         "surface": "assembly"
       }
     ],
@@ -1008,6 +1056,137 @@
         },
         {
           "name": "hermes-attachment-security-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-api": [],
+      "hermes-mail-core": [
+        {
+          "name": "hermes-mail-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-ingress",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-imap": [
+        {
+          "name": "hermes-mail-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-gmail": [
+        {
+          "name": "hermes-mail-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-smtp": [
+        {
+          "name": "hermes-mail-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-persistence": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-runtime": [
+        {
+          "name": "hermes-mail-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-imap",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-gmail",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-smtp",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-security-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-attachment-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-managed-vault-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-vault-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-assembly": [
+        {
+          "name": "hermes-mail-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-runtime",
           "kind": "normal"
         },
         {
@@ -2783,6 +2962,266 @@
           "defaultFeatures": true,
           "features": []
         }
+      ],
+      "hermes-mail-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-mail-core": [
+        {
+          "name": "base64",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.22.1",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-mail-imap": [
+        {
+          "name": "async-imap",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.2",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "async-native-tls",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.6.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "async-std",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.13.2",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "futures-util",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.3.32",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-mail-gmail": [
+        {
+          "name": "async-native-tls",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.6.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "async-std",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.13.2",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "base64",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.22.1",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "futures-util",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.3.32",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": true,
+          "features": [
+            "derive"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-mail-smtp": [
+        {
+          "name": "async-native-tls",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.6.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "async-std",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.13.2",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-mail-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-mail-runtime": [
+        {
+          "name": "getrandom",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.4.3",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-mail-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -2806,6 +3245,34 @@
       "hermes-provider-"
     ],
     "cargoFeaturesEnabled": false,
+    "cargoFeatureAllowlist": {
+      "hermes-mail-api": {
+        "default": [],
+        "conformance-test-support": []
+      },
+      "hermes-mail-imap": {
+        "default": [],
+        "conformance-test-support": []
+      },
+      "hermes-mail-gmail": {
+        "default": [],
+        "conformance-test-support": [
+          "hermes-mail-api/conformance-test-support"
+        ]
+      },
+      "hermes-mail-persistence": {
+        "default": [],
+        "conformance-test-support": []
+      },
+      "hermes-mail-runtime": {
+        "default": [],
+        "conformance-test-support": [
+          "hermes-mail-api/conformance-test-support",
+          "hermes-mail-gmail/conformance-test-support",
+          "hermes-mail-imap/conformance-test-support"
+        ]
+      }
+    },
     "targetPolicy": {
       "hermes-events-protocol": {
         "primaryKind": "lib",
@@ -3018,6 +3485,38 @@
       "hermes-attachment-security-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
+      },
+      "hermes-mail-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-mail-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-mail-imap": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-mail-gmail": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-mail-smtp": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-mail-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-mail-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-mail-assembly": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -3047,7 +3546,9 @@
       "domains": [
         "communications"
       ],
-      "integrations": [],
+      "integrations": [
+        "mail"
+      ],
       "workflows": [],
       "engines": [
         "attachment_security"
@@ -3065,7 +3566,26 @@
         "communications.observe.v1",
         "communications.query.v1",
         "communications.search.index.v1",
-        "communications.storage.v1"
+        "communications.storage.v1",
+        "mail.attachment-anchor.consume.v1",
+        "mail.attachment-blob-admission.publish.v1",
+        "mail.attachment-safety-state.consume.v1",
+        "mail.attachment.scan-candidate.publish.v1",
+        "mail.blob.v1",
+        "mail.communication-observed.publish.v1",
+        "mail.delivery.query.v1",
+        "mail.delivery.v1",
+        "mail.gmail.credentials.v1",
+        "mail.gmail.oauth-refresh.credentials.v1",
+        "mail.gmail.oauth-setup.credentials.v1",
+        "mail.imap.credentials.v1",
+        "mail.oauth.complete.v1",
+        "mail.oauth.query.v1",
+        "mail.oauth.refresh.v1",
+        "mail.oauth.start.v1",
+        "mail.smtp.credentials.v1",
+        "mail.storage.v1",
+        "mail.sync.v1"
       ]
     },
     "kernelProfile": {
@@ -3178,6 +3698,15 @@
         "storage_control_v1",
         "nats_data_plane_v1",
         "blob_v1"
+      ],
+      "mail_outbound_mime_attachments_v1": [
+        "managed_launch_trust_v1",
+        "vault_v1",
+        "storage_control_v1",
+        "nats_data_plane_v1",
+        "blob_v1",
+        "attachment_security_engine_v1",
+        "client_gateway_v1"
       ],
       "clock_v1": [
         "module_control_plane_v1",
@@ -3300,6 +3829,18 @@
         "source_target_vault_blob_fencing",
         "negative_output_privacy",
         "architecture_srp_cargo_full_backend_gates"
+      ],
+      "mail_outbound_mime_attachments_v1": [
+        "exact_package_and_owner_inventory",
+        "bounded_generated_attachment_anchor_contract",
+        "event_only_canonical_safety_projection",
+        "mail_owned_blob_materialization_and_read_range",
+        "deterministic_mime_and_provider_adapter_boundary",
+        "unsafe_stale_unknown_and_hash_negative_matrix",
+        "exact_duplicate_restart_nats_and_provider_ambiguity",
+        "smtp_gmail_live_attachment_conformance",
+        "negative_output_privacy",
+        "architecture_srp_cargo_clippy_full_backend_gates"
       ],
       "clock_v1": [
         "protocol_and_package_topology",

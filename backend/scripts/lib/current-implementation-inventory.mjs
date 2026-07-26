@@ -41,6 +41,17 @@ function sameStringSet(actual, expected) {
   return exactOrderedList(actualValues, expectedValues);
 }
 
+function exactCargoFeatureDefinitions(actual, expected) {
+  if (!actual || typeof actual !== 'object' || Array.isArray(actual)
+    || !expected || typeof expected !== 'object' || Array.isArray(expected)
+    || !sameStringSet(Object.keys(actual), Object.keys(expected))) {
+    return false;
+  }
+  return Object.entries(expected).every(([feature, expectedMembers]) => (
+    exactOrderedList(actual[feature], expectedMembers)
+  ));
+}
+
 function sourceMatches(dependency, expectedSource) {
   if (expectedSource !== 'crates_io') return false;
   return dependency?.source === CRATES_IO_REGISTRY_SOURCE;
@@ -171,12 +182,13 @@ export function validateCurrentImplementationInventory(policy, cargoMetadata) {
       ));
     }
 
-    if (policy.implementation.cargoFeaturesEnabled === false
-      && Object.keys(pkg.features ?? {}).length > 0) {
+    const expectedCargoFeatures = policy.implementation.cargoFeatureAllowlist?.[name] ?? {};
+    if (policy.implementation.cargoFeaturesEnabled !== false
+      || !exactCargoFeatureDefinitions(pkg.features ?? {}, expectedCargoFeatures)) {
       violations.push(violation(
         'implementation_features',
         `cargo:${name}`,
-        'Cargo features cannot hide or activate capabilities in the recovery-only slice',
+        'Cargo feature definitions must exactly match the reviewed non-capability allowlist',
       ));
     }
 

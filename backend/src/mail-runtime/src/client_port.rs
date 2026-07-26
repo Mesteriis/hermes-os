@@ -244,11 +244,21 @@ pub fn decode_module_response(
 ) -> Result<(u64, MailClientResponseV1), MailClientPortErrorV1> {
     let envelope =
         ModuleClientResponseV1::decode(bytes).map_err(|_| MailClientPortErrorV1::Protocol)?;
-    if envelope.protocol_major != MODULE_CLIENT_PROTOCOL_MAJOR
-        || envelope.request_id == 0
-        || !envelope.error_code.is_empty()
-        || envelope.response_payload.is_empty()
-    {
+    if envelope.protocol_major != MODULE_CLIENT_PROTOCOL_MAJOR || envelope.request_id == 0 {
+        return Err(MailClientPortErrorV1::Protocol);
+    }
+    if !envelope.error_code.is_empty() {
+        return if envelope.response_payload.is_empty()
+            && matches!(
+                envelope.error_code.as_str(),
+                "INVALID_ARGUMENT" | "REJECTED" | "RUNTIME_UNAVAILABLE"
+            ) {
+            Err(MailClientPortErrorV1::Runtime)
+        } else {
+            Err(MailClientPortErrorV1::Protocol)
+        };
+    }
+    if envelope.response_payload.is_empty() {
         return Err(MailClientPortErrorV1::Protocol);
     }
     let response = match contract {
@@ -294,6 +304,7 @@ mod tests {
             recipients: vec!["recipient@example.com".to_owned()],
             subject: "subject".to_owned(),
             text_body: "body".to_owned(),
+            attachment_anchor_ids: Vec::new(),
         })
     }
 
@@ -347,6 +358,29 @@ mod tests {
 
         assert_eq!(
             decode_module_request(&envelope.encode_to_vec()),
+            Err(MailClientPortErrorV1::Protocol)
+        );
+    }
+
+    #[test]
+    fn stable_empty_error_response_is_runtime_rejection_not_protocol_corruption() {
+        let rejection = ModuleClientResponseV1 {
+            protocol_major: MODULE_CLIENT_PROTOCOL_MAJOR,
+            request_id: 9,
+            response_payload: Vec::new(),
+            error_code: "REJECTED".to_owned(),
+        }
+        .encode_to_vec();
+        assert_eq!(
+            decode_module_response(MailClientContractV1::Delivery, &rejection),
+            Err(MailClientPortErrorV1::Runtime)
+        );
+
+        let mut invalid =
+            ModuleClientResponseV1::decode(rejection.as_slice()).expect("decode rejection");
+        invalid.response_payload = vec![1];
+        assert_eq!(
+            decode_module_response(MailClientContractV1::Delivery, &invalid.encode_to_vec()),
             Err(MailClientPortErrorV1::Protocol)
         );
     }

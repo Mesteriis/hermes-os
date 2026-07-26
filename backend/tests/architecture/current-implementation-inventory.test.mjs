@@ -40,7 +40,9 @@ function recoveryOnlyPackages() {
     return {
       ...workspacePackage(descriptor.name, hermes, dependencies),
       targets: [{ kind: [policy.implementation.targetPolicy[descriptor.name].primaryKind] }],
-      features: {},
+      features: structuredClone(
+        policy.implementation.cargoFeatureAllowlist[descriptor.name] ?? {},
+      ),
     };
   });
 }
@@ -120,9 +122,9 @@ test('requires every production source file to belong to an authorized package r
 
 test('allows staged integration and engine sources outside the active owner inventory only', () => {
   const policy = canonicalPolicyForTests();
-  const integration = workspacePackage('hermes-mail-core', {
+  const integration = workspacePackage('hermes-telegram-core', {
     role: 'integration',
-    owner: 'mail',
+    owner: 'telegram',
     surface: 'implementation',
   });
   const engine = workspacePackage('hermes-content-security-core', {
@@ -146,9 +148,13 @@ test('allows staged integration and engine sources outside the active owner inve
   );
   assert.deepEqual(
     validateCurrentImplementationSourceCoverage(policy, [
-      { path: 'src/mail-core/Cargo.toml', isDirectory: false },
-      { path: 'src/mail-core/src/lib.rs', isDirectory: false },
-    ], [{ name: 'hermes-mail-core', role: 'integration', root: 'src/mail-core' }]),
+      { path: 'src/telegram-core/Cargo.toml', isDirectory: false },
+      { path: 'src/telegram-core/src/lib.rs', isDirectory: false },
+    ], [{
+      name: 'hermes-telegram-core',
+      role: 'integration',
+      root: 'src/telegram-core',
+    }]),
     [],
   );
   assert.deepEqual(
@@ -204,7 +210,7 @@ test('allows only the explicit development Kernel operator outside production in
   )).has('development_runtime_inventory'));
 });
 
-test('accepts exactly the recovery-only production inventory', () => {
+test('accepts exactly the current production inventory', () => {
   assert.deepEqual(
     validateCurrentImplementationInventory(
       canonicalPolicyForTests(),
@@ -261,7 +267,7 @@ test('requires only the active recovery-only Kernel components', () => {
   }
 });
 
-test('allows only the declared internal recovery-only dependency graph', () => {
+test('allows only the declared internal current-slice dependency graph', () => {
   const packages = recoveryOnlyPackages();
 
   assert.deepEqual(validateCurrentImplementationInventory(
@@ -380,7 +386,7 @@ test('does not accept a registry namesake as a required workspace package-ID edg
   )).has('implementation_dependency'));
 });
 
-test('rejects Cargo feature switches in the recovery-only production graph', () => {
+test('rejects Cargo feature definitions outside the exact current-slice allowlist', () => {
   const packages = recoveryOnlyPackages();
   packages.find(({ name }) => name === 'hermes-kernel').features = {
     nats_data_plane_v1: [],

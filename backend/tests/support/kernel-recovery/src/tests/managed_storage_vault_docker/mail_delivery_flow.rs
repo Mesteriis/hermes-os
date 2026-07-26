@@ -227,6 +227,7 @@ fn assert_delivery_accepted(
             recipients: vec![PRIVATE_RECIPIENT.to_owned()],
             subject: "managed SMTP delivery".to_owned(),
             text_body: PRIVATE_BODY.to_owned(),
+            attachment_anchor_ids: Vec::new(),
         }),
     );
     assert_eq!(

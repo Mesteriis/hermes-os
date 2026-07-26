@@ -21,6 +21,14 @@ test('Mail runtime uses one correlated managed-control frame pump', async () => 
   assert.match(managed, /ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS/);
   assert.equal(
     managed.match(/capability_id: MAIL_BLOB_CAPABILITY_ID/g)?.length,
+    3,
+  );
+  assert.equal(
+    managed.match(/operation: BlobDataOperationV1::BlobDataOperationReadRangeV1/g)?.length,
+    1,
+  );
+  assert.equal(
+    managed.match(/operation: BlobDataOperationV1::BlobDataOperationWriteV1/g)?.length,
     2,
   );
   assert.doesNotMatch(managed, /\.try_clone\(/);

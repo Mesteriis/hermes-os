@@ -12,6 +12,7 @@ use std::{
     time::Duration,
 };
 
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rcgen::generate_simple_self_signed;
 use rustls::{
     ServerConfig, ServerConnection, StreamOwned,
@@ -20,6 +21,25 @@ use rustls::{
 
 const MAX_HTTP_LINE_BYTES: usize = 8 * 1024;
 const MAX_REQUEST_BODY_BYTES: usize = 2 * 1024 * 1024;
+const GMAIL_INBOUND_MESSAGE: &[u8] = concat!(
+    "From: gmail-source@example.test\r\n",
+    "To: owner@example.test\r\n",
+    "Subject: managed Gmail attachment evidence\r\n",
+    "Content-Type: multipart/mixed; boundary=hermes-gmail-fixture\r\n",
+    "\r\n",
+    "--hermes-gmail-fixture\r\n",
+    "Content-Type: text/plain; charset=utf-8\r\n",
+    "\r\n",
+    "managed Gmail body\r\n",
+    "--hermes-gmail-fixture\r\n",
+    "Content-Type: text/plain; name=gmail-evidence.txt\r\n",
+    "Content-Disposition: attachment; filename=gmail-evidence.txt\r\n",
+    "Content-Transfer-Encoding: base64\r\n",
+    "\r\n",
+    "Z21haWwtY2xlYW4tcm9vbS1hdHRhY2htZW50\r\n",
+    "--hermes-gmail-fixture--\r\n",
+)
+.as_bytes();
 
 #[derive(Clone)]
 pub(super) struct GmailSentRequestV1 {
@@ -33,6 +53,7 @@ pub(super) struct MailGmailFixture {
     port: u16,
     ca_certificate_pem: String,
     accepted_mutations: Arc<AtomicUsize>,
+    accepted_reads: Arc<AtomicUsize>,
     last_request: Arc<Mutex<Option<GmailSentRequestV1>>>,
     shutdown: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
@@ -59,9 +80,11 @@ impl MailGmailFixture {
             .expect("configure Gmail fixture listener");
         let port = listener.local_addr().expect("Gmail fixture address").port();
         let accepted_mutations = Arc::new(AtomicUsize::new(0));
+        let accepted_reads = Arc::new(AtomicUsize::new(0));
         let last_request = Arc::new(Mutex::new(None));
         let shutdown = Arc::new(AtomicBool::new(false));
         let worker_mutations = Arc::clone(&accepted_mutations);
+        let worker_reads = Arc::clone(&accepted_reads);
         let worker_request = Arc::clone(&last_request);
         let worker_shutdown = Arc::clone(&shutdown);
         let worker = thread::spawn(move || {
@@ -80,7 +103,12 @@ impl MailGmailFixture {
                         let connection =
                             ServerConnection::new(Arc::clone(&server)).expect("Gmail TLS session");
                         let mut stream = StreamOwned::new(connection, stream);
-                        serve_connection(&mut stream, &worker_mutations, &worker_request);
+                        serve_connection(
+                            &mut stream,
+                            &worker_mutations,
+                            &worker_reads,
+                            &worker_request,
+                        );
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(10));
@@ -93,6 +121,7 @@ impl MailGmailFixture {
             port,
             ca_certificate_pem,
             accepted_mutations,
+            accepted_reads,
             last_request,
             shutdown,
             worker: Some(worker),
@@ -109,6 +138,10 @@ impl MailGmailFixture {
 
     pub(super) fn accepted_mutations(&self) -> usize {
         self.accepted_mutations.load(Ordering::SeqCst)
+    }
+
+    pub(super) fn accepted_reads(&self) -> usize {
+        self.accepted_reads.load(Ordering::SeqCst)
     }
 
     pub(super) fn last_request(&self) -> GmailSentRequestV1 {
@@ -135,12 +168,13 @@ impl Drop for MailGmailFixture {
 fn serve_connection(
     stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>,
     accepted_mutations: &AtomicUsize,
+    accepted_reads: &AtomicUsize,
     last_request: &Mutex<Option<GmailSentRequestV1>>,
 ) {
     let request_line = read_line(stream);
     let request_line = std::str::from_utf8(&request_line).expect("Gmail request line");
     let mut parts = request_line.split_whitespace();
-    assert_eq!(parts.next(), Some("POST"));
+    let method = parts.next().expect("Gmail request method");
     let path = parts.next().expect("Gmail request path").to_owned();
     assert_eq!(parts.next(), Some("HTTP/1.1"));
     assert_eq!(parts.next(), None);
@@ -163,6 +197,61 @@ fn serve_connection(
             "duplicate Gmail request header"
         );
     }
+    match method {
+        "GET" => {
+            serve_get(stream, &path);
+            accepted_reads.fetch_add(1, Ordering::SeqCst);
+        }
+        "POST" => serve_send(stream, &path, &headers, accepted_mutations, last_request),
+        _ => panic!("unsupported Gmail fixture method"),
+    }
+}
+
+fn serve_get(stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>, path: &str) {
+    let body = if path.starts_with("/gmail/v1/users/me/messages?") {
+        serde_json::to_vec(&serde_json::json!({
+            "messages": [{
+                "id": "gmail-inbound-1",
+                "threadId": "gmail-inbound-thread-1"
+            }]
+        }))
+        .expect("encode Gmail list response")
+    } else if path == "/gmail/v1/users/me/messages/gmail-inbound-1?format=raw" {
+        serde_json::to_vec(&serde_json::json!({
+            "id": "gmail-inbound-1",
+            "threadId": "gmail-inbound-thread-1",
+            "labelIds": ["INBOX"],
+            "historyId": "101",
+            "internalDate": "1700000000000",
+            "raw": URL_SAFE_NO_PAD.encode(GMAIL_INBOUND_MESSAGE)
+        }))
+        .expect("encode Gmail raw response")
+    } else if path.starts_with("/gmail/v1/users/me/history?") {
+        serde_json::to_vec(&serde_json::json!({
+            "history": [{
+                "messagesAdded": [{
+                    "message": {
+                        "id": "gmail-inbound-1"
+                    }
+                }]
+            }],
+            "historyId": "101"
+        }))
+        .expect("encode Gmail history response")
+    } else {
+        panic!("unsupported Gmail fixture GET path: {path}");
+    };
+    write_json_response(stream, &body);
+}
+
+fn serve_send(
+    stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>,
+    path: &str,
+    headers: &BTreeMap<String, String>,
+    accepted_mutations: &AtomicUsize,
+    last_request: &Mutex<Option<GmailSentRequestV1>>,
+) {
+    assert_eq!(path, "/gmail/v1/users/me/messages/send");
     let content_length = headers
         .get("content-length")
         .expect("Gmail request content length")
@@ -189,7 +278,7 @@ fn serve_connection(
         .expect("Gmail authorization")
         .to_owned();
     *last_request.lock().expect("lock Gmail fixture request") = Some(GmailSentRequestV1 {
-        path,
+        path: path.to_owned(),
         authorization,
         raw,
         thread_id,
@@ -197,6 +286,13 @@ fn serve_connection(
     accepted_mutations.fetch_add(1, Ordering::SeqCst);
 
     let body = br#"{"id":"gmail-sent-1","threadId":"gmail-thread-1","labelIds":["SENT"]}"#;
+    write_json_response(stream, body);
+}
+
+fn write_json_response(
+    stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>,
+    body: &[u8],
+) {
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
@@ -219,4 +315,20 @@ fn read_line(stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>) ->
         }
     }
     panic!("Gmail fixture line exceeded its bound");
+}
+
+#[test]
+fn inbound_fixture_contains_the_exact_bounded_attachment() {
+    let metadata = hermes_mail_core::rfc822::attachment_metadata(GMAIL_INBOUND_MESSAGE);
+
+    assert_eq!(metadata.len(), 1);
+    assert_eq!(metadata[0].filename.as_deref(), Some("gmail-evidence.txt"));
+    assert_eq!(metadata[0].media_type, "text/plain");
+    assert_eq!(
+        hermes_mail_core::rfc822::extract_attachment_part(
+            GMAIL_INBOUND_MESSAGE,
+            metadata[0].part_id,
+        ),
+        Ok(b"gmail-clean-room-attachment".to_vec())
+    );
 }
