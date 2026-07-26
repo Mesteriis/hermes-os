@@ -224,6 +224,7 @@ async function run_conformance(secrets) {
 
 async function run_managed_process_conformance(secrets) {
   const tdjsonFixture = await compile_tdjson_fixture(secrets);
+  const tgcallsFixture = await compile_tgcalls_fixture(secrets);
   await run('cargo', [
     `+${toolchain}`,
     '--config',
@@ -298,6 +299,7 @@ async function run_managed_process_conformance(secrets) {
       HERMES_ZULIP_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-zulip-runtime`,
       HERMES_WHATSAPP_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-whatsapp-runtime`,
       HERMES_TELEGRAM_TDJSON_FIXTURE: tdjsonFixture,
+      HERMES_TELEGRAM_TGCALLS_FIXTURE: tgcallsFixture,
       HERMES_BLOB_SERVICE_BIN: `${process.cwd()}/target/debug/hermes-blob-service`,
       HERMES_COMMUNICATIONS_LIVE_NATS_ENDPOINT: `nats://127.0.0.1:${secrets.natsPort}`,
     },
@@ -317,6 +319,29 @@ async function compile_tdjson_fixture(secrets) {
     'tdjson.c',
   );
   const output = join(secrets.directory, 'libhermes-telegram-tdjson-fixture.dylib');
+  const linkMode = process.platform === 'darwin' ? '-dynamiclib' : '-shared';
+  await run('cc', [
+    linkMode,
+    '-fPIC',
+    '-Wall',
+    '-Wextra',
+    '-Werror',
+    source,
+    '-o',
+    output,
+  ]);
+  return output;
+}
+
+async function compile_tgcalls_fixture(secrets) {
+  const source = join(
+    process.cwd(),
+    'tests',
+    'fixtures',
+    'telegram-tgcalls',
+    'bridge.c',
+  );
+  const output = join(secrets.directory, 'libhermes-telegram-tgcalls-fixture.dylib');
   const linkMode = process.platform === 'darwin' ? '-dynamiclib' : '-shared';
   await run('cc', [
     linkMode,

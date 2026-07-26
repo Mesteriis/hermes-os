@@ -117,6 +117,7 @@ pub struct TelegramAdmittedProviderLoop {
 #[allow(clippy::too_many_arguments)]
 pub async fn open_admitted_runtime(
     library: TdJsonLibrary,
+    call_media: Box<dyn hermes_telegram_call_media_contract::TelegramCallSignalingMediaPort>,
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
     runtime_instance_id: &str,
@@ -300,6 +301,7 @@ pub async fn open_admitted_runtime(
         TelegramRuntimeComposition::new_with_account_setup(library, account_setup, parameters)
             .map_err(TelegramBootstrapError::Provider)?;
     composition.set_admission(admission.clone());
+    composition.install_call_media_port(call_media);
     identity
         .signal_ready(&mut control_channel)
         .map_err(TelegramBootstrapError::ManagedRuntime)?;

@@ -156,3 +156,31 @@ test('Telegram tgcalls native build is pinned, system-audio backed and secret-ne
   assert.match(buildScript, /readonly XCODE_VERSION="26\.2"/);
   assert.doesNotMatch(buildScript, /submodule update --remote|--branch\s/);
 });
+
+test('Telegram release and runtime bind the exact staged tgcalls artifact', async () => {
+  const [assembly, assemblyCli, admission, bindings, runtimeMain, runtimeCore, fixture] =
+    await Promise.all([
+      source('src/telegram-assembly/src/lib.rs'),
+      source('src/telegram-assembly/src/main.rs'),
+      source('src/telegram-runtime/src/admission.rs'),
+      source('src/telegram-runtime/src/runtime_bindings.rs'),
+      source('src/telegram-runtime/src/main.rs'),
+      source('src/telegram-runtime/src/lib.rs'),
+      source('tests/fixtures/telegram-tgcalls/bridge.c'),
+    ]);
+
+  for (const value of [assembly, admission]) {
+    assert.match(value, /telegram\.tgcalls\.v1/);
+  }
+  assert.match(assembly, /lib\/libhermes_tgcalls_bridge\.dylib/);
+  assert.match(assemblyCli, /--tgcalls/);
+  assert.match(admission, /RuntimeArtifactUseV1::NativeDynamicLibrary/);
+  assert.match(bindings, /tgcalls_artifact_path/);
+  assert.match(bindings, /TELEGRAM_TGCALLS_ARTIFACT_ID/);
+  assert.match(bindings, /MAX_TGCALLS_ARTIFACT_BYTES/);
+  assert.match(runtimeMain, /TgCallsMediaAdapter::load_exact/);
+  assert.match(runtimeCore, /install_call_media_port/);
+  assert.doesNotMatch(runtimeMain, /HERMES_TGCALLS_BRIDGE_PATH/);
+  assert.match(fixture, /Test-only ABI fixture/);
+  assert.match(fixture, /no\s*\n\s*\* audio device, network transport or production media behavior/);
+});

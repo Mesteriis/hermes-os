@@ -9,10 +9,16 @@ route с restart/stale-fence conformance. `telegram_call_signaling_v1`,
 `telegram_call_media_v1` и umbrella `telegram_calls_operational_v1` остаются
 закрыты. Для media реализованы отдельные typed contract и
 `hermes-telegram-call-media-tgcalls`, exact-source build script, native C ABI,
-system-audio implementation patch и exact dylib loader. Это ещё не доказывает
-assembly/runtime binding, TDLib ready/signaling wiring, teardown/fence
-conformance, real audio loop или authorized live call. Historical fixture
-transcript не является evidence ни для одного gate этого ADR.
+system-audio implementation patch, exact dylib loader и Kernel-staged
+assembly/runtime binding. Exact V4 storage bundle проходит additive DDL
+admission и disposable managed-runtime conformance. Исторические V3 realtime
+frames нельзя копировать запрещённым DML внутри Storage migration; их
+restart-safe owner-local backfill через Job Platform остаётся обязательным до
+открытия signaling gate. Реализованное всё ещё не доказывает TDLib
+ready/signaling wiring, teardown/fence conformance, real audio loop или
+authorized live call.
+Historical fixture transcript не является evidence ни для одного gate этого
+ADR.
 
 Уточняет:
 
@@ -328,8 +334,9 @@ Telegram call behavior.
 
 1. exact TDLib initiate/accept/discard request tests;
 2. durable idempotency and operation reconciliation;
-3. negative-state, authorization and restart tests;
-4. live managed route evidence without generic REST fallback.
+3. durable V3 history-to-V4 realtime backfill through Job Platform;
+4. negative-state, authorization and restart tests;
+5. live managed route evidence without generic REST fallback.
 
 `telegram_call_media_v1` additionally requires:
 

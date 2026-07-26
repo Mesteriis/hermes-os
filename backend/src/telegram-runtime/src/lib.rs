@@ -875,6 +875,8 @@ pub struct TelegramRuntimeComposition {
     account_setup: TelegramAccountSetup,
     authorization: Option<TdlibAuthorizationDriver>,
     runtime: Option<TelegramRuntime<TdJsonTransport>>,
+    call_media:
+        Option<Box<dyn hermes_telegram_call_media_contract::TelegramCallSignalingMediaPort>>,
     admission: Option<TelegramRuntimeAdmission>,
 }
 
@@ -942,6 +944,7 @@ impl TelegramRuntimeComposition {
             account_setup,
             authorization: Some(TdlibAuthorizationDriver::new(client, parameters)),
             runtime: None,
+            call_media: None,
             admission: None,
         })
     }
@@ -969,6 +972,9 @@ impl TelegramRuntimeComposition {
             let transport = authorization.into_transport(self.account_id.clone())?;
             let mut runtime = TelegramRuntime::new(transport);
             runtime.set_admission(self.admission.clone());
+            if let Some(call_media) = self.call_media.take() {
+                runtime.install_call_media_port(call_media);
+            }
             runtime
                 .provision_account(self.account_setup.clone())
                 .map_err(|_| {
@@ -994,6 +1000,13 @@ impl TelegramRuntimeComposition {
 
     pub fn set_admission(&mut self, admission: TelegramRuntimeAdmission) {
         self.admission = Some(admission);
+    }
+
+    pub fn install_call_media_port(
+        &mut self,
+        port: Box<dyn hermes_telegram_call_media_contract::TelegramCallSignalingMediaPort>,
+    ) {
+        self.call_media = Some(port);
     }
 
     #[must_use]

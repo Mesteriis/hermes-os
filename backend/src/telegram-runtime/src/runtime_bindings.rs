@@ -2,24 +2,32 @@ use std::fs::{self, DirBuilder};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::path::{Path, PathBuf};
 
-use hermes_runtime_protocol::v1::{ManagedIntegrationRuntimeConfigurationV1, RuntimeArtifactUseV1};
+use hermes_runtime_protocol::v1::{
+    ManagedIntegrationRuntimeConfigurationV1, ManagedRuntimeArtifactBindingV1, RuntimeArtifactUseV1,
+};
 use hermes_secure_file::{SecureReadPolicy, read};
 use hermes_telegram_runtime::admission::{
-    TELEGRAM_STATE_LAYOUT_REVISION_V1, TELEGRAM_TDJSON_ARTIFACT_ID,
+    TELEGRAM_STATE_LAYOUT_REVISION_V1, TELEGRAM_TDJSON_ARTIFACT_ID, TELEGRAM_TGCALLS_ARTIFACT_ID,
 };
 use sha2::{Digest, Sha256};
 
 const TDLIB_STATE_DIRECTORY_V1: &str = "tdlib-v1";
 const MAX_TDJSON_ARTIFACT_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_TGCALLS_ARTIFACT_BYTES: u64 = 128 * 1024 * 1024;
 
 pub(crate) struct TelegramRuntimeBindingsV1 {
     tdjson_artifact_path: PathBuf,
+    tgcalls_artifact_path: PathBuf,
     database_directory: PathBuf,
 }
 
 impl TelegramRuntimeBindingsV1 {
     pub(crate) fn tdjson_artifact_path(&self) -> &Path {
         &self.tdjson_artifact_path
+    }
+
+    pub(crate) fn tgcalls_artifact_path(&self) -> &Path {
+        &self.tgcalls_artifact_path
     }
 
     #[cfg(test)]
@@ -35,37 +43,20 @@ impl TelegramRuntimeBindingsV1 {
 pub(crate) fn resolve(
     configuration: &ManagedIntegrationRuntimeConfigurationV1,
 ) -> Result<TelegramRuntimeBindingsV1, String> {
-    let artifact = configuration
-        .runtime_artifacts
-        .binary_search_by(|candidate| {
-            candidate
-                .artifact_id
-                .as_str()
-                .cmp(TELEGRAM_TDJSON_ARTIFACT_ID)
-        })
-        .ok()
-        .map(|index| &configuration.runtime_artifacts[index])
-        .ok_or_else(invalid_bindings)?;
-    if RuntimeArtifactUseV1::try_from(artifact.r#use)
-        .ok()
-        .is_none_or(|value| value != RuntimeArtifactUseV1::NativeDynamicLibrary)
-        || artifact.size_bytes == 0
-        || artifact.size_bytes > MAX_TDJSON_ARTIFACT_BYTES
-        || artifact.sha256.len() != 32
+    if configuration.runtime_artifacts.len() != 2
+        || configuration.runtime_artifacts[0].artifact_id != TELEGRAM_TDJSON_ARTIFACT_ID
+        || configuration.runtime_artifacts[1].artifact_id != TELEGRAM_TGCALLS_ARTIFACT_ID
     {
         return Err(invalid_bindings());
     }
-    let tdjson_artifact_path = PathBuf::from(&artifact.staged_path);
-    let bytes = read(
-        &tdjson_artifact_path,
-        SecureReadPolicy::owner_private(artifact.size_bytes),
-    )
-    .map_err(|_| invalid_bindings())?;
-    if bytes.len() as u64 != artifact.size_bytes
-        || Sha256::digest(&bytes).as_slice() != artifact.sha256.as_slice()
-    {
-        return Err(invalid_bindings());
-    }
+    let tdjson_artifact_path = resolve_native_artifact(
+        &configuration.runtime_artifacts[0],
+        MAX_TDJSON_ARTIFACT_BYTES,
+    )?;
+    let tgcalls_artifact_path = resolve_native_artifact(
+        &configuration.runtime_artifacts[1],
+        MAX_TGCALLS_ARTIFACT_BYTES,
+    )?;
 
     let state_root = configuration
         .integration_state_root
@@ -78,8 +69,36 @@ pub(crate) fn resolve(
     let database_directory = prepare_database_directory(Path::new(&state_root.root_path))?;
     Ok(TelegramRuntimeBindingsV1 {
         tdjson_artifact_path,
+        tgcalls_artifact_path,
         database_directory,
     })
+}
+
+fn resolve_native_artifact(
+    artifact: &ManagedRuntimeArtifactBindingV1,
+    maximum_size_bytes: u64,
+) -> Result<PathBuf, String> {
+    if RuntimeArtifactUseV1::try_from(artifact.r#use)
+        .ok()
+        .is_none_or(|value| value != RuntimeArtifactUseV1::NativeDynamicLibrary)
+        || artifact.size_bytes == 0
+        || artifact.size_bytes > maximum_size_bytes
+        || artifact.sha256.len() != 32
+    {
+        return Err(invalid_bindings());
+    }
+    let artifact_path = PathBuf::from(&artifact.staged_path);
+    let bytes = read(
+        &artifact_path,
+        SecureReadPolicy::owner_private(artifact.size_bytes),
+    )
+    .map_err(|_| invalid_bindings())?;
+    if bytes.len() as u64 != artifact.size_bytes
+        || Sha256::digest(&bytes).as_slice() != artifact.sha256.as_slice()
+    {
+        return Err(invalid_bindings());
+    }
+    Ok(artifact_path)
 }
 
 fn prepare_database_directory(root: &Path) -> Result<PathBuf, String> {
@@ -131,23 +150,38 @@ mod tests {
         IntegrationStateRootV1, ManagedIntegrationRuntimeConfigurationV1,
         ManagedRuntimeArtifactBindingV1, RuntimeArtifactUseV1,
     };
+    use hermes_telegram_runtime::admission::{
+        TELEGRAM_TDJSON_ARTIFACT_ID, TELEGRAM_TGCALLS_ARTIFACT_ID,
+    };
     use sha2::{Digest, Sha256};
 
     use super::resolve;
 
     #[test]
-    fn resolves_only_exact_staged_tdlib_and_private_state_root() {
+    fn resolves_only_exact_staged_native_artifacts_and_private_state_root() {
         let directory = test_directory("exact");
-        let artifact = write_artifact(&directory, b"exact-tdlib");
+        let tdjson = write_artifact(&directory, "libtdjson.dylib", b"exact-tdlib");
+        let tgcalls = write_artifact(
+            &directory,
+            "libhermes_tgcalls_bridge.dylib",
+            b"exact-tgcalls",
+        );
         let state_root = directory.join("state");
         fs::create_dir(&state_root).expect("create state root");
         fs::set_permissions(&state_root, fs::Permissions::from_mode(0o700))
             .expect("protect state root");
-        let configuration = configuration(&artifact, b"exact-tdlib", &state_root);
+        let configuration = configuration(
+            &tdjson,
+            b"exact-tdlib",
+            &tgcalls,
+            b"exact-tgcalls",
+            &state_root,
+        );
 
         let bindings = resolve(&configuration).expect("resolve exact runtime bindings");
 
-        assert_eq!(bindings.tdjson_artifact_path(), artifact);
+        assert_eq!(bindings.tdjson_artifact_path(), tdjson);
+        assert_eq!(bindings.tgcalls_artifact_path(), tgcalls);
         assert_eq!(
             bindings.database_directory(),
             fs::canonicalize(&state_root)
@@ -167,20 +201,37 @@ mod tests {
     #[test]
     fn rejects_tampered_artifact_and_symlinked_state_child() {
         let directory = test_directory("tampered");
-        let artifact = write_artifact(&directory, b"exact-tdlib");
+        let tdjson = write_artifact(&directory, "libtdjson.dylib", b"exact-tdlib");
+        let tgcalls = write_artifact(
+            &directory,
+            "libhermes_tgcalls_bridge.dylib",
+            b"exact-tgcalls",
+        );
         let state_root = directory.join("state");
         fs::create_dir(&state_root).expect("create state root");
         fs::set_permissions(&state_root, fs::Permissions::from_mode(0o700))
             .expect("protect state root");
-        let configuration = configuration(&artifact, b"exact-tdlib", &state_root);
-        fs::set_permissions(&artifact, fs::Permissions::from_mode(0o700))
+        let configuration = configuration(
+            &tdjson,
+            b"exact-tdlib",
+            &tgcalls,
+            b"exact-tgcalls",
+            &state_root,
+        );
+        let mut missing_artifact = configuration.clone();
+        missing_artifact.runtime_artifacts.pop();
+        assert!(resolve(&missing_artifact).is_err());
+        let mut wrong_order = configuration.clone();
+        wrong_order.runtime_artifacts.swap(0, 1);
+        assert!(resolve(&wrong_order).is_err());
+        fs::set_permissions(&tgcalls, fs::Permissions::from_mode(0o700))
             .expect("make test artifact writable");
-        fs::write(&artifact, b"tampered-tdlib").expect("tamper staged artifact");
+        fs::write(&tgcalls, b"tampered-tgcalls").expect("tamper staged artifact");
 
         assert!(resolve(&configuration).is_err());
 
-        fs::write(&artifact, b"exact-tdlib").expect("restore staged artifact");
-        fs::set_permissions(&artifact, fs::Permissions::from_mode(0o500))
+        fs::write(&tgcalls, b"exact-tgcalls").expect("restore staged artifact");
+        fs::set_permissions(&tgcalls, fs::Permissions::from_mode(0o500))
             .expect("protect staged artifact");
         let outside = directory.join("outside");
         fs::create_dir(&outside).expect("create outside state");
@@ -190,18 +241,29 @@ mod tests {
     }
 
     fn configuration(
-        artifact: &Path,
-        artifact_bytes: &[u8],
+        tdjson: &Path,
+        tdjson_bytes: &[u8],
+        tgcalls: &Path,
+        tgcalls_bytes: &[u8],
         state_root: &Path,
     ) -> ManagedIntegrationRuntimeConfigurationV1 {
         ManagedIntegrationRuntimeConfigurationV1 {
-            runtime_artifacts: vec![ManagedRuntimeArtifactBindingV1 {
-                artifact_id: "telegram.tdjson.v1".to_owned(),
-                r#use: RuntimeArtifactUseV1::NativeDynamicLibrary as i32,
-                staged_path: artifact.display().to_string(),
-                size_bytes: artifact_bytes.len() as u64,
-                sha256: Sha256::digest(artifact_bytes).to_vec(),
-            }],
+            runtime_artifacts: vec![
+                ManagedRuntimeArtifactBindingV1 {
+                    artifact_id: TELEGRAM_TDJSON_ARTIFACT_ID.to_owned(),
+                    r#use: RuntimeArtifactUseV1::NativeDynamicLibrary as i32,
+                    staged_path: tdjson.display().to_string(),
+                    size_bytes: tdjson_bytes.len() as u64,
+                    sha256: Sha256::digest(tdjson_bytes).to_vec(),
+                },
+                ManagedRuntimeArtifactBindingV1 {
+                    artifact_id: TELEGRAM_TGCALLS_ARTIFACT_ID.to_owned(),
+                    r#use: RuntimeArtifactUseV1::NativeDynamicLibrary as i32,
+                    staged_path: tgcalls.display().to_string(),
+                    size_bytes: tgcalls_bytes.len() as u64,
+                    sha256: Sha256::digest(tgcalls_bytes).to_vec(),
+                },
+            ],
             integration_state_root: Some(IntegrationStateRootV1 {
                 root_path: state_root.display().to_string(),
                 state_generation: 1,
@@ -211,11 +273,11 @@ mod tests {
         }
     }
 
-    fn write_artifact(directory: &Path, bytes: &[u8]) -> PathBuf {
-        fs::create_dir(directory).expect("create test directory");
+    fn write_artifact(directory: &Path, name: &str, bytes: &[u8]) -> PathBuf {
+        fs::create_dir_all(directory).expect("create test directory");
         fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
             .expect("protect test directory");
-        let path = directory.join("libtdjson.dylib");
+        let path = directory.join(name);
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)

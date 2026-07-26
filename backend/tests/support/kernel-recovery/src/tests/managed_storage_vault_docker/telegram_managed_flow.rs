@@ -36,8 +36,8 @@ use hermes_telegram_calls_api::{
     },
     wire::{
         CallDiscardReasonV1, CallStateV1, CallsQueryRequestV1, CallsQueryResponseV1,
-        CallsReplayRequestV1, CallsReplayResponseV1, ListCallsRequestV1, calls_query_request_v1,
-        calls_query_response_v1,
+        CallsReplayRequestV1, CallsReplayResponseV1, ListCallsRequestV1, call_frame_v1,
+        calls_query_request_v1, calls_query_response_v1,
     },
 };
 use hermes_telegram_runtime::client_port::{
@@ -491,18 +491,14 @@ fn managed_telegram_call_history_route_is_durable_and_replayable() {
     );
     let replay = decode_calls_replay_response(&replay);
     assert_eq!(replay.frames.len(), 2);
-    assert_eq!(
-        replay.frames[0]
-            .call
-            .as_ref()
-            .expect("pending call")
-            .revision,
-        1
-    );
-    assert_eq!(
-        replay.frames[1].call.as_ref().expect("ended call").revision,
-        2
-    );
+    let Some(call_frame_v1::Event::Call(pending_call)) = replay.frames[0].event.as_ref() else {
+        panic!("pending call frame is unexpected");
+    };
+    let Some(call_frame_v1::Event::Call(ended_call)) = replay.frames[1].event.as_ref() else {
+        panic!("ended call frame is unexpected");
+    };
+    assert_eq!(pending_call.revision, 1);
+    assert_eq!(ended_call.revision, 2);
     assert!(replay.frames[0].sequence < replay.frames[1].sequence);
     assert!(!replay.reset_required);
 

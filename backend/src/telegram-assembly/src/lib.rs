@@ -32,6 +32,7 @@ pub const TELEGRAM_ASSEMBLY_MODULE_ID: &str = "hermes-telegram-runtime";
 pub const TELEGRAM_RUNTIME_ARTIFACT_ID: &str = "telegram.runtime.v1";
 pub const TELEGRAM_STORAGE_ARTIFACT_ID: &str = "telegram.storage.v1";
 pub const TELEGRAM_TDJSON_ARTIFACT_ID: &str = "telegram.tdjson.v1";
+pub const TELEGRAM_TGCALLS_ARTIFACT_ID: &str = "telegram.tgcalls.v1";
 pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V2: u32 = TELEGRAM_AUTOMATION_STORAGE_REVISION_V1;
 pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V3: u32 = TELEGRAM_CALLS_STORAGE_REVISION_V1;
 pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V4: u32 = TELEGRAM_CALLS_STORAGE_REVISION_V2;
@@ -45,6 +46,7 @@ const TELEGRAM_DESCRIPTOR_RELATIVE_PATH: &str = "contracts/telegram.runtime.desc
 const TELEGRAM_SETTINGS_RELATIVE_PATH: &str = "contracts/telegram.runtime.settings.pb";
 const TELEGRAM_STORAGE_RELATIVE_PATH: &str = "storage/telegram.storage.bundle.pb";
 const TELEGRAM_TDJSON_RELATIVE_PATH: &str = "lib/libtdjson.dylib";
+const TELEGRAM_TGCALLS_RELATIVE_PATH: &str = "lib/libhermes_tgcalls_bridge.dylib";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -167,8 +169,15 @@ pub fn materialize_telegram_release_assembly_v1(
     build_id: &str,
     runtime_source: &Path,
     tdjson_source: &Path,
+    tgcalls_source: &Path,
 ) -> Result<TelegramReleaseAssemblyPathsV1, TelegramReleaseAssemblyErrorV1> {
-    validate_inputs(output_directory, build_id, runtime_source, tdjson_source)?;
+    validate_inputs(
+        output_directory,
+        build_id,
+        runtime_source,
+        tdjson_source,
+        tgcalls_source,
+    )?;
 
     let descriptor = telegram_module_descriptor_v1(build_id);
     let settings_schema = telegram_settings_schema_v1();
@@ -192,6 +201,7 @@ pub fn materialize_telegram_release_assembly_v1(
     let fragment = artifact_fragment(
         runtime_source,
         tdjson_source,
+        tgcalls_source,
         &paths.descriptor,
         &paths.settings_schema,
         &paths.storage_bundle,
@@ -225,6 +235,7 @@ fn validate_inputs(
     build_id: &str,
     runtime_source: &Path,
     tdjson_source: &Path,
+    tgcalls_source: &Path,
 ) -> Result<(), TelegramReleaseAssemblyErrorV1> {
     if !output_directory.is_absolute()
         || output_directory.parent().is_none()
@@ -234,8 +245,10 @@ fn validate_inputs(
         || !build_id.is_ascii()
         || !runtime_source.is_absolute()
         || !tdjson_source.is_absolute()
+        || !tgcalls_source.is_absolute()
         || !regular_non_symlink_file(runtime_source)
         || !regular_non_symlink_file(tdjson_source)
+        || !regular_non_symlink_file(tgcalls_source)
     {
         return Err(TelegramReleaseAssemblyErrorV1::InvalidInput);
     }
@@ -251,12 +264,14 @@ fn regular_non_symlink_file(path: &Path) -> bool {
 fn artifact_fragment(
     runtime_source: &Path,
     tdjson_source: &Path,
+    tgcalls_source: &Path,
     descriptor: &Path,
     settings_schema: &Path,
     storage_bundle: &Path,
 ) -> Result<TelegramReleaseArtifactFragmentV1, TelegramReleaseAssemblyErrorV1> {
     let runtime_source = utf8_path(runtime_source)?;
     let tdjson_source = utf8_path(tdjson_source)?;
+    let tgcalls_source = utf8_path(tgcalls_source)?;
     let descriptor = utf8_path(descriptor)?;
     let settings_schema = utf8_path(settings_schema)?;
     let storage_bundle = utf8_path(storage_bundle)?;
@@ -288,6 +303,14 @@ fn artifact_fragment(
             artifact_id: TELEGRAM_TDJSON_ARTIFACT_ID.to_owned(),
             relative_path: TELEGRAM_TDJSON_RELATIVE_PATH.to_owned(),
             source_path: tdjson_source,
+            required: true,
+            bound_module_id: TELEGRAM_ASSEMBLY_MODULE_ID.to_owned(),
+        }),
+        TelegramReleaseArtifactInputV1::NativeDependency(NativeDependencyArtifactInputV1 {
+            artifact_kind: "module_runtime_native_dependency".to_owned(),
+            artifact_id: TELEGRAM_TGCALLS_ARTIFACT_ID.to_owned(),
+            relative_path: TELEGRAM_TGCALLS_RELATIVE_PATH.to_owned(),
+            source_path: tgcalls_source,
             required: true,
             bound_module_id: TELEGRAM_ASSEMBLY_MODULE_ID.to_owned(),
         }),
@@ -338,12 +361,16 @@ mod tests {
         let root = temporary_directory();
         let runtime = root.join("runtime");
         let tdjson = root.join("libtdjson.dylib");
+        let tgcalls = root.join("libhermes_tgcalls_bridge.dylib");
         fs::write(&runtime, b"runtime").expect("runtime fixture");
         fs::write(&tdjson, b"tdjson").expect("TDJson fixture");
+        fs::write(&tgcalls, b"tgcalls").expect("tgcalls fixture");
         let output = root.join("assembly");
 
-        let paths = materialize_telegram_release_assembly_v1(&output, "build-1", &runtime, &tdjson)
-            .expect("materialize Telegram assembly");
+        let paths = materialize_telegram_release_assembly_v1(
+            &output, "build-1", &runtime, &tdjson, &tgcalls,
+        )
+        .expect("materialize Telegram assembly");
         let descriptor =
             decode_descriptor_v1(&fs::read(paths.descriptor).expect("descriptor bytes"))
                 .expect("valid descriptor");
@@ -387,12 +414,18 @@ mod tests {
                 TELEGRAM_RUNTIME_ARTIFACT_ID,
                 TELEGRAM_STORAGE_ARTIFACT_ID,
                 TELEGRAM_TDJSON_ARTIFACT_ID,
+                TELEGRAM_TGCALLS_ARTIFACT_ID,
             ]
         );
         assert_eq!(fragment.owner_id, TELEGRAM_ASSEMBLY_OWNER_ID);
         assert_eq!(fragment.module_id, TELEGRAM_ASSEMBLY_MODULE_ID);
         assert!(matches!(
             &fragment.artifacts[2],
+            TelegramReleaseArtifactInputV1::NativeDependency(value)
+                if value.bound_module_id == TELEGRAM_ASSEMBLY_MODULE_ID
+        ));
+        assert!(matches!(
+            &fragment.artifacts[3],
             TelegramReleaseArtifactInputV1::NativeDependency(value)
                 if value.bound_module_id == TELEGRAM_ASSEMBLY_MODULE_ID
         ));
@@ -405,13 +438,16 @@ mod tests {
         let root = temporary_directory();
         let runtime = root.join("runtime");
         let tdjson = root.join("libtdjson.dylib");
+        let tgcalls = root.join("libhermes_tgcalls_bridge.dylib");
         fs::write(&runtime, b"runtime").expect("runtime fixture");
         fs::write(&tdjson, b"tdjson").expect("TDJson fixture");
+        fs::write(&tgcalls, b"tgcalls").expect("tgcalls fixture");
         let first = materialize_telegram_release_assembly_v1(
             &root.join("first"),
             "build-1",
             &runtime,
             &tdjson,
+            &tgcalls,
         )
         .expect("first assembly");
         let second = materialize_telegram_release_assembly_v1(
@@ -419,6 +455,7 @@ mod tests {
             "build-1",
             &runtime,
             &tdjson,
+            &tgcalls,
         )
         .expect("second assembly");
 
@@ -440,6 +477,7 @@ mod tests {
                 "build-1",
                 &runtime,
                 &tdjson,
+                &tgcalls,
             ),
             Err(TelegramReleaseAssemblyErrorV1::InvalidInput)
         );
@@ -455,10 +493,12 @@ mod tests {
         let root = temporary_directory();
         let runtime = root.join("runtime");
         let tdjson = root.join("libtdjson.dylib");
+        let tgcalls = root.join("libhermes_tgcalls_bridge.dylib");
         let empty_tdjson = root.join("empty-libtdjson.dylib");
         let runtime_link = root.join("runtime-link");
         fs::write(&runtime, b"runtime").expect("runtime fixture");
         fs::write(&tdjson, b"tdjson").expect("TDJson fixture");
+        fs::write(&tgcalls, b"tgcalls").expect("tgcalls fixture");
         fs::write(&empty_tdjson, b"").expect("empty TDJson fixture");
         symlink(&runtime, &runtime_link).expect("runtime symlink");
 
@@ -468,6 +508,7 @@ mod tests {
                 "build-1",
                 &runtime,
                 &tdjson,
+                &tgcalls,
             ),
             Err(TelegramReleaseAssemblyErrorV1::InvalidInput)
         );
@@ -477,6 +518,7 @@ mod tests {
                 "build-1",
                 &runtime,
                 &root.join("absent"),
+                &tgcalls,
             ),
             Err(TelegramReleaseAssemblyErrorV1::InvalidInput)
         );
@@ -486,6 +528,7 @@ mod tests {
                 "build-1",
                 &runtime_link,
                 &tdjson,
+                &tgcalls,
             ),
             Err(TelegramReleaseAssemblyErrorV1::InvalidInput)
         );
@@ -495,6 +538,7 @@ mod tests {
                 "build-1",
                 &runtime,
                 &empty_tdjson,
+                &tgcalls,
             ),
             Err(TelegramReleaseAssemblyErrorV1::InvalidInput)
         );

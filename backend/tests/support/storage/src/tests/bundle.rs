@@ -42,6 +42,12 @@ fn admits_the_canonical_telegram_bundle() {
 }
 
 #[test]
+fn admits_the_canonical_telegram_release_bundle() {
+    let bundle = hermes_telegram_assembly::telegram_storage_bundle_with_call_signaling_v4();
+    assert_eq!(admit_storage_bundle(&bundle), Ok(()));
+}
+
+#[test]
 fn rejects_unversioned_or_reordered_steps() {
     let mut unversioned = valid_bundle();
     unversioned.major = 0;

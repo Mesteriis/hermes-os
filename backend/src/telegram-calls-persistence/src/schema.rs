@@ -156,23 +156,6 @@ CREATE INDEX IF NOT EXISTS telegram_call_operations_account_id_idx
 
 CREATE INDEX IF NOT EXISTS telegram_call_realtime_events_account_sequence_idx
     ON hermes_data.telegram_call_realtime_events (account_id, event_sequence);
-
-INSERT INTO hermes_data.telegram_call_realtime_events (
-    account_id,
-    event_kind,
-    call_session_id,
-    call_revision,
-    observed_at_unix_seconds
-)
-SELECT
-    account_id,
-    'call',
-    call_session_id,
-    call_revision,
-    observed_at_unix_seconds
-FROM hermes_data.telegram_call_realtime_frames
-ORDER BY frame_sequence
-ON CONFLICT (call_session_id, call_revision) DO NOTHING;
 "#;
 
 pub fn telegram_calls_storage_migration_v1() -> StorageMigrationStepV1 {
@@ -213,5 +196,6 @@ mod tests {
         assert!(TELEGRAM_CALLS_SCHEMA_V2.contains("telegram_call_local_mute"));
         assert!(TELEGRAM_CALLS_SCHEMA_V2.contains("telegram_call_operation_history"));
         assert!(TELEGRAM_CALLS_SCHEMA_V2.contains("telegram_call_realtime_events"));
+        assert!(!TELEGRAM_CALLS_SCHEMA_V2.contains("INSERT INTO"));
     }
 }

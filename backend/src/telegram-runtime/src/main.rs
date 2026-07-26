@@ -14,6 +14,7 @@ use hermes_runtime_protocol::{
     },
 };
 use hermes_telegram_api::TelegramProviderKind;
+use hermes_telegram_call_media_tgcalls::TgCallsMediaAdapter;
 use hermes_telegram_runtime::{bootstrap, process, settings};
 use hermes_telegram_tdlib::TdJsonLibrary;
 use prost::Message;
@@ -65,6 +66,8 @@ where
     }
     let settings = settings::decode(&snapshot)?;
     let runtime_bindings = runtime_bindings::resolve(&configuration)?;
+    let call_media = TgCallsMediaAdapter::load_exact(runtime_bindings.tgcalls_artifact_path())
+        .map_err(|_| "Telegram runtime tgcalls artifact is unavailable".to_owned())?;
     let library = TdJsonLibrary::load_exact(runtime_bindings.tdjson_artifact_path())
         .map_err(|_| "Telegram runtime TDLib artifact is unavailable".to_owned())?;
     let storage = configuration
@@ -78,6 +81,7 @@ where
     let admitted = runtime
         .block_on(bootstrap::open_admitted_runtime(
             library,
+            Box::new(call_media),
             descriptor,
             schema_bytes,
             &configuration.runtime_instance_id,

@@ -4,7 +4,13 @@ use std::process::ExitCode;
 
 use hermes_telegram_assembly::materialize_telegram_release_assembly_v1;
 
-const OPTIONS: [&str; 4] = ["--build-id", "--output-dir", "--runtime", "--tdjson"];
+const OPTIONS: [&str; 5] = [
+    "--build-id",
+    "--output-dir",
+    "--runtime",
+    "--tdjson",
+    "--tgcalls",
+];
 
 fn main() -> ExitCode {
     match arguments(std::env::args().skip(1).collect()) {
@@ -14,6 +20,7 @@ fn main() -> ExitCode {
                 &arguments.build_id,
                 &arguments.runtime,
                 &arguments.tdjson,
+                &arguments.tgcalls,
             )
             .is_err()
             {
@@ -24,7 +31,7 @@ fn main() -> ExitCode {
         }
         None => fail(
             "usage: hermes-telegram-assembly --build-id <id> --output-dir <absolute-path> \
-             --runtime <absolute-path> --tdjson <absolute-path>",
+             --runtime <absolute-path> --tdjson <absolute-path> --tgcalls <absolute-path>",
         ),
     }
 }
@@ -34,6 +41,7 @@ struct Arguments {
     output_directory: PathBuf,
     runtime: PathBuf,
     tdjson: PathBuf,
+    tgcalls: PathBuf,
 }
 
 fn arguments(values: Vec<String>) -> Option<Arguments> {
@@ -54,6 +62,7 @@ fn arguments(values: Vec<String>) -> Option<Arguments> {
         output_directory: PathBuf::from(parsed.remove("--output-dir")?),
         runtime: PathBuf::from(parsed.remove("--runtime")?),
         tdjson: PathBuf::from(parsed.remove("--tdjson")?),
+        tgcalls: PathBuf::from(parsed.remove("--tgcalls")?),
     })
 }
 
@@ -69,6 +78,8 @@ mod tests {
     #[test]
     fn parses_each_exact_option_once_in_any_order() {
         let parsed = arguments(vec![
+            "--tgcalls".to_owned(),
+            "/tmp/libhermes_tgcalls_bridge.dylib".to_owned(),
             "--tdjson".to_owned(),
             "/tmp/libtdjson.dylib".to_owned(),
             "--build-id".to_owned(),
@@ -90,6 +101,10 @@ mod tests {
             PathBuf::from("/tmp/hermes-telegram-runtime")
         );
         assert_eq!(parsed.tdjson, PathBuf::from("/tmp/libtdjson.dylib"));
+        assert_eq!(
+            parsed.tgcalls,
+            PathBuf::from("/tmp/libhermes_tgcalls_bridge.dylib")
+        );
     }
 
     #[test]
@@ -105,6 +120,8 @@ mod tests {
                 "/tmp/runtime".to_owned(),
                 "--tdjson".to_owned(),
                 "/tmp/tdjson".to_owned(),
+                "--tgcalls".to_owned(),
+                "/tmp/tgcalls".to_owned(),
             ])
             .is_none()
         );
@@ -118,6 +135,8 @@ mod tests {
                 "/tmp/runtime".to_owned(),
                 "--unknown".to_owned(),
                 "/tmp/tdjson".to_owned(),
+                "--tgcalls".to_owned(),
+                "/tmp/tgcalls".to_owned(),
             ])
             .is_none()
         );

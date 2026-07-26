@@ -6,8 +6,12 @@
 материализует exact descriptor/settings/storage bytes и typed artifact
 fragment без signing authority; generic release compiler безопасно объединяет
 fragment с полным release input и signed-manifest test проверяет runtime,
-storage и bound native dependency entries. Managed-launch/live conformance
-остаётся prerequisite для `telegram_integration_v1`.
+storage и две bound native dependency entries. Runtime теперь fail-closed
+получает exact TDJson и tgcalls artifacts из Kernel-staged configuration.
+Disposable managed conformance подтверждает этот binding вместе с Vault,
+Storage, NATS, history query/replay, restart и stale fence; test-only tgcalls
+ABI fixture не является evidence real audio. Полный signaling/media/live-call
+conformance остаётся prerequisite для `telegram_calls_command_v1`.
 
 Зависит от:
 
@@ -21,8 +25,8 @@ storage и bound native dependency entries. Managed-launch/live conformance
 
 ## Контекст
 
-Telegram runtime, descriptor/settings builders, owner-local storage bundle и
-TDLib native dependency меняются по разным причинам. Release composition
+Telegram runtime, descriptor/settings builders, owner-local storage bundle,
+TDLib и tgcalls native dependencies меняются по разным причинам. Release composition
 должна собрать их в один exact artifact set, но не должна:
 
 - превращать integration runtime в build/release tool;
@@ -75,13 +79,15 @@ telegram.release-artifacts.json
 ```
 
 Первые три файла являются exact Protobuf bytes из canonical Rust builders.
-JSON является только release compiler artifact fragment и содержит ровно три
+JSON является только release compiler artifact fragment и содержит ровно четыре
 отсортированные assembly entries:
 
 ```text
 telegram.runtime.v1  -> module_runtime
 telegram.storage.v1  -> storage_bundle
 telegram.tdjson.v1   -> module_runtime_native_dependency
+                        bound_module_id = hermes-telegram-runtime
+telegram.tgcalls.v1  -> module_runtime_native_dependency
                         bound_module_id = hermes-telegram-runtime
 ```
 
@@ -95,7 +101,7 @@ Assembly tool:
 
 - не читает signing key и не создаёт подпись;
 - не выдаёт capability grants;
-- не выбирает установленный TDLib по convention или environment;
+- не выбирает установленные TDLib/tgcalls по convention или environment;
 - не создаёт Storage binding;
 - не импортируется runtime, Kernel, Gateway или Communications;
 - не перезаписывает существующие output files/directories.
@@ -121,18 +127,19 @@ runtime lifecycle.
 1. package topology/compile-isolation guard для exact assembly unit;
 2. deterministic byte equality для одинакового `build_id`;
 3. independent validation descriptor, settings schema и storage bundle;
-4. fail-closed output path, symlink, duplicate/existing output и missing TDLib
+4. fail-closed output path, symlink, duplicate/existing output и missing native
    source tests;
 5. exact sorted artifact fragment without secrets or private content;
 6. generic release compiler test, который включает fragment в полный
-   distribution input и проверяет signed runtime, storage и native dependency
-   entries;
+   distribution input и проверяет signed runtime, storage и обе native
+   dependency entries;
 7. подтверждение, что Kernel/Gateway/Communications packages не зависят от
    assembly unit.
 
 Даже после этих checks `telegram_integration_v1` остаётся закрыт до
 managed-launch, revoke/generation, native-loader и live event-flow conformance
-из ADR-0266/0267.
+из ADR-0266/0267. Наличие tgcalls entry и успешная загрузка ABI сами по себе не
+открывают Calls command capability.
 
 ## Отклонённые варианты
 

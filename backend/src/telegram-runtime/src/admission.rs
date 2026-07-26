@@ -40,6 +40,7 @@ pub const TELEGRAM_EVENTS_CAPABILITY_ID: &str = "telegram.events.v1";
 pub const TELEGRAM_RUNTIME_CAPABILITY_ID: &str = "telegram.runtime.v1";
 pub const TELEGRAM_STORAGE_CAPABILITY_ID: &str = "telegram.storage.v1";
 pub const TELEGRAM_TDJSON_ARTIFACT_ID: &str = "telegram.tdjson.v1";
+pub const TELEGRAM_TGCALLS_ARTIFACT_ID: &str = "telegram.tgcalls.v1";
 pub const TELEGRAM_STATE_LAYOUT_REVISION_V1: u32 = 1;
 pub const TELEGRAM_BLOB_QUOTA_BYTES: u64 = 64 * 1024 * 1024;
 pub const TELEGRAM_BLOB_CUSTODY_SCOPE_ID: &str = "telegram.content.v1";
@@ -210,12 +211,18 @@ fn telegram_events_capability_v1() -> CapabilityDescriptorV1 {
 fn telegram_runtime_capability_v1() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: TELEGRAM_RUNTIME_CAPABILITY_ID.to_owned(),
-        capability_revision: 1,
+        capability_revision: 2,
         criticality: CapabilityCriticalityV1::Required as i32,
         requests: vec![
             CapabilityRequestV1 {
                 request: Some(Request::RuntimeArtifact(RuntimeArtifactRequestV1 {
                     artifact_id: TELEGRAM_TDJSON_ARTIFACT_ID.to_owned(),
+                    r#use: RuntimeArtifactUseV1::NativeDynamicLibrary as i32,
+                })),
+            },
+            CapabilityRequestV1 {
+                request: Some(Request::RuntimeArtifact(RuntimeArtifactRequestV1 {
+                    artifact_id: TELEGRAM_TGCALLS_ARTIFACT_ID.to_owned(),
                     r#use: RuntimeArtifactUseV1::NativeDynamicLibrary as i32,
                 })),
             },
@@ -250,7 +257,7 @@ pub fn telegram_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
     let settings_schema = telegram_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 3,
+        descriptor_revision: 4,
         module_id: TELEGRAM_MODULE_ID.to_owned(),
         owner_id: TELEGRAM_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Integration as i32,
@@ -353,6 +360,12 @@ mod tests {
             request.request,
             Some(Request::RuntimeArtifact(ref artifact))
                 if artifact.artifact_id == "telegram.tdjson.v1"
+                    && artifact.r#use == RuntimeArtifactUseV1::NativeDynamicLibrary as i32
+        )));
+        assert!(runtime.requests.iter().any(|request| matches!(
+            request.request,
+            Some(Request::RuntimeArtifact(ref artifact))
+                if artifact.artifact_id == "telegram.tgcalls.v1"
                     && artifact.r#use == RuntimeArtifactUseV1::NativeDynamicLibrary as i32
         )));
         assert!(runtime.requests.iter().any(|request| matches!(
