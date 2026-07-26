@@ -10,7 +10,7 @@ path = "src/lib.rs"
 [package.metadata.hermes]
 role = "integration"
 owner = "telegram"
-surface = "automation-contract"
+surface = "contract"
 
 [dependencies]
 prost = "=0.14.4"

@@ -4,9 +4,12 @@
 Дата: 2026-07-26
 Состояние реализации: generated API, pure policy/rendering core, owner-local
 persistence migration/repositories, exact runtime routes, descriptor
-capabilities и release-assembly storage composition реализованы. Frontend
-cutover, disposable PostgreSQL/live managed conformance и production admission
-не завершены; `telegram_automation_v1` закрыт.
+capabilities, release-assembly storage composition и frontend cutover
+реализованы. Disposable PostgreSQL/live managed conformance доказал exact
+create/update/query/preview retry, successor process replay, stale runtime
+fencing и отсутствие provider/Communications side effects.
+`telegram_automation_v1` имеет reconstruction state `implemented`; production
+admission остаётся закрытым до `telegram_full_operational_v1`.
 
 Уточняет:
 
@@ -240,5 +243,6 @@ Automation policy является Telegram operational configuration, поэт�
 9. live managed route proving create/update/query/preview/retry through the
    admitted runtime.
 
-До полного evidence inventory остаётся `planned`; наличие ADR или UI не
-открывает gate и не закрывает `telegram_full_operational_v1`.
+Полный evidence переводит slice в reconstruction state `implemented`, но не
+добавляет Telegram в production owner inventory и не закрывает
+`telegram_full_operational_v1`.

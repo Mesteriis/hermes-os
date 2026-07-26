@@ -19,6 +19,7 @@ const TELEGRAM_AUTOMATION_ADR_PATH = new URL(
 );
 
 const ALLOWED_ROLES = new Set(['app', 'domain', 'engine', 'integration', 'platform', 'workflow']);
+const ALLOWED_STATES = new Set(['implemented', 'planned']);
 const BUSINESS_OWNER_ROLES = new Set(['domain', 'engine', 'integration', 'workflow']);
 const FORBIDDEN_BUSINESS_OWNERS = new Set(['core', 'gateway', 'kernel', 'settings']);
 
@@ -40,7 +41,8 @@ test('ADR-0282 keeps an exact incomplete reconstruction inventory', async () => 
 
   const gates = inventory.slices.map(({ gate }) => gate);
   assert.equal(new Set(gates).size, gates.length, 'reconstruction gates must be unique');
-  assert.ok(inventory.slices.every(({ state }) => state === 'planned'));
+  assert.ok(inventory.slices.every(({ state }) => ALLOWED_STATES.has(state)));
+  assert.ok(inventory.slices.some(({ state }) => state === 'planned'));
 
   for (const slice of inventory.slices) {
     assert.ok(ALLOWED_ROLES.has(slice.role), `unknown owner role for ${slice.gate}`);
@@ -71,7 +73,7 @@ test('ADR-0282 keeps an exact incomplete reconstruction inventory', async () => 
   }
   assert.ok(
     gates.every((gate) => !activeCapabilities.has(gate)),
-    'planned reconstruction gate must not be an active production capability',
+    'reconstruction slice must not be active before an exact production admission gate',
   );
   assert.ok(
     !Object.hasOwn(policy.phaseGates.requires, inventory.completionGate),
@@ -122,9 +124,12 @@ test('Telegram completion remains closed behind its independent capability slice
     requiredTelegramGates,
   );
   assert.deepEqual([...fullGate.dependsOn].sort(), requiredTelegramGates);
-  assert.ok([...telegramSlices.values()].every(({ role, state }) => role === 'integration' && state === 'planned'));
+  assert.ok([...telegramSlices.values()].every(({ role }) => role === 'integration'));
 
   const automationGate = telegramSlices.get('telegram_automation_v1');
+  assert.equal(automationGate.state, 'implemented');
+  assert.equal(fullGate.state, 'planned');
+  assert.equal(telegramSlices.get('telegram_calls_operational_v1').state, 'planned');
   assert.deepEqual(automationGate.dependsOn, ['telegram_core_operational_v1']);
   assert.match(automationAdrSource, /hermes-telegram-automation-api/);
   assert.match(automationAdrSource, /hermes-telegram-automation-core/);

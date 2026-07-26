@@ -14,7 +14,7 @@ conformance-test-support = []
 [package.metadata.hermes]
 role = "integration"
 owner = "telegram"
-surface = "automation-persistence"
+surface = "persistence"
 
 [dependencies]
 hermes-storage-protocol = { path = "../platform/storage/protocol" }

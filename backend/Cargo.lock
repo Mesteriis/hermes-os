@@ -2037,6 +2037,8 @@ dependencies = [
  "hermes-storage-control",
  "hermes-storage-protocol",
  "hermes-telegram-api",
+ "hermes-telegram-assembly",
+ "hermes-telegram-automation-api",
  "hermes-telegram-core",
  "hermes-telegram-persistence",
  "hermes-telegram-runtime",

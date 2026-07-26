@@ -458,6 +458,18 @@ release.
 Порядок между независимыми slices может меняться, но dependency и admission
 rules не ослабляются.
 
+Executable reconstruction inventory различает:
+
+- `planned` — обязательный slice классифицирован, но его evidence gate не
+  закрыт;
+- `implemented` — slice имеет полный contract/runtime/storage/client/live
+  evidence, но сам по себе не добавлен в production owner inventory.
+
+`implemented` не означает `admitted`. Production admission остаётся отдельным
+exact phase gate в `backend/architecture/policy.json`. Для Telegram отдельные
+implemented slices не добавляют bundled integration в production inventory:
+это разрешено только после закрытия `telegram_full_operational_v1`.
+
 ## Evidence для каждого slice
 
 Gate может быть открыт только при наличии:

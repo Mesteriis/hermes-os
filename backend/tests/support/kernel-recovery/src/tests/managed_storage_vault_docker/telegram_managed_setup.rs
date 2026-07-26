@@ -7,11 +7,11 @@ use hermes_telegram_api::{
     TelegramProviderKind, TelegramRuntimeState,
     client_contract::{TELEGRAM_MODULE_ID, TELEGRAM_OWNER_ID},
 };
-use hermes_telegram_core::credential_lease_purpose_for_purpose;
-use hermes_telegram_persistence::{
-    TELEGRAM_STORAGE_BUNDLE_REVISION_V1, TelegramDurablePersistence,
-    TelegramPersistenceConformanceV1, telegram_storage_bundle_v1,
+use hermes_telegram_assembly::{
+    TELEGRAM_STORAGE_BUNDLE_REVISION_V2, telegram_storage_bundle_with_automation_v2,
 };
+use hermes_telegram_core::credential_lease_purpose_for_purpose;
+use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramPersistenceConformanceV1};
 use hermes_telegram_runtime::{
     admission::{
         TELEGRAM_STORAGE_CAPABILITY_ID, TELEGRAM_TDJSON_ARTIFACT_ID, telegram_module_descriptor_v1,
@@ -32,11 +32,13 @@ pub(super) struct AdmittedTelegramRuntime {
     capability_ids: Vec<String>,
 }
 
+#[derive(Clone)]
 pub(super) struct StartedTelegramRuntime {
     pub(super) registration_id: String,
     pub(super) runtime_instance_id: String,
     pub(super) runtime_generation: u64,
     pub(super) grant_epoch: u64,
+    capability_ids: Vec<String>,
 }
 
 pub(super) fn installed_communications_telegram_release(root: &Path) -> InstalledSignedBundle {
@@ -131,12 +133,12 @@ pub(super) fn admit_telegram_runtime(store: &SqliteControlStore) -> AdmittedTele
             Some(Sha256::digest(&schema).into()),
         ))
         .expect("record Telegram release binding");
-    let bundle = telegram_storage_bundle_v1().encode_to_vec();
+    let bundle = telegram_storage_bundle_with_automation_v2().encode_to_vec();
     store
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 TELEGRAM_OWNER_ID,
-                u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V1),
+                u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V2),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -161,7 +163,7 @@ pub(super) fn prepare_telegram_runtime(
     let bundle = store
         .platform_storage_bundle(
             TELEGRAM_OWNER_ID,
-            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V1),
+            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V2),
         )
         .expect("read Telegram Storage bundle")
         .expect("Telegram Storage bundle");
@@ -174,7 +176,7 @@ pub(super) fn prepare_telegram_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V1),
+            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V2),
             *bundle.digest(),
         )
         .expect("Telegram Storage binding issue"),
@@ -250,7 +252,50 @@ pub(super) fn start_telegram_runtime(
         runtime_instance_id,
         runtime_generation,
         grant_epoch,
+        capability_ids: admitted.capability_ids,
     }
+}
+
+pub(super) fn restart_telegram_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    predecessor: StartedTelegramRuntime,
+) -> StartedTelegramRuntime {
+    let predecessor_generation = predecessor.runtime_generation;
+    let predecessor_binding = store
+        .platform_storage_binding(&predecessor.registration_id, TELEGRAM_STORAGE_CAPABILITY_ID)
+        .expect("read predecessor Telegram Storage binding")
+        .expect("predecessor Telegram Storage binding");
+    let issue = storage_successor::issue_after(&predecessor_binding)
+        .expect("derive Telegram successor storage fences");
+    let (_, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        &predecessor.registration_id,
+        TELEGRAM_STORAGE_CAPABILITY_ID,
+        issue,
+    )
+    .expect("reserve successor Telegram launch and Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision successor Telegram Storage binding");
+    let successor = start_telegram_runtime(
+        supervisor,
+        store,
+        kernel_data,
+        runtime_dir,
+        AdmittedTelegramRuntime {
+            registration_id: predecessor.registration_id,
+            capability_ids: predecessor.capability_ids,
+        },
+    );
+    assert_eq!(
+        successor.runtime_generation,
+        predecessor_generation + 1,
+        "Telegram restart must use the next managed runtime generation",
+    );
+    successor
 }
 
 fn telegram_settings_snapshot() -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {
