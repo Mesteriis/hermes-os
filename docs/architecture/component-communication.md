@@ -383,6 +383,18 @@ downstream credentials до canonical mutation. Для завершения уж
 `revoking` binding; это узкий lifecycle route, а не восстановление data-plane
 прав target module.
 
+Blob data authority разделяет current access и durable custody. Descriptor
+объявляет exact `custody_scope_id`, quota и непустой operation set; Kernel
+выдаёт signed one-use session только для operation из текущего approved
+capability. Registration, runtime generation и grant epoch fences session и
+Vault lease, но не входят в at-rest identity. Ciphertext, Vault content-key
+scope и technical quota ledger связываются с logical owner, stable custody
+scope, opaque reference и key schema revision. Поэтому successor runtime или
+отдельный read-only capability того же scope может получить новый current
+lease к существующим bytes, не наследуя write/transfer authority. Другой scope,
+legacy format или persisted metadata без fresh current operation grant fail
+closed.
+
 `managed` module запускается и перезапускается Kernel через private inherited
 control channel только после проверки exact-byte `ManagedLaunchBinding` перед
 каждым launch. Bundled binding происходит из signed immutable distribution

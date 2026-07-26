@@ -2,7 +2,9 @@
 
 use std::collections::BTreeSet;
 
-use hermes_kernel_control_store::{ModuleBlobQuotaRequestV1, ModuleRegistration};
+use hermes_kernel_control_store::{
+    ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleRegistration,
+};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{SqliteControlStore, StoreError, valid_capability_ids};
@@ -33,12 +35,25 @@ pub(crate) fn validate_blob_quota_requests(
         .map(String::as_str)
         .collect::<BTreeSet<_>>();
     let mut seen = BTreeSet::new();
+    let mut quotas_by_scope = std::collections::BTreeMap::new();
     let valid = requests.iter().all(|request| {
+        let operations = request
+            .allowed_operations()
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
         request.registration_id() == registration.registration_id()
             && request.owner_id() == registration.owner_id()
             && requested.contains(request.capability_id())
             && valid_capability_ids(&[request.capability_id().to_owned()])
+            && valid_capability_ids(&[request.custody_scope_id().to_owned()])
             && (1..=MAX_BLOB_QUOTA_BYTES).contains(&request.max_bytes())
+            && !operations.is_empty()
+            && operations.len() == request.allowed_operations().len()
+            && quotas_by_scope
+                .entry(request.custody_scope_id())
+                .or_insert(request.max_bytes())
+                == &request.max_bytes()
             && seen.insert(request.capability_id())
     });
     valid
@@ -55,13 +70,15 @@ pub(crate) fn insert_blob_quota_requests(
             .map_err(|_| StoreError::InvalidModuleBlobQuotaRequest)?;
         connection.execute(
             "INSERT INTO hermes_kernel_module_blob_quota_request
-             (registration_id, capability_id, owner_id, max_bytes)
-             VALUES (?1, ?2, ?3, ?4)",
+             (registration_id, capability_id, owner_id, max_bytes, custody_scope_id, allowed_operations)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 request.registration_id(),
                 request.capability_id(),
                 request.owner_id(),
                 quota,
+                request.custody_scope_id(),
+                operation_mask(request.allowed_operations()),
             ],
         )?;
     }
@@ -75,7 +92,7 @@ fn read_blob_quota_request(
 ) -> Result<Option<ModuleBlobQuotaRequestV1>, StoreError> {
     connection
         .query_row(
-            "SELECT owner_id, max_bytes
+            "SELECT owner_id, max_bytes, custody_scope_id, allowed_operations
              FROM hermes_kernel_module_blob_quota_request
              WHERE registration_id = ?1 AND capability_id = ?2",
             params![registration_id, capability_id],
@@ -87,9 +104,32 @@ fn read_blob_quota_request(
                     capability_id,
                     row.get::<_, String>(0)?,
                     max_bytes,
+                    row.get::<_, String>(2)?,
+                    decode_operation_mask(row.get::<_, i64>(3)?),
                 ))
             },
         )
         .optional()
         .map_err(StoreError::from)
+}
+
+fn operation_mask(operations: &[ModuleBlobOperationV1]) -> i64 {
+    operations.iter().fold(0, |mask, operation| {
+        mask | match operation {
+            ModuleBlobOperationV1::Write => 1,
+            ModuleBlobOperationV1::ReadRange => 2,
+            ModuleBlobOperationV1::CustodyTransfer => 4,
+        }
+    })
+}
+
+fn decode_operation_mask(mask: i64) -> Vec<ModuleBlobOperationV1> {
+    [
+        (1, ModuleBlobOperationV1::Write),
+        (2, ModuleBlobOperationV1::ReadRange),
+        (4, ModuleBlobOperationV1::CustodyTransfer),
+    ]
+    .into_iter()
+    .filter_map(|(bit, operation)| (mask & bit != 0).then_some(operation))
+    .collect()
 }

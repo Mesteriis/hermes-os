@@ -1,10 +1,13 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobBackupClassV1, BlobQuotaGrantV1, BlobRefV1};
+use hermes_blob_protocol::{
+    BlobAccessFenceV1, BlobBackupClassV1, BlobCustodyScopeV1, BlobQuotaGrantV1, BlobRefV1,
+};
 use hermes_blob_runtime::lease::BlobKeyLeaseV1;
 use hermes_blob_runtime::storage::{
-    BlobContentLifecycleStore, BlobDeletionLeaseErrorV1, BlobDeletionLeaseResolverV1,
+    BlobContentLifecycleStore, BlobContentWriteRequestV1, BlobDeletionAuthorizationV1,
+    BlobDeletionLeaseErrorV1, BlobDeletionLeaseResolverV1,
 };
 use zeroize::Zeroizing;
 
@@ -16,10 +19,18 @@ fn scheduled_gc_deletes_only_due_owner_marked_references() {
     let access = access();
     let lease = lease(&reference, access.clone());
     store
-        .write_new(&reference, &access, &quota(), &lease, b"private bytes", 2)
+        .write_new(BlobContentWriteRequestV1 {
+            reference: &reference,
+            access: &access,
+            custody: &custody(),
+            quota: &quota(),
+            lease: &lease,
+            plaintext: b"private bytes",
+            now_unix_ms: 2,
+        })
         .expect("write encrypted Blob");
     store
-        .reserve_deletion(&reference, &access, 10, 5)
+        .reserve_deletion(&reference, &access, &custody(), 10, 5)
         .expect("owner marks Blob eligible");
 
     let mut resolver = OneLeaseResolver::new(lease);
@@ -39,10 +50,18 @@ fn revoked_or_unavailable_gc_key_defers_deletion_without_touching_ciphertext() {
     let access = access();
     let lease = lease(&reference, access.clone());
     store
-        .write_new(&reference, &access, &quota(), &lease, b"private bytes", 2)
+        .write_new(BlobContentWriteRequestV1 {
+            reference: &reference,
+            access: &access,
+            custody: &custody(),
+            quota: &quota(),
+            lease: &lease,
+            plaintext: b"private bytes",
+            now_unix_ms: 2,
+        })
         .expect("write encrypted Blob");
     store
-        .reserve_deletion(&reference, &access, 10, 5)
+        .reserve_deletion(&reference, &access, &custody(), 10, 5)
         .expect("owner marks Blob eligible");
 
     let report = store
@@ -71,10 +90,13 @@ impl BlobDeletionLeaseResolverV1 for OneLeaseResolver {
     fn resolve_deletion_lease(
         &mut self,
         _: &BlobRefV1,
-        _: &BlobAccessFenceV1,
+        _: &BlobCustodyScopeV1,
         _: u64,
-    ) -> Result<BlobKeyLeaseV1, BlobDeletionLeaseErrorV1> {
-        self.0.take().ok_or(BlobDeletionLeaseErrorV1::Unavailable)
+    ) -> Result<BlobDeletionAuthorizationV1, BlobDeletionLeaseErrorV1> {
+        self.0
+            .take()
+            .map(|lease| BlobDeletionAuthorizationV1::new(access(), lease))
+            .ok_or(BlobDeletionLeaseErrorV1::Unavailable)
     }
 }
 
@@ -84,9 +106,9 @@ impl BlobDeletionLeaseResolverV1 for DeniedResolver {
     fn resolve_deletion_lease(
         &mut self,
         _: &BlobRefV1,
-        _: &BlobAccessFenceV1,
+        _: &BlobCustodyScopeV1,
         _: u64,
-    ) -> Result<BlobKeyLeaseV1, BlobDeletionLeaseErrorV1> {
+    ) -> Result<BlobDeletionAuthorizationV1, BlobDeletionLeaseErrorV1> {
         Err(BlobDeletionLeaseErrorV1::Revoked)
     }
 }
@@ -115,13 +137,32 @@ fn access() -> BlobAccessFenceV1 {
 }
 
 fn quota() -> BlobQuotaGrantV1 {
-    BlobQuotaGrantV1::new("owner_notes", "registration_notes", "attachments", 4, 20)
-        .expect("Blob quota grant")
+    BlobQuotaGrantV1::new(
+        "owner_notes",
+        "registration_notes",
+        "attachments",
+        4,
+        20,
+        custody(),
+    )
+    .expect("Blob quota grant")
+}
+
+fn custody() -> BlobCustodyScopeV1 {
+    BlobCustodyScopeV1::new("owner_notes", "attachments").expect("Blob custody")
 }
 
 fn lease(reference: &BlobRefV1, access: BlobAccessFenceV1) -> BlobKeyLeaseV1 {
-    BlobKeyLeaseV1::from_vault_response(reference, access, 1_500, 1, Zeroizing::new(vec![9; 64]))
-        .expect("Blob key lease")
+    BlobKeyLeaseV1::from_vault_response(
+        reference,
+        access,
+        custody(),
+        1,
+        1_500,
+        1,
+        Zeroizing::new(vec![9; 64]),
+    )
+    .expect("Blob key lease")
 }
 
 fn private_directory() -> tempfile::TempDir {

@@ -1,7 +1,9 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobBackupClassV1, BlobRangeV1, BlobRefV1};
+use hermes_blob_protocol::{
+    BlobAccessFenceV1, BlobBackupClassV1, BlobCustodyScopeV1, BlobRangeV1, BlobRefV1,
+};
 use hermes_blob_runtime::lease::BlobKeyLeaseV1;
 use hermes_blob_runtime::storage::{BlobStorageError, EncryptedBlobStore};
 use zeroize::Zeroizing;
@@ -29,9 +31,33 @@ fn fence() -> BlobAccessFenceV1 {
     .expect("fence")
 }
 
+fn restarted_fence() -> BlobAccessFenceV1 {
+    BlobAccessFenceV1::new(
+        "owner_notes",
+        "registration-v2",
+        "attachments.read",
+        "runtime-v2",
+        8,
+        11,
+    )
+    .expect("restarted fence")
+}
+
+fn custody() -> BlobCustodyScopeV1 {
+    BlobCustodyScopeV1::new("owner_notes", "attachments").expect("custody")
+}
+
 fn lease(reference: &BlobRefV1, fence: BlobAccessFenceV1) -> BlobKeyLeaseV1 {
-    BlobKeyLeaseV1::from_vault_response(reference, fence, 1_500, 1, Zeroizing::new(vec![9; 64]))
-        .expect("Vault-routed key lease")
+    BlobKeyLeaseV1::from_vault_response(
+        reference,
+        fence,
+        custody(),
+        1,
+        1_500,
+        1,
+        Zeroizing::new(vec![9; 64]),
+    )
+    .expect("Vault-routed key lease")
 }
 
 fn private_directory() -> tempfile::TempDir {
@@ -61,7 +87,7 @@ fn encrypted_store_writes_no_plaintext_and_returns_only_bounded_ranges() {
     let plaintext = b"private bytes";
 
     store
-        .write_new(&reference, &fence, &lease, plaintext, 2)
+        .write_new(&reference, &fence, &custody(), &lease, plaintext, 2)
         .expect("encrypted write");
 
     let filename = "07070707070707070707070707070707.blob";
@@ -76,6 +102,7 @@ fn encrypted_store_writes_no_plaintext_and_returns_only_bounded_ranges() {
             .read_range(
                 &reference,
                 &fence,
+                &custody(),
                 &lease,
                 BlobRangeV1::new(8, 13, reference.declared_size()).expect("range"),
                 3,
@@ -83,6 +110,103 @@ fn encrypted_store_writes_no_plaintext_and_returns_only_bounded_ranges() {
             .expect("bounded read"),
         b"bytes",
     );
+}
+
+#[test]
+fn encrypted_content_survives_runtime_registration_and_grant_rotation() {
+    let directory = private_directory();
+    let store = EncryptedBlobStore::open(directory.path(), 1024).expect("store");
+    let reference = reference();
+    let write_fence = fence();
+    let write_lease = lease(&reference, write_fence.clone());
+    store
+        .write_new(
+            &reference,
+            &write_fence,
+            &custody(),
+            &write_lease,
+            b"private bytes",
+            2,
+        )
+        .expect("write with initial runtime grant");
+
+    let read_fence = restarted_fence();
+    let read_lease = lease(&reference, read_fence.clone());
+    assert_eq!(
+        store
+            .read_range(
+                &reference,
+                &read_fence,
+                &custody(),
+                &read_lease,
+                BlobRangeV1::new(0, 13, reference.declared_size()).expect("full range"),
+                3,
+            )
+            .expect("read after runtime and grant rotation"),
+        b"private bytes",
+    );
+}
+
+#[test]
+fn encrypted_content_rejects_a_different_custody_scope() {
+    let directory = private_directory();
+    let store = EncryptedBlobStore::open(directory.path(), 1024).expect("store");
+    let reference = reference();
+    let write_fence = fence();
+    let write_lease = lease(&reference, write_fence.clone());
+    store
+        .write_new(
+            &reference,
+            &write_fence,
+            &custody(),
+            &write_lease,
+            b"private bytes",
+            2,
+        )
+        .expect("write with original custody");
+
+    let other_custody =
+        BlobCustodyScopeV1::new("owner_notes", "other-content").expect("other custody");
+    let read_fence = restarted_fence();
+    let other_lease = BlobKeyLeaseV1::from_vault_response(
+        &reference,
+        read_fence.clone(),
+        other_custody.clone(),
+        1,
+        1_500,
+        1,
+        Zeroizing::new(vec![9; 64]),
+    )
+    .expect("other custody key lease");
+    assert_eq!(
+        store.read_range(
+            &reference,
+            &read_fence,
+            &other_custody,
+            &other_lease,
+            BlobRangeV1::new(0, 13, reference.declared_size()).expect("full range"),
+            3,
+        ),
+        Err(BlobStorageError::AuthenticationFailed),
+    );
+}
+
+#[test]
+fn store_open_rejects_legacy_ciphertext_before_serving_requests() {
+    let directory = private_directory();
+    EncryptedBlobStore::open(directory.path(), 1024).expect("create content root");
+    let path = directory
+        .path()
+        .join("content")
+        .join("07070707070707070707070707070707.blob");
+    fs::write(&path, b"HBLBENC1legacy-ciphertext").expect("write legacy ciphertext");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+        .expect("private legacy ciphertext");
+
+    assert!(matches!(
+        EncryptedBlobStore::open(directory.path(), 1024),
+        Err(BlobStorageError::MalformedCiphertext),
+    ));
 }
 
 #[test]
@@ -94,7 +218,14 @@ fn lease_fence_expiry_and_symlink_attacks_fail_closed() {
     let lease = lease(&reference, fence.clone());
 
     assert_eq!(
-        store.write_new(&reference, &fence, &lease, b"private bytes", 1_500),
+        store.write_new(
+            &reference,
+            &fence,
+            &custody(),
+            &lease,
+            b"private bytes",
+            1_500,
+        ),
         Err(BlobStorageError::Lease(
             hermes_blob_runtime::lease::BlobLeaseError::Expired
         )),
@@ -106,7 +237,7 @@ fn lease_fence_expiry_and_symlink_attacks_fail_closed() {
         .join("07070707070707070707070707070707.blob");
     std::os::unix::fs::symlink("/tmp", &path).expect("test symlink");
     assert_eq!(
-        store.write_new(&reference, &fence, &lease, b"private bytes", 2),
+        store.write_new(&reference, &fence, &custody(), &lease, b"private bytes", 2,),
         Err(BlobStorageError::AlreadyExists),
     );
 }
@@ -120,16 +251,24 @@ fn expired_reference_cannot_be_written_or_read_with_a_current_key_lease() {
     let lease = lease(&reference, fence.clone());
 
     assert_eq!(
-        store.write_new(&reference, &fence, &lease, b"private bytes", 2_000),
+        store.write_new(
+            &reference,
+            &fence,
+            &custody(),
+            &lease,
+            b"private bytes",
+            2_000,
+        ),
         Err(BlobStorageError::Expired),
     );
     store
-        .write_new(&reference, &fence, &lease, b"private bytes", 2)
+        .write_new(&reference, &fence, &custody(), &lease, b"private bytes", 2)
         .expect("write before reference expiry");
     assert_eq!(
         store.read_range(
             &reference,
             &fence,
+            &custody(),
             &lease,
             BlobRangeV1::new(0, 1, reference.declared_size()).expect("range"),
             2_000,
@@ -146,11 +285,11 @@ fn owner_fenced_delete_removes_the_blob() {
     let fence = fence();
     let lease = lease(&reference, fence.clone());
     store
-        .write_new(&reference, &fence, &lease, b"private bytes", 2)
+        .write_new(&reference, &fence, &custody(), &lease, b"private bytes", 2)
         .expect("encrypted write");
 
     store
-        .delete(&reference, &fence, &lease, 3)
+        .delete(&reference, &fence, &custody(), &lease, 3)
         .expect("owner-fenced delete");
     assert!(
         !directory
@@ -168,7 +307,14 @@ fn ciphertext_is_bound_to_the_complete_reference_and_private_root() {
     let fence = fence();
     let key_lease = lease(&reference, fence.clone());
     store
-        .write_new(&reference, &fence, &key_lease, b"private bytes", 2)
+        .write_new(
+            &reference,
+            &fence,
+            &custody(),
+            &key_lease,
+            b"private bytes",
+            2,
+        )
         .expect("encrypted write");
 
     let altered = BlobRefV1::new(
@@ -184,6 +330,7 @@ fn ciphertext_is_bound_to_the_complete_reference_and_private_root() {
         store.read_range(
             &altered,
             &fence,
+            &custody(),
             &altered_lease,
             BlobRangeV1::new(0, 1, altered.declared_size()).expect("range"),
             3,

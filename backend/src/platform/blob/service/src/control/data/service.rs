@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_blob_runtime::{
     lease::BlobKeyLeaseV1,
-    storage::{BlobContentLifecycleStore, BlobCustodyTransferRequestV1},
+    storage::{BlobContentLifecycleStore, BlobContentWriteRequestV1, BlobCustodyTransferRequestV1},
     vault::{BlobContentKeyFenceV1, BlobVaultKeyLeaseAdapterV1, BlobVaultRoutePortV1},
 };
 use hermes_runtime_protocol::v1::{
@@ -99,14 +99,15 @@ where
                     return Err(());
                 }
                 self.store
-                    .write_new(
-                        session.reference(),
-                        session.access(),
-                        session.quota(),
-                        &lease,
-                        &write.plaintext,
-                        now,
-                    )
+                    .write_new(BlobContentWriteRequestV1 {
+                        reference: session.reference(),
+                        access: session.access(),
+                        custody: session.custody(),
+                        quota: session.quota(),
+                        lease: &lease,
+                        plaintext: &write.plaintext,
+                        now_unix_ms: now,
+                    })
                     .map_err(|_| developer_denied("write"))?;
                 Ok(BlobDataResponseV1 {
                     plaintext: Vec::new(),
@@ -131,7 +132,14 @@ where
                 .map_err(|_| ())?;
                 let plaintext = self
                     .store
-                    .read_range(session.reference(), session.access(), &lease, range, now)
+                    .read_range(
+                        session.reference(),
+                        session.access(),
+                        session.custody(),
+                        &lease,
+                        range,
+                        now,
+                    )
                     .map_err(|_| developer_denied("read"))?;
                 if !exact_plaintext_binding(session.expected_plaintext_sha256(), &plaintext) {
                     return Err(());
@@ -151,8 +159,12 @@ where
         session: &VerifiedBlobDataSessionV1,
         now: u64,
     ) -> Result<BlobKeyLeaseV1, ()> {
-        let fence = BlobContentKeyFenceV1::new(session.access().clone(), session.key_revision())
-            .map_err(|_| ())?;
+        let fence = BlobContentKeyFenceV1::new(
+            session.access().clone(),
+            session.custody().clone(),
+            session.key_revision(),
+        )
+        .map_err(|_| ())?;
         complete_immediately(
             self.keys
                 .ensure_content_key(session.reference(), &fence, now),
@@ -169,12 +181,14 @@ where
         let source_key = self.content_key_for(
             transfer.source_reference(),
             transfer.source_access(),
+            transfer.source_custody(),
             transfer.source_key_revision(),
             now,
         )?;
         let target_key = self.content_key_for(
             transfer.target_reference(),
             transfer.target_access(),
+            transfer.target_custody(),
             transfer.target_key_revision(),
             now,
         )?;
@@ -182,9 +196,11 @@ where
             .custody_transfer(BlobCustodyTransferRequestV1 {
                 source_reference: transfer.source_reference(),
                 source_access: transfer.source_access(),
+                source_custody: transfer.source_custody(),
                 source_lease: &source_key,
                 target_reference: transfer.target_reference(),
                 target_access: transfer.target_access(),
+                target_custody: transfer.target_custody(),
                 target_quota: transfer.target_quota(),
                 target_lease: &target_key,
                 expected_plaintext_sha256: transfer.expected_plaintext_sha256(),
@@ -202,10 +218,12 @@ where
         &mut self,
         reference: &hermes_blob_protocol::BlobRefV1,
         access: &hermes_blob_protocol::BlobAccessFenceV1,
+        custody: &hermes_blob_protocol::BlobCustodyScopeV1,
         key_revision: u64,
         now: u64,
     ) -> Result<BlobKeyLeaseV1, ()> {
-        let fence = BlobContentKeyFenceV1::new(access.clone(), key_revision).map_err(|_| ())?;
+        let fence = BlobContentKeyFenceV1::new(access.clone(), custody.clone(), key_revision)
+            .map_err(|_| ())?;
         complete_immediately(self.keys.ensure_content_key(reference, &fence, now))
             .map_err(|_| ())?
             .map_err(|_| ())

@@ -159,6 +159,12 @@ distinct generated request с common `AiContextReceiptV1` и concrete use-case
 context и передаёт его AI. AI не получает cross-owner SQL или query access, а
 global fragment union и generic/durable Context projection запрещены.
 
+ADR-0279 разделяет ephemeral Blob access fence и stable at-rest custody.
+Capabilities остаются точными operation-scoped approval units, тогда как
+encrypted bytes, Vault content-key scope и aggregate quota переживают
+restart/re-registration внутри того же logical owner custody. Kernel не
+интерпретирует content и не становится Blob/data facade.
+
 ## Top-Level Shape
 
 Диаграмма ниже показывает целевую систему после открытия всех фазовых ворот.

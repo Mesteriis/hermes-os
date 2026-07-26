@@ -145,6 +145,39 @@ impl BlobAccessFenceV1 {
     }
 }
 
+/// Stable at-rest ownership independent from one runtime registration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlobCustodyScopeV1 {
+    owner_id: String,
+    custody_scope_id: String,
+}
+
+impl BlobCustodyScopeV1 {
+    pub fn new(
+        owner_id: impl Into<String>,
+        custody_scope_id: impl Into<String>,
+    ) -> Result<Self, BlobContractError> {
+        let owner_id = owner_id.into();
+        let custody_scope_id = custody_scope_id.into();
+        (valid_owner_id(&owner_id) && valid_opaque_id(&custody_scope_id))
+            .then_some(Self {
+                owner_id,
+                custody_scope_id,
+            })
+            .ok_or(BlobContractError::InvalidCustody)
+    }
+
+    #[must_use]
+    pub fn owner_id(&self) -> &str {
+        &self.owner_id
+    }
+
+    #[must_use]
+    pub fn custody_scope_id(&self) -> &str {
+        &self.custody_scope_id
+    }
+}
+
 /// Kernel-authorized aggregate byte budget for one Blob capability grant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlobQuotaGrantV1 {
@@ -153,6 +186,7 @@ pub struct BlobQuotaGrantV1 {
     capability_id: String,
     grant_epoch: u64,
     max_bytes: u64,
+    custody: BlobCustodyScopeV1,
 }
 
 impl BlobQuotaGrantV1 {
@@ -162,6 +196,7 @@ impl BlobQuotaGrantV1 {
         capability_id: impl Into<String>,
         grant_epoch: u64,
         max_bytes: u64,
+        custody: BlobCustodyScopeV1,
     ) -> Result<Self, BlobContractError> {
         let owner_id = owner_id.into();
         let module_registration_id = module_registration_id.into();
@@ -170,13 +205,15 @@ impl BlobQuotaGrantV1 {
             && valid_opaque_id(&module_registration_id)
             && valid_opaque_id(&capability_id)
             && grant_epoch > 0
-            && (1..=MAX_QUOTA_BYTES).contains(&max_bytes))
+            && (1..=MAX_QUOTA_BYTES).contains(&max_bytes)
+            && owner_id == custody.owner_id())
         .then_some(Self {
             owner_id,
             module_registration_id,
             capability_id,
             grant_epoch,
             max_bytes,
+            custody,
         })
         .ok_or(BlobContractError::InvalidQuota)
     }
@@ -192,6 +229,11 @@ impl BlobQuotaGrantV1 {
     #[must_use]
     pub const fn max_bytes(&self) -> u64 {
         self.max_bytes
+    }
+
+    #[must_use]
+    pub const fn custody(&self) -> &BlobCustodyScopeV1 {
+        &self.custody
     }
 }
 
@@ -224,6 +266,7 @@ pub enum BlobContractError {
     InvalidReference,
     InvalidRange,
     InvalidFence,
+    InvalidCustody,
     InvalidQuota,
 }
 

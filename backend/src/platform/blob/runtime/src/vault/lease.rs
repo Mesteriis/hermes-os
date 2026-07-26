@@ -1,10 +1,11 @@
 //! Per-reference Blob key authority issued and resolved through Vault leases.
 
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobRefV1};
+use hermes_blob_protocol::{BlobAccessFenceV1, BlobCustodyScopeV1, BlobRefV1};
 use hermes_vault_protocol::{
     DEFAULT_LEASE_TTL_SECONDS, LeaseIdV1, SecretClassV1, VaultActionV1, VaultLeaseIssueRequestV1,
     VaultPurposeRequestV1, VaultTransportCommandV1,
 };
+use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::lease::BlobKeyLeaseV1;
@@ -16,17 +17,20 @@ const BLOB_CONTENT_KEY_PURPOSE: &str = "blob.content.key";
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BlobContentKeyFenceV1 {
     access: BlobAccessFenceV1,
+    custody: BlobCustodyScopeV1,
     key_revision: u64,
 }
 
 impl BlobContentKeyFenceV1 {
     pub fn new(
         access: BlobAccessFenceV1,
+        custody: BlobCustodyScopeV1,
         key_revision: u64,
     ) -> Result<Self, BlobContentKeyLeaseErrorV1> {
-        (key_revision > 0)
+        (key_revision > 0 && access.owner_id() == custody.owner_id())
             .then_some(Self {
                 access,
+                custody,
                 key_revision,
             })
             .ok_or(BlobContentKeyLeaseErrorV1::Rejected)
@@ -40,6 +44,11 @@ impl BlobContentKeyFenceV1 {
     #[must_use]
     pub const fn key_revision(&self) -> u64 {
         self.key_revision
+    }
+
+    #[must_use]
+    pub fn custody(&self) -> &BlobCustodyScopeV1 {
+        &self.custody
     }
 }
 
@@ -166,6 +175,8 @@ fn lease_from_authority(
     BlobKeyLeaseV1::from_vault_response(
         reference,
         fence.access.clone(),
+        fence.custody.clone(),
+        fence.key_revision,
         expiry,
         now_unix_ms,
         authority,
@@ -181,7 +192,7 @@ fn issue_request(
 ) -> Result<VaultLeaseIssueRequestV1, BlobContentKeyLeaseErrorV1> {
     let purpose = VaultPurposeRequestV1::new(
         BLOB_CONTENT_KEY_PURPOSE.to_owned(),
-        opaque_reference_scope(reference),
+        opaque_reference_scope(reference, fence.custody()),
         vec![SecretClassV1::PlatformCredential],
         vec![action],
         DEFAULT_LEASE_TTL_SECONDS,
@@ -198,8 +209,14 @@ fn issue_request(
     .map_err(|_| BlobContentKeyLeaseErrorV1::Rejected)
 }
 
-fn opaque_reference_scope(reference: &BlobRefV1) -> String {
-    let mut scope = String::from("blob-");
+fn opaque_reference_scope(reference: &BlobRefV1, custody: &BlobCustodyScopeV1) -> String {
+    let custody_digest = Sha256::digest(custody.custody_scope_id().as_bytes());
+    let mut scope = String::from("blob2-");
+    for byte in custody_digest {
+        use std::fmt::Write as _;
+        write!(&mut scope, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    scope.push('-');
     for byte in reference.reference_id() {
         use std::fmt::Write as _;
         write!(&mut scope, "{byte:02x}").expect("writing to String cannot fail");

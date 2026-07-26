@@ -43,13 +43,20 @@ fn managed_blob_writes_and_reads_through_the_live_vault_route() {
         [1; 16],
         [3; 32],
         blob_generation,
+        BlobCallerIdentityV1 {
+            registration_id: "blob",
+            capability_id: "blob-content.write",
+            runtime_instance_id: "blob-runtime-v1",
+            runtime_generation: 1,
+            grant_epoch: 1,
+        },
         b"hello",
     );
     let written =
         exchange(&socket, write.clone()).unwrap_or_else(|error| failure(&supervisor, error));
     assert!(written.accepted && written.error_code.is_empty());
     assert_denied(exchange(&socket, write).unwrap_or_else(|error| failure(&supervisor, error)));
-    assert_cross_capability_read_denied(&socket, &signer, blob_generation, &supervisor);
+    assert_cross_custody_read_denied(&socket, &signer, blob_generation, &supervisor);
     assert_stale_generation_denied(&socket, &signer, blob_generation, &supervisor);
     let read = exchange(
         &socket,
@@ -59,6 +66,13 @@ fn managed_blob_writes_and_reads_through_the_live_vault_route() {
             [2; 16],
             [4; 32],
             blob_generation,
+            BlobCallerIdentityV1 {
+                registration_id: "blob-successor",
+                capability_id: "blob-content.read",
+                runtime_instance_id: "blob-runtime-v2",
+                runtime_generation: 8,
+                grant_epoch: 9,
+            },
             b"hello",
         ),
     )
@@ -78,6 +92,7 @@ fn request(
     session_id: [u8; 16],
     binding: [u8; 32],
     blob_generation: u64,
+    caller: BlobCallerIdentityV1<'_>,
     plaintext: &[u8],
 ) -> BlobDataRequestV1 {
     let expected_plaintext_sha256 =
@@ -88,6 +103,7 @@ fn request(
         session_id,
         &binding,
         blob_generation,
+        caller,
         expected_plaintext_sha256,
     );
     let operation = match operation {
@@ -116,6 +132,7 @@ fn signed_grant(
     session_id: [u8; 16],
     binding: &[u8; 32],
     blob_generation: u64,
+    caller: BlobCallerIdentityV1<'_>,
     expected_plaintext_sha256: Option<[u8; 32]>,
 ) -> BlobDataSessionGrantV1 {
     let mut grant = BlobDataSessionGrantV1 {
@@ -124,13 +141,14 @@ fn signed_grant(
         session_id: session_id.to_vec(),
         channel_binding_sha256: Sha256::digest(binding).to_vec(),
         owner_id: "owner-1".to_owned(),
-        registration_id: "blob".to_owned(),
-        capability_id: "blob-content".to_owned(),
-        runtime_instance_id: "blob".to_owned(),
-        runtime_generation: blob_generation,
-        grant_epoch: 1,
+        registration_id: caller.registration_id.to_owned(),
+        capability_id: caller.capability_id.to_owned(),
+        runtime_instance_id: caller.runtime_instance_id.to_owned(),
+        runtime_generation: caller.runtime_generation,
+        grant_epoch: caller.grant_epoch,
         key_revision: 1,
         quota_max_bytes: 1024,
+        custody_scope_id: "owner-1.content.v1".to_owned(),
         reference_id: [9; 16].to_vec(),
         declared_size: 5,
         reference_expires_at_unix_ms: 0,
@@ -145,6 +163,15 @@ fn signed_grant(
     message.extend_from_slice(&grant.encode_to_vec());
     grant.kernel_authorization_signature_raw = signer.sign(&message).to_vec();
     grant
+}
+
+#[derive(Clone, Copy)]
+struct BlobCallerIdentityV1<'a> {
+    registration_id: &'a str,
+    capability_id: &'a str,
+    runtime_instance_id: &'a str,
+    runtime_generation: u64,
+    grant_epoch: u64,
 }
 
 fn exchange(
@@ -188,31 +215,44 @@ fn assert_stale_generation_denied(
         [3; 16],
         [5; 32],
         blob_generation + 1,
+        BlobCallerIdentityV1 {
+            registration_id: "blob",
+            capability_id: "blob-content.write",
+            runtime_instance_id: "blob-runtime-v1",
+            runtime_generation: 1,
+            grant_epoch: 1,
+        },
         b"hello",
     );
     assert_denied(exchange(socket, stale).unwrap_or_else(|error| failure(supervisor, error)));
 }
 
-fn assert_cross_capability_read_denied(
+fn assert_cross_custody_read_denied(
     socket: &std::path::Path,
     signer: &FileDeviceSigner,
     blob_generation: u64,
     supervisor: &ManagedRuntimeSupervisor,
 ) {
-    let mut cross_capability = request(
+    let mut cross_custody = request(
         signer,
         BlobDataOperationV1::BlobDataOperationReadRangeV1,
         [5; 16],
         [6; 32],
         blob_generation,
+        BlobCallerIdentityV1 {
+            registration_id: "blob",
+            capability_id: "blob-content.read",
+            runtime_instance_id: "blob-runtime-v1",
+            runtime_generation: 1,
+            grant_epoch: 1,
+        },
         b"",
     );
-    let grant = cross_capability.grant.as_mut().expect("Blob grant");
-    grant.registration_id = "communications-runtime".to_owned();
-    grant.capability_id = "communications.blob.v1".to_owned();
+    let grant = cross_custody.grant.as_mut().expect("Blob grant");
+    grant.custody_scope_id = "owner-1.other-content.v1".to_owned();
     resign_grant(signer, grant);
     assert_denied(
-        exchange(socket, cross_capability).unwrap_or_else(|error| failure(supervisor, error)),
+        exchange(socket, cross_custody).unwrap_or_else(|error| failure(supervisor, error)),
     );
 }
 

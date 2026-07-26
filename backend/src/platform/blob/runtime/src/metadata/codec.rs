@@ -1,27 +1,27 @@
 //! Fixed-version binary codec for non-content Blob technical metadata.
 
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobBackupClassV1, BlobRefV1};
+use hermes_blob_protocol::{BlobBackupClassV1, BlobCustodyScopeV1, BlobRefV1};
 
 use super::record::{BlobMetadataRecordV1, BlobMetadataStateV1};
 
-const MAGIC: &[u8; 8] = b"HBLBM001";
+const MAGIC: &[u8; 8] = b"HBLBM002";
 const MAX_RECORD_BYTES: usize = 1024;
+const CONTENT_FORMAT_REVISION: u8 = 2;
+const CONTENT_KEY_SCHEMA_REVISION: u64 = 1;
 
 pub(super) fn encode(record: &BlobMetadataRecordV1) -> Vec<u8> {
     let reference = record.reference();
-    let access = record.access();
+    let custody = record.custody();
     let mut bytes = Vec::with_capacity(256);
     bytes.extend_from_slice(MAGIC);
+    bytes.push(CONTENT_FORMAT_REVISION);
+    bytes.extend_from_slice(&CONTENT_KEY_SCHEMA_REVISION.to_be_bytes());
     bytes.extend_from_slice(reference.reference_id());
     bytes.push(backup_class_code(reference.backup_class()));
     bytes.extend_from_slice(&reference.declared_size().to_be_bytes());
     append_optional_u64(&mut bytes, reference.expires_at_unix_ms());
     append_text(&mut bytes, reference.owner_id());
-    append_text(&mut bytes, access.module_registration_id());
-    append_text(&mut bytes, access.capability_id());
-    append_text(&mut bytes, access.runtime_instance_id());
-    bytes.extend_from_slice(&access.runtime_generation().to_be_bytes());
-    bytes.extend_from_slice(&access.grant_epoch().to_be_bytes());
+    append_text(&mut bytes, custody.custody_scope_id());
     append_state(&mut bytes, record.state());
     bytes
 }
@@ -31,16 +31,15 @@ pub(super) fn decode(bytes: &[u8]) -> Option<BlobMetadataRecordV1> {
         return None;
     }
     let mut cursor = Cursor::new(&bytes[MAGIC.len()..]);
+    if cursor.byte()? != CONTENT_FORMAT_REVISION || cursor.u64()? != CONTENT_KEY_SCHEMA_REVISION {
+        return None;
+    }
     let reference_id = cursor.array()?;
     let backup_class = backup_class(cursor.byte()?)?;
     let declared_size = cursor.u64()?;
     let expires_at_unix_ms = cursor.optional_u64()?;
     let owner_id = cursor.text()?;
-    let registration_id = cursor.text()?;
-    let capability_id = cursor.text()?;
-    let runtime_id = cursor.text()?;
-    let generation = cursor.u64()?;
-    let grant_epoch = cursor.u64()?;
+    let custody_scope_id = cursor.text()?;
     let state = cursor.state()?;
     if !cursor.is_exhausted() {
         return None;
@@ -53,16 +52,8 @@ pub(super) fn decode(bytes: &[u8]) -> Option<BlobMetadataRecordV1> {
         backup_class,
     )
     .ok()?;
-    let access = BlobAccessFenceV1::new(
-        owner_id,
-        registration_id,
-        capability_id,
-        runtime_id,
-        generation,
-        grant_epoch,
-    )
-    .ok()?;
-    BlobMetadataRecordV1::from_parts(reference, access, state)
+    let custody = BlobCustodyScopeV1::new(owner_id, custody_scope_id).ok()?;
+    BlobMetadataRecordV1::from_parts(reference, custody, state)
 }
 
 fn append_optional_u64(target: &mut Vec<u8>, value: Option<u64>) {

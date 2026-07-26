@@ -1,11 +1,11 @@
 //! Owner-fenced encrypted Blob reads and atomic writes.
 
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobRangeV1, BlobRefV1};
+use hermes_blob_protocol::{BlobAccessFenceV1, BlobCustodyScopeV1, BlobRangeV1, BlobRefV1};
 
 use crate::lease::{BlobKeyLeaseV1, BlobLeaseError};
 
@@ -23,8 +23,10 @@ impl EncryptedBlobStore {
         if maximum_blob_bytes == 0 || maximum_blob_bytes > MAX_BLOB_BYTES {
             return Err(BlobStorageError::InvalidQuota);
         }
+        let content_root = root::prepare_content_root(data_dir)?;
+        validate_existing_content(&content_root)?;
         Ok(Self {
-            content_root: root::prepare_content_root(data_dir)?,
+            content_root,
             maximum_blob_bytes,
         })
     }
@@ -33,17 +35,21 @@ impl EncryptedBlobStore {
         &self,
         reference: &BlobRefV1,
         fence: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         lease: &BlobKeyLeaseV1,
         plaintext: &[u8],
         now_unix_ms: u64,
     ) -> Result<(), BlobStorageError> {
         self.validate_write(reference, fence, plaintext, now_unix_ms)?;
+        if custody.owner_id() != reference.owner_id() {
+            return Err(BlobStorageError::FenceMismatch);
+        }
         let key = lease
-            .key_for(reference, fence, now_unix_ms)
+            .key_for(reference, fence, custody, now_unix_ms)
             .map_err(BlobStorageError::Lease)?;
         let target = root::blob_path(&self.content_root, reference);
         reject_existing_path(&target)?;
-        let encrypted = format::encrypt(reference, fence, key, plaintext)?;
+        let encrypted = format::encrypt(reference, custody, lease.key_revision(), key, plaintext)?;
         self.write_staged(&target, &encrypted)
     }
 
@@ -51,6 +57,7 @@ impl EncryptedBlobStore {
         &self,
         reference: &BlobRefV1,
         fence: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         lease: &BlobKeyLeaseV1,
         range: BlobRangeV1,
         now_unix_ms: u64,
@@ -58,19 +65,19 @@ impl EncryptedBlobStore {
         if reference.is_expired_at(now_unix_ms) {
             return Err(BlobStorageError::Expired);
         }
-        if fence.owner_id() != reference.owner_id() {
+        if fence.owner_id() != reference.owner_id() || custody.owner_id() != reference.owner_id() {
             return Err(BlobStorageError::FenceMismatch);
         }
         if range.end_exclusive() > reference.declared_size() {
             return Err(BlobStorageError::InvalidRange);
         }
         let key = lease
-            .key_for(reference, fence, now_unix_ms)
+            .key_for(reference, fence, custody, now_unix_ms)
             .map_err(BlobStorageError::Lease)?;
         let target = root::blob_path(&self.content_root, reference);
         root::validate_private_regular_file(&target)?;
         let encrypted = fs::read(target).map_err(|_| BlobStorageError::Filesystem)?;
-        let plaintext = format::decrypt(reference, fence, key, &encrypted)?;
+        let plaintext = format::decrypt(reference, custody, lease.key_revision(), key, &encrypted)?;
         if u64::try_from(plaintext.len()) != Ok(reference.declared_size()) {
             return Err(BlobStorageError::MalformedCiphertext);
         }
@@ -88,14 +95,15 @@ impl EncryptedBlobStore {
         &self,
         reference: &BlobRefV1,
         fence: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         lease: &BlobKeyLeaseV1,
         now_unix_ms: u64,
     ) -> Result<(), BlobStorageError> {
-        if fence.owner_id() != reference.owner_id() {
+        if fence.owner_id() != reference.owner_id() || custody.owner_id() != reference.owner_id() {
             return Err(BlobStorageError::FenceMismatch);
         }
         lease
-            .key_for(reference, fence, now_unix_ms)
+            .key_for(reference, fence, custody, now_unix_ms)
             .map_err(BlobStorageError::Lease)?;
         let target = root::blob_path(&self.content_root, reference);
         root::validate_private_regular_file(&target)?;
@@ -179,6 +187,37 @@ impl EncryptedBlobStore {
             .and_then(|directory| directory.sync_all())
             .map_err(|_| BlobStorageError::Filesystem)
     }
+}
+
+fn validate_existing_content(content_root: &Path) -> Result<(), BlobStorageError> {
+    for entry in fs::read_dir(content_root).map_err(|_| BlobStorageError::Filesystem)? {
+        let path = entry.map_err(|_| BlobStorageError::Filesystem)?.path();
+        if !valid_blob_filename(&path) {
+            return Err(BlobStorageError::UnsafePath);
+        }
+        root::validate_private_regular_file(&path)?;
+        let mut magic = [0_u8; 8];
+        File::open(path)
+            .and_then(|mut file| file.read_exact(&mut magic))
+            .map_err(|_| BlobStorageError::MalformedCiphertext)?;
+        if !format::is_current_magic(&magic) {
+            return Err(BlobStorageError::MalformedCiphertext);
+        }
+    }
+    Ok(())
+}
+
+fn valid_blob_filename(path: &Path) -> bool {
+    let Some(filename) = path.file_name().and_then(|value| value.to_str()) else {
+        return false;
+    };
+    filename.len() == 37
+        && filename.ends_with(".blob")
+        && filename.as_bytes().get(..32).is_some_and(|prefix| {
+            prefix
+                .iter()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+        })
 }
 
 fn reject_existing_path(path: &Path) -> Result<(), BlobStorageError> {

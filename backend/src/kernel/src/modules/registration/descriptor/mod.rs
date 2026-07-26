@@ -1,16 +1,17 @@
 //! Translation of a validated module descriptor into Control Store request records.
 
 use hermes_kernel_control_store::{
-    ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1,
-    ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1,
-    ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1, ModuleRegistration,
-    ModuleSchedulerJobRequestV1, ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
+    ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1,
+    ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
+    ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
+    ModuleEventSubscriptionRequirementV1, ModuleRegistration, ModuleSchedulerJobRequestV1,
+    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
 use hermes_runtime_protocol::{
     v1::{
-        DurableEnvelopeKindV1, EventRouteDirectionV1, EventSubscriptionRequirementV1,
-        ProvidedSurfaceKindV1, VaultActionV1, VaultSecretClassV1, VaultTargetScopeV1,
-        capability_request_v1::Request as CapabilityRequest,
+        BlobQuotaOperationV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
+        EventSubscriptionRequirementV1, ProvidedSurfaceKindV1, VaultActionV1, VaultSecretClassV1,
+        VaultTargetScopeV1, capability_request_v1::Request as CapabilityRequest,
     },
     validation::descriptor::decode_descriptor_v1,
 };
@@ -142,6 +143,8 @@ fn bind_blob_quota_requests(
                 &request.capability_id,
                 registration.owner_id(),
                 request.max_bytes,
+                &request.custody_scope_id,
+                request.allowed_operations.clone(),
             )
         })
         .collect()
@@ -236,6 +239,8 @@ struct DescriptorEventRouteRequest {
 struct DescriptorBlobQuotaRequest {
     capability_id: String,
     max_bytes: u64,
+    custody_scope_id: String,
+    allowed_operations: Vec<ModuleBlobOperationV1>,
 }
 
 struct DescriptorSchedulerJobRequest {
@@ -406,12 +411,22 @@ fn event_subscription_requirement(
 fn blob_quota_requests(
     descriptor: &hermes_runtime_protocol::v1::ModuleDescriptorV1,
 ) -> Result<Vec<DescriptorBlobQuotaRequest>, String> {
-    descriptor
+    let requests = descriptor
         .capabilities
         .iter()
         .map(blob_quota_request_for_capability)
         .collect::<Result<Vec<_>, _>>()
-        .map(|requests| requests.into_iter().flatten().collect())
+        .map(|requests| requests.into_iter().flatten().collect::<Vec<_>>())?;
+    let mut quotas_by_scope = std::collections::BTreeMap::new();
+    if !requests.iter().all(|request| {
+        quotas_by_scope
+            .entry(request.custody_scope_id.as_str())
+            .or_insert(request.max_bytes)
+            == &request.max_bytes
+    }) {
+        return Err("module Blob quota request is invalid".to_owned());
+    }
+    Ok(requests)
 }
 
 fn blob_quota_request_for_capability(
@@ -427,10 +442,28 @@ fn blob_quota_request_for_capability(
         .collect::<Vec<_>>();
     match requests.as_slice() {
         [] => Ok(None),
-        [request] => Ok(Some(DescriptorBlobQuotaRequest {
-            capability_id: capability.capability_id.clone(),
-            max_bytes: request.max_bytes,
-        })),
+        [request] => {
+            let allowed_operations = request
+                .allowed_operations
+                .iter()
+                .map(|value| match BlobQuotaOperationV1::try_from(*value).ok() {
+                    Some(BlobQuotaOperationV1::Write) => Ok(ModuleBlobOperationV1::Write),
+                    Some(BlobQuotaOperationV1::ReadRange) => Ok(ModuleBlobOperationV1::ReadRange),
+                    Some(BlobQuotaOperationV1::CustodyTransfer) => {
+                        Ok(ModuleBlobOperationV1::CustodyTransfer)
+                    }
+                    Some(BlobQuotaOperationV1::Unspecified) | None => {
+                        Err("module Blob quota request is invalid".to_owned())
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Some(DescriptorBlobQuotaRequest {
+                capability_id: capability.capability_id.clone(),
+                max_bytes: request.max_bytes,
+                custody_scope_id: request.custody_scope_id.clone(),
+                allowed_operations,
+            }))
+        }
         _ => Err("module Blob quota request is invalid".to_owned()),
     }
 }

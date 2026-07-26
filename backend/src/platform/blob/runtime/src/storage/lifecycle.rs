@@ -2,7 +2,9 @@
 
 use std::path::Path;
 
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobQuotaGrantV1, BlobRangeV1, BlobRefV1};
+use hermes_blob_protocol::{
+    BlobAccessFenceV1, BlobCustodyScopeV1, BlobQuotaGrantV1, BlobRangeV1, BlobRefV1,
+};
 use sha2::{Digest, Sha256};
 
 use crate::lease::BlobKeyLeaseV1;
@@ -15,9 +17,21 @@ pub trait BlobDeletionLeaseResolverV1 {
     fn resolve_deletion_lease(
         &mut self,
         reference: &BlobRefV1,
-        access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         now_unix_ms: u64,
-    ) -> Result<BlobKeyLeaseV1, BlobDeletionLeaseErrorV1>;
+    ) -> Result<BlobDeletionAuthorizationV1, BlobDeletionLeaseErrorV1>;
+}
+
+pub struct BlobDeletionAuthorizationV1 {
+    access: BlobAccessFenceV1,
+    lease: BlobKeyLeaseV1,
+}
+
+impl BlobDeletionAuthorizationV1 {
+    #[must_use]
+    pub fn new(access: BlobAccessFenceV1, lease: BlobKeyLeaseV1) -> Self {
+        Self { access, lease }
+    }
 }
 
 /// A revoked or unavailable key never authorizes an implicit Blob deletion.
@@ -65,27 +79,33 @@ impl BlobContentLifecycleStore {
 
     pub fn write_new(
         &self,
-        reference: &BlobRefV1,
-        access: &BlobAccessFenceV1,
-        quota: &BlobQuotaGrantV1,
-        lease: &BlobKeyLeaseV1,
-        plaintext: &[u8],
-        now_unix_ms: u64,
+        request: BlobContentWriteRequestV1<'_>,
     ) -> Result<(), BlobLifecycleError> {
+        let BlobContentWriteRequestV1 {
+            reference,
+            access,
+            custody,
+            quota,
+            lease,
+            plaintext,
+            now_unix_ms,
+        } = request;
         let reservation = self
             .metadata
-            .reserve_write(reference, access, quota)
+            .reserve_write(reference, access, custody, quota)
             .map_err(BlobLifecycleError::Metadata)?;
         match self
             .encrypted
-            .write_new(reference, access, lease, plaintext, now_unix_ms)
+            .write_new(reference, access, custody, lease, plaintext, now_unix_ms)
         {
             Ok(()) => self
                 .metadata
-                .commit_write(&reservation, reference, access)
+                .commit_write(&reservation, reference, custody)
                 .map_err(BlobLifecycleError::Metadata),
             Err(error) => {
-                let _ = self.metadata.abandon_write(&reservation, reference, access);
+                let _ = self
+                    .metadata
+                    .abandon_write(&reservation, reference, custody);
                 Err(BlobLifecycleError::Storage(error))
             }
         }
@@ -95,12 +115,13 @@ impl BlobContentLifecycleStore {
         &self,
         reference: &BlobRefV1,
         access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         lease: &BlobKeyLeaseV1,
         range: BlobRangeV1,
         now_unix_ms: u64,
     ) -> Result<Vec<u8>, BlobLifecycleError> {
         self.encrypted
-            .read_range(reference, access, lease, range, now_unix_ms)
+            .read_range(reference, access, custody, lease, range, now_unix_ms)
             .map_err(BlobLifecycleError::Storage)
     }
 
@@ -113,9 +134,11 @@ impl BlobContentLifecycleStore {
         let BlobCustodyTransferRequestV1 {
             source_reference,
             source_access,
+            source_custody,
             source_lease,
             target_reference,
             target_access,
+            target_custody,
             target_quota,
             target_lease,
             expected_plaintext_sha256,
@@ -130,6 +153,7 @@ impl BlobContentLifecycleStore {
         let plaintext = self.read_range(
             source_reference,
             source_access,
+            source_custody,
             source_lease,
             full_source,
             now_unix_ms,
@@ -137,14 +161,15 @@ impl BlobContentLifecycleStore {
         if Sha256::digest(&plaintext).as_slice() != expected_plaintext_sha256 {
             return Err(BlobLifecycleError::Integrity);
         }
-        match self.write_new(
-            target_reference,
-            target_access,
-            target_quota,
-            target_lease,
-            &plaintext,
+        match self.write_new(BlobContentWriteRequestV1 {
+            reference: target_reference,
+            access: target_access,
+            custody: target_custody,
+            quota: target_quota,
+            lease: target_lease,
+            plaintext: &plaintext,
             now_unix_ms,
-        ) {
+        }) {
             Ok(()) => Ok(()),
             Err(BlobLifecycleError::Metadata(BlobMetadataError::AlreadyExists))
             | Err(BlobLifecycleError::Storage(BlobStorageError::AlreadyExists)) => {
@@ -157,6 +182,7 @@ impl BlobContentLifecycleStore {
                 let existing = self.read_range(
                     target_reference,
                     target_access,
+                    target_custody,
                     target_lease,
                     full_target,
                     now_unix_ms,
@@ -173,11 +199,12 @@ impl BlobContentLifecycleStore {
         &self,
         reference: &BlobRefV1,
         access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         now_unix_ms: u64,
         grace_period_ms: u64,
     ) -> Result<BlobDeletionReservationV1, BlobLifecycleError> {
         self.metadata
-            .reserve_deletion(reference, access, now_unix_ms, grace_period_ms)
+            .reserve_deletion(reference, access, custody, now_unix_ms, grace_period_ms)
             .map_err(BlobLifecycleError::Metadata)
     }
 
@@ -186,17 +213,18 @@ impl BlobContentLifecycleStore {
         reservation: &BlobDeletionReservationV1,
         reference: &BlobRefV1,
         access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         lease: &BlobKeyLeaseV1,
         now_unix_ms: u64,
     ) -> Result<(), BlobLifecycleError> {
         self.metadata
-            .deletion_is_due(reservation, reference, access, now_unix_ms)
+            .deletion_is_due(reservation, reference, custody, now_unix_ms)
             .map_err(BlobLifecycleError::Metadata)?;
         self.encrypted
-            .delete(reference, access, lease, now_unix_ms)
+            .delete(reference, access, custody, lease, now_unix_ms)
             .map_err(BlobLifecycleError::Storage)?;
         self.metadata
-            .finalize_deletion(reservation, reference, access, now_unix_ms)
+            .finalize_deletion(reservation, reference, custody, now_unix_ms)
             .map_err(BlobLifecycleError::Metadata)
     }
 
@@ -227,13 +255,14 @@ impl BlobContentLifecycleStore {
             .due_deletions(now_unix_ms)
             .map_err(BlobLifecycleError::Metadata)?
         {
-            match resolver.resolve_deletion_lease(due.reference(), due.access(), now_unix_ms) {
-                Ok(lease) => {
+            match resolver.resolve_deletion_lease(due.reference(), due.custody(), now_unix_ms) {
+                Ok(authorization) => {
                     self.delete_due(
                         due.reservation(),
                         due.reference(),
-                        due.access(),
-                        &lease,
+                        &authorization.access,
+                        due.custody(),
+                        &authorization.lease,
                         now_unix_ms,
                     )?;
                     report.deleted += 1;
@@ -263,12 +292,24 @@ impl BlobContentLifecycleStore {
     }
 }
 
+pub struct BlobContentWriteRequestV1<'a> {
+    pub reference: &'a BlobRefV1,
+    pub access: &'a BlobAccessFenceV1,
+    pub custody: &'a BlobCustodyScopeV1,
+    pub quota: &'a BlobQuotaGrantV1,
+    pub lease: &'a BlobKeyLeaseV1,
+    pub plaintext: &'a [u8],
+    pub now_unix_ms: u64,
+}
+
 pub struct BlobCustodyTransferRequestV1<'a> {
     pub source_reference: &'a BlobRefV1,
     pub source_access: &'a BlobAccessFenceV1,
+    pub source_custody: &'a BlobCustodyScopeV1,
     pub source_lease: &'a BlobKeyLeaseV1,
     pub target_reference: &'a BlobRefV1,
     pub target_access: &'a BlobAccessFenceV1,
+    pub target_custody: &'a BlobCustodyScopeV1,
     pub target_quota: &'a BlobQuotaGrantV1,
     pub target_lease: &'a BlobKeyLeaseV1,
     pub expected_plaintext_sha256: &'a [u8; 32],

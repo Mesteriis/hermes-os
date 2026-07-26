@@ -40,8 +40,9 @@ mod v35_to_v36;
 mod v36_to_v37;
 mod v37_to_v38;
 mod v38_to_v39;
+mod v39_to_v40;
 
-pub const SCHEMA_VERSION: i64 = 39;
+pub const SCHEMA_VERSION: i64 = 40;
 
 pub fn migrate_schema(connection: &Connection) -> Result<(), StoreError> {
     loop {
@@ -139,6 +140,11 @@ fn version_feature_exists(connection: &Connection, version: i64) -> Result<bool,
             "key_schema_revision",
         ),
         39 => table_exists(connection, "hermes_kernel_module_client_rpc_route_request"),
+        40 => Ok(columns_exist(
+            connection,
+            "hermes_kernel_module_blob_quota_request",
+            &["custody_scope_id", "allowed_operations"],
+        )?),
         _ => Ok(false),
     }
 }
@@ -302,6 +308,7 @@ fn apply_step(version: i64, transaction: &Transaction<'_>) -> Result<(), StoreEr
         36 => v36_to_v37::apply(transaction),
         37 => v37_to_v38::apply(transaction),
         38 => v38_to_v39::apply(transaction),
+        39 => v39_to_v40::apply(transaction),
         unsupported => Err(StoreError::UnsupportedSchema(unsupported)),
     }
 }

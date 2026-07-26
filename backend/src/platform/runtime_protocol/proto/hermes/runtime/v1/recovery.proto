@@ -51,7 +51,17 @@ enum VaultSecretClassV1 { VAULT_SECRET_CLASS_V1_UNSPECIFIED = 0; VAULT_SECRET_CL
 enum VaultActionV1 { VAULT_ACTION_V1_UNSPECIFIED = 0; VAULT_ACTION_V1_RESOLVE = 1; VAULT_ACTION_V1_CREATE = 2; VAULT_ACTION_V1_REPLACE_CAS = 3; VAULT_ACTION_V1_RETIRE = 4; VAULT_ACTION_V1_DELETE = 5; VAULT_ACTION_V1_ISSUE_SESSION_STORE_KEY = 6; VAULT_ACTION_V1_ISSUE_OWNER_DERIVED_KEY = 7; }
 enum VaultTargetScopeV1 { VAULT_TARGET_SCOPE_V1_UNSPECIFIED = 0; VAULT_TARGET_SCOPE_V1_CONFIGURATION_INSTANCE = 1; VAULT_TARGET_SCOPE_V1_OWNER_DERIVED_PROJECTION_KEY = 2; }
 message VaultPurposeRequestV1 { string purpose_id = 1; uint32 requested_lease_ttl_seconds = 2; repeated VaultSecretClassV1 allowed_secret_classes = 3; repeated VaultActionV1 actions = 4; VaultTargetScopeV1 target_scope = 5; uint32 key_schema_revision = 6; }
-message BlobQuotaRequestV1 { uint64 max_bytes = 1; }
+enum BlobQuotaOperationV1 {
+  BLOB_QUOTA_OPERATION_V1_UNSPECIFIED = 0;
+  BLOB_QUOTA_OPERATION_V1_WRITE = 1;
+  BLOB_QUOTA_OPERATION_V1_READ_RANGE = 2;
+  BLOB_QUOTA_OPERATION_V1_CUSTODY_TRANSFER = 3;
+}
+message BlobQuotaRequestV1 {
+  uint64 max_bytes = 1;
+  string custody_scope_id = 2;
+  repeated BlobQuotaOperationV1 allowed_operations = 3;
+}
 message ClockTimerRequestV1 { bool requires_wall_clock = 1; }
 message SchedulerJobRequestV1 { ContractReferenceV1 job_kind = 1; }
 message TelemetrySignalRequestV1 { string signal_class = 1; uint32 quota_per_minute = 2; }

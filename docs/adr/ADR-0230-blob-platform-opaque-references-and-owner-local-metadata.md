@@ -3,23 +3,27 @@
 Статус: Принято
 Дата: 2026-07-17
 Состояние реализации: protocol, encrypted filesystem storage и Kernel Blob
-quota-control foundations реализованы: opaque reference/range/fence contracts,
-ephemeral Vault-response key lease, authenticated atomic files, atomic
-descriptor-declared quota persistence, grant-aware catalog и ciphertext-only
-Blob-to-Kernel Vault route adapter существуют. Отдельный `hermes-blob-service`
+quota-control foundations реализованы: opaque reference/range contracts,
+ephemeral access fence, stable `BlobCustodyScopeV1`, operation-scoped
+descriptor grants, ephemeral Vault-response key lease, authenticated atomic
+`HBLBENC2` files, stable-custody `HBLBM002` quota persistence, grant-aware
+catalog и ciphertext-only Blob-to-Kernel Vault route adapter существуют.
+Отдельный `hermes-blob-service`
 запускается только из verified release binding, получает one-shot private
 configuration и attests its runtime/Vault generations over inherited Kernel FD.
 Signed release binding и start разрешены только через current owner-control session;
 content route через Kernel этим не создаётся.
 Filesystem foundation rejects a reference at its declared expiry before any read/write
 and supports only a current-fence/key-authorized atomic delete with directory `fsync`.
-Its private technical ledger reserves aggregate bytes before content persistence,
-records `pending_write` / `active` / fenced `delete_reserved` states, survives a
+Its private technical ledger reserves aggregate bytes per stable custody scope
+before content persistence, records `pending_write` / `active` /
+`delete_reserved` states, survives a
 reopen, and removes uncommitted ciphertext together with its pending reservation
 before accepting a retry. It removes only an uncommitted private staged ledger file
 after a crash. It finalizes an owner-marked deletion only after a grace period and a
-final matching fence. Its scheduled technical collector enumerates only due
-owner-marked reservations and requires a newly resolved current deletion lease;
+fresh current operation authority. Its scheduled technical collector enumerates
+only due owner-marked reservations and requires a newly resolved current
+deletion lease;
 a revoked or unavailable lease leaves ciphertext and the reservation intact.
 This is technical accounting, not owner metadata retention or an owner-liveness
 decision.
@@ -27,13 +31,15 @@ decision.
 Vault runtime, помещает оба в signed release bundle, запускает через Kernel и
 сверяет generation-bound status. Live data-path test дополнительно выпускает
 test-only P-256 signed grants, записывает и читает encrypted bytes через private
-Blob socket и ciphertext-only Kernel-to-Vault relay, а replayed и stale-runtime
-grants получают sanitized denial. Узкий protocol fixture остаётся отдельной
+Blob socket и ciphertext-only Kernel-to-Vault relay с разными caller
+registration/capability/runtime/grant identities одного custody scope; replay,
+stale Blob generation и другой custody scope получают sanitized denial. Узкий
+protocol fixture остаётся отдельной
 negative-path проверкой. Вместе с full managed-service, live Vault data-path,
 replay/stale-generation и encrypted-storage conformance это открывает
-`blob_v1` как platform gate. Первый owner не создан: его canonical metadata,
-owner-specific issuance of content sessions и whole-instance restore остаются
-отдельной работой под `first_owner_v1` и `whole_instance_backup_v1`.
+`blob_v1` как platform gate. Owner-specific canonical metadata остаётся у
+owner packages; whole-instance restore остаётся отдельной работой под
+`whole_instance_backup_v1`.
 
 ## Контекст
 
@@ -60,6 +66,7 @@ capability token.
 
 - current registration/capability grant и runtime generation;
 - owner scope, reference ID и grant epoch;
+- descriptor-declared exact operation и stable custody scope;
 - Vault-issued content-encryption/key-wrap authority;
 - bounded declared quota и request/range limits.
 
@@ -68,10 +75,15 @@ Blob runtime normalizes and contains all disk paths internally. Caller нико�
 `end <= declared_size`, bounded maximum range и no implicit full-file fallback
 являются mandatory для range read.
 
-Content encryption uses per-blob data encryption keys. Key-wrap material и
+Content encryption uses per-blob data encryption keys. Ciphertext, Vault record
+scope и quota accounting bind logical owner, stable custody scope, opaque
+reference и key schema revision; registration/runtime/grant fields в at-rest
+identity не входят. Key-wrap material и
 unwrapped keys остаются за Vault boundary; Blob process получает только
 scoped/revocable authority. Revoke, expiry, owner suspension, grant epoch change
-или runtime generation change делают existing read/write lease unusable.
+или runtime generation change делают existing read/write lease unusable, но не
+делают owner content нечитаемым для нового current operation grant того же
+custody scope.
 
 Retention/GC имеет two-phase model: owner marks a reference eligible only after
 its canonical metadata transition; Blob Platform records a fenced deletion

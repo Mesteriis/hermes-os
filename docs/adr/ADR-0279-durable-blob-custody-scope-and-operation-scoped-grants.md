@@ -2,12 +2,17 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: Не реализовано. Решение открывает обязательный
-platform-repair slice перед outbound Mail MIME/attachment gate. Текущий
-`HBLBENC1` ciphertext, `HBLBM001` technical ledger и
-`BlobQuotaRequestV1 { max_bytes }` не являются evidence этого ADR:
-authenticated content и quota ownership пока связаны с ephemeral
-registration/runtime/grant fence, а descriptor не ограничивает Blob operation.
+Состояние реализации: Реализовано. `BlobQuotaRequestV1` объявляет exact
+`custody_scope_id` и непустой набор `write` / `read_range` /
+`custody_transfer`; Kernel сохраняет declaration в Control Store schema 40,
+проверяет requested operation и подписывает custody scope в data/transfer
+grants. `HBLBENC2`, `HBLBM002` и Vault content-key scope используют stable
+owner custody плюс key schema revision, а current access fence остаётся
+ephemeral authorization. Legacy ciphertext/metadata блокируют startup.
+Focused storage, descriptor, Kernel admission и architecture regressions
+зелёные; live managed Blob/Vault conformance записывает content одной
+registration/runtime/grant identity и читает exact bytes другой identity того
+же custody scope, отклоняя другой scope.
 
 Уточняет:
 

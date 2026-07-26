@@ -13,11 +13,11 @@ use hermes_communications_attachment_contract::admission::{
     communication_attachment_safety_verdict_observed_publish_request_v1,
 };
 use hermes_runtime_protocol::v1::{
-    BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1,
-    ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1, EventRouteRequestV1,
-    EventSubscriptionRequirementV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1,
-    ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1,
-    StorageNamespaceRequestV1, capability_request_v1::Request,
+    BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
+    CapabilityRequestV1, ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
+    EventRouteRequestV1, EventSubscriptionRequirementV1, ModuleDescriptorV1, ModuleKindV1,
+    ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1,
+    SettingsSchemaRefV1, StorageNamespaceRequestV1, capability_request_v1::Request,
 };
 use sha2::{Digest, Sha256};
 
@@ -38,6 +38,7 @@ pub const ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID: &str = "attachment_security
 pub const ATTACHMENT_SECURITY_MODULE_ID: &str = ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID;
 pub const ATTACHMENT_SECURITY_OWNER_ID: &str = ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_OWNER_ID;
 pub const ATTACHMENT_SECURITY_BLOB_QUOTA_BYTES: u64 = 64 * 1024 * 1024;
+pub const ATTACHMENT_SECURITY_BLOB_CUSTODY_SCOPE_ID: &str = "attachment_security.scan.content.v1";
 pub const ATTACHMENT_SECURITY_STORAGE_CONNECTION_BUDGET: u32 = 4;
 pub const ATTACHMENT_SECURITY_STORAGE_STATEMENT_TIMEOUT_MILLIS: u32 = 5_000;
 pub const ATTACHMENT_SECURITY_EVENT_MAX_DELIVER: u32 = 8;
@@ -151,6 +152,11 @@ fn blob_custody() -> CapabilityDescriptorV1 {
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
                 max_bytes: ATTACHMENT_SECURITY_BLOB_QUOTA_BYTES,
+                custody_scope_id: ATTACHMENT_SECURITY_BLOB_CUSTODY_SCOPE_ID.to_owned(),
+                allowed_operations: vec![
+                    BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::CustodyTransfer as i32,
+                ],
             })),
         }],
         ..Default::default()

@@ -162,7 +162,7 @@ flowchart TB
 | Vault runtime | Separate verified managed process; authorization re-check, key lifecycle and process-bound credential leases without provider semantics |
 | SQLCipher Vault store | Encrypted bounded credential material and private metadata; not settings, business state or a generic session/blob store |
 | File wrapping-key adapter | Owner-private wrapping key; Owner/device signing keys remain outside Vault |
-| Blob service | Opaque capability-based private content storage |
+| Blob service | Opaque operation-scoped private content storage with stable owner custody |
 
 Clients never connect directly to module runtimes or infrastructure. HTTP/3 is
 a paired-client transport adapter for the same Core Gateway contracts; it does

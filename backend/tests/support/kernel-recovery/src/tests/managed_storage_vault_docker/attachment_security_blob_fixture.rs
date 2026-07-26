@@ -8,7 +8,7 @@ use hermes_attachment_security_contract::admission::{
     ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_OWNER_ID,
 };
 use hermes_blob_client::{BlobClientError, BlobDataClient};
-use hermes_kernel_control_store::ModuleBlobQuotaRequestV1;
+use hermes_kernel_control_store::{ModuleBlobOperationV1, ModuleBlobQuotaRequestV1};
 use hermes_runtime_protocol::v1::{BlobDataOperationV1, ManagedRuntimeBlobSessionRequestV1};
 
 use crate::runtime::lifecycle::control::{
@@ -20,6 +20,7 @@ const SOURCE_MODULE_ID: &str = "integration.attachment-security-fixture-source";
 const SOURCE_OWNER_ID: &str = "mail";
 const SOURCE_BLOB_CAPABILITY_ID: &str = "attachment-security-fixture-source.blob.v1";
 const SOURCE_RUNTIME_INSTANCE_ID: &str = "71717171717171717171717171717171";
+const SOURCE_CUSTODY_SCOPE_ID: &str = "mail.attachment.content.v1";
 const AUTHORITY_SOURCE_REGISTRATION_ID: &str = "attachment-security-authority-source";
 const AUTHORITY_SOURCE_MODULE_ID: &str = "integration.attachment-security-authority-source";
 const AUTHORITY_SOURCE_BLOB_CAPABILITY_ID: &str = "attachment-security-authority-source.blob.v1";
@@ -83,6 +84,8 @@ impl AttachmentSecurityBlobSourceFixture {
             capability_id,
             SOURCE_OWNER_ID,
             64 * 1024 * 1024,
+            SOURCE_CUSTODY_SCOPE_ID,
+            vec![ModuleBlobOperationV1::Write],
         );
         store
             .create_pending_registration_with_requests(

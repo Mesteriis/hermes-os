@@ -43,6 +43,9 @@ message BlobDataSessionGrantV1 {
   // Optional exact plaintext binding. When present, full writes and reads are
   // rejected unless their plaintext SHA-256 matches these signed bytes.
   bytes expected_plaintext_sha256 = 21;
+  // Stable at-rest custody selected from the exact descriptor request. It is
+  // signed by Kernel and never accepted from the direct data request.
+  string custody_scope_id = 22;
 }
 
 // Durable, non-readable proof that an exact producer-owned Blob reference was
@@ -71,6 +74,9 @@ message BlobCustodySourceProofV1 {
   string target_owner_id = 18;
   string target_module_id = 19;
   string target_capability_id = 20;
+  // Stable source at-rest custody. The target scope is resolved from the
+  // current target descriptor rather than accepted from this source proof.
+  string custody_scope_id = 21;
 }
 
 // One-use Kernel authorization for an internal Blob rewrap from the source
@@ -96,6 +102,7 @@ message BlobCustodyTransferGrantV1 {
   uint64 expires_at_unix_ms = 17;
   uint64 blob_runtime_generation = 18;
   bytes kernel_authorization_signature_raw = 19;
+  string target_custody_scope_id = 20;
 }
 
 enum BlobBackupClassV1 {

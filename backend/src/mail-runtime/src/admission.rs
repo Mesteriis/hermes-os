@@ -17,12 +17,12 @@ use hermes_mail_api::client_contract::{
 };
 pub use hermes_mail_api::client_contract::{MAIL_MODULE_ID, MAIL_OWNER_ID};
 use hermes_runtime_protocol::v1::{
-    BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1,
-    ClientRpcRouteV1, DurableEnvelopeKindV1, EventRouteDirectionV1, EventRouteRequestV1,
-    EventSubscriptionRequirementV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1,
-    ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1,
-    StorageNamespaceRequestV1, VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1,
-    VaultTargetScopeV1, capability_request_v1::Request,
+    BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
+    CapabilityRequestV1, ClientRpcRouteV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
+    EventRouteRequestV1, EventSubscriptionRequirementV1, ModuleDescriptorV1, ModuleKindV1,
+    ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1,
+    SettingsSchemaRefV1, StorageNamespaceRequestV1, VaultActionV1, VaultPurposeRequestV1,
+    VaultSecretClassV1, VaultTargetScopeV1, capability_request_v1::Request,
 };
 use sha2::{Digest, Sha256};
 
@@ -47,6 +47,7 @@ pub const MAIL_IMAP_CREDENTIALS_CAPABILITY_ID: &str = "mail.imap.credentials.v1"
 pub const MAIL_SMTP_CREDENTIALS_CAPABILITY_ID: &str = "mail.smtp.credentials.v1";
 pub const MAIL_STORAGE_CAPABILITY_ID: &str = "mail.storage.v1";
 pub const MAIL_ATTACHMENT_BLOB_MAX_BYTES: u64 = 16 * 1024 * 1024;
+pub const MAIL_ATTACHMENT_BLOB_CUSTODY_SCOPE_ID: &str = "mail.attachment.content.v1";
 pub const MAIL_STORAGE_CONNECTION_BUDGET: u32 = 4;
 pub const MAIL_STORAGE_STATEMENT_TIMEOUT_MILLIS: u32 = 5_000;
 pub const MAIL_EVENT_MAX_DELIVER: u32 = 8;
@@ -134,6 +135,8 @@ pub fn mail_blob_capability_v1() -> CapabilityDescriptorV1 {
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
                 max_bytes: MAIL_ATTACHMENT_BLOB_MAX_BYTES,
+                custody_scope_id: MAIL_ATTACHMENT_BLOB_CUSTODY_SCOPE_ID.to_owned(),
+                allowed_operations: vec![BlobQuotaOperationV1::Write as i32],
             })),
         }],
         ..Default::default()

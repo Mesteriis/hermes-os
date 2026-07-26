@@ -5,24 +5,25 @@
 Состояние реализации: Реализовано как platform gate. `hermes-blob-service` открывает
 private 0600 Unix socket из staged configuration, проверяет one-use P-256
 `BlobDataSessionGrantV1` (Kernel instance, Blob/runtime/grant fences, expiry и
-32-byte channel binding) и умеет выполнить bounded `write`/`read_range` только
-после ciphertext-only Vault lease. Grant теперь также поддерживает optional
-signed `expected_plaintext_sha256`: bound write или полный read fail closed при
+32-byte channel binding, exact operation и stable custody scope) и умеет
+выполнить bounded `write`/`read_range` только после ciphertext-only Vault
+lease. Grant также поддерживает optional signed
+`expected_plaintext_sha256`: bound write или полный read fail closed при
 несовпадении digest; partial read с таким binding запрещён. Live managed
-conformance подтверждает
-write/read через file-backed Vault, one-use replay rejection и stale Blob
-runtime-generation rejection. Kernel передаёт service verification key. Первый
-owner ещё не существует, поэтому owner-specific content-session issuer намеренно
-не добавлен в Kernel и data socket не становится generic domain API. Это не
-препятствует `blob_v1` как platform gate; owner-facing issuance появится только
-вместе с exact owner capability contract под `first_owner_v1`.
+conformance подтверждает write/read через file-backed Vault между разными
+caller registration/capability/runtime/grant identities одного custody scope,
+one-use replay rejection, stale Blob runtime-generation rejection и
+cross-custody denial. Kernel передаёт service verification key и выдаёт owner
+sessions только для descriptor-declared operation текущего approved
+capability; data socket не становится generic domain API.
 
 Уточняет:
 
 - [ADR-0215: открытая регистрация модулей и capability grants](ADR-0215-open-module-registration-and-capability-grants.md);
 - [ADR-0219: integrity managed modules](ADR-0219-managed-module-distribution-integrity-and-explicit-updates.md);
 - [ADR-0223: Vault и scoped credential leases](ADR-0223-encrypted-sqlite-vault-and-scoped-credential-leases.md);
-- [ADR-0230: Blob Platform](ADR-0230-blob-platform-opaque-references-and-owner-local-metadata.md).
+- [ADR-0230: Blob Platform](ADR-0230-blob-platform-opaque-references-and-owner-local-metadata.md);
+- [ADR-0279: durable custody и operation-scoped grants](ADR-0279-durable-blob-custody-scope-and-operation-scoped-grants.md).
 
 ## Контекст
 
@@ -95,13 +96,14 @@ socket response is never an empty Protobuf payload.
   private directory, rejecting symlink, wrong mode and stale-file attacks;
 - live managed-service startup and data-path conformance obtain a current Vault
   key through the inherited ciphertext route, write encrypted bytes, read a
-  bounded range, and reject replayed or stale-runtime sessions;
+  bounded range under a successor caller identity of the same custody scope,
+  and reject replayed, stale-runtime or cross-custody sessions;
 - runtime/grant expiry and revoke invalidate an active session and a cached
   lease; a subsequent request cannot read or write;
 - interrupted write, socket restart and concurrent same-reference requests
   preserve the existing metadata/quota recovery invariants.
 
 This ADR opens `blob_v1` only as a platform gate. Owner-local canonical metadata
-and the owner-facing session-issuance contract remain deferred to
-`first_owner_v1`; encrypted component classification is present, while full
+remains outside Blob, while Kernel issues only exact owner-declared
+operation-scoped sessions. Encrypted component classification is present; full
 instance restore remains exclusively `whole_instance_backup_v1` work.

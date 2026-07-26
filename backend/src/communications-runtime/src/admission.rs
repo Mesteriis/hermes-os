@@ -18,12 +18,12 @@ use hermes_communications_ingress::{
     COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID,
 };
 use hermes_runtime_protocol::v1::{
-    BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1,
-    ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1, EventRouteRequestV1,
-    EventSubscriptionRequirementV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1,
-    ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1,
-    SettingsSchemaV1, StorageNamespaceRequestV1, VaultActionV1, VaultPurposeRequestV1,
-    VaultSecretClassV1, VaultTargetScopeV1, capability_request_v1::Request,
+    BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
+    CapabilityRequestV1, ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
+    EventRouteRequestV1, EventSubscriptionRequirementV1, ModuleDescriptorV1, ModuleKindV1,
+    ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1,
+    SettingsSchemaRefV1, SettingsSchemaV1, StorageNamespaceRequestV1, VaultActionV1,
+    VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1, capability_request_v1::Request,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -42,6 +42,7 @@ pub const COMMUNICATIONS_STORAGE_CAPABILITY_ID: &str = "communications.storage.v
 pub const COMMUNICATIONS_MODULE_ID: &str = COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID;
 pub const COMMUNICATIONS_OWNER_ID: &str = COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID;
 pub const COMMUNICATIONS_BLOB_QUOTA_BYTES: u64 = 1 << 30;
+pub const COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID: &str = "communications.evidence.body.v1";
 pub const COMMUNICATIONS_STORAGE_CONNECTION_BUDGET: u32 = 8;
 pub const COMMUNICATIONS_STORAGE_STATEMENT_TIMEOUT_MILLIS: u32 = 5_000;
 pub const COMMUNICATIONS_EVENT_MAX_DELIVER: u32 = 8;
@@ -73,6 +74,11 @@ pub fn communications_blob_capability_v1() -> CapabilityDescriptorV1 {
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
                 max_bytes: COMMUNICATIONS_BLOB_QUOTA_BYTES,
+                custody_scope_id: COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID.to_owned(),
+                allowed_operations: vec![
+                    BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::CustodyTransfer as i32,
+                ],
             })),
         }],
         ..Default::default()

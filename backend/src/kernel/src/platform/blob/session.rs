@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use hermes_kernel_control_store::ModuleBlobOperationV1;
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::{
     BlobCustodySourceProofV1, BlobCustodyTransferGrantV1, BlobDataOperationV1,
@@ -24,6 +25,7 @@ use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelayPort;
 
 const MAX_SESSION_TTL_SECONDS: u32 = 30;
 const CUSTODY_SOURCE_PROOF_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
+const BLOB_CONTENT_KEY_SCHEMA_REVISION: u64 = 1;
 
 /// Kernel authority for an exact direct Blob data operation.
 pub(crate) struct BlobSessionHandlerV1 {
@@ -85,6 +87,7 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
             })
             .ok_or_else(|| "managed runtime Blob session request is denied".to_owned())?;
         if entry.request().owner_id().is_empty()
+            || !module_blob_operation(operation).is_some_and(|value| entry.request().allows(value))
             || request.declared_size == 0
             || request.declared_size > entry.request().max_bytes()
         {
@@ -123,8 +126,7 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
             runtime_instance_id: expectation.runtime_instance_id().to_owned(),
             runtime_generation: expectation.runtime_generation(),
             grant_epoch: expectation.grant_epoch(),
-            // Blob content keys rotate with the only current durable access revision.
-            key_revision: expectation.grant_epoch(),
+            key_revision: BLOB_CONTENT_KEY_SCHEMA_REVISION,
             quota_max_bytes: entry.request().max_bytes(),
             reference_id: request.reference_id,
             declared_size: request.declared_size,
@@ -136,6 +138,7 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
             kernel_authorization_signature_raw: Vec::new(),
             blob_runtime_generation: blob.runtime_generation(),
             expected_plaintext_sha256: request.receipt_sha256.clone(),
+            custody_scope_id: entry.request().custody_scope_id().to_owned(),
         };
         let signer = FileDeviceSigner::open_for_instance(&self.data_dir)?;
         let mut message = b"hermes.blob-data-session.v1\0".to_vec();
@@ -207,6 +210,8 @@ impl BlobSessionHandlerV1 {
                     && entry.capability_id() == source.capability_id.as_str()
                     && entry.grant_epoch() == source.grant_epoch
                     && entry.request().owner_id() == source.owner_id.as_str()
+                    && entry.request().custody_scope_id() == source.custody_scope_id
+                    && entry.request().allows(ModuleBlobOperationV1::Write)
             })
         {
             return Err("managed runtime Blob custody transfer is denied".to_owned());
@@ -248,12 +253,13 @@ impl BlobSessionHandlerV1 {
             target_runtime_instance_id: expectation.runtime_instance_id().to_owned(),
             target_runtime_generation: expectation.runtime_generation(),
             target_grant_epoch: expectation.grant_epoch(),
-            target_key_revision: expectation.grant_epoch(),
+            target_key_revision: BLOB_CONTENT_KEY_SCHEMA_REVISION,
             target_quota_max_bytes: target.request().max_bytes(),
             target_reference_id: target_reference_id.to_vec(),
             expires_at_unix_ms,
             blob_runtime_generation: blob.runtime_generation(),
             kernel_authorization_signature_raw: Vec::new(),
+            target_custody_scope_id: target.request().custody_scope_id().to_owned(),
         };
         let mut message = b"hermes.blob-custody-transfer.v1\0".to_vec();
         message.extend_from_slice(&grant.encode_to_vec());
@@ -303,6 +309,7 @@ fn verify_custody_source_proof(
         || proof.runtime_generation == 0
         || proof.grant_epoch == 0
         || proof.key_revision == 0
+        || proof.custody_scope_id.is_empty()
         || proof.reference_id.len() != 16
         || proof.reference_id.iter().all(|byte| *byte == 0)
         || proof.declared_size == 0
@@ -379,11 +386,23 @@ fn issue_custody_source_proof(
         target_owner_id: target_owner_id.to_owned(),
         target_module_id: target_module_id.to_owned(),
         target_capability_id: target_capability_id.to_owned(),
+        custody_scope_id: grant.custody_scope_id.clone(),
     };
     let mut message = b"hermes.blob-custody-source-proof.v1\0".to_vec();
     message.extend_from_slice(&proof.encode_to_vec());
     proof.kernel_authorization_signature_raw = signer.sign(&message).to_vec();
     Ok(proof.encode_to_vec())
+}
+
+const fn module_blob_operation(operation: BlobDataOperationV1) -> Option<ModuleBlobOperationV1> {
+    match operation {
+        BlobDataOperationV1::BlobDataOperationWriteV1 => Some(ModuleBlobOperationV1::Write),
+        BlobDataOperationV1::BlobDataOperationReadRangeV1 => Some(ModuleBlobOperationV1::ReadRange),
+        BlobDataOperationV1::BlobDataOperationCustodyTransferV1 => {
+            Some(ModuleBlobOperationV1::CustodyTransfer)
+        }
+        BlobDataOperationV1::BlobDataOperationUnspecifiedV1 => None,
+    }
 }
 
 fn valid_custody_target_request(request: &ManagedRuntimeBlobSessionRequestV1) -> bool {

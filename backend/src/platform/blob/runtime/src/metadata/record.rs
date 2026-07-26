@@ -1,16 +1,16 @@
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobRefV1};
+use hermes_blob_protocol::{BlobCustodyScopeV1, BlobRefV1};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct BlobMetadataRecordV1 {
     reference: BlobRefV1,
-    access: BlobAccessFenceV1,
+    custody: BlobCustodyScopeV1,
     state: BlobMetadataStateV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct BlobDueDeletionV1 {
     reference: BlobRefV1,
-    access: BlobAccessFenceV1,
+    custody: BlobCustodyScopeV1,
     reservation: BlobDeletionReservationV1,
 }
 
@@ -33,22 +33,22 @@ pub struct BlobDeletionReservationV1 {
 }
 
 impl BlobMetadataRecordV1 {
-    pub(crate) fn pending(reference: BlobRefV1, access: BlobAccessFenceV1) -> Self {
+    pub(crate) fn pending(reference: BlobRefV1, custody: BlobCustodyScopeV1) -> Self {
         Self {
             reference,
-            access,
+            custody,
             state: BlobMetadataStateV1::PendingWrite,
         }
     }
 
     pub(crate) fn from_parts(
         reference: BlobRefV1,
-        access: BlobAccessFenceV1,
+        custody: BlobCustodyScopeV1,
         state: BlobMetadataStateV1,
     ) -> Option<Self> {
-        (reference.owner_id() == access.owner_id()).then_some(Self {
+        (reference.owner_id() == custody.owner_id()).then_some(Self {
             reference,
-            access,
+            custody,
             state,
         })
     }
@@ -57,8 +57,8 @@ impl BlobMetadataRecordV1 {
         &self.reference
     }
 
-    pub(crate) fn access(&self) -> &BlobAccessFenceV1 {
-        &self.access
+    pub(crate) fn custody(&self) -> &BlobCustodyScopeV1 {
+        &self.custody
     }
 
     pub(crate) const fn state(&self) -> BlobMetadataStateV1 {
@@ -73,14 +73,12 @@ impl BlobMetadataRecordV1 {
         self.state = BlobMetadataStateV1::DeleteReserved { not_before_unix_ms };
     }
 
-    pub(crate) fn belongs_to_quota(&self, access: &BlobAccessFenceV1) -> bool {
-        self.reference.owner_id() == access.owner_id()
-            && self.access.module_registration_id() == access.module_registration_id()
-            && self.access.capability_id() == access.capability_id()
+    pub(crate) fn belongs_to_quota(&self, custody: &BlobCustodyScopeV1) -> bool {
+        self.custody == *custody
     }
 
-    pub(crate) fn matches(&self, reference: &BlobRefV1, access: &BlobAccessFenceV1) -> bool {
-        self.reference == *reference && self.access == *access
+    pub(crate) fn matches(&self, reference: &BlobRefV1, custody: &BlobCustodyScopeV1) -> bool {
+        self.reference == *reference && self.custody == *custody
     }
 
     pub(crate) const fn counts_toward_quota(&self) -> bool {
@@ -100,7 +98,7 @@ impl BlobMetadataRecordV1 {
         };
         (not_before_unix_ms <= now_unix_ms).then(|| BlobDueDeletionV1 {
             reference: self.reference.clone(),
-            access: self.access.clone(),
+            custody: self.custody.clone(),
             reservation: BlobDeletionReservationV1::new(&self.reference, not_before_unix_ms),
         })
     }
@@ -111,8 +109,8 @@ impl BlobDueDeletionV1 {
         &self.reference
     }
 
-    pub(crate) fn access(&self) -> &BlobAccessFenceV1 {
-        &self.access
+    pub(crate) fn custody(&self) -> &BlobCustodyScopeV1 {
+        &self.custody
     }
 
     pub(crate) fn reservation(&self) -> &BlobDeletionReservationV1 {

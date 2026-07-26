@@ -1,7 +1,7 @@
 use prost::Message;
 
 use crate::v1::{
-    CapabilityCriticalityV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
+    BlobQuotaOperationV1, CapabilityCriticalityV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
     EventSubscriptionRequirementV1, InitialOwnerEnrollmentChallengeV1, InitialOwnerEnrollmentV1,
     ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, RuntimeArtifactUseV1,
     SettingApplyModeV1, SettingClientVisibilityV1, SettingMutationAuthorityV1,
@@ -214,6 +214,8 @@ fn valid_capability_request(request: &crate::v1::CapabilityRequestV1) -> bool {
         }
         Some(capability_request_v1::Request::BlobQuota(blob)) => {
             (1..=MAX_BLOB_QUOTA_BYTES).contains(&blob.max_bytes)
+                && validate_identifier(&blob.custody_scope_id).is_ok()
+                && valid_blob_operations(&blob.allowed_operations)
         }
         Some(capability_request_v1::Request::ClockTimer(clock)) => clock.requires_wall_clock,
         Some(capability_request_v1::Request::SchedulerJob(scheduler)) => scheduler
@@ -239,6 +241,26 @@ fn valid_capability_request(request: &crate::v1::CapabilityRequestV1) -> bool {
         }
         None => false,
     }
+}
+
+fn valid_blob_operations(operations: &[i32]) -> bool {
+    if operations.is_empty() || operations.len() > 3 {
+        return false;
+    }
+    let mut seen = [false; 3];
+    operations.iter().all(|value| {
+        let index = match BlobQuotaOperationV1::try_from(*value).ok() {
+            Some(BlobQuotaOperationV1::Write) => 0,
+            Some(BlobQuotaOperationV1::ReadRange) => 1,
+            Some(BlobQuotaOperationV1::CustodyTransfer) => 2,
+            Some(BlobQuotaOperationV1::Unspecified) | None => return false,
+        };
+        if seen[index] {
+            return false;
+        }
+        seen[index] = true;
+        true
+    })
 }
 
 fn valid_event_route_request(route: &crate::v1::EventRouteRequestV1) -> bool {

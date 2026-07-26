@@ -6,7 +6,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobQuotaGrantV1, BlobRefV1};
+use hermes_blob_protocol::{BlobAccessFenceV1, BlobCustodyScopeV1, BlobQuotaGrantV1, BlobRefV1};
 
 use crate::storage::{BlobStorageError, root};
 
@@ -38,16 +38,20 @@ impl BlobMetadataLedger {
         &self,
         reference: &BlobRefV1,
         access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         quota: &BlobQuotaGrantV1,
     ) -> Result<BlobWriteReservationV1, BlobMetadataError> {
         let _guard = self.lock()?;
-        if !quota.matches(access) || reference.owner_id() != access.owner_id() {
+        if !quota.matches(access)
+            || quota.custody() != custody
+            || reference.owner_id() != custody.owner_id()
+        {
             return Err(BlobMetadataError::FenceMismatch);
         }
         if self.read(reference)?.is_some() {
             return Err(BlobMetadataError::AlreadyExists);
         }
-        let used_bytes = self.used_bytes(access)?;
+        let used_bytes = self.used_bytes(custody)?;
         let total = used_bytes
             .checked_add(reference.declared_size())
             .ok_or(BlobMetadataError::QuotaExceeded)?;
@@ -56,7 +60,7 @@ impl BlobMetadataLedger {
         }
         self.write(&BlobMetadataRecordV1::pending(
             reference.clone(),
-            access.clone(),
+            custody.clone(),
         ))?;
         Ok(BlobWriteReservationV1::new(reference))
     }
@@ -65,12 +69,12 @@ impl BlobMetadataLedger {
         &self,
         reservation: &BlobWriteReservationV1,
         reference: &BlobRefV1,
-        access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
     ) -> Result<(), BlobMetadataError> {
         let _guard = self.lock()?;
         let mut record = self.required(reference)?;
         if !reservation.matches(reference)
-            || !record.matches(reference, access)
+            || !record.matches(reference, custody)
             || record.state() != BlobMetadataStateV1::PendingWrite
         {
             return Err(BlobMetadataError::ReservationMismatch);
@@ -83,12 +87,12 @@ impl BlobMetadataLedger {
         &self,
         reservation: &BlobWriteReservationV1,
         reference: &BlobRefV1,
-        access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
     ) -> Result<(), BlobMetadataError> {
         let _guard = self.lock()?;
         let record = self.required(reference)?;
         if !reservation.matches(reference)
-            || !record.matches(reference, access)
+            || !record.matches(reference, custody)
             || record.state() != BlobMetadataStateV1::PendingWrite
         {
             return Err(BlobMetadataError::ReservationMismatch);
@@ -100,18 +104,22 @@ impl BlobMetadataLedger {
         &self,
         reference: &BlobRefV1,
         access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         now_unix_ms: u64,
         grace_period_ms: u64,
     ) -> Result<BlobDeletionReservationV1, BlobMetadataError> {
         let _guard = self.lock()?;
-        if grace_period_ms == 0 {
+        if grace_period_ms == 0
+            || access.owner_id() != custody.owner_id()
+            || reference.owner_id() != custody.owner_id()
+        {
             return Err(BlobMetadataError::InvalidGracePeriod);
         }
         let not_before_unix_ms = now_unix_ms
             .checked_add(grace_period_ms)
             .ok_or(BlobMetadataError::InvalidGracePeriod)?;
         let mut record = self.required(reference)?;
-        if !record.matches(reference, access) || record.state() != BlobMetadataStateV1::Active {
+        if !record.matches(reference, custody) || record.state() != BlobMetadataStateV1::Active {
             return Err(BlobMetadataError::ReservationMismatch);
         }
         record.reserve_deletion(not_before_unix_ms);
@@ -126,12 +134,12 @@ impl BlobMetadataLedger {
         &self,
         reservation: &BlobDeletionReservationV1,
         reference: &BlobRefV1,
-        access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         now_unix_ms: u64,
     ) -> Result<(), BlobMetadataError> {
         let _guard = self.lock()?;
         let record = self.required(reference)?;
-        matches_due_deletion(&record, reservation, reference, access, now_unix_ms)
+        matches_due_deletion(&record, reservation, reference, custody, now_unix_ms)
             .then_some(())
             .ok_or(BlobMetadataError::ReservationMismatch)
     }
@@ -140,12 +148,12 @@ impl BlobMetadataLedger {
         &self,
         reservation: &BlobDeletionReservationV1,
         reference: &BlobRefV1,
-        access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
         now_unix_ms: u64,
     ) -> Result<(), BlobMetadataError> {
         let _guard = self.lock()?;
         let record = self.required(reference)?;
-        matches_due_deletion(&record, reservation, reference, access, now_unix_ms)
+        matches_due_deletion(&record, reservation, reference, custody, now_unix_ms)
             .then_some(())
             .ok_or(BlobMetadataError::ReservationMismatch)?;
         self.remove(reference)
@@ -202,11 +210,11 @@ impl BlobMetadataLedger {
         self.remove(pending.reference())
     }
 
-    fn used_bytes(&self, access: &BlobAccessFenceV1) -> Result<u64, BlobMetadataError> {
+    fn used_bytes(&self, custody: &BlobCustodyScopeV1) -> Result<u64, BlobMetadataError> {
         self.records()?
             .into_iter()
             .try_fold(0_u64, |total, record| {
-                if record.belongs_to_quota(access) && record.counts_toward_quota() {
+                if record.belongs_to_quota(custody) && record.counts_toward_quota() {
                     total
                         .checked_add(record.reference().declared_size())
                         .ok_or(BlobMetadataError::QuotaExceeded)
@@ -319,7 +327,7 @@ fn matches_due_deletion(
     record: &BlobMetadataRecordV1,
     reservation: &BlobDeletionReservationV1,
     reference: &BlobRefV1,
-    access: &BlobAccessFenceV1,
+    custody: &BlobCustodyScopeV1,
     now_unix_ms: u64,
 ) -> bool {
     matches!(
@@ -328,7 +336,7 @@ fn matches_due_deletion(
             if not_before_unix_ms == reservation.not_before_unix_ms()
                 && not_before_unix_ms <= now_unix_ms
     ) && reservation.matches(reference)
-        && record.matches(reference, access)
+        && record.matches(reference, custody)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

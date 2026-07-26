@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::future::{Future, ready};
 
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobBackupClassV1, BlobRefV1};
+use hermes_blob_protocol::{BlobAccessFenceV1, BlobBackupClassV1, BlobCustodyScopeV1, BlobRefV1};
 use hermes_blob_runtime::vault::{
     BlobContentKeyFenceV1, BlobVaultKeyLeaseAdapterV1, BlobVaultRouteContextV1,
     BlobVaultRouteFailureV1, BlobVaultRoutePortV1,
@@ -68,6 +68,7 @@ fn fence() -> BlobContentKeyFenceV1 {
             4,
         )
         .expect("access fence"),
+        BlobCustodyScopeV1::new("owner_notes", "attachments").expect("custody"),
         1,
     )
     .expect("key fence")

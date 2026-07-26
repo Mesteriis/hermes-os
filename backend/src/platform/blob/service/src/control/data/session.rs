@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobBackupClassV1, BlobQuotaGrantV1, BlobRefV1};
+use hermes_blob_protocol::{
+    BlobAccessFenceV1, BlobBackupClassV1, BlobCustodyScopeV1, BlobQuotaGrantV1, BlobRefV1,
+};
 use hermes_runtime_protocol::v1::{
     BlobBackupClassV1 as WireBackupClass, BlobCustodyTransferGrantV1, BlobDataOperationV1,
     BlobDataSessionGrantV1,
@@ -17,6 +19,7 @@ const MAX_ACTIVE_SESSIONS: usize = 4_096;
 pub(super) struct VerifiedBlobDataSessionV1 {
     reference: BlobRefV1,
     access: BlobAccessFenceV1,
+    custody: BlobCustodyScopeV1,
     quota: BlobQuotaGrantV1,
     key_revision: u64,
     expected_plaintext_sha256: Option<[u8; 32]>,
@@ -25,9 +28,11 @@ pub(super) struct VerifiedBlobDataSessionV1 {
 pub(super) struct VerifiedBlobCustodyTransferV1 {
     source_reference: BlobRefV1,
     source_access: BlobAccessFenceV1,
+    source_custody: BlobCustodyScopeV1,
     source_key_revision: u64,
     target_reference: BlobRefV1,
     target_access: BlobAccessFenceV1,
+    target_custody: BlobCustodyScopeV1,
     target_quota: BlobQuotaGrantV1,
     target_key_revision: u64,
     expected_plaintext_sha256: [u8; 32],
@@ -40,6 +45,9 @@ impl VerifiedBlobCustodyTransferV1 {
     pub(super) fn source_access(&self) -> &BlobAccessFenceV1 {
         &self.source_access
     }
+    pub(super) fn source_custody(&self) -> &BlobCustodyScopeV1 {
+        &self.source_custody
+    }
     pub(super) const fn source_key_revision(&self) -> u64 {
         self.source_key_revision
     }
@@ -48,6 +56,9 @@ impl VerifiedBlobCustodyTransferV1 {
     }
     pub(super) fn target_access(&self) -> &BlobAccessFenceV1 {
         &self.target_access
+    }
+    pub(super) fn target_custody(&self) -> &BlobCustodyScopeV1 {
+        &self.target_custody
     }
     pub(super) fn target_quota(&self) -> &BlobQuotaGrantV1 {
         &self.target_quota
@@ -66,6 +77,9 @@ impl VerifiedBlobDataSessionV1 {
     }
     pub(super) fn access(&self) -> &BlobAccessFenceV1 {
         &self.access
+    }
+    pub(super) fn custody(&self) -> &BlobCustodyScopeV1 {
+        &self.custody
     }
     pub(super) fn quota(&self) -> &BlobQuotaGrantV1 {
         &self.quota
@@ -285,12 +299,15 @@ fn decode_grant(grant: &BlobDataSessionGrantV1) -> Result<VerifiedBlobDataSessio
         grant.grant_epoch,
     )
     .map_err(|_| denied("access_fence"))?;
+    let custody = BlobCustodyScopeV1::new(grant.owner_id.clone(), grant.custody_scope_id.clone())
+        .map_err(|_| denied("custody_scope"))?;
     let quota = BlobQuotaGrantV1::new(
         grant.owner_id.clone(),
         grant.registration_id.clone(),
         grant.capability_id.clone(),
         grant.grant_epoch,
         grant.quota_max_bytes,
+        custody.clone(),
     )
     .map_err(|_| denied("quota"))?;
     if !quota.matches(&access) || grant.key_revision == 0 {
@@ -312,6 +329,7 @@ fn decode_grant(grant: &BlobDataSessionGrantV1) -> Result<VerifiedBlobDataSessio
     Ok(VerifiedBlobDataSessionV1 {
         reference,
         access,
+        custody,
         quota,
         key_revision: grant.key_revision,
         expected_plaintext_sha256,
@@ -340,6 +358,9 @@ fn decode_transfer(
         source.grant_epoch,
     )
     .map_err(|_| ())?;
+    let source_custody =
+        BlobCustodyScopeV1::new(source.owner_id.clone(), source.custody_scope_id.clone())
+            .map_err(|_| ())?;
     let target_reference = BlobRefV1::new(
         grant
             .target_reference_id
@@ -361,12 +382,18 @@ fn decode_transfer(
         grant.target_grant_epoch,
     )
     .map_err(|_| ())?;
+    let target_custody = BlobCustodyScopeV1::new(
+        grant.target_owner_id.clone(),
+        grant.target_custody_scope_id.clone(),
+    )
+    .map_err(|_| ())?;
     let target_quota = BlobQuotaGrantV1::new(
         grant.target_owner_id.clone(),
         grant.target_registration_id.clone(),
         grant.target_capability_id.clone(),
         grant.target_grant_epoch,
         grant.target_quota_max_bytes,
+        target_custody.clone(),
     )
     .map_err(|_| ())?;
     // The Kernel-signed transfer grant is the authority for an exact
@@ -381,9 +408,11 @@ fn decode_transfer(
     Ok(VerifiedBlobCustodyTransferV1 {
         source_reference,
         source_access,
+        source_custody,
         source_key_revision: source.key_revision,
         target_reference,
         target_access,
+        target_custody,
         target_quota,
         target_key_revision: grant.target_key_revision,
         expected_plaintext_sha256: source

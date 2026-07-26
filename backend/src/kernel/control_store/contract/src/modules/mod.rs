@@ -9,7 +9,7 @@ mod settings;
 mod storage_request;
 mod vault_purpose_request;
 
-pub use blob_request::ModuleBlobQuotaRequestV1;
+pub use blob_request::{ModuleBlobOperationV1, ModuleBlobQuotaRequestV1};
 pub use client_rpc_route::{ModuleClientRpcContractVersionV1, ModuleClientRpcRouteV1};
 pub use event_request::{
     ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,

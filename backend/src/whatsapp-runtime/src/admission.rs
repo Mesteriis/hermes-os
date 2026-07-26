@@ -6,9 +6,9 @@
 
 use hermes_communications_ingress::admission::communication_observed_publish_request_v1;
 use hermes_runtime_protocol::v1::{
-    BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1,
-    ClientRpcRouteV1, ContractReferenceV1, HostCapabilityRequestV1, ModuleDescriptorV1,
-    ModuleKindV1, ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
+    BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
+    CapabilityRequestV1, ClientRpcRouteV1, ContractReferenceV1, HostCapabilityRequestV1,
+    ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
     RuntimeBudgetRequestV1, SettingsSchemaRefV1, StorageNamespaceRequestV1,
     capability_request_v1::Request,
 };
@@ -31,6 +31,7 @@ pub const WHATSAPP_BLOB_CAPABILITY_ID: &str = "whatsapp.blob.v1";
 pub const WHATSAPP_EVENTS_CAPABILITY_ID: &str = "whatsapp.events.v1";
 pub const WHATSAPP_STORAGE_CAPABILITY_ID: &str = "whatsapp.storage.v1";
 pub const WHATSAPP_BLOB_QUOTA_BYTES: u64 = 64 * 1024 * 1024;
+pub const WHATSAPP_BLOB_CUSTODY_SCOPE_ID: &str = "whatsapp.content.v1";
 pub const WHATSAPP_STORAGE_CONNECTION_BUDGET: u32 = 4;
 pub const WHATSAPP_STORAGE_STATEMENT_TIMEOUT_MILLIS: u32 = 5_000;
 
@@ -82,6 +83,11 @@ fn whatsapp_blob_capability_v1() -> CapabilityDescriptorV1 {
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
                 max_bytes: WHATSAPP_BLOB_QUOTA_BYTES,
+                custody_scope_id: WHATSAPP_BLOB_CUSTODY_SCOPE_ID.to_owned(),
+                allowed_operations: vec![
+                    BlobQuotaOperationV1::Write as i32,
+                    BlobQuotaOperationV1::ReadRange as i32,
+                ],
             })),
         }],
         ..Default::default()

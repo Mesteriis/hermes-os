@@ -3,16 +3,21 @@
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use getrandom::fill;
-use hermes_blob_protocol::{BlobAccessFenceV1, BlobBackupClassV1, BlobRefV1};
+use hermes_blob_protocol::{BlobBackupClassV1, BlobCustodyScopeV1, BlobRefV1};
 
 use super::store::BlobStorageError;
 
-const MAGIC: &[u8; 8] = b"HBLBENC1";
+const MAGIC: &[u8; 8] = b"HBLBENC2";
 const NONCE_BYTES: usize = 24;
+
+pub(super) fn is_current_magic(bytes: &[u8; 8]) -> bool {
+    bytes == MAGIC
+}
 
 pub(super) fn encrypt(
     reference: &BlobRefV1,
-    fence: &BlobAccessFenceV1,
+    custody: &BlobCustodyScopeV1,
+    key_revision: u64,
     key: &[u8; 32],
     plaintext: &[u8],
 ) -> Result<Vec<u8>, BlobStorageError> {
@@ -25,7 +30,7 @@ pub(super) fn encrypt(
             &nonce,
             Payload {
                 msg: plaintext,
-                aad: &associated_data(reference, fence),
+                aad: &associated_data(reference, custody, key_revision),
             },
         )
         .map_err(|_| BlobStorageError::Crypto)?;
@@ -34,7 +39,8 @@ pub(super) fn encrypt(
 
 pub(super) fn decrypt(
     reference: &BlobRefV1,
-    fence: &BlobAccessFenceV1,
+    custody: &BlobCustodyScopeV1,
+    key_revision: u64,
     key: &[u8; 32],
     bytes: &[u8],
 ) -> Result<Vec<u8>, BlobStorageError> {
@@ -49,13 +55,17 @@ pub(super) fn decrypt(
             &nonce,
             Payload {
                 msg: &bytes[MAGIC.len() + NONCE_BYTES..],
-                aad: &associated_data(reference, fence),
+                aad: &associated_data(reference, custody, key_revision),
             },
         )
         .map_err(|_| BlobStorageError::AuthenticationFailed)
 }
 
-fn associated_data(reference: &BlobRefV1, fence: &BlobAccessFenceV1) -> Vec<u8> {
+fn associated_data(
+    reference: &BlobRefV1,
+    custody: &BlobCustodyScopeV1,
+    key_revision: u64,
+) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(512);
     bytes.extend_from_slice(MAGIC);
     bytes.extend_from_slice(reference.reference_id());
@@ -68,12 +78,9 @@ fn associated_data(reference: &BlobRefV1, fence: &BlobAccessFenceV1) -> Vec<u8> 
             .to_be_bytes(),
     );
     bytes.push(backup_class_code(reference.backup_class()));
-    append_field(&mut bytes, fence.owner_id().as_bytes());
-    append_field(&mut bytes, fence.module_registration_id().as_bytes());
-    append_field(&mut bytes, fence.capability_id().as_bytes());
-    append_field(&mut bytes, fence.runtime_instance_id().as_bytes());
-    bytes.extend_from_slice(&fence.runtime_generation().to_be_bytes());
-    bytes.extend_from_slice(&fence.grant_epoch().to_be_bytes());
+    append_field(&mut bytes, custody.owner_id().as_bytes());
+    append_field(&mut bytes, custody.custody_scope_id().as_bytes());
+    bytes.extend_from_slice(&key_revision.to_be_bytes());
     bytes
 }
 

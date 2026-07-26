@@ -22,8 +22,8 @@ use hermes_communications_persistence::{
 use hermes_communications_runtime::admission::{
     COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
-    COMMUNICATIONS_BLOB_CAPABILITY_ID, COMMUNICATIONS_BLOB_QUOTA_BYTES,
-    COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
+    COMMUNICATIONS_BLOB_CAPABILITY_ID, COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
+    COMMUNICATIONS_BLOB_QUOTA_BYTES, COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
     COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
     COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
     COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION, COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS,
@@ -33,9 +33,9 @@ use hermes_communications_runtime::admission::{
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
 use hermes_kernel_control_store::{
-    ModuleBlobQuotaRequestV1, ModuleClientRpcContractVersionV1, ModuleClientRpcRouteV1,
-    ModuleDescriptorRegistrationRequestsV1, ModuleRegistrationState, ModuleVaultPurposePolicyV1,
-    ModuleVaultPurposeRequestV1, PlatformStorageBindingStateV1,
+    ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientRpcContractVersionV1,
+    ModuleClientRpcRouteV1, ModuleDescriptorRegistrationRequestsV1, ModuleRegistrationState,
+    ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1, PlatformStorageBindingStateV1,
 };
 use hermes_runtime_protocol::v1::{
     BlobDataOperationV1, ManagedRuntimeBlobSessionRequestV1, ModuleClientResponseV1, VaultActionV1,
@@ -1795,6 +1795,11 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_BLOB_CAPABILITY_ID,
         COMMUNICATIONS_OWNER_ID,
         COMMUNICATIONS_BLOB_QUOTA_BYTES,
+        COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
+        vec![
+            ModuleBlobOperationV1::ReadRange,
+            ModuleBlobOperationV1::CustodyTransfer,
+        ],
     );
     let vault_purpose = ModuleVaultPurposeRequestV1::new_with_key_schema_revision(
         COMMUNICATIONS_REGISTRATION,
@@ -1905,6 +1910,8 @@ fn record_fixture_source_integration(store: &SqliteControlStore) -> u64 {
         FIXTURE_SOURCE_CAPABILITY_ID,
         COMMUNICATIONS_OWNER_ID,
         COMMUNICATIONS_BLOB_QUOTA_BYTES,
+        COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
+        vec![ModuleBlobOperationV1::Write],
     );
     store
         .create_pending_registration_with_requests(

@@ -6,9 +6,9 @@
 
 use hermes_communications_ingress::admission::communication_observed_publish_request_v1;
 use hermes_runtime_protocol::v1::{
-    BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1,
-    ClientRpcRouteV1, ContractReferenceV1, IntegrationStateRequestV1, ModuleDescriptorV1,
-    ModuleKindV1, ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
+    BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
+    CapabilityRequestV1, ClientRpcRouteV1, ContractReferenceV1, IntegrationStateRequestV1,
+    ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
     RuntimeArtifactRequestV1, RuntimeArtifactUseV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1,
     StorageNamespaceRequestV1, VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1,
     VaultTargetScopeV1, capability_request_v1::Request,
@@ -34,6 +34,7 @@ pub const TELEGRAM_STORAGE_CAPABILITY_ID: &str = "telegram.storage.v1";
 pub const TELEGRAM_TDJSON_ARTIFACT_ID: &str = "telegram.tdjson.v1";
 pub const TELEGRAM_STATE_LAYOUT_REVISION_V1: u32 = 1;
 pub const TELEGRAM_BLOB_QUOTA_BYTES: u64 = 64 * 1024 * 1024;
+pub const TELEGRAM_BLOB_CUSTODY_SCOPE_ID: &str = "telegram.content.v1";
 pub const TELEGRAM_STORAGE_CONNECTION_BUDGET: u32 = 4;
 pub const TELEGRAM_STORAGE_STATEMENT_TIMEOUT_MILLIS: u32 = 5_000;
 pub const TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
@@ -89,6 +90,11 @@ fn telegram_blob_capability_v1() -> CapabilityDescriptorV1 {
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
                 max_bytes: TELEGRAM_BLOB_QUOTA_BYTES,
+                custody_scope_id: TELEGRAM_BLOB_CUSTODY_SCOPE_ID.to_owned(),
+                allowed_operations: vec![
+                    BlobQuotaOperationV1::Write as i32,
+                    BlobQuotaOperationV1::ReadRange as i32,
+                ],
             })),
         }],
         ..Default::default()
