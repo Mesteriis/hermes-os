@@ -22,7 +22,9 @@ use hermes_telegram_persistence::{
     TelegramPersistenceConformanceV1,
 };
 use hermes_telegram_runtime::{PACKAGE as TELEGRAM_MODULE_ID, TelegramRuntime};
-use hermes_telegram_tdlib::{TdlibError, TdlibRequest, TdlibResponse, TdlibTransport};
+use hermes_telegram_tdlib::{
+    TdlibError, TdlibProviderUpdate, TdlibRequest, TdlibResponse, TdlibTransport,
+};
 use zeroize::Zeroizing;
 
 use super::*;
@@ -246,7 +248,7 @@ impl TdlibTransport for UnusedProvider {
         ))
     }
 
-    fn poll_events(&mut self) -> Result<Vec<TelegramProviderEvent>, TdlibError> {
+    fn poll_updates(&mut self) -> Result<Vec<TdlibProviderUpdate>, TdlibError> {
         Ok(Vec::new())
     }
 }

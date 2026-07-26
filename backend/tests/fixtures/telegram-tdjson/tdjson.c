@@ -64,6 +64,14 @@ void *td_json_client_create(void) {
         client,
         "{\"@type\":\"updateNewMessage\",\"message\":{\"id\":7001,\"chat_id\":9001,\"sender_id\":{\"@type\":\"messageSenderUser\",\"user_id\":42},\"is_outgoing\":false,\"date\":1783024000,\"content\":{\"@type\":\"messageText\",\"text\":{\"@type\":\"formattedText\",\"text\":\"managed Telegram evidence\"}}}}"
     );
+    enqueue(
+        client,
+        "{\"@type\":\"updateCall\",\"call\":{\"id\":41,\"unique_id\":5001,\"user_id\":42,\"is_outgoing\":false,\"is_video\":false,\"state\":{\"@type\":\"callStatePending\",\"is_created\":true,\"is_received\":true}}}"
+    );
+    enqueue(
+        client,
+        "{\"@type\":\"updateCall\",\"call\":{\"id\":41,\"unique_id\":5001,\"user_id\":42,\"is_outgoing\":false,\"is_video\":false,\"state\":{\"@type\":\"callStateDiscarded\",\"reason\":{\"@type\":\"callDiscardReasonMissed\"},\"need_rating\":false,\"need_debug_information\":false,\"need_log\":false}}}"
+    );
     return client;
 }
 

@@ -2,8 +2,13 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: не реализовано. Historical fixture metadata и fixture
-transcript не являются evidence ни для одного gate этого ADR.
+Состояние реализации: частично реализовано. `telegram_call_history_v1`
+реализован через generated Query/Realtime contracts, typed `updateCall`
+projection, owner-local PostgreSQL history/replay и exact managed-runtime
+route с restart/stale-fence conformance. `telegram_call_signaling_v1`,
+`telegram_call_media_v1` и umbrella `telegram_calls_operational_v1` остаются
+не реализованы. Historical fixture transcript не является evidence ни для
+одного gate этого ADR.
 
 Уточняет:
 

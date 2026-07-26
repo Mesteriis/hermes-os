@@ -5,6 +5,7 @@
 pub mod admission;
 pub mod automation_client_port;
 pub mod bootstrap;
+pub mod calls_client_port;
 pub mod client_port;
 pub mod client_transport;
 pub mod communications_outbox;
@@ -44,9 +45,10 @@ use hermes_telegram_core::{
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{
     TdJsonLibrary, TdJsonTransport, TdlibAuthorizationDriver, TdlibAuthorizationEvent,
-    TdlibAuthorizationParameters, TdlibError, TdlibRequest, TdlibResponse, TdlibTransport,
-    TelegramMediaMaterializer, get_chats_request, get_history_request,
-    get_history_request_with_options, parse_file_snapshot, parse_provider_events, parse_topic_list,
+    TdlibAuthorizationParameters, TdlibCallObservation, TdlibError, TdlibProviderUpdate,
+    TdlibRequest, TdlibResponse, TdlibTransport, TelegramMediaMaterializer, get_chats_request,
+    get_history_request, get_history_request_with_options, parse_file_snapshot,
+    parse_provider_events, parse_topic_list,
 };
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -58,6 +60,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use projection_cache::TelegramRuntimeProjectionCache;
 
 pub const PACKAGE: &str = "hermes-telegram-runtime";
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TelegramProviderPollBatch {
+    pub frames: Vec<TelegramRealtimeFrame>,
+    pub call_observations: Vec<TdlibCallObservation>,
+}
 
 #[derive(Debug)]
 pub enum TelegramDurableExecutionError {
@@ -540,8 +548,11 @@ mod tests {
             ))
         }
 
-        fn poll_events(&mut self) -> Result<Vec<TelegramProviderEvent>, TdlibError> {
-            Ok(std::mem::take(&mut self.events))
+        fn poll_updates(&mut self) -> Result<Vec<TdlibProviderUpdate>, TdlibError> {
+            Ok(std::mem::take(&mut self.events)
+                .into_iter()
+                .map(|event| TdlibProviderUpdate::Operational(Box::new(event)))
+                .collect())
         }
     }
 
@@ -561,10 +572,14 @@ mod tests {
             .poll_provider_events("account", Some("cursor-1".to_owned()))
             .expect("provider polling");
 
-        assert_eq!(frames.len(), 1);
-        assert_eq!(frames[0].sequence, 1);
-        assert_eq!(frames[0].provider_cursor.as_deref(), Some("cursor-1"));
-        assert_eq!(runtime.realtime_after("account", 0), frames);
+        assert_eq!(frames.frames.len(), 1);
+        assert!(frames.call_observations.is_empty());
+        assert_eq!(frames.frames[0].sequence, 1);
+        assert_eq!(
+            frames.frames[0].provider_cursor.as_deref(),
+            Some("cursor-1")
+        );
+        assert_eq!(runtime.realtime_after("account", 0), frames.frames);
     }
 
     #[test]
@@ -988,10 +1003,16 @@ impl TelegramRuntimeComposition {
         self.runtime.is_some()
     }
 
+    pub fn runtime_admission(&self) -> Option<&TelegramRuntimeAdmission> {
+        self.runtime
+            .as_ref()
+            .and_then(|runtime| runtime.admission.as_ref())
+    }
+
     pub fn poll_runtime_events(
         &mut self,
         provider_cursor: Option<String>,
-    ) -> Result<Vec<TelegramRealtimeFrame>, TdlibError> {
+    ) -> Result<TelegramProviderPollBatch, TdlibError> {
         let account_id = self.account_id.clone();
         self.runtime
             .as_mut()
@@ -2669,29 +2690,45 @@ where
         &mut self,
         account_id: &str,
         provider_cursor: Option<String>,
-    ) -> Result<Vec<TelegramRealtimeFrame>, TdlibError> {
-        let events = self.transport.poll_events()?;
-        let mut frames = Vec::with_capacity(events.len());
-        for event in events {
-            if hermes_telegram_api::provider_event_account_id(&event) != account_id {
-                return Err(TdlibError::Protocol(
-                    "Telegram provider event belongs to another account".to_owned(),
-                ));
+    ) -> Result<TelegramProviderPollBatch, TdlibError> {
+        let updates = self.transport.poll_updates()?;
+        let mut frames = Vec::with_capacity(updates.len());
+        let mut call_observations = Vec::new();
+        for update in updates {
+            match update {
+                TdlibProviderUpdate::Operational(event) => {
+                    if hermes_telegram_api::provider_event_account_id(&event) != account_id {
+                        return Err(TdlibError::Protocol(
+                            "Telegram provider event belongs to another account".to_owned(),
+                        ));
+                    }
+                    let frame = TelegramRealtimeFrame {
+                        account_id: account_id.to_owned(),
+                        sequence: self.persistence.next_realtime_sequence(account_id),
+                        provider_cursor: provider_cursor.clone(),
+                        event: *event,
+                    };
+                    self.persistence.append_realtime_frame(frame.clone());
+                    self.apply_provider_event(frame.event.clone())
+                        .map_err(|_| {
+                            TdlibError::Protocol("Telegram provider event is invalid".to_owned())
+                        })?;
+                    frames.push(frame);
+                }
+                TdlibProviderUpdate::Call(observation) => {
+                    if observation.account_id != account_id {
+                        return Err(TdlibError::Protocol(
+                            "Telegram call update belongs to another account".to_owned(),
+                        ));
+                    }
+                    call_observations.push(observation);
+                }
             }
-            let frame = TelegramRealtimeFrame {
-                account_id: account_id.to_owned(),
-                sequence: self.persistence.next_realtime_sequence(account_id),
-                provider_cursor: provider_cursor.clone(),
-                event,
-            };
-            self.persistence.append_realtime_frame(frame.clone());
-            self.apply_provider_event(frame.event.clone())
-                .map_err(|_| {
-                    TdlibError::Protocol("Telegram provider event is invalid".to_owned())
-                })?;
-            frames.push(frame);
         }
-        Ok(frames)
+        Ok(TelegramProviderPollBatch {
+            frames,
+            call_observations,
+        })
     }
 
     pub fn realtime_after(&self, account_id: &str, sequence: u64) -> Vec<TelegramRealtimeFrame> {

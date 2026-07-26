@@ -20,6 +20,7 @@ surface = "assembly"
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-telegram-automation-persistence = { path = "../telegram-automation-persistence" }
+hermes-telegram-calls-persistence = { path = "../telegram-calls-persistence" }
 hermes-telegram-persistence = { path = "../telegram-persistence" }
 hermes-telegram-runtime = { path = "../telegram-runtime" }
 prost = "=0.14.4"

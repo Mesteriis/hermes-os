@@ -2039,6 +2039,7 @@ dependencies = [
  "hermes-telegram-api",
  "hermes-telegram-assembly",
  "hermes-telegram-automation-api",
+ "hermes-telegram-calls-api",
  "hermes-telegram-core",
  "hermes-telegram-persistence",
  "hermes-telegram-runtime",
@@ -2441,6 +2442,7 @@ dependencies = [
  "hermes-runtime-protocol",
  "hermes-storage-protocol",
  "hermes-telegram-automation-persistence",
+ "hermes-telegram-calls-persistence",
  "hermes-telegram-persistence",
  "hermes-telegram-runtime",
  "prost 0.14.4",
@@ -2470,6 +2472,29 @@ version = "0.1.0"
 dependencies = [
  "hermes-storage-protocol",
  "hermes-telegram-automation-core",
+ "sha2 0.10.9",
+ "sqlx",
+]
+
+[[package]]
+name = "hermes-telegram-calls-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+]
+
+[[package]]
+name = "hermes-telegram-calls-core"
+version = "0.1.0"
+
+[[package]]
+name = "hermes-telegram-calls-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-storage-protocol",
+ "hermes-telegram-calls-core",
  "sha2 0.10.9",
  "sqlx",
 ]
@@ -2517,6 +2542,9 @@ dependencies = [
  "hermes-telegram-automation-api",
  "hermes-telegram-automation-core",
  "hermes-telegram-automation-persistence",
+ "hermes-telegram-calls-api",
+ "hermes-telegram-calls-core",
+ "hermes-telegram-calls-persistence",
  "hermes-telegram-core",
  "hermes-telegram-persistence",
  "hermes-telegram-tdlib",

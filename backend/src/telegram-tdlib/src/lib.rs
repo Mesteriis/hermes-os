@@ -27,6 +27,60 @@ pub use authorization::{TdlibAuthorizationDriver, TdlibAuthorizationEvent};
 
 pub const PACKAGE: &str = "hermes-telegram-tdlib";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TdlibCallDirection {
+    Incoming,
+    Outgoing,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TdlibCallState {
+    Pending,
+    ExchangingKeys,
+    Ready,
+    HangingUp,
+    Discarded,
+    Error,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TdlibCallDiscardReason {
+    Empty,
+    Missed,
+    Declined,
+    Disconnected,
+    HungUp,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TdlibCallFailureCategory {
+    Network,
+    NotAvailable,
+    Permission,
+    Unknown,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TdlibCallObservation {
+    pub account_id: String,
+    pub tdlib_call_id: i32,
+    pub provider_call_unique_id: Option<i64>,
+    pub provider_user_id: String,
+    pub direction: TdlibCallDirection,
+    pub is_video: bool,
+    pub state: TdlibCallState,
+    pub pending_created: bool,
+    pub pending_received: bool,
+    pub discard_reason: Option<TdlibCallDiscardReason>,
+    pub failure_category: Option<TdlibCallFailureCategory>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TdlibProviderUpdate {
+    Operational(Box<TelegramProviderEvent>),
+    Call(TdlibCallObservation),
+}
+
 /// Runtime-owned port for converting an authorized opaque BlobRef into a
 /// short-lived TDLib input file. The adapter never reads a filesystem path
 /// from the provider contract.
@@ -1425,6 +1479,146 @@ pub fn parse_provider_events(
     Ok(vec![event])
 }
 
+pub fn parse_provider_updates(
+    account_id: &str,
+    payload: &Value,
+) -> Result<Vec<TdlibProviderUpdate>, TdlibError> {
+    if payload.get("@type").and_then(Value::as_str) == Some("updateCall") {
+        return Ok(vec![TdlibProviderUpdate::Call(parse_call_observation(
+            account_id, payload,
+        )?)]);
+    }
+    parse_provider_events(account_id, payload).map(|events| {
+        events
+            .into_iter()
+            .map(|event| TdlibProviderUpdate::Operational(Box::new(event)))
+            .collect()
+    })
+}
+
+fn parse_call_observation(
+    account_id: &str,
+    payload: &Value,
+) -> Result<TdlibCallObservation, TdlibError> {
+    let call = payload
+        .get("call")
+        .ok_or_else(|| TdlibError::Protocol("updateCall has no call".to_owned()))?;
+    let tdlib_call_id = integer_field(call, "id")
+        .and_then(|value| i32::try_from(value).ok())
+        .filter(|value| *value > 0)
+        .ok_or_else(|| TdlibError::Protocol("TDLib call id is invalid".to_owned()))?;
+    let provider_call_unique_id = integer_field(call, "unique_id")
+        .filter(|value| *value > 0)
+        .map(i64::try_from)
+        .transpose()
+        .map_err(|_| TdlibError::Protocol("TDLib persistent call id is invalid".to_owned()))?;
+    let provider_user_id = required_string(call, "user_id")?;
+    let direction = if call
+        .get("is_outgoing")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| TdlibError::Protocol("TDLib call direction is missing".to_owned()))?
+    {
+        TdlibCallDirection::Outgoing
+    } else {
+        TdlibCallDirection::Incoming
+    };
+    let is_video = call
+        .get("is_video")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| TdlibError::Protocol("TDLib call media kind is missing".to_owned()))?;
+    let state = call
+        .get("state")
+        .ok_or_else(|| TdlibError::Protocol("TDLib call state is missing".to_owned()))?;
+    let state_type = state
+        .get("@type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| TdlibError::Protocol("TDLib call state type is missing".to_owned()))?;
+
+    let (normalized_state, pending_created, pending_received, discard_reason, failure_category) =
+        match state_type {
+            "callStatePending" => (
+                TdlibCallState::Pending,
+                state
+                    .get("is_created")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                state
+                    .get("is_received")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                None,
+                None,
+            ),
+            "callStateExchangingKeys" => (TdlibCallState::ExchangingKeys, false, false, None, None),
+            "callStateReady" => (TdlibCallState::Ready, false, false, None, None),
+            "callStateHangingUp" => (TdlibCallState::HangingUp, false, false, None, None),
+            "callStateDiscarded" => (
+                TdlibCallState::Discarded,
+                false,
+                false,
+                Some(parse_call_discard_reason(state)?),
+                None,
+            ),
+            "callStateError" => (
+                TdlibCallState::Error,
+                false,
+                false,
+                None,
+                Some(call_failure_category(state)),
+            ),
+            _ => {
+                return Err(TdlibError::Protocol(
+                    "TDLib call state is unsupported".to_owned(),
+                ));
+            }
+        };
+
+    Ok(TdlibCallObservation {
+        account_id: account_id.to_owned(),
+        tdlib_call_id,
+        provider_call_unique_id,
+        provider_user_id,
+        direction,
+        is_video,
+        state: normalized_state,
+        pending_created,
+        pending_received,
+        discard_reason,
+        failure_category,
+    })
+}
+
+fn parse_call_discard_reason(payload: &Value) -> Result<TdlibCallDiscardReason, TdlibError> {
+    let reason_type = payload
+        .get("reason")
+        .and_then(|reason| reason.get("@type"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| TdlibError::Protocol("TDLib call discard reason is missing".to_owned()))?;
+    match reason_type {
+        "callDiscardReasonEmpty" => Ok(TdlibCallDiscardReason::Empty),
+        "callDiscardReasonMissed" => Ok(TdlibCallDiscardReason::Missed),
+        "callDiscardReasonDeclined" => Ok(TdlibCallDiscardReason::Declined),
+        "callDiscardReasonDisconnected" => Ok(TdlibCallDiscardReason::Disconnected),
+        "callDiscardReasonHungUp" => Ok(TdlibCallDiscardReason::HungUp),
+        _ => Err(TdlibError::Protocol(
+            "TDLib call discard reason is unsupported".to_owned(),
+        )),
+    }
+}
+
+fn call_failure_category(payload: &Value) -> TdlibCallFailureCategory {
+    match payload
+        .get("error")
+        .and_then(|error| error.get("code"))
+        .and_then(Value::as_i64)
+    {
+        Some(401 | 403) => TdlibCallFailureCategory::Permission,
+        Some(404) => TdlibCallFailureCategory::NotAvailable,
+        Some(408 | 429 | 500..=599) => TdlibCallFailureCategory::Network,
+        _ => TdlibCallFailureCategory::Unknown,
+    }
+}
+
 fn message_text(content: Option<&Value>) -> Option<String> {
     content?
         .get("text")
@@ -2008,6 +2202,128 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod call_update_tests {
+    use super::*;
+
+    #[test]
+    fn parses_pending_call_without_promoting_volatile_id_to_persistent_identity() {
+        let updates = parse_provider_updates(
+            "account-1",
+            &json!({
+                "@type": "updateCall",
+                "call": {
+                    "id": 41,
+                    "unique_id": 0,
+                    "user_id": 99,
+                    "is_outgoing": false,
+                    "is_video": false,
+                    "state": {
+                        "@type": "callStatePending",
+                        "is_created": true,
+                        "is_received": false
+                    }
+                }
+            }),
+        )
+        .expect("pending call");
+
+        assert_eq!(
+            updates,
+            vec![TdlibProviderUpdate::Call(TdlibCallObservation {
+                account_id: "account-1".to_owned(),
+                tdlib_call_id: 41,
+                provider_call_unique_id: None,
+                provider_user_id: "99".to_owned(),
+                direction: TdlibCallDirection::Incoming,
+                is_video: false,
+                state: TdlibCallState::Pending,
+                pending_created: true,
+                pending_received: false,
+                discard_reason: None,
+                failure_category: None,
+            })]
+        );
+    }
+
+    #[test]
+    fn parses_ready_and_discarded_states_without_retaining_ready_secrets() {
+        let ready = parse_provider_updates(
+            "account-1",
+            &json!({
+                "@type": "updateCall",
+                "call": {
+                    "id": 41,
+                    "unique_id": 5001,
+                    "user_id": 99,
+                    "is_outgoing": true,
+                    "is_video": false,
+                    "state": {
+                        "@type": "callStateReady",
+                        "config": "private-config",
+                        "encryption_key": "private-key",
+                        "custom_parameters": "private-parameters"
+                    }
+                }
+            }),
+        )
+        .expect("ready call");
+        let debug = format!("{ready:?}");
+        assert!(!debug.contains("private-config"));
+        assert!(!debug.contains("private-key"));
+        assert!(!debug.contains("private-parameters"));
+
+        let discarded = parse_provider_updates(
+            "account-1",
+            &json!({
+                "@type": "updateCall",
+                "call": {
+                    "id": 41,
+                    "unique_id": 5001,
+                    "user_id": 99,
+                    "is_outgoing": true,
+                    "is_video": false,
+                    "state": {
+                        "@type": "callStateDiscarded",
+                        "reason": {"@type": "callDiscardReasonMissed"}
+                    }
+                }
+            }),
+        )
+        .expect("discarded call");
+
+        assert!(matches!(
+            discarded.as_slice(),
+            [TdlibProviderUpdate::Call(TdlibCallObservation {
+                state: TdlibCallState::Discarded,
+                discard_reason: Some(TdlibCallDiscardReason::Missed),
+                ..
+            })]
+        ));
+    }
+
+    #[test]
+    fn unknown_call_state_fails_closed() {
+        let error = parse_provider_updates(
+            "account-1",
+            &json!({
+                "@type": "updateCall",
+                "call": {
+                    "id": 41,
+                    "unique_id": 0,
+                    "user_id": 99,
+                    "is_outgoing": false,
+                    "is_video": false,
+                    "state": {"@type": "callStateFuture"}
+                }
+            }),
+        )
+        .expect_err("unknown call state");
+
+        assert!(matches!(error, TdlibError::Protocol(_)));
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TdlibError {
     Transport(String),
@@ -2238,7 +2554,7 @@ fn plan_folder_reassignment(
 /// The runtime owns this port; TDLib transport implementations own sockets/processes.
 pub trait TdlibTransport {
     fn request(&mut self, request: TdlibRequest) -> Result<TdlibResponse, TdlibError>;
-    fn poll_events(&mut self) -> Result<Vec<TelegramProviderEvent>, TdlibError>;
+    fn poll_updates(&mut self) -> Result<Vec<TdlibProviderUpdate>, TdlibError>;
 }
 
 /// Real libtdjson execution port. It owns correlation, while provider parsing stays here.
@@ -2282,15 +2598,15 @@ impl TdJsonTransport {
         Ok(self)
     }
 
-    pub fn poll_events(&mut self) -> Result<Vec<TelegramProviderEvent>, TdlibError> {
-        let mut events = Vec::new();
+    pub fn poll_updates(&mut self) -> Result<Vec<TdlibProviderUpdate>, TdlibError> {
+        let mut updates = Vec::new();
         while let Some(payload) = self.pending_updates.pop_front() {
-            events.extend(parse_provider_events(&self.account_id, &payload)?);
+            updates.extend(parse_provider_updates(&self.account_id, &payload)?);
         }
         while let Some(payload) = self.client.receive_json(0.0)? {
-            events.extend(parse_provider_events(&self.account_id, &payload)?);
+            updates.extend(parse_provider_updates(&self.account_id, &payload)?);
         }
-        Ok(events)
+        Ok(updates)
     }
 
     fn receive_correlated(&mut self, expected_extra: &str) -> Result<Value, TdlibError> {
@@ -2471,8 +2787,8 @@ impl TdlibTransport for TdJsonTransport {
         self.request_once(&request)
     }
 
-    fn poll_events(&mut self) -> Result<Vec<TelegramProviderEvent>, TdlibError> {
-        TdJsonTransport::poll_events(self)
+    fn poll_updates(&mut self) -> Result<Vec<TdlibProviderUpdate>, TdlibError> {
+        TdJsonTransport::poll_updates(self)
     }
 }
 

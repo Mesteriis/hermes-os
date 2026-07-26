@@ -28,9 +28,16 @@ use hermes_runtime_protocol::{
     },
 };
 use hermes_telegram_automation_persistence::TelegramAutomationPersistence;
+use hermes_telegram_calls_core::{
+    TelegramCallDirection, TelegramCallDiscardReason, TelegramCallFailureCategory,
+    TelegramProviderCallState, TelegramProviderCallUpdate,
+};
+use hermes_telegram_calls_persistence::{TelegramCallsPersistence, TelegramCallsPersistenceError};
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
-use hermes_telegram_tdlib::TdlibAuthorizationUpdate;
-use hermes_telegram_tdlib::{TdlibAuthorizationEvent, TdlibError};
+use hermes_telegram_tdlib::{
+    TdlibAuthorizationEvent, TdlibAuthorizationUpdate, TdlibCallDirection, TdlibCallDiscardReason,
+    TdlibCallFailureCategory, TdlibCallObservation, TdlibCallState, TdlibError,
+};
 use prost::Message;
 use sha2::{Digest, Sha256};
 
@@ -54,6 +61,7 @@ pub enum TelegramProcessTick {
 pub enum TelegramDurableProcessError {
     Provider(TdlibError),
     Persistence(TelegramDurablePersistenceError),
+    Calls(TelegramCallsPersistenceError),
     Projection(TelegramDurableProjectionError),
 }
 
@@ -94,13 +102,16 @@ impl TelegramProcessLoop {
         stream: UnixStream,
         durable: &TelegramDurablePersistence,
         automation: &TelegramAutomationPersistence,
+        calls: &TelegramCallsPersistence,
         handle: &tokio::runtime::Handle,
     ) -> Result<(), TelegramClientTransportError> {
         let runtime = self
             .composition
             .runtime_mut()
             .ok_or(TelegramClientTransportError::RuntimeUnavailable)?;
-        client_transport::serve_connection_durable(stream, runtime, durable, automation, handle)
+        client_transport::serve_connection_durable(
+            stream, runtime, durable, automation, calls, handle,
+        )
     }
 
     pub fn poll_once(&mut self, timeout: Duration) -> Result<TelegramProcessTick, TdlibError> {
@@ -114,17 +125,18 @@ impl TelegramProcessLoop {
                 .unwrap_or(TelegramProcessTick::Idle));
         }
         if self.composition.has_runtime() {
-            let frames = self
+            let batch = self
                 .composition
                 .poll_runtime_events(self.provider_cursor.clone())?;
-            if let Some(cursor) = frames
+            if let Some(cursor) = batch
+                .frames
                 .last()
                 .and_then(|frame| frame.provider_cursor.clone())
             {
                 self.provider_cursor = Some(cursor);
             }
             return Ok(TelegramProcessTick::Runtime {
-                frames: frames.len(),
+                frames: batch.frames.len() + batch.call_observations.len(),
                 provider_cursor: self.provider_cursor.clone(),
             });
         }
@@ -135,6 +147,7 @@ impl TelegramProcessLoop {
         &mut self,
         timeout: Duration,
         durable: &TelegramDurablePersistence,
+        calls: &TelegramCallsPersistence,
         body_admitter: &mut F,
     ) -> Result<TelegramProcessTick, TelegramDurableProcessError>
     where
@@ -153,11 +166,11 @@ impl TelegramProcessLoop {
                 .unwrap_or(TelegramProcessTick::Idle));
         }
         if self.composition.has_runtime() {
-            let frames = self
+            let batch = self
                 .composition
                 .poll_runtime_events(self.provider_cursor.clone())
                 .map_err(TelegramDurableProcessError::Provider)?;
-            for frame in &frames {
+            for frame in &batch.frames {
                 durable
                     .append_provider_event(frame)
                     .await
@@ -169,14 +182,42 @@ impl TelegramProcessLoop {
                         .map_err(TelegramDurableProcessError::Projection)?;
                 }
             }
-            if let Some(cursor) = frames
+            let runtime_generation = self
+                .composition
+                .runtime_admission()
+                .map(|admission| admission.runtime_generation)
+                .ok_or_else(|| {
+                    TelegramDurableProcessError::Provider(TdlibError::Protocol(
+                        "Telegram call update has no admitted runtime fence".to_owned(),
+                    ))
+                })?;
+            let observed_at_unix_seconds = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| {
+                    TelegramDurableProcessError::Provider(TdlibError::Protocol(
+                        "Telegram runtime clock is unavailable".to_owned(),
+                    ))
+                })?
+                .as_secs();
+            for observation in &batch.call_observations {
+                if observation.is_video {
+                    continue;
+                }
+                let update = call_update(observation, runtime_generation, observed_at_unix_seconds);
+                calls
+                    .ingest_provider_update(&call_session_id(&update), &update)
+                    .await
+                    .map_err(TelegramDurableProcessError::Calls)?;
+            }
+            if let Some(cursor) = batch
+                .frames
                 .last()
                 .and_then(|frame| frame.provider_cursor.clone())
             {
                 self.provider_cursor = Some(cursor);
             }
             return Ok(TelegramProcessTick::Runtime {
-                frames: frames.len(),
+                frames: batch.frames.len() + batch.call_observations.len(),
                 provider_cursor: self.provider_cursor.clone(),
             });
         }
@@ -213,6 +254,7 @@ pub fn serve_admitted_provider_loop(
         composition,
         durable,
         automation,
+        calls,
         event_connection,
         event_publish_permit,
     } = admitted;
@@ -225,6 +267,7 @@ pub fn serve_admitted_provider_loop(
             &mut process,
             &durable,
             &automation,
+            &calls,
             executor,
         )?;
         let poll = {
@@ -233,6 +276,7 @@ pub fn serve_admitted_provider_loop(
             executor.block_on(process.poll_once_durable(
                 Duration::from_millis(25),
                 &durable,
+                &calls,
                 &mut body_admitter,
             ))
         };
@@ -373,11 +417,72 @@ fn hex_reference_id(reference_id: &[u8; 16]) -> String {
         .collect()
 }
 
+fn call_update(
+    observation: &TdlibCallObservation,
+    runtime_generation: u64,
+    observed_at_unix_seconds: u64,
+) -> TelegramProviderCallUpdate {
+    TelegramProviderCallUpdate {
+        account_id: observation.account_id.clone(),
+        runtime_generation,
+        tdlib_call_id: observation.tdlib_call_id,
+        provider_call_unique_id: observation.provider_call_unique_id,
+        provider_user_id: observation.provider_user_id.clone(),
+        direction: match observation.direction {
+            TdlibCallDirection::Incoming => TelegramCallDirection::Incoming,
+            TdlibCallDirection::Outgoing => TelegramCallDirection::Outgoing,
+        },
+        state: match observation.state {
+            TdlibCallState::Pending => TelegramProviderCallState::Pending,
+            TdlibCallState::ExchangingKeys => TelegramProviderCallState::ExchangingKeys,
+            TdlibCallState::Ready => TelegramProviderCallState::MediaReady,
+            TdlibCallState::HangingUp => TelegramProviderCallState::HangingUp,
+            TdlibCallState::Discarded => TelegramProviderCallState::Discarded,
+            TdlibCallState::Error => TelegramProviderCallState::Error,
+        },
+        pending_created: observation.pending_created,
+        pending_received: observation.pending_received,
+        discard_reason: observation.discard_reason.map(|reason| match reason {
+            TdlibCallDiscardReason::Empty => TelegramCallDiscardReason::Empty,
+            TdlibCallDiscardReason::Missed => TelegramCallDiscardReason::Missed,
+            TdlibCallDiscardReason::Declined => TelegramCallDiscardReason::Declined,
+            TdlibCallDiscardReason::Disconnected => TelegramCallDiscardReason::Disconnected,
+            TdlibCallDiscardReason::HungUp => TelegramCallDiscardReason::HungUp,
+        }),
+        failure_category: observation.failure_category.map(|category| match category {
+            TdlibCallFailureCategory::Network => TelegramCallFailureCategory::Network,
+            TdlibCallFailureCategory::NotAvailable => TelegramCallFailureCategory::NotAvailable,
+            TdlibCallFailureCategory::Permission => TelegramCallFailureCategory::Permission,
+            TdlibCallFailureCategory::Unknown => TelegramCallFailureCategory::Unknown,
+        }),
+        observed_at_unix_seconds,
+    }
+}
+
+fn call_session_id(update: &TelegramProviderCallUpdate) -> String {
+    let mut digest = Sha256::new();
+    digest.update(update.account_id.as_bytes());
+    digest.update([0]);
+    if let Some(provider_call_unique_id) = update.provider_call_unique_id {
+        digest.update(b"provider");
+        digest.update(provider_call_unique_id.to_be_bytes());
+    } else {
+        digest.update(b"runtime");
+        digest.update(update.runtime_generation.to_be_bytes());
+        digest.update(update.tdlib_call_id.to_be_bytes());
+    }
+    let digest = digest.finalize();
+    let mut reference_id = [0_u8; 16];
+    reference_id.copy_from_slice(&digest[..16]);
+    format!("tg-call-{}", hex_reference_id(&reference_id))
+}
+
 fn handle_client_delivery(
     channel: &mut ManagedControlChannelV2<UnixStream>,
     process: &mut TelegramProcessLoop,
     durable: &TelegramDurablePersistence,
     automation: &TelegramAutomationPersistence,
+    calls: &TelegramCallsPersistence,
     executor: &tokio::runtime::Runtime,
 ) -> Result<(), String> {
     let Some((correlation_id, control_request)) = channel
@@ -427,6 +532,7 @@ fn handle_client_delivery(
                 runtime,
                 durable,
                 automation,
+                calls,
                 &request.encode_to_vec(),
             ))
             .map_err(|_| "Telegram runtime client request failed".to_owned())?;

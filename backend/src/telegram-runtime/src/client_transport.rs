@@ -4,6 +4,7 @@ use std::io::{ErrorKind, Read, Write};
 use std::os::unix::net::UnixStream;
 
 use hermes_telegram_automation_persistence::TelegramAutomationPersistence;
+use hermes_telegram_calls_persistence::TelegramCallsPersistence;
 use hermes_telegram_persistence::TelegramDurablePersistence;
 use hermes_telegram_tdlib::TdlibTransport;
 
@@ -80,6 +81,7 @@ pub fn serve_connection_durable<T: TdlibTransport>(
     runtime: &mut TelegramRuntime<T>,
     durable: &TelegramDurablePersistence,
     automation: &TelegramAutomationPersistence,
+    calls: &TelegramCallsPersistence,
     handle: &tokio::runtime::Handle,
 ) -> Result<(), TelegramClientTransportError> {
     loop {
@@ -90,7 +92,7 @@ pub fn serve_connection_durable<T: TdlibTransport>(
         };
         let response = tokio::task::block_in_place(|| {
             handle.block_on(handle_durable_request(
-                runtime, durable, automation, &request,
+                runtime, durable, automation, calls, &request,
             ))
         })?;
         write_frame(&mut stream, &response)?;
@@ -101,8 +103,17 @@ pub async fn handle_durable_request<T: TdlibTransport>(
     runtime: &mut TelegramRuntime<T>,
     durable: &TelegramDurablePersistence,
     automation: &TelegramAutomationPersistence,
+    calls: &TelegramCallsPersistence,
     request: &[u8],
 ) -> Result<Vec<u8>, TelegramClientTransportError> {
+    if crate::calls_client_port::calls_route(request)
+        .map_err(TelegramClientTransportError::Port)?
+        .is_some()
+    {
+        return crate::calls_client_port::handle_calls_module_request(request, calls)
+            .await
+            .map_err(TelegramClientTransportError::Port);
+    }
     if crate::automation_client_port::automation_route(request)
         .map_err(TelegramClientTransportError::Port)?
         .is_some()

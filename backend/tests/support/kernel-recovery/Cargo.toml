@@ -39,6 +39,7 @@ hermes-mail-runtime = { path = "../../../src/mail-runtime" }
 hermes-telegram-api = { path = "../../../src/telegram-api" }
 hermes-telegram-assembly = { path = "../../../src/telegram-assembly" }
 hermes-telegram-automation-api = { path = "../../../src/telegram-automation-api" }
+hermes-telegram-calls-api = { path = "../../../src/telegram-calls-api" }
 hermes-telegram-core = { path = "../../../src/telegram-core" }
 hermes-telegram-persistence = { path = "../../../src/telegram-persistence", features = ["conformance-test-support"] }
 hermes-telegram-runtime = { path = "../../../src/telegram-runtime" }

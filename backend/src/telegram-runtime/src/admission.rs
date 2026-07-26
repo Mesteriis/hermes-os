@@ -22,6 +22,10 @@ use hermes_telegram_automation_api::contract::{
     TELEGRAM_AUTOMATION_CONTRACT_MAJOR, TELEGRAM_AUTOMATION_CONTRACT_REVISION,
     TELEGRAM_AUTOMATION_DESCRIPTOR_SET_V1, TelegramAutomationContractV1,
 };
+use hermes_telegram_calls_api::contract::{
+    TELEGRAM_CALLS_CONTRACT_MAJOR, TELEGRAM_CALLS_CONTRACT_REVISION,
+    TELEGRAM_CALLS_DESCRIPTOR_SET_V1, TelegramCallsContractV1,
+};
 use hermes_telegram_core::{TELEGRAM_API_HASH_PURPOSE_ID, TELEGRAM_SESSION_STORE_KEY_PURPOSE_ID};
 use sha2::{Digest, Sha256};
 
@@ -50,6 +54,8 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         telegram_automation_client_capability_v1(TelegramAutomationContractV1::Command),
         telegram_automation_client_capability_v1(TelegramAutomationContractV1::Query),
         telegram_blob_capability_v1(),
+        telegram_calls_client_capability_v1(TelegramCallsContractV1::Query),
+        telegram_calls_client_capability_v1(TelegramCallsContractV1::Realtime),
         telegram_client_capability_v1(TelegramClientContractV1::Command),
         telegram_credentials_capability_v1(),
         telegram_events_capability_v1(),
@@ -58,6 +64,31 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         telegram_runtime_capability_v1(),
         telegram_storage_capability_v1(),
     ]
+}
+
+fn telegram_calls_client_capability_v1(
+    contract: TelegramCallsContractV1,
+) -> CapabilityDescriptorV1 {
+    debug_assert_ne!(contract, TelegramCallsContractV1::Command);
+    CapabilityDescriptorV1 {
+        capability_id: contract.capability_id().to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+            contract: Some(ContractReferenceV1 {
+                owner: TELEGRAM_OWNER_ID.to_owned(),
+                name: contract.contract_name().to_owned(),
+                major: TELEGRAM_CALLS_CONTRACT_MAJOR,
+                revision: TELEGRAM_CALLS_CONTRACT_REVISION,
+                schema_sha256: Sha256::digest(TELEGRAM_CALLS_DESCRIPTOR_SET_V1).to_vec(),
+            }),
+            client_rpc_route: Some(ClientRpcRouteV1 {
+                path: contract.connect_path().to_owned(),
+            }),
+        }],
+        ..Default::default()
+    }
 }
 
 fn telegram_automation_client_capability_v1(
@@ -219,7 +250,7 @@ pub fn telegram_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
     let settings_schema = telegram_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 2,
+        descriptor_revision: 3,
         module_id: TELEGRAM_MODULE_ID.to_owned(),
         owner_id: TELEGRAM_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Integration as i32,
@@ -258,6 +289,7 @@ mod tests {
     };
     use hermes_telegram_api::client_contract::TelegramClientContractV1;
     use hermes_telegram_automation_api::contract::TelegramAutomationContractV1;
+    use hermes_telegram_calls_api::contract::TelegramCallsContractV1;
 
     use super::{
         TELEGRAM_BLOB_CAPABILITY_ID, TELEGRAM_CREDENTIALS_CAPABILITY_ID,
@@ -282,6 +314,8 @@ mod tests {
                 "telegram.automation.command.v1",
                 "telegram.automation.query.v1",
                 TELEGRAM_BLOB_CAPABILITY_ID,
+                "telegram.calls.query.v1",
+                "telegram.calls.realtime.v1",
                 "telegram.command.v1",
                 TELEGRAM_CREDENTIALS_CAPABILITY_ID,
                 TELEGRAM_EVENTS_CAPABILITY_ID,
@@ -299,8 +333,11 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             client_surfaces.len(),
-            TelegramClientContractV1::ALL.len() + TelegramAutomationContractV1::ALL.len()
+            TelegramClientContractV1::ALL.len() + TelegramAutomationContractV1::ALL.len() + 2
         );
+        assert!(!descriptor.capabilities.iter().any(|capability| {
+            capability.capability_id == TelegramCallsContractV1::Command.capability_id()
+        }));
         assert!(client_surfaces.iter().all(|surface| {
             surface.kind == ProvidedSurfaceKindV1::ClientRpc as i32
                 && surface.contract.is_some()

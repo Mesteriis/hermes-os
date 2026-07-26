@@ -28,6 +28,18 @@ use hermes_telegram_automation_api::{
         automation_query_response_v1,
     },
 };
+use hermes_telegram_calls_api::{
+    contract::{
+        TELEGRAM_CALLS_CONTRACT_MAJOR, TELEGRAM_CALLS_CONTRACT_REVISION,
+        TELEGRAM_CALLS_DESCRIPTOR_SET_V1, TELEGRAM_CALLS_MODULE_ID, TELEGRAM_CALLS_OWNER_ID,
+        TelegramCallsContractV1,
+    },
+    wire::{
+        CallDiscardReasonV1, CallStateV1, CallsQueryRequestV1, CallsQueryResponseV1,
+        CallsReplayRequestV1, CallsReplayResponseV1, ListCallsRequestV1, calls_query_request_v1,
+        calls_query_response_v1,
+    },
+};
 use hermes_telegram_runtime::client_port::{
     TelegramClientPortError, decode_module_response, encode_module_request,
 };
@@ -426,6 +438,94 @@ fn managed_telegram_automation_route_is_durable_and_provider_side_effect_free() 
     ));
 }
 
+#[test]
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Communications and Telegram binaries"]
+fn managed_telegram_call_history_route_is_durable_and_replayable() {
+    let mut fixture = prepare_managed_telegram_fixture();
+    let store = Arc::clone(&fixture.store);
+    let telegram = fixture.start_telegram();
+    assert_telegram_lifecycle_query(&store, &fixture.supervisor, &telegram);
+
+    let list_request = CallsQueryRequestV1 {
+        request: Some(calls_query_request_v1::Request::ListCalls(
+            ListCallsRequestV1 {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                after_call_session_id: String::new(),
+                limit: 10,
+            },
+        )),
+    }
+    .encode_to_vec();
+    let list_response =
+        wait_for_telegram_call_history(&store, &fixture.supervisor, &telegram, 101, &list_request);
+    let calls_query_response_v1::Response::CallList(list) = list_response
+        .response
+        .as_ref()
+        .expect("Telegram Calls list response")
+    else {
+        panic!("Telegram Calls list response is unexpected");
+    };
+    assert_eq!(list.calls.len(), 1);
+    let call = list.calls.first().expect("Telegram call");
+    assert_eq!(call.provider_call_unique_id, Some(5001));
+    assert_eq!(call.provider_user_id, "42");
+    assert_eq!(call.state, CallStateV1::Ended as i32);
+    assert_eq!(
+        call.discard_reason,
+        Some(CallDiscardReasonV1::Missed as i32)
+    );
+    assert_eq!(call.revision, 2);
+
+    let replay = route_telegram_calls_until_ready(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        TelegramCallsContractV1::Realtime,
+        102,
+        &CallsReplayRequestV1 {
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            after_sequence: 0,
+            limit: 10,
+        }
+        .encode_to_vec(),
+    );
+    let replay = decode_calls_replay_response(&replay);
+    assert_eq!(replay.frames.len(), 2);
+    assert_eq!(
+        replay.frames[0]
+            .call
+            .as_ref()
+            .expect("pending call")
+            .revision,
+        1
+    );
+    assert_eq!(
+        replay.frames[1].call.as_ref().expect("ended call").revision,
+        2
+    );
+    assert!(replay.frames[0].sequence < replay.frames[1].sequence);
+    assert!(!replay.reset_required);
+
+    let stale_runtime = telegram.clone();
+    let telegram = fixture.restart_telegram(telegram);
+    assert_telegram_lifecycle_query(&store, &fixture.supervisor, &telegram);
+    let replayed_list =
+        wait_for_telegram_call_history(&store, &fixture.supervisor, &telegram, 103, &list_request);
+    assert_eq!(replayed_list, list_response);
+    assert!(matches!(
+        route_telegram_calls_client(
+            &store,
+            &fixture.supervisor.relay_port(),
+            &stale_runtime,
+            TelegramCallsContractV1::Query,
+            104,
+            &list_request,
+        ),
+        Err(TelegramClientRouteError::Kernel(error))
+            if error == "managed runtime fence is stale"
+    ));
+}
+
 struct TelegramAutomationConformanceState {
     template: AutomationTemplateV1,
     policy: AutomationPolicyV1,
@@ -795,6 +895,131 @@ fn telegram_operation_count(
             Err(error) => panic!("Telegram operation query failed: {error:?}"),
         }
     }
+}
+
+fn wait_for_telegram_call_history(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    request_id: u64,
+    request_payload: &[u8],
+) -> CallsQueryResponseV1 {
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let bytes = route_telegram_calls_until_ready(
+            store,
+            supervisor,
+            telegram,
+            TelegramCallsContractV1::Query,
+            request_id,
+            request_payload,
+        );
+        let response = decode_calls_query_response(&bytes);
+        if matches!(
+            response.response,
+            Some(calls_query_response_v1::Response::CallList(ref list)) if !list.calls.is_empty()
+        ) {
+            return response;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Telegram call history was not projected"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn route_telegram_calls_until_ready(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    contract: TelegramCallsContractV1,
+    request_id: u64,
+    request_payload: &[u8],
+) -> Vec<u8> {
+    let relay = supervisor.relay_port();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        match route_telegram_calls_client(
+            store,
+            &relay,
+            telegram,
+            contract,
+            request_id,
+            request_payload,
+        ) {
+            Ok(response) => return response,
+            Err(error) if error.is_retryable() => {
+                if std::time::Instant::now() >= deadline {
+                    let runtime_failure = supervisor
+                        .last_failure(&telegram.registration_id)
+                        .expect("read Telegram runtime failure");
+                    panic!(
+                        "Telegram Calls route remained busy: {error:?}; runtime failure: {runtime_failure:?}"
+                    );
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(error) => panic!("Telegram Calls route failed: {error:?}"),
+        }
+    }
+}
+
+fn route_telegram_calls_client(
+    store: &SqliteControlStore,
+    relay: &crate::runtime::lifecycle::supervisor::ManagedRuntimeRelayPort,
+    telegram: &StartedTelegramRuntime,
+    contract: TelegramCallsContractV1,
+    request_id: u64,
+    request_payload: &[u8],
+) -> Result<Vec<u8>, TelegramClientRouteError> {
+    let request = ModuleClientRequestV1 {
+        protocol_major: MODULE_CLIENT_PROTOCOL_MAJOR,
+        module_id: TELEGRAM_CALLS_MODULE_ID.to_owned(),
+        owner_id: TELEGRAM_CALLS_OWNER_ID.to_owned(),
+        contract: Some(ContractReferenceV1 {
+            owner: TELEGRAM_CALLS_OWNER_ID.to_owned(),
+            name: contract.contract_name().to_owned(),
+            major: TELEGRAM_CALLS_CONTRACT_MAJOR,
+            revision: TELEGRAM_CALLS_CONTRACT_REVISION,
+            schema_sha256: sha2::Sha256::digest(TELEGRAM_CALLS_DESCRIPTOR_SET_V1).to_vec(),
+        }),
+        request_id,
+        request_payload: request_payload.to_vec(),
+    }
+    .encode_to_vec();
+    let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+        &telegram.registration_id,
+        &telegram.runtime_instance_id,
+        telegram.runtime_generation,
+        telegram.grant_epoch,
+        contract.capability_id(),
+        &request,
+    );
+    let bytes =
+        crate::modules::capability::router::route_managed_client_request(store, relay, &route)
+            .map_err(TelegramClientRouteError::Kernel)?;
+    let response = ModuleClientResponseV1::decode(bytes.as_slice()).map_err(|error| {
+        TelegramClientRouteError::Client(TelegramClientPortError::Codec(error.to_string()))
+    })?;
+    if !response.error_code.is_empty() {
+        return Err(TelegramClientRouteError::Client(
+            TelegramClientPortError::Protocol(response.error_code),
+        ));
+    }
+    Ok(bytes)
+}
+
+fn decode_calls_query_response(bytes: &[u8]) -> CallsQueryResponseV1 {
+    let response = ModuleClientResponseV1::decode(bytes).expect("Telegram Calls module response");
+    CallsQueryResponseV1::decode(response.response_payload.as_slice())
+        .expect("Telegram Calls query response")
+}
+
+fn decode_calls_replay_response(bytes: &[u8]) -> CallsReplayResponseV1 {
+    let response = ModuleClientResponseV1::decode(bytes).expect("Telegram Calls module response");
+    CallsReplayResponseV1::decode(response.response_payload.as_slice())
+        .expect("Telegram Calls replay response")
 }
 
 fn route_telegram_automation_until_ready(

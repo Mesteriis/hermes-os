@@ -33,6 +33,9 @@ hermes-telegram-api = { path = "../telegram-api" }
 hermes-telegram-automation-api = { path = "../telegram-automation-api" }
 hermes-telegram-automation-core = { path = "../telegram-automation-core" }
 hermes-telegram-automation-persistence = { path = "../telegram-automation-persistence" }
+hermes-telegram-calls-api = { path = "../telegram-calls-api" }
+hermes-telegram-calls-core = { path = "../telegram-calls-core" }
+hermes-telegram-calls-persistence = { path = "../telegram-calls-persistence" }
 hermes-telegram-persistence = { path = "../telegram-persistence" }
 hermes-telegram-tdlib = { path = "../telegram-tdlib" }
 hermes-vault-protocol = { path = "../platform/vault/protocol" }

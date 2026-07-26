@@ -8,7 +8,7 @@ use hermes_telegram_api::{
     client_contract::{TELEGRAM_MODULE_ID, TELEGRAM_OWNER_ID},
 };
 use hermes_telegram_assembly::{
-    TELEGRAM_STORAGE_BUNDLE_REVISION_V2, telegram_storage_bundle_with_automation_v2,
+    TELEGRAM_STORAGE_BUNDLE_REVISION_V3, telegram_storage_bundle_with_calls_v3,
 };
 use hermes_telegram_core::credential_lease_purpose_for_purpose;
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramPersistenceConformanceV1};
@@ -133,12 +133,12 @@ pub(super) fn admit_telegram_runtime(store: &SqliteControlStore) -> AdmittedTele
             Some(Sha256::digest(&schema).into()),
         ))
         .expect("record Telegram release binding");
-    let bundle = telegram_storage_bundle_with_automation_v2().encode_to_vec();
+    let bundle = telegram_storage_bundle_with_calls_v3().encode_to_vec();
     store
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 TELEGRAM_OWNER_ID,
-                u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V2),
+                u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V3),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -163,7 +163,7 @@ pub(super) fn prepare_telegram_runtime(
     let bundle = store
         .platform_storage_bundle(
             TELEGRAM_OWNER_ID,
-            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V2),
+            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V3),
         )
         .expect("read Telegram Storage bundle")
         .expect("Telegram Storage bundle");
@@ -176,7 +176,7 @@ pub(super) fn prepare_telegram_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V2),
+            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V3),
             *bundle.digest(),
         )
         .expect("Telegram Storage binding issue"),

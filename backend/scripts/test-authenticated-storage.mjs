@@ -268,6 +268,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_whatsapp_runtime_uses_signed_kernel_admission_and_host_route_fencing',
     'managed_whatsapp_runtime_delivers_live_command_and_event_only_communications_handoff',
     'managed_telegram_automation_route_is_durable_and_provider_side_effect_free',
+    'managed_telegram_call_history_route_is_durable_and_replayable',
   ]) {
     await start_contour(secrets);
     try {
