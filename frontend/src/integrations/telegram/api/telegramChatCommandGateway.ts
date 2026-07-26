@@ -78,6 +78,30 @@ export async function removeTelegramChatFromFolder(
 	return executeFolderCommand('removeChatFromFolder', target, providerFolderId)
 }
 
+export async function reassignTelegramChatFolders(
+	target: TelegramChatTarget,
+	targetProviderFolderIds: readonly bigint[],
+): Promise<TelegramOperationResponse> {
+	const uniqueFolderIds = new Set(targetProviderFolderIds)
+	if (
+		targetProviderFolderIds.length === 0
+		|| targetProviderFolderIds.length > 64
+		|| uniqueFolderIds.size !== targetProviderFolderIds.length
+		|| targetProviderFolderIds.some((folderId) => folderId <= 0n)
+	) {
+		throw new RangeError('Telegram target folder IDs must be 1-64 unique positive integers')
+	}
+	return getTelegramOperationalConnectClient().executeCommand({
+		command: {
+			case: 'reassignChatFolders',
+			value: {
+				...normalizeTarget(target),
+				targetProviderFolderIds: [...targetProviderFolderIds],
+			},
+		},
+	})
+}
+
 async function executeFolderCommand(
 	command: 'addChatToFolder' | 'removeChatFromFolder',
 	target: TelegramChatTarget,

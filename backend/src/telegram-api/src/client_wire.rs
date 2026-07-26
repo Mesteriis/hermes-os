@@ -257,6 +257,17 @@ pub fn encode_command(command: &TelegramProviderCommand) -> Vec<u8> {
             provider_chat_id: provider_chat_id.clone(),
             provider_folder_id: *provider_folder_id,
         }),
+        TelegramProviderCommand::ReassignChatFolders {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            target_provider_folder_ids,
+        } => Command::ReassignChatFolders(wire::ReassignChatFoldersCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            target_provider_folder_ids: target_provider_folder_ids.clone(),
+        }),
         TelegramProviderCommand::SearchMessages {
             operation_id,
             account_id,
@@ -450,6 +461,12 @@ pub fn decode_command(
             account_id: value.account_id,
             provider_chat_id: value.provider_chat_id,
             provider_folder_id: value.provider_folder_id,
+        }),
+        Command::ReassignChatFolders(value) => Ok(TelegramProviderCommand::ReassignChatFolders {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            target_provider_folder_ids: value.target_provider_folder_ids,
         }),
         Command::SearchMessages(value) => Ok(TelegramProviderCommand::SearchMessages {
             operation_id: value.operation_id,
@@ -2730,6 +2747,7 @@ fn parse_operation(
         "leave" => crate::TelegramCommandKind::Leave,
         "folder_add" => crate::TelegramCommandKind::AddChatToFolder,
         "folder_remove" => crate::TelegramCommandKind::RemoveChatFromFolder,
+        "folder_reassign" => crate::TelegramCommandKind::ReassignChatFolders,
         "search_messages" => crate::TelegramCommandKind::SearchMessages,
         "list_participants" => crate::TelegramCommandKind::ListParticipants,
         "list_topics" => crate::TelegramCommandKind::ListTopics,

@@ -4,6 +4,7 @@ import {
 	addTelegramChatToFolder,
 	joinTelegramChat,
 	leaveTelegramChat,
+	reassignTelegramChatFolders,
 	removeTelegramChatFromFolder,
 	setTelegramChatArchived,
 	setTelegramChatMuted,
@@ -37,6 +38,7 @@ describe('Telegram chat command adapter', () => {
 		await leaveTelegramChat(target)
 		await addTelegramChatToFolder(target, 4n)
 		await removeTelegramChatFromFolder(target, 4n)
+		await reassignTelegramChatFolders(target, [7n, 11n])
 
 		expect(executeCommand.mock.calls.map(([request]) => request.command.case)).toEqual([
 			'markUnread',
@@ -46,12 +48,22 @@ describe('Telegram chat command adapter', () => {
 			'leave',
 			'addChatToFolder',
 			'removeChatFromFolder',
+			'reassignChatFolders',
 		])
+		expect(executeCommand).toHaveBeenLastCalledWith({
+			command: {
+				case: 'reassignChatFolders',
+				value: { ...target, targetProviderFolderIds: [7n, 11n] },
+			},
+		})
 	})
 
 	it('rejects invalid folder IDs before transport', async () => {
 		await expect(addTelegramChatToFolder(target, -1n)).rejects.toThrow(
 			'Telegram folder ID must be non-negative',
+		)
+		await expect(reassignTelegramChatFolders(target, [7n, 7n])).rejects.toThrow(
+			'1-64 unique positive integers',
 		)
 		expect(executeCommand).not.toHaveBeenCalled()
 	})

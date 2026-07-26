@@ -3,7 +3,7 @@
 pub const TELEGRAM_CLIENT_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.telegram.v1.bin"));
 pub const TELEGRAM_CLIENT_CONTRACT_MAJOR: u32 = 1;
-pub const TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 2;
+pub const TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 3;
 pub const TELEGRAM_MODULE_ID: &str = "hermes-telegram-runtime";
 pub const TELEGRAM_OWNER_ID: &str = "telegram";
 

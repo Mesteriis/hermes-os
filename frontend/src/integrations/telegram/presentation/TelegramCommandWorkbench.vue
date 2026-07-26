@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TelegramChatCommandModel } from '../queries/useTelegramChatCommands'
+import type { TelegramChatCommandModel } from './telegramChatCommandModel'
 import type { TelegramMediaCommandModel } from '../queries/useTelegramMediaCommands'
 import type { TelegramMessageCommandModel } from '../queries/useTelegramMessageCommands'
 import type { TelegramTopicCommandModel } from '../queries/useTelegramTopicCommands'
@@ -24,6 +24,7 @@ const emit = defineEmits<{
 	chatMarkUnread: [active: boolean]
 	chatMute: [active: boolean]
 	chatRemoveFromFolder: []
+	chatReassignFolders: []
 	mediaDownload: []
 	mediaSend: []
 	messageDelete: []
@@ -39,6 +40,7 @@ const emit = defineEmits<{
 	topicRefresh: []
 	topicSearch: []
 	updateChatFolderId: [value: string]
+	updateChatTargetFolderIds: [value: string]
 	updateMediaBlobRef: [value: string]
 	updateMediaBackupClass: [value: string]
 	updateMediaCaption: [value: string]
@@ -88,7 +90,9 @@ const emit = defineEmits<{
 				@mark-unread="emit('chatMarkUnread', $event)"
 				@mute="emit('chatMute', $event)"
 				@remove-from-folder="emit('chatRemoveFromFolder')"
+				@reassign-folders="emit('chatReassignFolders')"
 				@update-folder-id="emit('updateChatFolderId', $event)"
+				@update-target-folder-ids="emit('updateChatTargetFolderIds', $event)"
 			/>
 			<TelegramTopicCommandPanel
 				:model="topic"

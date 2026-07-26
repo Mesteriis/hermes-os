@@ -272,12 +272,20 @@ pub enum TdlibRequest {
 pub enum TdlibResponse {
     Chats(Vec<TelegramChat>),
     History(Vec<TelegramMessageObservation>),
-    Sent { provider_message_id: String },
+    Sent {
+        provider_message_id: String,
+    },
     File(TelegramFileSnapshot),
     Participants(TelegramParticipantPage),
     Topics(Vec<TelegramTopic>),
     ChatFolders(Vec<TelegramChatFolder>),
-    Accepted { operation_id: String },
+    FolderReassigned {
+        added_provider_folder_ids: Vec<i64>,
+        removed_provider_folder_ids: Vec<i64>,
+    },
+    Accepted {
+        operation_id: String,
+    },
 }
 
 pub fn get_chats_request(account_id: &str, limit: u32) -> Result<TdlibRequest, TdlibError> {
@@ -676,6 +684,15 @@ pub fn encode_provider_command(command: &TelegramProviderCommand) -> Result<Valu
             "@type": "getChatFolder",
             "chat_folder_id": provider_folder_id,
             "@extra": format!("{operation_id}:get")
+        })),
+        TelegramProviderCommand::ReassignChatFolders {
+            operation_id,
+            provider_chat_id,
+            ..
+        } => Ok(json!({
+            "@type": "getChat",
+            "chat_id": provider_id(provider_chat_id)?,
+            "@extra": format!("{operation_id}:get-chat")
         })),
         TelegramProviderCommand::SearchMessages {
             operation_id,
@@ -2162,6 +2179,62 @@ fn library_candidates(configured_path: Option<&Path>) -> Vec<PathBuf> {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct FolderReassignmentPlan {
+    added_provider_folder_ids: Vec<i64>,
+    removed_provider_folder_ids: Vec<i64>,
+}
+
+fn provider_folder_ids_from_chat(payload: &Value) -> Result<Vec<i64>, TdlibError> {
+    if payload.get("@type").and_then(Value::as_str) != Some("chat") {
+        return Err(TdlibError::Protocol(
+            "TDLib getChat response is missing chat payload".to_owned(),
+        ));
+    }
+    let mut folder_ids = Vec::new();
+    for position in payload
+        .get("positions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(list) = position.get("list") else {
+            continue;
+        };
+        if list.get("@type").and_then(Value::as_str) != Some("chatListFolder") {
+            continue;
+        }
+        let folder_id = list
+            .get("chat_folder_id")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| {
+                TdlibError::Protocol("TDLib folder chat list is missing folder id".to_owned())
+            })?;
+        if !folder_ids.contains(&folder_id) {
+            folder_ids.push(folder_id);
+        }
+    }
+    Ok(folder_ids)
+}
+
+fn plan_folder_reassignment(
+    current_provider_folder_ids: &[i64],
+    target_provider_folder_ids: &[i64],
+) -> FolderReassignmentPlan {
+    FolderReassignmentPlan {
+        added_provider_folder_ids: target_provider_folder_ids
+            .iter()
+            .copied()
+            .filter(|folder_id| !current_provider_folder_ids.contains(folder_id))
+            .collect(),
+        removed_provider_folder_ids: current_provider_folder_ids
+            .iter()
+            .copied()
+            .filter(|folder_id| !target_provider_folder_ids.contains(folder_id))
+            .collect(),
+    }
+}
+
 /// The runtime owns this port; TDLib transport implementations own sockets/processes.
 pub trait TdlibTransport {
     fn request(&mut self, request: TdlibRequest) -> Result<TdlibResponse, TdlibError>;
@@ -2246,10 +2319,79 @@ impl TdJsonTransport {
         let response = self.receive_correlated(&expected_extra)?;
         parse_response_for_request(&self.account_id, request, response)
     }
+
+    fn reassign_chat_folders(
+        &mut self,
+        request: &TdlibRequest,
+        operation_id: &str,
+        provider_chat_id: &str,
+        target_provider_folder_ids: &[i64],
+    ) -> Result<TdlibResponse, TdlibError> {
+        let chat_id = provider_id(provider_chat_id)?;
+        let get_chat_extra = format!("{operation_id}:get-chat");
+        self.client.send_json(&json!({
+            "@type": "getChat",
+            "chat_id": chat_id,
+            "@extra": get_chat_extra,
+        }))?;
+        let chat = self.receive_correlated(&get_chat_extra)?;
+        let current_provider_folder_ids = provider_folder_ids_from_chat(&chat)?;
+        let plan =
+            plan_folder_reassignment(&current_provider_folder_ids, target_provider_folder_ids);
+
+        for provider_folder_id in &plan.added_provider_folder_ids {
+            let extra = format!("{operation_id}:add:{provider_folder_id}");
+            self.client.send_json(&json!({
+                "@type": "addChatToList",
+                "chat_id": chat_id,
+                "chat_list": {
+                    "@type": "chatListFolder",
+                    "chat_folder_id": provider_folder_id,
+                },
+                "@extra": extra,
+            }))?;
+            let response = self.receive_correlated(&extra)?;
+            parse_response_for_request(&self.account_id, request, response)?;
+        }
+        for provider_folder_id in &plan.removed_provider_folder_ids {
+            let get_folder_extra = format!("{operation_id}:remove:{provider_folder_id}:get");
+            self.client.send_json(&json!({
+                "@type": "getChatFolder",
+                "chat_folder_id": provider_folder_id,
+                "@extra": get_folder_extra,
+            }))?;
+            let folder = self.receive_correlated(&get_folder_extra)?;
+            let edit_extra = format!("{operation_id}:remove:{provider_folder_id}");
+            let edit =
+                encode_remove_chat_from_folder(*provider_folder_id, chat_id, &folder, &edit_extra)?;
+            self.client.send_json(&edit)?;
+            let response = self.receive_correlated(&edit_extra)?;
+            parse_response_for_request(&self.account_id, request, response)?;
+        }
+
+        Ok(TdlibResponse::FolderReassigned {
+            added_provider_folder_ids: plan.added_provider_folder_ids,
+            removed_provider_folder_ids: plan.removed_provider_folder_ids,
+        })
+    }
 }
 
 impl TdlibTransport for TdJsonTransport {
     fn request(&mut self, request: TdlibRequest) -> Result<TdlibResponse, TdlibError> {
+        if let TdlibRequest::ProviderCommand(TelegramProviderCommand::ReassignChatFolders {
+            operation_id,
+            provider_chat_id,
+            target_provider_folder_ids,
+            ..
+        }) = &request
+        {
+            return self.reassign_chat_folders(
+                &request,
+                operation_id,
+                provider_chat_id,
+                target_provider_folder_ids,
+            );
+        }
         if let TdlibRequest::ProviderCommand(TelegramProviderCommand::RemoveChatFromFolder {
             operation_id,
             provider_chat_id,
@@ -2635,6 +2777,45 @@ mod folder_command_tests {
         assert_eq!(encoded["folder"]["excluded_chat_ids"], json!([103, 100]));
         assert_eq!(encoded["folder"]["exclude_muted"], true);
         assert_eq!(encoded["folder"]["include_bots"], true);
+    }
+
+    #[test]
+    fn folder_reassignment_converges_from_current_provider_membership() {
+        let chat = json!({
+            "@type": "chat",
+            "id": 100,
+            "positions": [
+                {"list": {"@type": "chatListMain"}, "order": 1},
+                {"list": {"@type": "chatListFolder", "chat_folder_id": 7}, "order": 2},
+                {"list": {"@type": "chatListFolder", "chat_folder_id": 9}, "order": 3},
+                {"list": {"@type": "chatListFolder", "chat_folder_id": 9}, "order": 4}
+            ]
+        });
+        let current = provider_folder_ids_from_chat(&chat).expect("provider folder memberships");
+
+        assert_eq!(current, vec![7, 9]);
+        assert_eq!(
+            plan_folder_reassignment(&current, &[9, 11]),
+            FolderReassignmentPlan {
+                added_provider_folder_ids: vec![11],
+                removed_provider_folder_ids: vec![7],
+            }
+        );
+    }
+
+    #[test]
+    fn folder_reassignment_command_starts_with_a_correlated_chat_snapshot() {
+        let command = TelegramProviderCommand::ReassignChatFolders {
+            operation_id: "op-folder-reassign".to_owned(),
+            account_id: "account".to_owned(),
+            provider_chat_id: "100".to_owned(),
+            target_provider_folder_ids: vec![9, 11],
+        };
+        let encoded = encode_provider_command(&command).expect("valid folder reassignment");
+
+        assert_eq!(encoded["@type"], "getChat");
+        assert_eq!(encoded["chat_id"], 100);
+        assert_eq!(encoded["@extra"], "op-folder-reassign:get-chat");
     }
 
     #[test]

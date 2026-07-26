@@ -82,6 +82,7 @@ describe('Telegram operational active route boundary', () => {
 			'leave',
 			'addChatToFolder',
 			'removeChatFromFolder',
+			'reassignChatFolders',
 			'searchMessages',
 			'listParticipants',
 			'listTopics',

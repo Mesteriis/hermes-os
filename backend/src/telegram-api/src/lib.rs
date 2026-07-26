@@ -705,6 +705,12 @@ pub enum TelegramProviderCommand {
         provider_chat_id: String,
         provider_folder_id: i64,
     },
+    ReassignChatFolders {
+        operation_id: TelegramOperationId,
+        account_id: TelegramAccountId,
+        provider_chat_id: String,
+        target_provider_folder_ids: Vec<i64>,
+    },
     SearchMessages {
         operation_id: TelegramOperationId,
         account_id: TelegramAccountId,
@@ -1400,6 +1406,12 @@ pub fn validate_provider_command(
             provider_chat_id,
             ..
         }
+        | TelegramProviderCommand::ReassignChatFolders {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
         | TelegramProviderCommand::SearchMessages {
             operation_id,
             account_id,
@@ -1523,6 +1535,26 @@ pub fn validate_provider_command(
         TelegramProviderCommand::SetTopicClosed {
             provider_topic_id, ..
         } => validate_id(provider_topic_id),
+        TelegramProviderCommand::ReassignChatFolders {
+            target_provider_folder_ids,
+            ..
+        } => {
+            if target_provider_folder_ids.is_empty()
+                || target_provider_folder_ids.len() > 64
+                || target_provider_folder_ids
+                    .iter()
+                    .any(|folder_id| *folder_id <= 0)
+            {
+                return Err(TelegramContractError::InvalidTransition);
+            }
+            let unique = target_provider_folder_ids
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>();
+            if unique.len() != target_provider_folder_ids.len() {
+                return Err(TelegramContractError::InvalidTransition);
+            }
+            Ok(())
+        }
         _ => Ok(()),
     }
 }
@@ -1546,6 +1578,7 @@ pub fn provider_command_account_id(command: &TelegramProviderCommand) -> &str {
         | TelegramProviderCommand::Leave { account_id, .. }
         | TelegramProviderCommand::AddChatToFolder { account_id, .. }
         | TelegramProviderCommand::RemoveChatFromFolder { account_id, .. }
+        | TelegramProviderCommand::ReassignChatFolders { account_id, .. }
         | TelegramProviderCommand::SearchMessages { account_id, .. } => account_id,
         TelegramProviderCommand::ListParticipants { account_id, .. } => account_id,
         TelegramProviderCommand::ListTopics { account_id, .. }
@@ -1573,6 +1606,7 @@ pub fn provider_command_operation_id(command: &TelegramProviderCommand) -> &str 
         | TelegramProviderCommand::Leave { operation_id, .. }
         | TelegramProviderCommand::AddChatToFolder { operation_id, .. }
         | TelegramProviderCommand::RemoveChatFromFolder { operation_id, .. }
+        | TelegramProviderCommand::ReassignChatFolders { operation_id, .. }
         | TelegramProviderCommand::SearchMessages { operation_id, .. } => operation_id,
         TelegramProviderCommand::ListParticipants { operation_id, .. } => operation_id,
         TelegramProviderCommand::ListTopics { operation_id, .. }
@@ -1600,6 +1634,7 @@ pub enum TelegramCommandKind {
     Leave,
     AddChatToFolder,
     RemoveChatFromFolder,
+    ReassignChatFolders,
     SearchMessages,
     ListParticipants,
     ListTopics,
@@ -1627,6 +1662,7 @@ impl TelegramCommandKind {
             Self::Leave => "leave",
             Self::AddChatToFolder => "folder_add",
             Self::RemoveChatFromFolder => "folder_remove",
+            Self::ReassignChatFolders => "folder_reassign",
             Self::SearchMessages => "search_messages",
             Self::ListParticipants => "list_participants",
             Self::ListTopics => "list_topics",
@@ -1656,6 +1692,9 @@ pub fn provider_command_kind(command: &TelegramProviderCommand) -> TelegramComma
         TelegramProviderCommand::AddChatToFolder { .. } => TelegramCommandKind::AddChatToFolder,
         TelegramProviderCommand::RemoveChatFromFolder { .. } => {
             TelegramCommandKind::RemoveChatFromFolder
+        }
+        TelegramProviderCommand::ReassignChatFolders { .. } => {
+            TelegramCommandKind::ReassignChatFolders
         }
         TelegramProviderCommand::SearchMessages { .. } => TelegramCommandKind::SearchMessages,
         TelegramProviderCommand::ListParticipants { .. } => TelegramCommandKind::ListParticipants,
@@ -1718,6 +1757,9 @@ pub fn provider_command_chat_id(command: &TelegramProviderCommand) -> Option<&st
             provider_chat_id, ..
         }
         | TelegramProviderCommand::RemoveChatFromFolder {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::ReassignChatFolders {
             provider_chat_id, ..
         }
         | TelegramProviderCommand::ListParticipants {

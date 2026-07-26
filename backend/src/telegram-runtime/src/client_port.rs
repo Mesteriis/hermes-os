@@ -893,7 +893,7 @@ mod tests {
         assert_eq!(contract.owner, "telegram");
         assert_eq!(contract.name, "telegram.query.v1");
         assert_eq!(contract.major, 1);
-        assert_eq!(contract.revision, 2);
+        assert_eq!(contract.revision, 3);
         assert_eq!(contract.schema_sha256.len(), 32);
     }
 
@@ -911,6 +911,24 @@ mod tests {
         assert_eq!(
             decode_module_request(&encoded).expect("decode restart"),
             (46, TelegramClientContractV1::Lifecycle, request)
+        );
+    }
+
+    #[test]
+    fn folder_reassignment_round_trips_only_through_the_command_contract() {
+        let request = TelegramClientRequest::Command(
+            hermes_telegram_api::TelegramProviderCommand::ReassignChatFolders {
+                operation_id: "folder-reassign-1".to_owned(),
+                account_id: "account-1".to_owned(),
+                provider_chat_id: "chat-1".to_owned(),
+                target_provider_folder_ids: vec![7, 11],
+            },
+        );
+        let encoded = encode_module_request(47, &request).expect("encode reassignment");
+
+        assert_eq!(
+            decode_module_request(&encoded).expect("decode reassignment"),
+            (47, TelegramClientContractV1::Command, request)
         );
     }
 

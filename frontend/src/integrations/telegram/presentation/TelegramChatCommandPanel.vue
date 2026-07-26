@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TelegramChatCommandModel } from '../queries/useTelegramChatCommands'
+import type { TelegramChatCommandModel } from './telegramChatCommandModel'
 
 defineProps<{ model: TelegramChatCommandModel }>()
 
@@ -11,7 +11,9 @@ const emit = defineEmits<{
 	markUnread: [active: boolean]
 	mute: [active: boolean]
 	removeFromFolder: []
+	reassignFolders: []
 	updateFolderId: [value: string]
+	updateTargetFolderIds: [value: string]
 }>()
 </script>
 
@@ -38,6 +40,17 @@ const emit = defineEmits<{
 			>
 			<button type="button" :disabled="!model.hasChat || !model.folderId.trim() || !model.canCommand || model.pending" @click="emit('addToFolder')">Add</button>
 			<button type="button" :disabled="!model.hasChat || !model.folderId.trim() || !model.canCommand || model.pending" @click="emit('removeFromFolder')">Remove</button>
+		</div>
+		<label for="telegram-target-folder-ids">Target folder IDs</label>
+		<div>
+			<input
+				id="telegram-target-folder-ids"
+				inputmode="numeric"
+				placeholder="7, 11"
+				:value="model.targetFolderIds"
+				@input="emit('updateTargetFolderIds', ($event.target as HTMLInputElement).value)"
+			>
+			<button type="button" :disabled="!model.hasChat || !model.targetFolderIds.trim() || !model.canCommand || model.pending" @click="emit('reassignFolders')">Reassign exact set</button>
 		</div>
 		<small role="status">{{ model.statusMessage }}</small>
 	</section>

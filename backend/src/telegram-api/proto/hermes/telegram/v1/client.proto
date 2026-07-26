@@ -142,6 +142,7 @@ message TelegramProviderCommandV1 {
     ListTopicsCommand list_topics = 20;
     CreateTopicCommand create_topic = 21;
     SetTopicClosedCommand set_topic_closed = 22;
+    ReassignChatFoldersCommand reassign_chat_folders = 23;
   }
 }
 message SendTextCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; string text = 4; }
@@ -161,6 +162,12 @@ message MuteCommand { string operation_id = 1; string account_id = 2; string pro
 message JoinCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; }
 message LeaveCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; }
 message FolderCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; int64 provider_folder_id = 4; }
+message ReassignChatFoldersCommand {
+  string operation_id = 1;
+  string account_id = 2;
+  string provider_chat_id = 3;
+  repeated int64 target_provider_folder_ids = 4;
+}
 message SearchMessagesCommand { string operation_id = 1; string account_id = 2; optional string provider_chat_id = 3; string query = 4; uint32 limit = 5; }
 message ListParticipantsCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; string filter = 4; uint32 offset = 5; uint32 limit = 6; }
 message ListTopicsCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; uint32 limit = 4; }
