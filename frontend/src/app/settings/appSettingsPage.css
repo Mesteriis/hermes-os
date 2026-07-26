@@ -1,0 +1,20 @@
+.app-settings-page {
+	background:
+		radial-gradient(circle at 100% 0, color-mix(in srgb, var(--h-color-accent) 7%, transparent), transparent 34rem),
+		var(--h-color-bg);
+}
+
+.app-settings-page .settings-tree {
+	box-shadow: var(--h-shadow-sm);
+}
+
+.app-settings-page .settings-workbench-content {
+	border-radius: var(--h-radius-lg);
+}
+
+@media (max-width: 780px) {
+	.app-settings-page {
+		height: auto;
+		min-height: 100%;
+	}
+}

@@ -9,9 +9,12 @@ operational pages используют только свои generated contracts
 controls проверяют exact capabilities. WhatsApp browser page не обходит
 host-only provider execution. Zulip page экспонирует только доказанные
 stream/direct commands и terminal status, не создавая общий chat projection.
-Provider gates остаются закрыты до provider-owned settings и удаления scoped
-legacy REST. Settings composition остаётся закрыта до собственного executable
-gate ниже.
+App-level Settings workbench, platform-owned System Control и provider-owned
+read-only panels для Mail, Telegram, WhatsApp и Zulip реализованы поверх
+sanitized bootstrap projection. Provider gates остаются закрыты до удаления
+соответствующих scoped legacy REST/query/realtime surfaces. Settings composition
+остаётся закрыта до удаления historical `domains/settings` orchestrator и mixed
+Communications settings surfaces согласно executable gate ниже.
 
 Зависит от:
 

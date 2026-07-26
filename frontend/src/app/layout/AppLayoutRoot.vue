@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import Toast from '../../shared/ui/Toast.vue'
-import SystemControlPage from '../../platform/system-control/SystemControlPage.vue'
+import AppSettingsPage from '../settings/AppSettingsPage.vue'
 import { useClientNavigationSurface } from '../queries/useClientNavigationSurface'
 import AppLayout from '../../shared/ui/shell/AppLayout.vue'
 import AppNavbar from '../../shared/ui/shell/AppNavbar.vue'
@@ -112,7 +112,7 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					v-else-if="selectedRouteId === 'communications-zulip'"
 					:can-command="zulipCommandAvailable"
 				/>
-				<SystemControlPage
+				<AppSettingsPage
 					v-else-if="selectedTopLevelRouteId === 'settings'"
 					:bootstrap="bootstrap"
 					:route-downgrade-reason="routeDowngradeReason"

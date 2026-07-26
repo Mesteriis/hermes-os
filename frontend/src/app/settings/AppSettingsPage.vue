@@ -1,0 +1,100 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import type { ClientSurfaceAdapterId } from '../../platform/client-runtime/clientSurfaces'
+import type { ClientBootstrapSnapshot } from '../../platform/gateway/clientBootstrap'
+import SystemControlPage from '../../platform/system-control/SystemControlPage.vue'
+import Icon from '../../shared/ui/Icon.vue'
+import MailSettingsPanel from '../../integrations/mail/presentation/MailSettingsPanel.vue'
+import TelegramSettingsPanel from '../../integrations/telegram/presentation/TelegramSettingsPanel.vue'
+import WhatsAppSettingsPanel from '../../integrations/whatsapp/presentation/WhatsAppSettingsPanel.vue'
+import ZulipSettingsPanel from '../../integrations/zulip/presentation/ZulipSettingsPanel.vue'
+import {
+	clientSettingsModule,
+	type SettingsOwnerId,
+} from './clientSettingsModules'
+import './appSettingsPage.css'
+
+const props = defineProps<{
+	bootstrap: ClientBootstrapSnapshot
+	routeDowngradeReason?: string
+	developerMode: boolean
+	currentLanguage: string
+	languageOptions: readonly { value: string; label: string }[]
+	compiledAdapterIds: readonly ClientSurfaceAdapterId[]
+	initialOwner?: SettingsOwnerId
+}>()
+const emit = defineEmits<{ languageChange: [value: string] }>()
+const selectedOwner = ref<SettingsOwnerId>(props.initialOwner ?? 'system')
+
+const mailModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'mail'))
+const telegramModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'telegram'))
+const whatsAppModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'whatsapp'))
+const zulipModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'zulip'))
+
+const providerNavigation = [
+	{ id: 'mail', label: 'Mail', icon: 'tabler:mail' },
+	{ id: 'telegram', label: 'Telegram', icon: 'tabler:brand-telegram' },
+	{ id: 'whatsapp', label: 'WhatsApp', icon: 'tabler:brand-whatsapp' },
+	{ id: 'zulip', label: 'Zulip', icon: 'tabler:brand-zulip' },
+] as const
+</script>
+
+<template>
+	<section class="settings-page app-settings-page">
+		<div class="settings-workbench">
+			<nav class="settings-tree" aria-label="Settings owners">
+				<header class="settings-tree-header">
+					<span>Settings</span>
+					<strong>Owner workbench</strong>
+				</header>
+				<section class="settings-tree-group">
+					<h2>Platform</h2>
+					<button
+						type="button"
+						:class="{ active: selectedOwner === 'system' }"
+						@click="selectedOwner = 'system'"
+					>
+						<Icon class="tree-icon" icon="tabler:heart-rate-monitor" />
+						<span class="settings-tree-copy">
+							<strong>System Control</strong>
+							<small>Kernel recovery and admission</small>
+						</span>
+					</button>
+				</section>
+				<section class="settings-tree-group">
+					<h2>Integrations</h2>
+					<button
+						v-for="owner in providerNavigation"
+						:key="owner.id"
+						type="button"
+						:class="{ active: selectedOwner === owner.id }"
+						@click="selectedOwner = owner.id"
+					>
+						<Icon class="tree-icon" :icon="owner.icon" />
+						<span class="settings-tree-copy">
+							<strong>{{ owner.label }}</strong>
+							<small>Provider-owned settings</small>
+						</span>
+					</button>
+				</section>
+			</nav>
+
+			<main class="settings-workbench-content">
+				<SystemControlPage
+					v-if="selectedOwner === 'system'"
+					:bootstrap="bootstrap"
+					:route-downgrade-reason="routeDowngradeReason"
+					:developer-mode="developerMode"
+					:current-language="currentLanguage"
+					:language-options="languageOptions"
+					:compiled-adapter-ids="compiledAdapterIds"
+					@language-change="emit('languageChange', $event)"
+				/>
+				<MailSettingsPanel v-else-if="selectedOwner === 'mail'" :module="mailModule" />
+				<TelegramSettingsPanel v-else-if="selectedOwner === 'telegram'" :module="telegramModule" />
+				<WhatsAppSettingsPanel v-else-if="selectedOwner === 'whatsapp'" :module="whatsAppModule" />
+				<ZulipSettingsPanel v-else :module="zulipModule" />
+			</main>
+		</div>
+	</section>
+</template>

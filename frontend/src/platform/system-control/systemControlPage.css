@@ -1,0 +1,107 @@
+.system-control-surface {
+	display: grid;
+	grid-template-rows: auto auto minmax(0, 1fr);
+	gap: var(--h-space-3);
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+}
+
+.system-control-surface__header {
+	display: flex;
+	align-items: start;
+	justify-content: space-between;
+	gap: var(--h-space-4);
+	padding: var(--h-space-4);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-sm);
+}
+
+.system-control-surface__header > div {
+	display: grid;
+	gap: var(--h-space-2);
+}
+
+.system-control-surface__header span {
+	color: var(--h-color-accent);
+	font-size: var(--h-font-size-xs);
+	font-weight: 750;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.system-control-surface__header h2,
+.system-control-surface__header p {
+	margin: 0;
+}
+
+.system-control-surface__header p {
+	color: var(--h-color-text-muted);
+}
+
+.system-control-surface__header > strong {
+	padding: var(--h-space-2) var(--h-space-3);
+	border-radius: var(--h-radius-pill);
+	color: var(--h-color-accent);
+	background: color-mix(in srgb, var(--h-color-accent) 10%, var(--h-color-surface));
+	font-size: var(--h-font-size-xs);
+	white-space: nowrap;
+}
+
+.system-control-tabs {
+	display: flex;
+	gap: var(--h-space-2);
+	padding: var(--h-space-2);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+	overflow-x: auto;
+}
+
+.system-control-tabs button {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--h-space-2);
+	min-height: 2.5rem;
+	padding: 0 var(--h-space-3);
+	border: 1px solid transparent;
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text-muted);
+	background: transparent;
+	font-weight: 650;
+	white-space: nowrap;
+}
+
+.system-control-tabs button[aria-pressed='true'] {
+	border-color: var(--h-color-accent);
+	color: var(--h-color-accent);
+	background: color-mix(in srgb, var(--h-color-accent) 10%, var(--h-color-surface));
+}
+
+.system-control-tabs em {
+	padding: 0.1rem 0.4rem;
+	border-radius: var(--h-radius-pill);
+	background: var(--h-color-bg-muted);
+	font-size: var(--h-font-size-xs);
+	font-style: normal;
+}
+
+.system-control-surface > .settings-section {
+	overflow: auto;
+}
+
+@media (max-width: 720px) {
+	.system-control-surface {
+		height: auto;
+	}
+
+	.system-control-surface__header {
+		display: grid;
+	}
+
+	.system-control-surface__header > strong {
+		justify-self: start;
+	}
+}
