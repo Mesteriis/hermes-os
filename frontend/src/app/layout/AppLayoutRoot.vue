@@ -33,6 +33,12 @@ const routeDowngradeReason = navbar.routeDowngradeReason
 const telegramCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'telegram.command.v1'),
 )
+const telegramAuthorizationAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'telegram.authorization.v1'),
+)
+const telegramLifecycleAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'telegram.lifecycle.v1'),
+)
 const whatsAppCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'whatsapp.command.v1'),
 )
@@ -102,6 +108,8 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 				/>
 				<TelegramOperationalRoute
 					v-else-if="selectedRouteId === 'communications-telegram'"
+					:can-authorize="telegramAuthorizationAvailable"
+					:can-manage-lifecycle="telegramLifecycleAvailable"
 					:can-send="telegramCommandAvailable"
 				/>
 				<WhatsAppOperationalRoute

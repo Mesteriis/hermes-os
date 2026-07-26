@@ -1,15 +1,32 @@
 <script setup lang="ts">
+import TelegramAccountAccessPanel from './TelegramAccountAccessPanel.vue'
+import type { TelegramAccountAccessModel } from './telegramAccountAccessModel'
 import type { TelegramOperationalPageModel } from './telegramOperationalPageModel'
 import './telegramOperationalPage.css'
 
-defineProps<{ model: TelegramOperationalPageModel }>()
+defineProps<{
+	accountAccess: TelegramAccountAccessModel
+	model: TelegramOperationalPageModel
+}>()
 
 const emit = defineEmits<{
 	load: []
+	provisionAccount: []
+	refreshAccounts: []
+	replayAccount: []
+	retireAccount: []
+	selectAccount: [accountId: string]
 	selectChat: [providerChatId: string]
 	send: []
+	startAccount: []
+	stopAccount: []
+	submitAuthorizationPassword: []
 	updateAccountId: [value: string]
+	updateAuthorizationPassword: [value: string]
 	updateDraft: [value: string]
+	updateProvisionAccountId: [value: string]
+	updateProvisionDisplayName: [value: string]
+	updateProvisionExternalAccountId: [value: string]
 }>()
 </script>
 
@@ -41,6 +58,22 @@ const emit = defineEmits<{
 		<p v-if="model.statusMessage" class="telegram-operational-page__status" :role="model.status === 'error' ? 'alert' : 'status'">
 			{{ model.statusMessage }}
 		</p>
+
+		<TelegramAccountAccessPanel
+			:model="accountAccess"
+			@provision="emit('provisionAccount')"
+			@refresh="emit('refreshAccounts')"
+			@replay="emit('replayAccount')"
+			@retire="emit('retireAccount')"
+			@select-account="emit('selectAccount', $event)"
+			@start="emit('startAccount')"
+			@stop="emit('stopAccount')"
+			@submit-password="emit('submitAuthorizationPassword')"
+			@update-password="emit('updateAuthorizationPassword', $event)"
+			@update-provision-account-id="emit('updateProvisionAccountId', $event)"
+			@update-provision-display-name="emit('updateProvisionDisplayName', $event)"
+			@update-provision-external-account-id="emit('updateProvisionExternalAccountId', $event)"
+		/>
 
 		<div class="telegram-operational-workbench" :aria-busy="model.status === 'loading'">
 			<aside class="telegram-operational-pane telegram-operational-pane--chats">

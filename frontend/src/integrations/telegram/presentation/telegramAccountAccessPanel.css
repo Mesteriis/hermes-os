@@ -1,0 +1,113 @@
+.telegram-account-access {
+	display: grid;
+	gap: var(--h-space-3);
+	padding: var(--h-space-4);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+}
+
+.telegram-account-access > header,
+.telegram-account-access__action-row,
+.telegram-account-access form > div {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--h-space-2);
+}
+
+.telegram-account-access h2,
+.telegram-account-access p {
+	margin: 0;
+}
+
+.telegram-account-access header span {
+	color: #229ed9;
+	font-size: var(--h-font-size-xs);
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.telegram-account-access button,
+.telegram-account-access input {
+	padding: var(--h-space-2) var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-surface-muted);
+}
+
+.telegram-account-access button:disabled {
+	opacity: 0.5;
+}
+
+.telegram-account-access button.danger {
+	color: var(--h-color-danger);
+}
+
+.telegram-account-access__status,
+.telegram-account-access small {
+	color: var(--h-color-text-muted);
+}
+
+.telegram-account-access__grid {
+	display: grid;
+	grid-template-columns: minmax(12rem, 0.8fr) minmax(18rem, 1.2fr);
+	gap: var(--h-space-3);
+}
+
+.telegram-account-access__accounts,
+.telegram-account-access__actions {
+	display: grid;
+	align-content: start;
+	gap: var(--h-space-2);
+}
+
+.telegram-account-access__accounts button {
+	display: grid;
+	gap: var(--h-space-1);
+	text-align: left;
+}
+
+.telegram-account-access__accounts button.selected {
+	border-color: #229ed9;
+	background: color-mix(in srgb, #229ed9 10%, var(--h-color-surface));
+}
+
+.telegram-account-access label,
+.telegram-account-access__provision {
+	display: grid;
+	gap: var(--h-space-1);
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+}
+
+.telegram-account-access__provision {
+	grid-template-columns: max-content minmax(0, 1fr);
+	align-items: center;
+	margin-top: var(--h-space-3);
+}
+
+.telegram-account-access__provision button {
+	grid-column: 2;
+}
+
+@media (max-width: 760px) {
+	.telegram-account-access__grid {
+		grid-template-columns: 1fr;
+	}
+
+	.telegram-account-access__action-row {
+		align-items: stretch;
+		flex-wrap: wrap;
+	}
+
+	.telegram-account-access__provision {
+		grid-template-columns: 1fr;
+	}
+
+	.telegram-account-access__provision button {
+		grid-column: 1;
+	}
+}
