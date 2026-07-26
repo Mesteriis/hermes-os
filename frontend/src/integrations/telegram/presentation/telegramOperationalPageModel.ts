@@ -30,6 +30,7 @@ export type TelegramOperationalPageModel = {
 	messages: readonly TelegramOperationalMessageRow[]
 	selectedChatId: string
 	selectedChatTitle: string
+	selectedMessageId: string
 	selectedProviderMessageId: string
 	draft: string
 	sendPending: boolean

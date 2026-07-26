@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import TelegramOperationalPage from '../presentation/TelegramOperationalPage.vue'
 import TelegramCommandWorkbench from '../presentation/TelegramCommandWorkbench.vue'
+import TelegramMessageInspector from '../presentation/TelegramMessageInspector.vue'
+import TelegramOperationRetryPanel from '../presentation/TelegramOperationRetryPanel.vue'
 import { useTelegramOperationalPage } from '../queries/useTelegramOperationalPage'
 import { useTelegramAccountAccess } from '../queries/useTelegramAccountAccess'
 import { useTelegramChatCommands } from '../queries/useTelegramChatCommands'
 import { useTelegramDiscovery } from '../queries/useTelegramDiscovery'
 import { useTelegramMediaCommands } from '../queries/useTelegramMediaCommands'
 import { useTelegramMessageCommands } from '../queries/useTelegramMessageCommands'
+import { useTelegramMessageInspector } from '../queries/useTelegramMessageInspector'
+import { useTelegramOperationRetry } from '../queries/useTelegramOperationRetry'
 import { useTelegramTopicCommands } from '../queries/useTelegramTopicCommands'
 
 const props = defineProps<{
@@ -37,6 +41,14 @@ const messageCommands = useTelegramMessageCommands({
 const chatCommands = useTelegramChatCommands(commandTarget)
 const topicCommands = useTelegramTopicCommands(commandTarget)
 const mediaCommands = useTelegramMediaCommands(commandTarget)
+const messageInspector = useTelegramMessageInspector({
+	accountId: () => accountAccess.selectedAccountId.value,
+	canQuery: () => props.canQuery,
+	messageId: () => surface.model.value.selectedMessageId,
+	providerChatId: () => surface.model.value.selectedChatId,
+	providerMessageId: () => surface.model.value.selectedProviderMessageId,
+})
+const operationRetry = useTelegramOperationRetry(() => props.canManageLifecycle)
 
 async function refreshAccounts(): Promise<void> {
 	await accountAccess.refresh()
@@ -85,6 +97,15 @@ function updateAccountId(accountId: string): void {
 		@update-provision-account-id="accountAccess.updateProvisionAccountId"
 		@update-provision-display-name="accountAccess.updateProvisionDisplayName"
 		@update-provision-external-account-id="accountAccess.updateProvisionExternalAccountId"
+	/>
+	<TelegramMessageInspector
+		:model="messageInspector.model.value"
+		@inspect="messageInspector.inspect"
+	/>
+	<TelegramOperationRetryPanel
+		:model="operationRetry.model.value"
+		@retry="operationRetry.retry"
+		@update-operation-id="operationRetry.updateOperationId"
 	/>
 	<TelegramCommandWorkbench
 		:chat="chatCommands.model.value"

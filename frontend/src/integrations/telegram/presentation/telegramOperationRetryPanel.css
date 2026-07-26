@@ -1,0 +1,56 @@
+.telegram-operation-retry {
+	display: grid;
+	gap: var(--h-space-3);
+	margin: 0 var(--h-space-5) var(--h-space-5);
+	padding: var(--h-space-4);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+}
+
+.telegram-operation-retry h2 {
+	margin: 0;
+}
+
+.telegram-operation-retry header span {
+	color: #229ed9;
+	font-size: var(--h-font-size-xs);
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.telegram-operation-retry form {
+	display: grid;
+	gap: var(--h-space-1);
+}
+
+.telegram-operation-retry form > div {
+	display: flex;
+	gap: var(--h-space-2);
+}
+
+.telegram-operation-retry input,
+.telegram-operation-retry button {
+	padding: var(--h-space-2) var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-surface-muted);
+}
+
+.telegram-operation-retry input {
+	flex: 1;
+}
+
+.telegram-operation-retry label,
+.telegram-operation-retry small {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+}
+
+@media (max-width: 760px) {
+	.telegram-operation-retry {
+		margin: 0 var(--h-space-3) var(--h-space-3);
+	}
+}

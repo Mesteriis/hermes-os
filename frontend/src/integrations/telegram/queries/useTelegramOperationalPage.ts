@@ -22,6 +22,7 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 	const chats = ref<readonly TelegramChatProjection[]>([])
 	const messages = ref<readonly TelegramMessageProjection[]>([])
 	const selectedChatId = ref('')
+	const selectedMessageId = ref('')
 	const selectedProviderMessageId = ref('')
 	const draft = ref('')
 	const sendPending = ref(false)
@@ -35,6 +36,7 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 		messages: buildTelegramMessageRows(messages.value, selectedProviderMessageId.value),
 		selectedChatId: selectedChatId.value,
 		selectedChatTitle: chats.value.find((chat) => chat.providerChatId === selectedChatId.value)?.title || '',
+		selectedMessageId: selectedMessageId.value,
 		selectedProviderMessageId: selectedProviderMessageId.value,
 		draft: draft.value,
 		sendPending: sendPending.value,
@@ -56,6 +58,7 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 				await selectChat(chats.value[0].providerChatId)
 			} else {
 				selectedChatId.value = ''
+				selectedMessageId.value = ''
 				selectedProviderMessageId.value = ''
 				messages.value = []
 			}
@@ -66,6 +69,7 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 
 	async function selectChat(providerChatId: string): Promise<void> {
 		selectedChatId.value = providerChatId
+		selectedMessageId.value = ''
 		selectedProviderMessageId.value = ''
 		status.value = 'loading'
 		statusMessage.value = 'Loading Telegram messages…'
@@ -78,7 +82,8 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 		}
 	}
 
-	function selectMessage(providerMessageId: string): void {
+	function selectMessage(messageId: string, providerMessageId: string): void {
+		selectedMessageId.value = messageId
 		selectedProviderMessageId.value = providerMessageId
 	}
 

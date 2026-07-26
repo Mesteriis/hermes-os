@@ -11,6 +11,7 @@ describe('Telegram operational active route boundary', () => {
 		const authorizationGateway = read('../api/telegramAuthorizationGateway.ts')
 		const lifecycleGateway = read('../api/telegramLifecycleGateway.ts')
 		const discoveryGateway = read('../api/telegramDiscoveryGateway.ts')
+		const inspectorGateway = read('../api/telegramMessageInspectorGateway.ts')
 		const commandGateways = [
 			read('../api/telegramChatCommandGateway.ts'),
 			read('../api/telegramMediaCommandGateway.ts'),
@@ -27,6 +28,8 @@ describe('Telegram operational active route boundary', () => {
 		const accountPresentation = read('../presentation/TelegramAccountAccessPanel.vue')
 		const discoveryPresentation = read('../presentation/TelegramDiscoveryPanel.vue')
 		const commandWorkbench = read('../presentation/TelegramCommandWorkbench.vue')
+		const messageInspector = read('../presentation/TelegramMessageInspector.vue')
+		const operationRetry = read('../presentation/TelegramOperationRetryPanel.vue')
 		const appLayout = read('../../../app/layout/AppLayoutRoot.vue')
 		const compiledAdapters = read('../../../app/client-surfaces/compiledClientSurfaceAdapters.ts')
 		const capabilityComposition = read('../../../app/client-surfaces/clientModuleCapabilities.ts')
@@ -39,12 +42,15 @@ describe('Telegram operational active route boundary', () => {
 			authorizationGateway,
 			lifecycleGateway,
 			discoveryGateway,
+			inspectorGateway,
 			...commandGateways,
 			...commandControllers,
 			presentation,
 			accountPresentation,
 			discoveryPresentation,
 			commandWorkbench,
+			messageInspector,
+			operationRetry,
 		]) {
 			expect(source).not.toMatch(/\/api\/v1\//)
 			expect(source).not.toMatch(/domains\/communications/)
@@ -55,6 +61,7 @@ describe('Telegram operational active route boundary', () => {
 		expect(lifecycleGateway).toContain('getTelegramLifecycleConnectClient')
 		expect(discoveryGateway).toContain('getTelegramOperationalConnectClient')
 		expect(discoveryGateway).not.toMatch(/as never|Record<|unknown as/)
+		expect(inspectorGateway).not.toMatch(/as never|Record<|unknown as|Object\.keys/)
 		expect(commandGateways.join('\n')).not.toMatch(/as never|Record<|unknown as/)
 		expect(commandWorkbench).not.toMatch(/emit\('action'|emit\('update'/)
 		for (const commandCase of [
@@ -85,6 +92,8 @@ describe('Telegram operational active route boundary', () => {
 		expect(presentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(accountPresentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(discoveryPresentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
+		expect(messageInspector).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
+		expect(operationRetry).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(appLayout).toContain('TelegramOperationalRoute')
 		expect(appLayout).toContain("'telegram.authorization.v1'")
 		expect(appLayout).toContain("'telegram.lifecycle.v1'")

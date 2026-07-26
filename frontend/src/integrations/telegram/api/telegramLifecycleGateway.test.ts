@@ -5,6 +5,7 @@ import {
 	provisionTelegramAccount,
 	replayTelegramAccount,
 	retireTelegramAccount,
+	retryTelegramOperation,
 	startTelegramAccount,
 	stopTelegramAccount,
 } from './telegramLifecycleGateway'
@@ -66,12 +67,21 @@ describe('Telegram lifecycle Gateway adapter', () => {
 					value: { operationId: 'replay-1', state: 'accepted' },
 				},
 			})
+			.mockResolvedValueOnce({
+				response: {
+					case: 'operation',
+					value: { operationId: 'retry-1', state: 'accepted' },
+				},
+			})
 			.mockResolvedValueOnce({ response: { case: 'accepted', value: { operationId: 'retire-1' } } })
 
 		await expect(startTelegramAccount('account-1', 'desktop', 100n)).resolves.toBe('start-1')
 		await expect(stopTelegramAccount('account-1')).resolves.toBe('stop-1')
 		await expect(replayTelegramAccount('account-1', 8n)).resolves.toMatchObject({
 			operationId: 'replay-1',
+		})
+		await expect(retryTelegramOperation('retry-1', 101n)).resolves.toMatchObject({
+			operationId: 'retry-1',
 		})
 		await expect(retireTelegramAccount('account-1')).resolves.toBe('retire-1')
 
@@ -97,6 +107,16 @@ describe('Telegram lifecycle Gateway adapter', () => {
 			},
 		})
 		expect(execute).toHaveBeenNthCalledWith(4, {
+			request: {
+				case: 'retry',
+				value: {
+					operationId: 'retry-1',
+					nowUnixSeconds: 101n,
+					nextAttemptAtUnixSeconds: 101n,
+				},
+			},
+		})
+		expect(execute).toHaveBeenNthCalledWith(5, {
 			request: { case: 'retireAccount', value: { accountId: 'account-1' } },
 		})
 	})

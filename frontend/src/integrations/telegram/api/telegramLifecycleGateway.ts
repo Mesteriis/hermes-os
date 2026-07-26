@@ -99,6 +99,26 @@ export async function replayTelegramAccount(
 	return response.response.value
 }
 
+export async function retryTelegramOperation(
+	operationId: string,
+	nowUnixSeconds: bigint,
+): Promise<TelegramOperationResponse> {
+	const response = await getTelegramLifecycleConnectClient().execute({
+		request: {
+			case: 'retry',
+			value: {
+				operationId: requireIdentifier('operation ID', operationId),
+				nowUnixSeconds,
+				nextAttemptAtUnixSeconds: nowUnixSeconds,
+			},
+		},
+	})
+	if (response.response.case !== 'operation') {
+		throw new Error('Telegram retry result is unavailable')
+	}
+	return response.response.value
+}
+
 async function executeAccountAction(
 	action: 'retireAccount' | 'stopAccount',
 	accountId: string,

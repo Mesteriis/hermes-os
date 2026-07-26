@@ -1,0 +1,90 @@
+.telegram-message-inspector {
+	display: grid;
+	gap: var(--h-space-3);
+	margin: 0 var(--h-space-5) var(--h-space-5);
+	padding: var(--h-space-4);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+}
+
+.telegram-message-inspector > header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--h-space-3);
+}
+
+.telegram-message-inspector h2,
+.telegram-message-inspector p {
+	margin: 0;
+}
+
+.telegram-message-inspector header span {
+	color: #229ed9;
+	font-size: var(--h-font-size-xs);
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.telegram-message-inspector small,
+.telegram-message-inspector p {
+	color: var(--h-color-text-muted);
+}
+
+.telegram-message-inspector button {
+	padding: var(--h-space-2) var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-surface-muted);
+}
+
+.telegram-message-inspector__badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--h-space-2);
+}
+
+.telegram-message-inspector__badges span {
+	padding: var(--h-space-1) var(--h-space-2);
+	border-radius: 999px;
+	color: #229ed9;
+	background: color-mix(in srgb, #229ed9 10%, var(--h-color-surface));
+}
+
+.telegram-message-inspector__sections {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--h-space-3);
+}
+
+.telegram-message-inspector details {
+	padding: var(--h-space-2);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+}
+
+.telegram-message-inspector summary {
+	cursor: pointer;
+	font-weight: 700;
+}
+
+.telegram-message-inspector article {
+	display: grid;
+	gap: var(--h-space-1);
+	margin-top: var(--h-space-2);
+}
+
+@media (max-width: 980px) {
+	.telegram-message-inspector__sections {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 760px) {
+	.telegram-message-inspector {
+		margin: 0 var(--h-space-3) var(--h-space-3);
+	}
+}

@@ -22,7 +22,7 @@ const emit = defineEmits<{
 	search: []
 	selectAccount: [accountId: string]
 	selectChat: [providerChatId: string]
-	selectMessage: [providerMessageId: string]
+	selectMessage: [messageId: string, providerMessageId: string]
 	send: []
 	startAccount: []
 	stopAccount: []
@@ -111,7 +111,7 @@ const emit = defineEmits<{
 					class="telegram-message-row"
 					:class="{ outgoing: message.outgoing, selected: message.selected }"
 					:aria-pressed="message.selected"
-					@click="emit('selectMessage', message.providerMessageId)"
+					@click="emit('selectMessage', message.id, message.providerMessageId)"
 				>
 					<div><strong>{{ message.sender }}</strong><small>{{ message.meta }}</small></div>
 					<p>{{ message.body }}</p>
