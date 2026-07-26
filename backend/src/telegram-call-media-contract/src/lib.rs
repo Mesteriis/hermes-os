@@ -24,6 +24,15 @@ pub struct TelegramCallProtocolV1 {
     pub library_versions: Vec<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TelegramCallPeerProtocolV1 {
+    pub udp_p2p: bool,
+    pub udp_reflector: bool,
+    pub min_layer: i32,
+    pub max_layer: i32,
+    pub library_versions: Vec<String>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TelegramCallMediaContractError {
     InvalidProtocol,
@@ -67,6 +76,37 @@ impl TelegramCallProtocolV1 {
             return Err(TelegramCallMediaContractError::InvalidProtocol);
         }
         Ok(())
+    }
+}
+
+impl TelegramCallPeerProtocolV1 {
+    pub fn select_library(
+        &self,
+        local: &TelegramCallProtocolV1,
+    ) -> Result<String, TelegramCallMediaContractError> {
+        local.validate()?;
+        if (!self.udp_p2p && !self.udp_reflector)
+            || self.min_layer <= 0
+            || self.max_layer < self.min_layer
+            || self.library_versions.is_empty()
+            || self.library_versions.len() > MAX_LIBRARY_VERSIONS
+            || self.library_versions.iter().any(|version| {
+                version.trim().is_empty()
+                    || version.len() > MAX_LIBRARY_VERSION_BYTES
+                    || version.chars().any(char::is_control)
+            })
+            || self.max_layer < local.min_layer
+            || self.min_layer > local.max_layer
+            || (!self.udp_p2p || !local.udp_p2p) && (!self.udp_reflector || !local.udp_reflector)
+        {
+            return Err(TelegramCallMediaContractError::InvalidProtocol);
+        }
+        local
+            .library_versions
+            .iter()
+            .find(|version| self.library_versions.contains(version))
+            .cloned()
+            .ok_or(TelegramCallMediaContractError::InvalidProtocol)
     }
 }
 
@@ -190,6 +230,56 @@ pub struct TelegramCallReadyPlanV1 {
     pub is_outgoing: bool,
 }
 
+pub struct TelegramCallReadyMaterialV1 {
+    pub peer_protocol: TelegramCallPeerProtocolV1,
+    pub servers: Vec<TelegramCallServerV1>,
+    pub allow_p2p: bool,
+    pub allow_tcp: bool,
+    pub call_config: TelegramCallSecretTextV1,
+    pub custom_parameters: TelegramCallSecretTextV1,
+    pub encryption_key: TelegramCallSecretBytesV1,
+    pub is_outgoing: bool,
+}
+
+impl fmt::Debug for TelegramCallReadyMaterialV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TelegramCallReadyMaterialV1")
+            .field("peer_protocol", &self.peer_protocol)
+            .field("servers", &self.servers)
+            .field("allow_p2p", &self.allow_p2p)
+            .field("allow_tcp", &self.allow_tcp)
+            .field("call_config", &"[REDACTED]")
+            .field("custom_parameters", &"[REDACTED]")
+            .field("encryption_key", &"[REDACTED]")
+            .field("is_outgoing", &self.is_outgoing)
+            .finish()
+    }
+}
+
+impl TelegramCallReadyMaterialV1 {
+    pub fn into_plan(
+        self,
+        call_session_id: String,
+        local_protocol: &TelegramCallProtocolV1,
+    ) -> Result<TelegramCallReadyPlanV1, TelegramCallMediaContractError> {
+        let library_version = self.peer_protocol.select_library(local_protocol)?;
+        let plan = TelegramCallReadyPlanV1 {
+            call_session_id,
+            library_version,
+            servers: self.servers,
+            allow_p2p: self.allow_p2p && local_protocol.udp_p2p,
+            allow_tcp: self.allow_tcp,
+            call_config: self.call_config,
+            custom_parameters: self.custom_parameters,
+            encryption_key: self.encryption_key,
+            is_outgoing: self.is_outgoing,
+        };
+        plan.validate()?;
+        Ok(plan)
+    }
+}
+
 impl fmt::Debug for TelegramCallReadyPlanV1 {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -302,6 +392,28 @@ mod tests {
         assert_eq!(protocol.max_layer, 92);
         assert_eq!(
             TelegramCallProtocolV1::new(true, true, Vec::new()),
+            Err(TelegramCallMediaContractError::InvalidProtocol)
+        );
+    }
+
+    #[test]
+    fn peer_protocol_selects_only_an_exact_local_library_with_overlapping_layers() {
+        let local = TelegramCallProtocolV1::new(true, true, vec!["pinned-tgcalls".to_owned()])
+            .expect("local protocol");
+        let peer = TelegramCallPeerProtocolV1 {
+            udp_p2p: true,
+            udp_reflector: true,
+            min_layer: 70,
+            max_layer: 100,
+            library_versions: vec!["other".to_owned(), "pinned-tgcalls".to_owned()],
+        };
+        assert_eq!(peer.select_library(&local), Ok("pinned-tgcalls".to_owned()));
+        assert_eq!(
+            TelegramCallPeerProtocolV1 {
+                library_versions: vec!["other".to_owned()],
+                ..peer
+            }
+            .select_library(&local),
             Err(TelegramCallMediaContractError::InvalidProtocol)
         );
     }

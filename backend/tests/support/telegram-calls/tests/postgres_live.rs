@@ -1,6 +1,7 @@
 use hermes_telegram_calls_core::{
     TelegramCallCommand, TelegramCallDirection, TelegramCallFailureCategory,
-    TelegramCallOperationState, TelegramProviderCallState, TelegramProviderCallUpdate,
+    TelegramCallMediaState, TelegramCallMediaUpdate, TelegramCallOperationState,
+    TelegramProviderCallState, TelegramProviderCallUpdate,
 };
 use hermes_telegram_calls_persistence::{TelegramCallsPersistence, TelegramCallsPersistenceError};
 
@@ -107,7 +108,7 @@ async fn durable_signaling_is_idempotent_fenced_and_restart_safe() {
     assert_eq!(completed.state, TelegramCallOperationState::Completed);
     assert_eq!(completed.tdlib_call_id, Some(77));
 
-    restarted
+    let media_ready = restarted
         .ingest_provider_update(
             "call-session-1",
             &TelegramProviderCallUpdate {
@@ -120,6 +121,58 @@ async fn durable_signaling_is_idempotent_fenced_and_restart_safe() {
         )
         .await
         .expect("project media-ready state before mute");
+    let media_update = TelegramCallMediaUpdate {
+        account_id: "account-1".to_owned(),
+        call_session_id: "call-session-1".to_owned(),
+        runtime_generation: 1,
+        provider_revision: media_ready.session.revision,
+        state: TelegramCallMediaState::Connecting,
+        observed_at_unix_seconds: 105,
+    };
+    let connecting = restarted
+        .ingest_media_update(&media_update)
+        .await
+        .expect("persist connecting media");
+    assert_eq!(connecting.revision, 1);
+    let active = restarted
+        .ingest_media_update(&TelegramCallMediaUpdate {
+            state: TelegramCallMediaState::Active,
+            observed_at_unix_seconds: 106,
+            ..media_update.clone()
+        })
+        .await
+        .expect("persist active media");
+    assert_eq!(active.revision, 2);
+    assert_eq!(active.connected_at_unix_seconds, Some(106));
+    let duplicate = restarted
+        .ingest_media_update(&TelegramCallMediaUpdate {
+            state: TelegramCallMediaState::Active,
+            observed_at_unix_seconds: 107,
+            ..media_update.clone()
+        })
+        .await
+        .expect("replay duplicate media state");
+    assert_eq!(duplicate.revision, 2);
+    assert_eq!(
+        restarted
+            .ingest_media_update(&TelegramCallMediaUpdate {
+                runtime_generation: 2,
+                state: TelegramCallMediaState::Active,
+                observed_at_unix_seconds: 108,
+                ..media_update.clone()
+            })
+            .await
+            .expect_err("stale runtime cannot mutate media"),
+        TelegramCallsPersistenceError::IdentityConflict
+    );
+    assert_eq!(
+        restarted
+            .media_projection("account-1", "call-session-1")
+            .await
+            .expect("load media after persistence restart")
+            .expect("media projection exists"),
+        active
+    );
 
     let mute = TelegramCallCommand::SetLocalMute {
         operation_id: "operation-mute".to_owned(),
@@ -128,16 +181,16 @@ async fn durable_signaling_is_idempotent_fenced_and_restart_safe() {
         muted: true,
     };
     restarted
-        .accept_call_command(&mute, None, 1, 1, 105)
+        .accept_call_command(&mute, None, 1, 1, 109)
         .await
         .expect("accept local mute");
     let claimed = restarted
-        .claim_accepted_call_operations("account-1", 1, 1, 106, 10)
+        .claim_accepted_call_operations("account-1", 1, 1, 110, 10)
         .await
         .expect("claim local mute");
     assert_eq!(claimed.len(), 1);
     restarted
-        .complete_local_mute_operation("account-1", "operation-mute", 107)
+        .complete_local_mute_operation("account-1", "operation-mute", 111)
         .await
         .expect("complete local mute");
     assert!(
@@ -153,12 +206,12 @@ async fn durable_signaling_is_idempotent_fenced_and_restart_safe() {
         call_session_id: "call-session-1".to_owned(),
     };
     restarted
-        .accept_call_command(&end, None, 1, 1, 108)
+        .accept_call_command(&end, None, 1, 1, 112)
         .await
         .expect("accept end under old fence");
     assert_eq!(
         restarted
-            .fail_stale_accepted_call_operations("account-1", 2, 2, 109)
+            .fail_stale_accepted_call_operations("account-1", 2, 2, 113)
             .await
             .expect("fence stale command"),
         1

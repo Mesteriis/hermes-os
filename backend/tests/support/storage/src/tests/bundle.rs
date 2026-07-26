@@ -43,7 +43,7 @@ fn admits_the_canonical_telegram_bundle() {
 
 #[test]
 fn admits_the_canonical_telegram_release_bundle() {
-    let bundle = hermes_telegram_assembly::telegram_storage_bundle_with_call_signaling_v4();
+    let bundle = hermes_telegram_assembly::telegram_storage_bundle_with_call_media_v5();
     assert_eq!(admit_storage_bundle(&bundle), Ok(()));
 }
 

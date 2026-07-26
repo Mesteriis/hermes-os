@@ -474,7 +474,12 @@ fn managed_telegram_call_history_route_is_durable_and_replayable() {
         call.discard_reason,
         Some(CallDiscardReasonV1::Missed as i32)
     );
-    assert_eq!(call.revision, 2);
+    assert_eq!(call.revision, 3);
+    assert_eq!(
+        telegram_call_media_state(),
+        "active",
+        "managed TDLib ready/signaling must drive the signed tgcalls artifact into a durable media state"
+    );
 
     let replay = route_telegram_calls_until_ready(
         &store,
@@ -490,16 +495,21 @@ fn managed_telegram_call_history_route_is_durable_and_replayable() {
         .encode_to_vec(),
     );
     let replay = decode_calls_replay_response(&replay);
-    assert_eq!(replay.frames.len(), 2);
+    assert_eq!(replay.frames.len(), 3);
     let Some(call_frame_v1::Event::Call(pending_call)) = replay.frames[0].event.as_ref() else {
         panic!("pending call frame is unexpected");
     };
-    let Some(call_frame_v1::Event::Call(ended_call)) = replay.frames[1].event.as_ref() else {
+    let Some(call_frame_v1::Event::Call(ready_call)) = replay.frames[1].event.as_ref() else {
+        panic!("ready call frame is unexpected");
+    };
+    let Some(call_frame_v1::Event::Call(ended_call)) = replay.frames[2].event.as_ref() else {
         panic!("ended call frame is unexpected");
     };
     assert_eq!(pending_call.revision, 1);
-    assert_eq!(ended_call.revision, 2);
+    assert_eq!(ready_call.revision, 2);
+    assert_eq!(ended_call.revision, 3);
     assert!(replay.frames[0].sequence < replay.frames[1].sequence);
+    assert!(replay.frames[1].sequence < replay.frames[2].sequence);
     assert!(!replay.reset_required);
 
     let stale_runtime = telegram.clone();

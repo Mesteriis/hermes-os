@@ -15,8 +15,9 @@ use hermes_telegram_calls_api::{
 };
 use hermes_telegram_calls_core::{
     TelegramCallCommand, TelegramCallDirection, TelegramCallDiscardReason,
-    TelegramCallFailureCategory, TelegramCallOperation, TelegramCallOperationKind,
-    TelegramCallOperationState, TelegramCallSession, TelegramProviderCallState,
+    TelegramCallFailureCategory, TelegramCallMediaState, TelegramCallOperation,
+    TelegramCallOperationKind, TelegramCallOperationState, TelegramCallSession,
+    TelegramProviderCallState,
 };
 use hermes_telegram_calls_persistence::{
     TelegramCallRealtimeEvent, TelegramCallRealtimePayload, TelegramCallsPersistence,
@@ -178,13 +179,8 @@ async fn handle_query(
                     .call(&query.account_id, &query.call_session_id)
                     .await
                 {
-                    Ok(Some(call)) => match persistence
-                        .local_mute(&call.account_id, &call.call_session_id)
-                        .await
-                    {
-                        Ok(local_muted) => query_response(calls_query_response_v1::Response::Call(
-                            call_wire(&call, local_muted),
-                        )),
+                    Ok(Some(call)) => match persisted_call_wire(persistence, &call).await {
+                        Ok(call) => query_response(calls_query_response_v1::Response::Call(call)),
                         Err(error) => query_persistence_failure(error),
                     },
                     Ok(None) => query_failure(CallsFailureCodeV1::NotFound, "call_session_id"),
@@ -197,13 +193,8 @@ async fn handle_query(
                 query_failure(CallsFailureCodeV1::InvalidRequest, "account_id")
             } else {
                 match persistence.active_call(&query.account_id).await {
-                    Ok(Some(call)) => match persistence
-                        .local_mute(&call.account_id, &call.call_session_id)
-                        .await
-                    {
-                        Ok(local_muted) => query_response(calls_query_response_v1::Response::Call(
-                            call_wire(&call, local_muted),
-                        )),
+                    Ok(Some(call)) => match persisted_call_wire(persistence, &call).await {
+                        Ok(call) => query_response(calls_query_response_v1::Response::Call(call)),
                         Err(error) => query_persistence_failure(error),
                     },
                     Ok(None) => {
@@ -403,7 +394,11 @@ async fn handle_command<R: TelegramCallsCommandRuntime>(
     Ok(response.encode_to_vec())
 }
 
-fn call_wire(call: &TelegramCallSession, local_muted: bool) -> TelegramCallV1 {
+fn call_wire(
+    call: &TelegramCallSession,
+    local_muted: bool,
+    media_state: Option<TelegramCallMediaState>,
+) -> TelegramCallV1 {
     TelegramCallV1 {
         call_session_id: call.call_session_id.clone(),
         account_id: call.account_id.clone(),
@@ -413,13 +408,23 @@ fn call_wire(call: &TelegramCallSession, local_muted: bool) -> TelegramCallV1 {
             TelegramCallDirection::Incoming => CallDirectionV1::Incoming as i32,
             TelegramCallDirection::Outgoing => CallDirectionV1::Outgoing as i32,
         },
-        state: match call.state {
-            TelegramProviderCallState::Pending => CallStateV1::Pending as i32,
-            TelegramProviderCallState::ExchangingKeys => CallStateV1::ExchangingKeys as i32,
-            TelegramProviderCallState::MediaReady => CallStateV1::MediaReady as i32,
-            TelegramProviderCallState::HangingUp => CallStateV1::HangingUp as i32,
-            TelegramProviderCallState::Discarded => CallStateV1::Ended as i32,
-            TelegramProviderCallState::Error => CallStateV1::Failed as i32,
+        state: match (call.state, media_state) {
+            (TelegramProviderCallState::MediaReady, Some(TelegramCallMediaState::Connecting))
+            | (TelegramProviderCallState::MediaReady, Some(TelegramCallMediaState::Reconnecting)) => {
+                CallStateV1::Connecting as i32
+            }
+            (TelegramProviderCallState::MediaReady, Some(TelegramCallMediaState::Active)) => {
+                CallStateV1::Active as i32
+            }
+            (TelegramProviderCallState::MediaReady, Some(TelegramCallMediaState::Failed)) => {
+                CallStateV1::Failed as i32
+            }
+            (TelegramProviderCallState::Pending, _) => CallStateV1::Pending as i32,
+            (TelegramProviderCallState::ExchangingKeys, _) => CallStateV1::ExchangingKeys as i32,
+            (TelegramProviderCallState::MediaReady, None) => CallStateV1::MediaReady as i32,
+            (TelegramProviderCallState::HangingUp, _) => CallStateV1::HangingUp as i32,
+            (TelegramProviderCallState::Discarded, _) => CallStateV1::Ended as i32,
+            (TelegramProviderCallState::Error, _) => CallStateV1::Failed as i32,
         },
         pending_created: call.pending_created,
         pending_received: call.pending_received,
@@ -476,7 +481,7 @@ fn frame_wire(frame: &TelegramCallRealtimeEvent) -> CallFrameV1 {
             TelegramCallRealtimePayload::Call {
                 session,
                 local_muted,
-            } => call_frame_v1::Event::Call(call_wire(session, *local_muted)),
+            } => call_frame_v1::Event::Call(call_wire(session, *local_muted, None)),
             TelegramCallRealtimePayload::Operation(operation) => {
                 call_frame_v1::Event::Operation(operation_wire(operation))
             }
@@ -490,12 +495,23 @@ async fn calls_wire(
 ) -> Result<Vec<TelegramCallV1>, TelegramCallsPersistenceError> {
     let mut wire = Vec::with_capacity(calls.len());
     for call in calls {
-        let local_muted = persistence
-            .local_mute(&call.account_id, &call.call_session_id)
-            .await?;
-        wire.push(call_wire(call, local_muted));
+        wire.push(persisted_call_wire(persistence, call).await?);
     }
     Ok(wire)
+}
+
+async fn persisted_call_wire(
+    persistence: &TelegramCallsPersistence,
+    call: &TelegramCallSession,
+) -> Result<TelegramCallV1, TelegramCallsPersistenceError> {
+    let local_muted = persistence
+        .local_mute(&call.account_id, &call.call_session_id)
+        .await?;
+    let media_state = persistence
+        .media_projection(&call.account_id, &call.call_session_id)
+        .await?
+        .map(|projection| projection.state);
+    Ok(call_wire(call, local_muted, media_state))
 }
 
 fn failure_category_wire(category: TelegramCallFailureCategory) -> i32 {
@@ -694,7 +710,7 @@ mod tests {
             ended_at_unix_seconds: None,
         };
 
-        let bytes = call_wire(&call, false).encode_to_vec();
+        let bytes = call_wire(&call, false, None).encode_to_vec();
         assert!(!bytes.is_empty());
         assert!(!String::from_utf8_lossy(&bytes).contains("runtime_generation"));
         assert!(!String::from_utf8_lossy(&bytes).contains("tdlib_call_id"));

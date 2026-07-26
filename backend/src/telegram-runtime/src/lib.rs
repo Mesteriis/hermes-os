@@ -36,6 +36,7 @@ use hermes_telegram_api::{
     provider_command_operation_id, provider_query_account_id, validate_provider_command,
     validate_provider_query, validate_setup,
 };
+use hermes_telegram_call_media_contract::{TelegramCallReadyMaterialV1, TelegramCallSecretBytesV1};
 use hermes_telegram_core::{
     TelegramLifecycle, accept_operation, credential_lease_purposes, event_chat_state,
     event_message_mutation, observation_draft, operation_awaiting_provider, operation_completed,
@@ -62,10 +63,24 @@ use projection_cache::TelegramRuntimeProjectionCache;
 
 pub const PACKAGE: &str = "hermes-telegram-runtime";
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug)]
+pub enum TelegramCallProviderUpdate {
+    Observation(TdlibCallObservation),
+    Ready {
+        observation: TdlibCallObservation,
+        material: TelegramCallReadyMaterialV1,
+    },
+    Signaling {
+        account_id: String,
+        tdlib_call_id: i32,
+        data: TelegramCallSecretBytesV1,
+    },
+}
+
+#[derive(Debug)]
 pub struct TelegramProviderPollBatch {
     pub frames: Vec<TelegramRealtimeFrame>,
-    pub call_observations: Vec<TdlibCallObservation>,
+    pub call_updates: Vec<TelegramCallProviderUpdate>,
 }
 
 #[derive(Debug)]
@@ -574,7 +589,7 @@ mod tests {
             .expect("provider polling");
 
         assert_eq!(frames.frames.len(), 1);
-        assert!(frames.call_observations.is_empty());
+        assert!(frames.call_updates.is_empty());
         assert_eq!(frames.frames[0].sequence, 1);
         assert_eq!(
             frames.frames[0].provider_cursor.as_deref(),
@@ -867,6 +882,7 @@ pub struct TelegramRuntime<T> {
     media_materializer: Option<TelegramBlobMaterializer<BlobDataClient>>,
     call_media:
         Option<Box<dyn hermes_telegram_call_media_contract::TelegramCallSignalingMediaPort>>,
+    active_call_media: Option<calls_execution::TelegramActiveCallMediaSession>,
     admission: Option<TelegramRuntimeAdmission>,
 }
 
@@ -1048,6 +1064,7 @@ where
             lifecycle: TelegramLifecycle,
             media_materializer: None,
             call_media: None,
+            active_call_media: None,
             admission: None,
         }
     }
@@ -2710,7 +2727,7 @@ where
     ) -> Result<TelegramProviderPollBatch, TdlibError> {
         let updates = self.transport.poll_updates()?;
         let mut frames = Vec::with_capacity(updates.len());
-        let mut call_observations = Vec::new();
+        let mut call_updates = Vec::new();
         for update in updates {
             match update {
                 TdlibProviderUpdate::Operational(event) => {
@@ -2738,13 +2755,43 @@ where
                             "Telegram call update belongs to another account".to_owned(),
                         ));
                     }
-                    call_observations.push(observation);
+                    call_updates.push(TelegramCallProviderUpdate::Observation(observation));
+                }
+                TdlibProviderUpdate::CallReady {
+                    observation,
+                    material,
+                } => {
+                    if observation.account_id != account_id {
+                        return Err(TdlibError::Protocol(
+                            "Telegram call update belongs to another account".to_owned(),
+                        ));
+                    }
+                    call_updates.push(TelegramCallProviderUpdate::Ready {
+                        observation,
+                        material,
+                    });
+                }
+                TdlibProviderUpdate::CallSignaling {
+                    account_id: signaling_account_id,
+                    tdlib_call_id,
+                    data,
+                } => {
+                    if signaling_account_id != account_id {
+                        return Err(TdlibError::Protocol(
+                            "Telegram call signaling belongs to another account".to_owned(),
+                        ));
+                    }
+                    call_updates.push(TelegramCallProviderUpdate::Signaling {
+                        account_id: signaling_account_id,
+                        tdlib_call_id,
+                        data,
+                    });
                 }
             }
         }
         Ok(TelegramProviderPollBatch {
             frames,
-            call_observations,
+            call_updates,
         })
     }
 

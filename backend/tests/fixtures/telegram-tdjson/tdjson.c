@@ -70,6 +70,20 @@ void *td_json_client_create(void) {
     );
     enqueue(
         client,
+        "{\"@type\":\"updateCall\",\"call\":{\"id\":41,\"unique_id\":5001,\"user_id\":42,\"is_outgoing\":false,\"is_video\":false,\"state\":{\"@type\":\"callStateReady\",\"protocol\":{\"@type\":\"callProtocol\",\"udp_p2p\":true,\"udp_reflector\":true,\"min_layer\":65,\"max_layer\":92,\"library_versions\":[\"13.0.0\"]},\"servers\":[{\"@type\":\"callServer\",\"id\":4,\"ip_address\":\"127.0.0.1\",\"ipv6_address\":\"\",\"port\":443,\"type\":{\"@type\":\"callServerTypeTelegramReflector\",\"peer_tag\":\"CAgICAgICAgICAgICAgICA==\",\"is_tcp\":false}}],\"config\":\"managed-private-config\",\"encryption_key\":\""
+        "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH"
+        "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH"
+        "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH"
+        "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH"
+        "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBw=="
+        "\",\"custom_parameters\":\"managed-private-parameters\",\"allow_p2p\":true,\"is_group_call_supported\":false}}}"
+    );
+    enqueue(
+        client,
+        "{\"@type\":\"updateNewCallSignalingData\",\"call_id\":41,\"data\":\"aW5jb21pbmctc2lnbmFs\"}"
+    );
+    enqueue(
+        client,
         "{\"@type\":\"updateCall\",\"call\":{\"id\":41,\"unique_id\":5001,\"user_id\":42,\"is_outgoing\":false,\"is_video\":false,\"state\":{\"@type\":\"callStateDiscarded\",\"reason\":{\"@type\":\"callDiscardReasonMissed\"},\"need_rating\":false,\"need_debug_information\":false,\"need_log\":false}}}"
     );
     return client;
@@ -83,9 +97,15 @@ void td_json_client_send(void *raw_client, const char *request) {
         !extract_extra(request, extra, sizeof(extra))) {
         return;
     }
-    const char *format = strstr(request, "\"@type\":\"sendMessage\"") == NULL
-        ? "{\"@type\":\"ok\",\"@extra\":\"%s\"}"
-        : "{\"@type\":\"message\",\"id\":8001,\"@extra\":\"%s\"}";
+    const char *format;
+    if (strstr(request, "\"@type\":\"sendCallSignalingData\"") != NULL
+        && strstr(request, "\"data\":\"b3V0Ym91bmQtc2lnbmFs\"") == NULL) {
+        format = "{\"@type\":\"error\",\"code\":400,\"message\":\"invalid fixture signaling\",\"@extra\":\"%s\"}";
+    } else {
+        format = strstr(request, "\"@type\":\"sendMessage\"") == NULL
+            ? "{\"@type\":\"ok\",\"@extra\":\"%s\"}"
+            : "{\"@type\":\"message\",\"id\":8001,\"@extra\":\"%s\"}";
+    }
     int written = snprintf(response, sizeof(response), format, extra);
     if (written > 0 && (size_t)written < sizeof(response)) {
         enqueue(client, response);

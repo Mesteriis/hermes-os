@@ -59,6 +59,35 @@ impl TelegramProviderCallState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TelegramCallMediaState {
+    Connecting,
+    Active,
+    Reconnecting,
+    Failed,
+}
+
+impl TelegramCallMediaState {
+    pub const fn storage_name(self) -> &'static str {
+        match self {
+            Self::Connecting => "connecting",
+            Self::Active => "active",
+            Self::Reconnecting => "reconnecting",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub fn from_storage_name(value: &str) -> Option<Self> {
+        match value {
+            "connecting" => Some(Self::Connecting),
+            "active" => Some(Self::Active),
+            "reconnecting" => Some(Self::Reconnecting),
+            "failed" => Some(Self::Failed),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TelegramCallDiscardReason {
     Empty,
     Missed,
@@ -527,6 +556,131 @@ pub struct TelegramCallSession {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TelegramCallMediaUpdate {
+    pub account_id: String,
+    pub call_session_id: String,
+    pub runtime_generation: u64,
+    pub provider_revision: u64,
+    pub state: TelegramCallMediaState,
+    pub observed_at_unix_seconds: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TelegramCallMediaProjection {
+    pub account_id: String,
+    pub call_session_id: String,
+    pub runtime_generation: u64,
+    pub provider_revision: u64,
+    pub state: TelegramCallMediaState,
+    pub revision: u64,
+    pub connected_at_unix_seconds: Option<u64>,
+    pub updated_at_unix_seconds: u64,
+    pub failed_at_unix_seconds: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProjectedCallMediaUpdate {
+    pub projection: TelegramCallMediaProjection,
+    pub changed: bool,
+}
+
+pub fn project_call_media_update(
+    current: Option<&TelegramCallMediaProjection>,
+    update: &TelegramCallMediaUpdate,
+) -> Result<ProjectedCallMediaUpdate, TelegramCallProjectionError> {
+    validate_id("account_id", &update.account_id)?;
+    validate_id("call_session_id", &update.call_session_id)?;
+    if update.runtime_generation == 0
+        || update.provider_revision == 0
+        || update.observed_at_unix_seconds == 0
+    {
+        return Err(TelegramCallProjectionError::InvalidRequest("media_update"));
+    }
+    let Some(current) = current else {
+        if update.state == TelegramCallMediaState::Reconnecting {
+            return Err(TelegramCallProjectionError::StateRegression);
+        }
+        return Ok(ProjectedCallMediaUpdate {
+            projection: TelegramCallMediaProjection {
+                account_id: update.account_id.clone(),
+                call_session_id: update.call_session_id.clone(),
+                runtime_generation: update.runtime_generation,
+                provider_revision: update.provider_revision,
+                state: update.state,
+                revision: 1,
+                connected_at_unix_seconds: (update.state == TelegramCallMediaState::Active)
+                    .then_some(update.observed_at_unix_seconds),
+                updated_at_unix_seconds: update.observed_at_unix_seconds,
+                failed_at_unix_seconds: (update.state == TelegramCallMediaState::Failed)
+                    .then_some(update.observed_at_unix_seconds),
+            },
+            changed: true,
+        });
+    };
+    if current.account_id != update.account_id
+        || current.call_session_id != update.call_session_id
+        || update.provider_revision < current.provider_revision
+    {
+        return Err(TelegramCallProjectionError::IdentityConflict);
+    }
+    if current.runtime_generation != update.runtime_generation {
+        if update.state != TelegramCallMediaState::Connecting {
+            return Err(TelegramCallProjectionError::StateRegression);
+        }
+    } else {
+        if current.state == update.state {
+            return Ok(ProjectedCallMediaUpdate {
+                projection: current.clone(),
+                changed: false,
+            });
+        }
+        let valid_transition = matches!(
+            (current.state, update.state),
+            (
+                TelegramCallMediaState::Connecting,
+                TelegramCallMediaState::Active | TelegramCallMediaState::Failed
+            ) | (
+                TelegramCallMediaState::Active,
+                TelegramCallMediaState::Reconnecting | TelegramCallMediaState::Failed
+            ) | (
+                TelegramCallMediaState::Reconnecting,
+                TelegramCallMediaState::Active | TelegramCallMediaState::Failed
+            )
+        );
+        if !valid_transition {
+            return Err(if current.state == TelegramCallMediaState::Failed {
+                TelegramCallProjectionError::TerminalConflict
+            } else {
+                TelegramCallProjectionError::StateRegression
+            });
+        }
+    }
+    Ok(ProjectedCallMediaUpdate {
+        projection: TelegramCallMediaProjection {
+            account_id: current.account_id.clone(),
+            call_session_id: current.call_session_id.clone(),
+            runtime_generation: update.runtime_generation,
+            provider_revision: update.provider_revision,
+            state: update.state,
+            revision: current.revision + 1,
+            connected_at_unix_seconds: if current.runtime_generation != update.runtime_generation {
+                None
+            } else {
+                current.connected_at_unix_seconds
+            }
+            .or_else(|| {
+                (update.state == TelegramCallMediaState::Active)
+                    .then_some(update.observed_at_unix_seconds)
+            }),
+            updated_at_unix_seconds: update.observed_at_unix_seconds,
+            failed_at_unix_seconds: (update.state == TelegramCallMediaState::Failed)
+                .then_some(update.observed_at_unix_seconds),
+        },
+        changed: true,
+    })
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectedCallUpdate {
     pub session: TelegramCallSession,
     pub changed: bool,
@@ -788,6 +942,53 @@ mod tests {
 
         assert!(!replay.changed);
         assert_eq!(replay.session, first.session);
+    }
+
+    #[test]
+    fn media_projection_is_fenced_restartable_and_terminal() {
+        let update = TelegramCallMediaUpdate {
+            account_id: "account-1".to_owned(),
+            call_session_id: "call-session-1".to_owned(),
+            runtime_generation: 1,
+            provider_revision: 2,
+            state: TelegramCallMediaState::Connecting,
+            observed_at_unix_seconds: 20,
+        };
+        let connecting =
+            project_call_media_update(None, &update).expect("connecting media projection");
+        let active = project_call_media_update(
+            Some(&connecting.projection),
+            &TelegramCallMediaUpdate {
+                state: TelegramCallMediaState::Active,
+                observed_at_unix_seconds: 21,
+                ..update.clone()
+            },
+        )
+        .expect("active media projection");
+        assert_eq!(active.projection.connected_at_unix_seconds, Some(21));
+        assert_eq!(
+            project_call_media_update(
+                Some(&active.projection),
+                &TelegramCallMediaUpdate {
+                    runtime_generation: 2,
+                    state: TelegramCallMediaState::Active,
+                    observed_at_unix_seconds: 22,
+                    ..update.clone()
+                },
+            ),
+            Err(TelegramCallProjectionError::StateRegression)
+        );
+        let restarted = project_call_media_update(
+            Some(&active.projection),
+            &TelegramCallMediaUpdate {
+                runtime_generation: 2,
+                state: TelegramCallMediaState::Connecting,
+                observed_at_unix_seconds: 23,
+                ..update
+            },
+        )
+        .expect("new generation starts a new media session");
+        assert_eq!(restarted.projection.connected_at_unix_seconds, None);
     }
 
     #[test]

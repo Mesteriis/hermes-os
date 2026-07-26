@@ -1,3 +1,4 @@
+mod media;
 mod operations;
 mod realtime;
 mod repository;

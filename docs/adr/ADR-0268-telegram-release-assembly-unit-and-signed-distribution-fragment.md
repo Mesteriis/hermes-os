@@ -9,9 +9,11 @@ fragment с полным release input и signed-manifest test проверяе�
 storage и две bound native dependency entries. Runtime теперь fail-closed
 получает exact TDJson и tgcalls artifacts из Kernel-staged configuration.
 Disposable managed conformance подтверждает этот binding вместе с Vault,
-Storage, NATS, history query/replay, restart и stale fence; test-only tgcalls
-ABI fixture не является evidence real audio. Полный signaling/media/live-call
-conformance остаётся prerequisite для `telegram_calls_command_v1`.
+Storage, NATS, exact V5 storage bundle, history query/replay, TDLib
+ready/signaling, pinned media lifecycle, restart и stale fence; test-only
+tgcalls ABI fixture не является evidence real audio. Job Platform backfill,
+real media и authorized live-call conformance остаются prerequisite для
+`telegram_calls_command_v1`.
 
 Зависит от:
 

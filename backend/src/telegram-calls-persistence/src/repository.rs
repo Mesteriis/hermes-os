@@ -83,6 +83,10 @@ impl TelegramCallsPersistence {
             .execute(&self.pool)
             .await
             .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        sqlx::raw_sql(crate::schema::TELEGRAM_CALLS_SCHEMA_V3)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| TelegramCallsPersistenceError::Database)?;
         Ok(())
     }
 
@@ -150,6 +154,29 @@ impl TelegramCallsPersistence {
         )
         .bind(account_id)
         .bind(call_session_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        row.as_ref().map(session_from_row).transpose()
+    }
+
+    pub async fn call_by_runtime_identity(
+        &self,
+        account_id: &str,
+        runtime_generation: u64,
+        tdlib_call_id: i32,
+    ) -> Result<Option<TelegramCallSession>, TelegramCallsPersistenceError> {
+        let row = sqlx::query(
+            "SELECT call_session_id, account_id, runtime_generation, tdlib_call_id, \
+             provider_call_unique_id, provider_user_id, direction, provider_state, \
+             pending_created, pending_received, discard_reason, failure_category, revision, \
+             created_at_unix_seconds, updated_at_unix_seconds, ended_at_unix_seconds \
+             FROM hermes_data.telegram_call_sessions \
+             WHERE account_id = $1 AND runtime_generation = $2 AND tdlib_call_id = $3",
+        )
+        .bind(account_id)
+        .bind(as_i64(runtime_generation)?)
+        .bind(tdlib_call_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|_| TelegramCallsPersistenceError::Database)?;

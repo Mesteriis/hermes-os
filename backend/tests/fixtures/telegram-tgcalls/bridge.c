@@ -12,7 +12,7 @@
 
 typedef struct {
     int stopped;
-    int state_event_pending;
+    int event_index;
     int muted;
 } HermesTgCallsFixtureSession;
 
@@ -78,7 +78,7 @@ int32_t hermes_tgcalls_session_create_v1(
     if (session == NULL) {
         return HERMES_TGCALLS_NATIVE_FAILURE_V1;
     }
-    session->state_event_pending = 1;
+    session->event_index = 0;
     *session_out = session;
     return HERMES_TGCALLS_OK_V1;
 }
@@ -88,7 +88,12 @@ int32_t hermes_tgcalls_session_receive_signaling_v1(
     const uint8_t *data,
     size_t data_length) {
     HermesTgCallsFixtureSession *session = raw_session;
+    static const uint8_t expected[] = "incoming-signal";
     if (session == NULL || session->stopped || data == NULL || data_length == 0) {
+        return HERMES_TGCALLS_INVALID_ARGUMENT_V1;
+    }
+    if (data_length != sizeof(expected) - 1
+        || memcmp(data, expected, sizeof(expected) - 1) != 0) {
         return HERMES_TGCALLS_INVALID_ARGUMENT_V1;
     }
     return HERMES_TGCALLS_OK_V1;
@@ -109,15 +114,27 @@ int32_t hermes_tgcalls_session_poll_event_v1(
     uint8_t *payload_out,
     size_t payload_capacity) {
     HermesTgCallsFixtureSession *session = raw_session;
-    (void)payload_out;
-    (void)payload_capacity;
     if (session == NULL || event_out == NULL) {
         return HERMES_TGCALLS_INVALID_ARGUMENT_V1;
     }
-    if (!session->state_event_pending) {
+    if (session->event_index == 0) {
+        static const uint8_t signaling[] = "outbound-signal";
+        size_t signaling_length = sizeof(signaling) - 1;
+        if (payload_out == NULL || payload_capacity < signaling_length) {
+            return HERMES_TGCALLS_BUFFER_TOO_SMALL_V1;
+        }
+        memcpy(payload_out, signaling, signaling_length);
+        session->event_index = 1;
+        event_out->abi_version = HERMES_TGCALLS_ABI_VERSION_V1;
+        event_out->kind = HERMES_TGCALLS_SIGNALING_EVENT_V1;
+        event_out->state = HERMES_TGCALLS_CONNECTING_V1;
+        event_out->payload_length = signaling_length;
+        return HERMES_TGCALLS_EVENT_V1;
+    }
+    if (session->event_index > 1) {
         return HERMES_TGCALLS_OK_V1;
     }
-    session->state_event_pending = 0;
+    session->event_index = 2;
     event_out->abi_version = HERMES_TGCALLS_ABI_VERSION_V1;
     event_out->kind = HERMES_TGCALLS_STATE_EVENT_V1;
     event_out->state = HERMES_TGCALLS_ESTABLISHED_V1;

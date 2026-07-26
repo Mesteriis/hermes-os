@@ -18,7 +18,8 @@ use hermes_telegram_automation_persistence::schema::{
 };
 use hermes_telegram_calls_persistence::{
     TELEGRAM_CALLS_STORAGE_REVISION_V1, TELEGRAM_CALLS_STORAGE_REVISION_V2,
-    telegram_calls_storage_migration_v1, telegram_calls_storage_migration_v2,
+    TELEGRAM_CALLS_STORAGE_REVISION_V3, telegram_calls_storage_migration_v1,
+    telegram_calls_storage_migration_v2, telegram_calls_storage_migration_v3,
 };
 use hermes_telegram_persistence::telegram_storage_bundle_v1;
 use hermes_telegram_runtime::admission::telegram_module_descriptor_v1;
@@ -36,6 +37,7 @@ pub const TELEGRAM_TGCALLS_ARTIFACT_ID: &str = "telegram.tgcalls.v1";
 pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V2: u32 = TELEGRAM_AUTOMATION_STORAGE_REVISION_V1;
 pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V3: u32 = TELEGRAM_CALLS_STORAGE_REVISION_V1;
 pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V4: u32 = TELEGRAM_CALLS_STORAGE_REVISION_V2;
+pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V5: u32 = TELEGRAM_CALLS_STORAGE_REVISION_V3;
 pub const TELEGRAM_DESCRIPTOR_FILE: &str = "telegram.runtime.descriptor.pb";
 pub const TELEGRAM_SETTINGS_FILE: &str = "telegram.runtime.settings.pb";
 pub const TELEGRAM_STORAGE_BUNDLE_FILE: &str = "telegram.storage.bundle.pb";
@@ -159,6 +161,14 @@ pub fn telegram_storage_bundle_with_call_signaling_v4() -> StorageBundleV1 {
     bundle
 }
 
+#[must_use]
+pub fn telegram_storage_bundle_with_call_media_v5() -> StorageBundleV1 {
+    let mut bundle = telegram_storage_bundle_with_call_signaling_v4();
+    bundle.revision = TELEGRAM_STORAGE_BUNDLE_REVISION_V5;
+    bundle.steps.push(telegram_calls_storage_migration_v3());
+    bundle
+}
+
 /// Materializes one unsigned, exact Telegram release artifact set.
 ///
 /// The output directory must be an absolute path that does not exist. Runtime
@@ -181,7 +191,7 @@ pub fn materialize_telegram_release_assembly_v1(
 
     let descriptor = telegram_module_descriptor_v1(build_id);
     let settings_schema = telegram_settings_schema_v1();
-    let storage_bundle = telegram_storage_bundle_with_call_signaling_v4();
+    let storage_bundle = telegram_storage_bundle_with_call_media_v5();
     if validate_descriptor_v1(&descriptor).is_err()
         || validate_settings_schema_v1(&settings_schema).is_err()
         || validate_storage_bundle(&storage_bundle).is_err()
@@ -390,7 +400,7 @@ mod tests {
         assert_eq!(descriptor.module_id, TELEGRAM_ASSEMBLY_MODULE_ID);
         assert_eq!(settings.major, 1);
         assert_eq!(storage.owner_id, TELEGRAM_ASSEMBLY_OWNER_ID);
-        assert_eq!(storage.revision, TELEGRAM_STORAGE_BUNDLE_REVISION_V4);
+        assert_eq!(storage.revision, TELEGRAM_STORAGE_BUNDLE_REVISION_V5);
         assert_eq!(
             storage
                 .steps
@@ -401,7 +411,8 @@ mod tests {
                 "telegram_state_initial",
                 "telegram_automation_management_preview",
                 "telegram_call_history",
-                "telegram_call_signaling"
+                "telegram_call_signaling",
+                "telegram_call_media_projection"
             ]
         );
         assert_eq!(

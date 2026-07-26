@@ -3,6 +3,7 @@ use sha2::{Digest, Sha256};
 
 pub const TELEGRAM_CALLS_STORAGE_REVISION_V1: u32 = 3;
 pub const TELEGRAM_CALLS_STORAGE_REVISION_V2: u32 = 4;
+pub const TELEGRAM_CALLS_STORAGE_REVISION_V3: u32 = 5;
 
 pub const TELEGRAM_CALLS_SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS hermes_data.telegram_call_sessions (
@@ -158,6 +159,43 @@ CREATE INDEX IF NOT EXISTS telegram_call_realtime_events_account_sequence_idx
     ON hermes_data.telegram_call_realtime_events (account_id, event_sequence);
 "#;
 
+pub const TELEGRAM_CALLS_SCHEMA_V3: &str = r#"
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_call_media_projection (
+    call_session_id TEXT PRIMARY KEY
+        REFERENCES hermes_data.telegram_call_sessions(call_session_id),
+    account_id TEXT NOT NULL,
+    runtime_generation BIGINT NOT NULL CHECK (runtime_generation > 0),
+    provider_revision BIGINT NOT NULL CHECK (provider_revision > 0),
+    media_state TEXT NOT NULL CHECK (
+        media_state IN ('connecting', 'active', 'reconnecting', 'failed')
+    ),
+    revision BIGINT NOT NULL CHECK (revision > 0),
+    connected_at_unix_seconds BIGINT NULL CHECK (
+        connected_at_unix_seconds IS NULL OR connected_at_unix_seconds > 0
+    ),
+    updated_at_unix_seconds BIGINT NOT NULL CHECK (updated_at_unix_seconds > 0),
+    failed_at_unix_seconds BIGINT NULL CHECK (
+        failed_at_unix_seconds IS NULL OR failed_at_unix_seconds > 0
+    )
+);
+
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_call_media_state_history (
+    call_session_id TEXT NOT NULL
+        REFERENCES hermes_data.telegram_call_sessions(call_session_id),
+    revision BIGINT NOT NULL CHECK (revision > 0),
+    runtime_generation BIGINT NOT NULL CHECK (runtime_generation > 0),
+    provider_revision BIGINT NOT NULL CHECK (provider_revision > 0),
+    media_state TEXT NOT NULL CHECK (
+        media_state IN ('connecting', 'active', 'reconnecting', 'failed')
+    ),
+    observed_at_unix_seconds BIGINT NOT NULL CHECK (observed_at_unix_seconds > 0),
+    PRIMARY KEY (call_session_id, revision)
+);
+
+CREATE INDEX IF NOT EXISTS telegram_call_media_projection_account_idx
+    ON hermes_data.telegram_call_media_projection (account_id, call_session_id);
+"#;
+
 pub fn telegram_calls_storage_migration_v1() -> StorageMigrationStepV1 {
     StorageMigrationStepV1 {
         revision: TELEGRAM_CALLS_STORAGE_REVISION_V1,
@@ -173,6 +211,15 @@ pub fn telegram_calls_storage_migration_v2() -> StorageMigrationStepV1 {
         migration_id: "telegram_call_signaling".to_owned(),
         forward_sql_utf8: TELEGRAM_CALLS_SCHEMA_V2.as_bytes().to_vec(),
         sha256: Sha256::digest(TELEGRAM_CALLS_SCHEMA_V2.as_bytes()).to_vec(),
+    }
+}
+
+pub fn telegram_calls_storage_migration_v3() -> StorageMigrationStepV1 {
+    StorageMigrationStepV1 {
+        revision: TELEGRAM_CALLS_STORAGE_REVISION_V3,
+        migration_id: "telegram_call_media_projection".to_owned(),
+        forward_sql_utf8: TELEGRAM_CALLS_SCHEMA_V3.as_bytes().to_vec(),
+        sha256: Sha256::digest(TELEGRAM_CALLS_SCHEMA_V3.as_bytes()).to_vec(),
     }
 }
 
@@ -197,5 +244,12 @@ mod tests {
         assert!(TELEGRAM_CALLS_SCHEMA_V2.contains("telegram_call_operation_history"));
         assert!(TELEGRAM_CALLS_SCHEMA_V2.contains("telegram_call_realtime_events"));
         assert!(!TELEGRAM_CALLS_SCHEMA_V2.contains("INSERT INTO"));
+
+        let media = telegram_calls_storage_migration_v3();
+        assert_eq!(media.revision, 5);
+        assert_eq!(media.migration_id, "telegram_call_media_projection");
+        assert!(TELEGRAM_CALLS_SCHEMA_V3.contains("telegram_call_media_projection"));
+        assert!(TELEGRAM_CALLS_SCHEMA_V3.contains("telegram_call_media_state_history"));
+        assert!(!TELEGRAM_CALLS_SCHEMA_V3.contains("INSERT INTO"));
     }
 }

@@ -10,13 +10,16 @@ route с restart/stale-fence conformance. `telegram_call_signaling_v1`,
 закрыты. Для media реализованы отдельные typed contract и
 `hermes-telegram-call-media-tgcalls`, exact-source build script, native C ABI,
 system-audio implementation patch, exact dylib loader и Kernel-staged
-assembly/runtime binding. Exact V4 storage bundle проходит additive DDL
-admission и disposable managed-runtime conformance. Исторические V3 realtime
-frames нельзя копировать запрещённым DML внутри Storage migration; их
-restart-safe owner-local backfill через Job Platform остаётся обязательным до
-открытия signaling gate. Реализованное всё ещё не доказывает TDLib
-ready/signaling wiring, teardown/fence conformance, real audio loop или
-authorized live call.
+assembly/runtime binding. TDLib `callStateReady` и bidirectional signaling
+преобразуются в secret-safe media plan, исполняются через pinned tgcalls port и
+дают отдельную durable media projection. Exact V5 storage bundle проходит
+additive DDL admission, disposable PostgreSQL test и managed-runtime fixture
+conformance для ready/signaling, terminal teardown, revoke/restart и stale
+runtime generation. Исторические V3 realtime frames нельзя копировать
+запрещённым DML внутри Storage migration; их restart-safe owner-local backfill
+через Job Platform остаётся обязательным до открытия signaling gate.
+Реализованное всё ещё не доказывает real input/output audio loop, upstream
+tgcalls memory/thread conformance или authorized live one-to-one call.
 Historical fixture transcript не является evidence ни для одного gate этого
 ADR.
 

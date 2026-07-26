@@ -18,6 +18,12 @@ use hermes_telegram_api::{
     TelegramTopic, TelegramTypingState, provider_command_operation_id, validate_provider_command,
 };
 use hermes_telegram_api::{TelegramChatKind, validate_page_size, validate_text};
+use hermes_telegram_call_media_contract::{
+    CALL_ENCRYPTION_KEY_BYTES, MAX_READY_TEXT_BYTES, MAX_SERVER_CREDENTIAL_BYTES,
+    MAX_SIGNALING_DATA_BYTES, TelegramCallPeerProtocolV1, TelegramCallReadyMaterialV1,
+    TelegramCallSecretBytesV1, TelegramCallSecretTextV1, TelegramCallServerKindV1,
+    TelegramCallServerV1,
+};
 use libloading::Library;
 use serde_json::{Value, json};
 use zeroize::Zeroizing;
@@ -75,10 +81,19 @@ pub struct TdlibCallObservation {
     pub failure_category: Option<TdlibCallFailureCategory>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug)]
 pub enum TdlibProviderUpdate {
     Operational(Box<TelegramProviderEvent>),
     Call(TdlibCallObservation),
+    CallReady {
+        observation: TdlibCallObservation,
+        material: TelegramCallReadyMaterialV1,
+    },
+    CallSignaling {
+        account_id: String,
+        tdlib_call_id: i32,
+        data: TelegramCallSecretBytesV1,
+    },
 }
 
 /// Runtime-owned port for converting an authorized opaque BlobRef into a
@@ -278,7 +293,7 @@ pub fn parse_authorization_update(payload: &Value) -> Result<TdlibAuthorizationU
     })
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub enum TdlibRequest {
     GetOwnUser {
         correlation_id: String,
@@ -299,6 +314,11 @@ pub enum TdlibRequest {
         is_disconnected: bool,
         duration_seconds: u32,
         connection_id: i64,
+    },
+    SendCallSignalingData {
+        correlation_id: String,
+        tdlib_call_id: i32,
+        data: TelegramCallSecretBytesV1,
     },
     LoadChats {
         account_id: String,
@@ -490,6 +510,23 @@ pub fn encode_request(request: &TdlibRequest) -> Result<Value, TdlibError> {
                 "is_video": false,
                 "connection_id": connection_id,
                 "@extra": operation_id,
+            }))
+        }
+        TdlibRequest::SendCallSignalingData {
+            correlation_id,
+            tdlib_call_id,
+            data,
+        } => {
+            if *tdlib_call_id <= 0 {
+                return Err(TdlibError::Protocol(
+                    "TDLib call identifier is invalid".to_owned(),
+                ));
+            }
+            Ok(json!({
+                "@type": "sendCallSignalingData",
+                "call_id": tdlib_call_id,
+                "data": STANDARD.encode(data.expose()),
+                "@extra": correlation_id,
             }))
         }
         TdlibRequest::LoadChats { account_id, limit } => Ok(json!({
@@ -1581,16 +1618,254 @@ pub fn parse_provider_updates(
     account_id: &str,
     payload: &Value,
 ) -> Result<Vec<TdlibProviderUpdate>, TdlibError> {
+    if payload.get("@type").and_then(Value::as_str) == Some("updateNewCallSignalingData") {
+        let tdlib_call_id = integer_field(payload, "call_id")
+            .and_then(|value| i32::try_from(value).ok())
+            .filter(|value| *value > 0)
+            .ok_or_else(|| TdlibError::Protocol("TDLib call id is invalid".to_owned()))?;
+        let encoded = payload.get("data").and_then(Value::as_str).ok_or_else(|| {
+            TdlibError::Protocol("TDLib call signaling data is missing".to_owned())
+        })?;
+        let data = STANDARD
+            .decode(encoded)
+            .map_err(|_| TdlibError::Protocol("TDLib call signaling data is invalid".to_owned()))?;
+        return Ok(vec![TdlibProviderUpdate::CallSignaling {
+            account_id: account_id.to_owned(),
+            tdlib_call_id,
+            data: TelegramCallSecretBytesV1::new(data, MAX_SIGNALING_DATA_BYTES).map_err(|_| {
+                TdlibError::Protocol("TDLib call signaling data is invalid".to_owned())
+            })?,
+        }]);
+    }
     if payload.get("@type").and_then(Value::as_str) == Some("updateCall") {
-        return Ok(vec![TdlibProviderUpdate::Call(parse_call_observation(
-            account_id, payload,
-        )?)]);
+        let observation = parse_call_observation(account_id, payload)?;
+        if observation.state == TdlibCallState::Ready {
+            let state = payload
+                .get("call")
+                .and_then(|call| call.get("state"))
+                .ok_or_else(|| TdlibError::Protocol("TDLib call state is missing".to_owned()))?;
+            let material = parse_call_ready_material(
+                state,
+                observation.direction == TdlibCallDirection::Outgoing,
+            )?;
+            return Ok(vec![TdlibProviderUpdate::CallReady {
+                observation,
+                material,
+            }]);
+        }
+        return Ok(vec![TdlibProviderUpdate::Call(observation)]);
     }
     parse_provider_events(account_id, payload).map(|events| {
         events
             .into_iter()
             .map(|event| TdlibProviderUpdate::Operational(Box::new(event)))
             .collect()
+    })
+}
+
+fn parse_call_ready_material(
+    state: &Value,
+    is_outgoing: bool,
+) -> Result<TelegramCallReadyMaterialV1, TdlibError> {
+    let peer_protocol = parse_call_peer_protocol(
+        state
+            .get("protocol")
+            .ok_or_else(|| TdlibError::Protocol("TDLib call protocol is missing".to_owned()))?,
+    )?;
+    let server_values = state
+        .get("servers")
+        .and_then(Value::as_array)
+        .filter(|servers| !servers.is_empty())
+        .ok_or_else(|| TdlibError::Protocol("TDLib call servers are missing".to_owned()))?;
+    let mut servers = Vec::with_capacity(server_values.len());
+    let mut allow_tcp = false;
+    for server in server_values {
+        let ipv4 = server
+            .get("ip_address")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let ipv6 = server
+            .get("ipv6_address")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let port = integer_field(server, "port")
+            .and_then(|value| u16::try_from(value).ok())
+            .filter(|value| *value > 0)
+            .ok_or_else(|| TdlibError::Protocol("TDLib call server port is invalid".to_owned()))?;
+        let server_type = server
+            .get("type")
+            .ok_or_else(|| TdlibError::Protocol("TDLib call server type is missing".to_owned()))?;
+        let kind = match server_type.get("@type").and_then(Value::as_str) {
+            Some("callServerTypeTelegramReflector") => {
+                let reflector_id = integer_field(server, "id")
+                    .and_then(|value| u8::try_from(value).ok())
+                    .ok_or_else(|| {
+                        TdlibError::Protocol("TDLib reflector id is unsupported".to_owned())
+                    })?;
+                let peer_tag = server_type
+                    .get("peer_tag")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        TdlibError::Protocol("TDLib reflector peer tag is missing".to_owned())
+                    })
+                    .and_then(|encoded| {
+                        STANDARD.decode(encoded).map_err(|_| {
+                            TdlibError::Protocol("TDLib reflector peer tag is invalid".to_owned())
+                        })
+                    })?;
+                let peer_tag: [u8; 16] = peer_tag.try_into().map_err(|_| {
+                    TdlibError::Protocol("TDLib reflector peer tag is invalid".to_owned())
+                })?;
+                let is_tcp = server_type
+                    .get("is_tcp")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| {
+                        TdlibError::Protocol("TDLib reflector transport is missing".to_owned())
+                    })?;
+                allow_tcp |= is_tcp;
+                TelegramCallServerKindV1::TelegramReflector {
+                    reflector_id,
+                    peer_tag,
+                    is_tcp,
+                }
+            }
+            Some("callServerTypeWebrtc") => {
+                let supports_stun = server_type
+                    .get("supports_stun")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| {
+                        TdlibError::Protocol("TDLib WebRTC STUN flag is missing".to_owned())
+                    })?;
+                let supports_turn = server_type
+                    .get("supports_turn")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| {
+                        TdlibError::Protocol("TDLib WebRTC TURN flag is missing".to_owned())
+                    })?;
+                allow_tcp |= supports_turn;
+                TelegramCallServerKindV1::WebRtc {
+                    username: TelegramCallSecretTextV1::new(
+                        server_type
+                            .get("username")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned(),
+                        MAX_SERVER_CREDENTIAL_BYTES,
+                    )
+                    .map_err(|_| {
+                        TdlibError::Protocol("TDLib WebRTC username is invalid".to_owned())
+                    })?,
+                    password: TelegramCallSecretTextV1::new(
+                        server_type
+                            .get("password")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned(),
+                        MAX_SERVER_CREDENTIAL_BYTES,
+                    )
+                    .map_err(|_| {
+                        TdlibError::Protocol("TDLib WebRTC password is invalid".to_owned())
+                    })?,
+                    supports_stun,
+                    supports_turn,
+                }
+            }
+            _ => {
+                return Err(TdlibError::Protocol(
+                    "TDLib call server type is unsupported".to_owned(),
+                ));
+            }
+        };
+        servers.push(TelegramCallServerV1 {
+            ipv4,
+            ipv6,
+            port,
+            kind,
+        });
+    }
+    let call_config = state
+        .get("config")
+        .and_then(Value::as_str)
+        .ok_or_else(|| TdlibError::Protocol("TDLib call config is missing".to_owned()))?;
+    let custom_parameters = state
+        .get("custom_parameters")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            TdlibError::Protocol("TDLib call custom parameters are missing".to_owned())
+        })?;
+    let encryption_key = state
+        .get("encryption_key")
+        .and_then(Value::as_str)
+        .ok_or_else(|| TdlibError::Protocol("TDLib call encryption key is missing".to_owned()))
+        .and_then(|encoded| {
+            STANDARD.decode(encoded).map_err(|_| {
+                TdlibError::Protocol("TDLib call encryption key is invalid".to_owned())
+            })
+        })?;
+    if encryption_key.len() != CALL_ENCRYPTION_KEY_BYTES {
+        return Err(TdlibError::Protocol(
+            "TDLib call encryption key is invalid".to_owned(),
+        ));
+    }
+    Ok(TelegramCallReadyMaterialV1 {
+        peer_protocol,
+        servers,
+        allow_p2p: state
+            .get("allow_p2p")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| TdlibError::Protocol("TDLib call P2P flag is missing".to_owned()))?,
+        allow_tcp,
+        call_config: TelegramCallSecretTextV1::new(call_config.to_owned(), MAX_READY_TEXT_BYTES)
+            .map_err(|_| TdlibError::Protocol("TDLib call config is invalid".to_owned()))?,
+        custom_parameters: TelegramCallSecretTextV1::new(
+            custom_parameters.to_owned(),
+            MAX_READY_TEXT_BYTES,
+        )
+        .map_err(|_| TdlibError::Protocol("TDLib call custom parameters are invalid".to_owned()))?,
+        encryption_key: TelegramCallSecretBytesV1::new(encryption_key, CALL_ENCRYPTION_KEY_BYTES)
+            .map_err(|_| {
+            TdlibError::Protocol("TDLib call encryption key is invalid".to_owned())
+        })?,
+        is_outgoing,
+    })
+}
+
+fn parse_call_peer_protocol(protocol: &Value) -> Result<TelegramCallPeerProtocolV1, TdlibError> {
+    let library_versions = protocol
+        .get("library_versions")
+        .and_then(Value::as_array)
+        .ok_or_else(|| TdlibError::Protocol("TDLib call library versions are missing".to_owned()))?
+        .iter()
+        .map(|version| {
+            version.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                TdlibError::Protocol("TDLib call library version is invalid".to_owned())
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(TelegramCallPeerProtocolV1 {
+        udp_p2p: protocol
+            .get("udp_p2p")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| TdlibError::Protocol("TDLib call P2P protocol is missing".to_owned()))?,
+        udp_reflector: protocol
+            .get("udp_reflector")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| {
+                TdlibError::Protocol("TDLib call reflector protocol is missing".to_owned())
+            })?,
+        min_layer: protocol
+            .get("min_layer")
+            .and_then(Value::as_i64)
+            .and_then(|value| i32::try_from(value).ok())
+            .ok_or_else(|| TdlibError::Protocol("TDLib call min layer is invalid".to_owned()))?,
+        max_layer: protocol
+            .get("max_layer")
+            .and_then(Value::as_i64)
+            .and_then(|value| i32::try_from(value).ok())
+            .ok_or_else(|| TdlibError::Protocol("TDLib call max layer is invalid".to_owned()))?,
+        library_versions,
     })
 }
 
@@ -2326,13 +2601,13 @@ mod call_update_tests {
         )
         .expect("pending call");
 
-        assert_eq!(
-            updates,
-            vec![TdlibProviderUpdate::Call(TdlibCallObservation {
-                account_id: "account-1".to_owned(),
+        assert!(matches!(
+            updates.as_slice(),
+            [TdlibProviderUpdate::Call(TdlibCallObservation {
+                account_id,
                 tdlib_call_id: 41,
                 provider_call_unique_id: None,
-                provider_user_id: "99".to_owned(),
+                provider_user_id,
                 direction: TdlibCallDirection::Incoming,
                 is_video: false,
                 state: TdlibCallState::Pending,
@@ -2340,12 +2615,14 @@ mod call_update_tests {
                 pending_received: false,
                 discard_reason: None,
                 failure_category: None,
-            })]
-        );
+            })] if account_id == "account-1" && provider_user_id == "99"
+        ));
     }
 
     #[test]
-    fn parses_ready_and_discarded_states_without_retaining_ready_secrets() {
+    fn parses_ready_signaling_and_discarded_states_without_exposing_secrets() {
+        let encryption_key = vec![7_u8; CALL_ENCRYPTION_KEY_BYTES];
+        let peer_tag = [8_u8; 16];
         let ready = parse_provider_updates(
             "account-1",
             &json!({
@@ -2358,9 +2635,30 @@ mod call_update_tests {
                     "is_video": false,
                     "state": {
                         "@type": "callStateReady",
+                        "protocol": {
+                            "@type": "callProtocol",
+                            "udp_p2p": true,
+                            "udp_reflector": true,
+                            "min_layer": 65,
+                            "max_layer": 92,
+                            "library_versions": ["pinned-tgcalls"]
+                        },
+                        "servers": [{
+                            "@type": "callServer",
+                            "id": 4,
+                            "ip_address": "127.0.0.1",
+                            "ipv6_address": "",
+                            "port": 443,
+                            "type": {
+                                "@type": "callServerTypeTelegramReflector",
+                                "peer_tag": STANDARD.encode(peer_tag),
+                                "is_tcp": true
+                            }
+                        }],
                         "config": "private-config",
-                        "encryption_key": "private-key",
-                        "custom_parameters": "private-parameters"
+                        "encryption_key": STANDARD.encode(&encryption_key),
+                        "custom_parameters": "private-parameters",
+                        "allow_p2p": true
                     }
                 }
             }),
@@ -2368,8 +2666,40 @@ mod call_update_tests {
         .expect("ready call");
         let debug = format!("{ready:?}");
         assert!(!debug.contains("private-config"));
-        assert!(!debug.contains("private-key"));
+        assert!(!debug.contains(&STANDARD.encode(&encryption_key)));
         assert!(!debug.contains("private-parameters"));
+        let [
+            TdlibProviderUpdate::CallReady {
+                observation,
+                material,
+            },
+        ] = ready.as_slice()
+        else {
+            panic!("ready call update");
+        };
+        assert_eq!(observation.state, TdlibCallState::Ready);
+        assert_eq!(material.servers.len(), 1);
+        assert!(material.allow_tcp);
+
+        let signaling = parse_provider_updates(
+            "account-1",
+            &json!({
+                "@type": "updateNewCallSignalingData",
+                "call_id": 41,
+                "data": STANDARD.encode(b"private-signaling")
+            }),
+        )
+        .expect("call signaling");
+        let signaling_debug = format!("{signaling:?}");
+        assert!(!signaling_debug.contains("private-signaling"));
+        assert!(matches!(
+            signaling.as_slice(),
+            [TdlibProviderUpdate::CallSignaling {
+                account_id,
+                tdlib_call_id: 41,
+                data,
+            }] if account_id == "account-1" && data.expose() == b"private-signaling"
+        ));
 
         let discarded = parse_provider_updates(
             "account-1",
@@ -2961,6 +3291,7 @@ fn request_extra(request: &TdlibRequest) -> String {
         TdlibRequest::CreateCall { operation_id, .. }
         | TdlibRequest::AcceptCall { operation_id, .. }
         | TdlibRequest::DiscardCall { operation_id, .. } => operation_id.clone(),
+        TdlibRequest::SendCallSignalingData { correlation_id, .. } => correlation_id.clone(),
         TdlibRequest::LoadChats { account_id, .. }
         | TdlibRequest::LoadHistory { account_id, .. }
         | TdlibRequest::ListTopics { account_id, .. }
@@ -3011,6 +3342,9 @@ fn parse_response_for_request(
         TdlibRequest::AcceptCall { operation_id, .. }
         | TdlibRequest::DiscardCall { operation_id, .. } => Ok(TdlibResponse::Accepted {
             operation_id: operation_id.clone(),
+        }),
+        TdlibRequest::SendCallSignalingData { correlation_id, .. } => Ok(TdlibResponse::Accepted {
+            operation_id: correlation_id.clone(),
         }),
         TdlibRequest::LoadHistory { .. } => {
             let messages = response
@@ -3338,6 +3672,21 @@ mod call_command_tests {
         assert_eq!(discard["connection_id"], 9002);
         assert_eq!(discard["invite_link"], "");
         assert_eq!(discard["is_video"], false);
+
+        let signaling = encode_request(&TdlibRequest::SendCallSignalingData {
+            correlation_id: "call-signal-1".to_owned(),
+            tdlib_call_id: 41,
+            data: TelegramCallSecretBytesV1::new(
+                b"private-signaling".to_vec(),
+                MAX_SIGNALING_DATA_BYTES,
+            )
+            .expect("signaling"),
+        })
+        .expect("sendCallSignalingData");
+        assert_eq!(signaling["@type"], "sendCallSignalingData");
+        assert_eq!(signaling["call_id"], 41);
+        assert_eq!(signaling["data"], STANDARD.encode(b"private-signaling"));
+        assert_eq!(signaling["@extra"], "call-signal-1");
     }
 
     #[test]

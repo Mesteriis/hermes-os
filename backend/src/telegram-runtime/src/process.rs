@@ -30,7 +30,8 @@ use hermes_runtime_protocol::{
 use hermes_telegram_automation_persistence::TelegramAutomationPersistence;
 use hermes_telegram_calls_core::{
     TelegramCallDirection, TelegramCallDiscardReason, TelegramCallFailureCategory,
-    TelegramProviderCallState, TelegramProviderCallUpdate,
+    TelegramCallMediaState, TelegramCallMediaUpdate, TelegramProviderCallState,
+    TelegramProviderCallUpdate,
 };
 use hermes_telegram_calls_persistence::{TelegramCallsPersistence, TelegramCallsPersistenceError};
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
@@ -42,8 +43,9 @@ use prost::Message;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    TelegramDurableProjectionError, TelegramRuntimeComposition,
+    TelegramCallProviderUpdate, TelegramDurableProjectionError, TelegramRuntimeComposition,
     bootstrap::{TelegramAdmittedProviderLoop, TelegramAdmittedRuntime},
+    calls_execution::TelegramCallExecutionError,
     client_transport::{self, TelegramClientTransportError},
 };
 
@@ -63,6 +65,7 @@ pub enum TelegramDurableProcessError {
     Persistence(TelegramDurablePersistenceError),
     Calls(TelegramCallsPersistenceError),
     Projection(TelegramDurableProjectionError),
+    CallExecution(TelegramCallExecutionError),
 }
 
 pub struct TelegramProcessLoop {
@@ -136,7 +139,7 @@ impl TelegramProcessLoop {
                 self.provider_cursor = Some(cursor);
             }
             return Ok(TelegramProcessTick::Runtime {
-                frames: batch.frames.len() + batch.call_observations.len(),
+                frames: batch.frames.len() + batch.call_updates.len(),
                 provider_cursor: self.provider_cursor.clone(),
             });
         }
@@ -199,30 +202,91 @@ impl TelegramProcessLoop {
                     ))
                 })?
                 .as_secs();
-            for observation in &batch.call_observations {
-                if observation.is_video {
-                    continue;
-                }
-                let update = call_update(observation, runtime_generation, observed_at_unix_seconds);
-                let suggested_call_session_id =
-                    if update.direction == TelegramCallDirection::Outgoing {
-                        calls
-                            .pending_outgoing_call_session_id(
-                                &update.account_id,
-                                update.runtime_generation,
-                                update.tdlib_call_id,
-                                &update.provider_user_id,
+            let call_update_count = batch.call_updates.len();
+            for call_provider_update in batch.call_updates {
+                match call_provider_update {
+                    TelegramCallProviderUpdate::Observation(observation) => {
+                        if observation.is_video {
+                            continue;
+                        }
+                        let session = persist_call_observation(
+                            calls,
+                            &observation,
+                            runtime_generation,
+                            observed_at_unix_seconds,
+                        )
+                        .await?;
+                        if session.state.is_terminal()
+                            && let Some(runtime) = self.composition.runtime_mut()
+                        {
+                            runtime
+                                .stop_call_media_session(&session.call_session_id)
+                                .map_err(TelegramDurableProcessError::CallExecution)?;
+                        }
+                    }
+                    TelegramCallProviderUpdate::Ready {
+                        observation,
+                        material,
+                    } => {
+                        if observation.is_video {
+                            continue;
+                        }
+                        let session = persist_call_observation(
+                            calls,
+                            &observation,
+                            runtime_generation,
+                            observed_at_unix_seconds,
+                        )
+                        .await?;
+                        if session.state != TelegramProviderCallState::MediaReady
+                            || session.runtime_generation != runtime_generation
+                        {
+                            continue;
+                        }
+                        self.composition
+                            .runtime_mut()
+                            .ok_or_else(|| {
+                                TelegramDurableProcessError::Provider(TdlibError::Protocol(
+                                    "Telegram call ready update has no runtime".to_owned(),
+                                ))
+                            })?
+                            .start_call_media_session(&session, material)
+                            .map_err(TelegramDurableProcessError::CallExecution)?;
+                        self.drain_call_media_events(calls, &session, observed_at_unix_seconds, 16)
+                            .await?;
+                    }
+                    TelegramCallProviderUpdate::Signaling {
+                        account_id,
+                        tdlib_call_id,
+                        data,
+                    } => {
+                        let Some(session) = calls
+                            .call_by_runtime_identity(
+                                &account_id,
+                                runtime_generation,
+                                tdlib_call_id,
                             )
                             .await
                             .map_err(TelegramDurableProcessError::Calls)?
-                            .unwrap_or_else(|| call_session_id(&update))
-                    } else {
-                        call_session_id(&update)
-                    };
-                calls
-                    .ingest_provider_update(&suggested_call_session_id, &update)
-                    .await
-                    .map_err(TelegramDurableProcessError::Calls)?;
+                        else {
+                            continue;
+                        };
+                        if session.state != TelegramProviderCallState::MediaReady {
+                            continue;
+                        }
+                        self.composition
+                            .runtime_mut()
+                            .ok_or_else(|| {
+                                TelegramDurableProcessError::Provider(TdlibError::Protocol(
+                                    "Telegram call signaling has no runtime".to_owned(),
+                                ))
+                            })?
+                            .receive_call_signaling_data(&session.call_session_id, data)
+                            .map_err(TelegramDurableProcessError::CallExecution)?;
+                        self.drain_call_media_events(calls, &session, observed_at_unix_seconds, 16)
+                            .await?;
+                    }
+                }
             }
             if let Some(cursor) = batch
                 .frames
@@ -232,11 +296,60 @@ impl TelegramProcessLoop {
                 self.provider_cursor = Some(cursor);
             }
             return Ok(TelegramProcessTick::Runtime {
-                frames: batch.frames.len() + batch.call_observations.len(),
+                frames: batch.frames.len() + call_update_count,
                 provider_cursor: self.provider_cursor.clone(),
             });
         }
         Ok(TelegramProcessTick::Idle)
+    }
+
+    async fn drain_call_media_events(
+        &mut self,
+        calls: &TelegramCallsPersistence,
+        call: &hermes_telegram_calls_core::TelegramCallSession,
+        observed_at_unix_seconds: u64,
+        limit: usize,
+    ) -> Result<(), TelegramDurableProcessError> {
+        for _ in 0..limit {
+            let media_state = self
+                .composition
+                .runtime_mut()
+                .ok_or_else(|| {
+                    TelegramDurableProcessError::Provider(TdlibError::Protocol(
+                        "Telegram call media has no runtime".to_owned(),
+                    ))
+                })?
+                .poll_call_media_event(&call.call_session_id, call.tdlib_call_id)
+                .map_err(TelegramDurableProcessError::CallExecution)?;
+            let Some(media_state) = media_state else {
+                continue;
+            };
+            let media_state = call_media_state(media_state);
+            calls
+                .ingest_media_update(&TelegramCallMediaUpdate {
+                    account_id: call.account_id.clone(),
+                    call_session_id: call.call_session_id.clone(),
+                    runtime_generation: call.runtime_generation,
+                    provider_revision: call.revision,
+                    state: media_state,
+                    observed_at_unix_seconds,
+                })
+                .await
+                .map_err(TelegramDurableProcessError::Calls)?;
+            if media_state == TelegramCallMediaState::Failed {
+                self.composition
+                    .runtime_mut()
+                    .ok_or_else(|| {
+                        TelegramDurableProcessError::Provider(TdlibError::Protocol(
+                            "Telegram failed call teardown has no runtime".to_owned(),
+                        ))
+                    })?
+                    .stop_call_media_session(&call.call_session_id)
+                    .map_err(TelegramDurableProcessError::CallExecution)?;
+                break;
+            }
+        }
+        Ok(())
     }
 
     pub fn run_until<F, H>(
@@ -342,16 +455,29 @@ pub fn serve_admitted_provider_loop(
                 ))
                 .map_err(|error| format!("Telegram durable execution failed: {error:?}"))?;
             if runtime.has_call_signaling_media() {
-                executor
-                    .block_on(runtime.execute_due_call_operations(
-                        &calls,
-                        &account_id,
-                        now_unix_seconds,
-                        16,
-                    ))
-                    .map_err(|error| {
-                        format!("Telegram call signaling execution failed: {error:?}")
-                    })?;
+                if let Some((active_media, media_state)) = runtime
+                    .poll_active_call_media_event()
+                    .map_err(|error| format!("Telegram call media polling failed: {error:?}"))?
+                {
+                    let media_state = call_media_state(media_state);
+                    executor
+                        .block_on(calls.ingest_media_update(&TelegramCallMediaUpdate {
+                            account_id: active_media.account_id.clone(),
+                            call_session_id: active_media.call_session_id.clone(),
+                            runtime_generation: active_media.runtime_generation,
+                            provider_revision: active_media.provider_revision,
+                            state: media_state,
+                            observed_at_unix_seconds: now_unix_seconds,
+                        }))
+                        .map_err(|_| "Telegram call media projection failed".to_owned())?;
+                    if media_state == TelegramCallMediaState::Failed {
+                        runtime
+                            .stop_call_media_session(&active_media.call_session_id)
+                            .map_err(|error| {
+                                format!("Telegram failed call teardown failed: {error:?}")
+                            })?;
+                    }
+                }
             }
         }
         let published_at_unix_seconds = SystemTime::now()
@@ -444,6 +570,34 @@ fn hex_reference_id(reference_id: &[u8; 16]) -> String {
         .collect()
 }
 
+async fn persist_call_observation(
+    calls: &TelegramCallsPersistence,
+    observation: &TdlibCallObservation,
+    runtime_generation: u64,
+    observed_at_unix_seconds: u64,
+) -> Result<hermes_telegram_calls_core::TelegramCallSession, TelegramDurableProcessError> {
+    let update = call_update(observation, runtime_generation, observed_at_unix_seconds);
+    let suggested_call_session_id = if update.direction == TelegramCallDirection::Outgoing {
+        calls
+            .pending_outgoing_call_session_id(
+                &update.account_id,
+                update.runtime_generation,
+                update.tdlib_call_id,
+                &update.provider_user_id,
+            )
+            .await
+            .map_err(TelegramDurableProcessError::Calls)?
+            .unwrap_or_else(|| call_session_id(&update))
+    } else {
+        call_session_id(&update)
+    };
+    calls
+        .ingest_provider_update(&suggested_call_session_id, &update)
+        .await
+        .map(|persisted| persisted.session)
+        .map_err(TelegramDurableProcessError::Calls)
+}
+
 fn call_update(
     observation: &TdlibCallObservation,
     runtime_generation: u64,
@@ -483,6 +637,25 @@ fn call_update(
             TdlibCallFailureCategory::Unknown => TelegramCallFailureCategory::Unknown,
         }),
         observed_at_unix_seconds,
+    }
+}
+
+fn call_media_state(
+    state: hermes_telegram_call_media_contract::TelegramCallMediaStateV1,
+) -> TelegramCallMediaState {
+    match state {
+        hermes_telegram_call_media_contract::TelegramCallMediaStateV1::Connecting => {
+            TelegramCallMediaState::Connecting
+        }
+        hermes_telegram_call_media_contract::TelegramCallMediaStateV1::Established => {
+            TelegramCallMediaState::Active
+        }
+        hermes_telegram_call_media_contract::TelegramCallMediaStateV1::Reconnecting => {
+            TelegramCallMediaState::Reconnecting
+        }
+        hermes_telegram_call_media_contract::TelegramCallMediaStateV1::Failed => {
+            TelegramCallMediaState::Failed
+        }
     }
 }
 
