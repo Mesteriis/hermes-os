@@ -6,12 +6,14 @@ import SystemControlPage from '../../platform/system-control/SystemControlPage.v
 import Icon from '../../shared/ui/Icon.vue'
 import MailSettingsPanel from '../../integrations/mail/presentation/MailSettingsPanel.vue'
 import TelegramSettingsPanel from '../../integrations/telegram/presentation/TelegramSettingsPanel.vue'
+import TelegramAutomationSettingsRoute from '../../integrations/telegram/views/TelegramAutomationSettingsRoute.vue'
 import WhatsAppSettingsPanel from '../../integrations/whatsapp/presentation/WhatsAppSettingsPanel.vue'
 import ZulipSettingsPanel from '../../integrations/zulip/presentation/ZulipSettingsPanel.vue'
 import {
 	clientSettingsModule,
 	type SettingsOwnerId,
 } from './clientSettingsModules'
+import { hasClientModuleCapability } from '../client-surfaces/clientModuleCapabilities'
 import './appSettingsPage.css'
 
 const props = defineProps<{
@@ -28,6 +30,12 @@ const selectedOwner = ref<SettingsOwnerId>(props.initialOwner ?? 'system')
 
 const mailModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'mail'))
 const telegramModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'telegram'))
+const telegramAutomationCommandAvailable = computed(() =>
+	hasClientModuleCapability(props.bootstrap, 'telegram.automation.command.v1'),
+)
+const telegramAutomationQueryAvailable = computed(() =>
+	hasClientModuleCapability(props.bootstrap, 'telegram.automation.query.v1'),
+)
 const whatsAppModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'whatsapp'))
 const zulipModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'zulip'))
 
@@ -91,7 +99,13 @@ const providerNavigation = [
 					@language-change="emit('languageChange', $event)"
 				/>
 				<MailSettingsPanel v-else-if="selectedOwner === 'mail'" :module="mailModule" />
-				<TelegramSettingsPanel v-else-if="selectedOwner === 'telegram'" :module="telegramModule" />
+				<div v-else-if="selectedOwner === 'telegram'">
+					<TelegramSettingsPanel :module="telegramModule" />
+					<TelegramAutomationSettingsRoute
+						:can-command="telegramAutomationCommandAvailable"
+						:can-query="telegramAutomationQueryAvailable"
+					/>
+				</div>
 				<WhatsAppSettingsPanel v-else-if="selectedOwner === 'whatsapp'" :module="whatsAppModule" />
 				<ZulipSettingsPanel v-else :module="zulipModule" />
 			</main>
