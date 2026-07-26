@@ -51,7 +51,32 @@
       "role": "integration",
       "owner": "telegram",
       "state": "planned",
+      "dependsOn": [
+        "telegram_call_history_v1",
+        "telegram_call_signaling_v1",
+        "telegram_call_media_v1"
+      ]
+    },
+    {
+      "gate": "telegram_call_history_v1",
+      "role": "integration",
+      "owner": "telegram",
+      "state": "planned",
       "dependsOn": ["telegram_core_operational_v1"]
+    },
+    {
+      "gate": "telegram_call_signaling_v1",
+      "role": "integration",
+      "owner": "telegram",
+      "state": "planned",
+      "dependsOn": ["telegram_call_history_v1"]
+    },
+    {
+      "gate": "telegram_call_media_v1",
+      "role": "integration",
+      "owner": "telegram",
+      "state": "planned",
+      "dependsOn": ["telegram_call_signaling_v1"]
     },
     {
       "gate": "whatsapp_full_operational_v1",

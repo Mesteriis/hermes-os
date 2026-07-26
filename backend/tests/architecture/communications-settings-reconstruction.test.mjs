@@ -17,6 +17,10 @@ const TELEGRAM_AUTOMATION_ADR_PATH = new URL(
   'docs/adr/ADR-0283-telegram-automation-management-and-preview-boundary.md',
   PROJECT_ROOT,
 );
+const TELEGRAM_CALLS_ADR_PATH = new URL(
+  'docs/adr/ADR-0284-telegram-one-to-one-audio-calls-operational-boundary.md',
+  PROJECT_ROOT,
+);
 
 const ALLOWED_ROLES = new Set(['app', 'domain', 'engine', 'integration', 'platform', 'workflow']);
 const ALLOWED_STATES = new Set(['implemented', 'planned']);
@@ -100,9 +104,10 @@ test('provider operational slices remain separate integrations', async () => {
 });
 
 test('Telegram completion remains closed behind its independent capability slices', async () => {
-  const [inventorySource, automationAdrSource] = await Promise.all([
+  const [inventorySource, automationAdrSource, callsAdrSource] = await Promise.all([
     readFile(INVENTORY_PATH, 'utf8'),
     readFile(TELEGRAM_AUTOMATION_ADR_PATH, 'utf8'),
+    readFile(TELEGRAM_CALLS_ADR_PATH, 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const telegramSlices = new Map(
@@ -112,6 +117,9 @@ test('Telegram completion remains closed behind its independent capability slice
   );
   const requiredTelegramGates = [
     'telegram_automation_v1',
+    'telegram_call_history_v1',
+    'telegram_call_media_v1',
+    'telegram_call_signaling_v1',
     'telegram_calls_operational_v1',
     'telegram_core_operational_v1',
     'telegram_folder_reassignment_v1',
@@ -123,7 +131,10 @@ test('Telegram completion remains closed behind its independent capability slice
     [...telegramSlices.keys()].filter((gate) => gate !== 'telegram_full_operational_v1').sort(),
     requiredTelegramGates,
   );
-  assert.deepEqual([...fullGate.dependsOn].sort(), requiredTelegramGates);
+  assert.deepEqual(
+    [...fullGate.dependsOn].sort(),
+    requiredTelegramGates.filter((gate) => !gate.startsWith('telegram_call_')),
+  );
   assert.ok([...telegramSlices.values()].every(({ role }) => role === 'integration'));
 
   const automationGate = telegramSlices.get('telegram_automation_v1');
@@ -137,6 +148,32 @@ test('Telegram completion remains closed behind its independent capability slice
   assert.match(automationAdrSource, /telegram\.automation\.query\.v1/);
   assert.match(automationAdrSource, /telegram\.automation\.command\.v1/);
   assert.match(automationAdrSource, /telegram_automation_execution_v1/);
+
+  const callsGate = telegramSlices.get('telegram_calls_operational_v1');
+  assert.deepEqual([...callsGate.dependsOn].sort(), [
+    'telegram_call_history_v1',
+    'telegram_call_media_v1',
+    'telegram_call_signaling_v1',
+  ]);
+  assert.deepEqual(telegramSlices.get('telegram_call_history_v1').dependsOn, [
+    'telegram_core_operational_v1',
+  ]);
+  assert.deepEqual(telegramSlices.get('telegram_call_signaling_v1').dependsOn, [
+    'telegram_call_history_v1',
+  ]);
+  assert.deepEqual(telegramSlices.get('telegram_call_media_v1').dependsOn, [
+    'telegram_call_signaling_v1',
+  ]);
+  assert.match(callsAdrSource, /hermes-telegram-calls-api/);
+  assert.match(callsAdrSource, /hermes-telegram-calls-core/);
+  assert.match(callsAdrSource, /hermes-telegram-calls-persistence/);
+  assert.match(callsAdrSource, /hermes-telegram-call-media-contract/);
+  assert.match(callsAdrSource, /hermes-telegram-call-media-tgcalls/);
+  assert.match(callsAdrSource, /telegram\.calls\.query\.v1/);
+  assert.match(callsAdrSource, /telegram\.calls\.command\.v1/);
+  assert.match(callsAdrSource, /telegram\.calls\.realtime\.v1/);
+  assert.match(callsAdrSource, /call\.id.*непостоянным/);
+  assert.match(callsAdrSource, /fixture PCM[\s\S]*не закрывают production admission/);
 });
 
 test('cross-owner and AI use cases are distinct workflow units', async () => {

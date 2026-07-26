@@ -92,6 +92,7 @@ policy через ссылки из новых документов.
 - [ADR-0281: Communications frontend clean-room composition](ADR-0281-communications-frontend-clean-room-composition.md)
 - [ADR-0282: Full Communications and Settings capability reconstruction](ADR-0282-full-communications-and-settings-capability-reconstruction.md)
 - [ADR-0283: Telegram automation management and preview boundary](ADR-0283-telegram-automation-management-and-preview-boundary.md)
+- [ADR-0284: Telegram one-to-one audio calls operational boundary](ADR-0284-telegram-one-to-one-audio-calls-operational-boundary.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -289,3 +290,7 @@ capability reconstruction: Communications остаётся provider-neutral doma
 Mail/Telegram/WhatsApp/Zulip — независимыми integrations, Settings —
 app-composition, а cross-owner и AI use cases получают отдельные workflow
 units и atomic admission gates.
+ADR-0284 разделяет Telegram Calls на independently admitted history, signaling
+и real tgcalls media gates: provider calls остаются Telegram integration
+surface, а cross-provider evidence и transcription принадлежат отдельным
+composition/workflow units.

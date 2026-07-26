@@ -391,7 +391,10 @@ runtime не является domain, а app composition не становитс
 | Telegram atomic runtime restart/reconfiguration | Telegram | `telegram_runtime_reconfiguration_v1` |
 | Telegram folder reassignment | Telegram | `telegram_folder_reassignment_v1` |
 | Telegram automation policies, templates and dry-run | Telegram | `telegram_automation_v1` |
-| Telegram provider calls and call history | Telegram | `telegram_calls_operational_v1` |
+| Telegram provider call history | Telegram | `telegram_call_history_v1` |
+| Telegram provider call signaling | Telegram | `telegram_call_signaling_v1` |
+| Telegram real one-to-one audio media | Telegram | `telegram_call_media_v1` |
+| Telegram complete provider calls | Telegram | `telegram_calls_operational_v1` after the three Calls gates above |
 | Telegram full operational client closure | Telegram | `telegram_full_operational_v1` after all Telegram gates above |
 | WhatsApp public operational queries/client | WhatsApp | `whatsapp_full_operational_v1` |
 | Zulip lifecycle/history/search/client | Zulip | `zulip_full_operational_v1` |
@@ -436,7 +439,9 @@ release.
    `telegram_runtime_reconfiguration_v1`,
    `telegram_folder_reassignment_v1`,
    `telegram_automation_v1`,
-   `telegram_calls_operational_v1`. Только их совокупное evidence закрывает
+   `telegram_calls_operational_v1`. Calls umbrella отдельно требует
+   `telegram_call_history_v1`, `telegram_call_signaling_v1` и
+   `telegram_call_media_v1` по ADR-0284. Только их совокупное evidence закрывает
    umbrella gate `telegram_full_operational_v1`; существующий typed backend и
    frontend не считаются полным переносом, пока отсутствует хотя бы один из
    этих контрактов.
