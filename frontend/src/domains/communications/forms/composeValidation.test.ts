@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  composeAttachmentSendError,
   composeSendSchema,
   splitComposeRecipients,
   toComposeValidationValues
@@ -72,5 +73,17 @@ describe('compose validation', () => {
       body: 'Thanks',
       inReplyTo: 'provider-message-1'
     })
+  })
+
+  it('explains why a non-ready attachment cannot be sent', () => {
+    expect(composeAttachmentSendError([{
+      attachmentId: 'attachment-1',
+      filename: 'report.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 42,
+      scanStatus: 'suspicious',
+      uploadStatus: 'blocked',
+      error: ''
+    }])).toBe('Attachment "report.pdf" is blocked by its security scan (suspicious)')
   })
 })

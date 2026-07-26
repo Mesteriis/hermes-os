@@ -26,7 +26,6 @@ const emit = defineEmits<{
   'select-message': [messageId: string]
   'select-conversation': [item: MessengerListItemModel]
   'submit': [value: string]
-  'upload-file': [file: File, caption: string]
   'download-attachment': [attachment: MessengerAttachmentModel]
   'load-older': []
   'messages-visible': []
@@ -40,7 +39,6 @@ const controller = useMessengerWorkspaceController(
     conversationAction: (action) => emit('conversation-action', action),
     selectMessage: (messageId) => emit('select-message', messageId),
     submit: (value) => emit('submit', value),
-    uploadFile: (file, caption) => emit('upload-file', file, caption),
     downloadAttachment: (attachment) => emit('download-attachment', attachment),
     loadOlder: () => emit('load-older'),
     messagesVisible: () => emit('messages-visible'),
@@ -58,7 +56,6 @@ const {
   handleSelectMessage,
   handleSubmit,
   handleToggleInspector,
-  handleUploadFile,
 } = controller
 </script>
 
@@ -89,7 +86,6 @@ const {
 				@select-message="handleSelectMessage"
 				@submit="handleSubmit"
 				@toggle-inspector="handleToggleInspector"
-				@upload-file="handleUploadFile"
 				@download-attachment="handleDownloadAttachment"
 				@load-older="handleLoadOlder"
 				@messages-visible="handleMessagesVisible"

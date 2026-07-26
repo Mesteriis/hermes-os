@@ -5,7 +5,7 @@ import type {
   CommunicationAccountOption,
   ComposeFormModel,
 } from '../types/communications'
-import { composeAttachmentSendError } from '../forms/composeAttachmentUpload'
+import { composeAttachmentSendError } from '../forms/composeValidation'
 import { communicationConversationActiveMessage } from '../components/communicationConversationPresentation'
 import {
   composeAccountOptionSignature,

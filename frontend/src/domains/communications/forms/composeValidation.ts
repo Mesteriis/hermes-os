@@ -2,7 +2,7 @@ import { watch } from 'vue'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import type { ComposeFormModel } from '../types/communications'
+import type { ComposeAttachmentModel, ComposeFormModel } from '../types/communications'
 
 const MAX_EMAIL_SUBJECT_LENGTH = 998
 const MAX_EMAIL_BODY_LENGTH = 1_000_000
@@ -65,6 +65,20 @@ export const composeSendSchema = z.object({
 })
 
 export const composeVeeValidationSchema = toTypedSchema(composeSendSchema)
+
+export function composeAttachmentSendError(attachments: readonly ComposeAttachmentModel[]): string {
+  const uploading = attachments.find((attachment) => attachment.uploadStatus === 'uploading')
+  if (uploading) return `Attachment "${uploading.filename}" is still uploading`
+
+  const failed = attachments.find((attachment) => attachment.uploadStatus === 'failed')
+  if (failed) return failed.error || `Attachment "${failed.filename}" failed to upload`
+
+  const blocked = attachments.find((attachment) => attachment.uploadStatus === 'blocked')
+  if (blocked) {
+    return `Attachment "${blocked.filename}" is blocked by its security scan (${blocked.scanStatus})`
+  }
+  return ''
+}
 
 export function useComposeValidation(formSource: () => ComposeFormModel) {
   const { errors, setValues, validate } = useForm<ComposeValidationValues>({

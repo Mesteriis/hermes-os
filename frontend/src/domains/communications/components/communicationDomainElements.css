@@ -4157,22 +4157,6 @@
 	padding: var(--h-spacing-3);
 }
 
-.messenger-viewer__pending-attachment {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: var(--h-spacing-2);
-	margin-bottom: var(--h-spacing-2);
-	padding: var(--h-spacing-2);
-	border: 1px solid color-mix(in srgb, var(--h-color-accent) 35%, var(--h-color-border));
-	border-radius: var(--h-radius-md);
-	background: color-mix(in srgb, var(--h-color-accent) 6%, var(--h-color-surface-raised));
-}
-
-.messenger-viewer__file-input {
-	display: none;
-}
-
 .messenger-provider-rich-editor {
 	position: relative;
 	display: grid;

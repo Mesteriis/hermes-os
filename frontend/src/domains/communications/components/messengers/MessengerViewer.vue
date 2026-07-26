@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useI18n } from '@/platform/i18n'
 import { AttachmentChip, Badge, Button, MessageBubble, MessageStatus, ProviderIcon, ReactionBadge } from '@/shared/ui'
 import '../communicationDomainElements.css'
@@ -26,7 +25,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   'select-message': [messageId: string]
   'submit': [value: string]
-  'upload-file': [file: File, caption: string]
   'download-attachment': [attachment: MessengerAttachmentModel]
   'load-older': []
   'messages-visible': []
@@ -34,14 +32,10 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const fileInput = ref<HTMLInputElement | null>(null)
-
 const controller = useMessengerViewerController(
   props,
   {
-    openFilePicker: () => fileInput.value?.click(),
     submitMessage: (value) => emit('submit', value),
-    uploadFile: (file, caption) => emit('upload-file', file, caption),
     selectMessage: (messageId) => emit('select-message', messageId),
     downloadAttachment: (attachment) => emit('download-attachment', attachment),
     loadOlder: () => emit('load-older'),
@@ -50,11 +44,8 @@ const controller = useMessengerViewerController(
 )
 
 const {
-  pendingAttachment,
   messagesContainer,
   isConversationEmpty,
-  handleComposerCapability,
-  handleFileChange,
   handleComposerSubmit,
   handleMessageScroll,
   handleSelectMessage,
@@ -162,31 +153,9 @@ const {
 			</MessageBubble>
 		</div>
 		<footer v-if="!isConversationEmpty" class="messenger-viewer__composer">
-			<div v-if="pendingAttachment" class="messenger-viewer__pending-attachment" role="status">
-				<AttachmentChip
-					:name="pendingAttachment.name"
-					:meta="t('Attachment ready to send')"
-					icon="tabler:paperclip"
-				/>
-				<Button
-					variant="ghost"
-					size="sm"
-					icon="tabler:x"
-					:aria-label="t('Remove attachment')"
-					:title="t('Remove attachment')"
-					@click="pendingAttachment = null"
-				/>
-			</div>
 			<MessengerRichEditor
 				:conversation="conversation"
-				@select-capability="handleComposerCapability"
 				@submit="handleComposerSubmit"
-			/>
-			<input
-				ref="fileInput"
-				class="messenger-viewer__file-input"
-				type="file"
-				@change="handleFileChange"
 			/>
 		</footer>
 	</section>

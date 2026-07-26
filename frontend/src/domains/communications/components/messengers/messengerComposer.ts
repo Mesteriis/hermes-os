@@ -60,10 +60,9 @@ export function telegramMessengerComposerPreset(conversation: MessengerConversat
     placeholder: 'Write a Telegram reply',
     toolbarLabel: 'Telegram rich text tools',
     maxLength: 4096,
-    primaryActions: [
-      { id: 'telegram-file', label: 'Attach file', icon: 'tabler:paperclip', tone: 'accent' }
-    ],
-    // Voice, polls, scheduling and hidden-send options are not provider capabilities yet.
+    // Local media upload requires a separately admitted client Blob boundary.
+    primaryActions: [],
+    // Voice, polls, media, scheduling and hidden-send options are not provider capabilities yet.
     insertActions: [],
     richTextActions: telegramRichTextActions
   }
@@ -145,13 +144,6 @@ export function messengerComposerPlainText(html: string): string {
     .filter(Boolean)
     .join('\n')
     .trim()
-}
-
-export function messengerComposerCapabilityCanOpenFile(
-  capability: Pick<MessengerComposerCapability, 'id'>,
-  isActionRunning: boolean
-): boolean {
-  return capability.id === 'telegram-file' && !isActionRunning
 }
 
 export function localizedMessengerRichTextActions(

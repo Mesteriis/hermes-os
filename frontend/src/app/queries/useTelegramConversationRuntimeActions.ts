@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/vue-query'
-import { useTelegramMediaUploadMutation } from '../../platform/bootstrap/useTelegramMediaUploadWorkflow'
 import type {
   TelegramConversationRuntimeActionRequest,
 } from '../../shared/communications/types/telegramRuntimeActions'
@@ -42,7 +41,6 @@ export function useTelegramConversationRuntimeActions() {
   const unarchive = useUnarchiveTelegramChatMutation()
   const unmute = useUnmuteTelegramChatMutation()
   const unpin = useUnpinTelegramChatMutation()
-  const uploadMedia = useTelegramMediaUploadMutation()
 
   async function run(request: TelegramConversationRuntimeActionRequest): Promise<void> {
     const target = {
@@ -139,15 +137,6 @@ export function useTelegramConversationRuntimeActions() {
         break
       case 'unpin':
         await unpin.mutateAsync(target)
-        break
-      case 'upload_media':
-        if (!request.file) throw new Error('Select a file before sending Telegram media.')
-        await uploadMedia.mutateAsync({
-          accountId: request.accountId,
-          providerChatId: request.providerChatId,
-          file: request.file,
-          caption: request.caption,
-        })
         break
     }
 

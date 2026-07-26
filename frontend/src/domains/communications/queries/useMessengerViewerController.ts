@@ -1,10 +1,5 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import type { MessengerAttachmentModel, MessengerConversationModel } from '../components/messengers/messengerElements'
-import {
-  messengerComposerCapabilityCanOpenFile,
-  messengerComposerPlainText,
-  type MessengerComposerCapability,
-} from '../components/messengers/messengerComposer'
 import { messengerConversationIsEmpty } from '../components/messengers/messengerElements'
 
 export interface MessengerViewerControllerProps {
@@ -14,9 +9,7 @@ export interface MessengerViewerControllerProps {
 }
 
 export interface MessengerViewerControllerActions {
-  openFilePicker: () => void
   submitMessage: (value: string) => void
-  uploadFile: (file: File, caption: string) => void
   selectMessage: (messageId: string) => void
   downloadAttachment: (attachment: MessengerAttachmentModel) => void
   loadOlder: () => void
@@ -27,7 +20,6 @@ export function useMessengerViewerController(
   props: Readonly<MessengerViewerControllerProps>,
   actions: MessengerViewerControllerActions,
 ) {
-  const pendingAttachment = ref<File | null>(null)
   const messagesContainer = ref<HTMLElement | null>(null)
   const historyScrollHeight = ref<number | null>(null)
   const isConversationEmpty = computed(() => messengerConversationIsEmpty(props.conversation))
@@ -35,7 +27,6 @@ export function useMessengerViewerController(
   watch(
     () => props.conversation.id,
     () => {
-      pendingAttachment.value = null
       historyScrollHeight.value = null
       void nextTick(() => {
         const container = messagesContainer.value
@@ -72,34 +63,9 @@ export function useMessengerViewerController(
     },
   )
 
-  function handleComposerCapability(capability: MessengerComposerCapability): void {
-    if (!messengerComposerCapabilityCanOpenFile(capability, Boolean(props.isActionRunning))) {
-      return
-    }
-    actions.openFilePicker()
-  }
-
-  function handleFileChange(event: Event): void {
-    if (!(event.target instanceof HTMLInputElement)) return
-    const input = event.target
-    const file = input.files?.[0]
-    input.value = ''
-    if (file) {
-      pendingAttachment.value = file
-    }
-  }
-
   function handleComposerSubmit(value: string): void {
     if (props.isActionRunning) return
-
-    const file = pendingAttachment.value
-    if (!file) {
-      actions.submitMessage(value)
-      return
-    }
-
-    pendingAttachment.value = null
-    actions.uploadFile(file, messengerComposerPlainText(value))
+    actions.submitMessage(value)
   }
 
   function handleMessageScroll(event: Event): void {
@@ -119,11 +85,8 @@ export function useMessengerViewerController(
   }
 
   return {
-    pendingAttachment,
     messagesContainer,
     isConversationEmpty,
-    handleComposerCapability,
-    handleFileChange,
     handleComposerSubmit,
     handleMessageScroll,
     handleSelectMessage,

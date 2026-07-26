@@ -59,7 +59,7 @@ export type CommunicationsPageActions = {
 	updateMailSearch(query: string): void
 	updateCompose(partial: Partial<ComposeFormModel>): void
 	setVisibleMailItemIds(itemIds: string[]): void
-	runMessengerAction(action: MessengerConversationRuntimeAction, file?: File, caption?: string): void | Promise<void>
+	runMessengerAction(action: MessengerConversationRuntimeAction): void | Promise<void>
 	refreshMessengerConversation(): void | Promise<void>
 	selectMessengerConversation(item: MessengerListItemModel): void
 	selectMessengerMessage(messageId: string): void

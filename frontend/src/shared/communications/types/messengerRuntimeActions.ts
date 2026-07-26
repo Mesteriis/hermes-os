@@ -17,7 +17,6 @@ export type MessengerConversationRuntimeAction =
   | 'unarchive'
   | 'unmute'
   | 'unpin'
-  | 'upload_media'
 
 export type MessengerConversationRuntimeActionRunner = (
   action: MessengerConversationRuntimeAction,

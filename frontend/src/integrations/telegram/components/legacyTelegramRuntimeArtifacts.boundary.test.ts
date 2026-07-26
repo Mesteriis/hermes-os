@@ -24,6 +24,10 @@ const removedTelegramCommunicationsFacadeFiles = [
   resolve(integrationDir, 'queries/useTelegramBusinessQuery.boundary.test.ts'),
   resolve(integrationDir, 'queries/useTelegramBusinessQuery.ts'),
   resolve(integrationDir, 'types/business.ts'),
+  resolve(integrationDir, 'api/telegramMediaUpload.test.ts'),
+  resolve(integrationDir, 'api/telegramMediaUpload.ts'),
+  resolve(componentsDir, '../../../platform/bootstrap/useTelegramMediaUploadWorkflow.test.ts'),
+  resolve(componentsDir, '../../../platform/bootstrap/useTelegramMediaUploadWorkflow.ts'),
   resolve(componentsDir, '../../../domains/communications/components/messengers/TelegramConversationInspector.vue'),
   resolve(componentsDir, '../../../domains/communications/components/messengers/TelegramMessageInspector.vue'),
   resolve(componentsDir, '../../../domains/communications/components/messengers/telegramConversationInspectorActions.test.ts'),
@@ -69,10 +73,6 @@ describe('legacy telegram runtime artifacts', () => {
       resolve(componentsDir, '../../../platform/bootstrap/realtime.ts'),
       'utf8',
     )
-    const mediaUploadWorkflowSource = readFileSync(
-      resolve(componentsDir, '../../../platform/bootstrap/useTelegramMediaUploadWorkflow.ts'),
-      'utf8',
-    )
     const runtimeActionSource = readFileSync(
       resolve(componentsDir, '../../../app/queries/useTelegramConversationRuntimeActions.ts'),
       'utf8',
@@ -80,7 +80,6 @@ describe('legacy telegram runtime artifacts', () => {
 
     expect(platformRealtimeSource).not.toContain('domains/communications/queries/realtimeTelegram')
     expect(platformRealtimeSource).not.toMatch(/\[\s*['"]communications['"]\s*,\s*['"]telegram['"]/)
-    expect(mediaUploadWorkflowSource).not.toMatch(/\[\s*['"]communications['"]\s*,\s*['"]telegram['"]/)
     expect(runtimeActionSource).not.toMatch(/\[\s*['"]communications['"]\s*,\s*['"]telegram['"]/)
   })
 

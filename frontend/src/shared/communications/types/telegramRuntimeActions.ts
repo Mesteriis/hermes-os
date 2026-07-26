@@ -11,8 +11,6 @@ export type TelegramConversationRuntimeActionRequest = {
   providerChatId: string
   telegramChatId: string
   lastReadInboxProviderMessageId?: string
-  caption?: string
-  file?: File
   providerAttachmentId?: string
   providerFolderId?: number
   providerFolderIds?: number[]

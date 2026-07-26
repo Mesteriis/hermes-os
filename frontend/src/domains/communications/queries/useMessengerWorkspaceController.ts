@@ -16,7 +16,6 @@ export interface MessengerWorkspaceControllerActions {
   conversationAction: (action: MessengerConversationRuntimeAction) => void
   selectMessage: (messageId: string) => void
   submit: (value: string) => void
-  uploadFile: (file: File, caption: string) => void
   downloadAttachment: (attachment: MessengerAttachmentModel) => void
   loadOlder: () => void
   messagesVisible: () => void
@@ -53,10 +52,6 @@ export function useMessengerWorkspaceController(
     actions.submit(value)
   }
 
-  function handleUploadFile(file: File, caption: string): void {
-    actions.uploadFile(file, caption)
-  }
-
   function handleDownloadAttachment(attachment: MessengerAttachmentModel): void {
     actions.downloadAttachment(attachment)
   }
@@ -77,7 +72,6 @@ export function useMessengerWorkspaceController(
     handleConversationAction,
     handleSelectMessage,
     handleSubmit,
-    handleUploadFile,
     handleDownloadAttachment,
     handleLoadOlder,
     handleMessagesVisible,

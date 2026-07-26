@@ -6,6 +6,7 @@ const CANONICAL_THEMES = ['base-light', 'base-dark', 'hermes-light', 'hermes-dar
 // Cross-theme token regressions are covered by Hermes UI/Foundation/Themes, which renders all canonical themes side by side.
 const VISUAL_SNAPSHOT_THEMES = ['base-light'] as const
 const LOCALES = ['en'] as const
+const STORY_FILTER = process.env.HERMES_VISUAL_STORY_FILTER?.trim().toLocaleLowerCase() || null
 
 const VIEWPORTS = [
 	{ name: 'w320', width: 320, height: 900 },
@@ -118,6 +119,16 @@ const STORY_BUCKETS: readonly StoryBucket[] = [
 	}
 ]
 
+const ACTIVE_STORY_BUCKETS: readonly StoryBucket[] = STORY_FILTER
+	? [
+			{
+				name: 'selected',
+				includes: (story) =>
+					`${story.id} ${story.title} ${story.name}`.toLocaleLowerCase().includes(STORY_FILTER)
+			}
+		]
+	: STORY_BUCKETS
+
 test.describe('Hermes UI Storybook visual regression', () => {
 	test.describe.configure({ mode: 'serial' })
 
@@ -135,7 +146,7 @@ test.describe('Hermes UI Storybook visual regression', () => {
 		)
 	})
 
-	for (const bucket of STORY_BUCKETS) {
+	for (const bucket of ACTIVE_STORY_BUCKETS) {
 		test(`${bucket.name} stories match visual baselines`, async ({ page, request }) => {
 			const browserErrors: string[] = []
 			page.on('console', (message) => {

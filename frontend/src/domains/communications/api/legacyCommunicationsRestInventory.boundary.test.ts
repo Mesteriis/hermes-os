@@ -6,20 +6,17 @@ import { describe, expect, it } from 'vitest'
 
 const SOURCE_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const LEGACY_ROUTE_PREFIX = ['/api/v1', 'communications'].join('/')
-const EXACT_PENDING_FILES = [
-	'domains/communications/api/attachmentImportApi.ts',
-	'integrations/whatsapp/api/whatsappBusiness.ts',
-] as const
+const NO_PENDING_FILES: readonly string[] = []
 
 describe('legacy Communications REST inventory', () => {
-	it('keeps the secondary frontend cutover exact and bounded', () => {
+	it('has no production caller for the removed Communications REST facade', () => {
 		const pendingFiles = collectSourceFiles(SOURCE_ROOT)
 			.filter((path) => !path.endsWith('.test.ts'))
 			.filter((path) => readFileSync(path, 'utf8').includes(LEGACY_ROUTE_PREFIX))
 			.map((path) => relative(SOURCE_ROOT, path).replaceAll('\\', '/'))
 			.sort()
 
-		expect(pendingFiles).toEqual(EXACT_PENDING_FILES)
+		expect(pendingFiles).toEqual(NO_PENDING_FILES)
 	})
 })
 

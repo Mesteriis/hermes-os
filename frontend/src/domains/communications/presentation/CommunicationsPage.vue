@@ -13,10 +13,6 @@ const props = defineProps<{
 	actions: CommunicationsPageActions
 }>()
 
-function handleUploadMessengerMedia(file: File, caption: string): void {
-	void props.actions.runMessengerAction('upload_media', file, caption)
-}
-
 function handleAttachComposeFiles(files: File[]): void {
 	props.actions.attachComposeFiles(files)
 }
@@ -153,7 +149,6 @@ function handleMarkMessengerMessagesVisible(): void {
 			@select-conversation="handleSelectMessengerConversation"
 			@select-message="handleSelectMessengerMessage"
 			@submit="handleSubmitMessengerMessage"
-			@upload-file="handleUploadMessengerMedia"
 			@download-attachment="handleDownloadMessengerAttachment"
 			@load-older="handleLoadOlderMessengerMessages"
 			@messages-visible="handleMarkMessengerMessagesVisible"

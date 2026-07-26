@@ -23,7 +23,6 @@ const emit = defineEmits<{
   'select-message': [messageId: string]
   'toggle-inspector': []
   'submit': [value: string]
-  'upload-file': [file: File, caption: string]
   'download-attachment': [attachment: MessengerAttachmentModel]
   'load-older': []
   'messages-visible': []
@@ -31,10 +30,6 @@ const emit = defineEmits<{
 
 function handleSubmit(value: string): void {
   emit('submit', value)
-}
-
-function handleUploadFile(file: File, caption: string): void {
-  emit('upload-file', file, caption)
 }
 
 function handleDownloadAttachment(attachment: MessengerAttachmentModel): void {
@@ -79,7 +74,6 @@ function handleMessagesVisible(): void {
 			:is-action-running="isActionRunning"
 			:is-loading-older="isLoadingOlder"
 			@submit="handleSubmit"
-			@upload-file="handleUploadFile"
 			@download-attachment="handleDownloadAttachment"
 			@load-older="handleLoadOlder"
 			@messages-visible="handleMessagesVisible"

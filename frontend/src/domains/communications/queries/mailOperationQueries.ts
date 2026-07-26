@@ -10,11 +10,6 @@ import {
   sendEmail,
   undoOutboxItem
 } from '../api/communications'
-import {
-  importCommunicationAttachment,
-  type CommunicationAttachmentImportRequest,
-  type CommunicationAttachmentImportResponse
-} from '../api/attachmentImportApi'
 import type {
   BulkMessageActionRequest,
   BulkMessageActionResponse,
@@ -76,16 +71,6 @@ export function useOutboxQuery(accountId?: QueryParam<string>, status?: QueryPar
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
     ...communicationRealtimeQueryOptions
-  })
-}
-
-export function useCommunicationAttachmentImportMutation() {
-  return useMutation<
-    CommunicationAttachmentImportResponse,
-    Error,
-    CommunicationAttachmentImportRequest
-  >({
-    mutationFn: importCommunicationAttachment
   })
 }
 

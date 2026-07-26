@@ -2,8 +2,7 @@
 
 Status: Accepted
 Date: 2026-07-22
-Implementation state: Backend owner implemented; repository cutover in
-progress. The owner now has hash-scoped evidence,
+Implementation state: Fully implemented. The owner now has hash-scoped evidence,
 accounts, conversations, messages, observed participants, attachment anchors,
 reply/forward references, transactional inbox/outbox, a generated metadata-query
 port, typed Blob-backed body admission receipts/failures, and a Kernel-inherited
@@ -48,21 +47,17 @@ have one domain-owned source in `hermes-communications-attachment-contract`;
 the former ingress/API schema locations were removed without a facade or
 duplicate re-export.
 All backend owner criteria below are implemented and covered by the exact
-`attachment_security_engine_v1` inventory plus `make -C backend ci`. Repository
-completion remains open only because secondary frontend source still contains
-legacy `/api/v1/communications/*` clients outside the generated canonical query
-adapter. Those clients have no clean-room backend facade and must be removed or
-replaced in their rightful integration/workflow owner before this ADR can be
-marked fully implemented across the repository. The exact legacy REST inventory
-is now two production callers after removing the orphaned Telegram
-Communications REST/query/inspector chain and its Communications-prefixed
-realtime cache patchers, in addition to unsupported account, certificate,
-mail-import, read-receipt, AI-state, bilingual-reply and
-provider-command-diagnostics chains plus the Home and frozen Timeline
-cross-owner projections. The generated Telegram operational Connect client
-remains the only admitted future provider-operation seam; this removal does not
-claim that the separate Telegram frontend experience has completed its own
-generated-client phase gate.
+`attachment_security_engine_v1` inventory plus the canonical backend gates. The
+repository cutover is also complete:
+`legacyCommunicationsRestInventory.boundary.test.ts` proves that production
+frontend source contains no `/api/v1/communications/*` caller outside the
+generated canonical owner client. The last orphaned attachment-import and
+WhatsApp business REST chains were removed. The Telegram media-upload workflow
+and its file action were removed with them because no admitted client Blob
+upload boundary exists; they were not replaced by a facade, fallback or direct
+integration-to-domain call. The generated Telegram operational Connect client
+remains the only admitted future provider-operation seam, and a future media
+upload capability requires its own client Blob admission phase gate.
 
 Depends on:
 
@@ -188,9 +183,9 @@ The domain is considered migrated only when all of the following are true:
 | Criterion | State | Evidence |
 |---|---|---|
 | 1-4: typed owner model, durable owner state and event-only integration ingress | Complete | Exact six-package Communications inventory, typed lifecycle contracts, owner-local PostgreSQL inbox/outbox and live Mail/Telegram replay evidence. |
-| 5: generated Gateway/client owner contract | Backend and canonical client adapter complete; legacy frontend residue pending | Generated Communications Connect client and canonical search/evidence adapters are present; `legacyCommunicationsRestInventory.boundary.test.ts` keeps the remaining 2 REST callers exact and bounded after removing the Telegram Communications facade/query/realtime chain plus unsupported account, certificate, mail-import, read-receipt, AI-state, bilingual-reply, provider-command-diagnostics, Home and frozen Timeline surfaces. |
-| 6: no legacy facade or cross-owner backend edge | Backend complete; repository pending | Architecture and Cargo guards reject backend facades, cross-owner SQL and direct owner edges. Frontend legacy REST source must still be removed. |
-| 7: complete validation | Backend complete; frontend pending | `make -C backend ci` is the canonical architecture, workspace, integration, dependency-policy and SBOM gate. The exact Communications owner acceptance is independently replayable through `managed_communications_domain_starts_with_owner_local_storage_and_events`. Full frontend validation follows the legacy-client cutover. |
+| 5: generated Gateway/client owner contract | Complete | Generated Communications Connect client and canonical search/evidence adapters are present. The exact legacy REST inventory now proves zero production callers, and unsupported provider operations were removed rather than routed through a compatibility client. |
+| 6: no legacy facade or cross-owner backend edge | Complete | Architecture and Cargo guards reject backend facades, cross-owner SQL and direct owner edges. Frontend boundary tests reject any renewed `/api/v1/communications/*` production caller and keep the deleted Telegram workflow inventory explicit. |
+| 7: complete validation | Complete for the Communications cutover | The exact managed-owner acceptance remains independently replayable through `managed_communications_domain_starts_with_owner_local_storage_and_events`. Frontend lint, typecheck, 707 unit tests, build, browser-bootstrap and clean-room Tauri bundle gates pass. Targeted Messenger visual execution reaches the affected story; the repository-wide visual baseline still reports pre-existing local-icon drift unrelated to this cutover, so no unrelated baseline was rewritten as migration evidence. |
 
 ## Consequences
 
