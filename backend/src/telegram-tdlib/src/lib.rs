@@ -280,6 +280,26 @@ pub fn parse_authorization_update(payload: &Value) -> Result<TdlibAuthorizationU
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TdlibRequest {
+    GetOwnUser {
+        correlation_id: String,
+    },
+    CreateCall {
+        operation_id: String,
+        provider_user_id: String,
+        protocol: hermes_telegram_call_media_contract::TelegramCallProtocolV1,
+    },
+    AcceptCall {
+        operation_id: String,
+        tdlib_call_id: i32,
+        protocol: hermes_telegram_call_media_contract::TelegramCallProtocolV1,
+    },
+    DiscardCall {
+        operation_id: String,
+        tdlib_call_id: i32,
+        is_disconnected: bool,
+        duration_seconds: u32,
+        connection_id: i64,
+    },
     LoadChats {
         account_id: String,
         limit: u32,
@@ -324,6 +344,13 @@ pub enum TdlibRequest {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TdlibResponse {
+    OwnUser {
+        provider_user_id: String,
+    },
+    CallCreated {
+        operation_id: String,
+        tdlib_call_id: i32,
+    },
     Chats(Vec<TelegramChat>),
     History(Vec<TelegramMessageObservation>),
     Sent {
@@ -410,6 +437,61 @@ pub fn send_message_request(command: TelegramSendMessage) -> Result<TdlibRequest
 
 pub fn encode_request(request: &TdlibRequest) -> Result<Value, TdlibError> {
     match request {
+        TdlibRequest::GetOwnUser { correlation_id } => Ok(json!({
+            "@type": "getMe",
+            "@extra": correlation_id,
+        })),
+        TdlibRequest::CreateCall {
+            operation_id,
+            provider_user_id,
+            protocol,
+        } => Ok(json!({
+            "@type": "createCall",
+            "user_id": provider_id(provider_user_id)?,
+            "protocol": call_protocol_value(protocol)?,
+            "is_video": false,
+            "@extra": operation_id,
+        })),
+        TdlibRequest::AcceptCall {
+            operation_id,
+            tdlib_call_id,
+            protocol,
+        } => {
+            if *tdlib_call_id <= 0 {
+                return Err(TdlibError::Protocol(
+                    "TDLib call identifier is invalid".to_owned(),
+                ));
+            }
+            Ok(json!({
+                "@type": "acceptCall",
+                "call_id": tdlib_call_id,
+                "protocol": call_protocol_value(protocol)?,
+                "@extra": operation_id,
+            }))
+        }
+        TdlibRequest::DiscardCall {
+            operation_id,
+            tdlib_call_id,
+            is_disconnected,
+            duration_seconds,
+            connection_id,
+        } => {
+            if *tdlib_call_id <= 0 || i32::try_from(*duration_seconds).is_err() {
+                return Err(TdlibError::Protocol(
+                    "TDLib call discard context is invalid".to_owned(),
+                ));
+            }
+            Ok(json!({
+                "@type": "discardCall",
+                "call_id": tdlib_call_id,
+                "is_disconnected": is_disconnected,
+                "invite_link": "",
+                "duration": duration_seconds,
+                "is_video": false,
+                "connection_id": connection_id,
+                "@extra": operation_id,
+            }))
+        }
         TdlibRequest::LoadChats { account_id, limit } => Ok(json!({
             "@type": "getChats",
             "chat_list": {"@type": "chatListMain"},
@@ -510,6 +592,22 @@ pub fn encode_request(request: &TdlibRequest) -> Result<Value, TdlibError> {
         })),
         TdlibRequest::ProviderCommand(command) => encode_provider_command(command),
     }
+}
+
+fn call_protocol_value(
+    protocol: &hermes_telegram_call_media_contract::TelegramCallProtocolV1,
+) -> Result<Value, TdlibError> {
+    protocol
+        .validate()
+        .map_err(|_| TdlibError::Protocol("Telegram call protocol is invalid".to_owned()))?;
+    Ok(json!({
+        "@type": "callProtocol",
+        "udp_p2p": protocol.udp_p2p,
+        "udp_reflector": protocol.udp_reflector,
+        "min_layer": protocol.min_layer,
+        "max_layer": protocol.max_layer,
+        "library_versions": protocol.library_versions,
+    }))
 }
 
 pub fn encode_provider_command(command: &TelegramProviderCommand) -> Result<Value, TdlibError> {
@@ -2859,6 +2957,10 @@ fn encode_remove_chat_from_folder(
 
 fn request_extra(request: &TdlibRequest) -> String {
     match request {
+        TdlibRequest::GetOwnUser { correlation_id } => correlation_id.clone(),
+        TdlibRequest::CreateCall { operation_id, .. }
+        | TdlibRequest::AcceptCall { operation_id, .. }
+        | TdlibRequest::DiscardCall { operation_id, .. } => operation_id.clone(),
         TdlibRequest::LoadChats { account_id, .. }
         | TdlibRequest::LoadHistory { account_id, .. }
         | TdlibRequest::ListTopics { account_id, .. }
@@ -2881,7 +2983,35 @@ fn parse_response_for_request(
     request: &TdlibRequest,
     response: Value,
 ) -> Result<TdlibResponse, TdlibError> {
+    if response.get("@type").and_then(Value::as_str) == Some("error") {
+        return Err(tdlib_error(&response));
+    }
     match request {
+        TdlibRequest::GetOwnUser { .. } => Ok(TdlibResponse::OwnUser {
+            provider_user_id: value_id(
+                response
+                    .get("id")
+                    .ok_or_else(|| TdlibError::Protocol("TDLib user is missing id".to_owned()))?,
+            )?,
+        }),
+        TdlibRequest::CreateCall { operation_id, .. } => {
+            let tdlib_call_id = response
+                .get("id")
+                .and_then(Value::as_i64)
+                .and_then(|value| i32::try_from(value).ok())
+                .filter(|value| *value > 0)
+                .ok_or_else(|| {
+                    TdlibError::Protocol("TDLib createCall response is missing id".to_owned())
+                })?;
+            Ok(TdlibResponse::CallCreated {
+                operation_id: operation_id.clone(),
+                tdlib_call_id,
+            })
+        }
+        TdlibRequest::AcceptCall { operation_id, .. }
+        | TdlibRequest::DiscardCall { operation_id, .. } => Ok(TdlibResponse::Accepted {
+            operation_id: operation_id.clone(),
+        }),
         TdlibRequest::LoadHistory { .. } => {
             let messages = response
                 .get("messages")
@@ -3155,6 +3285,91 @@ mod folder_command_tests {
         assert_eq!(messages[0].provider_chat_id, "100");
         assert_eq!(messages[0].provider_message_id, "200");
         assert_eq!(messages[0].text.as_deref(), Some("release"));
+    }
+}
+
+#[cfg(test)]
+mod call_command_tests {
+    use hermes_telegram_call_media_contract::TelegramCallProtocolV1;
+
+    use super::*;
+
+    fn protocol() -> TelegramCallProtocolV1 {
+        TelegramCallProtocolV1::new(true, true, vec!["pinned-tgcalls".to_owned()])
+            .expect("protocol")
+    }
+
+    #[test]
+    fn encodes_exact_audio_call_signaling_requests() {
+        let create = encode_request(&TdlibRequest::CreateCall {
+            operation_id: "call-create".to_owned(),
+            provider_user_id: "9001".to_owned(),
+            protocol: protocol(),
+        })
+        .expect("createCall");
+        assert_eq!(create["@type"], "createCall");
+        assert_eq!(create["user_id"], 9001);
+        assert_eq!(create["is_video"], false);
+        assert_eq!(create["protocol"]["@type"], "callProtocol");
+        assert_eq!(create["protocol"]["min_layer"], 65);
+        assert_eq!(create["protocol"]["max_layer"], 92);
+        assert_eq!(create["protocol"]["library_versions"][0], "pinned-tgcalls");
+
+        let accept = encode_request(&TdlibRequest::AcceptCall {
+            operation_id: "call-accept".to_owned(),
+            tdlib_call_id: 41,
+            protocol: protocol(),
+        })
+        .expect("acceptCall");
+        assert_eq!(accept["@type"], "acceptCall");
+        assert_eq!(accept["call_id"], 41);
+        assert_eq!(accept["protocol"]["udp_p2p"], true);
+
+        let discard = encode_request(&TdlibRequest::DiscardCall {
+            operation_id: "call-discard".to_owned(),
+            tdlib_call_id: 41,
+            is_disconnected: false,
+            duration_seconds: 37,
+            connection_id: 9002,
+        })
+        .expect("discardCall");
+        assert_eq!(discard["@type"], "discardCall");
+        assert_eq!(discard["duration"], 37);
+        assert_eq!(discard["connection_id"], 9002);
+        assert_eq!(discard["invite_link"], "");
+        assert_eq!(discard["is_video"], false);
+    }
+
+    #[test]
+    fn parses_create_call_id_and_sanitizes_correlated_provider_errors() {
+        let request = TdlibRequest::CreateCall {
+            operation_id: "call-create".to_owned(),
+            provider_user_id: "9001".to_owned(),
+            protocol: protocol(),
+        };
+        assert_eq!(
+            parse_response_for_request(
+                "account",
+                &request,
+                json!({"@type": "callId", "id": 41, "@extra": "call-create"}),
+            ),
+            Ok(TdlibResponse::CallCreated {
+                operation_id: "call-create".to_owned(),
+                tdlib_call_id: 41,
+            })
+        );
+        let error = parse_response_for_request(
+            "account",
+            &request,
+            json!({
+                "@type": "error",
+                "code": 400,
+                "message": "private provider detail",
+                "@extra": "call-create"
+            }),
+        )
+        .expect_err("provider error");
+        assert_eq!(error, TdlibError::Protocol("TDLib error 400".to_owned()));
     }
 }
 

@@ -50,6 +50,24 @@ enum CallFailureCategoryV1 {
   CALL_FAILURE_CATEGORY_V1_UNKNOWN = 5;
 }
 
+enum CallOperationKindV1 {
+  CALL_OPERATION_KIND_V1_UNSPECIFIED = 0;
+  CALL_OPERATION_KIND_V1_INITIATE_AUDIO = 1;
+  CALL_OPERATION_KIND_V1_ACCEPT_AUDIO = 2;
+  CALL_OPERATION_KIND_V1_DECLINE = 3;
+  CALL_OPERATION_KIND_V1_END = 4;
+  CALL_OPERATION_KIND_V1_SET_LOCAL_MUTE = 5;
+}
+
+enum CallOperationStateV1 {
+  CALL_OPERATION_STATE_V1_UNSPECIFIED = 0;
+  CALL_OPERATION_STATE_V1_ACCEPTED = 1;
+  CALL_OPERATION_STATE_V1_DISPATCHING = 2;
+  CALL_OPERATION_STATE_V1_AWAITING_PROVIDER = 3;
+  CALL_OPERATION_STATE_V1_COMPLETED = 4;
+  CALL_OPERATION_STATE_V1_FAILED = 5;
+}
+
 message TelegramCallV1 {
   string call_session_id = 1;
   string account_id = 2;
@@ -65,6 +83,7 @@ message TelegramCallV1 {
   uint64 created_at_unix_seconds = 12;
   uint64 updated_at_unix_seconds = 13;
   optional uint64 ended_at_unix_seconds = 14;
+  bool local_muted = 15;
 }
 
 message CallOperationV1 {
@@ -75,6 +94,10 @@ message CallOperationV1 {
   string operation_state = 5;
   uint64 accepted_at_unix_seconds = 6;
   optional uint64 completed_at_unix_seconds = 7;
+  CallOperationKindV1 kind = 8;
+  CallOperationStateV1 state = 9;
+  optional CallFailureCategoryV1 failure_category = 10;
+  uint64 revision = 11;
 }
 
 message ListCallsRequestV1 {
@@ -204,7 +227,10 @@ message CallsReplayRequestV1 {
 
 message CallFrameV1 {
   uint64 sequence = 1;
-  TelegramCallV1 call = 2;
+  oneof event {
+    TelegramCallV1 call = 2;
+    CallOperationV1 operation = 3;
+  }
 }
 
 message CallsReplayResponseV1 {

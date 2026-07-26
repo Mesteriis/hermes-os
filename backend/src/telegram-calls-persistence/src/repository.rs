@@ -7,7 +7,7 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 
 #[derive(Clone)]
 pub struct TelegramCallsPersistence {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,12 +17,6 @@ pub struct PersistedCallUpdate {
     pub replayed: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TelegramCallFrame {
-    pub sequence: u64,
-    pub session: TelegramCallSession,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TelegramCallsPersistenceError {
     Database,
@@ -30,6 +24,8 @@ pub enum TelegramCallsPersistenceError {
     IdentityConflict,
     StateRegression,
     TerminalConflict,
+    IdempotencyConflict,
+    CommandConflict(&'static str),
     InvalidRequest(&'static str),
 }
 
@@ -49,8 +45,41 @@ impl TelegramCallsPersistence {
         Self { pool }
     }
 
+    #[cfg(feature = "conformance-test-support")]
+    pub async fn connect_for_conformance(
+        database_url: &str,
+    ) -> Result<Self, TelegramCallsPersistenceError> {
+        let pool = PgPool::connect(database_url)
+            .await
+            .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        Ok(Self::new(pool))
+    }
+
+    #[cfg(feature = "conformance-test-support")]
+    pub async fn reset_prerequisites_for_conformance(
+        &self,
+    ) -> Result<(), TelegramCallsPersistenceError> {
+        sqlx::raw_sql(
+            "DROP SCHEMA IF EXISTS hermes_data CASCADE;
+             CREATE SCHEMA hermes_data;
+             CREATE TABLE hermes_data.telegram_accounts (
+                 account_id TEXT PRIMARY KEY
+             );
+             INSERT INTO hermes_data.telegram_accounts (account_id) VALUES ('account-1');",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "conformance-test-support")]
     pub async fn apply_schema_for_conformance(&self) -> Result<(), TelegramCallsPersistenceError> {
         sqlx::raw_sql(crate::schema::TELEGRAM_CALLS_SCHEMA_V1)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| TelegramCallsPersistenceError::Database)?;
+        sqlx::raw_sql(crate::schema::TELEGRAM_CALLS_SCHEMA_V2)
             .execute(&self.pool)
             .await
             .map_err(|_| TelegramCallsPersistenceError::Database)?;
@@ -85,7 +114,15 @@ impl TelegramCallsPersistence {
 
         persist_session(&mut transaction, current.as_ref(), &projected.session).await?;
         persist_history(&mut transaction, &projected.session).await?;
-        let frame_sequence = persist_frame(&mut transaction, &projected.session).await?;
+        persist_legacy_frame(&mut transaction, &projected.session).await?;
+        let frame_sequence =
+            crate::realtime::persist_call_event(&mut transaction, &projected.session).await?;
+        crate::operations::reconcile_operations_for_call(
+            &mut transaction,
+            &projected.session,
+            projected.session.updated_at_unix_seconds,
+        )
+        .await?;
         transaction
             .commit()
             .await
@@ -169,39 +206,9 @@ impl TelegramCallsPersistence {
         account_id: &str,
         after_sequence: u64,
         limit: u32,
-    ) -> Result<Vec<TelegramCallFrame>, TelegramCallsPersistenceError> {
-        let limit = validated_limit(limit)?;
-        let after_sequence = i64::try_from(after_sequence)
-            .map_err(|_| TelegramCallsPersistenceError::InvalidRequest("after_sequence"))?;
-        let rows = sqlx::query(
-            "SELECT f.frame_sequence, s.call_session_id, s.account_id, s.runtime_generation, \
-             s.tdlib_call_id, s.provider_call_unique_id, s.provider_user_id, s.direction, \
-             f.provider_state, f.pending_created, f.pending_received, f.discard_reason, \
-             f.failure_category, f.call_revision AS revision, s.created_at_unix_seconds, \
-             f.observed_at_unix_seconds AS updated_at_unix_seconds, \
-             CASE WHEN f.provider_state IN ('discarded', 'error') \
-                  THEN f.observed_at_unix_seconds ELSE NULL END AS ended_at_unix_seconds \
-             FROM hermes_data.telegram_call_realtime_frames f \
-             JOIN hermes_data.telegram_call_sessions s \
-               ON s.call_session_id = f.call_session_id \
-             WHERE f.account_id = $1 AND f.frame_sequence > $2 \
-             ORDER BY f.frame_sequence ASC LIMIT $3",
-        )
-        .bind(account_id)
-        .bind(after_sequence)
-        .bind(i64::from(limit))
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|_| TelegramCallsPersistenceError::Database)?;
-
-        rows.iter()
-            .map(|row| {
-                Ok(TelegramCallFrame {
-                    sequence: from_i64(row.try_get("frame_sequence").map_err(database_error)?)?,
-                    session: session_from_row(row)?,
-                })
-            })
-            .collect()
+    ) -> Result<Vec<crate::realtime::TelegramCallRealtimeEvent>, TelegramCallsPersistenceError>
+    {
+        crate::realtime::load_events(&self.pool, account_id, after_sequence, limit).await
     }
 }
 
@@ -338,7 +345,7 @@ async fn persist_history(
     Ok(())
 }
 
-async fn persist_frame(
+async fn persist_legacy_frame(
     transaction: &mut Transaction<'_, Postgres>,
     session: &TelegramCallSession,
 ) -> Result<u64, TelegramCallsPersistenceError> {
@@ -371,7 +378,7 @@ async fn persist_frame(
     from_i64(row.try_get("frame_sequence").map_err(database_error)?)
 }
 
-fn session_from_row(
+pub(crate) fn session_from_row(
     row: &sqlx::postgres::PgRow,
 ) -> Result<TelegramCallSession, TelegramCallsPersistenceError> {
     let direction = match row
@@ -436,7 +443,7 @@ fn session_from_row(
     })
 }
 
-fn validated_limit(limit: u32) -> Result<u32, TelegramCallsPersistenceError> {
+pub(crate) fn validated_limit(limit: u32) -> Result<u32, TelegramCallsPersistenceError> {
     if (1..=200).contains(&limit) {
         Ok(limit)
     } else {
@@ -444,22 +451,26 @@ fn validated_limit(limit: u32) -> Result<u32, TelegramCallsPersistenceError> {
     }
 }
 
-fn as_i64(value: u64) -> Result<i64, TelegramCallsPersistenceError> {
+pub(crate) fn as_i64(value: u64) -> Result<i64, TelegramCallsPersistenceError> {
     i64::try_from(value).map_err(|_| TelegramCallsPersistenceError::InvalidRow)
 }
 
-fn optional_i64(value: Option<u64>) -> Result<Option<i64>, TelegramCallsPersistenceError> {
+pub(crate) fn optional_i64(
+    value: Option<u64>,
+) -> Result<Option<i64>, TelegramCallsPersistenceError> {
     value.map(as_i64).transpose()
 }
 
-fn from_i64(value: i64) -> Result<u64, TelegramCallsPersistenceError> {
+pub(crate) fn from_i64(value: i64) -> Result<u64, TelegramCallsPersistenceError> {
     u64::try_from(value).map_err(|_| TelegramCallsPersistenceError::InvalidRow)
 }
 
-fn optional_u64(value: Option<i64>) -> Result<Option<u64>, TelegramCallsPersistenceError> {
+pub(crate) fn optional_u64(
+    value: Option<i64>,
+) -> Result<Option<u64>, TelegramCallsPersistenceError> {
     value.map(from_i64).transpose()
 }
 
-fn database_error(_: sqlx::Error) -> TelegramCallsPersistenceError {
+pub(crate) fn database_error(_: sqlx::Error) -> TelegramCallsPersistenceError {
     TelegramCallsPersistenceError::Database
 }

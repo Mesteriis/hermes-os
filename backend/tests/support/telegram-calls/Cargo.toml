@@ -1,0 +1,15 @@
+[package]
+name = "hermes-telegram-calls-testkit"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[package.metadata.hermes]
+role = "test"
+owner = "test"
+surface = "test_support"
+
+[dev-dependencies]
+hermes-telegram-calls-core = { path = "../../../src/telegram-calls-core" }
+hermes-telegram-calls-persistence = { path = "../../../src/telegram-calls-persistence", features = ["conformance-test-support"] }
+tokio = { version = "=1.52.4", default-features = false, features = ["macros", "rt-multi-thread"] }

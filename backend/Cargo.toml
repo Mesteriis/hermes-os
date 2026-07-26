@@ -68,6 +68,7 @@ members = [
   "src/telegram-calls-api",
   "src/telegram-calls-core",
   "src/telegram-calls-persistence",
+  "src/telegram-call-media-contract",
   "src/telegram-core",
   "src/telegram-tdlib",
   "src/telegram-persistence",
@@ -94,5 +95,6 @@ members = [
   "tests/support/telemetry",
   "tests/support/storage",
   "tests/support/mail-communications-slice",
+  "tests/support/telegram-calls",
 ]
 resolver = "2"

@@ -110,7 +110,7 @@ pub async fn handle_durable_request<T: TdlibTransport>(
         .map_err(TelegramClientTransportError::Port)?
         .is_some()
     {
-        return crate::calls_client_port::handle_calls_module_request(request, calls)
+        return crate::calls_client_port::handle_calls_module_request(request, runtime, calls)
             .await
             .map_err(TelegramClientTransportError::Port);
     }

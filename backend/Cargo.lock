@@ -2477,6 +2477,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-telegram-call-media-contract"
+version = "0.1.0"
+
+[[package]]
 name = "hermes-telegram-calls-api"
 version = "0.1.0"
 dependencies = [
@@ -2488,6 +2492,9 @@ dependencies = [
 [[package]]
 name = "hermes-telegram-calls-core"
 version = "0.1.0"
+dependencies = [
+ "sha2 0.10.9",
+]
 
 [[package]]
 name = "hermes-telegram-calls-persistence"
@@ -2497,6 +2504,15 @@ dependencies = [
  "hermes-telegram-calls-core",
  "sha2 0.10.9",
  "sqlx",
+]
+
+[[package]]
+name = "hermes-telegram-calls-testkit"
+version = "0.1.0"
+dependencies = [
+ "hermes-telegram-calls-core",
+ "hermes-telegram-calls-persistence",
+ "tokio",
 ]
 
 [[package]]
@@ -2542,6 +2558,7 @@ dependencies = [
  "hermes-telegram-automation-api",
  "hermes-telegram-automation-core",
  "hermes-telegram-automation-persistence",
+ "hermes-telegram-call-media-contract",
  "hermes-telegram-calls-api",
  "hermes-telegram-calls-core",
  "hermes-telegram-calls-persistence",
@@ -2563,6 +2580,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "hermes-telegram-api",
+ "hermes-telegram-call-media-contract",
  "libloading",
  "serde_json",
  "zeroize",

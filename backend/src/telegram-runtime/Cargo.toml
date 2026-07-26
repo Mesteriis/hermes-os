@@ -36,6 +36,7 @@ hermes-telegram-automation-persistence = { path = "../telegram-automation-persis
 hermes-telegram-calls-api = { path = "../telegram-calls-api" }
 hermes-telegram-calls-core = { path = "../telegram-calls-core" }
 hermes-telegram-calls-persistence = { path = "../telegram-calls-persistence" }
+hermes-telegram-call-media-contract = { path = "../telegram-call-media-contract" }
 hermes-telegram-persistence = { path = "../telegram-persistence" }
 hermes-telegram-tdlib = { path = "../telegram-tdlib" }
 hermes-vault-protocol = { path = "../platform/vault/protocol" }

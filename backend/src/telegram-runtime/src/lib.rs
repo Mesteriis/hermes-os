@@ -6,6 +6,7 @@ pub mod admission;
 pub mod automation_client_port;
 pub mod bootstrap;
 pub mod calls_client_port;
+mod calls_execution;
 pub mod client_port;
 pub mod client_transport;
 pub mod communications_outbox;
@@ -864,6 +865,8 @@ pub struct TelegramRuntime<T> {
     persistence: TelegramRuntimeProjectionCache,
     lifecycle: TelegramLifecycle,
     media_materializer: Option<TelegramBlobMaterializer<BlobDataClient>>,
+    call_media:
+        Option<Box<dyn hermes_telegram_call_media_contract::TelegramCallSignalingMediaPort>>,
     admission: Option<TelegramRuntimeAdmission>,
 }
 
@@ -1031,6 +1034,7 @@ where
             persistence: TelegramRuntimeProjectionCache::new(),
             lifecycle: TelegramLifecycle,
             media_materializer: None,
+            call_media: None,
             admission: None,
         }
     }

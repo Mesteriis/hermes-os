@@ -204,8 +204,23 @@ impl TelegramProcessLoop {
                     continue;
                 }
                 let update = call_update(observation, runtime_generation, observed_at_unix_seconds);
+                let suggested_call_session_id =
+                    if update.direction == TelegramCallDirection::Outgoing {
+                        calls
+                            .pending_outgoing_call_session_id(
+                                &update.account_id,
+                                update.runtime_generation,
+                                update.tdlib_call_id,
+                                &update.provider_user_id,
+                            )
+                            .await
+                            .map_err(TelegramDurableProcessError::Calls)?
+                            .unwrap_or_else(|| call_session_id(&update))
+                    } else {
+                        call_session_id(&update)
+                    };
                 calls
-                    .ingest_provider_update(&call_session_id(&update), &update)
+                    .ingest_provider_update(&suggested_call_session_id, &update)
                     .await
                     .map_err(TelegramDurableProcessError::Calls)?;
             }
@@ -326,6 +341,18 @@ pub fn serve_admitted_provider_loop(
                     },
                 ))
                 .map_err(|error| format!("Telegram durable execution failed: {error:?}"))?;
+            if runtime.has_call_signaling_media() {
+                executor
+                    .block_on(runtime.execute_due_call_operations(
+                        &calls,
+                        &account_id,
+                        now_unix_seconds,
+                        16,
+                    ))
+                    .map_err(|error| {
+                        format!("Telegram call signaling execution failed: {error:?}")
+                    })?;
+            }
         }
         let published_at_unix_seconds = SystemTime::now()
             .duration_since(UNIX_EPOCH)

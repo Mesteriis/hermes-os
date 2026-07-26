@@ -15,6 +15,7 @@ surface = "implementation"
 [dependencies]
 base64 = "=0.22.1"
 hermes-telegram-api = { path = "../telegram-api" }
+hermes-telegram-call-media-contract = { path = "../telegram-call-media-contract" }
 libloading = "=0.8.9"
 serde_json = "=1.0.150"
 zeroize = "=1.9.0"

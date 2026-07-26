@@ -1,6 +1,8 @@
 pub const PACKAGE: &str = "hermes-telegram-calls-core";
 pub const MAX_CALL_ID_BYTES: usize = 256;
 
+use sha2::{Digest, Sha256};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TelegramCallDirection {
     Incoming,
@@ -95,6 +97,374 @@ pub enum TelegramCallFailureCategory {
     Permission,
     Protocol,
     Unknown,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TelegramCallOperationKind {
+    InitiateAudio,
+    AcceptAudio,
+    Decline,
+    End,
+    SetLocalMute,
+}
+
+impl TelegramCallOperationKind {
+    pub const fn storage_name(self) -> &'static str {
+        match self {
+            Self::InitiateAudio => "initiate_audio",
+            Self::AcceptAudio => "accept_audio",
+            Self::Decline => "decline",
+            Self::End => "end",
+            Self::SetLocalMute => "set_local_mute",
+        }
+    }
+
+    pub fn from_storage_name(value: &str) -> Option<Self> {
+        match value {
+            "initiate_audio" => Some(Self::InitiateAudio),
+            "accept_audio" => Some(Self::AcceptAudio),
+            "decline" => Some(Self::Decline),
+            "end" => Some(Self::End),
+            "set_local_mute" => Some(Self::SetLocalMute),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TelegramCallOperationState {
+    Accepted,
+    Dispatching,
+    AwaitingProvider,
+    Completed,
+    Failed,
+}
+
+impl TelegramCallOperationState {
+    pub const fn storage_name(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Dispatching => "dispatching",
+            Self::AwaitingProvider => "awaiting_provider",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub fn from_storage_name(value: &str) -> Option<Self> {
+        match value {
+            "accepted" => Some(Self::Accepted),
+            "dispatching" => Some(Self::Dispatching),
+            "awaiting_provider" => Some(Self::AwaitingProvider),
+            "completed" => Some(Self::Completed),
+            "failed" => Some(Self::Failed),
+            _ => None,
+        }
+    }
+
+    pub const fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TelegramCallCommand {
+    InitiateAudio {
+        operation_id: String,
+        account_id: String,
+        call_session_id: String,
+        provider_user_id: String,
+    },
+    AcceptAudio {
+        operation_id: String,
+        account_id: String,
+        call_session_id: String,
+    },
+    Decline {
+        operation_id: String,
+        account_id: String,
+        call_session_id: String,
+    },
+    End {
+        operation_id: String,
+        account_id: String,
+        call_session_id: String,
+    },
+    SetLocalMute {
+        operation_id: String,
+        account_id: String,
+        call_session_id: String,
+        muted: bool,
+    },
+}
+
+impl TelegramCallCommand {
+    pub const fn kind(&self) -> TelegramCallOperationKind {
+        match self {
+            Self::InitiateAudio { .. } => TelegramCallOperationKind::InitiateAudio,
+            Self::AcceptAudio { .. } => TelegramCallOperationKind::AcceptAudio,
+            Self::Decline { .. } => TelegramCallOperationKind::Decline,
+            Self::End { .. } => TelegramCallOperationKind::End,
+            Self::SetLocalMute { .. } => TelegramCallOperationKind::SetLocalMute,
+        }
+    }
+
+    pub fn operation_id(&self) -> &str {
+        match self {
+            Self::InitiateAudio { operation_id, .. }
+            | Self::AcceptAudio { operation_id, .. }
+            | Self::Decline { operation_id, .. }
+            | Self::End { operation_id, .. }
+            | Self::SetLocalMute { operation_id, .. } => operation_id,
+        }
+    }
+
+    pub fn account_id(&self) -> &str {
+        match self {
+            Self::InitiateAudio { account_id, .. }
+            | Self::AcceptAudio { account_id, .. }
+            | Self::Decline { account_id, .. }
+            | Self::End { account_id, .. }
+            | Self::SetLocalMute { account_id, .. } => account_id,
+        }
+    }
+
+    pub fn call_session_id(&self) -> &str {
+        match self {
+            Self::InitiateAudio {
+                call_session_id, ..
+            }
+            | Self::AcceptAudio {
+                call_session_id, ..
+            }
+            | Self::Decline {
+                call_session_id, ..
+            }
+            | Self::End {
+                call_session_id, ..
+            }
+            | Self::SetLocalMute {
+                call_session_id, ..
+            } => call_session_id,
+        }
+    }
+
+    pub fn provider_user_id(&self) -> Option<&str> {
+        match self {
+            Self::InitiateAudio {
+                provider_user_id, ..
+            } => Some(provider_user_id),
+            _ => None,
+        }
+    }
+
+    pub const fn requested_mute(&self) -> Option<bool> {
+        match self {
+            Self::SetLocalMute { muted, .. } => Some(*muted),
+            _ => None,
+        }
+    }
+
+    pub fn fingerprint_sha256(&self) -> [u8; 32] {
+        let mut digest = Sha256::new();
+        digest.update(self.kind().storage_name().as_bytes());
+        update_fingerprint_field(&mut digest, self.operation_id());
+        update_fingerprint_field(&mut digest, self.account_id());
+        update_fingerprint_field(&mut digest, self.call_session_id());
+        update_fingerprint_field(&mut digest, self.provider_user_id().unwrap_or_default());
+        digest.update([u8::from(self.requested_mute().unwrap_or_default())]);
+        digest.finalize().into()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TelegramCallOperation {
+    pub operation_id: String,
+    pub account_id: String,
+    pub call_session_id: String,
+    pub kind: TelegramCallOperationKind,
+    pub state: TelegramCallOperationState,
+    pub request_fingerprint_sha256: [u8; 32],
+    pub provider_user_id: Option<String>,
+    pub requested_mute: Option<bool>,
+    pub runtime_generation: u64,
+    pub grant_epoch: u64,
+    pub tdlib_call_id: Option<i32>,
+    pub revision: u64,
+    pub accepted_at_unix_seconds: u64,
+    pub updated_at_unix_seconds: u64,
+    pub completed_at_unix_seconds: Option<u64>,
+    pub failure_category: Option<TelegramCallFailureCategory>,
+}
+
+impl TelegramCallOperation {
+    pub fn accepted(
+        command: &TelegramCallCommand,
+        runtime_generation: u64,
+        grant_epoch: u64,
+        accepted_at_unix_seconds: u64,
+    ) -> Self {
+        Self {
+            operation_id: command.operation_id().to_owned(),
+            account_id: command.account_id().to_owned(),
+            call_session_id: command.call_session_id().to_owned(),
+            kind: command.kind(),
+            state: TelegramCallOperationState::Accepted,
+            request_fingerprint_sha256: command.fingerprint_sha256(),
+            provider_user_id: command.provider_user_id().map(str::to_owned),
+            requested_mute: command.requested_mute(),
+            runtime_generation,
+            grant_epoch,
+            tdlib_call_id: None,
+            revision: 1,
+            accepted_at_unix_seconds,
+            updated_at_unix_seconds: accepted_at_unix_seconds,
+            completed_at_unix_seconds: None,
+            failure_category: None,
+        }
+    }
+
+    pub fn command(&self) -> Option<TelegramCallCommand> {
+        let common = (
+            self.operation_id.clone(),
+            self.account_id.clone(),
+            self.call_session_id.clone(),
+        );
+        match self.kind {
+            TelegramCallOperationKind::InitiateAudio => Some(TelegramCallCommand::InitiateAudio {
+                operation_id: common.0,
+                account_id: common.1,
+                call_session_id: common.2,
+                provider_user_id: self.provider_user_id.clone()?,
+            }),
+            TelegramCallOperationKind::AcceptAudio => Some(TelegramCallCommand::AcceptAudio {
+                operation_id: common.0,
+                account_id: common.1,
+                call_session_id: common.2,
+            }),
+            TelegramCallOperationKind::Decline => Some(TelegramCallCommand::Decline {
+                operation_id: common.0,
+                account_id: common.1,
+                call_session_id: common.2,
+            }),
+            TelegramCallOperationKind::End => Some(TelegramCallCommand::End {
+                operation_id: common.0,
+                account_id: common.1,
+                call_session_id: common.2,
+            }),
+            TelegramCallOperationKind::SetLocalMute => Some(TelegramCallCommand::SetLocalMute {
+                operation_id: common.0,
+                account_id: common.1,
+                call_session_id: common.2,
+                muted: self.requested_mute?,
+            }),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TelegramCallCommandError {
+    InvalidRequest(&'static str),
+    Conflict(&'static str),
+}
+
+pub fn validate_call_command(
+    command: &TelegramCallCommand,
+    current_call: Option<&TelegramCallSession>,
+    own_provider_user_id: Option<&str>,
+) -> Result<(), TelegramCallCommandError> {
+    validate_command_id("operation_id", command.operation_id())?;
+    validate_command_id("account_id", command.account_id())?;
+    validate_command_id("call_session_id", command.call_session_id())?;
+
+    match command {
+        TelegramCallCommand::InitiateAudio {
+            provider_user_id, ..
+        } => {
+            validate_provider_user_id(provider_user_id)?;
+            let own_provider_user_id = own_provider_user_id.ok_or(
+                TelegramCallCommandError::InvalidRequest("own_provider_user_id"),
+            )?;
+            validate_provider_user_id(own_provider_user_id)?;
+            if provider_user_id == own_provider_user_id {
+                return Err(TelegramCallCommandError::Conflict("provider_user_id"));
+            }
+            if current_call.is_some() {
+                return Err(TelegramCallCommandError::Conflict("active_call"));
+            }
+        }
+        TelegramCallCommand::AcceptAudio { .. } => {
+            let call = validated_command_call(command, current_call)?;
+            if call.direction != TelegramCallDirection::Incoming
+                || call.state != TelegramProviderCallState::Pending
+                || !call.pending_received
+            {
+                return Err(TelegramCallCommandError::Conflict("call_state"));
+            }
+        }
+        TelegramCallCommand::Decline { .. } => {
+            let call = validated_command_call(command, current_call)?;
+            if call.direction != TelegramCallDirection::Incoming
+                || call.state != TelegramProviderCallState::Pending
+                || !call.pending_received
+            {
+                return Err(TelegramCallCommandError::Conflict("call_state"));
+            }
+        }
+        TelegramCallCommand::End { .. } => {
+            let call = validated_command_call(command, current_call)?;
+            if call.state.is_terminal() {
+                return Err(TelegramCallCommandError::Conflict("call_state"));
+            }
+        }
+        TelegramCallCommand::SetLocalMute { .. } => {
+            let call = validated_command_call(command, current_call)?;
+            if call.state != TelegramProviderCallState::MediaReady {
+                return Err(TelegramCallCommandError::Conflict("call_state"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validated_command_call<'a>(
+    command: &TelegramCallCommand,
+    current_call: Option<&'a TelegramCallSession>,
+) -> Result<&'a TelegramCallSession, TelegramCallCommandError> {
+    let call = current_call.ok_or(TelegramCallCommandError::Conflict("call_session_id"))?;
+    if call.account_id != command.account_id() || call.call_session_id != command.call_session_id()
+    {
+        return Err(TelegramCallCommandError::Conflict("call_session_id"));
+    }
+    Ok(call)
+}
+
+fn validate_provider_user_id(value: &str) -> Result<(), TelegramCallCommandError> {
+    validate_command_id("provider_user_id", value)?;
+    if value
+        .parse::<i64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .is_none()
+    {
+        return Err(TelegramCallCommandError::InvalidRequest("provider_user_id"));
+    }
+    Ok(())
+}
+
+fn validate_command_id(field: &'static str, value: &str) -> Result<(), TelegramCallCommandError> {
+    if value.trim().is_empty()
+        || value.len() > MAX_CALL_ID_BYTES
+        || value.chars().any(char::is_control)
+    {
+        return Err(TelegramCallCommandError::InvalidRequest(field));
+    }
+    Ok(())
+}
+
+fn update_fingerprint_field(digest: &mut Sha256, value: &str) {
+    digest.update((value.len() as u64).to_be_bytes());
+    digest.update(value.as_bytes());
 }
 
 impl TelegramCallFailureCategory {
@@ -485,6 +855,89 @@ mod tests {
             Err(TelegramCallProjectionError::InvalidRequest(
                 "discard_reason"
             ))
+        );
+    }
+
+    #[test]
+    fn call_commands_are_typed_fingerprinted_and_state_validated() {
+        let initiate = TelegramCallCommand::InitiateAudio {
+            operation_id: "operation-1".to_owned(),
+            account_id: "account-1".to_owned(),
+            call_session_id: "call-session-outgoing".to_owned(),
+            provider_user_id: "9001".to_owned(),
+        };
+        let replay = initiate.clone();
+        let conflicting = TelegramCallCommand::InitiateAudio {
+            operation_id: "operation-1".to_owned(),
+            account_id: "account-1".to_owned(),
+            call_session_id: "call-session-outgoing".to_owned(),
+            provider_user_id: "9002".to_owned(),
+        };
+
+        assert_eq!(validate_call_command(&initiate, None, Some("42")), Ok(()));
+        assert_eq!(initiate.fingerprint_sha256(), replay.fingerprint_sha256());
+        assert_ne!(
+            initiate.fingerprint_sha256(),
+            conflicting.fingerprint_sha256()
+        );
+        assert_eq!(
+            validate_call_command(&initiate, None, Some("9001")),
+            Err(TelegramCallCommandError::Conflict("provider_user_id"))
+        );
+    }
+
+    #[test]
+    fn accept_decline_end_and_mute_require_exact_call_state() {
+        let mut incoming = project_provider_call_update(
+            None,
+            "call-session-1",
+            &TelegramProviderCallUpdate {
+                pending_created: false,
+                pending_received: true,
+                ..update(TelegramProviderCallState::Pending, 10)
+            },
+        )
+        .expect("incoming")
+        .session;
+        let accept = TelegramCallCommand::AcceptAudio {
+            operation_id: "operation-accept".to_owned(),
+            account_id: incoming.account_id.clone(),
+            call_session_id: incoming.call_session_id.clone(),
+        };
+        let decline = TelegramCallCommand::Decline {
+            operation_id: "operation-decline".to_owned(),
+            account_id: incoming.account_id.clone(),
+            call_session_id: incoming.call_session_id.clone(),
+        };
+
+        assert_eq!(
+            validate_call_command(&accept, Some(&incoming), None),
+            Ok(())
+        );
+        assert_eq!(
+            validate_call_command(&decline, Some(&incoming), None),
+            Ok(())
+        );
+
+        incoming.state = TelegramProviderCallState::MediaReady;
+        incoming.pending_received = false;
+        let mute = TelegramCallCommand::SetLocalMute {
+            operation_id: "operation-mute".to_owned(),
+            account_id: incoming.account_id.clone(),
+            call_session_id: incoming.call_session_id.clone(),
+            muted: true,
+        };
+        let end = TelegramCallCommand::End {
+            operation_id: "operation-end".to_owned(),
+            account_id: incoming.account_id.clone(),
+            call_session_id: incoming.call_session_id.clone(),
+        };
+
+        assert_eq!(validate_call_command(&mute, Some(&incoming), None), Ok(()));
+        assert_eq!(validate_call_command(&end, Some(&incoming), None), Ok(()));
+        assert_eq!(
+            validate_call_command(&accept, Some(&incoming), None),
+            Err(TelegramCallCommandError::Conflict("call_state"))
         );
     }
 }

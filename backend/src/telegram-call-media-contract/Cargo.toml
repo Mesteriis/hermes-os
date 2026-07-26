@@ -1,5 +1,5 @@
 [package]
-name = "hermes-telegram-calls-core"
+name = "hermes-telegram-call-media-contract"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
@@ -10,7 +10,4 @@ path = "src/lib.rs"
 [package.metadata.hermes]
 role = "integration"
 owner = "telegram"
-surface = "implementation"
-
-[dependencies]
-sha2 = { version = "=0.10.9", default-features = false }
+surface = "contract"
