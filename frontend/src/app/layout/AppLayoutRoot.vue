@@ -39,6 +39,9 @@ const telegramAuthorizationAvailable = computed(() =>
 const telegramLifecycleAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'telegram.lifecycle.v1'),
 )
+const telegramQueryAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'telegram.query.v1'),
+)
 const whatsAppCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'whatsapp.command.v1'),
 )
@@ -110,6 +113,7 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					v-else-if="selectedRouteId === 'communications-telegram'"
 					:can-authorize="telegramAuthorizationAvailable"
 					:can-manage-lifecycle="telegramLifecycleAvailable"
+					:can-query="telegramQueryAvailable"
 					:can-send="telegramCommandAvailable"
 				/>
 				<WhatsAppOperationalRoute

@@ -1,0 +1,100 @@
+.telegram-discovery {
+	display: grid;
+	gap: var(--h-space-3);
+	padding: var(--h-space-4);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+}
+
+.telegram-discovery > header,
+.telegram-discovery form > div {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--h-space-2);
+}
+
+.telegram-discovery h2,
+.telegram-discovery p {
+	margin: 0;
+}
+
+.telegram-discovery header span {
+	color: #229ed9;
+	font-size: var(--h-font-size-xs);
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.telegram-discovery button,
+.telegram-discovery input {
+	padding: var(--h-space-2) var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-surface-muted);
+}
+
+.telegram-discovery form {
+	display: grid;
+	gap: var(--h-space-1);
+}
+
+.telegram-discovery form label,
+.telegram-discovery small,
+.telegram-discovery__status {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+}
+
+.telegram-discovery form input {
+	flex: 1;
+}
+
+.telegram-discovery__badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--h-space-2);
+}
+
+.telegram-discovery__badges span {
+	padding: var(--h-space-1) var(--h-space-2);
+	border-radius: 999px;
+	color: #229ed9;
+	background: color-mix(in srgb, #229ed9 10%, var(--h-color-surface));
+}
+
+.telegram-discovery__columns {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--h-space-3);
+}
+
+.telegram-discovery details {
+	min-width: 0;
+	padding: var(--h-space-2);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+}
+
+.telegram-discovery summary {
+	cursor: pointer;
+	font-weight: 700;
+}
+
+.telegram-discovery details article,
+.telegram-discovery details button {
+	display: grid;
+	gap: var(--h-space-1);
+	width: 100%;
+	margin-top: var(--h-space-2);
+	text-align: left;
+}
+
+@media (max-width: 980px) {
+	.telegram-discovery__columns {
+		grid-template-columns: 1fr;
+	}
+}

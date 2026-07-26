@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import TelegramAccountAccessPanel from './TelegramAccountAccessPanel.vue'
 import type { TelegramAccountAccessModel } from './telegramAccountAccessModel'
+import TelegramDiscoveryPanel from './TelegramDiscoveryPanel.vue'
+import type { TelegramDiscoveryModel } from './telegramDiscoveryModel'
 import type { TelegramOperationalPageModel } from './telegramOperationalPageModel'
 import './telegramOperationalPage.css'
 
 defineProps<{
 	accountAccess: TelegramAccountAccessModel
+	discovery: TelegramDiscoveryModel
 	model: TelegramOperationalPageModel
 }>()
 
@@ -13,8 +16,10 @@ const emit = defineEmits<{
 	load: []
 	provisionAccount: []
 	refreshAccounts: []
+	refreshChatContext: []
 	replayAccount: []
 	retireAccount: []
+	search: []
 	selectAccount: [accountId: string]
 	selectChat: [providerChatId: string]
 	send: []
@@ -24,6 +29,7 @@ const emit = defineEmits<{
 	updateAccountId: [value: string]
 	updateAuthorizationPassword: [value: string]
 	updateDraft: [value: string]
+	updateSearchQuery: [value: string]
 	updateProvisionAccountId: [value: string]
 	updateProvisionDisplayName: [value: string]
 	updateProvisionExternalAccountId: [value: string]
@@ -109,6 +115,14 @@ const emit = defineEmits<{
 			</main>
 		</div>
 
+		<TelegramDiscoveryPanel
+			:model="discovery"
+			@refresh-context="emit('refreshChatContext')"
+			@search="emit('search')"
+			@select-chat="emit('selectChat', $event)"
+			@update-query="emit('updateSearchQuery', $event)"
+		/>
+
 		<form class="telegram-composer" @submit.prevent="emit('send')">
 			<label for="telegram-message-draft">Send to selected Telegram chat</label>
 			<textarea
@@ -132,3 +146,4 @@ const emit = defineEmits<{
 		</form>
 	</section>
 </template>
+	search: []
