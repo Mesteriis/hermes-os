@@ -16,6 +16,7 @@ describe('compiled client navigation', () => {
 		expect(compiledClientSurfaceAdapterIds).toEqual([
 			'communications-owner',
 			'telegram-integration',
+			'whatsapp-integration',
 			'system-control',
 		])
 	})
@@ -35,6 +36,11 @@ describe('compiled client navigation', () => {
 			reasonCode: '',
 			available: true,
 		})
+		bootstrap.set('communications-whatsapp', {
+			state: ClientSurfaceAvailabilityStateV1.AVAILABLE,
+			reasonCode: '',
+			available: true,
+		})
 
 		const communications = buildClientRouteTree(bootstrap).find(
 			(item) => item.id === 'communications',
@@ -49,8 +55,15 @@ describe('compiled client navigation', () => {
 			disabled: false,
 			disabledReason: '',
 		})
+		expect(communications?.children?.find((item) => item.id === 'communications-whatsapp')).toMatchObject({
+			disabled: false,
+			disabledReason: '',
+		})
 		expect(communications?.children?.filter(
-			(item) => item.id !== 'communications-all' && item.id !== 'communications-telegram',
+			(item) =>
+				item.id !== 'communications-all'
+				&& item.id !== 'communications-telegram'
+				&& item.id !== 'communications-whatsapp',
 		)
 			.every((item) => item.disabled)).toBe(true)
 	})
@@ -71,13 +84,19 @@ describe('compiled client navigation', () => {
 			(item) => item.id !== 'settings' && item.id !== 'communications',
 		)
 		const compiledRoutes = productRoutes.filter(
-			(item) => item.id === 'communications-all' || item.id === 'communications-telegram',
+			(item) =>
+				item.id === 'communications-all'
+				|| item.id === 'communications-telegram'
+				|| item.id === 'communications-whatsapp',
 		)
 		const uncompiledRoutes = productRoutes.filter(
-			(item) => item.id !== 'communications-all' && item.id !== 'communications-telegram',
+			(item) =>
+				item.id !== 'communications-all'
+				&& item.id !== 'communications-telegram'
+				&& item.id !== 'communications-whatsapp',
 		)
 
-		expect(compiledRoutes).toHaveLength(2)
+		expect(compiledRoutes).toHaveLength(3)
 		expect(compiledRoutes.every((item) => !item.disabled && item.disabledReason === '')).toBe(true)
 		expect(uncompiledRoutes.every((item) => item.disabled)).toBe(true)
 		expect(uncompiledRoutes.every(

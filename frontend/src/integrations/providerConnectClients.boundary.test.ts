@@ -50,6 +50,18 @@ const clientUnits = [
 		generatedContract: '../../../gen/hermes/zulip/v1/client_pb',
 		service: 'ZulipQueryService',
 		foreignOwners: ['mail', 'telegram']
+	},
+	{
+		file: './whatsapp/api/whatsappCommandClient.ts',
+		generatedContract: '../../../gen/hermes/whatsapp/v1/client_pb',
+		service: 'WhatsAppCommandService',
+		foreignOwners: ['mail', 'telegram', 'zulip']
+	},
+	{
+		file: './whatsapp/api/whatsappQueryClient.ts',
+		generatedContract: '../../../gen/hermes/whatsapp/v1/client_pb',
+		service: 'WhatsAppQueryService',
+		foreignOwners: ['mail', 'telegram', 'zulip']
 	}
 ] as const
 
@@ -80,9 +92,10 @@ describe('provider operational Connect client boundaries', () => {
 
 		expect(generator).toContain("backend', 'src', 'mail-api', 'proto")
 		expect(generator).toContain("backend', 'src', 'telegram-api', 'proto")
+		expect(generator).toContain("backend', 'src', 'whatsapp-api', 'proto")
 		expect(generator).toContain("backend', 'src', 'zulip-api', 'proto")
-		expect(generator.match(/'hermes', '(mail|telegram|zulip)', 'v1', 'client\.proto'/g)).toHaveLength(
-			3
+		expect(generator.match(/'hermes', '(mail|telegram|whatsapp|zulip)', 'v1', 'client\.proto'/g)).toHaveLength(
+			4
 		)
 	})
 })

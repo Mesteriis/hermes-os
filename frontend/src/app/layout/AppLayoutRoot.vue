@@ -10,6 +10,7 @@ import { compiledClientSurfaceAdapterIds } from '../client-surfaces/compiledClie
 import CanonicalCommunicationsRoute from '../../domains/communications/views/CanonicalCommunicationsRoute.vue'
 import TelegramOperationalRoute from '../../integrations/telegram/views/TelegramOperationalRoute.vue'
 import { hasClientModuleCapability } from '../client-surfaces/clientModuleCapabilities'
+import WhatsAppOperationalRoute from '../../integrations/whatsapp/views/WhatsAppOperationalRoute.vue'
 
 const props = defineProps<{ gatewayAccessMode: BrowserGatewayAccessModeV1 }>()
 
@@ -29,6 +30,9 @@ const bootstrap = navbar.bootstrap
 const routeDowngradeReason = navbar.routeDowngradeReason
 const telegramCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'telegram.command.v1'),
+)
+const whatsAppCommandAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'whatsapp.command.v1'),
 )
 
 watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mode]) => {
@@ -83,6 +87,10 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 				<TelegramOperationalRoute
 					v-else-if="selectedRouteId === 'communications-telegram'"
 					:can-send="telegramCommandAvailable"
+				/>
+				<WhatsAppOperationalRoute
+					v-else-if="selectedRouteId === 'communications-whatsapp'"
+					:can-send="whatsAppCommandAvailable"
 				/>
 				<SystemControlPage
 					v-else-if="selectedTopLevelRouteId === 'settings'"
