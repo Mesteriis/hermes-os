@@ -83,7 +83,33 @@
       "role": "integration",
       "owner": "whatsapp",
       "state": "planned",
+      "dependsOn": [
+        "client_gateway_v1",
+        "nats_data_plane_v1",
+        "whatsapp_operational_read_v1",
+        "whatsapp_operational_realtime_v1"
+      ]
+    },
+    {
+      "gate": "whatsapp_integration_v1",
+      "role": "integration",
+      "owner": "whatsapp",
+      "state": "implemented",
       "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
+    },
+    {
+      "gate": "whatsapp_operational_read_v1",
+      "role": "integration",
+      "owner": "whatsapp",
+      "state": "planned",
+      "dependsOn": ["whatsapp_integration_v1"]
+    },
+    {
+      "gate": "whatsapp_operational_realtime_v1",
+      "role": "integration",
+      "owner": "whatsapp",
+      "state": "planned",
+      "dependsOn": ["whatsapp_operational_read_v1"]
     },
     {
       "gate": "zulip_full_operational_v1",

@@ -21,6 +21,10 @@ const TELEGRAM_CALLS_ADR_PATH = new URL(
   'docs/adr/ADR-0284-telegram-one-to-one-audio-calls-operational-boundary.md',
   PROJECT_ROOT,
 );
+const WHATSAPP_OPERATIONAL_ADR_PATH = new URL(
+  'docs/adr/ADR-0286-whatsapp-operational-read-and-realtime-boundary.md',
+  PROJECT_ROOT,
+);
 
 const ALLOWED_ROLES = new Set(['app', 'domain', 'engine', 'integration', 'platform', 'workflow']);
 const ALLOWED_STATES = new Set(['implemented', 'planned']);
@@ -175,6 +179,54 @@ test('Telegram completion remains closed behind its independent capability slice
   assert.match(callsAdrSource, /telegram\.calls\.realtime\.v1/);
   assert.match(callsAdrSource, /call\.id.*непостоянным/);
   assert.match(callsAdrSource, /fixture PCM[\s\S]*не закрывают production admission/);
+});
+
+test('WhatsApp completion remains closed behind independent read and realtime slices', async () => {
+  const [inventorySource, whatsappAdrSource] = await Promise.all([
+    readFile(INVENTORY_PATH, 'utf8'),
+    readFile(WHATSAPP_OPERATIONAL_ADR_PATH, 'utf8'),
+  ]);
+  const inventory = JSON.parse(inventorySource);
+  const whatsappSlices = new Map(
+    inventory.slices
+      .filter(({ owner }) => owner === 'whatsapp')
+      .map((slice) => [slice.gate, slice]),
+  );
+
+  assert.deepEqual([...whatsappSlices.keys()].sort(), [
+    'whatsapp_full_operational_v1',
+    'whatsapp_integration_v1',
+    'whatsapp_operational_read_v1',
+    'whatsapp_operational_realtime_v1',
+  ]);
+  assert.ok([...whatsappSlices.values()].every(({ role }) => role === 'integration'));
+  assert.equal(whatsappSlices.get('whatsapp_integration_v1').state, 'implemented');
+  assert.equal(whatsappSlices.get('whatsapp_full_operational_v1').state, 'planned');
+  assert.equal(whatsappSlices.get('whatsapp_operational_read_v1').state, 'planned');
+  assert.equal(whatsappSlices.get('whatsapp_operational_realtime_v1').state, 'planned');
+  assert.deepEqual(whatsappSlices.get('whatsapp_operational_read_v1').dependsOn, [
+    'whatsapp_integration_v1',
+  ]);
+  assert.deepEqual(whatsappSlices.get('whatsapp_operational_realtime_v1').dependsOn, [
+    'whatsapp_operational_read_v1',
+  ]);
+  assert.deepEqual(
+    [...whatsappSlices.get('whatsapp_full_operational_v1').dependsOn].sort(),
+    [
+      'client_gateway_v1',
+      'nats_data_plane_v1',
+      'whatsapp_operational_read_v1',
+      'whatsapp_operational_realtime_v1',
+    ],
+  );
+
+  assert.match(whatsappAdrSource, /whatsapp\.operational\.query\.v1/);
+  assert.match(whatsappAdrSource, /whatsapp\.operational\.realtime\.v1/);
+  assert.match(whatsappAdrSource, /hermes-whatsapp-api/);
+  assert.match(whatsappAdrSource, /hermes-whatsapp-core/);
+  assert.match(whatsappAdrSource, /hermes-whatsapp-persistence/);
+  assert.match(whatsappAdrSource, /DDL-only/);
+  assert.match(whatsappAdrSource, /Fake backfill запрещён/);
 });
 
 test('cross-owner and AI use cases are distinct workflow units', async () => {

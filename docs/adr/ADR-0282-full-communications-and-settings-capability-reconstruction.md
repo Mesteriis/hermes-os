@@ -396,7 +396,10 @@ runtime не является domain, а app composition не становитс
 | Telegram real one-to-one audio media | Telegram | `telegram_call_media_v1` |
 | Telegram complete provider calls | Telegram | `telegram_calls_operational_v1` after the three Calls gates above |
 | Telegram full operational client closure | Telegram | `telegram_full_operational_v1` after all Telegram gates above |
-| WhatsApp public operational queries/client | WhatsApp | `whatsapp_full_operational_v1` |
+| WhatsApp backend admission, command/status and host handoff | WhatsApp | `whatsapp_integration_v1` |
+| WhatsApp operational read projection/search | WhatsApp | `whatsapp_operational_read_v1` |
+| WhatsApp operational realtime/replay | WhatsApp | `whatsapp_operational_realtime_v1` |
+| WhatsApp full generated client and UI closure | WhatsApp | `whatsapp_full_operational_v1` after both WhatsApp backend gates |
 | Zulip lifecycle/history/search/client | Zulip | `zulip_full_operational_v1` |
 | Provider-neutral delivery intent | `communication_delivery_intent` workflow | `communication_delivery_intent_v1` |
 | Delayed delivery | `communication_delayed_delivery` workflow | `communication_delayed_delivery_v1` |
@@ -445,8 +448,11 @@ release.
    umbrella gate `telegram_full_operational_v1`; существующий typed backend и
    frontend не считаются полным переносом, пока отсутствует хотя бы один из
    этих контрактов.
-3. `whatsapp_full_operational_v1` — отдельно admitted public queries, runtime
-   handler и client.
+3. WhatsApp проходит independently admitted
+   `whatsapp_operational_read_v1` и
+   `whatsapp_operational_realtime_v1` по ADR-0286. Только после них,
+   generated frontend client и integration-owned UI cutover открывается
+   `whatsapp_full_operational_v1`.
 4. `zulip_full_operational_v1` — lifecycle/read projection/storage/runtime и
    client.
 5. Mail read, composition и command gates — независимо, без одного

@@ -93,6 +93,8 @@ policy через ссылки из новых документов.
 - [ADR-0282: Full Communications and Settings capability reconstruction](ADR-0282-full-communications-and-settings-capability-reconstruction.md)
 - [ADR-0283: Telegram automation management and preview boundary](ADR-0283-telegram-automation-management-and-preview-boundary.md)
 - [ADR-0284: Telegram one-to-one audio calls operational boundary](ADR-0284-telegram-one-to-one-audio-calls-operational-boundary.md)
+- [ADR-0285: Owner-local upgrade jobs and Telegram Calls realtime backfill](ADR-0285-owner-local-upgrade-jobs-and-telegram-calls-realtime-backfill.md)
+- [ADR-0286: WhatsApp operational read and realtime boundary](ADR-0286-whatsapp-operational-read-and-realtime-boundary.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -303,3 +305,8 @@ restart-safe V3-to-V4 realtime backfill. Реализованный V6 bundle о
 DDL-only; owner executor сохраняет прежние cursors через отдельный replay-order
 mapping, а Kernel/Scheduler/Communications не получают Telegram handler или
 owner SQL.
+ADR-0286 разделяет WhatsApp operational closure на отдельные read и realtime
+gates: integration владеет typed projections, bounded search и replay journal,
+а Kernel/Gateway только fence-ят exact routes и grants. Metadata-only history
+не превращается в fake content; upgrade требует bounded provider resync, а
+frontend остаётся вторичным integration-owned consumer.
