@@ -76,6 +76,18 @@ policy через ссылки из новых документов.
 - [ADR-0265: Provider operational client transport admission](ADR-0265-provider-operational-client-transport-admission.md)
 - [ADR-0266: Telegram Kernel admission and event-only Communications handoff](ADR-0266-telegram-kernel-admission-and-event-only-communications-handoff.md)
 - [ADR-0267: Kernel-staged runtime artifacts and integration state roots](ADR-0267-kernel-staged-runtime-artifacts-and-integration-state-roots.md)
+- [ADR-0268: Telegram release composition](ADR-0268-telegram-release-assembly-unit-and-signed-distribution-fragment.md)
+- [ADR-0269: Mail release composition](ADR-0269-mail-release-assembly-unit-and-signed-distribution-fragment.md)
+- [ADR-0270: Mail capability split](ADR-0270-mail-kernel-admission-and-route-specific-event-handoff.md)
+- [ADR-0271: Zulip phase gate](ADR-0271-zulip-kernel-admission-and-event-only-communications-handoff.md)
+- [ADR-0272: Zulip release composition](ADR-0272-zulip-release-assembly-unit-and-signed-distribution-fragment.md)
+- [ADR-0273: Attachment Security engine](ADR-0273-attachment-security-engine-and-event-only-verdict-authority.md)
+- [ADR-0274: Attachment Security Blob custody](ADR-0274-attachment-security-evidence-bound-blob-custody.md)
+- [ADR-0275: Target-bound cross-owner Blob custody](ADR-0275-target-bound-cross-owner-blob-custody-delegation.md)
+- [ADR-0276: WhatsApp phase gate](ADR-0276-whatsapp-kernel-admission-host-bridge-and-event-only-communications-handoff.md)
+- [ADR-0277: Gmail API outbound mutation gate](ADR-0277-mail-gmail-api-outbound-mutation-gate.md)
+- [ADR-0278: Gmail OAuth setup and refresh gate](ADR-0278-mail-gmail-oauth-setup-and-refresh-gate.md)
+- [ADR-0279: Durable Blob custody scope and operation-scoped grants](ADR-0279-durable-blob-custody-scope-and-operation-scoped-grants.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -264,3 +276,7 @@ Mail владеет PKCE/operation/binding state, а access и refresh credentia
 остаются разными secret classes и capability responsibilities. Gate открыт
 после live exact-form/CAS/revoke/negative-output conformance; Communications в
 credential lifecycle не участвует.
+ADR-0279 разделяет ephemeral Blob access fence и durable at-rest custody:
+descriptor объявляет exact custody scope и operation set, Kernel выдаёт только
+operation-scoped session, а ciphertext, Vault content-key revision и technical
+quota ledger переживают restart/re-registration без generic read/write grant.
