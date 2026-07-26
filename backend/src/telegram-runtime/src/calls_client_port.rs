@@ -36,6 +36,7 @@ const MAX_ID_BYTES: usize = 256;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TelegramCallsRoute {
+    Command,
     Query,
     Realtime,
 }
@@ -67,11 +68,7 @@ pub fn calls_route(bytes: &[u8]) -> Result<Option<TelegramCallsRoute>, TelegramC
     let route = match contract_kind {
         TelegramCallsContractV1::Query => TelegramCallsRoute::Query,
         TelegramCallsContractV1::Realtime => TelegramCallsRoute::Realtime,
-        TelegramCallsContractV1::Command => {
-            return Err(TelegramClientPortError::Protocol(
-                "Telegram Calls command route is not admitted".to_owned(),
-            ));
-        }
+        TelegramCallsContractV1::Command => TelegramCallsRoute::Command,
     };
     validate_calls_envelope(&envelope, contract, contract_kind)?;
     Ok(Some(route))
@@ -653,7 +650,7 @@ mod tests {
     }
 
     #[test]
-    fn history_routes_are_exact_and_command_remains_closed() {
+    fn calls_routes_are_exact_and_separate() {
         let query = request_envelope(
             TelegramCallsContractV1::Query,
             CallsQueryRequestV1 {
@@ -686,7 +683,10 @@ mod tests {
             calls_route(&realtime),
             Ok(Some(TelegramCallsRoute::Realtime))
         ));
-        assert!(calls_route(&command).is_err());
+        assert!(matches!(
+            calls_route(&command),
+            Ok(Some(TelegramCallsRoute::Command))
+        ));
     }
 
     #[test]

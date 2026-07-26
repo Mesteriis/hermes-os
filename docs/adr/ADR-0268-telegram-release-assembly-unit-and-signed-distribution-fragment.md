@@ -12,8 +12,11 @@ Disposable managed conformance подтверждает этот binding вме�
 Storage, NATS, exact V6 storage bundle, history query/replay, TDLib
 ready/signaling, pinned media lifecycle, restart и stale fence; test-only
 tgcalls ABI fixture не является evidence real audio. Job Platform backfill
-закрыт owner-local executor и managed conformance; real media и authorized
-live-call conformance остаются prerequisite для `telegram_calls_command_v1`.
+закрыт owner-local executor и managed conformance. Exact Calls Command route
+включён отдельной capability и managed conformance подтверждает
+initiate/end/provider reconciliation без generic REST fallback. Real media и
+authorized live-call conformance остаются prerequisite для
+`telegram_call_media_v1` и Calls umbrella.
 
 Зависит от:
 
@@ -141,7 +144,8 @@ runtime lifecycle.
 Даже после этих checks `telegram_integration_v1` остаётся закрыт до
 managed-launch, revoke/generation, native-loader и live event-flow conformance
 из ADR-0266/0267. Наличие tgcalls entry и успешная загрузка ABI сами по себе не
-открывают Calls command capability.
+открывают Calls command capability; capability открыта только после отдельного
+signaling conformance из ADR-0284 и не является evidence real media.
 
 ## Отклонённые варианты
 

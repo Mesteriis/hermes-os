@@ -55,6 +55,7 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         telegram_automation_client_capability_v1(TelegramAutomationContractV1::Command),
         telegram_automation_client_capability_v1(TelegramAutomationContractV1::Query),
         telegram_blob_capability_v1(),
+        telegram_calls_client_capability_v1(TelegramCallsContractV1::Command),
         telegram_calls_client_capability_v1(TelegramCallsContractV1::Query),
         telegram_calls_client_capability_v1(TelegramCallsContractV1::Realtime),
         telegram_client_capability_v1(TelegramClientContractV1::Command),
@@ -70,7 +71,6 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
 fn telegram_calls_client_capability_v1(
     contract: TelegramCallsContractV1,
 ) -> CapabilityDescriptorV1 {
-    debug_assert_ne!(contract, TelegramCallsContractV1::Command);
     CapabilityDescriptorV1 {
         capability_id: contract.capability_id().to_owned(),
         capability_revision: 1,
@@ -321,6 +321,7 @@ mod tests {
                 "telegram.automation.command.v1",
                 "telegram.automation.query.v1",
                 TELEGRAM_BLOB_CAPABILITY_ID,
+                "telegram.calls.command.v1",
                 "telegram.calls.query.v1",
                 "telegram.calls.realtime.v1",
                 "telegram.command.v1",
@@ -340,9 +341,11 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             client_surfaces.len(),
-            TelegramClientContractV1::ALL.len() + TelegramAutomationContractV1::ALL.len() + 2
+            TelegramClientContractV1::ALL.len()
+                + TelegramAutomationContractV1::ALL.len()
+                + TelegramCallsContractV1::ALL.len()
         );
-        assert!(!descriptor.capabilities.iter().any(|capability| {
+        assert!(descriptor.capabilities.iter().any(|capability| {
             capability.capability_id == TelegramCallsContractV1::Command.capability_id()
         }));
         assert!(client_surfaces.iter().all(|surface| {

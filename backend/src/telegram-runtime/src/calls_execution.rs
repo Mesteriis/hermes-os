@@ -178,7 +178,7 @@ impl<T: TdlibTransport> TelegramRuntime<T> {
             .clone()
             .ok_or(TelegramCallExecutionError::Admission)?;
         persistence
-            .fail_stale_accepted_call_operations(
+            .reconcile_stale_call_operations(
                 account_id,
                 admission.runtime_generation,
                 admission.grant_epoch,

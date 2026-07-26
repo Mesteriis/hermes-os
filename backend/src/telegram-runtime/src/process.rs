@@ -454,6 +454,14 @@ pub fn serve_admitted_provider_loop(
                     },
                 ))
                 .map_err(|error| format!("Telegram durable execution failed: {error:?}"))?;
+            executor
+                .block_on(runtime.execute_due_call_operations(
+                    &calls,
+                    &account_id,
+                    now_unix_seconds,
+                    16,
+                ))
+                .map_err(|error| format!("Telegram call execution failed: {error:?}"))?;
             if runtime.has_call_signaling_media() {
                 if let Some((active_media, media_state)) = runtime
                     .poll_active_call_media_event()

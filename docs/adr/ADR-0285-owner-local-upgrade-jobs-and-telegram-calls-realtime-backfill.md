@@ -173,8 +173,8 @@ Backfill gate закрыт следующими evidence:
 6. architecture tests, запрещающие Scheduler/Kernel/Communications dependency
    на Telegram job implementation.
 
-Backfill prerequisite ADR-0284 выполнен. Calls Command и real media gates
-остаются отдельными.
+Backfill prerequisite ADR-0284 выполнен. Последующий Calls Command signaling
+gate также закрыт отдельно; real media gate остаётся открытым.
 
 ## Отклонённые варианты
 

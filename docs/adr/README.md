@@ -293,7 +293,9 @@ units и atomic admission gates.
 ADR-0284 разделяет Telegram Calls на independently admitted history, signaling
 и real tgcalls media gates: provider calls остаются Telegram integration
 surface, а cross-provider evidence и transcription принадлежат отдельным
-composition/workflow units.
+composition/workflow units. History и signaling gates реализованы отдельными
+Query/Command/Realtime capabilities и durable owner-local operation journal;
+real audio и Calls umbrella остаются закрыты.
 ADR-0285 вводит owner-local upgrade job без fake Scheduler schedule:
 owner-neutral Job Platform protocol несёт exact upgrade command, а Telegram
 Calls persistence владеет durable execution, lease и checkpoint для

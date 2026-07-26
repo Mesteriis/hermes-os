@@ -98,7 +98,11 @@ void td_json_client_send(void *raw_client, const char *request) {
         return;
     }
     const char *format;
-    if (strstr(request, "\"@type\":\"sendCallSignalingData\"") != NULL
+    if (strstr(request, "\"@type\":\"getMe\"") != NULL) {
+        format = "{\"@type\":\"user\",\"id\":777,\"@extra\":\"%s\"}";
+    } else if (strstr(request, "\"@type\":\"createCall\"") != NULL) {
+        format = "{\"@type\":\"callId\",\"id\":52,\"@extra\":\"%s\"}";
+    } else if (strstr(request, "\"@type\":\"sendCallSignalingData\"") != NULL
         && strstr(request, "\"data\":\"b3V0Ym91bmQtc2lnbmFs\"") == NULL) {
         format = "{\"@type\":\"error\",\"code\":400,\"message\":\"invalid fixture signaling\",\"@extra\":\"%s\"}";
     } else {
@@ -109,6 +113,19 @@ void td_json_client_send(void *raw_client, const char *request) {
     int written = snprintf(response, sizeof(response), format, extra);
     if (written > 0 && (size_t)written < sizeof(response)) {
         enqueue(client, response);
+    }
+    if (strstr(request, "\"@type\":\"createCall\"") != NULL) {
+        enqueue(
+            client,
+            "{\"@type\":\"updateCall\",\"call\":{\"id\":52,\"unique_id\":6001,\"user_id\":43,\"is_outgoing\":true,\"is_video\":false,\"state\":{\"@type\":\"callStatePending\",\"is_created\":true,\"is_received\":true}}}"
+        );
+    }
+    if (strstr(request, "\"@type\":\"discardCall\"") != NULL
+        && strstr(request, "\"call_id\":52") != NULL) {
+        enqueue(
+            client,
+            "{\"@type\":\"updateCall\",\"call\":{\"id\":52,\"unique_id\":6001,\"user_id\":43,\"is_outgoing\":true,\"is_video\":false,\"state\":{\"@type\":\"callStateDiscarded\",\"reason\":{\"@type\":\"callDiscardReasonHungUp\"},\"need_rating\":false,\"need_debug_information\":false,\"need_log\":false}}}"
+        );
     }
     if (strstr(request, "outage replay trigger") != NULL) {
         enqueue(

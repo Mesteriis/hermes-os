@@ -238,7 +238,7 @@ impl TelegramCallsPersistence {
         Ok(operation)
     }
 
-    pub async fn fail_stale_accepted_call_operations(
+    pub async fn reconcile_stale_call_operations(
         &self,
         account_id: &str,
         runtime_generation: u64,
@@ -252,9 +252,8 @@ impl TelegramCallsPersistence {
              grant_epoch, tdlib_call_id, revision, accepted_at_unix_seconds, \
              updated_at_unix_seconds, completed_at_unix_seconds, failure_category \
              FROM hermes_data.telegram_call_operations \
-             WHERE account_id = $1 AND (operation_state = 'accepted' OR ( \
-                    operation_state = 'dispatching' AND operation_kind = 'set_local_mute' \
-               )) \
+             WHERE account_id = $1 \
+               AND operation_state IN ('accepted', 'dispatching', 'awaiting_provider') \
                AND (runtime_generation <> $2 OR grant_epoch <> $3) \
              ORDER BY operation_id FOR UPDATE",
         )
@@ -268,11 +267,21 @@ impl TelegramCallsPersistence {
         for row in &rows {
             let mut operation = operation_from_row(row)?;
             let tdlib_call_id = operation.tdlib_call_id;
+            let failure_category = match operation.state {
+                TelegramCallOperationState::Accepted => TelegramCallFailureCategory::Permission,
+                TelegramCallOperationState::Dispatching
+                | TelegramCallOperationState::AwaitingProvider => {
+                    TelegramCallFailureCategory::Unknown
+                }
+                TelegramCallOperationState::Completed | TelegramCallOperationState::Failed => {
+                    return Err(TelegramCallsPersistenceError::InvalidRow);
+                }
+            };
             transition_operation(
                 &mut transaction,
                 &mut operation,
                 TelegramCallOperationState::Failed,
-                Some(TelegramCallFailureCategory::Permission),
+                Some(failure_category),
                 tdlib_call_id,
                 now_unix_seconds,
             )

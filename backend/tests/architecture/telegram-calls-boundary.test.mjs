@@ -33,28 +33,35 @@ test('Telegram Calls contract, core and persistence are separate integration bui
   assert.match(runtimeManifest, /hermes-telegram-calls-persistence/);
 });
 
-test('Telegram Call history admits query and replay without opening signaling commands', async () => {
-  const [admission, runtimePort, assembly, fixture] = await Promise.all([
+test('Telegram Calls admits exact query command and replay routes after signaling conformance', async () => {
+  const [admission, runtimePort, process, operations, assembly, fixture] = await Promise.all([
     source('src/telegram-runtime/src/admission.rs'),
     source('src/telegram-runtime/src/calls_client_port.rs'),
+    source('src/telegram-runtime/src/process.rs'),
+    source('src/telegram-calls-persistence/src/operations.rs'),
     source('src/telegram-assembly/src/lib.rs'),
     source('tests/fixtures/telegram-tdjson/tdjson.c'),
   ]);
 
+  assert.match(
+    admission,
+    /telegram_calls_client_capability_v1\(TelegramCallsContractV1::Command\)/,
+  );
   assert.match(admission, /telegram_calls_client_capability_v1\(TelegramCallsContractV1::Query\)/);
   assert.match(
     admission,
     /telegram_calls_client_capability_v1\(TelegramCallsContractV1::Realtime\)/,
   );
-  assert.doesNotMatch(
-    admission,
-    /telegram_calls_client_capability_v1\(TelegramCallsContractV1::Command\)/,
-  );
-  assert.match(runtimePort, /Telegram Calls command route is not admitted/);
+  assert.match(runtimePort, /TelegramCallsContractV1::Command => TelegramCallsRoute::Command/);
   assert.doesNotMatch(runtimePort, /hermes_communications|hermes_telegram_tdlib/);
+  assert.match(process, /execute_due_call_operations/);
+  assert.match(operations, /reconcile_stale_call_operations/);
+  assert.match(operations, /TelegramCallFailureCategory::Unknown/);
   assert.match(assembly, /telegram_storage_bundle_with_calls_backfill_v6/);
   assert.match(assembly, /telegram_calls_storage_migration_v1/);
   assert.match(assembly, /telegram_calls_storage_migration_v4/);
+  assert.match(fixture, /createCall/);
+  assert.match(fixture, /discardCall/);
   assert.match(fixture, /updateCall/);
   assert.match(fixture, /callStateDiscarded/);
 });

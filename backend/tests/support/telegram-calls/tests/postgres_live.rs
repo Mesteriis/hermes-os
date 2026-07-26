@@ -45,6 +45,7 @@ async fn durable_signaling_is_idempotent_fenced_and_restart_safe() {
         .apply_schema_for_conformance()
         .await
         .expect("apply call history and signaling migrations");
+    complete_empty_calls_realtime_backfill(&persistence).await;
 
     let initiate = TelegramCallCommand::InitiateAudio {
         operation_id: "operation-initiate".to_owned(),
@@ -233,7 +234,7 @@ async fn durable_signaling_is_idempotent_fenced_and_restart_safe() {
         .expect("accept end under old fence");
     assert_eq!(
         restarted
-            .fail_stale_accepted_call_operations("account-1", 2, 2, 113)
+            .reconcile_stale_call_operations("account-1", 2, 2, 113)
             .await
             .expect("fence stale command"),
         1
@@ -247,6 +248,42 @@ async fn durable_signaling_is_idempotent_fenced_and_restart_safe() {
     assert_eq!(
         failed.failure_category,
         Some(TelegramCallFailureCategory::Permission)
+    );
+
+    let ambiguous_end = TelegramCallCommand::End {
+        operation_id: "operation-end-ambiguous".to_owned(),
+        account_id: "account-1".to_owned(),
+        call_session_id: "call-session-1".to_owned(),
+    };
+    restarted
+        .accept_call_command(&ambiguous_end, None, 1, 1, 114)
+        .await
+        .expect("accept end before provider-ambiguous restart");
+    let claimed = restarted
+        .claim_accepted_call_operations("account-1", 1, 1, 115, 10)
+        .await
+        .expect("claim end before provider-ambiguous restart");
+    assert_eq!(claimed.len(), 1);
+    restarted
+        .mark_call_operation_awaiting_provider("account-1", "operation-end-ambiguous", None, 116)
+        .await
+        .expect("persist ambiguous provider dispatch");
+    assert_eq!(
+        restarted
+            .reconcile_stale_call_operations("account-1", 2, 2, 117)
+            .await
+            .expect("reconcile ambiguous provider dispatch"),
+        1
+    );
+    let ambiguous = restarted
+        .call_operation("account-1", "operation-end-ambiguous")
+        .await
+        .expect("load ambiguous operation")
+        .expect("ambiguous operation exists");
+    assert_eq!(ambiguous.state, TelegramCallOperationState::Failed);
+    assert_eq!(
+        ambiguous.failure_category,
+        Some(TelegramCallFailureCategory::Unknown)
     );
 
     let realtime = restarted
@@ -475,6 +512,33 @@ fn calls_backfill_envelope(accepted_at_unix_millis: i64, runtime_generation: u64
         payload,
     }
     .encode_to_vec()
+}
+
+async fn complete_empty_calls_realtime_backfill(persistence: &TelegramCallsPersistence) {
+    let envelope = calls_backfill_envelope(1_000, 1);
+    persistence
+        .accept_calls_realtime_backfill_v1(&envelope)
+        .await
+        .expect("accept empty Calls realtime backfill");
+    let mut execution = persistence
+        .claim_calls_realtime_backfill_v1(1, 1_001)
+        .await
+        .expect("claim empty Calls realtime backfill");
+    for now_unix_millis in 1_002..1_006 {
+        if execution.state == TelegramCallsBackfillStateV1::Succeeded {
+            return;
+        }
+        execution = persistence
+            .execute_calls_realtime_backfill_batch_v1(1, execution.lease_epoch, now_unix_millis)
+            .await
+            .expect("execute empty Calls realtime backfill")
+            .execution;
+    }
+    assert_eq!(
+        execution.state,
+        TelegramCallsBackfillStateV1::Succeeded,
+        "empty Calls realtime backfill must complete before signaling"
+    );
 }
 
 fn timestamp(unix_millis: i64) -> Timestamp {

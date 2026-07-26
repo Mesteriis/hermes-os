@@ -68,7 +68,7 @@
       "gate": "telegram_call_signaling_v1",
       "role": "integration",
       "owner": "telegram",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["telegram_call_history_v1"]
     },
     {

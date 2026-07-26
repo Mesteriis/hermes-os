@@ -35,8 +35,11 @@ use hermes_telegram_calls_api::{
         TelegramCallsContractV1,
     },
     wire::{
-        CallDiscardReasonV1, CallStateV1, CallsQueryRequestV1, CallsQueryResponseV1,
-        CallsReplayRequestV1, CallsReplayResponseV1, ListCallsRequestV1, call_frame_v1,
+        CallDiscardReasonV1, CallOperationKindV1, CallOperationStateV1, CallStateV1,
+        CallsCommandRequestV1, CallsCommandResponseV1, CallsQueryRequestV1, CallsQueryResponseV1,
+        CallsReplayRequestV1, CallsReplayResponseV1, EndCallRequestV1, GetCallOperationRequestV1,
+        InitiateAudioCallRequestV1, ListCallsRequestV1, call_frame_v1, calls_command_request_v1,
+        calls_command_response_v1, calls_failure_v1::Code as CallsFailureCodeV1,
         calls_query_request_v1, calls_query_response_v1,
     },
 };
@@ -528,20 +531,127 @@ fn managed_telegram_call_history_route_is_durable_and_replayable() {
     assert!(replay.frames[2].sequence < replay.frames[3].sequence);
     assert!(!replay.reset_required);
 
+    let initiate_request = CallsCommandRequestV1 {
+        request: Some(calls_command_request_v1::Request::InitiateAudioCall(
+            InitiateAudioCallRequestV1 {
+                operation_id: "managed-call-initiate".to_owned(),
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_user_id: "43".to_owned(),
+            },
+        )),
+    }
+    .encode_to_vec();
+    let initiate = decode_calls_command_response(&route_telegram_calls_until_ready(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        TelegramCallsContractV1::Command,
+        103,
+        &initiate_request,
+    ));
+    let calls_command_response_v1::Response::Accepted(initiate) =
+        initiate.response.expect("Telegram Calls initiate response")
+    else {
+        panic!("Telegram Calls initiate was not durably accepted");
+    };
+    assert_eq!(initiate.kind, CallOperationKindV1::InitiateAudio as i32);
+    assert_eq!(initiate.state, CallOperationStateV1::Accepted as i32);
+    let outgoing_call_session_id = initiate.call_session_id.clone();
+    let completed_initiate = wait_for_telegram_call_operation(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        104,
+        "managed-call-initiate",
+        CallOperationStateV1::Completed,
+    );
+    assert_eq!(completed_initiate.call_session_id, outgoing_call_session_id);
+
+    let conflict = decode_calls_command_response(&route_telegram_calls_until_ready(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        TelegramCallsContractV1::Command,
+        105,
+        &CallsCommandRequestV1 {
+            request: Some(calls_command_request_v1::Request::InitiateAudioCall(
+                InitiateAudioCallRequestV1 {
+                    operation_id: "managed-call-initiate".to_owned(),
+                    account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                    provider_user_id: "44".to_owned(),
+                },
+            )),
+        }
+        .encode_to_vec(),
+    ));
+    let calls_command_response_v1::Response::Failure(conflict) =
+        conflict.response.expect("Telegram Calls conflict response")
+    else {
+        panic!("Telegram Calls idempotency conflict was not rejected");
+    };
+    assert_eq!(conflict.code, CallsFailureCodeV1::Conflict as i32);
+    assert_eq!(conflict.field, "call_state");
+
+    let end_request = CallsCommandRequestV1 {
+        request: Some(calls_command_request_v1::Request::EndCall(
+            EndCallRequestV1 {
+                operation_id: "managed-call-end".to_owned(),
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                call_session_id: outgoing_call_session_id.clone(),
+            },
+        )),
+    }
+    .encode_to_vec();
+    let end = decode_calls_command_response(&route_telegram_calls_until_ready(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        TelegramCallsContractV1::Command,
+        106,
+        &end_request,
+    ));
+    let calls_command_response_v1::Response::Accepted(end) =
+        end.response.expect("Telegram Calls end response")
+    else {
+        panic!("Telegram Calls end was not durably accepted");
+    };
+    assert_eq!(end.kind, CallOperationKindV1::End as i32);
+    assert_eq!(end.state, CallOperationStateV1::Accepted as i32);
+    wait_for_telegram_call_operation(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        107,
+        "managed-call-end",
+        CallOperationStateV1::Completed,
+    );
+
     let stale_runtime = telegram.clone();
     let telegram = fixture.restart_telegram(telegram);
     assert_telegram_lifecycle_query(&store, &fixture.supervisor, &telegram);
     let replayed_list =
-        wait_for_telegram_call_history(&store, &fixture.supervisor, &telegram, 103, &list_request);
-    assert_eq!(replayed_list, list_response);
+        wait_for_telegram_call_history(&store, &fixture.supervisor, &telegram, 108, &list_request);
+    let calls_query_response_v1::Response::CallList(replayed_list) = replayed_list
+        .response
+        .expect("restarted Telegram Calls list response")
+    else {
+        panic!("restarted Telegram Calls list response is unexpected");
+    };
+    let outgoing_call = replayed_list
+        .calls
+        .iter()
+        .find(|call| call.call_session_id == outgoing_call_session_id)
+        .expect("restarted outgoing Telegram call");
+    assert_eq!(outgoing_call.provider_call_unique_id, Some(6001));
+    assert_eq!(outgoing_call.state, CallStateV1::Ended as i32);
     assert!(matches!(
         route_telegram_calls_client(
             &store,
             &fixture.supervisor.relay_port(),
             &stale_runtime,
-            TelegramCallsContractV1::Query,
-            104,
-            &list_request,
+            TelegramCallsContractV1::Command,
+            109,
+            &end_request,
         ),
         Err(TelegramClientRouteError::Kernel(error))
             if error == "managed runtime fence is stale"
@@ -951,6 +1061,46 @@ fn wait_for_telegram_call_history(
     }
 }
 
+fn wait_for_telegram_call_operation(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    request_id: u64,
+    operation_id: &str,
+    expected_state: CallOperationStateV1,
+) -> hermes_telegram_calls_api::wire::CallOperationV1 {
+    let request = CallsQueryRequestV1 {
+        request: Some(calls_query_request_v1::Request::GetCallOperation(
+            GetCallOperationRequestV1 {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                operation_id: operation_id.to_owned(),
+            },
+        )),
+    }
+    .encode_to_vec();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let response = decode_calls_query_response(&route_telegram_calls_until_ready(
+            store,
+            supervisor,
+            telegram,
+            TelegramCallsContractV1::Query,
+            request_id,
+            &request,
+        ));
+        if let Some(calls_query_response_v1::Response::Operation(operation)) = response.response
+            && operation.state == expected_state as i32
+        {
+            return operation;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Telegram call operation did not reach the expected state"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
 fn route_telegram_calls_until_ready(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
@@ -1042,6 +1192,12 @@ fn decode_calls_replay_response(bytes: &[u8]) -> CallsReplayResponseV1 {
     let response = ModuleClientResponseV1::decode(bytes).expect("Telegram Calls module response");
     CallsReplayResponseV1::decode(response.response_payload.as_slice())
         .expect("Telegram Calls replay response")
+}
+
+fn decode_calls_command_response(bytes: &[u8]) -> CallsCommandResponseV1 {
+    let response = ModuleClientResponseV1::decode(bytes).expect("Telegram Calls module response");
+    CallsCommandResponseV1::decode(response.response_payload.as_slice())
+        .expect("Telegram Calls command response")
 }
 
 fn route_telegram_automation_until_ready(

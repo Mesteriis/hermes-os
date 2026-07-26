@@ -2,12 +2,17 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: частично реализовано. `telegram_call_history_v1`
-реализован через generated Query/Realtime contracts, typed `updateCall`
-projection, owner-local PostgreSQL history/replay и exact managed-runtime
-route с restart/stale-fence conformance. `telegram_call_signaling_v1`,
-`telegram_call_media_v1` и umbrella `telegram_calls_operational_v1` остаются
-закрыты. Для media реализованы отдельные typed contract и
+Состояние реализации: частично реализовано. `telegram_call_history_v1` и
+`telegram_call_signaling_v1` реализованы через generated Query/Command/Realtime
+contracts, typed `updateCall` projection, owner-local PostgreSQL
+history/replay/operation journal и exact managed-runtime routes с
+restart/stale-fence conformance. Command executor возобновляет durable
+operations в owner runtime loop, а exact TDLib `createCall`, `acceptCall` и
+`discardCall` requests проверены отдельно. Managed conformance подтверждает
+durable `InitiateAudioCall`/`EndCall`, provider-result reconciliation,
+idempotency conflict и restart. `telegram_call_media_v1` и umbrella
+`telegram_calls_operational_v1` остаются закрыты. Для media реализованы
+отдельные typed contract и
 `hermes-telegram-call-media-tgcalls`, exact-source build script, native C ABI,
 system-audio implementation patch, exact dylib loader и Kernel-staged
 assembly/runtime binding. TDLib `callStateReady` и bidirectional signaling
@@ -19,10 +24,10 @@ runtime generation. Исторические V3 realtime frames копируют
 restart-safe owner-local Job Platform executor после additive DDL admission:
 257-frame PostgreSQL и signed managed-runtime conformance подтверждают bounded
 checkpoint/resume, cursor-preserving V3/V4 order, generation/lease fencing и
-terminal replay до readiness. Backfill prerequisite signaling gate выполнен;
-exact Calls Command/provider-result conformance остаётся следующим gate.
-Реализованное всё ещё не доказывает real input/output audio loop, upstream
-tgcalls memory/thread conformance или authorized live one-to-one call.
+terminal replay до readiness. Backfill и exact Calls Command/provider-result
+prerequisites signaling gate выполнены. Реализованное всё ещё не доказывает
+real input/output audio loop, upstream tgcalls memory/thread conformance или
+authorized live one-to-one call.
 Historical fixture transcript не является evidence ни для одного gate этого
 ADR.
 
@@ -240,6 +245,9 @@ scope and current runtime/grant fence.
 Crash before durable acceptance creates no accepted receipt. Crash after
 acceptance must resume or reconcile using persisted operation and subsequent
 TDLib updates; it must not blindly repeat a non-idempotent provider call.
+После смены runtime/grant fence неотправленный `accepted` завершается как
+permission-fenced, а `dispatching`/`awaiting_provider` с неоднозначным provider
+outcome — как explicit `Unknown`; новый runtime не повторяет TDLib mutation.
 
 ### TDLib и media boundary
 
@@ -353,6 +361,12 @@ Telegram call behavior.
 5. secret-negative logs/storage/client-output tests;
 6. teardown on end, crash, restart, revoke and stale generation;
 7. an authorized live one-to-one audio call smoke test.
+
+`telegram_call_signaling_v1` закрыт exact TDLib request tests, disposable
+PostgreSQL operation-journal conformance, V3→V4 backfill evidence и signed
+managed route, который проверяет durable initiate/end receipt, provider update
+reconciliation, idempotency conflict, restart и stale runtime fence. Это не
+закрывает `telegram_call_media_v1`.
 
 `telegram_calls_operational_v1` opens only after all three gates, generated
 frontend cutover and removal of historical Calls REST/fixture fallbacks.
