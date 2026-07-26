@@ -2446,6 +2446,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-telegram-automation-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+]
+
+[[package]]
+name = "hermes-telegram-automation-core"
+version = "0.1.0"
+dependencies = [
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "hermes-telegram-automation-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-storage-protocol",
+ "hermes-telegram-automation-core",
+ "sha2 0.10.9",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-telegram-core"
 version = "0.1.0"
 dependencies = [

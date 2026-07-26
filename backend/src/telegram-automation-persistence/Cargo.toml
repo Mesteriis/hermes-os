@@ -1,0 +1,23 @@
+[package]
+name = "hermes-telegram-automation-persistence"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []
+conformance-test-support = []
+
+[package.metadata.hermes]
+role = "integration"
+owner = "telegram"
+surface = "automation-persistence"
+
+[dependencies]
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-telegram-automation-core = { path = "../telegram-automation-core" }
+sha2 = { version = "=0.10.9", default-features = false }
+sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }
