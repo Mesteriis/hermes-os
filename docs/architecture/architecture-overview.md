@@ -165,6 +165,13 @@ encrypted bytes, Vault content-key scope и aggregate quota переживают
 restart/re-registration внутри того же logical owner custody. Kernel не
 интерпретирует content и не становится Blob/data facade.
 
+ADR-0280 открывает design gate для Mail outbound MIME attachments. Mail
+проецирует только canonical Communications safety-state event, хранит
+owner-local anchor/Blob metadata и materializes bytes через exact Blob
+`ReadRange`; SMTP/Gmail получают только готовый bounded RFC822. Ни
+Communications runtime/domain, ни Kernel/Core не входят в synchronous delivery
+path.
+
 ## Top-Level Shape
 
 Диаграмма ниже показывает целевую систему после открытия всех фазовых ворот.

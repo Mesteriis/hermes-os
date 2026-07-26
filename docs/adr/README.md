@@ -88,6 +88,7 @@ policy через ссылки из новых документов.
 - [ADR-0277: Gmail API outbound mutation gate](ADR-0277-mail-gmail-api-outbound-mutation-gate.md)
 - [ADR-0278: Gmail OAuth setup and refresh gate](ADR-0278-mail-gmail-oauth-setup-and-refresh-gate.md)
 - [ADR-0279: Durable Blob custody scope and operation-scoped grants](ADR-0279-durable-blob-custody-scope-and-operation-scoped-grants.md)
+- [ADR-0280: Mail event-gated outbound MIME attachments](ADR-0280-mail-event-gated-outbound-mime-attachments.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
