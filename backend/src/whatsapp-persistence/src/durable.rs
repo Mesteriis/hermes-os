@@ -5,10 +5,8 @@ use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 
-use crate::WHATSAPP_SCHEMA_V1;
-
 pub struct WhatsAppDurablePersistence {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -111,7 +109,11 @@ impl WhatsAppDurablePersistence {
     }
 
     pub async fn initialize(&self) -> Result<(), WhatsAppDurablePersistenceError> {
-        sqlx::raw_sql(WHATSAPP_SCHEMA_V1)
+        sqlx::raw_sql(crate::WHATSAPP_SCHEMA_V1)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
+        sqlx::raw_sql(crate::WHATSAPP_SCHEMA_V2)
             .execute(&self.pool)
             .await
             .map(|_| ())
@@ -300,66 +302,13 @@ impl WhatsAppDurablePersistence {
         record: &OutboxRecordV1,
         created_at_unix_seconds: i64,
     ) -> Result<bool, WhatsAppDurablePersistenceError> {
-        if observation.account_id.trim().is_empty()
-            || observation.provider_event_id.trim().is_empty()
-            || !(1..=11).contains(&observation.evidence_kind)
-        {
-            return Err(WhatsAppDurablePersistenceError::InvalidRow);
-        }
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        let inserted = sqlx::query(
-            "INSERT INTO hermes_data.whatsapp_host_observations (account_id, provider_event_id, evidence_kind, observed_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (account_id, provider_event_id) DO NOTHING RETURNING account_id",
+        self.record_host_observation_projection_and_enqueue(
+            observation,
+            None,
+            Some(record),
+            created_at_unix_seconds,
         )
-        .bind(&observation.account_id)
-        .bind(&observation.provider_event_id)
-        .bind(observation.evidence_kind)
-        .bind(observation.observed_at_unix_seconds)
-        .fetch_optional(&mut *transaction)
         .await
-        .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        if inserted.is_none() {
-            let row = sqlx::query(
-                "SELECT evidence_kind, observed_at_unix_seconds FROM hermes_data.whatsapp_host_observations WHERE account_id = $1 AND provider_event_id = $2",
-            )
-            .bind(&observation.account_id)
-            .bind(&observation.provider_event_id)
-            .fetch_one(&mut *transaction)
-            .await
-            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-            let evidence_kind: i16 = row
-                .try_get("evidence_kind")
-                .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
-            let observed_at_unix_seconds: i64 = row
-                .try_get("observed_at_unix_seconds")
-                .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
-            if evidence_kind != observation.evidence_kind
-                || observed_at_unix_seconds != observation.observed_at_unix_seconds
-            {
-                return Err(WhatsAppDurablePersistenceError::ObservationConflict);
-            }
-            transaction
-                .commit()
-                .await
-                .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-            return Ok(false);
-        }
-        sqlx::query("INSERT INTO hermes_data.whatsapp_communications_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
-            .bind(record.message_id().as_slice())
-            .bind(record.envelope_sha256().as_slice())
-            .bind(record.exact_bytes())
-            .bind(created_at_unix_seconds)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        transaction
-            .commit()
-            .await
-            .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        Ok(true)
     }
 
     pub async fn pending_communications_outbox(

@@ -4,6 +4,13 @@
 //! domain dependency. It preserves only the evidence category allowed by the
 //! host bridge; provider payload and session material never enter this type.
 
+mod operational;
+
+pub use operational::{
+    WhatsAppOperationalProjectionError, WhatsAppOperationalProjectionV1,
+    project_operational_host_observation,
+};
+
 use hermes_communications_ingress::{
     AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1, CommunicationDirectionV1,
     CommunicationEvidenceKindV1, CommunicationObservationDraft, IngressDraftError,
@@ -59,6 +66,14 @@ pub fn project_host_observation(
             Some(sender_id.clone()),
             None,
             provider_message_id.clone(),
+            None,
+        ),
+        WhatsAppHostObservationV1::OperationalMessage(value) => (
+            CommunicationEvidenceKindV1::ChatMessage,
+            Some(value.provider_chat_id.clone()),
+            Some(value.sender_id.clone()),
+            None,
+            value.provider_message_id.clone(),
             None,
         ),
         WhatsAppHostObservationV1::MessageUpdated {
@@ -120,6 +135,25 @@ pub fn project_host_observation(
             envelope.provider_event_id.clone(),
             None,
         ),
+        WhatsAppHostObservationV1::OperationalParticipant(value) => (
+            CommunicationEvidenceKindV1::ParticipantChanged,
+            Some(value.provider_chat_id.clone()),
+            Some(value.provider_identity_id.clone()),
+            None,
+            envelope.provider_event_id.clone(),
+            None,
+        ),
+        WhatsAppHostObservationV1::OperationalParticipantRemoved {
+            provider_chat_id,
+            provider_identity_id,
+        } => (
+            CommunicationEvidenceKindV1::ParticipantChanged,
+            Some(provider_chat_id.clone()),
+            Some(provider_identity_id.clone()),
+            None,
+            envelope.provider_event_id.clone(),
+            None,
+        ),
         WhatsAppHostObservationV1::MediaMetadata {
             provider_chat_id,
             provider_message_id,
@@ -149,6 +183,7 @@ pub fn project_host_observation(
             )
         }
         WhatsAppHostObservationV1::Dialog { .. }
+        | WhatsAppHostObservationV1::OperationalDialog(_)
         | WhatsAppHostObservationV1::RuntimeState { .. }
         | WhatsAppHostObservationV1::Presence { .. }
         | WhatsAppHostObservationV1::CallMetadata { .. }
@@ -164,7 +199,8 @@ pub fn project_host_observation(
         ),
         WhatsAppHostObservationV1::SessionLinked { .. }
         | WhatsAppHostObservationV1::SessionRevoked
-        | WhatsAppHostObservationV1::CommandResult { .. } => {
+        | WhatsAppHostObservationV1::CommandResult { .. }
+        | WhatsAppHostObservationV1::OperationalResyncState { .. } => {
             return Err(WhatsAppCoreError::UnsupportedObservation);
         }
     };

@@ -10,6 +10,7 @@ use hermes_whatsapp_api::{
         HOST_BRIDGE_PROTOCOL_MAJOR, HOST_BRIDGE_PROTOCOL_REVISION, WhatsAppHostBridgeHandshakeV1,
         decode_host_bridge_handshake_accepted, encode_host_bridge_handshake,
     },
+    operational::WhatsAppOperationalQueryV1,
 };
 use hermes_whatsapp_runtime::{
     admission::WHATSAPP_STORAGE_CAPABILITY_ID,
@@ -28,6 +29,11 @@ fn managed_whatsapp_runtime_uses_signed_kernel_admission_and_host_route_fencing(
     assert_whatsapp_query_is_admitted(&contour.store, &contour.supervisor, &contour.whatsapp);
     assert_host_route_is_bound(&contour.whatsapp);
     assert_ungranted_whatsapp_command_is_rejected(
+        &contour.store,
+        &contour.supervisor,
+        &contour.whatsapp,
+    );
+    assert_ungranted_whatsapp_operational_query_is_rejected(
         &contour.store,
         &contour.supervisor,
         &contour.whatsapp,
@@ -57,6 +63,35 @@ fn managed_whatsapp_runtime_uses_signed_kernel_admission_and_host_route_fencing(
         .expect("join owner control server")
         .expect("owner control server");
     contour.finish();
+}
+
+fn assert_ungranted_whatsapp_operational_query_is_rejected(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    whatsapp: &StartedWhatsAppRuntime,
+) {
+    let request = encode_module_request(
+        24,
+        &WhatsAppPublicClientRequestV1::OperationalQuery(
+            WhatsAppOperationalQueryV1::GetRuntimeStatus {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+            },
+        ),
+    )
+    .expect("encode ungranted WhatsApp operational query");
+    let route = ManagedCapabilityRouteRequest::new(
+        &whatsapp.registration_id,
+        &whatsapp.runtime_instance_id,
+        whatsapp.runtime_generation,
+        whatsapp.grant_epoch,
+        WhatsAppClientContractV1::OperationalQuery.capability_id(),
+        &request,
+    );
+    assert_eq!(
+        route_managed_client_request(store, &supervisor.relay_port(), &route)
+            .expect_err("ungranted WhatsApp operational query route"),
+        "capability is not granted to this registration"
+    );
 }
 
 fn assert_whatsapp_query_is_admitted(

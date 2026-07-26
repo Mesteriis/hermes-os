@@ -4,16 +4,20 @@ use std::time::Instant;
 
 use super::*;
 
+use hermes_runtime_protocol::v1::ModuleClientResponseV1;
 use hermes_whatsapp_api::{
-    WhatsAppProviderCommand, WhatsAppProviderCommandStateV1, WhatsAppPublicClientRequestV1,
-    WhatsAppPublicClientResponseV1,
+    WhatsAppDialog, WhatsAppMessage, WhatsAppParticipant, WhatsAppProviderCommand,
+    WhatsAppProviderCommandStateV1, WhatsAppProviderEvent, WhatsAppProviderEventKind,
+    WhatsAppPublicClientRequestV1, WhatsAppPublicClientResponseV1,
     client_contract::WhatsAppClientContractV1,
     host_bridge::{
         HOST_BRIDGE_PROTOCOL_MAJOR, HOST_BRIDGE_PROTOCOL_REVISION, WhatsAppHostBridgeEnvelopeV1,
         WhatsAppHostObservationV1,
     },
+    operational::{WhatsAppOperationalQueryResponseV1, WhatsAppOperationalQueryV1},
 };
 use hermes_whatsapp_runtime::client_port::{decode_module_response, encode_module_request};
+use prost::Message as _;
 
 use crate::modules::capability::router::{
     ManagedCapabilityRouteRequest, route_managed_client_request,
@@ -27,7 +31,7 @@ const PRIVATE_COMMAND_TEXT: &str = "private WhatsApp body must stay integration-
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault, Storage, WhatsApp, NATS and Communications binaries"]
 fn managed_whatsapp_runtime_delivers_live_command_and_event_only_communications_handoff() {
-    let contour = ManagedWhatsAppContour::start(WhatsAppGrantProfileV1::CommandAndQuery);
+    let mut contour = ManagedWhatsAppContour::start(WhatsAppGrantProfileV1::CommandAndQuery);
     let events = contour
         .store
         .platform_event_hub_topology()
@@ -145,9 +149,434 @@ fn managed_whatsapp_runtime_delivers_live_command_and_event_only_communications_
         replayed_evidence_id, initial_evidence_id,
         "Communications query must expose the replayed WhatsApp evidence",
     );
+    assert_whatsapp_operational_read(&mut contour);
 
     contour.shutdown_processes();
     contour.finish();
+}
+
+fn assert_whatsapp_operational_read(contour: &mut ManagedWhatsAppContour) {
+    let mut host = WhatsAppHostBridgeTestClient::connect(&contour.whatsapp);
+    let message = |body: &str| WhatsAppMessage {
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_chat_id: "provider-chat-operational".to_owned(),
+        provider_message_id: "provider-message-operational".to_owned(),
+        sender_id: "provider-sender-operational".to_owned(),
+        sender_display_name: "Operational Sender".to_owned(),
+        text: Some(body.to_owned()),
+        reply_to_provider_message_id: None,
+        occurred_at_unix_seconds: 1_785_000_100,
+        delivery_state: None,
+    };
+    let initial = WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_event_id: "whatsapp-operational-message-initial".to_owned(),
+        observed_at_unix_seconds: 1_785_000_100,
+        observation: WhatsAppHostObservationV1::OperationalMessage(message("initial body")),
+    };
+    assert_eq!(host.submit_observation(&initial), initial.provider_event_id);
+    assert_eq!(
+        host.submit_observation(&initial),
+        initial.provider_event_id,
+        "exact duplicate host delivery is idempotent",
+    );
+    for (event_id, observed_at, body) in [
+        (
+            "whatsapp-operational-message-newer",
+            1_785_000_102,
+            "newest searchable body",
+        ),
+        (
+            "whatsapp-operational-message-older",
+            1_785_000_101,
+            "stale body must not win",
+        ),
+    ] {
+        assert_eq!(
+            host.submit_observation(&WhatsAppHostBridgeEnvelopeV1 {
+                protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+                protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                provider_event_id: event_id.to_owned(),
+                observed_at_unix_seconds: observed_at,
+                observation: WhatsAppHostObservationV1::OperationalMessage(message(body)),
+            }),
+            event_id,
+        );
+    }
+    let dialog = WhatsAppDialog {
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_chat_id: "provider-chat-operational".to_owned(),
+        title: "Operational Dialog".to_owned(),
+        kind: "group".to_owned(),
+        is_archived: Some(false),
+        is_pinned: Some(true),
+        is_muted: Some(false),
+        is_unread: Some(true),
+        unread_count: Some(3),
+        participant_count: Some(2),
+        observed_at_unix_seconds: 1_785_000_103,
+    };
+    host.submit_observation(&WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_event_id: "whatsapp-operational-dialog".to_owned(),
+        observed_at_unix_seconds: 1_785_000_103,
+        observation: WhatsAppHostObservationV1::OperationalDialog(dialog.clone()),
+    });
+    let participant = WhatsAppParticipant {
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_chat_id: "provider-chat-operational".to_owned(),
+        provider_identity_id: "provider-participant-operational".to_owned(),
+        display_name: "Operational Participant".to_owned(),
+        role: "member".to_owned(),
+        status: "active".to_owned(),
+        is_self: false,
+        observed_at_unix_seconds: 1_785_000_104,
+    };
+    host.submit_observation(&WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_event_id: "whatsapp-operational-participant".to_owned(),
+        observed_at_unix_seconds: 1_785_000_104,
+        observation: WhatsAppHostObservationV1::OperationalParticipant(participant.clone()),
+    });
+    host.submit_observation(&WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_event_id: "whatsapp-operational-resync-complete".to_owned(),
+        observed_at_unix_seconds: 1_785_000_105,
+        observation: WhatsAppHostObservationV1::OperationalResyncState { complete: true },
+    });
+    drop(host);
+
+    let messages = operational_query(
+        contour,
+        41,
+        WhatsAppOperationalQueryV1::ListMessages {
+            account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+            provider_chat_id: Some("provider-chat-operational".to_owned()),
+            cursor: None,
+            limit: 1,
+        },
+    );
+    let next_cursor = match messages {
+        WhatsAppOperationalQueryResponseV1::Messages(page) => {
+            assert_eq!(page.items.len(), 1);
+            assert_eq!(
+                page.items[0].text.as_deref(),
+                Some("newest searchable body"),
+                "older provider observation must not overwrite the current projection",
+            );
+            page.next_cursor.expect("bounded message cursor")
+        }
+        response => panic!("unexpected WhatsApp message response: {response:?}"),
+    };
+    assert!(matches!(
+        operational_query(
+            contour,
+            42,
+            WhatsAppOperationalQueryV1::ListMessages {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                provider_chat_id: Some("provider-chat-operational".to_owned()),
+                cursor: Some(next_cursor),
+                limit: 1,
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::Messages(page) if page.items.is_empty()
+    ));
+    assert!(matches!(
+        operational_query(
+            contour,
+            43,
+            WhatsAppOperationalQueryV1::SearchMessages {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                provider_chat_id: None,
+                query: "searchable".to_owned(),
+                cursor: None,
+                limit: 10,
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::Messages(page)
+            if page.items.len() == 1
+                && page.items[0].provider_message_id == "provider-message-operational"
+    ));
+    assert!(matches!(
+        operational_query(
+            contour,
+            44,
+            WhatsAppOperationalQueryV1::ListDialogs {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                cursor: None,
+                limit: 10,
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::Dialogs(page) if page.items == [dialog]
+    ));
+    assert!(matches!(
+        operational_query(
+            contour,
+            45,
+            WhatsAppOperationalQueryV1::ListParticipants {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "provider-chat-operational".to_owned(),
+                cursor: None,
+                limit: 10,
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::Participants(page)
+            if page.items == [participant.clone()]
+    ));
+    assert!(matches!(
+        operational_query(
+            contour,
+            46,
+            WhatsAppOperationalQueryV1::ListEvents {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                kind: Some(WhatsAppProviderEventKind::Message),
+                provider_chat_id: Some("provider-chat-operational".to_owned()),
+                cursor: None,
+                limit: 10,
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::Events(page)
+            if page.items.len() == 3
+                && page.items.iter().all(
+                    |event| matches!(event, WhatsAppProviderEvent::MessageObserved(_))
+                )
+    ));
+    assert!(matches!(
+        operational_query(
+            contour,
+            47,
+            WhatsAppOperationalQueryV1::GetRuntimeStatus {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::RuntimeStatus(status)
+            if status.projection_ready && status.latest_event_sequence >= 5
+    ));
+    let mut host = WhatsAppHostBridgeTestClient::connect(&contour.whatsapp);
+    host.submit_observation(&WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_event_id: "whatsapp-operational-message-deleted".to_owned(),
+        observed_at_unix_seconds: 1_785_000_106,
+        observation: WhatsAppHostObservationV1::MessageDeleted {
+            provider_chat_id: "provider-chat-operational".to_owned(),
+            provider_message_id: "provider-message-operational".to_owned(),
+        },
+    });
+    host.submit_observation(&WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_event_id: "whatsapp-operational-message-stale-after-delete".to_owned(),
+        observed_at_unix_seconds: 1_785_000_105,
+        observation: WhatsAppHostObservationV1::OperationalMessage(message(
+            "stale body must not resurrect",
+        )),
+    });
+    host.submit_observation(&WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_event_id: "whatsapp-operational-participant-removed".to_owned(),
+        observed_at_unix_seconds: 1_785_000_106,
+        observation: WhatsAppHostObservationV1::OperationalParticipantRemoved {
+            provider_chat_id: participant.provider_chat_id.clone(),
+            provider_identity_id: participant.provider_identity_id.clone(),
+        },
+    });
+    let mut stale_participant = participant.clone();
+    stale_participant.observed_at_unix_seconds = 1_785_000_105;
+    host.submit_observation(&WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_event_id: "whatsapp-operational-participant-stale-after-remove".to_owned(),
+        observed_at_unix_seconds: stale_participant.observed_at_unix_seconds,
+        observation: WhatsAppHostObservationV1::OperationalParticipant(stale_participant),
+    });
+    let mut restart_message = message("durable body survives restart");
+    restart_message.provider_message_id = "provider-message-restart".to_owned();
+    restart_message.occurred_at_unix_seconds = 1_785_000_107;
+    host.submit_observation(&WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_event_id: "whatsapp-operational-message-restart".to_owned(),
+        observed_at_unix_seconds: 1_785_000_107,
+        observation: WhatsAppHostObservationV1::OperationalMessage(restart_message),
+    });
+    host.submit_observation(&WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+        provider_event_id: "whatsapp-operational-message-receipt".to_owned(),
+        observed_at_unix_seconds: 1_785_000_108,
+        observation: WhatsAppHostObservationV1::Receipt {
+            provider_chat_id: "provider-chat-operational".to_owned(),
+            provider_message_id: "provider-message-restart".to_owned(),
+            delivery_state: "delivered".to_owned(),
+        },
+    });
+    drop(host);
+    assert!(matches!(
+        operational_query(
+            contour,
+            51,
+            WhatsAppOperationalQueryV1::SearchMessages {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                provider_chat_id: None,
+                query: "stale body".to_owned(),
+                cursor: None,
+                limit: 10,
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::Messages(page) if page.items.is_empty()
+    ));
+    assert!(matches!(
+        operational_query(
+            contour,
+            52,
+            WhatsAppOperationalQueryV1::ListParticipants {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "provider-chat-operational".to_owned(),
+                cursor: None,
+                limit: 10,
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::Participants(page) if page.items.is_empty()
+    ));
+    assert!(matches!(
+        operational_query(
+            contour,
+            53,
+            WhatsAppOperationalQueryV1::SearchMessages {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                provider_chat_id: None,
+                query: "survives restart".to_owned(),
+                cursor: None,
+                limit: 10,
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::Messages(page)
+            if page.items.len() == 1
+                && page.items[0].provider_message_id == "provider-message-restart"
+                && page.items[0].delivery_state.as_deref() == Some("delivered")
+    ));
+    let predecessor_generation = contour.whatsapp.runtime_generation;
+    contour.whatsapp = restart_whatsapp_runtime(
+        &contour.supervisor,
+        contour.store.as_ref(),
+        &contour.data,
+        &contour.data.join("runtime"),
+        &contour.whatsapp,
+    );
+    assert_eq!(
+        contour.whatsapp.runtime_generation,
+        predecessor_generation + 1,
+    );
+    assert!(matches!(
+        operational_query(
+            contour,
+            49,
+            WhatsAppOperationalQueryV1::SearchMessages {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                provider_chat_id: None,
+                query: "survives restart".to_owned(),
+                cursor: None,
+                limit: 10,
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::Messages(page)
+            if page.items.len() == 1
+                && page.items[0].provider_message_id == "provider-message-restart"
+                && page.items[0].delivery_state.as_deref() == Some("delivered")
+    ));
+    assert!(matches!(
+        operational_query(
+            contour,
+            50,
+            WhatsAppOperationalQueryV1::GetRuntimeStatus {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::RuntimeStatus(status)
+            if status.projection_ready && status.latest_event_sequence >= 11
+    ));
+    assert!(matches!(
+        operational_query(
+            contour,
+            54,
+            WhatsAppOperationalQueryV1::ListParticipants {
+                account_id: WHATSAPP_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "provider-chat-operational".to_owned(),
+                cursor: None,
+                limit: 10,
+            },
+        ),
+        WhatsAppOperationalQueryResponseV1::Participants(page) if page.items.is_empty()
+    ));
+    assert_cross_account_operational_query_is_rejected(contour);
+}
+
+fn assert_cross_account_operational_query_is_rejected(contour: &ManagedWhatsAppContour) {
+    let request_id = 48;
+    let request = encode_module_request(
+        request_id,
+        &WhatsAppPublicClientRequestV1::OperationalQuery(
+            WhatsAppOperationalQueryV1::GetRuntimeStatus {
+                account_id: "another-whatsapp-account".to_owned(),
+            },
+        ),
+    )
+    .expect("encode cross-account WhatsApp operational query");
+    let route = ManagedCapabilityRouteRequest::new(
+        &contour.whatsapp.registration_id,
+        &contour.whatsapp.runtime_instance_id,
+        contour.whatsapp.runtime_generation,
+        contour.whatsapp.grant_epoch,
+        WhatsAppClientContractV1::OperationalQuery.capability_id(),
+        &request,
+    );
+    let response = route_managed_client_request(
+        contour.store.as_ref(),
+        &contour.supervisor.relay_port(),
+        &route,
+    )
+    .expect("route admitted cross-account WhatsApp query to owner runtime");
+    let response =
+        ModuleClientResponseV1::decode(response.as_slice()).expect("decode WhatsApp module error");
+    assert_eq!(response.request_id, request_id);
+    assert_eq!(response.error_code, "RUNTIME_UNAVAILABLE");
+    assert!(
+        response.response_payload.is_empty(),
+        "cross-account rejection must not expose provider-owned data",
+    );
+}
+
+fn operational_query(
+    contour: &ManagedWhatsAppContour,
+    request_id: u64,
+    query: WhatsAppOperationalQueryV1,
+) -> WhatsAppOperationalQueryResponseV1 {
+    match route_whatsapp_client(
+        contour,
+        WhatsAppClientContractV1::OperationalQuery,
+        request_id,
+        &WhatsAppPublicClientRequestV1::OperationalQuery(query),
+    ) {
+        WhatsAppPublicClientResponseV1::OperationalQuery(response) => response,
+        response => panic!("unexpected WhatsApp operational response: {response:?}"),
+    }
 }
 
 fn assert_command_result_stays_owner_local(
@@ -327,7 +756,7 @@ fn route_whatsapp_client(
         };
         assert!(
             Instant::now() < deadline,
-            "WhatsApp client route remained unavailable: {last_error}; managed failure: {:?}",
+            "WhatsApp client route {contract:?} request {request_id} remained unavailable: {last_error}; managed failure: {:?}",
             contour
                 .supervisor
                 .last_failure(&contour.whatsapp.registration_id),

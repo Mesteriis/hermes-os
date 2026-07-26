@@ -1,5 +1,9 @@
 pub const WHATSAPP_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.whatsapp.v1.bin"));
+pub const WHATSAPP_OPERATIONAL_DESCRIPTOR_SET_V1: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/hermes.whatsapp.operational.v1.bin"
+));
 pub const WHATSAPP_CLIENT_CONTRACT_MAJOR: u32 = 1;
 pub const WHATSAPP_CLIENT_CONTRACT_REVISION: u32 = 1;
 pub const WHATSAPP_MODULE_ID: &str = "hermes-whatsapp-runtime";
@@ -9,16 +13,18 @@ pub const WHATSAPP_OWNER_ID: &str = "whatsapp";
 pub enum WhatsAppClientContractV1 {
     Command,
     Query,
+    OperationalQuery,
 }
 
 impl WhatsAppClientContractV1 {
-    pub const ALL: [Self; 2] = [Self::Command, Self::Query];
+    pub const ALL: [Self; 3] = [Self::Command, Self::Query, Self::OperationalQuery];
 
     #[must_use]
     pub const fn capability_id(self) -> &'static str {
         match self {
             Self::Command => "whatsapp.command.v1",
             Self::Query => "whatsapp.query.v1",
+            Self::OperationalQuery => "whatsapp.operational.query.v1",
         }
     }
 
@@ -32,6 +38,17 @@ impl WhatsAppClientContractV1 {
         match self {
             Self::Command => "/hermes.whatsapp.v1.WhatsAppCommandService/ExecuteCommand",
             Self::Query => "/hermes.whatsapp.v1.WhatsAppQueryService/GetOperationStatus",
+            Self::OperationalQuery => {
+                "/hermes.whatsapp.operational.v1.WhatsAppOperationalQueryService/Query"
+            }
+        }
+    }
+
+    #[must_use]
+    pub const fn descriptor_set(self) -> &'static [u8] {
+        match self {
+            Self::Command | Self::Query => WHATSAPP_DESCRIPTOR_SET_V1,
+            Self::OperationalQuery => WHATSAPP_OPERATIONAL_DESCRIPTOR_SET_V1,
         }
     }
 
@@ -52,6 +69,11 @@ mod tests {
     #[test]
     fn client_contracts_have_unique_capabilities_names_and_routes() {
         assert!(!WHATSAPP_DESCRIPTOR_SET_V1.is_empty());
+        assert!(!WHATSAPP_OPERATIONAL_DESCRIPTOR_SET_V1.is_empty());
+        assert_ne!(
+            WHATSAPP_DESCRIPTOR_SET_V1,
+            WHATSAPP_OPERATIONAL_DESCRIPTOR_SET_V1
+        );
         assert_eq!(
             WhatsAppClientContractV1::ALL
                 .into_iter()

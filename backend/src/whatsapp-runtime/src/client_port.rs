@@ -4,11 +4,11 @@ use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
 use hermes_whatsapp_api::client_contract::{
-    WHATSAPP_CLIENT_CONTRACT_MAJOR, WHATSAPP_CLIENT_CONTRACT_REVISION, WHATSAPP_DESCRIPTOR_SET_V1,
-    WHATSAPP_MODULE_ID, WHATSAPP_OWNER_ID, WhatsAppClientContractV1,
+    WHATSAPP_CLIENT_CONTRACT_MAJOR, WHATSAPP_CLIENT_CONTRACT_REVISION, WHATSAPP_MODULE_ID,
+    WHATSAPP_OWNER_ID, WhatsAppClientContractV1,
 };
 use hermes_whatsapp_api::{
-    WhatsAppPublicClientRequestV1, WhatsAppPublicClientResponseV1, client_wire,
+    WhatsAppPublicClientRequestV1, WhatsAppPublicClientResponseV1, client_wire, operational_wire,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -29,7 +29,7 @@ fn whatsapp_client_contract(contract: WhatsAppClientContractV1) -> ContractRefer
         name: contract.contract_name().to_owned(),
         major: WHATSAPP_CLIENT_CONTRACT_MAJOR,
         revision: WHATSAPP_CLIENT_CONTRACT_REVISION,
-        schema_sha256: Sha256::digest(WHATSAPP_DESCRIPTOR_SET_V1).to_vec(),
+        schema_sha256: Sha256::digest(contract.descriptor_set()).to_vec(),
     }
 }
 
@@ -48,16 +48,25 @@ fn request_contract(request: &WhatsAppPublicClientRequestV1) -> WhatsAppClientCo
     match request {
         WhatsAppPublicClientRequestV1::Command(_) => WhatsAppClientContractV1::Command,
         WhatsAppPublicClientRequestV1::OperationStatus { .. } => WhatsAppClientContractV1::Query,
+        WhatsAppPublicClientRequestV1::OperationalQuery(_) => {
+            WhatsAppClientContractV1::OperationalQuery
+        }
     }
 }
 
-fn encode_request_payload(request: &WhatsAppPublicClientRequestV1) -> Vec<u8> {
-    match request {
+fn encode_request_payload(
+    request: &WhatsAppPublicClientRequestV1,
+) -> Result<Vec<u8>, WhatsAppClientPortErrorV1> {
+    Ok(match request {
         WhatsAppPublicClientRequestV1::Command(command) => client_wire::encode_command(command),
         WhatsAppPublicClientRequestV1::OperationStatus { operation_id } => {
             client_wire::encode_operation_status_query(operation_id)
         }
-    }
+        WhatsAppPublicClientRequestV1::OperationalQuery(query) => {
+            operational_wire::encode_operational_query(query)
+                .map_err(|_| WhatsAppClientPortErrorV1::Protocol)?
+        }
+    })
 }
 
 fn decode_request_payload(
@@ -71,6 +80,11 @@ fn decode_request_payload(
         WhatsAppClientContractV1::Query => client_wire::decode_operation_status_query(bytes)
             .map(|operation_id| WhatsAppPublicClientRequestV1::OperationStatus { operation_id })
             .map_err(|_| WhatsAppClientPortErrorV1::Protocol),
+        WhatsAppClientContractV1::OperationalQuery => {
+            operational_wire::decode_operational_query(bytes)
+                .map(WhatsAppPublicClientRequestV1::OperationalQuery)
+                .map_err(|_| WhatsAppClientPortErrorV1::Protocol)
+        }
     }
 }
 
@@ -88,7 +102,7 @@ pub fn encode_module_request(
         owner_id: WHATSAPP_OWNER_ID.to_owned(),
         contract: Some(whatsapp_client_contract(contract)),
         request_id,
-        request_payload: encode_request_payload(request),
+        request_payload: encode_request_payload(request)?,
     }
     .encode_to_vec())
 }
@@ -137,6 +151,11 @@ pub async fn handle_client_request(
             .await
             .map(WhatsAppPublicClientResponseV1::OperationStatus)
             .map_err(|_| WhatsAppClientPortErrorV1::Runtime)?,
+        WhatsAppPublicClientRequestV1::OperationalQuery(query) => runtime
+            .operational_query(&query)
+            .await
+            .map(WhatsAppPublicClientResponseV1::OperationalQuery)
+            .map_err(|_| WhatsAppClientPortErrorV1::Runtime)?,
     };
     encode_module_response(request_id, contract, &response)
 }
@@ -158,6 +177,10 @@ fn encode_module_response(
             WhatsAppClientContractV1::Query,
             WhatsAppPublicClientResponseV1::OperationStatus(status),
         ) => client_wire::encode_operation_status_response(status.as_ref()),
+        (
+            WhatsAppClientContractV1::OperationalQuery,
+            WhatsAppPublicClientResponseV1::OperationalQuery(response),
+        ) => operational_wire::encode_operational_query_response(response),
         _ => return Err(WhatsAppClientPortErrorV1::Protocol),
     };
     Ok(ModuleClientResponseV1 {
@@ -190,6 +213,10 @@ pub fn decode_module_response(
             client_wire::decode_operation_status_response(&envelope.response_payload)
                 .map(WhatsAppPublicClientResponseV1::OperationStatus)
         }
+        WhatsAppClientContractV1::OperationalQuery => {
+            operational_wire::decode_operational_query_response(&envelope.response_payload)
+                .map(WhatsAppPublicClientResponseV1::OperationalQuery)
+        }
     }
     .map_err(|_| WhatsAppClientPortErrorV1::Protocol)?;
     Ok((envelope.request_id, response))
@@ -200,6 +227,10 @@ mod tests {
     use hermes_runtime_protocol::v1::ModuleClientRequestV1;
     use hermes_whatsapp_api::{
         WhatsAppProviderCommand, WhatsAppProviderCommandStateV1, WhatsAppProviderCommandStatusV1,
+        operational::{
+            WhatsAppOperationalQueryResponseV1, WhatsAppOperationalQueryV1,
+            WhatsAppOperationalRuntimeStatusV1,
+        },
     };
 
     use super::*;
@@ -219,11 +250,23 @@ mod tests {
         }
     }
 
+    fn operational_query_request() -> WhatsAppPublicClientRequestV1 {
+        WhatsAppPublicClientRequestV1::OperationalQuery(
+            WhatsAppOperationalQueryV1::GetRuntimeStatus {
+                account_id: "account".to_owned(),
+            },
+        )
+    }
+
     #[test]
     fn each_request_uses_only_its_exact_route_contract() {
         for (request, expected) in [
             (command_request(), WhatsAppClientContractV1::Command),
             (query_request(), WhatsAppClientContractV1::Query),
+            (
+                operational_query_request(),
+                WhatsAppClientContractV1::OperationalQuery,
+            ),
         ] {
             let encoded = encode_module_request(1, &request).expect("module request");
             let (request_id, contract, decoded) =
@@ -297,6 +340,30 @@ mod tests {
         );
         assert_eq!(
             decode_module_response(WhatsAppClientContractV1::Command, &encoded),
+            Err(WhatsAppClientPortErrorV1::Protocol)
+        );
+    }
+
+    #[test]
+    fn operational_response_round_trips_only_with_operational_contract() {
+        let response = WhatsAppPublicClientResponseV1::OperationalQuery(
+            WhatsAppOperationalQueryResponseV1::RuntimeStatus(WhatsAppOperationalRuntimeStatusV1 {
+                account_id: "account".to_owned(),
+                runtime_state: Some("running".to_owned()),
+                projection_ready: true,
+                latest_event_sequence: 7,
+            }),
+        );
+        let encoded =
+            encode_module_response(1, WhatsAppClientContractV1::OperationalQuery, &response)
+                .expect("operational response");
+
+        assert_eq!(
+            decode_module_response(WhatsAppClientContractV1::OperationalQuery, &encoded),
+            Ok((1, response))
+        );
+        assert_eq!(
+            decode_module_response(WhatsAppClientContractV1::Query, &encoded),
             Err(WhatsAppClientPortErrorV1::Protocol)
         );
     }

@@ -23,11 +23,14 @@ use hermes_whatsapp_api::{
     validate_provider_command,
 };
 use hermes_whatsapp_core::{
-    WhatsAppCoreError, communication_observation_draft, project_host_observation,
+    WhatsAppCoreError, WhatsAppOperationalProjectionError, WhatsAppOperationalProjectionV1,
+    communication_observation_draft, project_host_observation,
+    project_operational_host_observation,
 };
 use hermes_whatsapp_persistence::{
     WhatsAppClaimedCommandV1, WhatsAppDurablePersistence, WhatsAppDurablePersistenceError,
-    WhatsAppHostObservationRecordV1, WhatsAppProviderCommandStateV1 as PersistedCommandStateV1,
+    WhatsAppHostObservationRecordV1, WhatsAppOperationalObservationV1,
+    WhatsAppProviderCommandStateV1 as PersistedCommandStateV1,
 };
 
 pub use communications_outbox::{
@@ -55,6 +58,7 @@ pub struct WhatsAppRuntimeAdmission {
 pub enum WhatsAppHostIngressError {
     AccountScope,
     Core(WhatsAppCoreError),
+    OperationalCore(WhatsAppOperationalProjectionError),
     Envelope(ObservationEnvelopeBuildErrorV1),
     Persistence(WhatsAppDurablePersistenceError),
 }
@@ -64,6 +68,12 @@ pub enum WhatsAppCommandQueueError {
     InvalidCommand,
     Persistence(WhatsAppDurablePersistenceError),
     Wire,
+}
+
+#[derive(Debug)]
+pub enum WhatsAppOperationalQueryError {
+    AccountScope,
+    Persistence(WhatsAppDurablePersistenceError),
 }
 
 impl WhatsAppRuntimeIdentity {
@@ -126,22 +136,60 @@ pub async fn accept_host_observation(
                     ))
             });
     }
-    let projection = project_host_observation(envelope).map_err(WhatsAppHostIngressError::Core)?;
-    let draft =
-        communication_observation_draft(&projection).map_err(WhatsAppHostIngressError::Core)?;
-    let record = build_observation_outbox_record_v1(
-        &draft,
-        &identity.observation_context(recorded_at_unix_seconds, recorded_at_nanos),
-    )
-    .map_err(WhatsAppHostIngressError::Envelope)?;
+    let operational = project_operational_host_observation(envelope)
+        .map_err(WhatsAppHostIngressError::OperationalCore)?
+        .map(|projection| match projection {
+            WhatsAppOperationalProjectionV1::Event {
+                provider_event_id,
+                event,
+            } => WhatsAppOperationalObservationV1::Event {
+                provider_event_id,
+                event,
+            },
+            WhatsAppOperationalProjectionV1::ResyncState {
+                provider_event_id,
+                account_id,
+                observed_at_unix_seconds,
+                complete,
+            } => WhatsAppOperationalObservationV1::ResyncState {
+                provider_event_id,
+                account_id,
+                observed_at_unix_seconds,
+                complete,
+            },
+        });
+    let communication_projection = match project_host_observation(envelope) {
+        Ok(projection) => Some(projection),
+        Err(WhatsAppCoreError::UnsupportedObservation) if operational.is_some() => None,
+        Err(error) => return Err(WhatsAppHostIngressError::Core(error)),
+    };
+    let record = communication_projection
+        .as_ref()
+        .map(|projection| {
+            let draft = communication_observation_draft(projection)
+                .map_err(WhatsAppHostIngressError::Core)?;
+            build_observation_outbox_record_v1(
+                &draft,
+                &identity.observation_context(recorded_at_unix_seconds, recorded_at_nanos),
+            )
+            .map_err(WhatsAppHostIngressError::Envelope)
+        })
+        .transpose()?;
     let observation = WhatsAppHostObservationRecordV1 {
-        account_id: projection.account_id,
-        provider_event_id: projection.provider_event_id,
-        evidence_kind: evidence_kind_value(projection.evidence_kind),
-        observed_at_unix_seconds: projection.observed_at_unix_seconds,
+        account_id: envelope.account_id.clone(),
+        provider_event_id: envelope.provider_event_id.clone(),
+        evidence_kind: communication_projection.as_ref().map_or(0, |projection| {
+            evidence_kind_value(projection.evidence_kind)
+        }),
+        observed_at_unix_seconds: envelope.observed_at_unix_seconds,
     };
     durable
-        .record_host_observation_and_enqueue(&observation, &record, recorded_at_unix_seconds)
+        .record_host_observation_projection_and_enqueue(
+            &observation,
+            operational.as_ref(),
+            record.as_ref(),
+            recorded_at_unix_seconds,
+        )
         .await
         .map_err(WhatsAppHostIngressError::Persistence)
         .map(|_| ())

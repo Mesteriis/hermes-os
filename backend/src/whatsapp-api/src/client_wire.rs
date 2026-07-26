@@ -335,7 +335,7 @@ fn parse_account(
     })
 }
 
-fn parse_message(value: wire::WhatsAppMessage) -> WhatsAppMessage {
+pub(crate) fn parse_message(value: wire::WhatsAppMessage) -> WhatsAppMessage {
     WhatsAppMessage {
         account_id: value.account_id,
         provider_chat_id: value.provider_chat_id,
@@ -345,10 +345,11 @@ fn parse_message(value: wire::WhatsAppMessage) -> WhatsAppMessage {
         text: value.text,
         reply_to_provider_message_id: value.reply_to_provider_message_id,
         occurred_at_unix_seconds: value.occurred_at_unix_seconds,
+        delivery_state: value.delivery_state,
     }
 }
 
-fn parse_dialog(value: wire::WhatsAppDialog) -> WhatsAppDialog {
+pub(crate) fn parse_dialog(value: wire::WhatsAppDialog) -> WhatsAppDialog {
     WhatsAppDialog {
         account_id: value.account_id,
         provider_chat_id: value.provider_chat_id,
@@ -364,7 +365,7 @@ fn parse_dialog(value: wire::WhatsAppDialog) -> WhatsAppDialog {
     }
 }
 
-fn parse_participant(value: wire::WhatsAppParticipant) -> WhatsAppParticipant {
+pub(crate) fn parse_participant(value: wire::WhatsAppParticipant) -> WhatsAppParticipant {
     WhatsAppParticipant {
         account_id: value.account_id,
         provider_chat_id: value.provider_chat_id,
@@ -486,7 +487,9 @@ pub fn decode_query_response(
     }
 }
 
-fn event_kind_from_wire(value: i32) -> Result<WhatsAppProviderEventKind, ClientWireError> {
+pub(crate) fn event_kind_from_wire(
+    value: i32,
+) -> Result<WhatsAppProviderEventKind, ClientWireError> {
     match wire::ProviderEventKind::try_from(value).map_err(|_| ClientWireError::MissingVariant)? {
         wire::ProviderEventKind::RuntimeState => Ok(WhatsAppProviderEventKind::RuntimeState),
         wire::ProviderEventKind::Message => Ok(WhatsAppProviderEventKind::Message),
@@ -504,6 +507,9 @@ fn event_kind_from_wire(value: i32) -> Result<WhatsAppProviderEventKind, ClientW
         wire::ProviderEventKind::Media => Ok(WhatsAppProviderEventKind::Media),
         wire::ProviderEventKind::Session => Ok(WhatsAppProviderEventKind::Session),
         wire::ProviderEventKind::CommandResult => Ok(WhatsAppProviderEventKind::CommandResult),
+        wire::ProviderEventKind::ParticipantRemoved => {
+            Ok(WhatsAppProviderEventKind::ParticipantRemoved)
+        }
         wire::ProviderEventKind::Unspecified => Err(ClientWireError::MissingVariant),
     }
 }
@@ -546,7 +552,7 @@ fn runtime_status_to_wire(value: &WhatsAppRuntimeStatus) -> wire::WhatsAppRuntim
     }
 }
 
-fn event_kind_to_wire(value: WhatsAppProviderEventKind) -> i32 {
+pub(crate) fn event_kind_to_wire(value: WhatsAppProviderEventKind) -> i32 {
     match value {
         WhatsAppProviderEventKind::RuntimeState => wire::ProviderEventKind::RuntimeState as i32,
         WhatsAppProviderEventKind::Message => wire::ProviderEventKind::Message as i32,
@@ -564,6 +570,9 @@ fn event_kind_to_wire(value: WhatsAppProviderEventKind) -> i32 {
         WhatsAppProviderEventKind::Media => wire::ProviderEventKind::Media as i32,
         WhatsAppProviderEventKind::Session => wire::ProviderEventKind::Session as i32,
         WhatsAppProviderEventKind::CommandResult => wire::ProviderEventKind::CommandResult as i32,
+        WhatsAppProviderEventKind::ParticipantRemoved => {
+            wire::ProviderEventKind::ParticipantRemoved as i32
+        }
     }
 }
 
@@ -575,7 +584,7 @@ fn realtime_to_wire(value: &WhatsAppRealtimeFrame) -> wire::WhatsAppRealtimeFram
     }
 }
 
-fn event_to_wire(value: &WhatsAppProviderEvent) -> wire::WhatsAppProviderEventV1 {
+pub(crate) fn event_to_wire(value: &WhatsAppProviderEvent) -> wire::WhatsAppProviderEventV1 {
     use wire::whats_app_provider_event_v1::Event;
     let event = match value {
         WhatsAppProviderEvent::RuntimeStateChanged {
@@ -676,6 +685,17 @@ fn event_to_wire(value: &WhatsAppProviderEvent) -> wire::WhatsAppProviderEventV1
         WhatsAppProviderEvent::ParticipantObserved(value) => {
             Event::ParticipantObserved(participant_to_wire(value))
         }
+        WhatsAppProviderEvent::ParticipantRemoved {
+            account_id,
+            provider_chat_id,
+            provider_identity_id,
+            observed_at_unix_seconds,
+        } => Event::ParticipantRemoved(wire::ParticipantRemovedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_identity_id: provider_identity_id.clone(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
         WhatsAppProviderEvent::PresenceChanged {
             account_id,
             provider_chat_id,
@@ -756,7 +776,7 @@ fn media_to_wire(value: &WhatsAppMedia) -> wire::WhatsAppMedia {
     }
 }
 
-fn message_to_wire(value: &WhatsAppMessage) -> wire::WhatsAppMessage {
+pub(crate) fn message_to_wire(value: &WhatsAppMessage) -> wire::WhatsAppMessage {
     wire::WhatsAppMessage {
         account_id: value.account_id.clone(),
         provider_chat_id: value.provider_chat_id.clone(),
@@ -766,10 +786,11 @@ fn message_to_wire(value: &WhatsAppMessage) -> wire::WhatsAppMessage {
         text: value.text.clone(),
         reply_to_provider_message_id: value.reply_to_provider_message_id.clone(),
         occurred_at_unix_seconds: value.occurred_at_unix_seconds,
+        delivery_state: value.delivery_state.clone(),
     }
 }
 
-fn dialog_to_wire(value: &WhatsAppDialog) -> wire::WhatsAppDialog {
+pub(crate) fn dialog_to_wire(value: &WhatsAppDialog) -> wire::WhatsAppDialog {
     wire::WhatsAppDialog {
         account_id: value.account_id.clone(),
         provider_chat_id: value.provider_chat_id.clone(),
@@ -785,7 +806,7 @@ fn dialog_to_wire(value: &WhatsAppDialog) -> wire::WhatsAppDialog {
     }
 }
 
-fn participant_to_wire(value: &WhatsAppParticipant) -> wire::WhatsAppParticipant {
+pub(crate) fn participant_to_wire(value: &WhatsAppParticipant) -> wire::WhatsAppParticipant {
     wire::WhatsAppParticipant {
         account_id: value.account_id.clone(),
         provider_chat_id: value.provider_chat_id.clone(),
@@ -809,7 +830,7 @@ fn parse_runtime_state(value: &str) -> Result<WhatsAppRuntimeState, ClientWireEr
     }
 }
 
-fn parse_event(
+pub(crate) fn parse_event(
     value: wire::WhatsAppProviderEventV1,
 ) -> Result<WhatsAppProviderEvent, ClientWireError> {
     use wire::whats_app_provider_event_v1::Event;
@@ -871,6 +892,12 @@ fn parse_event(
         Event::ParticipantObserved(value) => Ok(WhatsAppProviderEvent::ParticipantObserved(
             parse_participant(value),
         )),
+        Event::ParticipantRemoved(value) => Ok(WhatsAppProviderEvent::ParticipantRemoved {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_identity_id: value.provider_identity_id,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
         Event::PresenceChanged(value) => Ok(WhatsAppProviderEvent::PresenceChanged {
             account_id: value.account_id,
             provider_chat_id: value.provider_chat_id,

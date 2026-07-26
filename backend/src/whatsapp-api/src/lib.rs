@@ -6,9 +6,18 @@ pub mod capabilities;
 pub mod client_contract;
 pub mod client_wire;
 pub mod host_bridge;
+pub mod operational;
+pub mod operational_wire;
 
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/hermes.whatsapp.v1.rs"));
+}
+
+pub mod operational_wire_generated {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.whatsapp.operational.v1.rs"
+    ));
 }
 
 pub const PACKAGE: &str = "hermes-whatsapp-api";
@@ -175,6 +184,7 @@ pub struct WhatsAppMessage {
     pub text: Option<String>,
     pub reply_to_provider_message_id: Option<String>,
     pub occurred_at_unix_seconds: i64,
+    pub delivery_state: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -270,6 +280,12 @@ pub enum WhatsAppProviderEvent {
     },
     DialogObserved(WhatsAppDialog),
     ParticipantObserved(WhatsAppParticipant),
+    ParticipantRemoved {
+        account_id: WhatsAppAccountId,
+        provider_chat_id: String,
+        provider_identity_id: String,
+        observed_at_unix_seconds: i64,
+    },
     PresenceChanged {
         account_id: WhatsAppAccountId,
         provider_chat_id: String,
@@ -454,6 +470,7 @@ pub fn provider_event_account_id(event: &WhatsAppProviderEvent) -> &str {
         | WhatsAppProviderEvent::MessageDeleted { account_id, .. }
         | WhatsAppProviderEvent::ReceiptChanged { account_id, .. }
         | WhatsAppProviderEvent::ReactionChanged { account_id, .. }
+        | WhatsAppProviderEvent::ParticipantRemoved { account_id, .. }
         | WhatsAppProviderEvent::PresenceChanged { account_id, .. }
         | WhatsAppProviderEvent::CallObserved { account_id, .. }
         | WhatsAppProviderEvent::StatusObserved { account_id, .. }
@@ -484,6 +501,7 @@ pub enum WhatsAppProviderEventKind {
     Reaction,
     Dialog,
     Participant,
+    ParticipantRemoved,
     Presence,
     Call,
     Status,
@@ -492,6 +510,55 @@ pub enum WhatsAppProviderEventKind {
     Media,
     Session,
     CommandResult,
+}
+
+impl WhatsAppProviderEventKind {
+    #[must_use]
+    pub const fn storage_code(self) -> i16 {
+        match self {
+            Self::RuntimeState => 1,
+            Self::Message => 2,
+            Self::MessageEdited => 3,
+            Self::MessageDeleted => 4,
+            Self::Receipt => 5,
+            Self::Reaction => 6,
+            Self::Dialog => 7,
+            Self::Participant => 8,
+            Self::Presence => 9,
+            Self::Call => 10,
+            Self::Status => 11,
+            Self::StatusView => 12,
+            Self::StatusDeleted => 13,
+            Self::Media => 14,
+            Self::Session => 15,
+            Self::CommandResult => 16,
+            Self::ParticipantRemoved => 17,
+        }
+    }
+
+    #[must_use]
+    pub const fn from_storage_code(value: i16) -> Option<Self> {
+        match value {
+            1 => Some(Self::RuntimeState),
+            2 => Some(Self::Message),
+            3 => Some(Self::MessageEdited),
+            4 => Some(Self::MessageDeleted),
+            5 => Some(Self::Receipt),
+            6 => Some(Self::Reaction),
+            7 => Some(Self::Dialog),
+            8 => Some(Self::Participant),
+            9 => Some(Self::Presence),
+            10 => Some(Self::Call),
+            11 => Some(Self::Status),
+            12 => Some(Self::StatusView),
+            13 => Some(Self::StatusDeleted),
+            14 => Some(Self::Media),
+            15 => Some(Self::Session),
+            16 => Some(Self::CommandResult),
+            17 => Some(Self::ParticipantRemoved),
+            _ => None,
+        }
+    }
 }
 
 pub fn provider_event_kind(event: &WhatsAppProviderEvent) -> WhatsAppProviderEventKind {
@@ -510,6 +577,9 @@ pub fn provider_event_kind(event: &WhatsAppProviderEvent) -> WhatsAppProviderEve
         WhatsAppProviderEvent::ReactionChanged { .. } => WhatsAppProviderEventKind::Reaction,
         WhatsAppProviderEvent::DialogObserved(_) => WhatsAppProviderEventKind::Dialog,
         WhatsAppProviderEvent::ParticipantObserved(_) => WhatsAppProviderEventKind::Participant,
+        WhatsAppProviderEvent::ParticipantRemoved { .. } => {
+            WhatsAppProviderEventKind::ParticipantRemoved
+        }
         WhatsAppProviderEvent::PresenceChanged { .. } => WhatsAppProviderEventKind::Presence,
         WhatsAppProviderEvent::CallObserved { .. } => WhatsAppProviderEventKind::Call,
         WhatsAppProviderEvent::StatusObserved { .. } => WhatsAppProviderEventKind::Status,
@@ -534,6 +604,9 @@ pub fn provider_event_chat_id(event: &WhatsAppProviderEvent) -> Option<&str> {
         | WhatsAppProviderEvent::ReactionChanged {
             provider_chat_id, ..
         }
+        | WhatsAppProviderEvent::ParticipantRemoved {
+            provider_chat_id, ..
+        }
         | WhatsAppProviderEvent::PresenceChanged {
             provider_chat_id, ..
         }
@@ -551,6 +624,68 @@ pub fn provider_event_chat_id(event: &WhatsAppProviderEvent) -> Option<&str> {
         | WhatsAppProviderEvent::StatusObserved { .. }
         | WhatsAppProviderEvent::StatusViewObserved { .. }
         | WhatsAppProviderEvent::StatusDeleted { .. } => None,
+    }
+}
+
+#[must_use]
+pub const fn provider_event_observed_at_unix_seconds(event: &WhatsAppProviderEvent) -> i64 {
+    match event {
+        WhatsAppProviderEvent::RuntimeStateChanged {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::SessionStateChanged {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::CommandResultObserved {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::MessageEdited {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::MessageDeleted {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::ReceiptChanged {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::ReactionChanged {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::ParticipantRemoved {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::PresenceChanged {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::CallObserved {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::StatusObserved {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::StatusViewObserved {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::StatusDeleted {
+            observed_at_unix_seconds,
+            ..
+        } => *observed_at_unix_seconds,
+        WhatsAppProviderEvent::MessageObserved(value) => value.occurred_at_unix_seconds,
+        WhatsAppProviderEvent::DialogObserved(value) => value.observed_at_unix_seconds,
+        WhatsAppProviderEvent::ParticipantObserved(value) => value.observed_at_unix_seconds,
+        WhatsAppProviderEvent::MediaObserved(value) => value.observed_at_unix_seconds,
     }
 }
 
@@ -650,12 +785,14 @@ pub struct WhatsAppProviderCommandStatusV1 {
 pub enum WhatsAppPublicClientRequestV1 {
     Command(WhatsAppProviderCommand),
     OperationStatus { operation_id: WhatsAppOperationId },
+    OperationalQuery(operational::WhatsAppOperationalQueryV1),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WhatsAppPublicClientResponseV1 {
     Accepted { operation_id: WhatsAppOperationId },
     OperationStatus(Option<WhatsAppProviderCommandStatusV1>),
+    OperationalQuery(operational::WhatsAppOperationalQueryResponseV1),
 }
 
 pub fn validate_provider_query(query: &WhatsAppProviderQuery) -> Result<(), WhatsAppContractError> {
@@ -931,6 +1068,10 @@ pub fn validate_event(event: &WhatsAppProviderEvent) -> Result<(), WhatsAppContr
             observed_at_unix_seconds,
             ..
         }
+        | WhatsAppProviderEvent::ParticipantRemoved {
+            observed_at_unix_seconds,
+            ..
+        }
         | WhatsAppProviderEvent::PresenceChanged {
             observed_at_unix_seconds,
             ..
@@ -986,6 +1127,17 @@ pub fn validate_event(event: &WhatsAppProviderEvent) -> Result<(), WhatsAppContr
             || revision.is_some_and(|value| value == 0))
     {
         return Err(WhatsAppContractError::InvalidTransition);
+    }
+    if let WhatsAppProviderEvent::ParticipantRemoved {
+        account_id,
+        provider_chat_id,
+        provider_identity_id,
+        ..
+    } = event
+    {
+        validate_id(account_id)?;
+        validate_id(provider_chat_id)?;
+        validate_id(provider_identity_id)?;
     }
     Ok(())
 }

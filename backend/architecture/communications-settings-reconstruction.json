@@ -101,7 +101,7 @@
       "gate": "whatsapp_operational_read_v1",
       "role": "integration",
       "owner": "whatsapp",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["whatsapp_integration_v1"]
     },
     {

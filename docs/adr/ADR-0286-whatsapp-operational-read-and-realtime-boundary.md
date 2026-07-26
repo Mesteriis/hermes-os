@@ -2,11 +2,11 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: запланировано. ADR принимает contract и разделяет
-`whatsapp_full_operational_v1` на независимые backend gates
-`whatsapp_operational_read_v1` и `whatsapp_operational_realtime_v1`.
-Наличие этого ADR не является evidence работающего runtime, storage, client
-или live conformance.
+Состояние реализации: `whatsapp_operational_read_v1` реализован;
+`whatsapp_operational_realtime_v1` и `whatsapp_full_operational_v1` остаются
+запланированными. ADR разделяет full gate на независимые backend gates;
+реализация read gate не является evidence realtime, provider extractor,
+generated frontend client или UI cutover.
 
 Уточняет:
 
@@ -230,6 +230,36 @@ Gate открывается только при наличии:
 6. restart-safe PostgreSQL conformance for duplicate/out-of-order ingestion;
 7. managed host-to-projection-to-query live conformance;
 8. negative evidence for ungranted/stale/cross-account access.
+
+Gate реализован следующими отдельными units:
+
+- `hermes-whatsapp-api` публикует exact
+  `whatsapp.operational.query.v1` с отдельным descriptor set и typed query /
+  response oneofs;
+- `hermes-whatsapp-core::operational` преобразует только typed host
+  observations и не восстанавливает отсутствующий metadata-only content;
+- WhatsApp Storage bundle revision 2 добавляет DDL-only owner-local
+  projections, event journal, timestamped message/participant tombstones и
+  resync control state;
+- `hermes-whatsapp-persistence::operational` атомарно deduplicate-ит host
+  observation, применяет projection, пишет typed event и optional
+  Communications outbox;
+- `hermes-whatsapp-runtime` проверяет exact configured account и обрабатывает
+  новый route только через отдельный granted capability.
+
+Disposable managed conformance запускается так:
+
+```bash
+HERMES_STORAGE_MANAGED_TEST_FILTER=managed_whatsapp_runtime_delivers_live_command_and_event_only_communications_handoff node scripts/test-authenticated-storage.mjs 1.97.0
+HERMES_STORAGE_MANAGED_TEST_FILTER=managed_whatsapp_runtime_uses_signed_kernel_admission_and_host_route_fencing node scripts/test-authenticated-storage.mjs 1.97.0
+```
+
+Первый contour доказывает duplicate/out-of-order ingestion, bounded
+list/search/cursors, message delivery state, delete/remove без stale
+resurrection, typed dialogs/participants/events, explicit resync readiness,
+cross-account rejection и чтение той же PostgreSQL projection после successor
+runtime/storage generation. Второй доказывает ungranted capability, stale
+generation и revoke/grant-epoch fencing.
 
 ### `whatsapp_operational_realtime_v1`
 

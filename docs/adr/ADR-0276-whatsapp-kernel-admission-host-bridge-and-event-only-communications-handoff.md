@@ -35,7 +35,10 @@ Communications evidence. Duplicate delivery не создаёт второй can
 а NATS outage оставляет runtime active и pending outbox replay-ится после
 reconnect. Provider body, private socket path и route binding отсутствуют в
 durable event bytes. Frontend cutover остаётся отдельным secondary client
-slice.
+slice. Additive `whatsapp_operational_read_v1` по ADR-0286 также реализован:
+отдельный capability/descriptor, typed host projection, Storage bundle
+revision 2 и restart-safe managed PostgreSQL conformance не расширяют
+ответственность command/status contracts этого ADR.
 
 Уточняет:
 

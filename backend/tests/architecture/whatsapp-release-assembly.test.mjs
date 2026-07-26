@@ -54,13 +54,25 @@ test('WhatsApp descriptor, storage and release assembly remain separate owner un
   assert.match(persistenceManifest, /surface = "persistence"/);
   assert.match(persistenceManifest, /hermes-storage-protocol/);
   assert.match(persistenceSchema, /owner_id: "whatsapp"\.to_owned\(\)/);
+  for (const revision of ['V1', 'V2']) {
+    assert.match(
+      persistenceSchema,
+      new RegExp(`forward_sql_utf8: WHATSAPP_SCHEMA_${revision}\\.as_bytes\\(\\)\\.to_vec\\(\\)`),
+    );
+    assert.match(
+      persistenceSchema,
+      new RegExp(`sha256: Sha256::digest\\(WHATSAPP_SCHEMA_${revision}\\.as_bytes\\(\\)\\)\\.to_vec\\(\\)`),
+    );
+  }
+  assert.match(persistenceSchema, /migration_id: "whatsapp_operational_read"/);
+  assert.match(persistenceSchema, /whatsapp_operational_messages/);
+  assert.match(persistenceSchema, /whatsapp_operational_dialogs/);
+  assert.match(persistenceSchema, /whatsapp_operational_participants/);
+  assert.match(persistenceSchema, /whatsapp_operational_runtime_status/);
+  assert.match(persistenceSchema, /whatsapp_operational_events/);
   assert.match(
     persistenceSchema,
-    /forward_sql_utf8: WHATSAPP_SCHEMA_V1\.as_bytes\(\)\.to_vec\(\)/,
-  );
-  assert.match(
-    persistenceSchema,
-    /sha256: Sha256::digest\(WHATSAPP_SCHEMA_V1\.as_bytes\(\)\)\.to_vec\(\)/,
+    /for forbidden in \["INSERT ", "UPDATE ", "DELETE "\]/,
   );
   assert.match(persistenceSchema, /hermes_data\.whatsapp_/);
   assert.doesNotMatch(
@@ -71,6 +83,7 @@ test('WhatsApp descriptor, storage and release assembly remain separate owner un
   assert.match(admission, /whatsapp_module_descriptor_v1/);
   assert.match(admission, /ModuleKindV1::Integration/);
   assert.match(admission, /WhatsAppClientContractV1::Command/);
+  assert.match(admission, /WhatsAppClientContractV1::OperationalQuery/);
   assert.match(admission, /WhatsAppClientContractV1::Query/);
   assert.match(admission, /Request::HostCapability/);
   assert.match(admission, /communication_observed_publish_request_v1/);
@@ -87,6 +100,10 @@ test('WhatsApp descriptor, storage and release assembly remain separate owner un
   assert.match(
     managedRuntime,
     /status\.filter\(\|value\| value\.account_id == self\.account_id\)/,
+  );
+  assert.match(
+    managedRuntime,
+    /operational_query_account_id\(query\) != self\.account_id/,
   );
 
   assert.match(assemblyManifest, /role = "integration"/);

@@ -11,7 +11,7 @@ use hermes_whatsapp_api::{
     host_bridge::HOST_BRIDGE_CONTRACT_NAME,
 };
 use hermes_whatsapp_persistence::{
-    WHATSAPP_STORAGE_BUNDLE_REVISION_V1, whatsapp_storage_bundle_v1,
+    WHATSAPP_STORAGE_BUNDLE_REVISION_V2, whatsapp_storage_bundle_v1,
 };
 use hermes_whatsapp_runtime::{
     admission::{
@@ -35,6 +35,7 @@ pub(super) enum WhatsAppGrantProfileV1 {
     CommandAndQuery,
 }
 
+#[derive(Clone)]
 pub(super) struct StartedWhatsAppRuntime {
     pub(super) registration_id: String,
     pub(super) runtime_instance_id: String,
@@ -42,6 +43,7 @@ pub(super) struct StartedWhatsAppRuntime {
     pub(super) grant_epoch: u64,
     pub(super) host_bridge_socket_path: PathBuf,
     pub(super) route_binding_sha256: [u8; 32],
+    capability_ids: Vec<String>,
 }
 
 pub(super) fn installed_communications_whatsapp_release(root: &Path) -> InstalledSignedBundle {
@@ -93,7 +95,7 @@ pub(super) fn admit_whatsapp_runtime(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 WHATSAPP_OWNER_ID,
-                u64::from(WHATSAPP_STORAGE_BUNDLE_REVISION_V1),
+                u64::from(WHATSAPP_STORAGE_BUNDLE_REVISION_V2),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -114,6 +116,15 @@ fn granted_capability_ids(grant_profile: WhatsAppGrantProfileV1) -> Vec<String> 
     capability_ids.extend([
         WHATSAPP_EVENTS_CAPABILITY_ID.to_owned(),
         HOST_BRIDGE_CONTRACT_NAME.to_owned(),
+    ]);
+    if matches!(grant_profile, WhatsAppGrantProfileV1::CommandAndQuery) {
+        capability_ids.push(
+            WhatsAppClientContractV1::OperationalQuery
+                .capability_id()
+                .to_owned(),
+        );
+    }
+    capability_ids.extend([
         WhatsAppClientContractV1::Query.capability_id().to_owned(),
         WHATSAPP_STORAGE_CAPABILITY_ID.to_owned(),
     ]);
@@ -132,7 +143,7 @@ pub(super) fn prepare_whatsapp_runtime(
     let bundle = store
         .platform_storage_bundle(
             WHATSAPP_OWNER_ID,
-            u64::from(WHATSAPP_STORAGE_BUNDLE_REVISION_V1),
+            u64::from(WHATSAPP_STORAGE_BUNDLE_REVISION_V2),
         )
         .expect("read WhatsApp Storage bundle")
         .expect("WhatsApp Storage bundle");
@@ -145,7 +156,7 @@ pub(super) fn prepare_whatsapp_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(WHATSAPP_STORAGE_BUNDLE_REVISION_V1),
+            u64::from(WHATSAPP_STORAGE_BUNDLE_REVISION_V2),
             *bundle.digest(),
         )
         .expect("WhatsApp Storage binding issue"),
@@ -230,7 +241,50 @@ pub(super) fn start_whatsapp_runtime(
         grant_epoch,
         host_bridge_socket_path,
         route_binding_sha256,
+        capability_ids: admitted.capability_ids,
     }
+}
+
+pub(super) fn restart_whatsapp_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    predecessor: &StartedWhatsAppRuntime,
+) -> StartedWhatsAppRuntime {
+    let predecessor_generation = predecessor.runtime_generation;
+    let predecessor_binding = store
+        .platform_storage_binding(&predecessor.registration_id, WHATSAPP_STORAGE_CAPABILITY_ID)
+        .expect("read predecessor WhatsApp Storage binding")
+        .expect("predecessor WhatsApp Storage binding");
+    let issue = storage_successor::issue_after(&predecessor_binding)
+        .expect("derive WhatsApp successor storage fences");
+    let (_, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        &predecessor.registration_id,
+        WHATSAPP_STORAGE_CAPABILITY_ID,
+        issue,
+    )
+    .expect("reserve successor WhatsApp launch and Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision successor WhatsApp Storage binding");
+    let successor = start_whatsapp_runtime(
+        supervisor,
+        store,
+        kernel_data,
+        runtime_dir,
+        AdmittedWhatsAppRuntime {
+            registration_id: predecessor.registration_id.clone(),
+            capability_ids: predecessor.capability_ids.clone(),
+        },
+    );
+    assert_eq!(
+        successor.runtime_generation,
+        predecessor_generation + 1,
+        "WhatsApp restart must use the next managed runtime generation",
+    );
+    successor
 }
 
 fn whatsapp_host_bridge_configuration(

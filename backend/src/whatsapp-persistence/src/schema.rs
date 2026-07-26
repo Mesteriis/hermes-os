@@ -4,6 +4,7 @@ use hermes_storage_protocol::v1::{StorageBundleV1, StorageMigrationStepV1};
 use sha2::{Digest, Sha256};
 
 pub const WHATSAPP_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
+pub const WHATSAPP_STORAGE_BUNDLE_REVISION_V2: u32 = 2;
 
 pub const WHATSAPP_SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS hermes_data.whatsapp_communications_outbox (
@@ -51,7 +52,129 @@ CREATE INDEX IF NOT EXISTS whatsapp_provider_commands_claimable_idx
     WHERE state IN (1, 2);
 "#;
 
-/// Returns the complete WhatsApp schema as one immutable initial bundle.
+pub const WHATSAPP_SCHEMA_V2: &str = r#"
+ALTER TABLE hermes_data.whatsapp_host_observations
+    ADD COLUMN IF NOT EXISTS operational_sha256 BYTEA;
+CREATE TABLE IF NOT EXISTS hermes_data.whatsapp_operational_events (
+    sequence BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    provider_event_id TEXT NOT NULL,
+    event_kind SMALLINT NOT NULL,
+    provider_chat_id TEXT,
+    exact_event_bytes BYTEA NOT NULL,
+    event_sha256 BYTEA NOT NULL,
+    observed_at_unix_seconds BIGINT NOT NULL,
+    UNIQUE (account_id, provider_event_id),
+    CHECK (char_length(account_id) BETWEEN 1 AND 256),
+    CHECK (char_length(provider_event_id) BETWEEN 1 AND 256),
+    CHECK (event_kind BETWEEN 1 AND 17),
+    CHECK (provider_chat_id IS NULL OR char_length(provider_chat_id) BETWEEN 1 AND 256),
+    CHECK (octet_length(exact_event_bytes) BETWEEN 1 AND 524288),
+    CHECK (octet_length(event_sha256) = 32)
+);
+CREATE INDEX IF NOT EXISTS whatsapp_operational_events_account_sequence_idx
+    ON hermes_data.whatsapp_operational_events (account_id, sequence DESC);
+CREATE INDEX IF NOT EXISTS whatsapp_operational_events_account_kind_sequence_idx
+    ON hermes_data.whatsapp_operational_events (account_id, event_kind, sequence DESC);
+CREATE TABLE IF NOT EXISTS hermes_data.whatsapp_operational_messages (
+    account_id TEXT NOT NULL,
+    provider_chat_id TEXT NOT NULL,
+    provider_message_id TEXT NOT NULL,
+    sender_id TEXT NOT NULL,
+    sender_display_name TEXT NOT NULL,
+    body_text TEXT,
+    reply_to_provider_message_id TEXT,
+    delivery_state TEXT,
+    occurred_at_unix_seconds BIGINT NOT NULL,
+    observed_at_unix_seconds BIGINT NOT NULL,
+    last_sequence BIGINT NOT NULL,
+    PRIMARY KEY (account_id, provider_chat_id, provider_message_id),
+    CHECK (char_length(account_id) BETWEEN 1 AND 256),
+    CHECK (char_length(provider_chat_id) BETWEEN 1 AND 256),
+    CHECK (char_length(provider_message_id) BETWEEN 1 AND 256),
+    CHECK (char_length(sender_id) BETWEEN 1 AND 256),
+    CHECK (octet_length(body_text) <= 262144)
+);
+CREATE INDEX IF NOT EXISTS whatsapp_operational_messages_account_sequence_idx
+    ON hermes_data.whatsapp_operational_messages (account_id, last_sequence DESC);
+CREATE INDEX IF NOT EXISTS whatsapp_operational_messages_chat_sequence_idx
+    ON hermes_data.whatsapp_operational_messages (account_id, provider_chat_id, last_sequence DESC);
+CREATE TABLE IF NOT EXISTS hermes_data.whatsapp_operational_dialogs (
+    account_id TEXT NOT NULL,
+    provider_chat_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    dialog_kind TEXT NOT NULL,
+    is_archived BOOLEAN,
+    is_pinned BOOLEAN,
+    is_muted BOOLEAN,
+    is_unread BOOLEAN,
+    unread_count BIGINT,
+    participant_count BIGINT,
+    observed_at_unix_seconds BIGINT NOT NULL,
+    last_sequence BIGINT NOT NULL,
+    PRIMARY KEY (account_id, provider_chat_id),
+    CHECK (char_length(account_id) BETWEEN 1 AND 256),
+    CHECK (char_length(provider_chat_id) BETWEEN 1 AND 256),
+    CHECK (unread_count >= 0),
+    CHECK (participant_count >= 0)
+);
+CREATE INDEX IF NOT EXISTS whatsapp_operational_dialogs_account_sequence_idx
+    ON hermes_data.whatsapp_operational_dialogs (account_id, last_sequence DESC);
+CREATE TABLE IF NOT EXISTS hermes_data.whatsapp_operational_participants (
+    account_id TEXT NOT NULL,
+    provider_chat_id TEXT NOT NULL,
+    provider_identity_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    participant_role TEXT NOT NULL,
+    participant_status TEXT NOT NULL,
+    is_self BOOLEAN NOT NULL,
+    observed_at_unix_seconds BIGINT NOT NULL,
+    last_sequence BIGINT NOT NULL,
+    PRIMARY KEY (account_id, provider_chat_id, provider_identity_id),
+    CHECK (char_length(account_id) BETWEEN 1 AND 256),
+    CHECK (char_length(provider_chat_id) BETWEEN 1 AND 256),
+    CHECK (char_length(provider_identity_id) BETWEEN 1 AND 256)
+);
+CREATE INDEX IF NOT EXISTS whatsapp_operational_participants_chat_sequence_idx
+    ON hermes_data.whatsapp_operational_participants (account_id, provider_chat_id, last_sequence DESC);
+CREATE TABLE IF NOT EXISTS hermes_data.whatsapp_operational_tombstones (
+    account_id TEXT NOT NULL,
+    entity_kind SMALLINT NOT NULL,
+    provider_chat_id TEXT NOT NULL,
+    provider_entity_id TEXT NOT NULL,
+    observed_at_unix_seconds BIGINT NOT NULL,
+    last_sequence BIGINT NOT NULL,
+    PRIMARY KEY (account_id, entity_kind, provider_chat_id, provider_entity_id),
+    CHECK (char_length(account_id) BETWEEN 1 AND 256),
+    CHECK (entity_kind IN (1, 2)),
+    CHECK (char_length(provider_chat_id) BETWEEN 1 AND 256),
+    CHECK (char_length(provider_entity_id) BETWEEN 1 AND 256),
+    CHECK (observed_at_unix_seconds > 0),
+    CHECK (last_sequence > 0)
+);
+CREATE TABLE IF NOT EXISTS hermes_data.whatsapp_operational_runtime_status (
+    account_id TEXT PRIMARY KEY,
+    runtime_state TEXT,
+    projection_ready BOOLEAN NOT NULL,
+    observed_at_unix_seconds BIGINT NOT NULL,
+    last_sequence BIGINT NOT NULL,
+    CHECK (char_length(account_id) BETWEEN 1 AND 256)
+);
+CREATE TABLE IF NOT EXISTS hermes_data.whatsapp_operational_controls (
+    account_id TEXT NOT NULL,
+    provider_event_id TEXT NOT NULL,
+    control_kind SMALLINT NOT NULL,
+    content_sha256 BYTEA NOT NULL,
+    observed_at_unix_seconds BIGINT NOT NULL,
+    PRIMARY KEY (account_id, provider_event_id),
+    CHECK (char_length(account_id) BETWEEN 1 AND 256),
+    CHECK (char_length(provider_event_id) BETWEEN 1 AND 256),
+    CHECK (control_kind = 1),
+    CHECK (octet_length(content_sha256) = 32)
+);
+"#;
+
+/// Returns the complete WhatsApp schema as one immutable ordered bundle.
 ///
 /// The bundle remains owned by the integration and contains no Communications
 /// tables, cross-owner foreign keys, credentials, or provider session state.
@@ -59,15 +182,23 @@ CREATE INDEX IF NOT EXISTS whatsapp_provider_commands_claimable_idx
 pub fn whatsapp_storage_bundle_v1() -> StorageBundleV1 {
     StorageBundleV1 {
         major: 1,
-        revision: WHATSAPP_STORAGE_BUNDLE_REVISION_V1,
+        revision: WHATSAPP_STORAGE_BUNDLE_REVISION_V2,
         bundle_id: "whatsapp_state".to_owned(),
         owner_id: "whatsapp".to_owned(),
-        steps: vec![StorageMigrationStepV1 {
-            revision: WHATSAPP_STORAGE_BUNDLE_REVISION_V1,
-            migration_id: "whatsapp_state_initial".to_owned(),
-            forward_sql_utf8: WHATSAPP_SCHEMA_V1.as_bytes().to_vec(),
-            sha256: Sha256::digest(WHATSAPP_SCHEMA_V1.as_bytes()).to_vec(),
-        }],
+        steps: vec![
+            StorageMigrationStepV1 {
+                revision: WHATSAPP_STORAGE_BUNDLE_REVISION_V1,
+                migration_id: "whatsapp_state_initial".to_owned(),
+                forward_sql_utf8: WHATSAPP_SCHEMA_V1.as_bytes().to_vec(),
+                sha256: Sha256::digest(WHATSAPP_SCHEMA_V1.as_bytes()).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: WHATSAPP_STORAGE_BUNDLE_REVISION_V2,
+                migration_id: "whatsapp_operational_read".to_owned(),
+                forward_sql_utf8: WHATSAPP_SCHEMA_V2.as_bytes().to_vec(),
+                sha256: Sha256::digest(WHATSAPP_SCHEMA_V2.as_bytes()).to_vec(),
+            },
+        ],
     }
 }
 
@@ -83,22 +214,33 @@ mod tests {
 
         assert_eq!(bundle.owner_id, "whatsapp");
         assert_eq!(bundle.bundle_id, "whatsapp_state");
-        assert_eq!(bundle.revision, WHATSAPP_STORAGE_BUNDLE_REVISION_V1);
-        assert_eq!(bundle.steps.len(), 1);
+        assert_eq!(bundle.revision, WHATSAPP_STORAGE_BUNDLE_REVISION_V2);
+        assert_eq!(bundle.steps.len(), 2);
         assert_eq!(validate_storage_bundle(&bundle), Ok(()));
         assert_eq!(
             bundle.steps[0].forward_sql_utf8,
             WHATSAPP_SCHEMA_V1.as_bytes()
         );
-        let sql = std::str::from_utf8(&bundle.steps[0].forward_sql_utf8)
-            .expect("WhatsApp Storage SQL is UTF-8");
-        assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 3);
+        assert_eq!(
+            bundle.steps[1].forward_sql_utf8,
+            WHATSAPP_SCHEMA_V2.as_bytes()
+        );
+        let sql = bundle
+            .steps
+            .iter()
+            .map(|step| std::str::from_utf8(&step.forward_sql_utf8).expect("WhatsApp SQL is UTF-8"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 10);
         assert_eq!(
             sql.matches("CREATE TABLE IF NOT EXISTS hermes_data.")
                 .count(),
-            3
+            10
         );
         assert!(!sql.contains("hermes_data.communications_"));
         assert!(!sql.contains("REFERENCES hermes_data.communications_"));
+        for forbidden in ["INSERT ", "UPDATE ", "DELETE "] {
+            assert!(!WHATSAPP_SCHEMA_V2.contains(forbidden));
+        }
     }
 }

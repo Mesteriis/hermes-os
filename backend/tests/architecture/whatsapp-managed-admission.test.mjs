@@ -53,6 +53,45 @@ test('WhatsApp managed admission is wired as an integration-owned conformance sl
   assert.match(runner, /HERMES_WHATSAPP_RUNTIME_BIN:/);
 });
 
+test('WhatsApp managed read conformance covers projection, cursors and access fences', async () => {
+  const [eventFlow, managedFlow] = await Promise.all([
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/whatsapp_event_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/whatsapp_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+  ]);
+
+  for (const evidence of [
+    'OperationalMessage',
+    'OperationalDialog',
+    'OperationalParticipant',
+    'OperationalParticipantRemoved',
+    'OperationalResyncState',
+    'SearchMessages',
+    'ListEvents',
+    'projection_ready',
+    'exact duplicate host delivery is idempotent',
+    'older provider observation must not overwrite',
+    'stale body must not resurrect',
+    'delivery_state',
+    'assert_cross_account_operational_query_is_rejected',
+  ]) {
+    assert.ok(eventFlow.includes(evidence), `missing managed WhatsApp read evidence: ${evidence}`);
+  }
+  assert.match(managedFlow, /assert_ungranted_whatsapp_operational_query_is_rejected/);
+  assert.match(managedFlow, /assert_stale_whatsapp_query_generation_is_rejected/);
+});
+
 test('WhatsApp managed launch receives an exact Kernel-fenced private host route', async () => {
   const [setup, managedRuntime, persistence] = await Promise.all([
     readFile(

@@ -2751,6 +2751,7 @@ version = "0.1.0"
 dependencies = [
  "hermes-events-protocol",
  "hermes-storage-protocol",
+ "hermes-whatsapp-api",
  "sha2 0.11.0",
  "sqlx",
 ]

@@ -3,12 +3,25 @@ fn main() {
     unsafe {
         std::env::set_var("PROTOC", protoc);
     }
-    let descriptor_set =
-        std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR must be available"))
-            .join("hermes.whatsapp.v1.bin");
-    let mut config = prost_build::Config::new();
-    config.file_descriptor_set_path(descriptor_set);
-    config
+    let output_directory =
+        std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR must be available"));
+
+    let mut provider_config = prost_build::Config::new();
+    provider_config.file_descriptor_set_path(output_directory.join("hermes.whatsapp.v1.bin"));
+    provider_config
+        .boxed(".hermes.whatsapp.v1.WhatsAppHostBridgeOperationV1.operation.observation");
+    provider_config
         .compile_protos(&["proto/hermes/whatsapp/v1/client.proto"], &["proto"])
         .expect("WhatsApp client protocol must compile");
+
+    let mut operational_config = prost_build::Config::new();
+    operational_config
+        .file_descriptor_set_path(output_directory.join("hermes.whatsapp.operational.v1.bin"));
+    operational_config.extern_path(".hermes.whatsapp.v1", "crate::wire");
+    operational_config
+        .compile_protos(
+            &["proto/hermes/whatsapp/operational/v1/client.proto"],
+            &["proto"],
+        )
+        .expect("WhatsApp operational client protocol must compile");
 }

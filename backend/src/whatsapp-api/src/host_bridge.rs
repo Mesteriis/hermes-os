@@ -1,10 +1,14 @@
 //! Versioned private WhatsApp host/WebView bridge contract.
 //!
-//! The host may submit sanitized provider metadata only. It cannot submit
-//! credentials, browser state, message bodies, or media bytes. Provider
-//! commands flow in the opposite direction through an exact bounded lease.
+//! The host may submit only sanitized typed provider observations. It cannot
+//! submit credentials, browser state, arbitrary page payloads, or media bytes.
+//! Provider commands flow in the opposite direction through an exact bounded
+//! lease.
 
-use crate::{WhatsAppProviderCommand, client_wire, wire};
+use crate::{
+    WhatsAppDialog, WhatsAppMessage, WhatsAppParticipant, WhatsAppProviderCommand,
+    WhatsAppProviderEvent, client_wire, validate_event, wire,
+};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +16,7 @@ pub const HOST_BRIDGE_CONTRACT_NAME: &str = "whatsapp.host_bridge.v1";
 pub const HOST_BRIDGE_CONTRACT_MAJOR: u32 = 1;
 pub const HOST_BRIDGE_CONTRACT_REVISION: u32 = 1;
 pub const HOST_BRIDGE_PROTOCOL_MAJOR: u32 = 1;
-pub const HOST_BRIDGE_PROTOCOL_REVISION: u32 = 5;
+pub const HOST_BRIDGE_PROTOCOL_REVISION: u32 = 6;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct WhatsAppHostBridgeEnvelopeV1 {
@@ -41,7 +45,7 @@ pub struct WhatsAppHostCommandClaimV1 {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WhatsAppHostBridgeOperationV1 {
-    Observation(WhatsAppHostBridgeEnvelopeV1),
+    Observation(Box<WhatsAppHostBridgeEnvelopeV1>),
     ClaimCommands(WhatsAppHostCommandClaimV1),
 }
 
@@ -126,6 +130,16 @@ pub enum WhatsAppHostObservationV1 {
         provider_request_id: Option<String>,
         succeeded: bool,
         host_claim_id: String,
+    },
+    OperationalMessage(WhatsAppMessage),
+    OperationalDialog(WhatsAppDialog),
+    OperationalParticipant(WhatsAppParticipant),
+    OperationalParticipantRemoved {
+        provider_chat_id: String,
+        provider_identity_id: String,
+    },
+    OperationalResyncState {
+        complete: bool,
     },
 }
 
@@ -213,6 +227,27 @@ pub fn validate_host_bridge_envelope(
     if envelope.observed_at_unix_seconds <= 0 {
         return Err(WhatsAppHostBridgeError::InvalidTimestamp);
     }
+    let operational_account_id = match &envelope.observation {
+        WhatsAppHostObservationV1::OperationalMessage(value) => Some(value.account_id.as_str()),
+        WhatsAppHostObservationV1::OperationalDialog(value) => Some(value.account_id.as_str()),
+        WhatsAppHostObservationV1::OperationalParticipant(value) => Some(value.account_id.as_str()),
+        _ => None,
+    };
+    if operational_account_id.is_some_and(|account_id| account_id != envelope.account_id) {
+        return Err(WhatsAppHostBridgeError::ForbiddenContent);
+    }
+    let embedded_observed_at = match &envelope.observation {
+        WhatsAppHostObservationV1::OperationalDialog(value) => Some(value.observed_at_unix_seconds),
+        WhatsAppHostObservationV1::OperationalParticipant(value) => {
+            Some(value.observed_at_unix_seconds)
+        }
+        _ => None,
+    };
+    if embedded_observed_at
+        .is_some_and(|observed_at| observed_at != envelope.observed_at_unix_seconds)
+    {
+        return Err(WhatsAppHostBridgeError::ForbiddenContent);
+    }
     validate_observation(&envelope.observation)
 }
 
@@ -248,7 +283,7 @@ pub fn encode_host_bridge_payload(
     };
     Ok(wire::WhatsAppHostBridgeOperationV1 {
         operation: Some(
-            wire::whats_app_host_bridge_operation_v1::Operation::Observation(observation),
+            wire::whats_app_host_bridge_operation_v1::Operation::Observation(Box::new(observation)),
         ),
     }
     .encode_to_vec())
@@ -284,6 +319,7 @@ pub fn decode_host_bridge_operation(
         .ok_or(WhatsAppHostBridgeError::InvalidProtocol)?;
     match operation {
         Operation::Observation(payload) => {
+            let payload = *payload;
             let observation = payload
                 .observation
                 .ok_or(WhatsAppHostBridgeError::InvalidProtocol)
@@ -297,7 +333,9 @@ pub fn decode_host_bridge_operation(
                 observation,
             };
             validate_host_bridge_envelope(&envelope)?;
-            Ok(WhatsAppHostBridgeOperationV1::Observation(envelope))
+            Ok(WhatsAppHostBridgeOperationV1::Observation(Box::new(
+                envelope,
+            )))
         }
         Operation::ClaimCommands(payload) => {
             let claim = WhatsAppHostCommandClaimV1 {
@@ -316,7 +354,7 @@ pub fn decode_host_bridge_payload(
     bytes: &[u8],
 ) -> Result<WhatsAppHostBridgeEnvelopeV1, WhatsAppHostBridgeError> {
     match decode_host_bridge_operation(bytes)? {
-        WhatsAppHostBridgeOperationV1::Observation(envelope) => Ok(envelope),
+        WhatsAppHostBridgeOperationV1::Observation(envelope) => Ok(*envelope),
         WhatsAppHostBridgeOperationV1::ClaimCommands(_) => {
             Err(WhatsAppHostBridgeError::InvalidProtocol)
         }
@@ -548,6 +586,27 @@ fn observation_to_wire(
             succeeded: *succeeded,
             host_claim_id: host_claim_id.clone(),
         }),
+        WhatsAppHostObservationV1::OperationalMessage(value) => {
+            Observation::OperationalMessage(client_wire::message_to_wire(value))
+        }
+        WhatsAppHostObservationV1::OperationalDialog(value) => {
+            Observation::OperationalDialog(client_wire::dialog_to_wire(value))
+        }
+        WhatsAppHostObservationV1::OperationalParticipant(value) => {
+            Observation::OperationalParticipant(client_wire::participant_to_wire(value))
+        }
+        WhatsAppHostObservationV1::OperationalParticipantRemoved {
+            provider_chat_id,
+            provider_identity_id,
+        } => Observation::OperationalParticipantRemoved(wire::OperationalParticipantRemoved {
+            provider_chat_id: provider_chat_id.clone(),
+            provider_identity_id: provider_identity_id.clone(),
+        }),
+        WhatsAppHostObservationV1::OperationalResyncState { complete } => {
+            Observation::OperationalResyncState(wire::OperationalResyncState {
+                complete: *complete,
+            })
+        }
     }
 }
 
@@ -638,6 +697,26 @@ fn observation_from_wire(
             succeeded: value.succeeded,
             host_claim_id: value.host_claim_id,
         },
+        Observation::OperationalMessage(value) => {
+            WhatsAppHostObservationV1::OperationalMessage(client_wire::parse_message(value))
+        }
+        Observation::OperationalDialog(value) => {
+            WhatsAppHostObservationV1::OperationalDialog(client_wire::parse_dialog(value))
+        }
+        Observation::OperationalParticipant(value) => {
+            WhatsAppHostObservationV1::OperationalParticipant(client_wire::parse_participant(value))
+        }
+        Observation::OperationalParticipantRemoved(value) => {
+            WhatsAppHostObservationV1::OperationalParticipantRemoved {
+                provider_chat_id: value.provider_chat_id,
+                provider_identity_id: value.provider_identity_id,
+            }
+        }
+        Observation::OperationalResyncState(value) => {
+            WhatsAppHostObservationV1::OperationalResyncState {
+                complete: value.complete,
+            }
+        }
     })
 }
 
@@ -748,6 +827,31 @@ fn validate_observation(
         } => {
             vec![operation_id.as_str(), host_claim_id.as_str()]
         }
+        WhatsAppHostObservationV1::OperationalMessage(value) => vec![
+            value.account_id.as_str(),
+            value.provider_chat_id.as_str(),
+            value.provider_message_id.as_str(),
+            value.sender_id.as_str(),
+        ],
+        WhatsAppHostObservationV1::OperationalDialog(value) => vec![
+            value.account_id.as_str(),
+            value.provider_chat_id.as_str(),
+            value.title.as_str(),
+            value.kind.as_str(),
+        ],
+        WhatsAppHostObservationV1::OperationalParticipant(value) => vec![
+            value.account_id.as_str(),
+            value.provider_chat_id.as_str(),
+            value.provider_identity_id.as_str(),
+            value.display_name.as_str(),
+            value.role.as_str(),
+            value.status.as_str(),
+        ],
+        WhatsAppHostObservationV1::OperationalParticipantRemoved {
+            provider_chat_id,
+            provider_identity_id,
+        } => vec![provider_chat_id.as_str(), provider_identity_id.as_str()],
+        WhatsAppHostObservationV1::OperationalResyncState { .. } => Vec::new(),
     };
     if fields.iter().any(|value| value.trim().is_empty()) {
         return Err(WhatsAppHostBridgeError::EmptyField);
@@ -764,6 +868,32 @@ fn validate_observation(
     } = observation
         && (filename.as_deref().is_some_and(str::is_empty)
             || content_type.as_deref().is_some_and(str::is_empty))
+    {
+        return Err(WhatsAppHostBridgeError::ForbiddenContent);
+    }
+    if let WhatsAppHostObservationV1::OperationalMessage(value) = observation
+        && value
+            .delivery_state
+            .as_deref()
+            .is_some_and(|state| state.trim().is_empty())
+    {
+        return Err(WhatsAppHostBridgeError::ForbiddenContent);
+    }
+    let operational_event = match observation {
+        WhatsAppHostObservationV1::OperationalMessage(value) => {
+            Some(WhatsAppProviderEvent::MessageObserved(value.clone()))
+        }
+        WhatsAppHostObservationV1::OperationalDialog(value) => {
+            Some(WhatsAppProviderEvent::DialogObserved(value.clone()))
+        }
+        WhatsAppHostObservationV1::OperationalParticipant(value) => {
+            Some(WhatsAppProviderEvent::ParticipantObserved(value.clone()))
+        }
+        _ => None,
+    };
+    if operational_event
+        .as_ref()
+        .is_some_and(|event| validate_event(event).is_err())
     {
         return Err(WhatsAppHostBridgeError::ForbiddenContent);
     }
@@ -803,7 +933,9 @@ mod tests {
             encode_host_bridge_payload(&observation).expect("encoded observation");
         assert_eq!(
             decode_host_bridge_operation(&observation_bytes),
-            Ok(WhatsAppHostBridgeOperationV1::Observation(observation))
+            Ok(WhatsAppHostBridgeOperationV1::Observation(Box::new(
+                observation,
+            )))
         );
 
         let claim = WhatsAppHostCommandClaimV1 {
