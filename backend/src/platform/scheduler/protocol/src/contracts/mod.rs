@@ -2,5 +2,6 @@
 
 pub(crate) mod command;
 pub(crate) mod job;
+pub(crate) mod owner_command;
 pub(crate) mod run;
 pub(crate) mod schedule;

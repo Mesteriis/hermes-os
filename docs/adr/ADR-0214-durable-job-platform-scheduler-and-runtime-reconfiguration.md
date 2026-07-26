@@ -10,6 +10,11 @@ trigger/overlap/misfire/retry/deadline policies,
 revisioned schedule identity и run lease epoch/expiry. Deterministic Clock
 conformance подтверждает stale-lease fencing; reconciliation не перезаписывает
 equal revision и сохраняет active lease при update future schedule.
+ADR-0285 расширяет owner-neutral protocol отдельным exact
+`OwnerJobCommandV1`/`UpgradeReconciliation` contract для owner-local Job
+Executor. Этот тип не имеет schedule identity или Scheduler policy и
+валидационно не взаимозаменяем с `ScheduledJobCommandV1`; Telegram-specific
+executor остаётся следующим отдельным implementation gate.
 `hermes-scheduler-persistence` предоставляет exact `StorageBundleV1` для
 `hermes_platform.scheduler_schedules`, `scheduler_runs`, `scheduler_dispatches`
 и bounded `scheduler_concurrency` slots; bundle проходит canonical digest и PostgreSQL

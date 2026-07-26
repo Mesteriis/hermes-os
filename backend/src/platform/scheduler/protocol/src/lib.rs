@@ -8,8 +8,14 @@ pub mod v1 {
     include!(concat!(env!("OUT_DIR"), "/hermes.scheduler.v1.rs"));
 }
 
+pub const SCHEDULER_JOB_DESCRIPTOR_SET_V1: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/hermes.scheduler.v1.bin"));
+
 pub use contracts::command::{ScheduledJobCommandBuildErrorV1, build_scheduled_job_command_v1};
 pub use contracts::job::{JobContractBindingV1, JobKindErrorV1, JobKindV1};
+pub use contracts::owner_command::{
+    OpaqueOwnerJobScopeV1, OwnerJobCommandBuildErrorV1, OwnerJobLeaseV1, build_owner_job_command_v1,
+};
 pub use contracts::run::{JobRunErrorV1, JobRunIdV1, ScheduleRunLeaseV1};
 pub use contracts::schedule::{
     ConcurrencyKeyV1, MisfirePolicyV1, OpaqueScheduleScopeV1, OverlapPolicyV1, RetryPolicyV1,
@@ -20,6 +26,7 @@ pub use transport::{
     SchedulerReceiptDeliveryErrorV1, SchedulerReceiptDeliveryPortV1, SchedulerReceiptDeliveryV1,
 };
 pub use validation::{
-    SchedulerCommandValidationErrorV1, SchedulerReceiptValidationErrorV1,
-    validate_job_run_receipt_v1, validate_scheduled_job_command_v1,
+    OwnerJobCommandValidationErrorV1, SchedulerCommandValidationErrorV1,
+    SchedulerReceiptValidationErrorV1, validate_job_run_receipt_v1, validate_owner_job_command_v1,
+    validate_scheduled_job_command_v1,
 };

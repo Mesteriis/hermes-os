@@ -2,8 +2,12 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: не реализовано. Этот ADR определяет обязательный
-контракт до изменения Job Platform protocol, Telegram storage bundle и runtime.
+Состояние реализации: частично реализовано. `hermes-scheduler-protocol` уже
+предоставляет отдельные `OwnerJobCommandV1`,
+`OwnerJobTriggerKindV1::UpgradeReconciliation`, owner-local lease/scope builder,
+exact descriptor set и отрицательную scheduled/upgrade interchange
+conformance. Telegram storage execution/checkpoint, runtime orchestration и
+managed backfill evidence ещё не реализованы.
 
 Уточняет:
 
@@ -47,6 +51,7 @@ upgrade reconciliation.
 - versioned `JobKindV1`;
 - bounded opaque `scope_id`;
 - exact trigger kind;
+- positive owner-local acceptance timestamp;
 - bounded execution lease с `run_id`, epoch и expiry.
 
 Команда валидируется отдельно от `ScheduledJobCommandV1`. У неё нет

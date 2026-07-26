@@ -20,6 +20,11 @@ enum JobTriggerKindV1 {
   JOB_TRIGGER_KIND_V1_RETRY = 2;
 }
 
+enum OwnerJobTriggerKindV1 {
+  OWNER_JOB_TRIGGER_KIND_V1_UNSPECIFIED = 0;
+  OWNER_JOB_TRIGGER_KIND_V1_UPGRADE_RECONCILIATION = 1;
+}
+
 // Typed DurableEnvelopeV1.command payload for a Scheduler time trigger.
 // It never contains owner-specific input, provider state or executable code.
 message ScheduledJobCommandV1 {
@@ -31,6 +36,18 @@ message ScheduledJobCommandV1 {
   JobTriggerKindV1 trigger_kind = 6;
   int64 scheduled_for_unix_millis = 7;
   JobLeaseV1 lease = 8;
+}
+
+// Typed DurableEnvelopeV1.command payload accepted by an owner-local Job
+// Executor. It is deliberately distinct from a Scheduler time trigger and
+// never carries a fake schedule identity.
+message OwnerJobCommandV1 {
+  bytes job_run_id = 1;
+  JobKindV1 job_kind = 2;
+  string scope_id = 3;
+  OwnerJobTriggerKindV1 trigger_kind = 4;
+  int64 accepted_at_unix_millis = 5;
+  JobLeaseV1 lease = 6;
 }
 
 enum JobRunOutcomeV1 {
