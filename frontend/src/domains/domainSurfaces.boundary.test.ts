@@ -11,7 +11,6 @@ import { useOrganizationsSurface } from './organizations/queries/useOrganization
 import { usePersonasSurface } from './personas/queries/usePersonasSurface'
 import { useProjectsSurface } from './projects/queries/useProjectsSurface'
 import { useReviewSurface } from './review/queries/useReviewSurface'
-import { useSettingsSurface } from './settings/queries/useSettingsSurface'
 import { useTasksSurface } from './tasks/queries/useTasksSurface'
 import { useTimelineSurface } from './timeline/queries/useTimelineSurface'
 
@@ -27,7 +26,6 @@ const plannedDomainSurfaceIds = [
   'personas',
   'projects',
   'review',
-  'settings',
   'tasks',
   'timeline'
 ] as const
@@ -45,7 +43,6 @@ function domainSurfaces(): DomainSurface[] {
     usePersonasSurface(),
     useProjectsSurface(),
     useReviewSurface(),
-    useSettingsSurface(),
     useTasksSurface(),
     useTimelineSurface()
   ]

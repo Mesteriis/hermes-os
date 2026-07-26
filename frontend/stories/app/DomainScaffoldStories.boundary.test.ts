@@ -59,11 +59,6 @@ const domainScaffoldStories: readonly DomainScaffoldStoryExpectation[] = [
     modelKey: 'review'
   },
   {
-    fileName: 'Settings.stories.ts',
-    storyTitle: 'Hermes App/Settings/Scaffold',
-    modelKey: 'settings'
-  },
-  {
     fileName: 'Tasks.stories.ts',
     storyTitle: 'Hermes App/Tasks/Scaffold',
     modelKey: 'tasks'
@@ -128,5 +123,14 @@ describe('domain scaffold Storybook coverage', () => {
     expect(source).toContain('CanonicalCommunicationsPage')
     expect(source).not.toContain('createDomainScaffoldStory')
     expect(source).not.toContain('domainScaffoldModels.communications')
+  })
+
+  it('keeps Settings on the app owner workbench story instead of the scaffold placeholder', () => {
+    const source = readFileSync(new URL('./Settings.stories.ts', import.meta.url), 'utf8')
+
+    expect(source).toContain("title: 'Hermes App/Settings/Clean Room'")
+    expect(source).toContain('AppSettingsPage')
+    expect(source).not.toContain('createDomainScaffoldStory')
+    expect(source).not.toContain('domainScaffoldModels.settings')
   })
 })

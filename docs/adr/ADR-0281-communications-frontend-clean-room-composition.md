@@ -12,9 +12,10 @@ stream/direct commands и terminal status, не создавая общий chat
 App-level Settings workbench, platform-owned System Control и provider-owned
 read-only panels для Mail, Telegram, WhatsApp и Zulip реализованы поверх
 sanitized bootstrap projection. Provider gates остаются закрыты до удаления
-соответствующих scoped legacy REST/query/realtime surfaces. Settings composition
-остаётся закрыта до удаления historical `domains/settings` orchestrator и mixed
-Communications settings surfaces согласно executable gate ниже.
+соответствующих scoped legacy REST/query/realtime surfaces.
+`settings_frontend_composition_v1` открыт: historical `domains/settings`
+orchestrator, mixed Communications settings surfaces, shared runtime setup
+wizard и неadmitted settings bridges удалены из active source.
 
 Зависит от:
 
@@ -197,9 +198,9 @@ generated service clients, capability-aware controls, provider-owned settings
 
 ### `settings_frontend_composition_v1`
 
-Открывается после удаления historical `domains/settings` orchestrator и mixed
-Communications settings panel, app-level composition System Control и admitted
-integration panels, а также executable ownership/SRP tests.
+Открыт. Historical `domains/settings` orchestrator и mixed Communications
+settings panel удалены; app-level composition монтирует System Control и exact
+integration panels, а ownership/SRP проверяются executable tests.
 
 ### `communications_frontend_clean_room_v1`
 

@@ -2,7 +2,6 @@ import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const domainsRoot = new URL('./', import.meta.url)
 const sourceRoot = path.resolve(new URL('../', import.meta.url).pathname)
 
 function collectVueFiles(rootPath: string): string[] {
@@ -42,10 +41,7 @@ describe('Domain Vue boundary contract', () => {
     )
 
     expect(allVueFiles).toContain(
-      `${sourceRoot}/domains/communications/views/CommunicationsEmptyPage.vue`.split(path.sep).join('/')
-    )
-    expect(allVueFiles).toContain(
-      `${sourceRoot}/domains/settings/views/SettingsPage.vue`.split(path.sep).join('/')
+      `${sourceRoot}/domains/communications/views/CanonicalCommunicationsRoute.vue`.split(path.sep).join('/')
     )
 
     for (const filePath of allVueFiles) {
@@ -66,26 +62,13 @@ describe('Domain Vue boundary contract', () => {
       expect(scriptSource).not.toMatch(/\bnew\s+(Set|Map)\s*\(/)
     }
 
-    const settingsPageSource = readFileSync(
-      new URL('./settings/views/SettingsPage.vue', domainsRoot),
-      'utf8'
-    )
-    const settingsNavigationSource = readFileSync(
-      new URL('./settings/components/SettingsNavigationTree.vue', domainsRoot),
-      'utf8'
-    )
-    const communicationsEmptyPageSource = readFileSync(
-      new URL('./communications/views/CommunicationsEmptyPage.vue', domainsRoot),
+    const canonicalCommunicationsSource = readFileSync(
+      new URL('./communications/views/CanonicalCommunicationsRoute.vue', import.meta.url),
       'utf8'
     )
 
-    expect(settingsPageSource).toContain("useSettingsPageController")
-    expect(settingsPageSource).toContain('@select-section="selectSection"')
-    expect(settingsPageSource).not.toContain("useSettingsStore")
-    expect(settingsPageSource).not.toContain("useApplicationSettingsQuery")
-    expect(settingsNavigationSource).toContain("handleSectionSelect(item.id)")
-
-    expect(communicationsEmptyPageSource).toContain("communications.empty.title")
-    expect(communicationsEmptyPageSource).not.toContain('fetch(')
+    expect(canonicalCommunicationsSource).toContain('useCanonicalCommunicationsPage')
+    expect(canonicalCommunicationsSource).not.toContain('/integrations/')
+    expect(canonicalCommunicationsSource).not.toContain('fetch(')
   })
 })

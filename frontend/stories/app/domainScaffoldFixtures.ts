@@ -13,7 +13,6 @@ export type DomainScaffoldKey =
   | 'personas'
   | 'projects'
   | 'review'
-  | 'settings'
   | 'tasks'
   | 'timeline'
 
@@ -772,60 +771,6 @@ export const domainScaffoldModels = {
         items: [
           { label: 'Source evidence', value: 'Mail thread and redline attachment cited.', icon: 'tabler:file-search' },
           { label: 'Execution', value: 'Remote send blocked until owner approval.', icon: 'tabler:lock' }
-        ]
-      }
-    ]
-  },
-  settings: {
-    title: 'Settings',
-    subtitle: 'Application, appearance, providers and owner preferences.',
-    icon: 'tabler:settings',
-    actionLabel: 'Сохранить',
-    searchPlaceholder: 'Поиск настроек, интеграций и интерфейса',
-    navItems: [
-      { label: 'Интерфейс', count: 6, selected: true },
-      { label: 'Интеграции', count: 8 },
-      { label: 'Система', count: 5 }
-    ],
-    records: [
-      {
-        title: 'Appearance',
-        summary: 'Theme family, mode, density and language.',
-        meta: 'active',
-        icon: 'tabler:palette',
-        selected: true
-      },
-      {
-        title: 'Integrations',
-        summary: 'Provider accounts and capability status.',
-        meta: '8',
-        icon: 'tabler:plug-connected'
-      },
-      {
-        title: 'Notifications',
-        summary: 'Signal timing, health checks and collapse timeout.',
-        meta: 'system',
-        icon: 'tabler:bell'
-      }
-    ],
-    preview: {
-      title: 'Appearance',
-      meta: 'Theme, language and density controls',
-      icon: 'tabler:palette',
-      chips: ['base light', 'ru', 'comfortable'],
-      body: [
-        'Settings surface должен быть рабочим инструментом, а не набором случайных переключателей. Каждая настройка должна иметь понятный owner impact.',
-        'Provider runtime details живут за integration boundaries, но пользователь видит единый список подключений и возможностей.'
-      ]
-    },
-    inspectorTitle: 'Системное состояние',
-    inspectorSummary: 'Связь настройки с layout, health checks and runtime capabilities.',
-    inspectorSections: [
-      {
-        title: 'Affected areas',
-        items: [
-          { label: 'App layout', value: 'Theme attributes update the full shell.', icon: 'tabler:layout' },
-          { label: 'Storybook', value: 'Stories follow the same theme contract.', icon: 'tabler:components' }
         ]
       }
     ]
