@@ -984,6 +984,13 @@ pub enum TelegramClientRequest {
         expires_at_unix_seconds: u64,
         now_unix_seconds: u64,
     },
+    RestartAccount {
+        account_id: TelegramAccountId,
+        topology: String,
+        holder: String,
+        expires_at_unix_seconds: u64,
+        now_unix_seconds: u64,
+    },
     StopAccount {
         account_id: TelegramAccountId,
     },

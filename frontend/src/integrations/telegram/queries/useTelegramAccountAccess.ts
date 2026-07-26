@@ -10,6 +10,7 @@ import {
 	listTelegramAccounts,
 	provisionTelegramAccount,
 	replayTelegramAccount,
+	restartTelegramAccount,
 	retireTelegramAccount,
 	startTelegramAccount,
 	stopTelegramAccount,
@@ -110,6 +111,17 @@ export function useTelegramAccountAccess(capabilities: {
 		})
 	}
 
+	async function restart(): Promise<void> {
+		await runSelectedAccountAction(async (accountId) => {
+			const operationId = await restartTelegramAccount(
+				accountId,
+				'telegram-desktop-client',
+				BigInt(Math.floor(Date.now() / 1_000)),
+			)
+			return `Restart operation ${operationId} accepted.`
+		})
+	}
+
 	async function replay(): Promise<void> {
 		await runSelectedAccountAction(async (accountId) => {
 			const operation = await replayTelegramAccount(accountId, 0n)
@@ -204,6 +216,7 @@ export function useTelegramAccountAccess(capabilities: {
 		refresh,
 		provision,
 		start,
+		restart,
 		stop,
 		replay,
 		retire,

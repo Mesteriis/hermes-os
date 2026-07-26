@@ -37,6 +37,7 @@ message TelegramLifecycleRequestV1 {
     StartAccountRequest start_account = 6;
     AccountIdRequest stop_account = 7;
     ReplayRequest replay = 8;
+    RestartAccountRequest restart_account = 9;
   }
 }
 
@@ -61,6 +62,13 @@ message RetryCommandRequest {
 message ListAccountsRequest {}
 message AccountIdRequest { string account_id = 1; }
 message StartAccountRequest {
+  string account_id = 1;
+  string topology = 2;
+  string holder = 3;
+  uint64 expires_at_unix_seconds = 4;
+  uint64 now_unix_seconds = 5;
+}
+message RestartAccountRequest {
   string account_id = 1;
   string topology = 2;
   string holder = 3;

@@ -190,6 +190,26 @@ impl TelegramLifecycle {
         })
     }
 
+    pub fn restart(
+        &self,
+        account: &TelegramAccount,
+        current_lease: &TelegramRuntimeLease,
+        replacement_lease: &TelegramRuntimeLease,
+        now_unix_seconds: u64,
+    ) -> Result<TelegramAccount, TelegramContractError> {
+        if current_lease.state != TelegramRuntimeLeaseState::Active
+            || !matches!(
+                account.runtime_state,
+                TelegramRuntimeState::Running | TelegramRuntimeState::Degraded
+            )
+        {
+            return Err(TelegramContractError::RuntimeBlocked);
+        }
+        let stopped = self.stop(account, current_lease)?;
+        let starting = self.start(&stopped, replacement_lease, now_unix_seconds)?;
+        Ok(self.mark_running(&starting))
+    }
+
     pub fn retire(
         &self,
         account: &TelegramAccount,
@@ -901,6 +921,49 @@ mod tests {
         };
         assert_eq!(
             lifecycle.start(&account, &foreign, 1),
+            Err(TelegramContractError::RuntimeBlocked)
+        );
+    }
+
+    #[test]
+    fn runtime_restart_is_one_validated_state_transition() {
+        let lifecycle = TelegramLifecycle;
+        let account = TelegramAccount {
+            account_id: "telegram-account".to_owned(),
+            provider_kind: TelegramProviderKind::User,
+            display_name: "Personal Telegram".to_owned(),
+            external_account_id: "telegram:42".to_owned(),
+            state: TelegramAccountState::Ready,
+            runtime_state: TelegramRuntimeState::Running,
+            runtime_epoch: 4,
+        };
+        let current = TelegramRuntimeLease {
+            account_id: account.account_id.clone(),
+            topology: "process".to_owned(),
+            holder: "runtime-4".to_owned(),
+            epoch: 4,
+            state: TelegramRuntimeLeaseState::Active,
+            expires_at_unix_seconds: 100,
+        };
+        let replacement = TelegramRuntimeLease {
+            holder: "runtime-5".to_owned(),
+            epoch: 5,
+            expires_at_unix_seconds: 200,
+            ..current.clone()
+        };
+
+        let restarted = lifecycle
+            .restart(&account, &current, &replacement, 20)
+            .expect("atomic restart");
+        assert_eq!(restarted.runtime_state, TelegramRuntimeState::Running);
+        assert_eq!(restarted.runtime_epoch, 5);
+
+        let expired = TelegramRuntimeLease {
+            expires_at_unix_seconds: 20,
+            ..replacement
+        };
+        assert_eq!(
+            lifecycle.restart(&account, &current, &expired, 20),
             Err(TelegramContractError::RuntimeBlocked)
         );
     }

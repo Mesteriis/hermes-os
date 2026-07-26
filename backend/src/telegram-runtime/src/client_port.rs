@@ -17,7 +17,7 @@ use hermes_telegram_tdlib::{TdlibError, TdlibTransport};
 use prost::Message;
 use sha2::{Digest, Sha256};
 
-use crate::TelegramRuntime;
+use crate::{TelegramRuntime, TelegramRuntimeRestart};
 
 #[derive(Debug)]
 pub enum TelegramClientPortError {
@@ -70,6 +70,7 @@ fn request_contract(
         | TelegramClientRequest::GetAccount { .. }
         | TelegramClientRequest::RetireAccount { .. }
         | TelegramClientRequest::StartAccount { .. }
+        | TelegramClientRequest::RestartAccount { .. }
         | TelegramClientRequest::StopAccount { .. } => Ok(TelegramClientContractV1::Lifecycle),
         TelegramClientRequest::Command(_) => Ok(TelegramClientContractV1::Command),
         TelegramClientRequest::Query(_) => Ok(TelegramClientContractV1::Query),
@@ -120,6 +121,19 @@ fn lifecycle_wire_request(
             expires_at_unix_seconds: *expires_at_unix_seconds,
             now_unix_seconds: *now_unix_seconds,
         }),
+        TelegramClientRequest::RestartAccount {
+            account_id,
+            topology,
+            holder,
+            expires_at_unix_seconds,
+            now_unix_seconds,
+        } => Some(TelegramLifecycleRequest::RestartAccount {
+            account_id: account_id.clone(),
+            topology: topology.clone(),
+            holder: holder.clone(),
+            expires_at_unix_seconds: *expires_at_unix_seconds,
+            now_unix_seconds: *now_unix_seconds,
+        }),
         TelegramClientRequest::StopAccount { account_id } => {
             Some(TelegramLifecycleRequest::StopAccount {
                 account_id: account_id.clone(),
@@ -160,6 +174,19 @@ fn client_request_from_lifecycle(
             expires_at_unix_seconds,
             now_unix_seconds,
         } => TelegramClientRequest::StartAccount {
+            account_id,
+            topology,
+            holder,
+            expires_at_unix_seconds,
+            now_unix_seconds,
+        },
+        TelegramLifecycleRequest::RestartAccount {
+            account_id,
+            topology,
+            holder,
+            expires_at_unix_seconds,
+            now_unix_seconds,
+        } => TelegramClientRequest::RestartAccount {
             account_id,
             topology,
             holder,
@@ -569,6 +596,27 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                 .await
                 .map(TelegramClientResponse::Account)
                 .map_err(|error| TelegramClientPortError::Protocol(format!("{error:?}")))?,
+            TelegramClientRequest::RestartAccount {
+                account_id,
+                topology,
+                holder,
+                expires_at_unix_seconds,
+                now_unix_seconds,
+            } => self
+                .runtime
+                .restart_admitted_account_durable(
+                    durable,
+                    &TelegramRuntimeRestart {
+                        account_id,
+                        topology,
+                        holder,
+                        expires_at_unix_seconds,
+                        now_unix_seconds,
+                    },
+                )
+                .await
+                .map(TelegramClientResponse::Account)
+                .map_err(|error| TelegramClientPortError::Protocol(format!("{error:?}")))?,
             TelegramClientRequest::StopAccount { account_id } => self
                 .runtime
                 .stop_account_durable(durable, &account_id)
@@ -845,8 +893,25 @@ mod tests {
         assert_eq!(contract.owner, "telegram");
         assert_eq!(contract.name, "telegram.query.v1");
         assert_eq!(contract.major, 1);
-        assert_eq!(contract.revision, 1);
+        assert_eq!(contract.revision, 2);
         assert_eq!(contract.schema_sha256.len(), 32);
+    }
+
+    #[test]
+    fn restart_request_round_trips_only_through_the_lifecycle_contract() {
+        let request = TelegramClientRequest::RestartAccount {
+            account_id: "account-1".to_owned(),
+            topology: "process".to_owned(),
+            holder: "runtime-2".to_owned(),
+            expires_at_unix_seconds: 200,
+            now_unix_seconds: 20,
+        };
+        let encoded = encode_module_request(46, &request).expect("encode restart");
+
+        assert_eq!(
+            decode_module_request(&encoded).expect("decode restart"),
+            (46, TelegramClientContractV1::Lifecycle, request)
+        );
     }
 
     #[test]

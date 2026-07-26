@@ -80,6 +80,7 @@ function updateAccountId(accountId: string): void {
 		@refresh-accounts="refreshAccounts"
 		@refresh-chat-context="discovery.refreshChatContext"
 		@replay-account="accountAccess.replay"
+		@restart-account="accountAccess.restart"
 		@retire-account="accountAccess.retire"
 		@select-account="selectAccount"
 		@start-account="accountAccess.start"

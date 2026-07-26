@@ -18,6 +18,7 @@ const emit = defineEmits<{
 	refreshAccounts: []
 	refreshChatContext: []
 	replayAccount: []
+	restartAccount: []
 	retireAccount: []
 	search: []
 	selectAccount: [accountId: string]
@@ -71,6 +72,7 @@ const emit = defineEmits<{
 			@provision="emit('provisionAccount')"
 			@refresh="emit('refreshAccounts')"
 			@replay="emit('replayAccount')"
+			@restart="emit('restartAccount')"
 			@retire="emit('retireAccount')"
 			@select-account="emit('selectAccount', $event)"
 			@start="emit('startAccount')"

@@ -71,6 +71,29 @@ export async function startTelegramAccount(
 	return response.response.value.operationId
 }
 
+export async function restartTelegramAccount(
+	accountId: string,
+	holder: string,
+	nowUnixSeconds: bigint,
+): Promise<string> {
+	const response = await getTelegramLifecycleConnectClient().execute({
+		request: {
+			case: 'restartAccount',
+			value: {
+				accountId: requireIdentifier('account ID', accountId),
+				topology: 'managed',
+				holder: requireIdentifier('runtime holder', holder),
+				nowUnixSeconds,
+				expiresAtUnixSeconds: nowUnixSeconds + 60n,
+			},
+		},
+	})
+	if (response.response.case !== 'accepted') {
+		throw new Error('Telegram account restart was not accepted')
+	}
+	return response.response.value.operationId
+}
+
 export async function stopTelegramAccount(accountId: string): Promise<string> {
 	return executeAccountAction('stopAccount', accountId)
 }

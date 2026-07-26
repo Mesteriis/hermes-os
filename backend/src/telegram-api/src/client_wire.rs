@@ -2340,6 +2340,13 @@ pub enum TelegramLifecycleRequest {
         expires_at_unix_seconds: u64,
         now_unix_seconds: u64,
     },
+    RestartAccount {
+        account_id: String,
+        topology: String,
+        holder: String,
+        expires_at_unix_seconds: u64,
+        now_unix_seconds: u64,
+    },
     StopAccount {
         account_id: String,
     },
@@ -2455,6 +2462,19 @@ pub fn encode_lifecycle_request(request: &TelegramLifecycleRequest) -> Vec<u8> {
             expires_at_unix_seconds: *expires_at_unix_seconds,
             now_unix_seconds: *now_unix_seconds,
         }),
+        TelegramLifecycleRequest::RestartAccount {
+            account_id,
+            topology,
+            holder,
+            expires_at_unix_seconds,
+            now_unix_seconds,
+        } => Request::RestartAccount(wire::RestartAccountRequest {
+            account_id: account_id.clone(),
+            topology: topology.clone(),
+            holder: holder.clone(),
+            expires_at_unix_seconds: *expires_at_unix_seconds,
+            now_unix_seconds: *now_unix_seconds,
+        }),
         TelegramLifecycleRequest::StopAccount { account_id } => {
             Request::StopAccount(wire::AccountIdRequest {
                 account_id: account_id.clone(),
@@ -2532,6 +2552,13 @@ pub fn decode_lifecycle_request(
             account_id: value.account_id,
         }),
         Request::StartAccount(value) => Ok(TelegramLifecycleRequest::StartAccount {
+            account_id: value.account_id,
+            topology: value.topology,
+            holder: value.holder,
+            expires_at_unix_seconds: value.expires_at_unix_seconds,
+            now_unix_seconds: value.now_unix_seconds,
+        }),
+        Request::RestartAccount(value) => Ok(TelegramLifecycleRequest::RestartAccount {
             account_id: value.account_id,
             topology: value.topology,
             holder: value.holder,

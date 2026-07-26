@@ -59,6 +59,7 @@ describe('Telegram operational active route boundary', () => {
 		expect(gateway).toContain('getTelegramOperationalConnectClient')
 		expect(authorizationGateway).toContain('getTelegramAuthorizationConnectClient')
 		expect(lifecycleGateway).toContain('getTelegramLifecycleConnectClient')
+		expect(lifecycleGateway).toContain("case: 'restartAccount'")
 		expect(discoveryGateway).toContain('getTelegramOperationalConnectClient')
 		expect(discoveryGateway).not.toMatch(/as never|Record<|unknown as/)
 		expect(inspectorGateway).not.toMatch(/as never|Record<|unknown as|Object\.keys/)

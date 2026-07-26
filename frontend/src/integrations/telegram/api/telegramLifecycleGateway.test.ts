@@ -4,6 +4,7 @@ import {
 	listTelegramAccounts,
 	provisionTelegramAccount,
 	replayTelegramAccount,
+	restartTelegramAccount,
 	retireTelegramAccount,
 	retryTelegramOperation,
 	startTelegramAccount,
@@ -57,9 +58,10 @@ describe('Telegram lifecycle Gateway adapter', () => {
 		})
 	})
 
-	it('keeps start, stop, replay and retire as exact lifecycle actions', async () => {
+	it('keeps start, restart, stop, replay and retire as exact lifecycle actions', async () => {
 		execute
 			.mockResolvedValueOnce({ response: { case: 'accepted', value: { operationId: 'start-1' } } })
+			.mockResolvedValueOnce({ response: { case: 'accepted', value: { operationId: 'restart-1' } } })
 			.mockResolvedValueOnce({ response: { case: 'accepted', value: { operationId: 'stop-1' } } })
 			.mockResolvedValueOnce({
 				response: {
@@ -76,6 +78,7 @@ describe('Telegram lifecycle Gateway adapter', () => {
 			.mockResolvedValueOnce({ response: { case: 'accepted', value: { operationId: 'retire-1' } } })
 
 		await expect(startTelegramAccount('account-1', 'desktop', 100n)).resolves.toBe('start-1')
+		await expect(restartTelegramAccount('account-1', 'desktop', 110n)).resolves.toBe('restart-1')
 		await expect(stopTelegramAccount('account-1')).resolves.toBe('stop-1')
 		await expect(replayTelegramAccount('account-1', 8n)).resolves.toMatchObject({
 			operationId: 'replay-1',
@@ -98,15 +101,27 @@ describe('Telegram lifecycle Gateway adapter', () => {
 			},
 		})
 		expect(execute).toHaveBeenNthCalledWith(2, {
-			request: { case: 'stopAccount', value: { accountId: 'account-1' } },
+			request: {
+				case: 'restartAccount',
+				value: {
+					accountId: 'account-1',
+					topology: 'managed',
+					holder: 'desktop',
+					nowUnixSeconds: 110n,
+					expiresAtUnixSeconds: 170n,
+				},
+			},
 		})
 		expect(execute).toHaveBeenNthCalledWith(3, {
+			request: { case: 'stopAccount', value: { accountId: 'account-1' } },
+		})
+		expect(execute).toHaveBeenNthCalledWith(4, {
 			request: {
 				case: 'replay',
 				value: { accountId: 'account-1', afterSequence: 8n, limit: 100 },
 			},
 		})
-		expect(execute).toHaveBeenNthCalledWith(4, {
+		expect(execute).toHaveBeenNthCalledWith(5, {
 			request: {
 				case: 'retry',
 				value: {
@@ -116,7 +131,7 @@ describe('Telegram lifecycle Gateway adapter', () => {
 				},
 			},
 		})
-		expect(execute).toHaveBeenNthCalledWith(5, {
+		expect(execute).toHaveBeenNthCalledWith(6, {
 			request: { case: 'retireAccount', value: { accountId: 'account-1' } },
 		})
 	})
@@ -124,6 +139,9 @@ describe('Telegram lifecycle Gateway adapter', () => {
 	it('rejects missing lifecycle identifiers before transport', async () => {
 		await expect(stopTelegramAccount(' ')).rejects.toThrow('account ID is required')
 		await expect(startTelegramAccount('account-1', '', 100n)).rejects.toThrow(
+			'runtime holder is required',
+		)
+		await expect(restartTelegramAccount('account-1', '', 100n)).rejects.toThrow(
 			'runtime holder is required',
 		)
 		expect(execute).not.toHaveBeenCalled()
