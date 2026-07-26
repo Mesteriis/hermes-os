@@ -3,6 +3,7 @@
 use std::io::{ErrorKind, Read, Write};
 use std::os::unix::net::UnixStream;
 
+use hermes_telegram_automation_persistence::TelegramAutomationPersistence;
 use hermes_telegram_persistence::TelegramDurablePersistence;
 use hermes_telegram_tdlib::TdlibTransport;
 
@@ -78,6 +79,7 @@ pub fn serve_connection_durable<T: TdlibTransport>(
     mut stream: UnixStream,
     runtime: &mut TelegramRuntime<T>,
     durable: &TelegramDurablePersistence,
+    automation: &TelegramAutomationPersistence,
     handle: &tokio::runtime::Handle,
 ) -> Result<(), TelegramClientTransportError> {
     loop {
@@ -87,12 +89,10 @@ pub fn serve_connection_durable<T: TdlibTransport>(
             Err(error) => return Err(error),
         };
         let response = tokio::task::block_in_place(|| {
-            handle.block_on(
-                crate::client_port::TelegramClientPort::new(runtime)
-                    .handle_module_request_durable(&request, durable),
-            )
-        })
-        .map_err(TelegramClientTransportError::Port)?;
+            handle.block_on(handle_durable_request(
+                runtime, durable, automation, &request,
+            ))
+        })?;
         write_frame(&mut stream, &response)?;
     }
 }
@@ -100,8 +100,19 @@ pub fn serve_connection_durable<T: TdlibTransport>(
 pub async fn handle_durable_request<T: TdlibTransport>(
     runtime: &mut TelegramRuntime<T>,
     durable: &TelegramDurablePersistence,
+    automation: &TelegramAutomationPersistence,
     request: &[u8],
 ) -> Result<Vec<u8>, TelegramClientTransportError> {
+    if crate::automation_client_port::automation_route(request)
+        .map_err(TelegramClientTransportError::Port)?
+        .is_some()
+    {
+        return crate::automation_client_port::handle_automation_module_request(
+            request, automation,
+        )
+        .await
+        .map_err(TelegramClientTransportError::Port);
+    }
     crate::client_port::TelegramClientPort::new(runtime)
         .handle_module_request_durable(request, durable)
         .await

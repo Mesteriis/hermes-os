@@ -1,6 +1,7 @@
 use hermes_telegram_automation_core::{
     AutomationError, AutomationPolicy, AutomationPolicyDraft, AutomationPreviewReceipt,
     AutomationPreviewRequest, AutomationTemplate, AutomationTemplateDraft, render_preview,
+    validate_identifier,
 };
 use sqlx::{PgPool, Postgres, Row, Transaction};
 
@@ -14,6 +15,7 @@ pub enum TelegramAutomationPersistenceError {
     Database,
     InvalidRow,
     MissingTemplate,
+    MissingAccount,
     MissingPolicy,
     RevisionConflict,
     IdempotencyConflict,
@@ -142,6 +144,8 @@ impl TelegramAutomationPersistence {
     where
         F: FnOnce(&AutomationTemplate) -> Vec<u8>,
     {
+        validate_identifier("mutation_id", mutation_id)
+            .map_err(TelegramAutomationPersistenceError::Core)?;
         draft
             .validate()
             .map_err(TelegramAutomationPersistenceError::Core)?;
@@ -256,6 +260,8 @@ impl TelegramAutomationPersistence {
     where
         F: FnOnce(&AutomationPolicy) -> Vec<u8>,
     {
+        validate_identifier("mutation_id", mutation_id)
+            .map_err(TelegramAutomationPersistenceError::Core)?;
         draft
             .validate()
             .map_err(TelegramAutomationPersistenceError::Core)?;
@@ -288,6 +294,16 @@ impl TelegramAutomationPersistence {
         .map_err(|_| TelegramAutomationPersistenceError::Database)?;
         if !template_exists {
             return Err(TelegramAutomationPersistenceError::MissingTemplate);
+        }
+        let account_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM hermes_data.telegram_accounts WHERE account_id = $1)",
+        )
+        .bind(&draft.account_id)
+        .fetch_one(&mut *transaction)
+        .await
+        .map_err(|_| TelegramAutomationPersistenceError::Database)?;
+        if !account_exists {
+            return Err(TelegramAutomationPersistenceError::MissingAccount);
         }
         let current = sqlx::query(
             "SELECT revision, created_at_unix_seconds \

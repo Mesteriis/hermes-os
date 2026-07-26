@@ -252,6 +252,10 @@ pub fn render_preview(
     })
 }
 
+pub fn validate_identifier(field: &'static str, value: &str) -> Result<(), AutomationError> {
+    validate_id(field, value)
+}
+
 fn validate_id(field: &'static str, value: &str) -> Result<(), AutomationError> {
     validate_bounded_non_empty(field, value, MAX_ID_BYTES)?;
     if !value.bytes().all(|byte| {

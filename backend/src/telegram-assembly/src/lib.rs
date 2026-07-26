@@ -11,7 +11,11 @@ use std::path::{Path, PathBuf};
 use hermes_runtime_protocol::validation::descriptor::{
     validate_descriptor_v1, validate_settings_schema_v1,
 };
+use hermes_storage_protocol::v1::StorageBundleV1;
 use hermes_storage_protocol::validation::validate_storage_bundle;
+use hermes_telegram_automation_persistence::schema::{
+    TELEGRAM_AUTOMATION_STORAGE_REVISION_V1, telegram_automation_storage_migration_v1,
+};
 use hermes_telegram_persistence::telegram_storage_bundle_v1;
 use hermes_telegram_runtime::admission::telegram_module_descriptor_v1;
 use hermes_telegram_runtime::settings::telegram_settings_schema_v1;
@@ -24,6 +28,7 @@ pub const TELEGRAM_ASSEMBLY_MODULE_ID: &str = "hermes-telegram-runtime";
 pub const TELEGRAM_RUNTIME_ARTIFACT_ID: &str = "telegram.runtime.v1";
 pub const TELEGRAM_STORAGE_ARTIFACT_ID: &str = "telegram.storage.v1";
 pub const TELEGRAM_TDJSON_ARTIFACT_ID: &str = "telegram.tdjson.v1";
+pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V2: u32 = TELEGRAM_AUTOMATION_STORAGE_REVISION_V1;
 pub const TELEGRAM_DESCRIPTOR_FILE: &str = "telegram.runtime.descriptor.pb";
 pub const TELEGRAM_SETTINGS_FILE: &str = "telegram.runtime.settings.pb";
 pub const TELEGRAM_STORAGE_BUNDLE_FILE: &str = "telegram.storage.bundle.pb";
@@ -120,6 +125,16 @@ pub enum TelegramReleaseAssemblyErrorV1 {
     FragmentEncodingFailed,
 }
 
+#[must_use]
+pub fn telegram_storage_bundle_with_automation_v2() -> StorageBundleV1 {
+    let mut bundle = telegram_storage_bundle_v1();
+    bundle.revision = TELEGRAM_STORAGE_BUNDLE_REVISION_V2;
+    bundle
+        .steps
+        .push(telegram_automation_storage_migration_v1());
+    bundle
+}
+
 /// Materializes one unsigned, exact Telegram release artifact set.
 ///
 /// The output directory must be an absolute path that does not exist. Runtime
@@ -135,7 +150,7 @@ pub fn materialize_telegram_release_assembly_v1(
 
     let descriptor = telegram_module_descriptor_v1(build_id);
     let settings_schema = telegram_settings_schema_v1();
-    let storage_bundle = telegram_storage_bundle_v1();
+    let storage_bundle = telegram_storage_bundle_with_automation_v2();
     if validate_descriptor_v1(&descriptor).is_err()
         || validate_settings_schema_v1(&settings_schema).is_err()
         || validate_storage_bundle(&storage_bundle).is_err()
@@ -289,12 +304,10 @@ mod tests {
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    use super::*;
     use hermes_runtime_protocol::validation::descriptor::{
         decode_descriptor_v1, decode_settings_schema_v1,
     };
-    use hermes_storage_protocol::v1::StorageBundleV1;
-
-    use super::*;
 
     static NEXT_TEMPORARY_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -328,6 +341,18 @@ mod tests {
         assert_eq!(descriptor.module_id, TELEGRAM_ASSEMBLY_MODULE_ID);
         assert_eq!(settings.major, 1);
         assert_eq!(storage.owner_id, TELEGRAM_ASSEMBLY_OWNER_ID);
+        assert_eq!(storage.revision, TELEGRAM_STORAGE_BUNDLE_REVISION_V2);
+        assert_eq!(
+            storage
+                .steps
+                .iter()
+                .map(|step| step.migration_id.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "telegram_state_initial",
+                "telegram_automation_management_preview"
+            ]
+        );
         assert_eq!(
             fragment
                 .artifacts

@@ -27,6 +27,7 @@ use hermes_runtime_protocol::{
         validate_module_client_request_v1, validate_module_client_response_v1,
     },
 };
+use hermes_telegram_automation_persistence::TelegramAutomationPersistence;
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::TdlibAuthorizationUpdate;
 use hermes_telegram_tdlib::{TdlibAuthorizationEvent, TdlibError};
@@ -92,13 +93,14 @@ impl TelegramProcessLoop {
         &mut self,
         stream: UnixStream,
         durable: &TelegramDurablePersistence,
+        automation: &TelegramAutomationPersistence,
         handle: &tokio::runtime::Handle,
     ) -> Result<(), TelegramClientTransportError> {
         let runtime = self
             .composition
             .runtime_mut()
             .ok_or(TelegramClientTransportError::RuntimeUnavailable)?;
-        client_transport::serve_connection_durable(stream, runtime, durable, handle)
+        client_transport::serve_connection_durable(stream, runtime, durable, automation, handle)
     }
 
     pub fn poll_once(&mut self, timeout: Duration) -> Result<TelegramProcessTick, TdlibError> {
@@ -210,6 +212,7 @@ pub fn serve_admitted_provider_loop(
         account_id,
         composition,
         durable,
+        automation,
         event_connection,
         event_publish_permit,
     } = admitted;
@@ -217,7 +220,13 @@ pub fn serve_admitted_provider_loop(
     let mut restored = false;
 
     loop {
-        handle_client_delivery(&mut control_channel, &mut process, &durable, executor)?;
+        handle_client_delivery(
+            &mut control_channel,
+            &mut process,
+            &durable,
+            &automation,
+            executor,
+        )?;
         let poll = {
             let mut body_admitter =
                 |plaintext: &[u8]| admit_telegram_plaintext(&mut control_channel, plaintext);
@@ -368,6 +377,7 @@ fn handle_client_delivery(
     channel: &mut ManagedControlChannelV2<UnixStream>,
     process: &mut TelegramProcessLoop,
     durable: &TelegramDurablePersistence,
+    automation: &TelegramAutomationPersistence,
     executor: &tokio::runtime::Runtime,
 ) -> Result<(), String> {
     let Some((correlation_id, control_request)) = channel
@@ -416,6 +426,7 @@ fn handle_client_delivery(
             .block_on(client_transport::handle_durable_request(
                 runtime,
                 durable,
+                automation,
                 &request.encode_to_vec(),
             ))
             .map_err(|_| "Telegram runtime client request failed".to_owned())?;

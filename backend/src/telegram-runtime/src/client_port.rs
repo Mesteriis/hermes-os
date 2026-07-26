@@ -27,7 +27,7 @@ pub enum TelegramClientPortError {
     Codec(String),
 }
 
-const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
+pub(crate) const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
 
 fn telegram_client_contract(contract: TelegramClientContractV1) -> ContractReferenceV1 {
     ContractReferenceV1 {

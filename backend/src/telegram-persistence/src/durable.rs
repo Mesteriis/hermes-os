@@ -266,6 +266,14 @@ impl TelegramDurablePersistence {
         Self { pool }
     }
 
+    /// Shares the already-fenced owner-local pool with a Telegram companion
+    /// persistence package. The returned handle does not change credentials,
+    /// budgets, role or storage generation.
+    #[must_use]
+    pub fn shared_owner_pool(&self) -> PgPool {
+        self.pool.clone()
+    }
+
     pub async fn initialize(&self) -> Result<(), TelegramDurablePersistenceError> {
         sqlx::raw_sql(TELEGRAM_SCHEMA_V1)
             .execute(&self.pool)

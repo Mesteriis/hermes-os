@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS hermes_data.telegram_automation_policies (
     revision BIGINT NOT NULL CHECK (revision > 0),
     name TEXT NOT NULL,
     enabled BOOLEAN NOT NULL,
-    account_id TEXT NOT NULL,
+    account_id TEXT NOT NULL REFERENCES hermes_data.telegram_accounts(account_id),
     expires_at_unix_seconds BIGINT NULL CHECK (expires_at_unix_seconds IS NULL OR expires_at_unix_seconds > 0),
     created_at_unix_seconds BIGINT NOT NULL CHECK (created_at_unix_seconds > 0),
     updated_at_unix_seconds BIGINT NOT NULL CHECK (updated_at_unix_seconds > 0)

@@ -3,6 +3,7 @@
 #![allow(clippy::collapsible_if)]
 
 pub mod admission;
+pub mod automation_client_port;
 pub mod bootstrap;
 pub mod client_port;
 pub mod client_transport;

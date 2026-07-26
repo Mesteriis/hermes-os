@@ -26,6 +26,7 @@ use hermes_telegram_api::{
     TelegramAccountSetup, TelegramCredentialBinding, TelegramCredentialPurpose,
     TelegramProviderKind,
 };
+use hermes_telegram_automation_persistence::TelegramAutomationPersistence;
 use hermes_telegram_core::credential_lease_purpose_for_purpose;
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{TdJsonLibrary, TdlibAuthorizationParameters, TdlibError};
@@ -94,6 +95,7 @@ pub struct TelegramAdmittedRuntime {
     pub account_id: String,
     pub composition: TelegramRuntimeComposition,
     pub durable: TelegramDurablePersistence,
+    pub automation: TelegramAutomationPersistence,
     pub(crate) event_connection: RuntimeJetStreamConnection,
     pub(crate) event_publish_permit: RuntimePublishPermitV1,
 }
@@ -104,6 +106,7 @@ pub struct TelegramAdmittedProviderLoop {
     pub account_id: String,
     pub composition: TelegramRuntimeComposition,
     pub durable: TelegramDurablePersistence,
+    pub automation: TelegramAutomationPersistence,
     pub(crate) event_connection: RuntimeJetStreamConnection,
     pub(crate) event_publish_permit: RuntimePublishPermitV1,
 }
@@ -179,6 +182,7 @@ pub async fn open_admitted_runtime(
     )
     .await
     .map_err(TelegramBootstrapError::Persistence)?;
+    let automation = TelegramAutomationPersistence::new(durable.shared_owner_pool());
     let (persisted_account, credential_bindings) = durable
         .account(account_id)
         .await
@@ -309,6 +313,7 @@ pub async fn open_admitted_runtime(
         account_id: account_id.to_owned(),
         composition,
         durable,
+        automation,
         event_connection,
         event_publish_permit,
     })
@@ -388,6 +393,7 @@ impl TelegramAdmittedRuntime {
             account_id: self.account_id,
             composition: self.composition,
             durable: self.durable,
+            automation: self.automation,
             event_connection: self.event_connection,
             event_publish_permit: self.event_publish_permit,
         }

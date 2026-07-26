@@ -2,8 +2,11 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: решение принято; implementation отсутствует,
-`telegram_automation_v1` закрыт.
+Состояние реализации: generated API, pure policy/rendering core, owner-local
+persistence migration/repositories, exact runtime routes, descriptor
+capabilities и release-assembly storage composition реализованы. Frontend
+cutover, disposable PostgreSQL/live managed conformance и production admission
+не завершены; `telegram_automation_v1` закрыт.
 
 Уточняет:
 
