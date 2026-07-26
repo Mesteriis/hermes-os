@@ -11,6 +11,7 @@ import CanonicalCommunicationsRoute from '../../domains/communications/views/Can
 import TelegramOperationalRoute from '../../integrations/telegram/views/TelegramOperationalRoute.vue'
 import { hasClientModuleCapability } from '../client-surfaces/clientModuleCapabilities'
 import WhatsAppOperationalRoute from '../../integrations/whatsapp/views/WhatsAppOperationalRoute.vue'
+import MailOperationalRoute from '../../integrations/mail/views/MailOperationalRoute.vue'
 
 const props = defineProps<{ gatewayAccessMode: BrowserGatewayAccessModeV1 }>()
 
@@ -33,6 +34,12 @@ const telegramCommandAvailable = computed(() =>
 )
 const whatsAppCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'whatsapp.command.v1'),
+)
+const mailDeliveryAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.delivery.v1'),
+)
+const mailSyncAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.sync.v1'),
 )
 
 watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mode]) => {
@@ -83,6 +90,11 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 
 				<CanonicalCommunicationsRoute
 					v-if="selectedRouteId === 'communications-all'"
+				/>
+				<MailOperationalRoute
+					v-else-if="selectedRouteId === 'communications-mail'"
+					:can-deliver="mailDeliveryAvailable"
+					:can-sync="mailSyncAvailable"
 				/>
 				<TelegramOperationalRoute
 					v-else-if="selectedRouteId === 'communications-telegram'"
