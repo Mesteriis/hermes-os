@@ -2,14 +2,15 @@
 
 Статус: Принято
 Дата: 2026-07-23
-Состояние реализации: policy admission открыт, live owner admission остаётся в
-работе. Exact owner inventory, module descriptor, settings schema, capability
-GrantSet, Storage bundle, NATS routes и owner query route закреплены executable
-policy. Managed Docker conformance доказывает owner-local PostgreSQL
-backup, destructive reset disposable PostgreSQL instance и restore canonical
-Communications evidence через Storage offline recovery contract. До полного admission остаётся полная проверка
-acceptance matrix ниже. Kernel остаётся в честном `module_control_plane`:
-отдельное production state `ready` ещё не реализовано.
+Состояние реализации: реализовано; `first_owner_v1` открыт. Exact owner
+inventory, module descriptor, settings schema, capability GrantSet, Storage
+bundle, NATS routes и owner query route закреплены executable policy. Live
+managed conformance доказывает signed Communications launch с отдельными
+Vault, Storage Control, PostgreSQL/PgBouncer, NATS и Blob process boundaries,
+event → inbox → mutation → outbox, replay/idempotency, owner query через Core
+Gateway, Blob custody/search, fencing и owner-local backup/restore. Kernel
+остаётся в честном `module_control_plane`: отдельное production state `ready`
+ещё не реализовано и этим owner gate не заявляется.
 
 Зависит от:
 
@@ -109,6 +110,21 @@ Communications не импортирует другой domain или integratio
 - backup, destructive reset of disposable instance and complete restore;
 - compile isolation and no cross-owner source/storage dependencies;
 - no legacy, facade, fallback or dual-write production path.
+
+Вся acceptance matrix реализована. Канонический live gate:
+
+```text
+HERMES_STORAGE_AUTHENTICATED_TEST_FILTER=managed_communications_domain_starts_with_owner_local_storage_and_events \
+  node backend/scripts/test-authenticated-storage.mjs 1.97.0
+```
+
+Он запускает реальный signed Communications process через Kernel admission,
+проверяет owner-local Storage/Event Hub/Blob paths, duplicate delivery без
+второй mutation, generated owner query через Core Gateway, fenced Blob custody
+grant и offline PostgreSQL backup/restore. Compile isolation, exact six-package
+owner inventory и запрет facade/cross-owner edges проверяются
+`make -C backend architecture-policy-check architecture-evidence-check
+srp-policy-check cargo-boundaries-check test-architecture`.
 
 ## Rollback
 
