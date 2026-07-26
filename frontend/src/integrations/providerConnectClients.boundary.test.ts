@@ -22,18 +22,6 @@ const clientUnits = [
 		foreignOwners: ['telegram', 'zulip']
 	},
 	{
-		file: './telegram/api/telegramAuthorizationClient.ts',
-		generatedContract: '../../../gen/hermes/telegram/v1/client_pb',
-		service: 'TelegramAuthorizationService',
-		foreignOwners: ['mail', 'zulip']
-	},
-	{
-		file: './telegram/api/telegramLifecycleClient.ts',
-		generatedContract: '../../../gen/hermes/telegram/v1/client_pb',
-		service: 'TelegramLifecycleService',
-		foreignOwners: ['mail', 'zulip']
-	},
-	{
 		file: './telegram/api/telegramOperationalClient.ts',
 		generatedContract: '../../../gen/hermes/telegram/v1/client_pb',
 		service: 'TelegramOperationalService',

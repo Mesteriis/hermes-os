@@ -89,8 +89,8 @@ describe('ApiClient', () => {
 			ok: false,
 			status: 400,
 			text: () => Promise.resolve(JSON.stringify({
-				error: 'invalid_telegram_request',
-				message: 'api_id must not be empty'
+				error: 'invalid_platform_request',
+				message: 'request must not be empty'
 			}))
 		})
 		vi.stubGlobal('fetch', mockFetch)
@@ -98,14 +98,14 @@ describe('ApiClient', () => {
 		ApiClient.init('http://localhost:3000', 'secret')
 
 		await expect(
-			ApiClient.instance.post('/api/v1/integrations/telegram/login/qr/start', {})
+			ApiClient.instance.post('/api/v1/test', {})
 		).rejects.toMatchObject({
-			code: 'invalid_telegram_request',
-			message: 'api_id must not be empty',
+			code: 'invalid_platform_request',
+			message: 'request must not be empty',
 			status: 400
 		})
 		await expect(
-			ApiClient.instance.post('/api/v1/integrations/telegram/login/qr/start', {})
+			ApiClient.instance.post('/api/v1/test', {})
 		).rejects.toBeInstanceOf(Error)
 
 		vi.unstubAllGlobals()

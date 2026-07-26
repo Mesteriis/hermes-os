@@ -40,14 +40,14 @@ const providerNavigation = [
 </script>
 
 <template>
-	<section class="settings-page app-settings-page">
-		<div class="settings-workbench">
-			<nav class="settings-tree" aria-label="Settings owners">
-				<header class="settings-tree-header">
+	<section class="app-settings-page">
+		<div class="app-settings-workbench">
+			<nav class="app-settings-navigation" aria-label="Settings owners">
+				<header class="app-settings-navigation__header">
 					<span>Settings</span>
 					<strong>Owner workbench</strong>
 				</header>
-				<section class="settings-tree-group">
+				<section class="app-settings-navigation__group">
 					<h2>Platform</h2>
 					<button
 						type="button"
@@ -55,13 +55,13 @@ const providerNavigation = [
 						@click="selectedOwner = 'system'"
 					>
 						<Icon class="tree-icon" icon="tabler:heart-rate-monitor" />
-						<span class="settings-tree-copy">
+						<span class="app-settings-navigation__copy">
 							<strong>System Control</strong>
 							<small>Kernel recovery and admission</small>
 						</span>
 					</button>
 				</section>
-				<section class="settings-tree-group">
+				<section class="app-settings-navigation__group">
 					<h2>Integrations</h2>
 					<button
 						v-for="owner in providerNavigation"
@@ -71,7 +71,7 @@ const providerNavigation = [
 						@click="selectedOwner = owner.id"
 					>
 						<Icon class="tree-icon" :icon="owner.icon" />
-						<span class="settings-tree-copy">
+						<span class="app-settings-navigation__copy">
 							<strong>{{ owner.label }}</strong>
 							<small>Provider-owned settings</small>
 						</span>
@@ -79,7 +79,7 @@ const providerNavigation = [
 				</section>
 			</nav>
 
-			<main class="settings-workbench-content">
+			<main class="app-settings-content">
 				<SystemControlPage
 					v-if="selectedOwner === 'system'"
 					:bootstrap="bootstrap"

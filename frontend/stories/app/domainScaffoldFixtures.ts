@@ -3,7 +3,6 @@ import type { DomainScaffoldModel } from './domainScaffoldStory'
 export type DomainScaffoldKey =
   | 'agents'
   | 'calendar'
-  | 'communications'
   | 'documents'
   | 'eventTraces'
   | 'home'
@@ -67,62 +66,6 @@ export const domainScaffoldModels = {
         items: [
           { label: 'Northwind review', value: 'Письмо, задача и документ связаны одним evidence path.', icon: 'tabler:git-branch' },
           { label: 'Legal owner', value: 'Ожидается подтверждение по формулировке retention.', icon: 'tabler:user-check' }
-        ]
-      }
-    ]
-  },
-  communications: {
-    title: 'Communications',
-    subtitle: 'Единый домен сигналов из почты, мессенджеров, каналов и звонков.',
-    icon: 'tabler:messages',
-    actionLabel: 'Новый контекст',
-    searchPlaceholder: 'Поиск по каналам, людям, письмам и диалогам',
-    navItems: [
-      { label: 'Все', count: 42, selected: true },
-      { label: 'Почта', count: 18 },
-      { label: 'Мессенджеры', count: 16 },
-      { label: 'Каналы', count: 4 },
-      { label: 'Звонки', count: 4 }
-    ],
-    records: [
-      {
-        title: 'Vendor security review',
-        summary: 'Письмо требует owner approval перед отправкой.',
-        meta: 'Mail',
-        icon: 'tabler:mail',
-        selected: true
-      },
-      {
-        title: 'Radar summary before meeting',
-        summary: 'Telegram содержит конфликтующие даты встречи.',
-        meta: 'TG',
-        icon: 'tabler:brand-telegram'
-      },
-      {
-        title: '#risk-review',
-        summary: 'Zulip topic привязан к export SLA и evidence.',
-        meta: 'Zulip',
-        icon: 'tabler:messages'
-      }
-    ],
-    preview: {
-      title: 'Vendor security review',
-      meta: 'Communication object, source evidence and provider-neutral actions',
-      icon: 'tabler:messages',
-      chips: ['evidence-first', 'provider boundary', 'review candidate'],
-      body: [
-        'Communications не является набором отдельных клиентов. Это общий рабочий слой, где provider data приводится к единому объекту общения и evidence path.',
-        'Отдельные каналы остаются sub-surfaces: Mail, Telegram, WhatsApp, Calls, Channels и будущие интеграции.'
-      ]
-    },
-    inspectorTitle: 'Интеллект коммуникации',
-    inspectorSummary: 'Hermes показывает кандидатов, сущности и действия без записи business truth напрямую.',
-    inspectorSections: [
-      {
-        title: 'Кандидаты',
-        items: [
-          { label: 'Decision candidate', value: 'Retention clause approval ожидает владельца.', icon: 'tabler:git-pull-request' },
-          { label: 'Document evidence', value: 'Redline attachment связан с source record.', icon: 'tabler:file-certificate' }
         ]
       }
     ]

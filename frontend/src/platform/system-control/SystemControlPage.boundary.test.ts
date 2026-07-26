@@ -20,6 +20,7 @@ describe('SystemControlPage bootstrap boundary', () => {
 		expect(source).toContain('Events runtime status')
 		expect(source).toContain('systemControlComponentRows')
 		expect(source).toContain("emit('languageChange', value)")
+		expect(source).not.toMatch(/class="settings-/)
 		expect(source).not.toContain('settings-status-strip')
 		expect(source).not.toContain('settings-note-panel')
 		expect(source).not.toContain('Only signed, local client surfaces')

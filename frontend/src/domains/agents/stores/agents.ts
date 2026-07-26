@@ -18,7 +18,6 @@ import {
 	fetchAiRun,
 	fetchAiRuns
 } from '../api/agents'
-import { isRecord } from '../../../shared/communications/queries/realtimePatchShared'
 
 export const useAgentsStore = defineStore('agents-ui', () => {
 	const aiStatus = ref<AiStatus | null>(null)
@@ -185,6 +184,10 @@ export const useAgentsStore = defineStore('agents-ui', () => {
 		loadAiRunsOnly
 	}
 })
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 function agentCardView(agent: AiAgent, aiRuns: AiRun[]): AgentCard {
 	const visual = agentVisual(agent.agent_id)

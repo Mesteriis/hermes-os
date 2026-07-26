@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const root = new URL('../..', import.meta.url)
@@ -24,14 +24,8 @@ function readAll(paths: string[]): string {
 }
 
 describe('business communication hooks ownership boundary', () => {
-	it('keeps shared communication modules DTO-only', () => {
-		const source = readAll(filesUnder('shared/communications'))
-
-		expect(source).not.toMatch(/\/api\/v1\/communications/)
-		expect(source).not.toMatch(/\buseQuery\b/)
-		expect(source).not.toMatch(/\bqueryKey\b/)
-		expect(source).not.toMatch(/\[\s*['"]communications['"]/)
-		expect(source).not.toMatch(/\bfetch\(/)
+	it('keeps shared free of Communications-owned modules', () => {
+		expect(existsSync(new URL('shared/communications', root))).toBe(false)
 	})
 
 	it('keeps integration modules out of Communications business read models', () => {

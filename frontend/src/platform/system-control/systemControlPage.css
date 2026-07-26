@@ -88,8 +88,93 @@
 	font-style: normal;
 }
 
-.system-control-surface > .settings-section {
+.system-control-section {
+	display: grid;
+	align-content: start;
+	gap: var(--h-spacing-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-bg-muted);
+	padding: var(--h-spacing-3);
 	overflow: auto;
+}
+
+.system-control-section__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--h-spacing-3);
+	min-width: 0;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+	padding: var(--h-spacing-3);
+}
+
+.system-control-section__header h3 {
+	margin: 0;
+	color: var(--h-color-text-strong);
+	font-size: var(--h-font-size-lg);
+	line-height: var(--h-line-height-tight);
+}
+
+.system-control-list {
+	display: grid;
+	gap: var(--h-spacing-2);
+}
+
+.system-control-row {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) minmax(180px, auto);
+	align-items: center;
+	gap: var(--h-spacing-3);
+	min-width: 0;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface);
+	padding: var(--h-spacing-3);
+}
+
+.system-control-row > span {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+}
+
+.system-control-row strong {
+	overflow: hidden;
+	color: var(--h-color-text-strong);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.system-control-row small {
+	margin: 0;
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-sm);
+	line-height: var(--h-line-height-default);
+}
+
+.system-control-row.disabled {
+	opacity: 0.72;
+}
+
+.system-control-subsection-title {
+	margin: var(--h-spacing-5) 0 0;
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	font-weight: 760;
+	text-transform: uppercase;
+}
+
+.system-control-empty-state {
+	display: grid;
+	place-items: center;
+	min-height: 180px;
+	border: 1px dashed var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text-muted);
+	text-align: center;
 }
 
 @media (max-width: 720px) {
@@ -103,5 +188,13 @@
 
 	.system-control-surface__header > strong {
 		justify-self: start;
+	}
+
+	.system-control-row {
+		grid-template-columns: auto minmax(0, 1fr);
+	}
+
+	.system-control-row > strong {
+		grid-column: 2;
 	}
 }

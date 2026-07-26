@@ -2,20 +2,22 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: выполняется по атомарным frontend slices. Exact
-client-surface admission, app-owned compiled-adapter registry и active canonical
-Communications page реализованы. Active Mail, Telegram, WhatsApp и Zulip
-operational pages используют только свои generated contracts; mutation и sync
-controls проверяют exact capabilities. WhatsApp browser page не обходит
-host-only provider execution. Zulip page экспонирует только доказанные
-stream/direct commands и terminal status, не создавая общий chat projection.
-App-level Settings workbench, platform-owned System Control и provider-owned
-read-only panels для Mail, Telegram, WhatsApp и Zulip реализованы поверх
-sanitized bootstrap projection. Provider gates остаются закрыты до удаления
-соответствующих scoped legacy REST/query/realtime surfaces.
-`settings_frontend_composition_v1` открыт: historical `domains/settings`
-orchestrator, mixed Communications settings surfaces, shared runtime setup
-wizard и неadmitted settings bridges удалены из active source.
+Состояние реализации: завершено. Exact client-surface admission, app-owned
+compiled-adapter registry, canonical Communications page и отдельные Mail,
+Telegram, WhatsApp и Zulip operational pages реализованы только через generated
+owner contracts и shared Gateway transport. App-level Settings workbench
+составляет platform-owned System Control и provider-owned read-only panels из
+sanitized bootstrap projection. Historical Communications и Settings pages,
+scoped provider REST/query/realtime units, shared Communications/Mail state,
+runtime setup wizard, legacy Storybook surfaces и их visual baselines удалены
+из active source. Global historical Settings/Communications CSS удалён; active
+styles принадлежат app, platform, domain или integration surface.
+
+Открыты все принятые gates: `frontend_surface_admission_v1`,
+`communications_frontend_owner_v1`, `mail_frontend_operational_v1`,
+`telegram_frontend_operational_v1`, `whatsapp_frontend_operational_v1`,
+`zulip_frontend_operational_v1`, `settings_frontend_composition_v1` и
+`communications_frontend_clean_room_v1`.
 
 Зависит от:
 
@@ -30,7 +32,7 @@ wizard и неadmitted settings bridges удалены из active source.
 
 ## Контекст
 
-Frontend содержит два несовместимых слоя:
+До clean-room переноса frontend содержал два несовместимых слоя:
 
 1. active recovery shell, который монтирует только System Control;
 2. historical Vue surfaces для Communications и Settings, которые смешивают
@@ -175,7 +177,7 @@ SRP оценивается по ответственности и причине
 
 ### `frontend_surface_admission_v1`
 
-Открывается при наличии:
+Открыт. Evidence включает:
 
 1. отдельных stable wire IDs и exact capability mapping для Communications,
    Mail, Telegram, WhatsApp и Zulip;
@@ -186,15 +188,16 @@ SRP оценивается по ответственности и причине
 
 ### `communications_frontend_owner_v1`
 
-Открывается при наличии active canonical route, generated owner query,
+Открыт: active canonical route, generated owner query,
 loading/empty/error/result states, separate cache root, accessibility tests и
-отсутствии provider imports/legacy REST.
+отсутствие provider imports/legacy REST подтверждены executable tests.
 
 ### `<provider>_frontend_operational_v1`
 
-Открывается отдельно для каждого provider при наличии exact compiled adapter,
-generated service clients, capability-aware controls, provider-owned settings
-и удаления соответствующего scoped legacy REST/query/realtime surface.
+Открыт отдельно для Mail, Telegram, WhatsApp и Zulip. Для каждого provider
+присутствуют exact compiled adapter, generated service clients,
+capability-aware controls и provider-owned settings; соответствующий scoped
+legacy REST/query/realtime source удалён.
 
 ### `settings_frontend_composition_v1`
 
@@ -204,9 +207,11 @@ integration panels, а ownership/SRP проверяются executable tests.
 
 ### `communications_frontend_clean_room_v1`
 
-Финальный gate требует открытия всех принятых slices, отсутствия scoped legacy
-runtime source, typecheck/unit/visual/build evidence и проверки, что dormant
-historical surfaces не входят в production bundle.
+Открыт. Все принятые slices открыты; scoped legacy runtime source отсутствует.
+Frontend typecheck, 220 unit/boundary tests, lint/SRP/style gates, production
+build, Tauri clean-room bundle, Storybook build и visual suites для
+Communications/Settings проходят. Backend architecture policy/evidence,
+SRP/Cargo boundaries, 501 architecture tests и formatting также проходят.
 
 ## Последствия
 
