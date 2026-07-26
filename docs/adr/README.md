@@ -294,3 +294,8 @@ ADR-0284 разделяет Telegram Calls на independently admitted history, 
 и real tgcalls media gates: provider calls остаются Telegram integration
 surface, а cross-provider evidence и transcription принадлежат отдельным
 composition/workflow units.
+ADR-0285 вводит owner-local upgrade job без fake Scheduler schedule:
+owner-neutral Job Platform protocol несёт exact upgrade command, а Telegram
+Calls persistence владеет durable execution, lease и checkpoint для
+restart-safe V3-to-V4 realtime backfill. Storage migration остаётся DDL-only,
+Kernel/Scheduler/Communications не получают Telegram handler или owner SQL.
