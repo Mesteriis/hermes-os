@@ -22,12 +22,11 @@ use hermes_managed_vault_client::{
     ManagedProviderCredentialClientV2, ManagedProviderCredentialErrorV1,
     ManagedProviderCredentialRequestV1,
 };
-use hermes_runtime_protocol::managed_control::RejectManagedControlRequestsV2;
 use hermes_vault_protocol::SecretClassV1;
 use zeroize::Zeroizing;
 
 use crate::admission::MAIL_CREDENTIAL_LEASE_TTL_SECONDS;
-use crate::managed::{MailAdmittedRuntime, MailBootstrapError};
+use crate::managed::{MailAdmittedRuntime, MailBootstrapError, MailBusyControlDispatcher};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailGmailOAuthDispatchErrorV1 {
@@ -35,6 +34,23 @@ pub enum MailGmailOAuthDispatchErrorV1 {
     Persistence,
     Rejected,
     OutcomeUnknown,
+}
+
+pub enum PreparedGmailOAuthProviderOperationV1 {
+    Complete {
+        queued: GmailOAuthQueuedOperationV1,
+        request: GmailAuthorizationCodeExchangeV1,
+    },
+    Refresh {
+        queued: GmailOAuthQueuedOperationV1,
+        current: GmailOAuthCredentialBindingV1,
+        request: GmailRefreshTokenRequestV1,
+    },
+}
+
+pub struct CompletedGmailOAuthProviderOperationV1 {
+    prepared: PreparedGmailOAuthProviderOperationV1,
+    provider_result: Result<GmailOAuthTokenResponseV1, MailGmailOAuthDispatchErrorV1>,
 }
 
 impl MailAdmittedRuntime {
@@ -144,22 +160,31 @@ impl MailAdmittedRuntime {
             .await
             .map_err(map_persistence_error)
             .map(|operation| {
-                operation.map(|operation| GmailOAuthOperationStatusV1 {
-                    operation_id: operation.operation_id,
-                    kind: match operation.kind {
-                        GmailOAuthOperationKindV1::Complete => ApiOperationKindV1::Complete,
-                        GmailOAuthOperationKindV1::Refresh => ApiOperationKindV1::Refresh,
-                    },
-                    outcome: match operation.outcome {
-                        GmailOAuthOperationOutcomeV1::Pending => GmailOAuthOutcomeV1::Pending,
-                        GmailOAuthOperationOutcomeV1::Completed => GmailOAuthOutcomeV1::Completed,
-                        GmailOAuthOperationOutcomeV1::Rejected => GmailOAuthOutcomeV1::Rejected,
-                        GmailOAuthOperationOutcomeV1::OutcomeUnknown => {
-                            GmailOAuthOutcomeV1::OutcomeUnknown
-                        }
-                    },
-                    requested_at_unix_seconds: operation.requested_at_unix_seconds,
-                    completed_at_unix_seconds: operation.completed_at_unix_seconds,
+                operation.map(|operation| {
+                    let in_flight = self.gmail_oauth_operation_in_flight.as_deref()
+                        == Some(operation.operation_id.as_str());
+                    GmailOAuthOperationStatusV1 {
+                        operation_id: operation.operation_id,
+                        kind: match operation.kind {
+                            GmailOAuthOperationKindV1::Complete => ApiOperationKindV1::Complete,
+                            GmailOAuthOperationKindV1::Refresh => ApiOperationKindV1::Refresh,
+                        },
+                        outcome: match operation.outcome {
+                            GmailOAuthOperationOutcomeV1::Pending => GmailOAuthOutcomeV1::Pending,
+                            GmailOAuthOperationOutcomeV1::Completed => {
+                                GmailOAuthOutcomeV1::Completed
+                            }
+                            GmailOAuthOperationOutcomeV1::Rejected => GmailOAuthOutcomeV1::Rejected,
+                            GmailOAuthOperationOutcomeV1::OutcomeUnknown if in_flight => {
+                                GmailOAuthOutcomeV1::Pending
+                            }
+                            GmailOAuthOperationOutcomeV1::OutcomeUnknown => {
+                                GmailOAuthOutcomeV1::OutcomeUnknown
+                            }
+                        },
+                        requested_at_unix_seconds: operation.requested_at_unix_seconds,
+                        completed_at_unix_seconds: operation.completed_at_unix_seconds,
+                    }
                 })
             })
     }
@@ -189,13 +214,36 @@ impl MailAdmittedRuntime {
         dispatched_at_unix_seconds: i64,
         completed_at_unix_seconds: i64,
     ) -> Result<bool, MailGmailOAuthDispatchErrorV1> {
+        let Some(prepared) = self
+            .prepare_next_gmail_oauth_provider_operation(
+                dispatched_at_unix_seconds,
+                completed_at_unix_seconds,
+            )
+            .await?
+        else {
+            return Ok(false);
+        };
+        let completed = execute_gmail_oauth_provider_operation(prepared).await;
+        self.finalize_gmail_oauth_provider_operation(completed, completed_at_unix_seconds)
+            .await?;
+        Ok(true)
+    }
+
+    pub async fn prepare_next_gmail_oauth_provider_operation(
+        &mut self,
+        dispatched_at_unix_seconds: i64,
+        rejected_at_unix_seconds: i64,
+    ) -> Result<Option<PreparedGmailOAuthProviderOperationV1>, MailGmailOAuthDispatchErrorV1> {
+        if self.gmail_oauth_operation_in_flight.is_some() {
+            return Err(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation);
+        }
         let queued = self
             .durable
             .claim_next_gmail_oauth_operation(dispatched_at_unix_seconds)
             .await
             .map_err(map_dispatch_persistence_error)?;
         let Some(queued) = queued else {
-            return Ok(false);
+            return Ok(None);
         };
         if queued.connection_id != self.account.connection_id {
             return Err(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation);
@@ -204,140 +252,145 @@ impl MailAdmittedRuntime {
             .gmail_oauth
             .clone()
             .ok_or(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation)?;
-        match queued.kind {
+        let prepared = match queued.kind {
             GmailOAuthOperationKindV1::Complete => {
-                self.execute_gmail_oauth_complete(queued, configuration, completed_at_unix_seconds)
-                    .await?;
+                let authorization_code = queued
+                    .authorization_code
+                    .as_deref()
+                    .ok_or(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation)?;
+                let code_verifier = queued
+                    .code_verifier
+                    .as_deref()
+                    .ok_or(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation)?;
+                PreparedGmailOAuthProviderOperationV1::Complete {
+                    request: GmailAuthorizationCodeExchangeV1 {
+                        configuration,
+                        authorization_code: authorization_code.to_owned(),
+                        code_verifier: code_verifier.to_owned(),
+                    },
+                    queued,
+                }
             }
             GmailOAuthOperationKindV1::Refresh => {
-                self.execute_gmail_oauth_refresh(queued, configuration, completed_at_unix_seconds)
-                    .await?;
+                if queued.authorization_code.is_some() || queued.code_verifier.is_some() {
+                    return Err(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation);
+                }
+                let current = self
+                    .durable
+                    .gmail_oauth_credential_binding(&queued.connection_id)
+                    .await
+                    .map_err(map_dispatch_persistence_error)?
+                    .ok_or(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation)?;
+                let refresh_credential = self
+                    .resolve_credential(
+                        MailCredentialPurpose::GmailRefreshCredential,
+                        current.refresh_credential_revision,
+                        SecretClassV1::OAuthRefreshCredential,
+                    )
+                    .map_err(classify_credential_resolution_error);
+                let refresh_credential = match refresh_credential {
+                    Ok(credential) => credential,
+                    Err(MailGmailOAuthDispatchErrorV1::Rejected) => {
+                        return self
+                            .persist_oauth_rejection(&queued.operation_id, rejected_at_unix_seconds)
+                            .await
+                            .map(|()| None);
+                    }
+                    Err(error) => return Err(error),
+                };
+                let refresh_credential = std::str::from_utf8(&refresh_credential)
+                    .map_err(|_| MailGmailOAuthDispatchErrorV1::InvalidStoredOperation)?;
+                PreparedGmailOAuthProviderOperationV1::Refresh {
+                    request: GmailRefreshTokenRequestV1 {
+                        configuration,
+                        refresh_token: refresh_credential.to_owned(),
+                    },
+                    current,
+                    queued,
+                }
             }
-        }
-        Ok(true)
+        };
+        self.gmail_oauth_operation_in_flight = Some(queued_operation_id(&prepared).to_owned());
+        Ok(Some(prepared))
     }
 
-    async fn execute_gmail_oauth_complete(
+    pub async fn finalize_gmail_oauth_provider_operation(
         &mut self,
-        queued: GmailOAuthQueuedOperationV1,
-        configuration: hermes_mail_api::GmailOAuthConfigurationV1,
+        completed: CompletedGmailOAuthProviderOperationV1,
         completed_at_unix_seconds: i64,
     ) -> Result<(), MailGmailOAuthDispatchErrorV1> {
-        let authorization_code = queued
-            .authorization_code
-            .ok_or(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation)?;
-        let code_verifier = queued
-            .code_verifier
-            .ok_or(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation)?;
-        let token = exchange_authorization_code(&GmailAuthorizationCodeExchangeV1 {
-            configuration,
-            authorization_code: authorization_code.to_string(),
-            code_verifier: code_verifier.to_string(),
-        })
-        .await
-        .map_err(classify_provider_error);
-        let token = match token {
-            Ok(token) if token.refresh_token.is_some() => token,
-            Ok(_) => {
-                return self
-                    .persist_oauth_rejection(&queued.operation_id, completed_at_unix_seconds)
-                    .await;
+        let operation_id = match &completed.prepared {
+            PreparedGmailOAuthProviderOperationV1::Complete { queued, .. }
+            | PreparedGmailOAuthProviderOperationV1::Refresh { queued, .. } => {
+                queued.operation_id.clone()
             }
-            Err(MailGmailOAuthDispatchErrorV1::Rejected) => {
-                return self
-                    .persist_oauth_rejection(&queued.operation_id, completed_at_unix_seconds)
-                    .await;
-            }
-            Err(error) => return Err(error),
         };
-        let existing = self
-            .durable
-            .gmail_oauth_credential_binding(&queued.connection_id)
-            .await
-            .map_err(map_dispatch_persistence_error)?;
-        let binding = self
-            .store_oauth_token_pair(
-                &queued.operation_id,
-                existing.as_ref(),
-                token,
-                completed_at_unix_seconds,
-            )
-            .await;
-        let binding = match binding {
-            Ok(binding) => binding,
-            Err(MailGmailOAuthDispatchErrorV1::Rejected) => {
-                return self
-                    .persist_oauth_rejection(&queued.operation_id, completed_at_unix_seconds)
-                    .await;
-            }
-            Err(error) => return Err(error),
-        };
-        self.durable
-            .complete_gmail_oauth_operation(
-                &queued.operation_id,
-                &binding,
-                completed_at_unix_seconds,
-            )
-            .await
-            .map_err(map_dispatch_persistence_error)
-    }
-
-    async fn execute_gmail_oauth_refresh(
-        &mut self,
-        queued: GmailOAuthQueuedOperationV1,
-        configuration: hermes_mail_api::GmailOAuthConfigurationV1,
-        completed_at_unix_seconds: i64,
-    ) -> Result<(), MailGmailOAuthDispatchErrorV1> {
-        if queued.authorization_code.is_some() || queued.code_verifier.is_some() {
+        if self.gmail_oauth_operation_in_flight.as_deref() != Some(operation_id.as_str()) {
             return Err(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation);
         }
-        let current = self
-            .durable
-            .gmail_oauth_credential_binding(&queued.connection_id)
-            .await
-            .map_err(map_dispatch_persistence_error)?
-            .ok_or(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation)?;
-        let refresh_credential = self
-            .resolve_credential(
-                MailCredentialPurpose::GmailRefreshCredential,
-                current.refresh_credential_revision,
-                SecretClassV1::OAuthRefreshCredential,
-            )
-            .map_err(classify_credential_error);
-        let refresh_credential = match refresh_credential {
-            Ok(credential) => credential,
-            Err(MailGmailOAuthDispatchErrorV1::Rejected) => {
-                return self
-                    .persist_oauth_rejection(&queued.operation_id, completed_at_unix_seconds)
-                    .await;
-            }
-            Err(error) => return Err(error),
-        };
-        let refresh_credential = std::str::from_utf8(&refresh_credential)
-            .map_err(|_| MailGmailOAuthDispatchErrorV1::InvalidStoredOperation)?;
-        let token = refresh_access_token(&GmailRefreshTokenRequestV1 {
-            configuration,
-            refresh_token: refresh_credential.to_owned(),
-        })
-        .await
-        .map_err(classify_provider_error);
-        let token = match token {
+        let result = self
+            .finalize_gmail_oauth_provider_operation_inner(completed, completed_at_unix_seconds)
+            .await;
+        self.gmail_oauth_operation_in_flight = None;
+        result
+    }
+
+    async fn finalize_gmail_oauth_provider_operation_inner(
+        &mut self,
+        completed: CompletedGmailOAuthProviderOperationV1,
+        completed_at_unix_seconds: i64,
+    ) -> Result<(), MailGmailOAuthDispatchErrorV1> {
+        let token = match completed.provider_result {
             Ok(token) => token,
             Err(MailGmailOAuthDispatchErrorV1::Rejected) => {
+                let operation_id = match &completed.prepared {
+                    PreparedGmailOAuthProviderOperationV1::Complete { queued, .. }
+                    | PreparedGmailOAuthProviderOperationV1::Refresh { queued, .. } => {
+                        queued.operation_id.as_str()
+                    }
+                };
                 return self
-                    .persist_oauth_rejection(&queued.operation_id, completed_at_unix_seconds)
+                    .persist_oauth_rejection(operation_id, completed_at_unix_seconds)
                     .await;
             }
             Err(error) => return Err(error),
         };
-        let binding = self
-            .rotate_oauth_token_pair(
-                &queued.operation_id,
-                &current,
-                token,
-                completed_at_unix_seconds,
-            )
-            .await;
+        let (queued, binding) = match completed.prepared {
+            PreparedGmailOAuthProviderOperationV1::Complete { queued, .. } => {
+                if token.refresh_token.is_none() {
+                    return self
+                        .persist_oauth_rejection(&queued.operation_id, completed_at_unix_seconds)
+                        .await;
+                }
+                let existing = self
+                    .durable
+                    .gmail_oauth_credential_binding(&queued.connection_id)
+                    .await
+                    .map_err(map_dispatch_persistence_error)?;
+                let binding = self
+                    .store_oauth_token_pair(
+                        &queued.operation_id,
+                        existing.as_ref(),
+                        token,
+                        completed_at_unix_seconds,
+                    )
+                    .await;
+                (queued, binding)
+            }
+            PreparedGmailOAuthProviderOperationV1::Refresh {
+                queued, current, ..
+            } => {
+                let binding = self
+                    .rotate_oauth_token_pair(
+                        &queued.operation_id,
+                        &current,
+                        token,
+                        completed_at_unix_seconds,
+                    )
+                    .await;
+                (queued, binding)
+            }
+        };
         let binding = match binding {
             Ok(binding) => binding,
             Err(MailGmailOAuthDispatchErrorV1::Rejected) => {
@@ -382,7 +435,7 @@ impl MailAdmittedRuntime {
                         binding.access_token_record_id,
                         access_token.as_bytes(),
                     )
-                    .map_err(classify_credential_error)?,
+                    .map_err(classify_post_provider_credential_mutation_error)?,
                     revision,
                 )
             }
@@ -393,7 +446,7 @@ impl MailAdmittedRuntime {
                     SecretClassV1::ProviderCredential,
                     access_token.as_bytes(),
                 )
-                .map_err(classify_credential_error)?,
+                .map_err(classify_post_provider_credential_mutation_error)?,
                 1,
             ),
         };
@@ -412,7 +465,7 @@ impl MailAdmittedRuntime {
                         binding.refresh_credential_record_id,
                         refresh_credential.as_bytes(),
                     )
-                    .map_err(classify_credential_error)?,
+                    .map_err(classify_post_provider_credential_mutation_error)?,
                     revision,
                 )
             }
@@ -423,7 +476,7 @@ impl MailAdmittedRuntime {
                     SecretClassV1::OAuthRefreshCredential,
                     refresh_credential.as_bytes(),
                 )
-                .map_err(classify_credential_error)?,
+                .map_err(classify_post_provider_credential_mutation_error)?,
                 1,
             ),
         };
@@ -464,7 +517,7 @@ impl MailAdmittedRuntime {
                 current.access_token_record_id,
                 access_token.as_bytes(),
             )
-            .map_err(classify_credential_error)?;
+            .map_err(classify_post_provider_credential_mutation_error)?;
         self.durable
             .checkpoint_gmail_oauth_access_record(operation_id, &access_record_id, access_revision)
             .await
@@ -481,7 +534,7 @@ impl MailAdmittedRuntime {
                         current.refresh_credential_record_id,
                         refresh_credential.as_bytes(),
                     )
-                    .map_err(classify_credential_error)?;
+                    .map_err(classify_post_provider_credential_mutation_error)?;
                 self.durable
                     .checkpoint_gmail_oauth_refresh_record(operation_id, &record_id, revision)
                     .await
@@ -515,18 +568,20 @@ impl MailAdmittedRuntime {
     ) -> Result<Zeroizing<Vec<u8>>, ManagedProviderCredentialErrorV1> {
         let configuration_instance_id = self.configuration_instance_id.clone();
         let context = self.provider_credential_context.clone();
-        let mut dispatcher = RejectManagedControlRequestsV2;
-        ManagedProviderCredentialClientV2::new(&mut self.control_channel).resolve(
-            &mut dispatcher,
-            &context,
-            ManagedProviderCredentialRequestV1 {
-                configuration_instance_id: &configuration_instance_id,
-                purpose_id: purpose.as_str(),
-                credential_revision: revision,
-                ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
-                secret_class,
-            },
-        )
+        self.with_blocking_provider_credential_request(|channel| {
+            let mut dispatcher = MailBusyControlDispatcher;
+            ManagedProviderCredentialClientV2::new(channel).resolve(
+                &mut dispatcher,
+                &context,
+                ManagedProviderCredentialRequestV1 {
+                    configuration_instance_id: &configuration_instance_id,
+                    purpose_id: purpose.as_str(),
+                    credential_revision: revision,
+                    ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+                    secret_class,
+                },
+            )
+        })
     }
 
     fn store_credential(
@@ -538,19 +593,21 @@ impl MailAdmittedRuntime {
     ) -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
         let configuration_instance_id = self.configuration_instance_id.clone();
         let context = self.provider_credential_context.clone();
-        let mut dispatcher = RejectManagedControlRequestsV2;
-        ManagedProviderCredentialClientV2::new(&mut self.control_channel).store_once(
-            &mut dispatcher,
-            &context,
-            ManagedProviderCredentialRequestV1 {
-                configuration_instance_id: &configuration_instance_id,
-                purpose_id: purpose.as_str(),
-                credential_revision: revision,
-                ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
-                secret_class,
-            },
-            payload,
-        )
+        self.with_blocking_provider_credential_request(|channel| {
+            let mut dispatcher = MailBusyControlDispatcher;
+            ManagedProviderCredentialClientV2::new(channel).store_once(
+                &mut dispatcher,
+                &context,
+                ManagedProviderCredentialRequestV1 {
+                    configuration_instance_id: &configuration_instance_id,
+                    purpose_id: purpose.as_str(),
+                    credential_revision: revision,
+                    ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+                    secret_class,
+                },
+                payload,
+            )
+        })
     }
 
     fn replace_credential(
@@ -563,20 +620,22 @@ impl MailAdmittedRuntime {
     ) -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
         let configuration_instance_id = self.configuration_instance_id.clone();
         let context = self.provider_credential_context.clone();
-        let mut dispatcher = RejectManagedControlRequestsV2;
-        ManagedProviderCredentialClientV2::new(&mut self.control_channel).replace_once(
-            &mut dispatcher,
-            &context,
-            ManagedProviderCredentialRequestV1 {
-                configuration_instance_id: &configuration_instance_id,
-                purpose_id: purpose.as_str(),
-                credential_revision: revision,
-                ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
-                secret_class,
-            },
-            prior_record_id,
-            payload,
-        )
+        self.with_blocking_provider_credential_request(|channel| {
+            let mut dispatcher = MailBusyControlDispatcher;
+            ManagedProviderCredentialClientV2::new(channel).replace_once(
+                &mut dispatcher,
+                &context,
+                ManagedProviderCredentialRequestV1 {
+                    configuration_instance_id: &configuration_instance_id,
+                    purpose_id: purpose.as_str(),
+                    credential_revision: revision,
+                    ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+                    secret_class,
+                },
+                prior_record_id,
+                payload,
+            )
+        })
     }
 
     async fn persist_oauth_rejection(
@@ -589,6 +648,35 @@ impl MailAdmittedRuntime {
             .await
             .map_err(map_dispatch_persistence_error)?;
         Err(MailGmailOAuthDispatchErrorV1::Rejected)
+    }
+}
+
+#[must_use]
+fn queued_operation_id(prepared: &PreparedGmailOAuthProviderOperationV1) -> &str {
+    match prepared {
+        PreparedGmailOAuthProviderOperationV1::Complete { queued, .. }
+        | PreparedGmailOAuthProviderOperationV1::Refresh { queued, .. } => &queued.operation_id,
+    }
+}
+
+pub async fn execute_gmail_oauth_provider_operation(
+    prepared: PreparedGmailOAuthProviderOperationV1,
+) -> CompletedGmailOAuthProviderOperationV1 {
+    let provider_result = match &prepared {
+        PreparedGmailOAuthProviderOperationV1::Complete { request, .. } => {
+            exchange_authorization_code(request)
+                .await
+                .map_err(classify_provider_error)
+        }
+        PreparedGmailOAuthProviderOperationV1::Refresh { request, .. } => {
+            refresh_access_token(request)
+                .await
+                .map_err(classify_provider_error)
+        }
+    };
+    CompletedGmailOAuthProviderOperationV1 {
+        prepared,
+        provider_result,
     }
 }
 
@@ -634,8 +722,11 @@ fn map_persistence_error(_error: MailDurablePersistenceError) -> MailBootstrapEr
 }
 
 fn map_dispatch_persistence_error(
-    _error: MailDurablePersistenceError,
+    error: MailDurablePersistenceError,
 ) -> MailGmailOAuthDispatchErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_mail_gmail_oauth_persistence_error={error:?}");
+    }
     MailGmailOAuthDispatchErrorV1::Persistence
 }
 
@@ -647,9 +738,12 @@ fn map_credential_error(error: ManagedProviderCredentialErrorV1) -> MailBootstra
     }
 }
 
-fn classify_credential_error(
+fn classify_credential_resolution_error(
     error: ManagedProviderCredentialErrorV1,
 ) -> MailGmailOAuthDispatchErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_mail_gmail_oauth_credential_resolution_error={error:?}");
+    }
     match error {
         ManagedProviderCredentialErrorV1::InvalidContext => {
             MailGmailOAuthDispatchErrorV1::InvalidStoredOperation
@@ -661,7 +755,19 @@ fn classify_credential_error(
     }
 }
 
+fn classify_post_provider_credential_mutation_error(
+    error: ManagedProviderCredentialErrorV1,
+) -> MailGmailOAuthDispatchErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_mail_gmail_oauth_post_provider_mutation_error={error:?}");
+    }
+    MailGmailOAuthDispatchErrorV1::OutcomeUnknown
+}
+
 fn classify_provider_error(error: GmailAdapterErrorV1) -> MailGmailOAuthDispatchErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_mail_gmail_oauth_provider_error={error:?}");
+    }
     match error {
         GmailAdapterErrorV1::InvalidRequest => MailGmailOAuthDispatchErrorV1::Rejected,
         GmailAdapterErrorV1::ProviderStatus(status)
@@ -698,16 +804,30 @@ mod tests {
     #[test]
     fn credential_failures_fail_closed_by_authority_and_availability() {
         assert_eq!(
-            classify_credential_error(ManagedProviderCredentialErrorV1::Rejected),
+            classify_credential_resolution_error(ManagedProviderCredentialErrorV1::Rejected),
             MailGmailOAuthDispatchErrorV1::Rejected
         );
         assert_eq!(
-            classify_credential_error(ManagedProviderCredentialErrorV1::Unavailable),
+            classify_credential_resolution_error(ManagedProviderCredentialErrorV1::Unavailable),
             MailGmailOAuthDispatchErrorV1::OutcomeUnknown
         );
         assert_eq!(
-            classify_credential_error(ManagedProviderCredentialErrorV1::InvalidContext),
+            classify_credential_resolution_error(ManagedProviderCredentialErrorV1::InvalidContext),
             MailGmailOAuthDispatchErrorV1::InvalidStoredOperation
         );
+    }
+
+    #[test]
+    fn post_provider_credential_mutation_is_always_outcome_unknown() {
+        for error in [
+            ManagedProviderCredentialErrorV1::Rejected,
+            ManagedProviderCredentialErrorV1::Unavailable,
+            ManagedProviderCredentialErrorV1::InvalidContext,
+        ] {
+            assert_eq!(
+                classify_post_provider_credential_mutation_error(error),
+                MailGmailOAuthDispatchErrorV1::OutcomeUnknown
+            );
+        }
     }
 }

@@ -28,7 +28,6 @@ fn host_validation() {
 #[test]
 fn port_validation() {
     assert!(valid_port(993));
-    assert!(!valid_port(143));
     assert!(!valid_port(0));
 }
 

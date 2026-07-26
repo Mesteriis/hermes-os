@@ -2,14 +2,18 @@
 
 Статус: Принято
 Дата: 2026-07-25
-Состояние реализации: В работе. Generated start/complete/refresh/query routes,
+Состояние реализации: Реализовано 2026-07-26. Generated
+start/complete/refresh/query routes,
 Mail-owned PKCE attempts и durable operations, descriptor revision 3, settings
 schema revision 4, Storage bundle revision 4, action-specific Vault admission,
 typed Gmail HTTPS exchange и runtime orchestration реализованы. Gmail
 sync/delivery теперь резолвят access credential on demand по Mail-owned opaque
-binding, а не по settings revision. Static package, Clippy и architecture gates
-зелёные. Live provider/Vault conformance, revoke/fence и negative-output
-evidence ещё не реализованы; до этого `mail_gmail_oauth_v1` закрыт.
+binding, а не по settings revision. Live provider/Vault conformance доказывает
+exact PKCE/form exchange, отзывчивость control route во время provider I/O,
+one-use completion, CAS rotation, stale/revoke fences, sanitized output и
+отсутствие hidden retry после ambiguous provider/Vault outcome. Focused,
+architecture, SRP, Cargo, Clippy и full backend gates зелёные;
+`mail_gmail_oauth_v1` открыт.
 
 Уточняет:
 
@@ -226,6 +230,28 @@ Gate открывается только при одновременном evide
     импортирует другой domain/runtime;
 13. focused live conformance и architecture/SRP/Cargo/full backend gates
     зелёные.
+
+### Implementation evidence
+
+Live managed conformance запускает signed Mail, Vault и Storage runtimes с
+loopback TLS provider fixture:
+
+- `managed_mail_gmail_oauth_rotates_credentials_once_and_fails_closed`
+  проверяет exact authorization-code/refresh form, pending status во время
+  delayed provider response, one-use setup, access/refresh CAS revision 1 → 2,
+  stale revision rejection, `outcome_unknown` без повторного provider request,
+  отсутствие Communications event и private values в diagnostics;
+- `managed_mail_gmail_oauth_route_is_fenced_by_owner_revoke` проверяет, что
+  owner revoke закрывает exact OAuth route до provider mutation;
+- существующий
+  `managed_mail_gmail_runtime_mutates_once_and_replays_event_without_private_payload`
+  подтверждает, что delivery резолвит access credential только через
+  Mail-owned opaque binding и не возвращает seeded-settings fallback.
+
+Owner unit tests отдельно фиксируют production endpoint policy и
+compile-time conformance endpoints. Full `make ci` проверяет workspace,
+integration profile, architecture/SRP/Cargo boundaries, dependency policy и
+supply-chain evidence.
 
 Frontend popup/callback UX и Scheduler-driven proactive refresh являются
 следующими client/job slices. Они используют этот owner contract, но не

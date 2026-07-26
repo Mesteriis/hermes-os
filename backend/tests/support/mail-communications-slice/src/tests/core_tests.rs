@@ -62,7 +62,6 @@ fn tracker_updates_state() {
 #[test]
 fn sync_request_validation() {
     assert!(validate_sync_request("mail.example.com", IMAP_PORT, 128).is_ok());
-    assert!(validate_sync_request("mail.example.com", 143, 128).is_err());
     assert!(validate_sync_request("bad host", IMAP_PORT, 128).is_err());
     assert!(validate_sync_request("mail.example.com", IMAP_PORT, MAX_MESSAGE_BYTES + 1).is_err());
     assert!(

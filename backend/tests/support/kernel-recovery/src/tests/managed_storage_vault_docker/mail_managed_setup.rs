@@ -6,14 +6,17 @@ use hermes_mail_api::{
     MailCredentialPurpose,
     client_contract::{MAIL_MODULE_ID, MAIL_OWNER_ID, MailClientContractV1},
 };
-use hermes_mail_persistence::{MAIL_STORAGE_BUNDLE_REVISION_V3, mail_storage_bundle_v1};
+use hermes_mail_persistence::{
+    GmailOAuthCredentialBindingV1, MAIL_STORAGE_BUNDLE_REVISION_V4, mail_storage_bundle_v1,
+};
 use hermes_mail_runtime::{
     admission::{
         MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
         MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID,
         MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID, MAIL_BLOB_CAPABILITY_ID,
         MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID, MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
-        MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID, MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
+        MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID, MAIL_GMAIL_OAUTH_REFRESH_CREDENTIALS_CAPABILITY_ID,
+        MAIL_GMAIL_OAUTH_SETUP_CREDENTIALS_CAPABILITY_ID, MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
         MAIL_SMTP_CREDENTIALS_CAPABILITY_ID, MAIL_STORAGE_CAPABILITY_ID, mail_module_descriptor_v1,
     },
     settings::mail_settings_schema_bytes_v1,
@@ -46,6 +49,31 @@ pub(super) struct MailSmtpFixtureSettingsV1 {
 pub(super) struct MailGmailFixtureSettingsV1 {
     pub(super) port: u16,
     pub(super) ca_certificate_pem: String,
+    pub(super) oauth: Option<MailGmailOAuthFixtureSettingsV1>,
+}
+
+pub(super) struct MailGmailOAuthFixtureSettingsV1 {
+    pub(super) host: String,
+    pub(super) port: u16,
+    pub(super) ca_certificate_pem: String,
+}
+
+pub(super) struct SeededGmailCredentialBindingV1 {
+    access_token_record_id: [u8; 16],
+    refresh_credential_record_id: [u8; 16],
+}
+
+impl SeededGmailCredentialBindingV1 {
+    pub(super) fn binding(&self) -> GmailOAuthCredentialBindingV1 {
+        GmailOAuthCredentialBindingV1 {
+            access_token_record_id: self.access_token_record_id,
+            access_token_revision: 1,
+            refresh_credential_record_id: self.refresh_credential_record_id,
+            refresh_credential_revision: 1,
+            access_token_expires_at_unix_seconds: i64::MAX,
+            scope_sha256: Sha256::digest(b"managed-mail-gmail-delivery-scope").into(),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -53,6 +81,7 @@ enum MailAdmissionProfileV1 {
     ImapSync,
     SmtpDelivery,
     GmailDelivery,
+    GmailOAuth,
 }
 
 enum MailSettingsProfileV1 {
@@ -79,7 +108,7 @@ pub(super) fn mail_release_artifact() -> SignedRuntimeArtifact {
     .with_settings_schema(mail_settings_schema_bytes_v1())
 }
 
-pub(super) fn seed_mail_vault(vault_dir: &Path) {
+pub(super) fn seed_mail_vault(vault_dir: &Path) -> SeededGmailCredentialBindingV1 {
     let key = FileWrappingKeyProvider::new(&vault_dir.join("platform-wrapping-key.bin"))
         .load_or_create()
         .expect("open Vault wrapping key");
@@ -97,10 +126,6 @@ pub(super) fn seed_mail_vault(vault_dir: &Path) {
         (
             MailCredentialPurpose::SmtpPassword,
             b"managed-mail-smtp-password".as_slice(),
-        ),
-        (
-            MailCredentialPurpose::GmailAccessToken,
-            b"managed-mail-gmail-access-token".as_slice(),
         ),
     ] {
         let request = VaultPurposeRequestV1::new(
@@ -122,6 +147,44 @@ pub(super) fn seed_mail_vault(vault_dir: &Path) {
             .store_secret(&scope, secret)
             .expect("store Mail test credential");
     }
+    let access_token_record_id = store_mail_test_secret(
+        &store,
+        MailCredentialPurpose::GmailAccessToken,
+        SecretClassV1::ProviderCredential,
+        b"managed-mail-gmail-access-token",
+    );
+    let refresh_credential_record_id = store_mail_test_secret(
+        &store,
+        MailCredentialPurpose::GmailRefreshCredential,
+        SecretClassV1::OAuthRefreshCredential,
+        b"managed-mail-gmail-refresh-credential",
+    );
+    SeededGmailCredentialBindingV1 {
+        access_token_record_id,
+        refresh_credential_record_id,
+    }
+}
+
+fn store_mail_test_secret(
+    store: &VaultStore,
+    purpose: MailCredentialPurpose,
+    secret_class: SecretClassV1,
+    secret: &[u8],
+) -> [u8; 16] {
+    let request = VaultPurposeRequestV1::new(
+        purpose.as_str().to_owned(),
+        MAIL_ACCOUNT_ID.to_owned(),
+        vec![secret_class],
+        vec![VaultActionV1::Resolve],
+        MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+    )
+    .expect("Mail test credential purpose");
+    let scope = SecretRecordScope::new(MAIL_OWNER_ID.to_owned(), &request, secret_class, 1)
+        .expect("Mail test credential scope");
+    *store
+        .store_secret(&scope, secret)
+        .expect("store Mail test credential")
+        .as_bytes()
 }
 
 pub(super) fn admit_mail_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
@@ -134,6 +197,10 @@ pub(super) fn admit_mail_delivery_runtime(store: &SqliteControlStore) -> Admitte
 
 pub(super) fn admit_mail_gmail_delivery_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
     admit_mail_runtime_profile(store, MailAdmissionProfileV1::GmailDelivery)
+}
+
+pub(super) fn admit_mail_gmail_oauth_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
+    admit_mail_runtime_profile(store, MailAdmissionProfileV1::GmailOAuth)
 }
 
 fn admit_mail_runtime_profile(
@@ -174,6 +241,24 @@ fn admit_mail_runtime_profile(
                 .capability_id()
                 .to_owned(),
         ],
+        MailAdmissionProfileV1::GmailOAuth => vec![
+            MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_GMAIL_OAUTH_REFRESH_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_GMAIL_OAUTH_SETUP_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_STORAGE_CAPABILITY_ID.to_owned(),
+            MailClientContractV1::GmailOAuthComplete
+                .capability_id()
+                .to_owned(),
+            MailClientContractV1::GmailOAuthQuery
+                .capability_id()
+                .to_owned(),
+            MailClientContractV1::GmailOAuthRefresh
+                .capability_id()
+                .to_owned(),
+            MailClientContractV1::GmailOAuthStart
+                .capability_id()
+                .to_owned(),
+        ],
     };
     capability_ids.sort();
     crate::modules::registration::registry::approve_after_owner_authorization(
@@ -199,7 +284,7 @@ fn admit_mail_runtime_profile(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 MAIL_OWNER_ID,
-                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V3),
+                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V4),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -222,7 +307,7 @@ pub(super) fn prepare_mail_runtime(
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
     let bundle = store
-        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V3))
+        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V4))
         .expect("read Mail Storage bundle")
         .expect("Mail Storage bundle");
     let binding = issue_managed(
@@ -234,7 +319,7 @@ pub(super) fn prepare_mail_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V3),
+            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V4),
             *bundle.digest(),
         )
         .expect("Mail Storage binding issue"),
@@ -441,31 +526,73 @@ fn mail_settings_snapshot(
                 ]);
             }
         }
-        MailSettingsProfileV1::Gmail(gmail) => values.extend([
-            entry(
-                "mail.gmail.access_token_revision",
-                Value::UnsignedIntegerValue(1),
-            ),
-            entry(
-                "mail.gmail.api_host",
-                Value::StringValue("localhost".to_owned()),
-            ),
-            entry(
-                "mail.gmail.api_port",
-                Value::UnsignedIntegerValue(u64::from(gmail.port)),
-            ),
-            entry(
-                "mail.gmail.ca_certificate_pem",
-                Value::StringValue(gmail.ca_certificate_pem),
-            ),
-            entry(
-                "mail.gmail.from_address",
-                Value::StringValue("owner@example.test".to_owned()),
-            ),
-            entry("mail.gmail.user_id", Value::StringValue("me".to_owned())),
-            entry("mail.inbound.kind", Value::StringValue("gmail".to_owned())),
-            entry("mail.smtp.enabled", Value::BooleanValue(false)),
-        ]),
+        MailSettingsProfileV1::Gmail(gmail) => {
+            values.extend([
+                entry(
+                    "mail.gmail.api_host",
+                    Value::StringValue("localhost".to_owned()),
+                ),
+                entry(
+                    "mail.gmail.api_port",
+                    Value::UnsignedIntegerValue(u64::from(gmail.port)),
+                ),
+                entry(
+                    "mail.gmail.ca_certificate_pem",
+                    Value::StringValue(gmail.ca_certificate_pem.clone()),
+                ),
+                entry(
+                    "mail.gmail.from_address",
+                    Value::StringValue("owner@example.test".to_owned()),
+                ),
+                entry("mail.gmail.user_id", Value::StringValue("me".to_owned())),
+                entry("mail.inbound.kind", Value::StringValue("gmail".to_owned())),
+                entry("mail.smtp.enabled", Value::BooleanValue(false)),
+            ]);
+            if let Some(oauth) = gmail.oauth {
+                values.extend([
+                    entry(
+                        "mail.gmail.oauth.authorization_ca_certificate_pem",
+                        Value::StringValue(oauth.ca_certificate_pem.clone()),
+                    ),
+                    entry(
+                        "mail.gmail.oauth.authorization_host",
+                        Value::StringValue(oauth.host.clone()),
+                    ),
+                    entry(
+                        "mail.gmail.oauth.authorization_path",
+                        Value::StringValue("/authorize".to_owned()),
+                    ),
+                    entry(
+                        "mail.gmail.oauth.authorization_port",
+                        Value::UnsignedIntegerValue(u64::from(oauth.port)),
+                    ),
+                    entry(
+                        "mail.gmail.oauth.client_id",
+                        Value::StringValue("managed-mail-gmail-client".to_owned()),
+                    ),
+                    entry(
+                        "mail.gmail.oauth.redirect_uri",
+                        Value::StringValue("https://127.0.0.1/oauth/callback".to_owned()),
+                    ),
+                    entry(
+                        "mail.gmail.oauth.token_ca_certificate_pem",
+                        Value::StringValue(oauth.ca_certificate_pem),
+                    ),
+                    entry(
+                        "mail.gmail.oauth.token_host",
+                        Value::StringValue(oauth.host.clone()),
+                    ),
+                    entry(
+                        "mail.gmail.oauth.token_path",
+                        Value::StringValue("/token".to_owned()),
+                    ),
+                    entry(
+                        "mail.gmail.oauth.token_port",
+                        Value::UnsignedIntegerValue(u64::from(oauth.port)),
+                    ),
+                ]);
+            }
+        }
     }
     values.sort_by(|left, right| left.setting_id.cmp(&right.setting_id));
     hermes_runtime_protocol::v1::SettingsSnapshotV1 {

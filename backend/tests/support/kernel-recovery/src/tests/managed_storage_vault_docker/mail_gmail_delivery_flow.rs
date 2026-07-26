@@ -9,6 +9,7 @@ use hermes_mail_api::{
     MailClientRequestV1, MailClientResponseV1, MailSendMailRequestV1,
     client_contract::MailClientContractV1,
 };
+use hermes_mail_persistence::GmailOAuthCredentialBindingV1;
 
 use crate::identity::device::signer::DeviceSigner;
 
@@ -32,7 +33,7 @@ fn managed_mail_gmail_runtime_mutates_once_and_replays_event_without_private_pay
     let data = private_directory(short_communications_kernel_data_directory());
     let vault_dir = private_directory(data.join("vault"));
     initialize_vault(&vault_dir, &credential_directory());
-    seed_mail_vault(&vault_dir);
+    let seeded_gmail = seed_mail_vault(&vault_dir);
     let release = installed_communications_mail_release(&root);
     unsafe {
         std::env::set_var("HERMES_TEST_KERNEL_EXECUTABLE", release.kernel());
@@ -93,6 +94,7 @@ fn managed_mail_gmail_runtime_mutates_once_and_replays_event_without_private_pay
         MailGmailFixtureSettingsV1 {
             port: gmail.port(),
             ca_certificate_pem: gmail.ca_certificate_pem().to_owned(),
+            oauth: None,
         },
     );
     wait_for_mail_ready(&supervisor, &mail);
@@ -103,6 +105,10 @@ fn managed_mail_gmail_runtime_mutates_once_and_replays_event_without_private_pay
     event_runtime
         .block_on(durable.initialize())
         .expect("initialize Mail persistence");
+    let binding: GmailOAuthCredentialBindingV1 = seeded_gmail.binding();
+    event_runtime
+        .block_on(durable.store_gmail_oauth_credential_binding(MAIL_ACCOUNT_ID, &binding, 1))
+        .expect("store Mail-owned Gmail credential binding");
     let endpoint = store
         .platform_event_hub_topology()
         .expect("read Event Hub topology")

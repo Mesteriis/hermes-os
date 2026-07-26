@@ -121,6 +121,7 @@ pub struct MailAdmittedRuntime {
     pub(crate) account: hermes_mail_api::MailAccountConfigurationV1,
     pub(crate) configuration_instance_id: String,
     pub(crate) gmail_oauth: Option<hermes_mail_api::GmailOAuthConfigurationV1>,
+    pub(crate) gmail_oauth_operation_in_flight: Option<String>,
     pub(crate) provider_credential_context: ManagedProviderCredentialContextV1,
     pub(crate) settings_revision: u64,
     runtime_instance_id: String,
@@ -397,6 +398,7 @@ pub async fn open_admitted_runtime(
         account: admission.account.clone(),
         configuration_instance_id: admission.configuration_instance_id.clone(),
         gmail_oauth: admission.gmail_oauth.clone(),
+        gmail_oauth_operation_in_flight: None,
         provider_credential_context: provider_context,
         settings_revision: admission.settings_revision,
         runtime_instance_id: admission.runtime_instance_id.clone(),
@@ -405,6 +407,37 @@ pub async fn open_admitted_runtime(
 }
 
 impl MailAdmittedRuntime {
+    pub(crate) fn with_blocking_provider_credential_request<T>(
+        &mut self,
+        request: impl FnOnce(
+            &mut ManagedControlChannelV2<UnixStream>,
+        ) -> Result<T, ManagedProviderCredentialErrorV1>,
+    ) -> Result<T, ManagedProviderCredentialErrorV1> {
+        let configure = self
+            .control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .and_then(|_| {
+                self.control_channel
+                    .inner_mut()
+                    .set_read_timeout(Some(CONTROL_TIMEOUT))
+            })
+            .and_then(|_| {
+                self.control_channel
+                    .inner_mut()
+                    .set_write_timeout(Some(CONTROL_TIMEOUT))
+            });
+        if configure.is_err() {
+            restore_nonblocking_control_stream(self.control_channel.inner_mut());
+            return Err(ManagedProviderCredentialErrorV1::Unavailable);
+        }
+        let result = request(&mut self.control_channel);
+        if !restore_nonblocking_control_stream(self.control_channel.inner_mut()) {
+            return Err(ManagedProviderCredentialErrorV1::Unavailable);
+        }
+        result
+    }
+
     pub async fn try_consume_attachment_anchor_handoff(
         &self,
         consumed_at_unix_seconds: i64,
@@ -1494,7 +1527,14 @@ impl MailAdmittedRuntime {
     }
 }
 
-struct MailBusyControlDispatcher;
+fn restore_nonblocking_control_stream(stream: &mut UnixStream) -> bool {
+    let read_timeout_cleared = stream.set_read_timeout(None).is_ok();
+    let write_timeout_cleared = stream.set_write_timeout(None).is_ok();
+    let nonblocking_restored = stream.set_nonblocking(true).is_ok();
+    read_timeout_cleared && write_timeout_cleared && nonblocking_restored
+}
+
+pub(crate) struct MailBusyControlDispatcher;
 
 impl ManagedControlRequestDispatcherV2<UnixStream> for MailBusyControlDispatcher {
     fn dispatch_request(

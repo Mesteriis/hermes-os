@@ -135,17 +135,20 @@ fn valid_oauth_endpoint(
     {
         return false;
     }
+    let production = endpoint.host == production_host
+        && endpoint.port == GMAIL_OAUTH_HTTPS_PORT
+        && endpoint.path == production_path
+        && endpoint.ca_certificate_pem.is_none();
+    if production {
+        return true;
+    }
     #[cfg(feature = "conformance-test-support")]
     {
         matches!(endpoint.host.as_str(), "127.0.0.1" | "localhost")
+            && endpoint.ca_certificate_pem.is_some()
     }
     #[cfg(not(feature = "conformance-test-support"))]
-    {
-        endpoint.host == production_host
-            && endpoint.port == GMAIL_OAUTH_HTTPS_PORT
-            && endpoint.path == production_path
-            && endpoint.ca_certificate_pem.is_none()
-    }
+    false
 }
 
 fn valid_oauth_client_id(value: &str) -> bool {

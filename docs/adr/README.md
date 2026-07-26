@@ -261,4 +261,6 @@ capabilities или Communications facade.
 ADR-0278 задаёт Mail-owned Gmail OAuth setup/refresh gate: Core/Kernel
 переносит только opaque owner routes и action-specific Vault ciphertext,
 Mail владеет PKCE/operation/binding state, а access и refresh credentials
-остаются разными secret classes и capability responsibilities.
+остаются разными secret classes и capability responsibilities. Gate открыт
+после live exact-form/CAS/revoke/negative-output conformance; Communications в
+credential lifecycle не участвует.

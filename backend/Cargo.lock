@@ -2027,6 +2027,7 @@ dependencies = [
  "hermes-kernel-control-store-sqlite",
  "hermes-mail-api",
  "hermes-mail-core",
+ "hermes-mail-gmail",
  "hermes-mail-persistence",
  "hermes-mail-runtime",
  "hermes-runtime-protocol",

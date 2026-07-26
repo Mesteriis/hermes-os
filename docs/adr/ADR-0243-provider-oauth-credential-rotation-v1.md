@@ -35,8 +35,8 @@ implements typed HTTPS authorization-code exchange and refresh requests.
 
 ADR-0278 now implements the generated Mail OAuth routes, signed descriptor and
 settings/storage revisions, Mail-owned one-use PKCE/operation persistence,
-action-specific Vault admission and runtime orchestration. The production gate
-remains closed until live provider/Vault conformance proves exact exchange,
-rotation, revoke/fence and negative-output behavior. No setting,
-provider-local secret store, or fallback access-token path is accepted as a
-substitute.
+action-specific Vault admission and runtime orchestration. Live managed
+provider/Vault conformance proves exact exchange, CAS rotation, ambiguous
+outcome without hidden retry, stale/revoke fences and sanitized outputs, so
+ADR-0278 opens `mail_gmail_oauth_v1`. No setting, provider-local secret store,
+or fallback access-token path is accepted as a substitute.
