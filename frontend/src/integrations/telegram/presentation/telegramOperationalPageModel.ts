@@ -14,10 +14,12 @@ export type TelegramOperationalChatRow = {
 
 export type TelegramOperationalMessageRow = {
 	id: string
+	providerMessageId: string
 	sender: string
 	body: string
 	meta: string
 	outgoing: boolean
+	selected: boolean
 }
 
 export type TelegramOperationalPageModel = {
@@ -28,6 +30,7 @@ export type TelegramOperationalPageModel = {
 	messages: readonly TelegramOperationalMessageRow[]
 	selectedChatId: string
 	selectedChatTitle: string
+	selectedProviderMessageId: string
 	draft: string
 	sendPending: boolean
 	sendMessage: string
@@ -48,13 +51,16 @@ export function buildTelegramChatRows(
 
 export function buildTelegramMessageRows(
 	messages: readonly TelegramMessageProjection[],
+	selectedProviderMessageId = '',
 ): readonly TelegramOperationalMessageRow[] {
 	return messages.map((message) => ({
 		id: message.messageId,
+		providerMessageId: message.providerMessageId || message.messageId,
 		sender: message.senderDisplayName || message.senderId || 'Unknown sender',
 		body: message.text || message.media?.caption || `[${message.media?.kind || 'message'}]`,
 		meta: `${formatObservedAt(message.observedAtUnixSeconds)} · ${message.deliveryState || 'observed'}`,
 		outgoing: message.deliveryState !== '' && message.deliveryState !== 'received',
+		selected: (message.providerMessageId || message.messageId) === selectedProviderMessageId,
 	}))
 }
 

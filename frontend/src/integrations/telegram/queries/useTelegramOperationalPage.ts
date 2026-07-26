@@ -22,6 +22,7 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 	const chats = ref<readonly TelegramChatProjection[]>([])
 	const messages = ref<readonly TelegramMessageProjection[]>([])
 	const selectedChatId = ref('')
+	const selectedProviderMessageId = ref('')
 	const draft = ref('')
 	const sendPending = ref(false)
 	const sendMessage = ref('')
@@ -31,9 +32,10 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 		status: status.value,
 		statusMessage: statusMessage.value,
 		chats: buildTelegramChatRows(chats.value, selectedChatId.value),
-		messages: buildTelegramMessageRows(messages.value),
+		messages: buildTelegramMessageRows(messages.value, selectedProviderMessageId.value),
 		selectedChatId: selectedChatId.value,
 		selectedChatTitle: chats.value.find((chat) => chat.providerChatId === selectedChatId.value)?.title || '',
+		selectedProviderMessageId: selectedProviderMessageId.value,
 		draft: draft.value,
 		sendPending: sendPending.value,
 		sendMessage: sendMessage.value,
@@ -54,6 +56,7 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 				await selectChat(chats.value[0].providerChatId)
 			} else {
 				selectedChatId.value = ''
+				selectedProviderMessageId.value = ''
 				messages.value = []
 			}
 		} catch (error) {
@@ -63,6 +66,7 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 
 	async function selectChat(providerChatId: string): Promise<void> {
 		selectedChatId.value = providerChatId
+		selectedProviderMessageId.value = ''
 		status.value = 'loading'
 		statusMessage.value = 'Loading Telegram messages…'
 		try {
@@ -72,6 +76,10 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 		} catch (error) {
 			fail(error, 'Telegram messages are unavailable.')
 		}
+	}
+
+	function selectMessage(providerMessageId: string): void {
+		selectedProviderMessageId.value = providerMessageId
 	}
 
 	async function send(): Promise<void> {
@@ -115,6 +123,7 @@ export function useTelegramOperationalPage(canSend: () => boolean) {
 		model,
 		loadChats,
 		selectChat,
+		selectMessage,
 		send,
 		updateAccountId,
 		updateDraft,

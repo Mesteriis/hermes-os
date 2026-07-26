@@ -1,0 +1,96 @@
+.telegram-command-workbench {
+	display: grid;
+	gap: var(--h-space-3);
+	padding: 0 var(--h-space-5) var(--h-space-5);
+	background: var(--h-color-bg);
+}
+
+.telegram-command-workbench > header span {
+	color: #229ed9;
+	font-size: var(--h-font-size-xs);
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.telegram-command-workbench h2,
+.telegram-command-workbench h3,
+.telegram-command-workbench p {
+	margin: 0;
+}
+
+.telegram-command-workbench > header p,
+.telegram-command-panel small {
+	color: var(--h-color-text-muted);
+}
+
+.telegram-command-workbench__grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--h-space-3);
+}
+
+.telegram-command-panel {
+	display: grid;
+	align-content: start;
+	gap: var(--h-space-2);
+	padding: var(--h-space-4);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+}
+
+.telegram-command-panel > header,
+.telegram-command-panel > div,
+.telegram-command-panel__actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--h-space-2);
+}
+
+.telegram-command-panel > header {
+	justify-content: space-between;
+}
+
+.telegram-command-panel label {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	font-weight: 650;
+}
+
+.telegram-command-panel input,
+.telegram-command-panel textarea,
+.telegram-command-panel button {
+	min-width: 0;
+	padding: var(--h-space-2) var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-surface-muted);
+}
+
+.telegram-command-panel input,
+.telegram-command-panel textarea {
+	flex: 1;
+}
+
+.telegram-command-panel button:disabled {
+	opacity: 0.5;
+}
+
+.telegram-command-panel button.danger {
+	color: var(--h-color-danger);
+}
+
+@media (max-width: 980px) {
+	.telegram-command-workbench__grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 760px) {
+	.telegram-command-workbench {
+		padding: 0 var(--h-space-3) var(--h-space-3);
+	}
+}

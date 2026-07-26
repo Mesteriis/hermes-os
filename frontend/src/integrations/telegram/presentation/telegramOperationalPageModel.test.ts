@@ -27,9 +27,11 @@ describe('Telegram operational presentation model', () => {
 			deliveryState: 'received',
 		} as never])[0]).toMatchObject({
 			id: 'message-1',
+			providerMessageId: 'message-1',
 			sender: 'Alex',
 			body: 'Boundary approved',
 			outgoing: false,
+			selected: false,
 		})
 	})
 })

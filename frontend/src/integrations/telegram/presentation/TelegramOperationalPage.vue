@@ -22,6 +22,7 @@ const emit = defineEmits<{
 	search: []
 	selectAccount: [accountId: string]
 	selectChat: [providerChatId: string]
+	selectMessage: [providerMessageId: string]
 	send: []
 	startAccount: []
 	stopAccount: []
@@ -103,15 +104,18 @@ const emit = defineEmits<{
 					<div><h2>{{ model.selectedChatTitle || 'Messages' }}</h2><small>{{ model.selectedChatId }}</small></div>
 					<span>{{ model.messages.length }}</span>
 				</header>
-				<article
+				<button
 					v-for="message in model.messages"
 					:key="message.id"
+					type="button"
 					class="telegram-message-row"
-					:class="{ outgoing: message.outgoing }"
+					:class="{ outgoing: message.outgoing, selected: message.selected }"
+					:aria-pressed="message.selected"
+					@click="emit('selectMessage', message.providerMessageId)"
 				>
 					<div><strong>{{ message.sender }}</strong><small>{{ message.meta }}</small></div>
 					<p>{{ message.body }}</p>
-				</article>
+				</button>
 			</main>
 		</div>
 

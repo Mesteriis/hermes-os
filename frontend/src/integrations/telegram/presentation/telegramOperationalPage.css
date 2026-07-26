@@ -173,12 +173,19 @@
 	padding: var(--h-space-3);
 	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-md);
+	color: inherit;
+	text-align: left;
 	background: var(--h-color-surface);
 }
 
 .telegram-message-row.outgoing {
 	margin-left: auto;
 	background: color-mix(in srgb, #229ed9 10%, var(--h-color-surface));
+}
+
+.telegram-message-row.selected {
+	border-color: #229ed9;
+	box-shadow: 0 0 0 1px color-mix(in srgb, #229ed9 35%, transparent);
 }
 
 .telegram-message-row > div {
