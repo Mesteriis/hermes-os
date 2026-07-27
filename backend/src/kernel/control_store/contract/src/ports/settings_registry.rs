@@ -10,6 +10,13 @@ pub trait SettingsRegistryStore {
         binding: &SettingsSchemaBinding,
         schema_bytes: &[u8],
     ) -> Result<(), Self::Error>;
+    fn upgrade_settings_schema_with_successor(
+        &self,
+        expected: &SettingsSchemaBinding,
+        successor: &SettingsSchemaBinding,
+        schema_bytes: &[u8],
+        successor_snapshot_bytes: &[u8],
+    ) -> Result<(), Self::Error>;
     fn settings_schema_artifact(
         &self,
         registration_id: &str,

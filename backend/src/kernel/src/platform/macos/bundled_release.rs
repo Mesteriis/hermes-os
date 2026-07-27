@@ -9,7 +9,9 @@ use sha2::{Digest, Sha256};
 
 use crate::distribution::bundle_verifier::VerifiedDistributionBundle;
 use crate::distribution::bundled_launch;
-use crate::modules::registration::registry::{self, BundledArtifactProposal};
+use crate::modules::registration::registry::{
+    self, BundledArtifactProposal, BundledArtifactUpgrade,
+};
 use crate::platform::macos::native_launch;
 
 const MACOS_AARCH64_TARGET: &str = "aarch64-apple-darwin";
@@ -31,6 +33,36 @@ pub fn propose_current_installed_artifact(
         operation_id,
         &kernel_executable,
     )
+}
+
+pub fn upgrade_current_installed_artifact(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    artifact_id: &str,
+    expected_distribution_id: &str,
+    expected_distribution_generation: u64,
+) -> Result<BundledArtifactUpgrade, String> {
+    let kernel_executable =
+        std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
+    let bundle = native_launch::verify_selected_installed_bundle_artifact_ids(
+        &kernel_executable,
+        MACOS_AARCH64_TARGET,
+        &[artifact_id],
+    )?;
+    if bundle.manifest().distribution_id != expected_distribution_id
+        || bundle.manifest().generation != expected_distribution_generation
+    {
+        return Err("installed distribution does not match the expected release".to_owned());
+    }
+    let artifact = bundle
+        .artifacts()
+        .iter()
+        .find(|artifact| artifact.artifact_id() == artifact_id)
+        .ok_or_else(|| "managed launch artifact is absent from distribution manifest".to_owned())?;
+    let descriptor_bytes = artifact
+        .module_descriptor_bytes()
+        .ok_or_else(|| "managed launch artifact is not a module runtime".to_owned())?;
+    registry::upgrade_bundled_artifact(store, registration_id, descriptor_bytes)
 }
 
 pub fn read_current_installed_storage_artifact(

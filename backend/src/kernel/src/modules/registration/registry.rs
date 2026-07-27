@@ -26,6 +26,11 @@ pub struct BundledArtifactProposal {
     requested_capability_ids: Vec<String>,
 }
 
+pub struct BundledArtifactUpgrade {
+    registration: ModuleRegistration,
+    requested_capability_ids: Vec<String>,
+}
+
 impl BundledArtifactProposal {
     #[must_use]
     pub const fn receipt(&self) -> &BundledManagedArtifactProposalReceiptV1 {
@@ -33,6 +38,16 @@ impl BundledArtifactProposal {
     }
 
     #[must_use]
+    pub fn requested_capability_ids(&self) -> &[String] {
+        &self.requested_capability_ids
+    }
+}
+
+impl BundledArtifactUpgrade {
+    pub const fn registration(&self) -> &ModuleRegistration {
+        &self.registration
+    }
+
     pub fn requested_capability_ids(&self) -> &[String] {
         &self.requested_capability_ids
     }
@@ -129,6 +144,63 @@ where
         }
     }
     Err("unable to allocate a unique module registration ID".to_owned())
+}
+
+pub fn upgrade_bundled_artifact<S>(
+    store: &S,
+    registration_id: &str,
+    descriptor_bytes: &[u8],
+) -> Result<BundledArtifactUpgrade, String>
+where
+    S: ModuleRegistryStore<Error = StoreError>,
+{
+    let current = store
+        .module_registration(registration_id)
+        .map_err(|error| format!("{error:?}"))?
+        .ok_or_else(|| "managed registration does not exist".to_owned())?;
+    if current.state() != ModuleRegistrationState::Approved {
+        return Err("managed registration is not approved".to_owned());
+    }
+    let requests = DescriptorRegistrationRequests::decode(descriptor_bytes)?;
+    if current.module_id() != requests.module_id() || current.owner_id() != requests.owner_id() {
+        return Err("managed registration identity cannot change during upgrade".to_owned());
+    }
+    if *current.descriptor_sha256() == requests.descriptor_sha256() {
+        return Ok(BundledArtifactUpgrade {
+            registration: current,
+            requested_capability_ids: requests.capability_ids().to_vec(),
+        });
+    }
+    let replacement = ModuleRegistration::new(
+        registration_id,
+        current.module_id(),
+        current.owner_id(),
+        requests.descriptor_sha256(),
+        ModuleRegistrationState::Approved,
+        current
+            .grant_epoch()
+            .checked_add(1)
+            .ok_or_else(|| "managed registration grant epoch overflowed".to_owned())?,
+    );
+    let bound = requests.bind(&replacement);
+    store
+        .upgrade_approved_registration_with_all_descriptor_requests(
+            &replacement,
+            requests.capability_ids(),
+            hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1 {
+                storage: &bound.storage,
+                events: &bound.events,
+                blobs: &bound.blobs,
+                scheduler: &bound.scheduler,
+                vault_purposes: &bound.vault_purposes,
+                client_rpc_routes: &bound.client_rpc_routes,
+            },
+        )
+        .map_err(|error| format!("{error:?}"))?;
+    Ok(BundledArtifactUpgrade {
+        registration: replacement,
+        requested_capability_ids: requests.capability_ids().to_vec(),
+    })
 }
 
 fn persist_registration<S>(

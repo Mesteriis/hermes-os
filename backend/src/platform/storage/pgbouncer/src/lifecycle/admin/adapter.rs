@@ -18,11 +18,22 @@ pub trait PgBouncerAdminPortV1 {
 
 pub struct PgBouncerPoolFenceAdapterV1<T> {
     admin: T,
+    pool_is_configured: bool,
 }
 
 impl<T> PgBouncerPoolFenceAdapterV1<T> {
     pub const fn new(admin: T) -> Self {
-        Self { admin }
+        Self {
+            admin,
+            pool_is_configured: true,
+        }
+    }
+
+    pub const fn for_configuration_state(admin: T, pool_is_configured: bool) -> Self {
+        Self {
+            admin,
+            pool_is_configured,
+        }
     }
 
     pub fn into_inner(self) -> T {
@@ -38,6 +49,9 @@ impl<T: PgBouncerAdminPortV1 + Send> StoragePoolFencePortV1 for PgBouncerPoolFen
     ) -> impl Future<Output = StorageFenceOutcomeV1> + Send {
         let command = render_command(binding, command);
         async move {
+            if !self.pool_is_configured {
+                return StorageFenceOutcomeV1::Applied;
+            }
             match command {
                 Some(command) => map_outcome(self.admin.execute_pool_command(&command).await),
                 None => StorageFenceOutcomeV1::Rejected,

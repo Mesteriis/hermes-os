@@ -41,6 +41,12 @@ pub trait ModuleRegistryStore {
         requested_capability_ids: &[String],
         requests: ModuleDescriptorRegistrationRequestsV1<'_>,
     ) -> Result<(), Self::Error>;
+    fn upgrade_approved_registration_with_all_descriptor_requests(
+        &self,
+        registration: &ModuleRegistration,
+        requested_capability_ids: &[String],
+        requests: ModuleDescriptorRegistrationRequestsV1<'_>,
+    ) -> Result<(), Self::Error>;
     fn module_registration(
         &self,
         registration_id: &str,

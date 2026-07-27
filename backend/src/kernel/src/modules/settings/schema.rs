@@ -5,9 +5,10 @@ use hermes_kernel_control_store::{
     SettingsRegistryStore, SettingsSchemaBinding, SettingsSchemaBindingInputV1,
 };
 use hermes_kernel_control_store_sqlite::StoreError;
-use hermes_runtime_protocol::v1::{SettingsSnapshotV1, SettingsValueEntryV1};
+use hermes_runtime_protocol::v1::{SettingsSchemaV1, SettingsSnapshotV1, SettingsValueEntryV1};
 use hermes_runtime_protocol::validation::descriptor::{
-    decode_descriptor_v1, decode_settings_schema_v1, validate_settings_snapshot_against_schema_v1,
+    decode_descriptor_v1, decode_settings_schema_v1, decode_settings_snapshot_v1,
+    validate_settings_snapshot_against_schema_v1,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -38,23 +39,33 @@ where
     S: ModuleRegistryStore<Error = StoreError> + SettingsRegistryStore<Error = StoreError>,
 {
     let binding = validated_binding(store, registration_id, descriptor_bytes, schema_bytes)?;
-    match store
+    let existing = store
         .settings_schema_binding(registration_id)
-        .map_err(|error| format!("{error:?}"))?
-    {
+        .map_err(|error| format!("{error:?}"))?;
+    match existing {
         None => store
             .admit_settings_schema(&binding, schema_bytes)
             .map_err(|error| format!("{error:?}"))?,
-        Some(existing)
-            if existing.schema_major() == binding.schema_major()
-                && existing.schema_revision() == binding.schema_revision()
-                && existing.schema_sha256() == binding.schema_sha256()
-                && store
-                    .settings_schema_artifact(registration_id)
-                    .map_err(|error| format!("{error:?}"))?
-                    .as_deref()
-                    == Some(schema_bytes) => {}
-        Some(_) => return Err("bundled settings schema conflicts with the registration".to_owned()),
+        Some(existing) if same_schema(&existing, &binding) => {
+            let existing_bytes = store
+                .settings_schema_artifact(registration_id)
+                .map_err(|error| format!("{error:?}"))?;
+            if existing_bytes.as_deref() != Some(schema_bytes) {
+                return Err("bundled settings schema conflicts with the registration".to_owned());
+            }
+        }
+        Some(existing) if schema_version_advances(&existing, &binding) => {
+            return upgrade_bundled_schema(
+                store,
+                registration_id,
+                &existing,
+                &binding,
+                schema_bytes,
+            );
+        }
+        Some(_) => {
+            return Err("bundled settings schema conflicts with the registration".to_owned());
+        }
     }
 
     let current = store
@@ -98,6 +109,159 @@ where
             .map_err(|error| format!("{error:?}"))?;
     }
     Ok(binding)
+}
+
+fn upgrade_bundled_schema<S>(
+    store: &S,
+    registration_id: &str,
+    existing: &SettingsSchemaBinding,
+    candidate: &SettingsSchemaBinding,
+    schema_bytes: &[u8],
+) -> Result<SettingsSchemaBinding, String>
+where
+    S: SettingsRegistryStore<Error = StoreError>,
+{
+    let existing_schema_bytes = store
+        .settings_schema_artifact(registration_id)
+        .map_err(|error| format!("{error:?}"))?
+        .ok_or_else(|| "existing settings schema artifact is unavailable".to_owned())?;
+    let existing_sha256: [u8; 32] = Sha256::digest(&existing_schema_bytes).into();
+    if existing_sha256 != *existing.schema_sha256() {
+        return Err("existing settings schema artifact does not match its binding".to_owned());
+    }
+    let existing_schema = decode_settings_schema_v1(&existing_schema_bytes)
+        .map_err(|_| "existing settings schema artifact is invalid".to_owned())?;
+    let candidate_schema = decode_settings_schema_v1(schema_bytes)
+        .map_err(|_| "settings schema is invalid or exceeds protocol limits".to_owned())?;
+    let desired = existing_desired_snapshot(store, registration_id, existing)?;
+    validate_settings_snapshot_against_schema_v1(&existing_schema, &desired)
+        .map_err(|_| "existing settings snapshot does not match its schema".to_owned())?;
+    let next_revision = existing
+        .desired_revision()
+        .checked_add(1)
+        .ok_or_else(|| "settings desired revision overflowed".to_owned())?;
+    let (successor_snapshot, complete) = project_successor_snapshot(
+        registration_id,
+        next_revision,
+        &existing_schema,
+        &desired,
+        &candidate_schema,
+    )?;
+    let successor = SettingsSchemaBinding::new(SettingsSchemaBindingInputV1 {
+        registration_id: registration_id.to_owned(),
+        schema_major: candidate.schema_major(),
+        schema_revision: candidate.schema_revision(),
+        schema_sha256: *candidate.schema_sha256(),
+        desired_revision: next_revision,
+        effective_revision: existing.effective_revision(),
+        apply_state: if complete {
+            SettingsApplyState::PendingValidation
+        } else {
+            SettingsApplyState::BlockedConfig
+        },
+        sanitized_reason_code: (!complete).then(|| "required_settings_missing".to_owned()),
+    });
+    store
+        .upgrade_settings_schema_with_successor(
+            existing,
+            &successor,
+            schema_bytes,
+            &successor_snapshot.encode_to_vec(),
+        )
+        .map_err(|error| format!("{error:?}"))?;
+    Ok(successor)
+}
+
+fn existing_desired_snapshot<S>(
+    store: &S,
+    registration_id: &str,
+    binding: &SettingsSchemaBinding,
+) -> Result<SettingsSnapshotV1, String>
+where
+    S: SettingsRegistryStore<Error = StoreError>,
+{
+    match store
+        .desired_settings_snapshot(registration_id)
+        .map_err(|error| format!("{error:?}"))?
+    {
+        Some((revision, bytes)) if revision == binding.desired_revision() => {
+            let snapshot = decode_settings_snapshot_v1(&bytes)
+                .map_err(|_| "existing settings snapshot is invalid".to_owned())?;
+            if snapshot.target_id != registration_id || snapshot.revision != revision {
+                return Err("existing settings snapshot target or revision is invalid".to_owned());
+            }
+            Ok(snapshot)
+        }
+        None if binding.desired_revision() == 0 => Ok(SettingsSnapshotV1 {
+            target_id: registration_id.to_owned(),
+            revision: 0,
+            values: Vec::new(),
+        }),
+        _ => Err("existing settings snapshot revision conflicts with its binding".to_owned()),
+    }
+}
+
+fn project_successor_snapshot(
+    registration_id: &str,
+    revision: u64,
+    existing_schema: &SettingsSchemaV1,
+    existing_snapshot: &SettingsSnapshotV1,
+    successor_schema: &SettingsSchemaV1,
+) -> Result<(SettingsSnapshotV1, bool), String> {
+    let existing_values = existing_snapshot
+        .values
+        .iter()
+        .map(|entry| (entry.setting_id.as_str(), entry))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let existing_definitions = existing_schema
+        .definitions
+        .iter()
+        .map(|definition| (definition.setting_id.as_str(), definition))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let values = successor_schema
+        .definitions
+        .iter()
+        .filter_map(|definition| {
+            let preserved = existing_definitions
+                .get(definition.setting_id.as_str())
+                .filter(|existing| existing.value_type == definition.value_type)
+                .and_then(|_| existing_values.get(definition.setting_id.as_str()))
+                .map(|entry| (*entry).clone());
+            preserved.or_else(|| {
+                definition
+                    .default_value
+                    .clone()
+                    .map(|value| SettingsValueEntryV1 {
+                        setting_id: definition.setting_id.clone(),
+                        value: Some(value),
+                    })
+            })
+        })
+        .collect::<Vec<_>>();
+    let complete = values.len() == successor_schema.definitions.len();
+    let snapshot = SettingsSnapshotV1 {
+        target_id: registration_id.to_owned(),
+        revision,
+        values,
+    };
+    validate_settings_snapshot_against_schema_v1(successor_schema, &snapshot)
+        .map_err(|_| "settings schema successor snapshot is invalid".to_owned())?;
+    Ok((snapshot, complete))
+}
+
+fn same_schema(existing: &SettingsSchemaBinding, candidate: &SettingsSchemaBinding) -> bool {
+    existing.schema_major() == candidate.schema_major()
+        && existing.schema_revision() == candidate.schema_revision()
+        && existing.schema_sha256() == candidate.schema_sha256()
+}
+
+fn schema_version_advances(
+    existing: &SettingsSchemaBinding,
+    candidate: &SettingsSchemaBinding,
+) -> bool {
+    candidate.schema_major() > existing.schema_major()
+        || (candidate.schema_major() == existing.schema_major()
+            && candidate.schema_revision() > existing.schema_revision())
 }
 
 fn validated_binding<S>(
@@ -188,4 +352,83 @@ fn validate_capability_bindings(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_runtime_protocol::v1::{
+        SettingApplyModeV1, SettingClientVisibilityV1, SettingDefinitionV1,
+        SettingMutationAuthorityV1, SettingTargetScopeV1, SettingValueTypeV1, SettingValueV1,
+        setting_value_v1::Value,
+    };
+
+    use super::*;
+
+    #[test]
+    fn schema_successor_preserves_only_same_id_and_type_values() {
+        let existing_schema = schema(2, &["account_id", "bot_email", "realm_url"]);
+        let existing_snapshot = SettingsSnapshotV1 {
+            target_id: "registration-zulip".to_owned(),
+            revision: 1,
+            values: vec![
+                value("account_id", "account-1"),
+                value("bot_email", "bot@example.test"),
+                value("realm_url", "https://zulip.example.test"),
+            ],
+        };
+        let successor_schema = schema(3, &["account_email", "account_id", "realm_url"]);
+
+        let (successor, complete) = project_successor_snapshot(
+            "registration-zulip",
+            2,
+            &existing_schema,
+            &existing_snapshot,
+            &successor_schema,
+        )
+        .expect("project successor");
+
+        assert!(!complete);
+        assert_eq!(successor.revision, 2);
+        assert_eq!(
+            successor
+                .values
+                .iter()
+                .map(|entry| entry.setting_id.as_str())
+                .collect::<Vec<_>>(),
+            ["account_id", "realm_url"],
+        );
+    }
+
+    fn schema(major: u32, setting_ids: &[&str]) -> SettingsSchemaV1 {
+        SettingsSchemaV1 {
+            major,
+            revision: 1,
+            definitions: setting_ids.iter().map(|id| definition(id)).collect(),
+        }
+    }
+
+    fn definition(setting_id: &str) -> SettingDefinitionV1 {
+        SettingDefinitionV1 {
+            setting_id: setting_id.to_owned(),
+            capability_id: String::new(),
+            value_type: SettingValueTypeV1::String as i32,
+            mutation_authority: SettingMutationAuthorityV1::OperatorManaged as i32,
+            target_scope: SettingTargetScopeV1::ConfigurationInstance as i32,
+            apply_mode: SettingApplyModeV1::RestartModule as i32,
+            client_visibility: SettingClientVisibilityV1::Editable as i32,
+            fresh_owner_proof_required: true,
+            kernel_controller_id: String::new(),
+            display_name: setting_id.to_owned(),
+            default_value: None,
+        }
+    }
+
+    fn value(setting_id: &str, value: &str) -> SettingsValueEntryV1 {
+        SettingsValueEntryV1 {
+            setting_id: setting_id.to_owned(),
+            value: Some(SettingValueV1 {
+                value: Some(Value::StringValue(value.to_owned())),
+            }),
+        }
+    }
 }

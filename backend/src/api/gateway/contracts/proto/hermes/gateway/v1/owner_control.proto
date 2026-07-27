@@ -141,6 +141,24 @@ message ProposeBundledManagedArtifactResponseV1 {
   bool replayed = 9;
 }
 
+// Reconciles the exact descriptor and capability requests of an existing
+// approved bundled registration against the selected installed distribution.
+// The registration identity and Settings target remain unchanged.
+message UpgradeBundledManagedRegistrationRequestV1 {
+  string owner_session_id = 1;
+  string registration_id = 2;
+  string artifact_id = 3;
+  string expected_distribution_id = 4;
+  uint64 expected_distribution_generation = 5;
+}
+
+message UpgradeBundledManagedRegistrationResponseV1 {
+  string registration_id = 1;
+  uint64 grant_epoch = 2;
+  bytes descriptor_sha256 = 3;
+  uint32 effective_capability_count = 4;
+}
+
 message AdmitBundledStorageArtifactRequestV1 {
   string owner_session_id = 1;
   string artifact_id = 2;
@@ -481,6 +499,23 @@ message IssueManagedStorageBindingResponseV1 {
   uint64 storage_generation = 5;
 }
 
+// Reads only the current technical fence for one managed registration and
+// Storage capability. It does not expose credentials, endpoints or owner data.
+message GetManagedStorageBindingStatusRequestV1 {
+  string owner_session_id = 1;
+  string registration_id = 2;
+  string capability_id = 3;
+}
+
+message GetManagedStorageBindingStatusResponseV1 {
+  string registration_id = 1;
+  string capability_id = 2;
+  uint64 binding_revision = 3;
+  uint64 role_epoch = 4;
+  uint64 credential_lease_revision = 5;
+  string binding_state = 6;
+}
+
 // An external runtime must have a current owner-bound attestation for the
 // exact runtime ID, generation and grant epoch. Its operating environment is
 // never trusted as a substitute for this durable identity.
@@ -605,6 +640,8 @@ message OwnerControlRequestV1 {
     ApplyManagedIntegrationSettingsRequestV1 apply_managed_integration_settings = 39;
     ProposeBundledManagedArtifactRequestV1 propose_bundled_managed_artifact = 40;
     AdmitBundledStorageArtifactRequestV1 admit_bundled_storage_artifact = 41;
+    GetManagedStorageBindingStatusRequestV1 get_managed_storage_binding_status = 42;
+    UpgradeBundledManagedRegistrationRequestV1 upgrade_bundled_managed_registration = 43;
   }
 }
 
@@ -651,6 +688,8 @@ message OwnerControlResponseV1 {
     ApplyManagedIntegrationSettingsResponseV1 apply_managed_integration_settings = 40;
     ProposeBundledManagedArtifactResponseV1 propose_bundled_managed_artifact = 41;
     AdmitBundledStorageArtifactResponseV1 admit_bundled_storage_artifact = 42;
+    GetManagedStorageBindingStatusResponseV1 get_managed_storage_binding_status = 43;
+    UpgradeBundledManagedRegistrationResponseV1 upgrade_bundled_managed_registration = 44;
   }
 
   // Sanitized stable code; details and private data remain local to Kernel.

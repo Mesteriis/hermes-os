@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+umask 077
 
 backend_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 project_root="$(cd "$backend_root/.." && pwd)"
@@ -11,7 +12,8 @@ release_root="${HERMES_DEV_RELEASE_ROOT:-$local_root/dev-release}"
 signing_key="${HERMES_DEV_RELEASE_SIGNING_KEY:-$local_root/dev-release-signing-key.pem}"
 tgcalls_root="${HERMES_DEV_TGCALLS_ROOT:-$local_root/dev-native/tgcalls}"
 distribution_id="hermes-local-development"
-distribution_generation="1"
+distribution_generation=""
+generation_metadata_name="development-distribution-generation"
 release_version="1"
 build_id="local-development"
 target_triple="aarch64-apple-darwin"
@@ -35,6 +37,34 @@ require_absolute_path() {
 
 require_regular_file() {
 	test -f "$1" && test ! -L "$1" || fail "$2 must be a regular non-symlink file"
+}
+
+next_distribution_generation() {
+	if ! test -e "$release_root"; then
+		printf '%s\n' 1
+		return
+	fi
+	test -d "$release_root" && test ! -L "$release_root" \
+		|| fail "existing development release root is invalid"
+	metadata_path="$release_root/$generation_metadata_name"
+	if ! test -e "$metadata_path"; then
+		printf '%s\n' 2
+		return
+	fi
+	require_regular_file "$metadata_path" "development release generation metadata"
+	test "$(stat -f '%Lp' "$metadata_path")" = "600" \
+		|| fail "development release generation metadata permissions must be 0600"
+	installed_generation="$(sed -n '1p' "$metadata_path")"
+	test "$(wc -l <"$metadata_path" | tr -d ' ')" = "1" \
+		|| fail "development release generation metadata is invalid"
+	case "$installed_generation" in
+		''|*[!0-9]*) fail "development release generation metadata is invalid" ;;
+	esac
+	test "$installed_generation" -gt 0 \
+		|| fail "development release generation metadata is invalid"
+	test "$installed_generation" -lt 9007199254740991 \
+		|| fail "development release generation cannot advance"
+	printf '%s\n' "$((installed_generation + 1))"
 }
 
 remove_staging_root() {
@@ -77,6 +107,7 @@ test "$(uname -m)" = "arm64" || fail "the current development release supports m
 
 mkdir -p "$local_root"
 chmod 700 "$local_root"
+distribution_generation="$(next_distribution_generation)"
 
 tdlib_prefix="$(brew --prefix tdlib 2>/dev/null)" \
 	|| fail "Homebrew TDLib is required for the Telegram runtime"
@@ -196,6 +227,7 @@ node "$backend_root/scripts/build-local-platform-release-input.mjs" \
 	--output "$base_input" \
 	--descriptor-dir "$scratch_root/descriptors" \
 	--distribution-id "$distribution_id" \
+	--generation "$distribution_generation" \
 	--release-version "$release_version" \
 	--build-id "$build_id" \
 	--source-commit "$source_commit" \
@@ -227,6 +259,9 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 
 cp "$cargo_target_dir/debug/hermes-kernel" "$app_root/Contents/MacOS/hermes-kernel"
 chmod 700 "$app_root/Contents/MacOS/hermes-kernel"
+printf '%s\n' "$distribution_generation" \
+	>"$new_release_root/$generation_metadata_name"
+chmod 600 "$new_release_root/$generation_metadata_name"
 
 previous_release_root="$local_root/dev-release-previous.$$"
 case "$release_root" in
@@ -246,6 +281,9 @@ fi
 
 kernel_path="$release_root/HermesDev.app/Contents/MacOS/hermes-kernel"
 require_regular_file "$kernel_path" "materialized development Kernel"
+require_regular_file \
+	"$release_root/$generation_metadata_name" \
+	"materialized development release generation metadata"
 printf 'development-release: ready distribution=%s generation=%s\n' \
 	"$distribution_id" "$distribution_generation" >&2
 printf '%s\n' "$kernel_path"

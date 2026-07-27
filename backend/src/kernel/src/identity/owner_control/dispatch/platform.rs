@@ -8,6 +8,7 @@ use hermes_gateway_protocol::v1::{
     BindPlatformTelemetryReleaseRequestV1, BindPlatformTelemetryReleaseResponseV1,
     BindPlatformVaultReleaseRequestV1, BindPlatformVaultReleaseResponseV1,
     ConfigurePlatformStorageTopologyRequestV1, ConfigurePlatformStorageTopologyResponseV1,
+    GetManagedStorageBindingStatusRequestV1, GetManagedStorageBindingStatusResponseV1,
     GetPlatformTelemetryDiagnosticsRequestV1, GetPlatformTelemetryDiagnosticsResponseV1,
     IssueExternalStorageBindingRequestV1, IssueExternalStorageBindingResponseV1,
     IssueManagedStorageBindingRequestV1, IssueManagedStorageBindingResponseV1,
@@ -17,8 +18,8 @@ use hermes_gateway_protocol::v1::{
     owner_control_request_v1::Operation,
 };
 use hermes_kernel_control_store::{
-    PlatformStorageEndpointV1, PlatformStorageTopology, PlatformStorageTopologyInputV1,
-    StorageDeploymentProfileV1,
+    PlatformStorageBindingStateV1, PlatformStorageEndpointV1, PlatformStorageTopology,
+    PlatformStorageTopologyInputV1, StorageDeploymentProfileV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::DeploymentProfileV1;
@@ -120,6 +121,9 @@ fn route_foundation(
         }
         Operation::IssueManagedStorageBinding(request) => {
             issue_managed_storage_binding(store, supervisor, sessions, request)
+        }
+        Operation::GetManagedStorageBindingStatus(request) => {
+            get_managed_storage_binding_status(store, sessions, request)
         }
         Operation::IssueExternalStorageBinding(request) => {
             issue_external_storage_binding(store, sessions, request)
@@ -360,6 +364,38 @@ fn issue_managed_storage_binding(
             binding_revision: binding.binding_revision(),
             topology_revision: binding.topology_revision(),
             storage_generation: binding.storage_generation(),
+        })
+    })
+}
+
+fn get_managed_storage_binding_status(
+    store: &SqliteControlStore,
+    sessions: &mut OwnerControlSessions,
+    request: GetManagedStorageBindingStatusRequestV1,
+) -> Result<OwnerResult, String> {
+    (|| {
+        sessions.authorize(store, &request.owner_session_id)?;
+        store
+            .effective_bundled_managed_launch_binding(&request.registration_id)
+            .map_err(|_| "Managed launch binding status is unavailable".to_owned())?
+            .ok_or_else(|| "Managed launch binding status is unavailable".to_owned())?;
+        store
+            .platform_storage_binding(&request.registration_id, &request.capability_id)
+            .map_err(|_| "Storage binding status is unavailable".to_owned())?
+            .ok_or_else(|| "Storage binding status is unavailable".to_owned())
+    })()
+    .map(|binding| {
+        OwnerResult::GetManagedStorageBindingStatus(GetManagedStorageBindingStatusResponseV1 {
+            registration_id: binding.registration_id().to_owned(),
+            capability_id: binding.capability_id().to_owned(),
+            binding_revision: binding.binding_revision(),
+            role_epoch: binding.role_epoch(),
+            credential_lease_revision: binding.credential_lease_revision(),
+            binding_state: match binding.state() {
+                PlatformStorageBindingStateV1::Active => "active",
+                PlatformStorageBindingStateV1::Revoking => "revoking",
+            }
+            .to_owned(),
         })
     })
 }

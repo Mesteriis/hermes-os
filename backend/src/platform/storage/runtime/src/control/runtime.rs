@@ -24,7 +24,7 @@ use prost::Message;
 use super::apply::{apply_active_binding, error_code as apply_error_code};
 use super::framing::{read_frame, write_frame};
 use super::handshake::{ManagedStorageRuntimeIdentityV1, authenticate, authenticate_on_channel};
-use super::revocation::revoke_active_binding;
+use super::revocation::revoke_reserved_binding;
 use super::vault_route::InheritedVaultRoutePortV1;
 use crate::admin::{
     RuntimeRoleCredentialV1, apply_authorized_bindings, apply_authorized_migrations,
@@ -297,17 +297,23 @@ fn response_for(
         Some(Operation::RevokeBinding(request)) => request.binding.map_or_else(
             || error_response("operation_not_available"),
             |binding| {
-                revoke_active_binding(channel, identity, &*configuration, active_bindings, binding)
-                    .map(|binding| {
-                        configuration.desired_bindings = active_bindings.clone();
-                        revoked_response(binding)
-                    })
-                    .unwrap_or_else(|error| {
-                        if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
-                            eprintln!("developer_storage_binding_revocation_error={error}");
-                        }
-                        error_response(revocation_error_code(&error))
-                    })
+                revoke_reserved_binding(
+                    channel,
+                    identity,
+                    &*configuration,
+                    active_bindings,
+                    binding,
+                )
+                .map(|binding| {
+                    configuration.desired_bindings = active_bindings.clone();
+                    revoked_response(binding)
+                })
+                .unwrap_or_else(|error| {
+                    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                        eprintln!("developer_storage_binding_revocation_error={error}");
+                    }
+                    error_response(revocation_error_code(&error))
+                })
             },
         ),
         Some(Operation::ApplyBinding(request)) => request.binding.zip(request.bundle).map_or_else(
@@ -361,7 +367,6 @@ fn revocation_error_code(error: &str) -> &'static str {
         "Storage PostgreSQL admin authentication is unavailable" => {
             "revocation_postgres_authentication_unavailable"
         }
-        "Storage binding is not active in this runtime" => "revocation_binding_inactive",
         "Storage binding is invalid" => "revocation_binding_invalid",
         _ => "revocation_incomplete",
     }

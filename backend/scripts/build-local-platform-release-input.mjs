@@ -6,7 +6,7 @@ import { isAbsolute, join } from 'node:path';
 
 const REQUIRED_OPTIONS = [
   '--target', '--artifact-dir', '--browser-bootstrap', '--output', '--descriptor-dir',
-  '--distribution-id', '--release-version', '--build-id',
+  '--distribution-id', '--generation', '--release-version', '--build-id',
   '--source-commit', '--lockfile-sha256', '--sbom-sha256', '--toolchain-sha256',
 ];
 
@@ -206,7 +206,8 @@ function buildInput(options) {
   return {
     verification_key_id: 'local-release-2026', trust_root_revision: 1, revision: 1,
     distribution_id: options.get('--distribution-id'), release_version: options.get('--release-version'),
-    build_id: options.get('--build-id'), target_triple: options.get('--target'), generation: 1,
+    build_id: options.get('--build-id'), target_triple: options.get('--target'),
+    generation: Number(options.get('--generation')),
     source_commit: options.get('--source-commit'),
     lockfile_sha256: options.get('--lockfile-sha256'),
     sbom_sha256: options.get('--sbom-sha256'),
@@ -218,7 +219,7 @@ function buildInput(options) {
 export function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (!options) {
-    fail('usage: build-local-platform-release-input.mjs --target <triple> --artifact-dir <dir> --browser-bootstrap <html> [--browser-assets-dir <dir>] --output <json> --descriptor-dir <dir> --distribution-id <id> --release-version <version> --build-id <id> --source-commit <hex> --lockfile-sha256 <hex> --sbom-sha256 <hex> --toolchain-sha256 <hex>');
+    fail('usage: build-local-platform-release-input.mjs --target <triple> --artifact-dir <dir> --browser-bootstrap <html> [--browser-assets-dir <dir>] --output <json> --descriptor-dir <dir> --distribution-id <id> --generation <positive-safe-integer> --release-version <version> --build-id <id> --source-commit <hex> --lockfile-sha256 <hex> --sbom-sha256 <hex> --toolchain-sha256 <hex>');
     return;
   }
   try {
@@ -232,6 +233,10 @@ export function main(argv = process.argv.slice(2)) {
       if (!/^[a-f0-9]{64}$/.test(options.get(option))) {
         throw new Error(`${option} must be a lowercase SHA-256 digest`);
       }
+    }
+    const generation = Number(options.get('--generation'));
+    if (!Number.isSafeInteger(generation) || generation <= 0) {
+      throw new Error('--generation must be a positive safe integer');
     }
     writeFileSync(options.get('--output'), `${JSON.stringify(buildInput(options), null, 2)}\n`, { mode: 0o600, flag: 'wx' });
   } catch (error) {

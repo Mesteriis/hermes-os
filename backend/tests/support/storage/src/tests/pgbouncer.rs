@@ -106,6 +106,28 @@ fn forwards_only_the_fenced_pool_commands_for_the_bound_runtime() {
     );
 }
 
+#[test]
+fn an_already_absent_pool_is_an_idempotent_fence() {
+    let mut adapter =
+        PgBouncerPoolFenceAdapterV1::for_configuration_state(RecordingAdmin::default(), false);
+    let binding = storage_role_binding("notes", "runtime_notes");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("test runtime");
+
+    for command in [
+        StoragePoolFenceCommandV1::Pause,
+        StoragePoolFenceCommandV1::Disable,
+        StoragePoolFenceCommandV1::Kill,
+    ] {
+        assert_eq!(
+            runtime.block_on(adapter.apply_pool_fence(&binding, command)),
+            StorageFenceOutcomeV1::Applied
+        );
+    }
+    assert!(adapter.into_inner().commands.is_empty());
+}
+
 #[derive(Default)]
 struct RecordingAdmin {
     commands: Vec<String>,

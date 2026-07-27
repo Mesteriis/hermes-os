@@ -54,6 +54,90 @@ impl SqliteControlStore {
         })
     }
 
+    pub fn upgrade_settings_schema_with_successor(
+        &self,
+        expected: &SettingsSchemaBinding,
+        successor: &SettingsSchemaBinding,
+        schema_bytes: &[u8],
+        successor_snapshot_bytes: &[u8],
+    ) -> Result<(), StoreError> {
+        validate_binding(expected)?;
+        validate_binding(successor)?;
+        validate_bounded_bytes(schema_bytes)?;
+        validate_bounded_bytes(successor_snapshot_bytes)?;
+        let successor_revision = expected
+            .desired_revision()
+            .checked_add(1)
+            .ok_or(StoreError::RecoveryFenceOverflow)?;
+        let version_advances = successor.schema_major() > expected.schema_major()
+            || (successor.schema_major() == expected.schema_major()
+                && successor.schema_revision() > expected.schema_revision());
+        let valid_successor_state = matches!(
+            (successor.apply_state(), successor.sanitized_reason_code()),
+            (SettingsApplyState::PendingValidation, None)
+                | (
+                    SettingsApplyState::BlockedConfig,
+                    Some("required_settings_missing")
+                )
+        );
+        if expected.registration_id() != successor.registration_id()
+            || !version_advances
+            || successor.desired_revision() != successor_revision
+            || successor.effective_revision() != expected.effective_revision()
+            || !valid_successor_state
+        {
+            return Err(StoreError::SettingsSchemaRevisionCollision);
+        }
+        let expected = expected.clone();
+        let successor = successor.clone();
+        let schema_bytes = schema_bytes.to_vec();
+        let successor_snapshot_bytes = successor_snapshot_bytes.to_vec();
+        self.with_connection(move |connection| {
+            let transaction = connection.transaction()?;
+            require_approved_registration(&transaction, successor.registration_id())?;
+            let current = read_settings_binding(&transaction, successor.registration_id())?
+                .ok_or(StoreError::SettingsSchemaRevisionCollision)?;
+            if current != expected {
+                return Err(StoreError::SettingsSchemaRevisionCollision);
+            }
+            let current_snapshot_revision = transaction
+                .query_row(
+                    "SELECT revision FROM hermes_kernel_settings_desired_snapshot
+                     WHERE registration_id=?1",
+                    [successor.registration_id()],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()?;
+            match current_snapshot_revision {
+                Some(revision)
+                    if as_u64(revision, 0)? == expected.desired_revision()
+                        && expected.desired_revision() > 0 => {}
+                None if expected.desired_revision() == 0 => {}
+                _ => return Err(StoreError::SettingsRevisionConflict),
+            }
+            write_schema_binding(&transaction, &successor)?;
+            transaction.execute(
+                "INSERT INTO hermes_kernel_settings_schema_artifact
+                 (registration_id, schema_bytes) VALUES (?1, ?2)
+                 ON CONFLICT(registration_id) DO UPDATE SET schema_bytes=excluded.schema_bytes",
+                params![successor.registration_id(), schema_bytes],
+            )?;
+            transaction.execute(
+                "INSERT INTO hermes_kernel_settings_desired_snapshot
+                 (registration_id, revision, snapshot_bytes) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(registration_id) DO UPDATE SET
+                 revision=excluded.revision, snapshot_bytes=excluded.snapshot_bytes",
+                params![
+                    successor.registration_id(),
+                    as_sql(successor.desired_revision())?,
+                    successor_snapshot_bytes
+                ],
+            )?;
+            transaction.commit()?;
+            Ok(())
+        })
+    }
+
     pub fn settings_schema_artifact(
         &self,
         registration_id: &str,

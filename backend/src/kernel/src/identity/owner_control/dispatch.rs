@@ -22,6 +22,7 @@ use hermes_gateway_protocol::v1::{
     StartReservedIntegrationRuntimeRequestV1, StartReservedIntegrationRuntimeResponseV1,
     TransitionModuleRegistrationRequestV1, TransitionModuleRegistrationResponseV1,
     UpdateOperatorSettingsRequestV1, UpdateOperatorSettingsResponseV1,
+    UpgradeBundledManagedRegistrationRequestV1, UpgradeBundledManagedRegistrationResponseV1,
 };
 use hermes_kernel_control_store::{
     ModuleRegistrationState, PlatformStorageBindingStateV1, SettingsApplyState,
@@ -130,6 +131,9 @@ fn route_operation(
         }
         Operation::ProposeBundledManagedArtifact(request) => {
             propose_bundled_artifact(store, sessions, request)
+        }
+        Operation::UpgradeBundledManagedRegistration(request) => {
+            upgrade_bundled_registration(store, supervisor, sessions, request)
         }
         Operation::StartBundledManagedRuntime(request) => {
             start_managed_runtime(store, runtime_dir, supervisor, sessions, request)
@@ -657,6 +661,33 @@ fn propose_bundled_artifact(
             distribution_generation: request.expected_distribution_generation,
             artifact_id: request.artifact_id,
             replayed: receipt.replayed(),
+        },
+    ))
+}
+
+fn upgrade_bundled_registration(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    sessions: &mut OwnerControlSessions,
+    request: UpgradeBundledManagedRegistrationRequestV1,
+) -> Result<OwnerResult, String> {
+    sessions.authorize(store, &request.owner_session_id)?;
+    let upgrade = macos_bundled_release_binding::upgrade_current_installed_artifact(
+        store,
+        &request.registration_id,
+        &request.artifact_id,
+        &request.expected_distribution_id,
+        request.expected_distribution_generation,
+    )?;
+    supervisor.stop_if_active(&request.registration_id)?;
+    let registration = upgrade.registration();
+    Ok(OwnerResult::UpgradeBundledManagedRegistration(
+        UpgradeBundledManagedRegistrationResponseV1 {
+            registration_id: registration.registration_id().to_owned(),
+            grant_epoch: registration.grant_epoch(),
+            descriptor_sha256: registration.descriptor_sha256().to_vec(),
+            effective_capability_count: u32::try_from(upgrade.requested_capability_ids().len())
+                .map_err(|_| "managed registration capability count is invalid".to_owned())?,
         },
     ))
 }

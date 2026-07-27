@@ -3,7 +3,10 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_storage_control::{StorageLifecycleV1, StorageRevocationErrorV1, StorageRevokerV1};
-use hermes_storage_pgbouncer::{PgBouncerPoolFenceAdapterV1, TokioPostgresPgBouncerAdminPortV1};
+use hermes_storage_pgbouncer::{
+    PgBouncerPoolFenceAdapterV1, PoolAliasV1, TokioPostgresPgBouncerAdminPortV1,
+    database_is_configured,
+};
 use hermes_storage_postgres::{PostgresRuntimeFenceAdapterV1, StorageRoleSpecV1};
 use hermes_storage_protocol::{
     v1::{StorageBindingV1, StorageRuntimeConfigurationV1},
@@ -21,21 +24,20 @@ use crate::{
     },
 };
 
-pub(super) fn revoke_active_binding(
+pub(super) fn revoke_reserved_binding(
     channel: &UnixStream,
     identity: &ManagedStorageRuntimeIdentityV1,
     configuration: &StorageRuntimeConfigurationV1,
     active_bindings: &mut Vec<StorageBindingV1>,
     requested: StorageBindingV1,
 ) -> Result<StorageBindingV1, String> {
-    let binding = active_bindings
-        .iter()
-        .find(|binding| **binding == requested)
-        .cloned()
-        .ok_or_else(|| "Storage binding is not active in this runtime".to_owned())?;
-    fence(channel, identity, configuration, &binding)?;
-    active_bindings.retain(|candidate| *candidate != binding);
-    Ok(binding)
+    // The durable Kernel reservation is the revocation authority. A Storage
+    // runtime restarted after that reservation intentionally excludes the
+    // revoking binding from its desired active set, but still has to finish
+    // the physical Vault, PgBouncer and PostgreSQL fences.
+    fence(channel, identity, configuration, &requested)?;
+    active_bindings.retain(|candidate| *candidate != requested);
+    Ok(requested)
 }
 
 fn fence(
@@ -81,12 +83,18 @@ fn fence(
         let admin = TokioPostgresPgBouncerAdminPortV1::connect(&endpoint, &credential)
             .await
             .map_err(|_| "Storage PgBouncer admin authentication is unavailable".to_owned())?;
+        let alias = PoolAliasV1::from_binding(&model_binding)
+            .map_err(|_| "Storage binding is invalid".to_owned())?;
+        let pool_is_configured = database_is_configured(&endpoint, &credential, &alias)
+            .await
+            .map_err(|_| "Storage PgBouncer admin authentication is unavailable".to_owned())?;
         let connector = connect_platform(topology, &postgres_credential).await?;
         let mut lifecycle = StorageLifecycleV1::default();
         lifecycle
             .activate(model_binding)
             .map_err(|_| "Storage binding is not revocable".to_owned())?;
-        let mut pool = PgBouncerPoolFenceAdapterV1::new(admin);
+        let mut pool =
+            PgBouncerPoolFenceAdapterV1::for_configuration_state(admin, pool_is_configured);
         let mut postgres = PostgresRuntimeFenceAdapterV1::new(&connector, &role);
         StorageRevokerV1
             .revoke(&mut lifecycle, &mut vault, &mut pool, &mut postgres)

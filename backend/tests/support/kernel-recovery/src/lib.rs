@@ -184,6 +184,7 @@ mod tests {
     mod managed_vault_binary;
     mod managed_vault_route;
     mod module_grant_snapshot;
+    mod module_registration_upgrade;
     mod operation_journal;
     mod owner_module_settings;
     mod owner_vault_provisioning;
@@ -203,6 +204,7 @@ mod tests {
     mod scheduler_requests;
     mod secure_file;
     mod settings_contract;
+    mod settings_schema_upgrade;
     mod storage_authorization;
     mod storage_launch;
     mod storage_requests;

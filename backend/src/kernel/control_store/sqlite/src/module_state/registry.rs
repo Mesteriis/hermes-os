@@ -117,6 +117,120 @@ impl SqliteControlStore {
         })
     }
 
+    pub fn upgrade_approved_registration_with_all_descriptor_requests(
+        &self,
+        registration: &ModuleRegistration,
+        requested_capability_ids: &[String],
+        requests: hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1<'_>,
+    ) -> Result<(), StoreError> {
+        if registration.state() != ModuleRegistrationState::Approved
+            || !valid_identity_token(registration.registration_id())
+            || !valid_identity_token(registration.module_id())
+            || !valid_identity_token(registration.owner_id())
+            || !valid_capability_ids(requested_capability_ids)
+        {
+            return Err(StoreError::InvalidModuleRegistration);
+        }
+        validate_storage_requests(registration, requested_capability_ids, requests.storage)?;
+        validate_event_route_requests(registration, requested_capability_ids, requests.events)?;
+        validate_blob_quota_requests(registration, requested_capability_ids, requests.blobs)?;
+        validate_scheduler_job_requests(
+            registration,
+            requested_capability_ids,
+            requests.scheduler,
+        )?;
+        validate_vault_purpose_requests(
+            registration,
+            requested_capability_ids,
+            requests.vault_purposes,
+        )?;
+        validate_client_rpc_routes(
+            registration,
+            requested_capability_ids,
+            requests.client_rpc_routes,
+        )?;
+        let registration = registration.clone();
+        let capabilities = requested_capability_ids.to_vec();
+        let storage_requests = requests.storage.to_vec();
+        let event_requests = requests.events.to_vec();
+        let blob_requests = requests.blobs.to_vec();
+        let scheduler_requests = requests.scheduler.to_vec();
+        let vault_purpose_requests = requests.vault_purposes.to_vec();
+        let client_rpc_routes = requests.client_rpc_routes.to_vec();
+        self.with_connection(move |connection| {
+            let transaction = connection.transaction()?;
+            let current =
+                read_required_registration(&transaction, registration.registration_id())?;
+            if current.state() != ModuleRegistrationState::Approved
+                || current.module_id() != registration.module_id()
+                || current.owner_id() != registration.owner_id()
+                || current.descriptor_sha256() == registration.descriptor_sha256()
+                || current.grant_epoch().checked_add(1) != Some(registration.grant_epoch())
+            {
+                return Err(StoreError::InvalidModuleRegistrationTransition);
+            }
+            transaction.execute(
+                "DELETE FROM hermes_kernel_module_storage_request WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            transaction.execute(
+                "DELETE FROM hermes_kernel_module_event_route_request WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            transaction.execute(
+                "DELETE FROM hermes_kernel_module_blob_quota_request WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            transaction.execute(
+                "DELETE FROM hermes_kernel_module_scheduler_job_request WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            transaction.execute(
+                "DELETE FROM hermes_kernel_module_vault_purpose_request WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            transaction.execute(
+                "DELETE FROM hermes_kernel_module_client_rpc_route_request WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            transaction.execute(
+                "DELETE FROM hermes_kernel_module_registration_capability WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            let changed = transaction.execute(
+                "UPDATE hermes_kernel_module_registration
+                 SET descriptor_sha256 = ?2, grant_epoch = ?3
+                 WHERE registration_id = ?1 AND descriptor_sha256 = ?4
+                   AND grant_epoch = ?5 AND state = 'approved'",
+                params![
+                    registration.registration_id(),
+                    registration.descriptor_sha256().as_slice(),
+                    as_sql(registration.grant_epoch())?,
+                    current.descriptor_sha256().as_slice(),
+                    as_sql(current.grant_epoch())?,
+                ],
+            )?;
+            if changed != 1 {
+                return Err(StoreError::InvalidModuleRegistrationTransition);
+            }
+            for capability in &capabilities {
+                transaction.execute(
+                    "INSERT INTO hermes_kernel_module_registration_capability
+                     (registration_id, capability_id, approved) VALUES (?1, ?2, 1)",
+                    params![registration.registration_id(), capability],
+                )?;
+            }
+            insert_storage_requests(&transaction, &storage_requests)?;
+            insert_event_route_requests(&transaction, &event_requests)?;
+            insert_blob_quota_requests(&transaction, &blob_requests)?;
+            insert_scheduler_job_requests(&transaction, &scheduler_requests)?;
+            insert_vault_purpose_requests(&transaction, &vault_purpose_requests)?;
+            insert_client_rpc_routes(&transaction, &client_rpc_routes)?;
+            transaction.commit()?;
+            Ok(())
+        })
+    }
+
     pub fn module_registration(
         &self,
         registration_id: &str,

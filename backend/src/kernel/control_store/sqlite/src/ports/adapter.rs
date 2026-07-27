@@ -174,6 +174,19 @@ impl ModuleRegistryStore for SqliteControlStore {
             requests,
         )
     }
+    fn upgrade_approved_registration_with_all_descriptor_requests(
+        &self,
+        registration: &ModuleRegistration,
+        capabilities: &[String],
+        requests: hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1<'_>,
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::upgrade_approved_registration_with_all_descriptor_requests(
+            self,
+            registration,
+            capabilities,
+            requests,
+        )
+    }
     fn module_registration(&self, id: &str) -> Result<Option<ModuleRegistration>, Self::Error> {
         SqliteControlStore::module_registration(self, id)
     }
@@ -248,6 +261,21 @@ impl SettingsRegistryStore for SqliteControlStore {
         bytes: &[u8],
     ) -> Result<(), Self::Error> {
         SqliteControlStore::admit_settings_schema(self, binding, bytes)
+    }
+    fn upgrade_settings_schema_with_successor(
+        &self,
+        expected: &SettingsSchemaBinding,
+        successor: &SettingsSchemaBinding,
+        schema_bytes: &[u8],
+        successor_snapshot_bytes: &[u8],
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::upgrade_settings_schema_with_successor(
+            self,
+            expected,
+            successor,
+            schema_bytes,
+            successor_snapshot_bytes,
+        )
     }
     fn settings_schema_artifact(&self, id: &str) -> Result<Option<Vec<u8>>, Self::Error> {
         SqliteControlStore::settings_schema_artifact(self, id)

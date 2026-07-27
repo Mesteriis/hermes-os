@@ -12,9 +12,11 @@ use crate::v1::{
     AdmitBundledStorageArtifactRequestV1, AdmitBundledStorageArtifactResponseV1,
     ApplyManagedIntegrationSettingsRequestV1, ApplyManagedIntegrationSettingsResponseV1,
     ApproveModuleRegistrationRequestV1, ApproveModuleRegistrationResponseV1,
-    BeginBrowserPairingRequestV1, BeginOwnerControlSessionRequestV1,
+    BeginBrowserPairingRequestV1, BeginManagedStorageBindingRevocationRequestV1,
+    BeginManagedStorageBindingRevocationResponseV1, BeginOwnerControlSessionRequestV1,
     BeginOwnerControlSessionResponseV1, BindBundledManagedReleaseRequestV1,
     BindBundledManagedReleaseResponseV1, CompleteOwnerControlSessionRequestV1,
+    GetManagedStorageBindingStatusRequestV1, GetManagedStorageBindingStatusResponseV1,
     GetModuleRegistrationStatusRequestV1, GetModuleRegistrationStatusResponseV1,
     IssueManagedStorageBindingRequestV1, IssueManagedStorageBindingResponseV1,
     OwnerControlRequestV1, OwnerControlResponseV1, ProposeBundledManagedArtifactRequestV1,
@@ -24,7 +26,9 @@ use crate::v1::{
     StartReservedEngineRuntimeResponseV1, StartReservedIntegrationRuntimeRequestV1,
     StartReservedIntegrationRuntimeResponseV1, TransitionModuleRegistrationRequestV1,
     TransitionModuleRegistrationResponseV1, UpdateOperatorSettingsRequestV1,
-    UpdateOperatorSettingsResponseV1, owner_control_request_v1, owner_control_response_v1,
+    UpdateOperatorSettingsResponseV1, UpgradeBundledManagedRegistrationRequestV1,
+    UpgradeBundledManagedRegistrationResponseV1, owner_control_request_v1,
+    owner_control_response_v1,
 };
 
 const IPC_TIMEOUT: Duration = Duration::from_secs(15);
@@ -273,6 +277,38 @@ impl OwnerControlClientV1 {
         }
     }
 
+    pub fn upgrade_bundled_managed_registration(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        artifact_id: &str,
+        expected_distribution_id: &str,
+        expected_distribution_generation: u64,
+    ) -> Result<UpgradeBundledManagedRegistrationResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::UpgradeBundledManagedRegistration(
+                UpgradeBundledManagedRegistrationRequestV1 {
+                    owner_session_id: owner_session_id.to_owned(),
+                    registration_id: registration_id.to_owned(),
+                    artifact_id: artifact_id.to_owned(),
+                    expected_distribution_id: expected_distribution_id.to_owned(),
+                    expected_distribution_generation,
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::UpgradeBundledManagedRegistration(value))
+                if value.registration_id == registration_id
+                    && value.grant_epoch > 0
+                    && value.descriptor_sha256.len() == 32
+                    && value.effective_capability_count > 0 =>
+            {
+                Ok(value)
+            }
+            _ => Err("bundled managed registration upgrade is unavailable".to_owned()),
+        }
+    }
+
     pub fn reserve_bundled_managed_runtime(
         &self,
         owner_session_id: &str,
@@ -296,6 +332,66 @@ impl OwnerControlClientV1 {
                 Ok(value)
             }
             _ => Err("bundled managed runtime reservation is unavailable".to_owned()),
+        }
+    }
+
+    pub fn begin_managed_storage_binding_revocation(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        capability_id: &str,
+        binding_revision: u64,
+    ) -> Result<BeginManagedStorageBindingRevocationResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::BeginManagedStorageBindingRevocation(
+                BeginManagedStorageBindingRevocationRequestV1 {
+                    owner_session_id: owner_session_id.to_owned(),
+                    registration_id: registration_id.to_owned(),
+                    capability_id: capability_id.to_owned(),
+                    binding_revision,
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::BeginManagedStorageBindingRevocation(
+                value,
+            )) if value.registration_id == registration_id
+                && value.capability_id == capability_id
+                && value.binding_revision == binding_revision =>
+            {
+                Ok(value)
+            }
+            _ => Err("managed Storage binding revocation is unavailable".to_owned()),
+        }
+    }
+
+    pub fn managed_storage_binding_status(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<GetManagedStorageBindingStatusResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::GetManagedStorageBindingStatus(
+                GetManagedStorageBindingStatusRequestV1 {
+                    owner_session_id: owner_session_id.to_owned(),
+                    registration_id: registration_id.to_owned(),
+                    capability_id: capability_id.to_owned(),
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::GetManagedStorageBindingStatus(value))
+                if value.registration_id == registration_id
+                    && value.capability_id == capability_id
+                    && value.binding_revision > 0
+                    && value.role_epoch > 0
+                    && value.credential_lease_revision > 0
+                    && matches!(value.binding_state.as_str(), "active" | "revoking") =>
+            {
+                Ok(value)
+            }
+            _ => Err("managed Storage binding status is unavailable".to_owned()),
         }
     }
 

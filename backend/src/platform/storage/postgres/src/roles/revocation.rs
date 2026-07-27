@@ -53,6 +53,11 @@ pub async fn fence_postgres_runtime_role(
     connector: &PostgresAdminConnectorV1,
     spec: &StorageRoleSpecV1,
 ) -> Result<PostgresRuntimeFenceV1, PostgresAdapterErrorV1> {
+    if !runtime_role_exists(connector, spec).await? {
+        return Ok(PostgresRuntimeFenceV1 {
+            terminated_backend_count: 0,
+        });
+    }
     disable_new_logins(connector, spec)
         .await
         .map_err(|_| PostgresAdapterErrorV1::LoginFence)?;
@@ -71,6 +76,17 @@ pub async fn fence_postgres_runtime_role(
     Ok(PostgresRuntimeFenceV1 {
         terminated_backend_count,
     })
+}
+
+async fn runtime_role_exists(
+    connector: &PostgresAdminConnectorV1,
+    spec: &StorageRoleSpecV1,
+) -> Result<bool, PostgresAdapterErrorV1> {
+    query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1)")
+        .bind(spec.runtime_principal())
+        .fetch_one(connector.pool())
+        .await
+        .map_err(|_| PostgresAdapterErrorV1::Query)
 }
 
 async fn disable_new_logins(

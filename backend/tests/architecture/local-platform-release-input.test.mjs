@@ -62,7 +62,7 @@ function fieldString(fields, number) {
   return fields.get(number)?.[0]?.toString('utf8');
 }
 
-function runBuilder(root, browserAssetsDirectory = null) {
+function runBuilder(root, browserAssetsDirectory = null, generation = '7') {
   const artifactDirectory = join(root, 'artifacts');
   const browserBootstrap = join(root, 'bootstrap.html');
   const output = join(root, 'release-input.json');
@@ -79,6 +79,7 @@ function runBuilder(root, browserAssetsDirectory = null) {
       '--output', output,
       '--descriptor-dir', descriptorDirectory,
       '--distribution-id', 'hermes-desktop',
+      '--generation', generation,
       '--release-version', '0.1.0',
       '--build-id', 'local-platform-v1',
       '--source-commit', '1'.repeat(40),
@@ -111,6 +112,7 @@ test('creates exact local platform runtime contracts before compiling a distribu
     assert.equal(input.lockfile_sha256, '2'.repeat(64));
     assert.equal(input.sbom_sha256, '3'.repeat(64));
     assert.equal(input.toolchain_sha256, '4'.repeat(64));
+    assert.equal(input.generation, 7);
     assert.deepEqual(input.artifacts.map((artifact) => artifact.artifact_id), [
       'browser.bootstrap',
       'platform.blob',
@@ -204,5 +206,20 @@ test('rejects an incomplete platform inventory before creating contracts', () =>
     assert.equal(existsSync(descriptorDirectory), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects a non-positive or unsafe distribution generation', () => {
+  for (const generation of ['0', '-1', '9007199254740992']) {
+    const root = temporaryDirectory('hermes-local-platform-generation-');
+    try {
+      createFixture(root);
+      const { output, result } = runBuilder(root, null, generation);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /--generation must be a positive safe integer/);
+      assert.equal(existsSync(output), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });

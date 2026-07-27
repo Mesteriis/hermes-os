@@ -10,10 +10,15 @@ const sources = {
     'docs/adr/ADR-0300-loopback-full-stack-development-assembly.md',
     PROJECT_ROOT,
   ),
+  refreshAdr: new URL(
+    'docs/adr/ADR-0306-repeatable-development-release-refresh-and-successor-fencing.md',
+    PROJECT_ROOT,
+  ),
   rootMakefile: new URL('Makefile', PROJECT_ROOT),
   backendMakefile: new URL('Makefile', BACKEND_ROOT),
   assembly: new URL('scripts/dev-ensemble.sh', BACKEND_ROOT),
   release: new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT),
+  developmentAssembly: new URL('development/assembly/src/main.rs', BACKEND_ROOT),
   probe: new URL('scripts/probe-dev-gateway.mjs', BACKEND_ROOT),
   vite: new URL('frontend/vite.config.ts', PROJECT_ROOT),
   gateway: new URL('src/kernel/src/platform/gateway.rs', BACKEND_ROOT),
@@ -22,20 +27,27 @@ const sources = {
     'src/api/gateway/contracts/proto/hermes/gateway/v1/browser_session.proto',
     BACKEND_ROOT,
   ),
+  ownerControl: new URL(
+    'src/api/gateway/contracts/proto/hermes/gateway/v1/owner_control.proto',
+    BACKEND_ROOT,
+  ),
 };
 
 test('root make dev owns one loopback full-stack browser assembly', async () => {
   const {
     adr,
+    refreshAdr,
     rootMakefile,
     backendMakefile,
     assembly,
     release,
+    developmentAssembly,
     probe,
     vite,
     gateway,
     cli,
     protocol,
+    ownerControl,
   } = Object.fromEntries(
     await Promise.all(
       Object.entries(sources).map(async ([name, path]) => [
@@ -46,6 +58,7 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   );
 
   assert.match(adr, /loopback_full_stack_dev_assembly_v1/);
+  assert.match(refreshAdr, /repeatable_development_release_refresh_v1/);
   assert.match(rootMakefile, /build test dev docker tauri clean:[\s\S]*\$\(MAKE\) -C backend \$@/);
   assert.match(backendMakefile, /^dev:\n\t@\.\/scripts\/dev-ensemble\.sh$/m);
   assert.doesNotMatch(backendMakefile, /wait -n/);
@@ -56,6 +69,8 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   assert.match(assembly, /provision-platform/);
   assert.match(assembly, /start-ensemble/);
   assert.match(assembly, /Admitting the exact Communications and provider module plan/);
+  assert.match(assembly, /development_assembly=stale/);
+  assert.match(assembly, /--distribution-generation "\$distribution_generation"/);
   assert.match(assembly, /--browser-gateway-listen-address "\$gateway_address"/);
   assert.match(assembly, /--browser-gateway-development-proxy-proof-file "\$proof_file"/);
   assert.match(assembly, /HERMES_DEV_GATEWAY_PROOF_FILE="\$proof_file"/);
@@ -67,6 +82,7 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   );
   assert.match(assembly, /trap cleanup EXIT/);
   assert.doesNotMatch(assembly, /wait -n|0\.0\.0\.0|--browser-gateway-development-proxy-proof [^"-]/);
+  assert.doesNotMatch(assembly, /rm -rf .*kernel-dev|rm -rf .*control|reset/);
 
   assert.match(release, /hermes-communications-assembly/);
   assert.match(release, /hermes-attachment-security-assembly/);
@@ -75,6 +91,15 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   assert.match(release, /hermes-whatsapp-assembly/);
   assert.match(release, /hermes-zulip-assembly/);
   assert.match(release, /build-distribution-release\.mjs/);
+  assert.match(release, /next_distribution_generation/);
+  assert.match(release, /--generation "\$distribution_generation"/);
+  assert.match(release, /development-distribution-generation/);
+
+  assert.match(developmentAssembly, /begin_managed_storage_binding_revocation/);
+  assert.match(developmentAssembly, /managed_storage_binding_status/);
+  assert.match(developmentAssembly, /upgrade_bundled_managed_registration/);
+  assert.match(developmentAssembly, /successor_fences/);
+  assert.match(developmentAssembly, /version=3/);
 
   assert.match(probe, /host: '127\.0\.0\.1'/);
   assert.match(probe, /origin: 'http:\/\/127\.0\.0\.1:5173'/);
@@ -97,4 +122,7 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   assert.match(cli, /browser_gateway_development_proxy_proof_file: Option<PathBuf>/);
   assert.match(cli, /metadata\.permissions\(\)\.mode\(\) & 0o077/);
   assert.match(protocol, /BROWSER_GATEWAY_ACCESS_MODE_V1_LOCAL_DEVELOPMENT = 3/);
+  assert.match(ownerControl, /message GetManagedStorageBindingStatusRequestV1/);
+  assert.match(ownerControl, /uint64 credential_lease_revision = 5/);
+  assert.match(ownerControl, /message UpgradeBundledManagedRegistrationRequestV1/);
 });

@@ -151,30 +151,33 @@ fn run(cli: Cli) -> Result<(), String> {
         }
         Command::Status => {
             let state = read_state_if_present(&state_path)?;
-            println!(
-                "development_assembly={}",
-                if state.is_some() {
-                    "admitted"
-                } else {
-                    "missing"
-                }
-            );
+            let status = development_assembly_status(
+                state.as_ref(),
+                &cli.distribution_id,
+                cli.distribution_generation,
+            )?;
+            println!("development_assembly={status}");
             Ok(())
         }
         Command::Admit => {
             let client = client(&data_dir)?;
             let signer = FileOwnerSigner::open(&data_dir)?;
             let owner_session_id = client.open_owner_session(&signer)?;
-            let state = admit_plan(
+            let reservation_path = data_dir.join(ENSEMBLE_RESERVATION_FILE);
+            let existing_state = read_state_if_present(&state_path)?;
+            let reconciliation = reconcile_plan(
                 &client,
                 &owner_session_id,
                 &cli.distribution_id,
                 cli.distribution_generation,
-                &data_dir.join(ENSEMBLE_RESERVATION_FILE),
+                existing_state.as_ref(),
+                &reservation_path,
             )?;
-            write_state(&state_path, &state)?;
-            remove_reservation(&data_dir.join(ENSEMBLE_RESERVATION_FILE))?;
-            println!("development_assembly=admitted");
+            if reconciliation.outcome != ReconciliationOutcomeV1::Current {
+                write_state(&state_path, &reconciliation.state)?;
+                remove_reservation(&reservation_path)?;
+            }
+            println!("development_assembly={}", reconciliation.outcome.as_str());
             Ok(())
         }
         Command::StartEnsemble => {
@@ -189,6 +192,48 @@ fn run(cli: Cli) -> Result<(), String> {
             let owner_session_id = client.open_owner_session(&signer)?;
             start_ensemble(&client, &owner_session_id, &state)?;
             Ok(())
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReconciliationOutcomeV1 {
+    Current,
+    Admitted,
+    Updated,
+}
+
+impl ReconciliationOutcomeV1 {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Current => "current",
+            Self::Admitted => "admitted",
+            Self::Updated => "updated",
+        }
+    }
+}
+
+struct ReconciliationResultV1 {
+    state: DevelopmentAssemblyStateV1,
+    outcome: ReconciliationOutcomeV1,
+}
+
+fn development_assembly_status(
+    state: Option<&DevelopmentAssemblyStateV1>,
+    distribution_id: &str,
+    distribution_generation: u64,
+) -> Result<&'static str, String> {
+    let Some(state) = state else {
+        return Ok("missing");
+    };
+    if state.distribution_id != distribution_id {
+        return Err("development assembly distribution identity changed".to_owned());
+    }
+    match distribution_generation.cmp(&state.distribution_generation) {
+        std::cmp::Ordering::Equal => Ok("current"),
+        std::cmp::Ordering::Greater => Ok("stale"),
+        std::cmp::Ordering::Less => {
+            Err("development assembly release rollback is not automatic".to_owned())
         }
     }
 }
@@ -387,16 +432,45 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn admit_plan(
+fn reconcile_plan(
     client: &OwnerControlClientV1,
     owner_session_id: &str,
     distribution_id: &str,
     distribution_generation: u64,
+    existing_state: Option<&DevelopmentAssemblyStateV1>,
     reservation_path: &Path,
-) -> Result<DevelopmentAssemblyStateV1, String> {
+) -> Result<ReconciliationResultV1, String> {
     if let Some(reservation) = read_reservation_if_present(reservation_path)? {
         validate_reservation_release(&reservation, distribution_id, distribution_generation)?;
-        return finish_ensemble_bindings(client, owner_session_id, reservation);
+        let state = finish_ensemble_bindings(client, owner_session_id, reservation)?;
+        return Ok(ReconciliationResultV1 {
+            state,
+            outcome: if existing_state.is_some() {
+                ReconciliationOutcomeV1::Updated
+            } else {
+                ReconciliationOutcomeV1::Admitted
+            },
+        });
+    }
+    if let Some(state) = existing_state {
+        development_assembly_status(Some(state), distribution_id, distribution_generation)?;
+        if state.distribution_generation == distribution_generation {
+            return Ok(ReconciliationResultV1 {
+                state: state.clone(),
+                outcome: ReconciliationOutcomeV1::Current,
+            });
+        }
+        return Ok(ReconciliationResultV1 {
+            state: refresh_plan(
+                client,
+                owner_session_id,
+                distribution_id,
+                distribution_generation,
+                state,
+                reservation_path,
+            )?,
+            outcome: ReconciliationOutcomeV1::Updated,
+        });
     }
 
     let mut modules = Vec::with_capacity(MODULE_PLAN.len());
@@ -461,6 +535,8 @@ fn admit_plan(
             storage_capability_id,
             runtime_instance_id: reservation.runtime_instance_id,
             runtime_generation: reservation.runtime_generation,
+            role_epoch: 1,
+            credential_lease_revision: 1,
             storage_bundle_revision: storage.storage_bundle_revision,
             storage_bundle_digest: storage.storage_bundle_digest.try_into().map_err(|_| {
                 admission_error(
@@ -477,7 +553,132 @@ fn admit_plan(
         modules,
     };
     write_reservation(reservation_path, &reservation)?;
+    Ok(ReconciliationResultV1 {
+        state: finish_ensemble_bindings(client, owner_session_id, reservation)?,
+        outcome: ReconciliationOutcomeV1::Admitted,
+    })
+}
+
+fn refresh_plan(
+    client: &OwnerControlClientV1,
+    owner_session_id: &str,
+    distribution_id: &str,
+    distribution_generation: u64,
+    current: &DevelopmentAssemblyStateV1,
+    reservation_path: &Path,
+) -> Result<DevelopmentAssemblyStateV1, String> {
+    validate_state_plan(current)?;
+    if current.distribution_id != distribution_id
+        || distribution_generation <= current.distribution_generation
+    {
+        return Err("development assembly release update is invalid".to_owned());
+    }
+
+    let mut modules = Vec::with_capacity(MODULE_PLAN.len());
+    for (plan, previous) in MODULE_PLAN.iter().zip(&current.modules) {
+        let current_binding = client
+            .managed_storage_binding_status(
+                owner_session_id,
+                &previous.registration_id,
+                &previous.storage_capability_id,
+            )
+            .map_err(|error| {
+                admission_error(plan.runtime_artifact_id, "read_storage_binding", error)
+            })?;
+        client
+            .begin_managed_storage_binding_revocation(
+                owner_session_id,
+                &previous.registration_id,
+                &previous.storage_capability_id,
+                current_binding.binding_revision,
+            )
+            .map_err(|error| {
+                admission_error(plan.runtime_artifact_id, "revoke_storage_binding", error)
+            })?;
+        client
+            .upgrade_bundled_managed_registration(
+                owner_session_id,
+                &previous.registration_id,
+                plan.runtime_artifact_id,
+                distribution_id,
+                distribution_generation,
+            )
+            .map_err(|error| {
+                admission_error(plan.runtime_artifact_id, "upgrade_registration", error)
+            })?;
+        client
+            .bind_bundled_managed_release(
+                owner_session_id,
+                &previous.registration_id,
+                plan.runtime_artifact_id,
+            )
+            .map_err(|error| admission_error(plan.runtime_artifact_id, "bind_release", error))?;
+        let storage = client
+            .admit_bundled_storage_artifact(
+                owner_session_id,
+                plan.storage_artifact_id,
+                distribution_id,
+                distribution_generation,
+            )
+            .map_err(|error| admission_error(plan.runtime_artifact_id, "admit_storage", error))?;
+        let reservation = client
+            .reserve_bundled_managed_runtime(owner_session_id, &previous.registration_id)
+            .map_err(|error| admission_error(plan.runtime_artifact_id, "reserve_runtime", error))?;
+        let (role_epoch, credential_lease_revision) = successor_fences(
+            current_binding.role_epoch,
+            current_binding.credential_lease_revision,
+        )?;
+        modules.push(ModuleReservationV1 {
+            runtime_artifact_id: previous.runtime_artifact_id.clone(),
+            registration_id: previous.registration_id.clone(),
+            storage_capability_id: previous.storage_capability_id.clone(),
+            runtime_instance_id: reservation.runtime_instance_id,
+            runtime_generation: reservation.runtime_generation,
+            role_epoch,
+            credential_lease_revision,
+            storage_bundle_revision: storage.storage_bundle_revision,
+            storage_bundle_digest: storage.storage_bundle_digest.try_into().map_err(|_| {
+                admission_error(
+                    plan.runtime_artifact_id,
+                    "admit_storage",
+                    "Storage bundle digest is invalid".to_owned(),
+                )
+            })?,
+        });
+    }
+    let reservation = EnsembleReservationV2 {
+        distribution_id: distribution_id.to_owned(),
+        distribution_generation,
+        modules,
+    };
+    write_reservation(reservation_path, &reservation)?;
     finish_ensemble_bindings(client, owner_session_id, reservation)
+}
+
+fn successor_fences(role_epoch: u64, credential_lease_revision: u64) -> Result<(u64, u64), String> {
+    Ok((
+        role_epoch
+            .checked_add(1)
+            .ok_or_else(|| "development assembly role epoch overflowed".to_owned())?,
+        credential_lease_revision.checked_add(1).ok_or_else(|| {
+            "development assembly credential lease revision overflowed".to_owned()
+        })?,
+    ))
+}
+
+fn validate_state_plan(state: &DevelopmentAssemblyStateV1) -> Result<(), String> {
+    if state.modules.len() != MODULE_PLAN.len()
+        || MODULE_PLAN
+            .iter()
+            .zip(&state.modules)
+            .any(|(plan, module)| {
+                module.runtime_artifact_id != plan.runtime_artifact_id
+                    || module.storage_capability_id != plan.storage_capability_id
+            })
+    {
+        return Err("development assembly module state does not match the plan".to_owned());
+    }
+    Ok(())
 }
 
 fn admission_error(artifact_id: &str, phase: &str, error: String) -> String {
@@ -499,15 +700,15 @@ fn finish_ensemble_bindings(
         {
             return Err("development ensemble reservation does not match the plan".to_owned());
         }
-        client
+        let issued = client
             .issue_managed_storage_binding(
                 owner_session_id,
                 &module.registration_id,
                 &module.storage_capability_id,
                 &module.runtime_instance_id,
                 module.runtime_generation,
-                1,
-                1,
+                module.role_epoch,
+                module.credential_lease_revision,
                 module.storage_bundle_revision,
                 module.storage_bundle_digest.to_vec(),
             )
@@ -518,6 +719,9 @@ fn finish_ensemble_bindings(
             runtime_artifact_id: module.runtime_artifact_id,
             registration_id: module.registration_id,
             storage_capability_id: module.storage_capability_id,
+            storage_binding_revision: issued.binding_revision,
+            role_epoch: module.role_epoch,
+            credential_lease_revision: module.credential_lease_revision,
         });
     }
     Ok(DevelopmentAssemblyStateV1 {
@@ -550,16 +754,21 @@ fn operation_id(artifact_id: &str) -> [u8; 16] {
         .expect("SHA-256 prefix has a fixed size")
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct DevelopmentAssemblyStateV1 {
     distribution_id: String,
     distribution_generation: u64,
     modules: Vec<ModuleAssemblyStateV1>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ModuleAssemblyStateV1 {
     runtime_artifact_id: String,
     registration_id: String,
     storage_capability_id: String,
+    storage_binding_revision: u64,
+    role_epoch: u64,
+    credential_lease_revision: u64,
 }
 
 struct EnsembleReservationV2 {
@@ -574,6 +783,8 @@ struct ModuleReservationV1 {
     storage_capability_id: String,
     runtime_instance_id: String,
     runtime_generation: u64,
+    role_epoch: u64,
+    credential_lease_revision: u64,
     storage_bundle_revision: u64,
     storage_bundle_digest: [u8; 32],
 }
@@ -583,19 +794,21 @@ fn write_reservation(path: &Path, reservation: &EnsembleReservationV2) -> Result
         return Err("development ensemble reservation is incomplete".to_owned());
     }
     let mut bytes = format!(
-        "version=2\ndistribution_id={}\ndistribution_generation={}\nmodule_count={}\n",
+        "version=3\ndistribution_id={}\ndistribution_generation={}\nmodule_count={}\n",
         reservation.distribution_id,
         reservation.distribution_generation,
         reservation.modules.len(),
     );
     for (index, module) in reservation.modules.iter().enumerate() {
         bytes.push_str(&format!(
-            "module.{index}.runtime_artifact_id={}\nmodule.{index}.registration_id={}\nmodule.{index}.storage_capability_id={}\nmodule.{index}.runtime_instance_id={}\nmodule.{index}.runtime_generation={}\nmodule.{index}.storage_bundle_revision={}\nmodule.{index}.storage_bundle_digest={}\n",
+            "module.{index}.runtime_artifact_id={}\nmodule.{index}.registration_id={}\nmodule.{index}.storage_capability_id={}\nmodule.{index}.runtime_instance_id={}\nmodule.{index}.runtime_generation={}\nmodule.{index}.role_epoch={}\nmodule.{index}.credential_lease_revision={}\nmodule.{index}.storage_bundle_revision={}\nmodule.{index}.storage_bundle_digest={}\n",
             module.runtime_artifact_id,
             module.registration_id,
             module.storage_capability_id,
             module.runtime_instance_id,
             module.runtime_generation,
+            module.role_epoch,
+            module.credential_lease_revision,
             module.storage_bundle_revision,
             hex(&module.storage_bundle_digest),
         ));
@@ -637,9 +850,17 @@ fn read_reservation(path: &Path) -> Result<EnsembleReservationV2, String> {
                 .ok_or_else(|| "development ensemble reservation is invalid".to_owned())
         })
         .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
-    if fields.get("version") != Some(&"2")
-        || parse_positive_field(&fields, "module_count")? as usize != MODULE_PLAN.len()
-        || fields.len() != 4 + MODULE_PLAN.len() * 7
+    let version = fields
+        .get("version")
+        .copied()
+        .ok_or_else(|| "development ensemble reservation is invalid".to_owned())?;
+    let fields_per_module = match version {
+        "2" => 7,
+        "3" => 9,
+        _ => return Err("development ensemble reservation is invalid".to_owned()),
+    };
+    if parse_positive_field(&fields, "module_count")? as usize != MODULE_PLAN.len()
+        || fields.len() != 4 + MODULE_PLAN.len() * fields_per_module
     {
         return Err("development ensemble reservation is invalid".to_owned());
     }
@@ -668,6 +889,16 @@ fn read_reservation(path: &Path) -> Result<EnsembleReservationV2, String> {
                 )?
                 .to_owned(),
                 runtime_generation: parse_positive_field(&fields, &field("runtime_generation"))?,
+                role_epoch: if version == "2" {
+                    1
+                } else {
+                    parse_positive_field(&fields, &field("role_epoch"))?
+                },
+                credential_lease_revision: if version == "2" {
+                    1
+                } else {
+                    parse_positive_field(&fields, &field("credential_lease_revision"))?
+                },
                 storage_bundle_revision: parse_positive_field(
                     &fields,
                     &field("storage_bundle_revision"),
@@ -752,15 +983,20 @@ fn write_state(path: &Path, state: &DevelopmentAssemblyStateV1) -> Result<(), St
         return Err("development assembly state cannot be replaced".to_owned());
     }
     let mut bytes = format!(
-        "version=2\ndistribution_id={}\ndistribution_generation={}\nmodule_count={}\n",
+        "version=3\ndistribution_id={}\ndistribution_generation={}\nmodule_count={}\n",
         state.distribution_id,
         state.distribution_generation,
         state.modules.len(),
     );
     for (index, module) in state.modules.iter().enumerate() {
         bytes.push_str(&format!(
-            "module.{index}.runtime_artifact_id={}\nmodule.{index}.registration_id={}\nmodule.{index}.storage_capability_id={}\n",
-            module.runtime_artifact_id, module.registration_id, module.storage_capability_id,
+            "module.{index}.runtime_artifact_id={}\nmodule.{index}.registration_id={}\nmodule.{index}.storage_capability_id={}\nmodule.{index}.storage_binding_revision={}\nmodule.{index}.role_epoch={}\nmodule.{index}.credential_lease_revision={}\n",
+            module.runtime_artifact_id,
+            module.registration_id,
+            module.storage_capability_id,
+            module.storage_binding_revision,
+            module.role_epoch,
+            module.credential_lease_revision,
         ));
     }
     let temporary = path.with_extension(format!("tmp-{}", std::process::id()));
@@ -811,12 +1047,20 @@ fn read_state(path: &Path) -> Result<DevelopmentAssemblyStateV1, String> {
                 .ok_or_else(|| "development assembly state is invalid".to_owned())
         })
         .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
-    if fields.get("version") != Some(&"2")
-        || required_field(&fields, "module_count")?
-            .parse::<usize>()
-            .ok()
-            != Some(MODULE_PLAN.len())
-        || fields.len() != 4 + MODULE_PLAN.len() * 3
+    let version = fields
+        .get("version")
+        .copied()
+        .ok_or_else(|| "development assembly state is invalid".to_owned())?;
+    let fields_per_module = match version {
+        "2" => 3,
+        "3" => 6,
+        _ => return Err("development assembly state is invalid".to_owned()),
+    };
+    if required_field(&fields, "module_count")?
+        .parse::<usize>()
+        .ok()
+        != Some(MODULE_PLAN.len())
+        || fields.len() != 4 + MODULE_PLAN.len() * fields_per_module
     {
         return Err("development assembly state is invalid".to_owned());
     }
@@ -836,6 +1080,21 @@ fn read_state(path: &Path) -> Result<DevelopmentAssemblyStateV1, String> {
                 runtime_artifact_id: runtime_artifact_id.to_owned(),
                 registration_id: required_field(&fields, &field("registration_id"))?.to_owned(),
                 storage_capability_id: storage_capability_id.to_owned(),
+                storage_binding_revision: if version == "2" {
+                    1
+                } else {
+                    parse_state_positive_field(&fields, &field("storage_binding_revision"))?
+                },
+                role_epoch: if version == "2" {
+                    1
+                } else {
+                    parse_state_positive_field(&fields, &field("role_epoch"))?
+                },
+                credential_lease_revision: if version == "2" {
+                    1
+                } else {
+                    parse_state_positive_field(&fields, &field("credential_lease_revision"))?
+                },
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -873,6 +1132,17 @@ fn required_field<'a>(
         .ok_or_else(|| "development assembly state is invalid".to_owned())
 }
 
+fn parse_state_positive_field(
+    fields: &std::collections::BTreeMap<&str, &str>,
+    key: &str,
+) -> Result<u64, String> {
+    required_field(fields, key)?
+        .parse::<u64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .ok_or_else(|| "development assembly state is invalid".to_owned())
+}
+
 struct FileOwnerSigner(SigningKey);
 
 impl FileOwnerSigner {
@@ -907,6 +1177,36 @@ impl OwnerControlProofSignerV1 for FileOwnerSigner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_FILE_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+    fn temporary_state_path(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "hermes-development-assembly-{label}-{}-{}",
+            std::process::id(),
+            TEST_FILE_COUNTER.fetch_add(1, Ordering::Relaxed),
+        ))
+    }
+
+    fn fixture_state(distribution_generation: u64) -> DevelopmentAssemblyStateV1 {
+        DevelopmentAssemblyStateV1 {
+            distribution_id: "hermes-local-development".to_owned(),
+            distribution_generation,
+            modules: MODULE_PLAN
+                .iter()
+                .enumerate()
+                .map(|(index, plan)| ModuleAssemblyStateV1 {
+                    runtime_artifact_id: plan.runtime_artifact_id.to_owned(),
+                    registration_id: format!("registration-{index}"),
+                    storage_capability_id: plan.storage_capability_id.to_owned(),
+                    storage_binding_revision: u64::try_from(index + 1).unwrap(),
+                    role_epoch: 2,
+                    credential_lease_revision: 3,
+                })
+                .collect(),
+        }
+    }
 
     #[test]
     fn development_plan_keeps_domains_engines_and_integrations_as_distinct_artifacts() {
@@ -966,5 +1266,75 @@ mod tests {
             operation_id(COMMUNICATIONS_RUNTIME_ARTIFACT),
             operation_id(MAIL_RUNTIME_ARTIFACT),
         );
+    }
+
+    #[test]
+    fn assembly_status_requires_the_same_monotonic_distribution() {
+        let state = fixture_state(7);
+        assert_eq!(
+            development_assembly_status(Some(&state), "hermes-local-development", 7),
+            Ok("current"),
+        );
+        assert_eq!(
+            development_assembly_status(Some(&state), "hermes-local-development", 8),
+            Ok("stale"),
+        );
+        assert!(development_assembly_status(Some(&state), "hermes-local-development", 6).is_err());
+        assert!(development_assembly_status(Some(&state), "other-distribution", 8).is_err());
+        assert_eq!(
+            development_assembly_status(None, "hermes-local-development", 1),
+            Ok("missing"),
+        );
+    }
+
+    #[test]
+    fn state_v3_round_trip_preserves_successor_fences() {
+        let path = temporary_state_path("v3");
+        let state = fixture_state(8);
+        write_state(&path, &state).unwrap();
+        assert_eq!(read_state(&path), Ok(state));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn legacy_state_v2_migrates_the_only_implemented_initial_fences() {
+        let path = temporary_state_path("v2");
+        let mut bytes = concat!(
+            "version=2\n",
+            "distribution_id=hermes-local-development\n",
+            "distribution_generation=1\n",
+            "module_count=6\n",
+        )
+        .to_owned();
+        for (index, plan) in MODULE_PLAN.iter().enumerate() {
+            bytes.push_str(&format!(
+                "module.{index}.runtime_artifact_id={}\nmodule.{index}.registration_id=registration-{index}\nmodule.{index}.storage_capability_id={}\n",
+                plan.runtime_artifact_id, plan.storage_capability_id,
+            ));
+        }
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)
+            .unwrap();
+        file.write_all(bytes.as_bytes()).unwrap();
+        file.sync_all().unwrap();
+
+        let state = read_state(&path).unwrap();
+        assert_eq!(state.distribution_generation, 1);
+        assert!(state.modules.iter().all(|module| {
+            module.storage_binding_revision == 1
+                && module.role_epoch == 1
+                && module.credential_lease_revision == 1
+        }));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn successor_fences_advance_without_reusing_a_credential_revision() {
+        assert_eq!(successor_fences(2, 3), Ok((3, 4)));
+        assert!(successor_fences(u64::MAX, 1).is_err());
+        assert!(successor_fences(1, u64::MAX).is_err());
     }
 }

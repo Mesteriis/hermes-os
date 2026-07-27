@@ -111,6 +111,10 @@ policy через ссылки из новых документов.
 - [ADR-0300: Loopback full-stack development assembly](ADR-0300-loopback-full-stack-development-assembly.md)
 - [ADR-0301: Bundled module discovery and development admission](ADR-0301-bundled-module-discovery-and-development-admission.md)
 - [ADR-0302: Bundled managed Settings and first runtime bootstrap](ADR-0302-bundled-managed-settings-and-runtime-bootstrap.md)
+- [ADR-0303: Provider-owned QR account linking](ADR-0303-provider-owned-qr-account-linking-and-transient-artifact-custody.md)
+- [ADR-0304: Zulip account identity and Settings schema v3](ADR-0304-zulip-account-identity-and-settings-schema-v3.md)
+- [ADR-0305: Mail-owned composition, drafts, templates and signatures](ADR-0305-mail-owned-composition-drafts-templates-and-signatures.md)
+- [ADR-0306: Repeatable development release refresh and successor fencing](ADR-0306-repeatable-development-release-refresh-and-successor-fencing.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также

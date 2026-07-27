@@ -13,6 +13,9 @@ browser_origin="http://127.0.0.1:5173"
 browser_url="$browser_origin/"
 data_dir="${HERMES_DEV_DATA_DIR:-$project_root/.local/kernel-dev}"
 cargo_target_dir="${HERMES_DEV_CARGO_TARGET_DIR:-$backend_root/target}"
+release_root="${HERMES_DEV_RELEASE_ROOT:-$project_root/.local/dev-release}"
+distribution_id="hermes-local-development"
+generation_metadata_name="development-distribution-generation"
 startup_timeout_seconds="${HERMES_DEV_STARTUP_TIMEOUT_SECONDS:-120}"
 kernel_pid=""
 frontend_pid=""
@@ -111,6 +114,7 @@ for command_name in cargo curl docker id lsof make mktemp node open pnpm; do
 done
 require_absolute_directory_path "HERMES_DEV_DATA_DIR" "$data_dir"
 require_absolute_directory_path "HERMES_DEV_CARGO_TARGET_DIR" "$cargo_target_dir"
+require_absolute_directory_path "HERMES_DEV_RELEASE_ROOT" "$release_root"
 case "$startup_timeout_seconds" in
 	''|*[!0-9]*) fail "HERMES_DEV_STARTUP_TIMEOUT_SECONDS must be a positive integer" ;;
 esac
@@ -122,10 +126,23 @@ require_available_port 9444
 printf '%s\n' 'Materializing the signed clean-room development release...'
 HERMES_DEV_CARGO_TARGET_DIR="$cargo_target_dir" \
 	"$backend_root/scripts/materialize-dev-release.sh"
-kernel_bin="$project_root/.local/dev-release/HermesDev.app/Contents/MacOS/hermes-kernel"
+kernel_bin="$release_root/HermesDev.app/Contents/MacOS/hermes-kernel"
+generation_metadata="$release_root/$generation_metadata_name"
 development_assembly_bin="$cargo_target_dir/debug/hermes-development-assembly"
 test -x "$kernel_bin" || fail "signed Kernel development binary is unavailable"
 test -x "$development_assembly_bin" || fail "development assembly unit is unavailable"
+test -f "$generation_metadata" && test ! -L "$generation_metadata" \
+	|| fail "development release generation metadata is unavailable"
+test "$(stat -f '%Lp' "$generation_metadata")" = "600" \
+	|| fail "development release generation metadata permissions must be 0600"
+distribution_generation="$(sed -n '1p' "$generation_metadata")"
+test "$(wc -l <"$generation_metadata" | tr -d ' ')" = "1" \
+	|| fail "development release generation metadata is invalid"
+case "$distribution_generation" in
+	''|*[!0-9]*) fail "development release generation metadata is invalid" ;;
+esac
+test "$distribution_generation" -gt 0 \
+	|| fail "development release generation metadata is invalid"
 
 status_output="$("$kernel_bin" --data-dir "$data_dir" status)"
 owner_identity="$(printf '%s\n' "$status_output" | sed -n 's/^owner_identity=//p')"
@@ -208,21 +225,44 @@ stop_kernel() {
 start_kernel
 wait_for_gateway
 
-assembly_status="$("$development_assembly_bin" --data-dir "$data_dir" status)"
-if printf '%s\n' "$assembly_status" | grep -qx 'development_assembly=missing'; then
-	printf '%s\n' 'Admitting the exact Communications and provider module plan...'
+assembly_status="$(
 	"$development_assembly_bin" \
 		--data-dir "$data_dir" \
-		admit
+		--distribution-id "$distribution_id" \
+		--distribution-generation "$distribution_generation" \
+		status
+)"
+case "$assembly_status" in
+	development_assembly=missing)
+	printf '%s\n' 'Admitting the exact Communications and provider module plan...'
+	;;
+	development_assembly=stale)
+	printf '%s\n' 'Refreshing the exact Communications and provider module plan...'
+	;;
+	development_assembly=current) ;;
+	*) fail "development assembly state is unavailable" ;;
+esac
+if test "$assembly_status" != "development_assembly=current"; then
+	reconcile_output="$(
+		"$development_assembly_bin" \
+			--data-dir "$data_dir" \
+			--distribution-id "$distribution_id" \
+			--distribution-generation "$distribution_generation" \
+			admit
+	)"
+	case "$reconcile_output" in
+		development_assembly=admitted|development_assembly=updated) ;;
+		*) fail "development assembly reconciliation did not complete" ;;
+	esac
 	stop_kernel
 	start_kernel
 	wait_for_gateway
-elif ! printf '%s\n' "$assembly_status" | grep -qx 'development_assembly=admitted'; then
-	fail "development assembly state is unavailable"
 fi
 
 "$development_assembly_bin" \
 	--data-dir "$data_dir" \
+	--distribution-id "$distribution_id" \
+	--distribution-generation "$distribution_generation" \
 	start-ensemble
 
 printf '%s\n' 'Starting the Vue/Vite browser client...'
