@@ -1,14 +1,33 @@
 <script setup lang="ts">
+import ZulipOperationalReadPanel from './ZulipOperationalReadPanel.vue'
+import type { ZulipOperationalReadModel } from './zulipOperationalReadModel'
+import ZulipOperationalReplayPanel from './ZulipOperationalReplayPanel.vue'
+import type { ZulipOperationalReplayModel } from './zulipOperationalReplayModel'
 import type {
 	ZulipDestination,
 	ZulipOperationalPageModel,
 } from './zulipOperationalPageModel'
 import './zulipOperationalPage.css'
 
-defineProps<{ model: ZulipOperationalPageModel }>()
+defineProps<{
+	model: ZulipOperationalPageModel
+	readModel: ZulipOperationalReadModel
+	replayModel: ZulipOperationalReplayModel
+}>()
 
 const emit = defineEmits<{
+	loadMoreConversations: []
+	loadMoreEvents: []
+	loadMoreMessages: []
+	loadMoreReplay: []
+	loadMoreSearchResults: []
+	readRefresh: []
 	refreshStatus: []
+	replayRefresh: []
+	search: []
+	selectConversation: [providerConversationId: string]
+	selectReadAccount: [accountId: string]
+	selectReplayAccount: [accountId: string]
 	send: []
 	updateDestination: [value: ZulipDestination]
 	updateAccountId: [value: string]
@@ -17,6 +36,7 @@ const emit = defineEmits<{
 	updateRecipients: [value: string]
 	updateContent: [value: string]
 	updateOperationId: [value: string]
+	updateSearchQuery: [value: string]
 }>()
 </script>
 
@@ -30,6 +50,26 @@ const emit = defineEmits<{
 				only durable evidence emitted after provider execution.
 			</p>
 		</header>
+
+		<ZulipOperationalReadPanel
+			:model="readModel"
+			@load-more-conversations="emit('loadMoreConversations')"
+			@load-more-events="emit('loadMoreEvents')"
+			@load-more-messages="emit('loadMoreMessages')"
+			@load-more-search-results="emit('loadMoreSearchResults')"
+			@refresh="emit('readRefresh')"
+			@search="emit('search')"
+			@select-account="emit('selectReadAccount', $event)"
+			@select-conversation="emit('selectConversation', $event)"
+			@update-search-query="emit('updateSearchQuery', $event)"
+		/>
+
+		<ZulipOperationalReplayPanel
+			:model="replayModel"
+			@load-more="emit('loadMoreReplay')"
+			@refresh="emit('replayRefresh')"
+			@select-account="emit('selectReplayAccount', $event)"
+		/>
 
 		<div class="zulip-operational-grid">
 			<form class="zulip-operational-card" @submit.prevent="emit('send')">

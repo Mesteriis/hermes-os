@@ -1,0 +1,214 @@
+.zulip-read-panel {
+	display: grid;
+	gap: var(--h-space-4);
+	padding: var(--h-space-5);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: color-mix(in srgb, #6492fe 3%, var(--h-color-surface));
+	box-shadow: var(--h-shadow-sm);
+}
+
+.zulip-read-panel__header {
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+	gap: var(--h-space-4);
+}
+
+.zulip-read-panel h2,
+.zulip-read-panel h3,
+.zulip-read-panel p {
+	margin: 0;
+}
+
+.zulip-read-panel__header > div > span {
+	color: #4f7fea;
+	font-size: var(--h-font-size-xs);
+	font-weight: 750;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.zulip-read-panel__header > div > p {
+	margin-top: var(--h-space-2);
+	color: var(--h-color-text-muted);
+}
+
+.zulip-read-panel__header form,
+.zulip-operational-search {
+	display: grid;
+	gap: var(--h-space-2);
+	min-width: min(100%, 25rem);
+}
+
+.zulip-read-panel__header form > div,
+.zulip-operational-search > div {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: var(--h-space-2);
+}
+
+.zulip-read-panel label,
+.zulip-account-summary dt {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	font-weight: 650;
+}
+
+.zulip-read-panel select,
+.zulip-read-panel input,
+.zulip-read-panel button {
+	min-height: 2.5rem;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+}
+
+.zulip-read-panel select,
+.zulip-read-panel input {
+	width: 100%;
+	padding: 0 var(--h-space-3);
+	color: var(--h-color-text);
+	background: var(--h-color-bg);
+}
+
+.zulip-read-panel button {
+	padding: 0 var(--h-space-3);
+	color: var(--h-color-text);
+	background: var(--h-color-surface);
+}
+
+.zulip-read-panel button:disabled {
+	opacity: 0.5;
+}
+
+.zulip-read-panel__status {
+	padding: var(--h-space-3);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text-muted);
+	background: var(--h-color-bg);
+}
+
+.zulip-account-summary {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	margin: 0;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	overflow: hidden;
+}
+
+.zulip-account-summary > div {
+	display: grid;
+	gap: var(--h-space-1);
+	padding: var(--h-space-3);
+	border-bottom: 1px solid var(--h-color-border);
+}
+
+.zulip-account-summary > div:not(:nth-child(3n + 1)) {
+	border-left: 1px solid var(--h-color-border);
+}
+
+.zulip-account-summary > div:nth-last-child(-n + 3) {
+	border-bottom: 0;
+}
+
+.zulip-account-summary dd {
+	margin: 0;
+	font-weight: 700;
+}
+
+.zulip-read-workbench {
+	display: grid;
+	grid-template-columns: minmax(14rem, 0.8fr) minmax(20rem, 1.6fr);
+	gap: var(--h-space-3);
+}
+
+.zulip-read-section {
+	display: grid;
+	align-content: start;
+	gap: var(--h-space-2);
+	min-width: 0;
+	padding: var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-bg);
+}
+
+.zulip-read-section > header,
+.zulip-message-row > header,
+.zulip-event-journal article > header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--h-space-2);
+}
+
+.zulip-conversation-row,
+.zulip-message-row,
+.zulip-event-journal > article {
+	display: grid;
+	gap: var(--h-space-1);
+	padding: var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	text-align: left;
+}
+
+.zulip-conversation-row.selected {
+	border-color: #4f7fea;
+	background: color-mix(in srgb, #6492fe 8%, var(--h-color-surface));
+}
+
+.zulip-message-row.deleted {
+	opacity: 0.72;
+}
+
+.zulip-conversation-row small,
+.zulip-message-row small,
+.zulip-event-journal small,
+.zulip-event-journal p {
+	color: var(--h-color-text-muted);
+	overflow-wrap: anywhere;
+}
+
+.zulip-message-row p {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.zulip-read-more {
+	width: 100%;
+}
+
+@media (max-width: 900px) {
+	.zulip-read-panel__header {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.zulip-read-workbench {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 640px) {
+	.zulip-read-panel {
+		padding: var(--h-space-3);
+	}
+
+	.zulip-account-summary {
+		grid-template-columns: 1fr;
+	}
+
+	.zulip-account-summary > div,
+	.zulip-account-summary > div:not(:nth-child(3n + 1)),
+	.zulip-account-summary > div:nth-last-child(-n + 3) {
+		border-right: 0;
+		border-bottom: 1px solid var(--h-color-border);
+		border-left: 0;
+	}
+
+	.zulip-account-summary > div:last-child {
+		border-bottom: 0;
+	}
+}

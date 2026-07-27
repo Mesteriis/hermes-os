@@ -4,10 +4,10 @@
 Дата: 2026-07-26
 Состояние реализации: `zulip_history_sync_v1`,
 `zulip_operational_read_v1`, `zulip_operational_realtime_v1` и
-`zulip_account_lifecycle_v1` реализованы. `zulip_full_operational_v1` остаётся
-запланированным. Наличие backend contracts не закрывает full gate без
-generated frontend client, sealed owner credential provisioning и
-integration-owned UI cutover.
+`zulip_account_lifecycle_v1` и `zulip_full_operational_v1` реализованы. Full
+gate закрыт только после generated frontend client, sealed owner credential
+provisioning и integration-owned UI cutover поверх ранее принятых backend
+gates.
 
 Уточняет:
 
@@ -243,6 +243,25 @@ provider-neutral evidence и ссылку на Zulip operational experience, н�
 6. integration-owned UI cutover;
 7. удаления scoped handwritten/legacy aliases.
 
+Frontend cutover реализован отдельными SRP units:
+
+- generated query/replay messages и service descriptors в
+  `frontend/src/gen/hermes/zulip/operational`;
+- route-specific ConnectRPC factories и validating gateways в
+  `frontend/src/integrations/zulip/api`;
+- exact effective-account discovery и независимые read/replay controllers в
+  `frontend/src/integrations/zulip/queries`;
+- pure account/history/message/event/replay presentation models и panels в
+  `frontend/src/integrations/zulip/presentation`;
+- `ZulipOperationalRoute.vue` композирует только integration-owned units, а
+  `AppLayoutRoot.vue` передаёт exact admitted capabilities и bootstrap modules.
+
+Read controller не владеет Settings/Vault mutation, command status или
+Communications state. Replay controller отдельно хранит monotonic cursor и
+показывает `reset_required` без silent restart. Pure panels не импортируют
+transport/controller code. Handwritten REST, event-queue и provider HTTP
+aliases в active client отсутствуют.
+
 ## Phase gates
 
 ### `zulip_account_lifecycle_v1`
@@ -292,6 +311,14 @@ Gate требует:
 
 Ни один backend gate сам по себе не открывает
 `zulip_full_operational_v1` и не добавляет integration в domain inventory.
+
+### `zulip_full_operational_v1`
+
+Gate открыт как `implemented` по совместному evidence account lifecycle,
+history sync, operational read/realtime и frontend cutover. Generated query и
+replay clients создаются из canonical backend protobuf через
+`frontend/scripts/generate-proto.mjs`; frontend не становится authority
+provider history, credential binding или replay retention.
 
 ## Фактическая реализация
 

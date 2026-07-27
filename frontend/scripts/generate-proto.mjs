@@ -35,6 +35,7 @@ const protoFiles = [
   join(whatsappProtoRoot, 'hermes', 'whatsapp', 'operational', 'realtime', 'v1', 'client.proto'),
   join(zulipProtoRoot, 'hermes', 'zulip', 'account', 'v1', 'client.proto'),
   join(zulipProtoRoot, 'hermes', 'zulip', 'operational', 'v1', 'client.proto'),
+  join(zulipProtoRoot, 'hermes', 'zulip', 'operational', 'realtime', 'v1', 'client.proto'),
   join(zulipProtoRoot, 'hermes', 'zulip', 'v1', 'client.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_realtime.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'browser_session.proto'),

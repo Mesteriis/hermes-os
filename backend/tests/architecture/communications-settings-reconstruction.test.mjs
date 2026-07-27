@@ -150,6 +150,58 @@ const ZULIP_MANAGED_FLOW_PATH = new URL(
   'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/zulip_event_flow.rs',
   BACKEND_ROOT,
 );
+const ZULIP_FRONTEND_GENERATED_READ_PATH = new URL(
+  'frontend/src/gen/hermes/zulip/operational/v1/client_pb.ts',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_GENERATED_REPLAY_PATH = new URL(
+  'frontend/src/gen/hermes/zulip/operational/realtime/v1/client_pb.ts',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_READ_CLIENT_PATH = new URL(
+  'frontend/src/integrations/zulip/api/zulipOperationalReadClient.ts',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_READ_GATEWAY_PATH = new URL(
+  'frontend/src/integrations/zulip/api/zulipOperationalReadGateway.ts',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_REPLAY_CLIENT_PATH = new URL(
+  'frontend/src/integrations/zulip/api/zulipOperationalRealtimeClient.ts',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_REPLAY_GATEWAY_PATH = new URL(
+  'frontend/src/integrations/zulip/api/zulipOperationalReplayGateway.ts',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_ACCOUNTS_PATH = new URL(
+  'frontend/src/integrations/zulip/queries/zulipOperationalAccounts.ts',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_READ_CONTROLLER_PATH = new URL(
+  'frontend/src/integrations/zulip/queries/useZulipOperationalRead.ts',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_REPLAY_CONTROLLER_PATH = new URL(
+  'frontend/src/integrations/zulip/queries/useZulipOperationalReplay.ts',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_READ_PANEL_PATH = new URL(
+  'frontend/src/integrations/zulip/presentation/ZulipOperationalReadPanel.vue',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_MESSAGE_ROW_PATH = new URL(
+  'frontend/src/integrations/zulip/presentation/ZulipMessageRow.vue',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_REPLAY_PANEL_PATH = new URL(
+  'frontend/src/integrations/zulip/presentation/ZulipOperationalReplayPanel.vue',
+  PROJECT_ROOT,
+);
+const ZULIP_FRONTEND_ROUTE_PATH = new URL(
+  'frontend/src/integrations/zulip/views/ZulipOperationalRoute.vue',
+  PROJECT_ROOT,
+);
 
 const ALLOWED_ROLES = new Set(['app', 'domain', 'engine', 'integration', 'platform', 'workflow']);
 const ALLOWED_STATES = new Set(['implemented', 'planned']);
@@ -534,7 +586,7 @@ test('WhatsApp completion admits independent read, realtime and frontend cutover
   assert.match(appLayoutSource, /whatsapp\.operational\.realtime\.v1/);
 });
 
-test('Zulip completion remains closed behind lifecycle, history, read and realtime slices', async () => {
+test('Zulip completion admits lifecycle, history, read, realtime and frontend cutover units', async () => {
   const [
     inventorySource,
     zulipAdrSource,
@@ -546,6 +598,20 @@ test('Zulip completion remains closed behind lifecycle, history, read and realti
     schemaSource,
     runtimeSource,
     managedFlowSource,
+    frontendGeneratedReadSource,
+    frontendGeneratedReplaySource,
+    frontendReadClientSource,
+    frontendReadGatewaySource,
+    frontendReplayClientSource,
+    frontendReplayGatewaySource,
+    frontendAccountsSource,
+    frontendReadControllerSource,
+    frontendReplayControllerSource,
+    frontendReadPanelSource,
+    frontendMessageRowSource,
+    frontendReplayPanelSource,
+    frontendRouteSource,
+    appLayoutSource,
   ] = await Promise.all([
     readFile(INVENTORY_PATH, 'utf8'),
     readFile(ZULIP_OPERATIONAL_ADR_PATH, 'utf8'),
@@ -557,6 +623,20 @@ test('Zulip completion remains closed behind lifecycle, history, read and realti
     readFile(ZULIP_SCHEMA_PATH, 'utf8'),
     readFile(ZULIP_RUNTIME_PATH, 'utf8'),
     readFile(ZULIP_MANAGED_FLOW_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_GENERATED_READ_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_GENERATED_REPLAY_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_READ_CLIENT_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_READ_GATEWAY_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_REPLAY_CLIENT_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_REPLAY_GATEWAY_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_ACCOUNTS_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_READ_CONTROLLER_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_REPLAY_CONTROLLER_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_READ_PANEL_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_MESSAGE_ROW_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_REPLAY_PANEL_PATH, 'utf8'),
+    readFile(ZULIP_FRONTEND_ROUTE_PATH, 'utf8'),
+    readFile(FRONTEND_APP_LAYOUT_PATH, 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const zulipSlices = new Map(
@@ -585,7 +665,7 @@ test('Zulip completion remains closed behind lifecycle, history, read and realti
   assert.equal(zulipSlices.get('zulip_operational_read_v1').state, 'implemented');
   assert.equal(zulipSlices.get('zulip_operational_realtime_v1').state, 'implemented');
   assert.equal(zulipSlices.get('zulip_integration_v1').state, 'implemented');
-  assert.equal(zulipSlices.get('zulip_full_operational_v1').state, 'planned');
+  assert.equal(zulipSlices.get('zulip_full_operational_v1').state, 'implemented');
   assert.deepEqual(
     [...zulipSlices.get('zulip_full_operational_v1').dependsOn].sort(),
     ['client_gateway_v1', 'nats_data_plane_v1', 'zulip_integration_v1', ...backendGates].sort(),
@@ -625,6 +705,23 @@ test('Zulip completion remains closed behind lifecycle, history, read and realti
   assert.match(managedFlowSource, /restart_zulip_runtime/);
   assert.match(managedFlowSource, /assert_cross_account_operational_query_is_rejected/);
   assert.match(managedFlowSource, /assert_zulip_operational_replay/);
+  assert.match(zulipAdrSource, /Gate открыт как `implemented`/);
+  assert.match(frontendGeneratedReadSource, /ZulipOperationalQueryService/);
+  assert.match(frontendGeneratedReplaySource, /ZulipOperationalRealtimeService/);
+  assert.match(frontendReadClientSource, /ZulipOperationalQueryService/);
+  assert.match(frontendReadGatewaySource, /ZulipOperationalQueryV1Schema/);
+  assert.match(frontendReplayClientSource, /ZulipOperationalRealtimeService/);
+  assert.match(frontendReplayGatewaySource, /ZulipOperationalReplayRequestV1Schema/);
+  assert.match(frontendAccountsSource, /zulip\.operational\.query\.v1/);
+  assert.match(frontendAccountsSource, /zulip\.operational\.realtime\.v1/);
+  assert.match(frontendReadControllerSource, /useZulipOperationalRead/);
+  assert.match(frontendReplayControllerSource, /useZulipOperationalReplay/);
+  assert.doesNotMatch(frontendReadPanelSource, /queries\/|api\/|connect\/|fetch\(/);
+  assert.doesNotMatch(frontendMessageRowSource, /queries\/|api\/|connect\/|fetch\(/);
+  assert.doesNotMatch(frontendReplayPanelSource, /queries\/|api\/|connect\/|fetch\(/);
+  assert.match(frontendRouteSource, /zulipOperationalAccountFingerprint/);
+  assert.match(appLayoutSource, /zulip\.operational\.query\.v1/);
+  assert.match(appLayoutSource, /zulip\.operational\.realtime\.v1/);
 });
 
 test('cross-owner and AI use cases are distinct workflow units', async () => {

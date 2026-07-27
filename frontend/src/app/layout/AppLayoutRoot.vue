@@ -69,6 +69,12 @@ const mailSyncHealthAvailable = computed(() =>
 const zulipCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'zulip.command.v1'),
 )
+const zulipOperationalQueryAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'zulip.operational.query.v1'),
+)
+const zulipOperationalRealtimeAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'zulip.operational.realtime.v1'),
+)
 
 watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mode]) => {
 	document.documentElement.setAttribute('data-ui-theme', theme)
@@ -145,6 +151,9 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 				<ZulipOperationalRoute
 					v-else-if="selectedRouteId === 'communications-zulip'"
 					:can-command="zulipCommandAvailable"
+					:can-query="zulipOperationalQueryAvailable"
+					:can-replay="zulipOperationalRealtimeAvailable"
+					:modules="bootstrap.modules"
 				/>
 				<AppSettingsPage
 					v-else-if="selectedTopLevelRouteId === 'settings'"
