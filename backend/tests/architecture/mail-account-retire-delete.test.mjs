@@ -83,7 +83,7 @@ test('Mail retire and delete are exact owner-local lifecycle operations', async 
   });
   assert.match(
     adr,
-    /Phase 1 `mail_account_credential_binding_v1` и Phase 2\s+`mail_account_retire_delete_v1` реализованы/,
+    /Phase 1 `mail_account_credential_binding_v1`, Phase 2\s+`mail_account_retire_delete_v1`[\s\S]*`mail_account_lifecycle_v1` реализованы/,
   );
   assert.match(adr, /Runtime не становится assembly, integration не становится domain/);
 

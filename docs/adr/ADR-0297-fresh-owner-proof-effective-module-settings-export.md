@@ -2,8 +2,8 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: Backend authority и generated desktop adapter
-реализованы; Mail portability остаётся отдельным planned gate.
+Состояние реализации: Backend authority, generated desktop adapter и отдельный
+Mail portability gate реализованы.
 
 Уточняет:
 

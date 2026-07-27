@@ -6,6 +6,7 @@ use hermes_mail_api::{
     MailInboundTransportV1, SmtpEndpointV1, valid_account_configuration,
     valid_gmail_oauth_configuration,
 };
+pub use hermes_mail_api::{MAIL_SETTINGS_SCHEMA_MAJOR_V2, MAIL_SETTINGS_SCHEMA_REVISION_V2};
 use hermes_runtime_protocol::v1::{
     SettingApplyModeV1, SettingClientVisibilityV1, SettingDefinitionV1, SettingMutationAuthorityV1,
     SettingTargetScopeV1, SettingValueTypeV1, SettingsSchemaV1, SettingsSnapshotV1,
@@ -54,9 +55,6 @@ const GMAIL_OAUTH_SETTING_IDS: [&str; 10] = [
     GMAIL_OAUTH_TOKEN_PATH,
     GMAIL_OAUTH_TOKEN_PORT,
 ];
-
-pub const MAIL_SETTINGS_SCHEMA_MAJOR_V2: u32 = 2;
-pub const MAIL_SETTINGS_SCHEMA_REVISION_V2: u32 = 1;
 
 /// The Mail integration owns these non-secret configuration-instance settings.
 /// They are owner-editable through Settings; credential bindings remain

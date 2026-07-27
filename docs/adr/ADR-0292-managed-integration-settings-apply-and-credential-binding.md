@@ -4,8 +4,9 @@
 Дата: 2026-07-26
 Состояние реализации: `managed_integration_settings_apply_v1` и
 `zulip_account_lifecycle_v1` реализованы. Public
-`owner_vault_provisioning_v1`, generated frontend client и integration-owned
-UI cutover остаются отдельными planned gates.
+`owner_vault_provisioning_desktop_v1`, generated frontend client и Mail-owned
+UI реализованы по ADR-0295; multi-client `owner_vault_provisioning_v1`
+остаётся planned до Android adapter.
 
 Уточняет:
 
@@ -281,7 +282,7 @@ Release assembly
 
 ### `owner_vault_provisioning_v1`
 
-Остаётся отдельным platform/frontend gate:
+Остаётся отдельным multi-client platform/frontend umbrella:
 
 1. authenticated owner device session;
 2. HPKE sealed write-only put/replace/retire;
@@ -290,6 +291,10 @@ Release assembly
 5. replay/CAS/wrong-owner negatives;
 6. desktop and Android host adapters;
 7. browser API never receives root/platform key material.
+
+Desktop subset закрыт отдельным implemented
+`owner_vault_provisioning_desktop_v1`; он не утверждает наличие Android
+adapter.
 
 ## Фактическая реализация
 

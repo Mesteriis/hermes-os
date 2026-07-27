@@ -19,6 +19,7 @@ const paths = {
     BACKEND_ROOT,
   ),
   account: new URL('src/mail-api/src/account.rs', BACKEND_ROOT),
+  portability: new URL('src/mail-api/src/portability.rs', BACKEND_ROOT),
   contract: new URL('src/mail-api/src/client_contract.rs', BACKEND_ROOT),
   persistence: new URL('src/mail-persistence/src/account.rs', BACKEND_ROOT),
   schema: new URL('src/mail-persistence/src/schema.rs', BACKEND_ROOT),
@@ -38,6 +39,7 @@ test('Mail credential binding is owner-local, configuration-only and successor-a
     inventorySource,
     proto,
     account,
+    portability,
     contract,
     persistence,
     schema,
@@ -51,6 +53,7 @@ test('Mail credential binding is owner-local, configuration-only and successor-a
     readFile(paths.inventory, 'utf8'),
     readFile(paths.proto, 'utf8'),
     readFile(paths.account, 'utf8'),
+    readFile(paths.portability, 'utf8'),
     readFile(paths.contract, 'utf8'),
     readFile(paths.persistence, 'utf8'),
     readFile(paths.schema, 'utf8'),
@@ -78,7 +81,7 @@ test('Mail credential binding is owner-local, configuration-only and successor-a
   });
   assert.match(
     adr,
-    /Состояние реализации: Phase 1 `mail_account_credential_binding_v1` и Phase 2\s+`mail_account_retire_delete_v1` реализованы/,
+    /Состояние реализации: Phase 1 `mail_account_credential_binding_v1`, Phase 2\s+`mail_account_retire_delete_v1`[\s\S]*`mail_account_lifecycle_v1` реализованы/,
   );
   assert.match(adr, /Communications не хранит Mail settings, credentials/);
   assert.match(adr, /Runtime не становится assembly, integration не становится domain/);
@@ -113,7 +116,11 @@ test('Mail credential binding is owner-local, configuration-only and successor-a
     /\&\[VaultActionV1::Create, VaultActionV1::ReplaceCas\]/,
   );
 
-  assert.match(settings, /MAIL_SETTINGS_SCHEMA_MAJOR_V2: u32 = 2/);
+  assert.match(portability, /MAIL_SETTINGS_SCHEMA_MAJOR_V2: u32 = 2/);
+  assert.match(
+    settings,
+    /pub use hermes_mail_api::\{MAIL_SETTINGS_SCHEMA_MAJOR_V2, MAIL_SETTINGS_SCHEMA_REVISION_V2\}/,
+  );
   assert.match(
     settings,
     /client_visibility: SettingClientVisibilityV1::Editable/,

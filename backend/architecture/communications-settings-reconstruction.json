@@ -240,12 +240,22 @@
       ]
     },
     {
+      "gate": "owner_vault_provisioning_desktop_v1",
+      "role": "app",
+      "owner": "first_party_desktop",
+      "state": "implemented",
+      "dependsOn": [
+        "owner_vault_provisioning_backend_v1"
+      ]
+    },
+    {
       "gate": "owner_vault_provisioning_v1",
       "role": "app",
       "owner": "first_party_client",
       "state": "planned",
       "dependsOn": [
-        "owner_vault_provisioning_backend_v1"
+        "owner_vault_provisioning_backend_v1",
+        "owner_vault_provisioning_desktop_v1"
       ]
     },
     {
@@ -271,21 +281,21 @@
       "gate": "mail_account_portability_v1",
       "role": "app",
       "owner": "first_party_client",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "client_gateway_v1",
         "mail_account_credential_binding_v1",
         "managed_integration_settings_apply_v1",
         "owner_module_settings_export_v1",
         "owner_module_settings_gateway_v1",
-        "owner_vault_provisioning_v1"
+        "owner_vault_provisioning_desktop_v1"
       ]
     },
     {
       "gate": "mail_account_lifecycle_v1",
       "role": "integration",
       "owner": "mail",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "mail_account_credential_binding_v1",
         "mail_account_portability_v1",

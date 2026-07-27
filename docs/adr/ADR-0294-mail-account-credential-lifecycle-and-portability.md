@@ -2,10 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: Phase 1 `mail_account_credential_binding_v1` и Phase 2
-`mail_account_retire_delete_v1` реализованы. Portability остаётся Planned;
-umbrella `mail_account_lifecycle_v1` остаётся закрыт до выполнения всех phase
-gates ниже.
+Состояние реализации: Phase 1 `mail_account_credential_binding_v1`, Phase 2
+`mail_account_retire_delete_v1`, desktop `mail_account_portability_v1` и
+umbrella `mail_account_lifecycle_v1` реализованы.
 
 Уточняет:
 
@@ -167,16 +166,26 @@ Export объединяет:
 Export никогда не содержит credential bytes, Vault record IDs, wrapping keys,
 OAuth codes/verifiers, provider message content или sync cursors.
 
-Import выполняет explicit sequence:
+Import выполняет explicit sequence. Для нового connection требуется первый
+configuration-only successor: Mail Bind/Query route проверяет connection ID
+текущего runtime и не может честно принять binding ещё не применённой
+конфигурации.
 
 ```text
 validate typed export
   -> create/update Mail Settings desired revision
+  -> generic managed Settings apply (configuration-only successor)
+  -> query current Mail binding revisions
   -> sealed owner Vault provisioning
-  -> Mail credential bind or Gmail OAuth setup
-  -> generic managed Settings apply
+  -> Mail credential bind
+  -> generic managed Settings apply (credential successor)
   -> query Mail readiness
 ```
+
+Для Gmail configuration-only successor предшествует OAuth Start. OAuth
+Start/Accepted/terminal status являются разными receipts; provider
+authorization code не сохраняется в portability state. Повторный Settings
+successor для IMAP/SMTP активирует только exact bound credential revision.
 
 App не пишет Mail/Kernel/Vault stores и не создаёт hidden global transaction.
 Partial state остаётся видимым и resumable через exact receipts.
@@ -276,10 +285,12 @@ composition не получает owner storage.
 5. no secret/session/content/cursor carriers;
 6. desktop generated client and integration-owned UI.
 
+Состояние: Implemented для first-party desktop.
+
 ### `mail_account_lifecycle_v1`
 
-Umbrella открывается только после всех трёх gates выше и существующего
-`mail_gmail_oauth_v1`.
+Umbrella открыт после всех трёх gates выше и существующего
+`mail_gmail_oauth_v1`. Это не открывает Mail read/composition/command gates.
 
 ## Evidence реализованных Phase 1 и Phase 2
 
@@ -313,6 +324,21 @@ Umbrella открывается только после всех трёх gates 
   restart fencing и отсутствие дополнительного IMAP/SMTP I/O;
 - executable architecture gate:
   `tests/architecture/mail-account-retire-delete.test.mjs`.
+- `hermes-mail-api` поставляет generated `MailAccountExportV1` с exact
+  IMAP/Gmail oneof, optional SMTP, schema/effective revision и sanitized
+  readiness enums без generic maps;
+- Mail export validator повторно использует Mail account и OAuth configuration
+  validators, а schema major/revision принадлежат public Mail API contract;
+- desktop app получает effective Settings только через fresh-proof
+  `OwnerModuleSettingsService`, затем сопоставляет typed values с Mail-owned
+  export contract и strict protobuf JSON;
+- import хранит Settings update, configuration successor, per-purpose Vault,
+  Mail Bind, credential successor и Gmail OAuth receipts отдельно; bind failure
+  продолжается с уже полученного Vault receipt без повторного provisioning;
+- integration-owned `MailPortabilityPanel` не импортирует Communications,
+  Kernel implementation, Vault storage или Mail runtime;
+- executable architecture gate:
+  `tests/architecture/mail-account-portability.test.mjs`.
 
 ## Отклонённые варианты
 

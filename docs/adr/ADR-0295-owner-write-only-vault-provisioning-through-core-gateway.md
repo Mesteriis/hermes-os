@@ -2,9 +2,8 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: Backend implemented. Desktop native host и generated
-client foundation реализуются отдельно; integration-owned setup UI и Android
-adapter остаются planned, поэтому first-party client gate ещё не открыт.
+Состояние реализации: Backend и desktop gate implemented. Android adapter и
+общий multi-client umbrella остаются Planned.
 
 Уточняет:
 
@@ -172,17 +171,29 @@ integration binding, generic Settings apply и provider readiness query.
 9. live managed Vault restart/retry conformance;
 10. architecture, SRP, Cargo, Clippy and workspace gates.
 
+### `owner_vault_provisioning_desktop_v1`
+
+Состояние: Implemented.
+
+1. `owner_vault_provisioning_backend_v1`;
+2. desktop host adapter с ephemeral X25519, HPKE seal/open и zeroization;
+3. non-extractable browser-profile P-256 device key;
+4. generated frontend client;
+5. browser code не получает platform private key, Vault root/wrapping material
+   или credential record ID;
+6. integration-owned Mail setup UI использует только sanitized receipt.
+
 ### `owner_vault_provisioning_v1`
 
 Состояние: Planned.
 
 1. `owner_vault_provisioning_backend_v1`;
-2. desktop host adapter with non-extractable device key and zeroization;
-3. Android host adapter with the same generated descriptor;
-4. generated frontend client;
-5. browser code receives neither platform private key nor Vault root/wrapping
+2. `owner_vault_provisioning_desktop_v1`;
+3. Android host adapter с тем же generated descriptor;
+4. browser/Android code receives neither platform private key nor Vault root/wrapping
    material;
-6. integration-owned credential setup UI using only sanitized receipt.
+5. integration-owned credential setup UI использует только sanitized receipt
+   на каждом поддерживаемом first-party client.
 
 Desktop implementation разделяет функции:
 
@@ -194,7 +205,10 @@ Desktop implementation разделяет функции:
 - generated Connect client композирует Prepare/Authorize/Commit и никогда не
   импортирует Mail/Telegram/WhatsApp/Zulip.
 
-Эти части не закрывают gate без integration-owned setup UI и Android adapter.
+Desktop части и Mail setup UI закрывают только
+`owner_vault_provisioning_desktop_v1`. Android adapter остаётся отдельной
+dependency общего `owner_vault_provisioning_v1`; отсутствие ещё не выбранного
+Android UI stack не блокирует честный desktop Mail portability gate.
 
 ## Последствия
 
@@ -202,5 +216,6 @@ Desktop implementation разделяет функции:
 - Zulip, Telegram и WhatsApp могут использовать тот же platform ceremony
   только через собственные separately admitted exact capabilities.
 - Новые provider integrations не требуют нового generic secrets endpoint.
-- Полный `mail_account_portability_v1` остаётся закрыт до client gate, даже
-  если backend provisioning реализован.
+- Desktop `mail_account_portability_v1` зависит от
+  `owner_vault_provisioning_desktop_v1`; общий multi-client provisioning
+  umbrella остаётся закрыт до Android adapter.

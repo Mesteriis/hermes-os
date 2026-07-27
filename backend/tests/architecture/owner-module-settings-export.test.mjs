@@ -68,7 +68,7 @@ test('effective Settings export is fresh-proof, current, typed and provider-neut
     state: 'implemented',
     dependsOn: ['owner_module_settings_gateway_v1'],
   });
-  assert.match(adr, /Backend authority и generated desktop adapter[\s\S]*реализованы/);
+  assert.match(adr, /Backend authority, generated desktop adapter[\s\S]*реализованы/);
   assert.match(contract, /ExportEffectiveOwnerModuleSettingsV1/);
   assert.match(contract, /expected_effective_revision/);
   assert.match(contract, /ExportEffectiveOwnerModuleSettingsReceiptV1/);

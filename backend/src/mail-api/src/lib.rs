@@ -22,6 +22,10 @@ pub mod client_contract;
 pub mod client_wire;
 pub mod oauth;
 pub mod oauth_wire;
+pub mod portability;
+pub mod portability_wire_generated {
+    include!(concat!(env!("OUT_DIR"), "/hermes.mail.portability.v1.rs"));
+}
 
 pub use oauth::{
     GMAIL_OAUTH_ATTEMPT_TTL_SECONDS, GMAIL_OAUTH_AUTHORIZATION_HOST,
@@ -30,6 +34,10 @@ pub use oauth::{
     GmailOAuthEndpointV1, GmailOAuthOperationKindV1, GmailOAuthOperationStatusV1,
     GmailOAuthOutcomeV1, GmailOAuthRefreshRequestV1, GmailOAuthStartRequestV1, GmailOAuthStartedV1,
     GmailOAuthStatusRequestV1, valid_gmail_oauth_configuration,
+};
+pub use portability::{
+    MAIL_ACCOUNT_EXPORT_MAJOR_V1, MAIL_SETTINGS_SCHEMA_MAJOR_V2, MAIL_SETTINGS_SCHEMA_REVISION_V2,
+    MailAccountExportValidationErrorV1, validate_mail_account_export_v1,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]

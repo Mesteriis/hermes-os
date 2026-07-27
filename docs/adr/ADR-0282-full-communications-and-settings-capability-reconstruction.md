@@ -468,15 +468,18 @@ release.
    `zulip_full_operational_v1`.
 5. Vault закрывает provider-neutral `vault_credential_retirement_v1` по
    ADR-0293 и implemented `owner_vault_provisioning_backend_v1` по ADR-0295.
-   First-party app отдельно закрывает `owner_vault_provisioning_v1`, включая
-   generated client и host adapters; backend gate не подменяет client gate.
+   First-party desktop отдельно закрывает implemented
+   `owner_vault_provisioning_desktop_v1`, включая generated client, native host
+   adapter и integration-owned UI. Multi-client `owner_vault_provisioning_v1`
+   остаётся planned до Android adapter; backend gate не подменяет client gates.
    Mail независимо проходит implemented
    `mail_account_credential_binding_v1`, implemented
-   `mail_account_retire_delete_v1` и planned `mail_account_portability_v1` по
-   ADR-0294; umbrella `mail_account_lifecycle_v1` требует все три slices, уже
+   `mail_account_retire_delete_v1` и implemented desktop
+   `mail_account_portability_v1` по ADR-0294; implemented umbrella
+   `mail_account_lifecycle_v1` требует все три slices, уже
    реализованный `mail_gmail_oauth_v1`, generic managed Settings apply и
    provider-neutral public `owner_module_settings_gateway_v1` по ADR-0296.
-   Fresh-proof typed export отдельно проходит planned
+   Fresh-proof typed export отдельно проходит implemented
    `owner_module_settings_export_v1` по ADR-0297 и является dependency
    portability, а не implicit read-all правом Gateway.
    Затем Mail read, composition и command gates проходят независимо, без
