@@ -103,7 +103,10 @@ use hermes_mail_api::{
         MailAccountLifecycleStatusRequestV1, MailCredentialLifecycleProgressV1,
         MailCredentialLifecycleStateV1,
     },
-    operational::{MailFolderKindV1, MailMessageFlagV1},
+    operational::{
+        MailFolderKindV1, MailMessageFlagV1, MailOperationalQueryResponseV1,
+        MailOperationalQueryV1, operational_query_connection_id,
+    },
     valid_account_configuration, valid_port,
 };
 use hermes_mail_core::rfc822::{
@@ -714,6 +717,19 @@ impl MailAdmittedRuntime {
             delivery_readiness,
             bindings,
         })
+    }
+
+    pub async fn operational_query(
+        &self,
+        query: &MailOperationalQueryV1,
+    ) -> Result<MailOperationalQueryResponseV1, MailBootstrapError> {
+        if operational_query_connection_id(query) != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        self.durable
+            .execute_operational_query(query)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)
     }
 
     pub async fn try_consume_attachment_anchor_handoff(

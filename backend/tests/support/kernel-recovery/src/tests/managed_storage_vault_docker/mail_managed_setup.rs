@@ -8,7 +8,7 @@ use hermes_mail_api::{
     client_contract::{MAIL_MODULE_ID, MAIL_OWNER_ID, MailClientContractV1},
 };
 use hermes_mail_persistence::{
-    GmailOAuthCredentialBindingV1, MAIL_STORAGE_BUNDLE_REVISION_V8, mail_storage_bundle_v1,
+    GmailOAuthCredentialBindingV1, MAIL_STORAGE_BUNDLE_REVISION_V9, mail_storage_bundle_v1,
 };
 use hermes_mail_runtime::{
     admission::{
@@ -315,6 +315,9 @@ fn admit_mail_runtime_profile(
             MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
             MAIL_IMAP_CREDENTIALS_CAPABILITY_ID.to_owned(),
             MAIL_STORAGE_CAPABILITY_ID.to_owned(),
+            MailClientContractV1::OperationalQuery
+                .capability_id()
+                .to_owned(),
             MailClientContractV1::Sync.capability_id().to_owned(),
         ],
         MailAdmissionProfileV1::AccountCredentialLifecycle => vec![
@@ -450,7 +453,7 @@ fn admit_mail_runtime_profile(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 MAIL_OWNER_ID,
-                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V8),
+                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V9),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -473,7 +476,7 @@ pub(super) fn prepare_mail_runtime(
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
     let bundle = store
-        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V8))
+        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V9))
         .expect("read Mail Storage bundle")
         .expect("Mail Storage bundle");
     let binding = issue_managed(
@@ -485,7 +488,7 @@ pub(super) fn prepare_mail_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V8),
+            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V9),
             *bundle.digest(),
         )
         .expect("Mail Storage binding issue"),

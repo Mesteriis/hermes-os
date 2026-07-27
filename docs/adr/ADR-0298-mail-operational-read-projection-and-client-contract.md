@@ -3,9 +3,10 @@
 - Статус: принято
 - Дата: 2026-07-26
 - Состояние реализации: публичный typed contract, owner-local persistence,
-  bounded scoped queries и атомарная IMAP/Gmail sync materialization
-  реализованы; runtime client route, managed conformance и frontend cutover ещё
-  не реализованы, поэтому gate `mail_operational_read_v1` остаётся `planned`.
+  bounded scoped queries, атомарная IMAP/Gmail sync materialization, exact
+  runtime client route и managed Gateway conformance реализованы и подтверждены
+  live host contour; frontend cutover ещё не завершён, поэтому gate
+  `mail_operational_read_v1` остаётся `planned`.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0212, ADR-0213, ADR-0220,
   ADR-0236, ADR-0239, ADR-0270, ADR-0278, ADR-0281, ADR-0282, ADR-0294
 

@@ -111,6 +111,8 @@ mod mail_gmail_oauth_fixture;
 mod mail_imap_fixture;
 #[path = "managed_storage_vault_docker/mail_managed_setup.rs"]
 mod mail_managed_setup;
+#[path = "managed_storage_vault_docker/mail_operational_flow.rs"]
+mod mail_operational_flow;
 #[path = "managed_storage_vault_docker/mail_smtp_fixture.rs"]
 mod mail_smtp_fixture;
 use mail_attachment_flow::*;
@@ -126,6 +128,7 @@ use attachment_security_blob_fixture::*;
 use attachment_security_event_flow::*;
 use attachment_security_managed_setup::*;
 use mail_managed_setup::*;
+use mail_operational_flow::*;
 #[path = "managed_storage_vault_docker/mail_account_credential_flow.rs"]
 mod mail_account_credential_flow;
 #[path = "managed_storage_vault_docker/mail_delivery_flow.rs"]

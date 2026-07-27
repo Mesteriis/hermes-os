@@ -6,6 +6,7 @@ pub const MAX_OPERATIONAL_ID_BYTES: usize = 512;
 pub const MAX_OPERATIONAL_SUBJECT_BYTES: usize = 998;
 pub const MAX_OPERATIONAL_SNIPPET_BYTES: usize = 4_096;
 pub const MAX_OPERATIONAL_ADDRESS_BYTES: usize = 1_024;
+pub const MAX_OPERATIONAL_FOLDER_DISPLAY_BYTES: usize = 512;
 pub const MAX_OPERATIONAL_RECIPIENTS: usize = 256;
 pub const MAX_OPERATIONAL_FOLDERS_PER_MESSAGE: usize = 128;
 
@@ -200,6 +201,7 @@ pub fn validate_operational_message(
             .snippet
             .as_deref()
             .is_some_and(|value| !valid_text(value, MAX_OPERATIONAL_SNIPPET_BYTES))
+        || message.sent_at_unix_seconds.is_some_and(|value| value <= 0)
         || message
             .flags
             .iter()
@@ -211,6 +213,68 @@ pub fn validate_operational_message(
         return Err(MailOperationalContractErrorV1::InvalidId);
     }
     Ok(())
+}
+
+pub fn validate_operational_response(
+    response: &MailOperationalQueryResponseV1,
+) -> Result<(), MailOperationalContractErrorV1> {
+    match response {
+        MailOperationalQueryResponseV1::Folders(page) => {
+            validate_response_page(&page.items, page.next_cursor.as_deref())?;
+            if page.items.iter().any(|folder| {
+                validate_id(&folder.connection_id).is_err()
+                    || validate_id(&folder.folder_id).is_err()
+                    || !valid_text(&folder.display_name, MAX_OPERATIONAL_FOLDER_DISPLAY_BYTES)
+                    || folder.unread_messages > folder.total_messages
+                    || folder.projection_revision == 0
+            }) {
+                return Err(MailOperationalContractErrorV1::InvalidId);
+            }
+        }
+        MailOperationalQueryResponseV1::Threads(page) => {
+            validate_response_page(&page.items, page.next_cursor.as_deref())?;
+            if page.items.iter().any(|thread| {
+                validate_id(&thread.connection_id).is_err()
+                    || validate_id(&thread.provider_thread_id).is_err()
+                    || thread
+                        .subject
+                        .as_deref()
+                        .is_some_and(|value| !valid_text(value, MAX_OPERATIONAL_SUBJECT_BYTES))
+                    || thread
+                        .latest_snippet
+                        .as_deref()
+                        .is_some_and(|value| !valid_text(value, MAX_OPERATIONAL_SNIPPET_BYTES))
+                    || thread
+                        .latest_at_unix_seconds
+                        .is_some_and(|value| value <= 0)
+                    || thread.message_count == 0
+                    || thread.unread_count > thread.message_count
+                    || thread.projection_revision == 0
+            }) {
+                return Err(MailOperationalContractErrorV1::InvalidId);
+            }
+        }
+        MailOperationalQueryResponseV1::Messages(page) => {
+            validate_response_page(&page.items, page.next_cursor.as_deref())?;
+            for message in &page.items {
+                validate_operational_message(message)?;
+            }
+        }
+        MailOperationalQueryResponseV1::Message(message) => {
+            validate_operational_message(&message.summary)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_response_page<T>(
+    items: &[T],
+    next_cursor: Option<&str>,
+) -> Result<(), MailOperationalContractErrorV1> {
+    if items.len() > MAX_OPERATIONAL_PAGE_SIZE as usize {
+        return Err(MailOperationalContractErrorV1::InvalidLimit);
+    }
+    validate_cursor(next_cursor)
 }
 
 fn validate_optional_id(value: Option<&str>) -> Result<(), MailOperationalContractErrorV1> {
@@ -238,6 +302,10 @@ fn validate_page(cursor: Option<&str>, limit: u32) -> Result<(), MailOperational
     if limit == 0 || limit > MAX_OPERATIONAL_PAGE_SIZE {
         return Err(MailOperationalContractErrorV1::InvalidLimit);
     }
+    validate_cursor(cursor)
+}
+
+fn validate_cursor(cursor: Option<&str>) -> Result<(), MailOperationalContractErrorV1> {
     if cursor.is_some_and(|cursor| {
         cursor.is_empty()
             || cursor.len() > MAX_OPERATIONAL_CURSOR_BYTES

@@ -4,7 +4,7 @@ use hermes_mail_api::client_contract::{
 };
 use hermes_mail_api::{
     MailClientRequestV1, MailClientResponseV1, account_lifecycle_wire, account_wire, client_wire,
-    oauth_wire,
+    oauth_wire, operational_wire,
 };
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
@@ -62,6 +62,7 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
         MailClientRequestV1::GmailOAuthComplete(_) => MailClientContractV1::GmailOAuthComplete,
         MailClientRequestV1::GmailOAuthRefresh(_) => MailClientContractV1::GmailOAuthRefresh,
         MailClientRequestV1::GmailOAuthStatus(_) => MailClientContractV1::GmailOAuthQuery,
+        MailClientRequestV1::OperationalQuery(_) => MailClientContractV1::OperationalQuery,
     }
 }
 
@@ -98,6 +99,10 @@ fn encode_request_payload(request: &MailClientRequestV1) -> Result<Vec<u8>, Mail
         }
         MailClientRequestV1::GmailOAuthStatus(value) => {
             Ok(oauth_wire::encode_status_request(value))
+        }
+        MailClientRequestV1::OperationalQuery(value) => {
+            operational_wire::encode_operational_query(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
         }
     }
 }
@@ -147,6 +152,9 @@ fn decode_request_payload(
             .map_err(|_| MailClientPortErrorV1::Protocol),
         MailClientContractV1::GmailOAuthQuery => oauth_wire::decode_status_request(bytes)
             .map(MailClientRequestV1::GmailOAuthStatus)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::OperationalQuery => operational_wire::decode_operational_query(bytes)
+            .map(MailClientRequestV1::OperationalQuery)
             .map_err(|_| MailClientPortErrorV1::Protocol),
     }
 }
@@ -282,6 +290,11 @@ pub async fn handle_client_request(
             .await
             .map(MailClientResponseV1::GmailOAuthStatus)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::OperationalQuery(value) => runtime
+            .operational_query(&value)
+            .await
+            .map(MailClientResponseV1::OperationalQuery)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
     };
     encode_module_response(request_id, contract, &response)
 }
@@ -336,6 +349,11 @@ fn encode_module_response(
         (MailClientContractV1::GmailOAuthQuery, MailClientResponseV1::GmailOAuthStatus(status)) => {
             oauth_wire::encode_status_response(status.as_ref())
         }
+        (
+            MailClientContractV1::OperationalQuery,
+            MailClientResponseV1::OperationalQuery(response),
+        ) => operational_wire::encode_operational_query_response(response)
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
         _ => return Err(MailClientPortErrorV1::Protocol),
     };
     Ok(ModuleClientResponseV1 {
@@ -402,6 +420,10 @@ pub fn decode_module_response(
         MailClientContractV1::GmailOAuthQuery => {
             oauth_wire::decode_status_response(&envelope.response_payload)
         }
+        MailClientContractV1::OperationalQuery => {
+            operational_wire::decode_operational_query_response(&envelope.response_payload)
+                .map(MailClientResponseV1::OperationalQuery)
+        }
     }
     .map_err(|_| MailClientPortErrorV1::Protocol)?;
     Ok((envelope.request_id, response))
@@ -417,6 +439,9 @@ mod tests {
         account_lifecycle::{
             MailAccountLifecycleCommandV1, MailAccountLifecycleRetryV1,
             MailAccountLifecycleStatusRequestV1,
+        },
+        operational::{
+            MailOperationalPageV1, MailOperationalQueryResponseV1, MailOperationalQueryV1,
         },
     };
 
@@ -442,6 +467,14 @@ mod tests {
     fn delivery_query() -> MailClientRequestV1 {
         MailClientRequestV1::DeliveryStatus(MailDeliveryStatusRequestV1 {
             operation_id: "delivery-operation".to_owned(),
+        })
+    }
+
+    fn operational_query() -> MailClientRequestV1 {
+        MailClientRequestV1::OperationalQuery(MailOperationalQueryV1::ListFolders {
+            connection_id: "mail-account".to_owned(),
+            cursor: None,
+            limit: 100,
         })
     }
 
@@ -523,6 +556,29 @@ mod tests {
         assert_eq!(request_id, 1);
         assert_eq!(contract, MailClientContractV1::Sync);
         assert_eq!(decoded, sync_request());
+    }
+
+    #[test]
+    fn operational_query_uses_its_exact_contract_and_response_codec() {
+        let encoded = encode_module_request(7, &operational_query()).expect("operational query");
+        let (request_id, contract, decoded) =
+            decode_module_request(&encoded).expect("decode operational query");
+        assert_eq!(request_id, 7);
+        assert_eq!(contract, MailClientContractV1::OperationalQuery);
+        assert_eq!(decoded, operational_query());
+
+        let response = MailClientResponseV1::OperationalQuery(
+            MailOperationalQueryResponseV1::Folders(MailOperationalPageV1 {
+                items: Vec::new(),
+                next_cursor: None,
+            }),
+        );
+        let encoded_response =
+            encode_module_response(7, contract, &response).expect("operational response");
+        assert_eq!(
+            decode_module_response(contract, &encoded_response),
+            Ok((7, response))
+        );
     }
 
     #[test]

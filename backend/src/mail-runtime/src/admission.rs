@@ -118,6 +118,7 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_client_capability_v1(MailClientContractV1::GmailOAuthQuery),
         mail_client_capability_v1(MailClientContractV1::GmailOAuthRefresh),
         mail_client_capability_v1(MailClientContractV1::GmailOAuthStart),
+        mail_client_capability_v1(MailClientContractV1::OperationalQuery),
         mail_provider_credential_lifecycle_capability_v1(
             MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
             "mail_smtp_password",
@@ -482,6 +483,7 @@ mod tests {
                 MailClientContractV1::GmailOAuthQuery.capability_id(),
                 MailClientContractV1::GmailOAuthRefresh.capability_id(),
                 MailClientContractV1::GmailOAuthStart.capability_id(),
+                MailClientContractV1::OperationalQuery.capability_id(),
                 MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
                 MAIL_SMTP_CREDENTIAL_PROVISIONING_CAPABILITY_ID,
                 MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,

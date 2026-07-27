@@ -19,11 +19,23 @@ const paths = {
     BACKEND_ROOT,
   ),
   validator: new URL('src/mail-api/src/operational.rs', BACKEND_ROOT),
+  wire: new URL('src/mail-api/src/operational_wire.rs', BACKEND_ROOT),
+  contract: new URL('src/mail-api/src/client_contract.rs', BACKEND_ROOT),
   persistence: new URL(
     'src/mail-persistence/src/operational.rs',
     BACKEND_ROOT,
   ),
   runtime: new URL('src/mail-runtime/src/managed.rs', BACKEND_ROOT),
+  clientPort: new URL('src/mail-runtime/src/client_port.rs', BACKEND_ROOT),
+  admission: new URL('src/mail-runtime/src/admission.rs', BACKEND_ROOT),
+  managedSetup: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_managed_setup.rs',
+    BACKEND_ROOT,
+  ),
+  managedFlow: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_operational_flow.rs',
+    BACKEND_ROOT,
+  ),
   build: new URL('src/mail-api/build.rs', BACKEND_ROOT),
   api: new URL('src/mail-api/src/lib.rs', BACKEND_ROOT),
 };
@@ -34,8 +46,14 @@ test('Mail operational read contract is typed, bounded and not falsely admitted'
     inventorySource,
     proto,
     validator,
+    wire,
+    contract,
     persistence,
     runtime,
+    clientPort,
+    admission,
+    managedSetup,
+    managedFlow,
     build,
     api,
   ] = await Promise.all(
@@ -59,12 +77,17 @@ test('Mail operational read contract is typed, bounded and not falsely admitted'
   });
   assert.match(
     adr,
-    /owner-local persistence,\s+bounded scoped queries и атомарная IMAP\/Gmail sync materialization\s+реализованы/,
+    /owner-local persistence,\s+bounded scoped queries, атомарная IMAP\/Gmail sync materialization/,
   );
   assert.match(
     adr,
-    /runtime client route, managed conformance и frontend cutover ещё\s+не реализованы/,
+    /exact\s+runtime client route и managed Gateway conformance реализованы/,
   );
+  assert.match(
+    adr,
+    /managed Gateway conformance реализованы и подтверждены\s+live host contour/,
+  );
+  assert.match(adr, /frontend cutover ещё не завершён/);
   assert.match(adr, /Core Gateway[\s\S]*не декодирует Mail payload/);
   assert.match(adr, /Mail does not import Communications/);
   assert.match(adr, /full body[\s\S]*communications_content_read_v1/);
@@ -85,7 +108,17 @@ test('Mail operational read contract is typed, bounded and not falsely admitted'
 
   assert.match(validator, /MAX_OPERATIONAL_PAGE_SIZE: u32 = 200/);
   assert.match(validator, /validate_operational_query/);
+  assert.match(validator, /validate_operational_response/);
   assert.match(validator, /limit == 0 \|\| limit > MAX_OPERATIONAL_PAGE_SIZE/);
+  assert.match(wire, /encode_operational_query/);
+  assert.match(wire, /decode_operational_query_response/);
+  assert.match(wire, /encode_operational_query_response\(&response\)\? != bytes/);
+  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 6/);
+  assert.match(contract, /mail\.operational\.query\.v1/);
+  assert.match(
+    contract,
+    /\/hermes\.mail\.operational\.v1\.MailOperationalQueryService\/Query/,
+  );
   assert.match(
     persistence,
     /CREATE TABLE IF NOT EXISTS hermes_data\.mail_operational_folders/,
@@ -106,12 +139,30 @@ test('Mail operational read contract is typed, bounded and not falsely admitted'
   assert.match(runtime, /ProviderProvenanceV1::MailImap[\s\S]*MailOperationalMaterializationV1/);
   assert.match(runtime, /ProviderProvenanceV1::MailGmail[\s\S]*MailOperationalMaterializationV1/);
   assert.match(
+    runtime,
+    /operational_query_connection_id\(query\) != self\.account\.connection_id/,
+  );
+  assert.match(clientPort, /MailClientRequestV1::OperationalQuery/);
+  assert.match(clientPort, /operational_wire::encode_operational_query/);
+  assert.match(clientPort, /operational_wire::decode_operational_query_response/);
+  assert.match(admission, /MailClientContractV1::OperationalQuery/);
+  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V9/);
+  assert.match(
+    managedSetup,
+    /MailClientContractV1::OperationalQuery[\s\S]*MailClientContractV1::Sync/,
+  );
+  assert.match(managedFlow, /assert_cross_account_query_is_rejected/);
+  assert.match(managedFlow, /assert_cursor_scope_is_enforced/);
+  assert.match(managedFlow, /assert_stale_cursor_is_rejected/);
+  assert.match(managedFlow, /assert_stale_operational_generation_is_rejected/);
+  assert.match(managedFlow, /managed-mail-imap-password/);
+  assert.match(
     build,
     /proto\/hermes\/mail\/operational\/v1\/client\.proto/,
   );
   assert.match(api, /pub mod operational;/);
   assert.doesNotMatch(
-    `${proto}\n${validator}`,
+    `${proto}\n${validator}\n${wire}\n${persistence}`,
     /hermes_communications|domains\/communications|mail-runtime|mail-persistence|hermes-kernel/i,
   );
 });

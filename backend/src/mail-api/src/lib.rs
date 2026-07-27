@@ -23,6 +23,7 @@ pub mod client_wire;
 pub mod oauth;
 pub mod oauth_wire;
 pub mod operational;
+pub mod operational_wire;
 pub mod operational_wire_generated {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail.operational.v1.rs"));
 }
@@ -59,6 +60,7 @@ pub enum MailClientRequestV1 {
     GmailOAuthComplete(GmailOAuthCompleteRequestV1),
     GmailOAuthRefresh(GmailOAuthRefreshRequestV1),
     GmailOAuthStatus(GmailOAuthStatusRequestV1),
+    OperationalQuery(operational::MailOperationalQueryV1),
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailSyncInboxRequestV1 {
@@ -95,6 +97,7 @@ pub enum MailClientResponseV1 {
         operation_id: String,
     },
     GmailOAuthStatus(Option<GmailOAuthOperationStatusV1>),
+    OperationalQuery(operational::MailOperationalQueryResponseV1),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
