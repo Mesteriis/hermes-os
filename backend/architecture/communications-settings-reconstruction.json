@@ -36,7 +36,7 @@
       "gate": "telegram_folder_reassignment_v1",
       "role": "integration",
       "owner": "telegram",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["telegram_core_operational_v1"]
     },
     {

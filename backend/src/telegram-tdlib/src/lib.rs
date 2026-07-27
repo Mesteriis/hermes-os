@@ -2958,7 +2958,19 @@ fn provider_folder_ids_from_chat(payload: &Value) -> Result<Vec<i64>, TdlibError
             folder_ids.push(folder_id);
         }
     }
-    Ok(folder_ids)
+    normalized_folder_ids(&folder_ids)
+}
+
+fn normalized_folder_ids(folder_ids: &[i64]) -> Result<Vec<i64>, TdlibError> {
+    if folder_ids.iter().any(|folder_id| *folder_id <= 0) {
+        return Err(TdlibError::Protocol(
+            "TDLib folder set contains an invalid folder id".to_owned(),
+        ));
+    }
+    let mut normalized = folder_ids.to_vec();
+    normalized.sort_unstable();
+    normalized.dedup();
+    Ok(normalized)
 }
 
 fn plan_folder_reassignment(
@@ -3072,6 +3084,7 @@ impl TdJsonTransport {
         target_provider_folder_ids: &[i64],
     ) -> Result<TdlibResponse, TdlibError> {
         let chat_id = provider_id(provider_chat_id)?;
+        let target_provider_folder_ids = normalized_folder_ids(target_provider_folder_ids)?;
         let get_chat_extra = format!("{operation_id}:get-chat");
         self.client.send_json(&json!({
             "@type": "getChat",
@@ -3081,7 +3094,7 @@ impl TdJsonTransport {
         let chat = self.receive_correlated(&get_chat_extra)?;
         let current_provider_folder_ids = provider_folder_ids_from_chat(&chat)?;
         let plan =
-            plan_folder_reassignment(&current_provider_folder_ids, target_provider_folder_ids);
+            plan_folder_reassignment(&current_provider_folder_ids, &target_provider_folder_ids);
 
         for provider_folder_id in &plan.added_provider_folder_ids {
             let extra = format!("{operation_id}:add:{provider_folder_id}");
@@ -3111,6 +3124,19 @@ impl TdJsonTransport {
             self.client.send_json(&edit)?;
             let response = self.receive_correlated(&edit_extra)?;
             parse_response_for_request(&self.account_id, request, response)?;
+        }
+
+        let verify_chat_extra = format!("{operation_id}:verify-chat");
+        self.client.send_json(&json!({
+            "@type": "getChat",
+            "chat_id": chat_id,
+            "@extra": verify_chat_extra,
+        }))?;
+        let verified_chat = self.receive_correlated(&verify_chat_extra)?;
+        if provider_folder_ids_from_chat(&verified_chat)? != target_provider_folder_ids {
+            return Err(TdlibError::Protocol(
+                "TDLib folder reassignment did not converge".to_owned(),
+            ));
         }
 
         Ok(TdlibResponse::FolderReassigned {
@@ -3566,16 +3592,17 @@ mod folder_command_tests {
             "id": 100,
             "positions": [
                 {"list": {"@type": "chatListMain"}, "order": 1},
-                {"list": {"@type": "chatListFolder", "chat_folder_id": 7}, "order": 2},
                 {"list": {"@type": "chatListFolder", "chat_folder_id": 9}, "order": 3},
+                {"list": {"@type": "chatListFolder", "chat_folder_id": 7}, "order": 2},
                 {"list": {"@type": "chatListFolder", "chat_folder_id": 9}, "order": 4}
             ]
         });
         let current = provider_folder_ids_from_chat(&chat).expect("provider folder memberships");
 
         assert_eq!(current, vec![7, 9]);
+        let target = normalized_folder_ids(&[11, 9]).expect("normalized target");
         assert_eq!(
-            plan_folder_reassignment(&current, &[9, 11]),
+            plan_folder_reassignment(&current, &target),
             FolderReassignmentPlan {
                 added_provider_folder_ids: vec![11],
                 removed_provider_folder_ids: vec![7],

@@ -97,6 +97,7 @@ policy через ссылки из новых документов.
 - [ADR-0286: WhatsApp operational read and realtime boundary](ADR-0286-whatsapp-operational-read-and-realtime-boundary.md)
 - [ADR-0287: Telegram operational realtime replay boundary](ADR-0287-telegram-operational-realtime-replay-boundary.md)
 - [ADR-0288: Managed successor quiesce and Storage fence order](ADR-0288-managed-successor-quiesce-and-storage-fence-order.md)
+- [ADR-0289: Telegram folder reassignment convergence boundary](ADR-0289-telegram-folder-reassignment-convergence-boundary.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -321,3 +322,7 @@ authority fence, supervisor до physical Storage fence запрещает autor
 exact predecessor worker, а новый runtime generation резервируется только
 после fence и join. Provider-specific retries и перенос lifecycle в integration
 запрещены.
+ADR-0289 фиксирует честную Telegram folder reassignment semantics: один durable
+command сходится к exact target через fresh provider delta и обязательную
+финальную проверку, а partial success повторно планируется от текущего TDLib
+state. Provider atomicity, stale saved plan и fake terminal `ok` запрещены.

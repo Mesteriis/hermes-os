@@ -110,16 +110,18 @@ impl TelegramRuntimeProjectionCache {
     }
 
     pub fn put_chat_position(&mut self, position: TelegramChatPosition) {
-        self.chat_positions.insert(
-            format!(
-                "{}:{}:{}:{}",
-                position.account_id,
-                position.provider_chat_id,
-                position.list_kind,
-                position.provider_folder_id.unwrap_or_default()
-            ),
-            position,
+        let key = format!(
+            "{}:{}:{}:{}",
+            position.account_id,
+            position.provider_chat_id,
+            position.list_kind,
+            position.provider_folder_id.unwrap_or_default()
         );
+        if position.order <= 0 {
+            self.chat_positions.remove(&key);
+        } else {
+            self.chat_positions.insert(key, position);
+        }
     }
 
     pub fn chat_positions(
@@ -939,6 +941,25 @@ mod tests {
         assert_eq!(replay.len(), 1);
         assert_eq!(replay[0].sequence, 2);
         assert_eq!(replay[0].provider_cursor.as_deref(), Some("cursor-2"));
+    }
+
+    #[test]
+    fn zero_order_chat_position_removes_provider_membership() {
+        let mut persistence = TelegramRuntimeProjectionCache::new();
+        let mut position = TelegramChatPosition {
+            account_id: "account".to_owned(),
+            provider_chat_id: "100".to_owned(),
+            list_kind: "folder".to_owned(),
+            provider_folder_id: Some(7),
+            order: 10,
+            is_pinned: false,
+        };
+        persistence.put_chat_position(position.clone());
+        assert_eq!(persistence.chat_positions("account", "100").len(), 1);
+
+        position.order = 0;
+        persistence.put_chat_position(position);
+        assert!(persistence.chat_positions("account", "100").is_empty());
     }
 
     #[test]

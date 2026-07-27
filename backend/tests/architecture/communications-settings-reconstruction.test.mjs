@@ -25,12 +25,25 @@ const TELEGRAM_REALTIME_ADR_PATH = new URL(
   'docs/adr/ADR-0287-telegram-operational-realtime-replay-boundary.md',
   PROJECT_ROOT,
 );
+const TELEGRAM_FOLDER_ADR_PATH = new URL(
+  'docs/adr/ADR-0289-telegram-folder-reassignment-convergence-boundary.md',
+  PROJECT_ROOT,
+);
 const TELEGRAM_CLIENT_CONTRACT_PATH = new URL(
   'src/telegram-api/src/client_contract.rs',
   BACKEND_ROOT,
 );
 const TELEGRAM_RUNTIME_ADMISSION_PATH = new URL(
   'src/telegram-runtime/src/admission.rs',
+  BACKEND_ROOT,
+);
+const TELEGRAM_TDLIB_PATH = new URL('src/telegram-tdlib/src/lib.rs', BACKEND_ROOT);
+const TELEGRAM_PERSISTENCE_PATH = new URL(
+  'src/telegram-persistence/src/durable.rs',
+  BACKEND_ROOT,
+);
+const TELEGRAM_PROJECTION_CACHE_PATH = new URL(
+  'src/telegram-runtime/src/projection_cache.rs',
   BACKEND_ROOT,
 );
 const TELEGRAM_MANAGED_FLOW_PATH = new URL(
@@ -129,16 +142,24 @@ test('Telegram completion remains closed behind its independent capability slice
     automationAdrSource,
     callsAdrSource,
     realtimeAdrSource,
+    folderAdrSource,
     clientContractSource,
     runtimeAdmissionSource,
+    tdlibSource,
+    telegramPersistenceSource,
+    telegramProjectionCacheSource,
     managedFlowSource,
   ] = await Promise.all([
     readFile(INVENTORY_PATH, 'utf8'),
     readFile(TELEGRAM_AUTOMATION_ADR_PATH, 'utf8'),
     readFile(TELEGRAM_CALLS_ADR_PATH, 'utf8'),
     readFile(TELEGRAM_REALTIME_ADR_PATH, 'utf8'),
+    readFile(TELEGRAM_FOLDER_ADR_PATH, 'utf8'),
     readFile(TELEGRAM_CLIENT_CONTRACT_PATH, 'utf8'),
     readFile(TELEGRAM_RUNTIME_ADMISSION_PATH, 'utf8'),
+    readFile(TELEGRAM_TDLIB_PATH, 'utf8'),
+    readFile(TELEGRAM_PERSISTENCE_PATH, 'utf8'),
+    readFile(TELEGRAM_PROJECTION_CACHE_PATH, 'utf8'),
     readFile(TELEGRAM_MANAGED_FLOW_PATH, 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
@@ -172,6 +193,10 @@ test('Telegram completion remains closed behind its independent capability slice
   const automationGate = telegramSlices.get('telegram_automation_v1');
   assert.equal(automationGate.state, 'implemented');
   assert.equal(telegramSlices.get('telegram_core_operational_v1').state, 'implemented');
+  assert.equal(
+    telegramSlices.get('telegram_folder_reassignment_v1').state,
+    'implemented',
+  );
   assert.equal(fullGate.state, 'planned');
   assert.equal(telegramSlices.get('telegram_calls_operational_v1').state, 'planned');
   assert.equal(telegramSlices.get('telegram_call_signaling_v1').state, 'implemented');
@@ -220,6 +245,24 @@ test('Telegram completion remains closed behind its independent capability slice
     /managed_telegram_core_operational_projection_is_restart_safe/,
   );
   assert.match(managedFlowSource, /managed_telegram_realtime_route_requires_exact_grant/);
+  assert.match(folderAdrSource, /Состояние реализации: Реализовано/);
+  assert.match(folderAdrSource, /final provider snapshot and exact target equality/);
+  assert.match(
+    managedFlowSource,
+    /managed_telegram_folder_reassignment_converges_after_partial_provider_failure/,
+  );
+  assert.match(
+    tdlibSource,
+    /verify-chat[\s\S]*provider_folder_ids_from_chat\(&verified_chat\)\? != target_provider_folder_ids/,
+  );
+  assert.match(
+    telegramPersistenceSource,
+    /position\.order <= 0[\s\S]*DELETE FROM hermes_data\.telegram_chat_position_projections/,
+  );
+  assert.match(
+    telegramProjectionCacheSource,
+    /position\.order <= 0[\s\S]*chat_positions\.remove/,
+  );
 });
 
 test('WhatsApp completion remains closed behind independent read and realtime slices', async () => {

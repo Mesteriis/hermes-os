@@ -417,6 +417,61 @@ fn managed_telegram_core_operational_projection_is_restart_safe() {
     );
 }
 
+#[test]
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Communications and Telegram binaries"]
+fn managed_telegram_folder_reassignment_converges_after_partial_provider_failure() {
+    let mut fixture = prepare_managed_telegram_fixture();
+    let store = Arc::clone(&fixture.store);
+    let mut telegram = fixture.start_telegram();
+    assert_telegram_lifecycle_query(&store, &fixture.supervisor, &telegram);
+    assert_telegram_account_started(&store, &fixture.supervisor, &telegram);
+
+    assert_telegram_command_accepted(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        "managed-telegram-folder-seed",
+        "managed Telegram operational fixture trigger",
+    );
+    assert_telegram_operation_completed(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        "managed-telegram-folder-seed",
+    );
+    wait_for_telegram_folder_ids(&store, &fixture.supervisor, &telegram, &[7, 9]);
+
+    const OPERATION_ID: &str = "managed-telegram-folder-reassign-retry";
+    assert_telegram_provider_command_accepted(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        87,
+        OPERATION_ID,
+        TelegramProviderCommand::ReassignChatFolders {
+            operation_id: OPERATION_ID.to_owned(),
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            provider_chat_id: "9002".to_owned(),
+            target_provider_folder_ids: vec![11, 9],
+        },
+    );
+    let completed =
+        assert_telegram_operation_completed(&store, &fixture.supervisor, &telegram, OPERATION_ID);
+    assert!(
+        completed.retry_count >= 1,
+        "ambiguous provider failure must reuse the durable operation through retry"
+    );
+    wait_for_telegram_folder_ids(&store, &fixture.supervisor, &telegram, &[9, 11]);
+
+    let predecessor_generation = telegram.runtime_generation;
+    telegram = fixture.restart_telegram(telegram);
+    assert_eq!(telegram.runtime_generation, predecessor_generation + 1);
+    wait_for_telegram_folder_ids(&store, &fixture.supervisor, &telegram, &[9, 11]);
+    let restored =
+        assert_telegram_operation_completed(&store, &fixture.supervisor, &telegram, OPERATION_ID);
+    assert_eq!(restored.retry_count, completed.retry_count);
+}
+
 fn assert_telegram_core_operational(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
@@ -2032,14 +2087,32 @@ fn assert_telegram_command_accepted(
     operation_id: &str,
     text: &str,
 ) {
+    let command = TelegramProviderCommand::SendText(TelegramSendMessage {
+        operation_id: operation_id.to_owned(),
+        account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+        provider_chat_id: "9001".to_owned(),
+        text: text.to_owned(),
+    });
+    assert_telegram_provider_command_accepted(
+        store,
+        supervisor,
+        telegram,
+        73,
+        operation_id,
+        command,
+    );
+}
+
+fn assert_telegram_provider_command_accepted(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    request_id: u64,
+    operation_id: &str,
+    command: TelegramProviderCommand,
+) {
     let relay = supervisor.relay_port();
-    let command =
-        TelegramClientRequest::Command(TelegramProviderCommand::SendText(TelegramSendMessage {
-            operation_id: operation_id.to_owned(),
-            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
-            provider_chat_id: "9001".to_owned(),
-            text: text.to_owned(),
-        }));
+    let command = TelegramClientRequest::Command(command);
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     let response = loop {
         match route_telegram_client(
@@ -2047,7 +2120,7 @@ fn assert_telegram_command_accepted(
             &relay,
             telegram,
             TelegramClientContractV1::Command,
-            73,
+            request_id,
             &command,
         ) {
             Ok(response) => break response,
@@ -2077,7 +2150,7 @@ fn assert_telegram_operation_completed(
     supervisor: &ManagedRuntimeSupervisor,
     telegram: &StartedTelegramRuntime,
     operation_id: &str,
-) {
+) -> hermes_telegram_api::TelegramOperation {
     let relay = supervisor.relay_port();
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     loop {
@@ -2113,7 +2186,7 @@ fn assert_telegram_operation_completed(
             .find(|operation| operation.operation_id == operation_id)
         {
             match operation.state {
-                TelegramOperationState::Completed => return,
+                TelegramOperationState::Completed => return operation.clone(),
                 TelegramOperationState::Failed | TelegramOperationState::DeadLetter => {
                     panic!("Telegram provider command reached a failure terminal state")
                 }
@@ -2123,6 +2196,60 @@ fn assert_telegram_operation_completed(
         assert!(
             std::time::Instant::now() < deadline,
             "Telegram provider command did not reach a terminal result"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn wait_for_telegram_folder_ids(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    expected: &[i64],
+) {
+    let relay = supervisor.relay_port();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let response = match route_telegram_client(
+            store,
+            &relay,
+            telegram,
+            TelegramClientContractV1::Query,
+            88,
+            &TelegramClientRequest::Query(TelegramProviderQuery::ChatPositions {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+            }),
+        ) {
+            Ok(response) => response,
+            Err(error) if error.is_retryable() => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Telegram folder query remained busy"
+                );
+                std::thread::sleep(Duration::from_millis(25));
+                continue;
+            }
+            Err(error) => panic!("Telegram folder query failed: {error:?}"),
+        };
+        let TelegramClientResponse::Query(TelegramProviderQueryResponse::ChatPositions(positions)) =
+            response
+        else {
+            panic!("Telegram folder query returned the wrong response type");
+        };
+        let mut folder_ids = positions
+            .iter()
+            .filter(|position| position.list_kind == "folder" && position.order > 0)
+            .filter_map(|position| position.provider_folder_id)
+            .collect::<Vec<_>>();
+        folder_ids.sort_unstable();
+        folder_ids.dedup();
+        if folder_ids == expected {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Telegram folder projection did not converge"
         );
         std::thread::sleep(Duration::from_millis(25));
     }

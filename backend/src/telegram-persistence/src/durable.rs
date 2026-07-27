@@ -529,6 +529,25 @@ impl TelegramDurablePersistence {
         &self,
         position: &TelegramChatPosition,
     ) -> Result<(), TelegramDurablePersistenceError> {
+        if position.order <= 0 {
+            return sqlx::query(
+                r#"
+                DELETE FROM hermes_data.telegram_chat_position_projections
+                WHERE account_id = $1
+                  AND provider_chat_id = $2
+                  AND list_kind = $3
+                  AND provider_folder_id = $4
+                "#,
+            )
+            .bind(&position.account_id)
+            .bind(&position.provider_chat_id)
+            .bind(&position.list_kind)
+            .bind(position.provider_folder_id.unwrap_or_default())
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(|_| TelegramDurablePersistenceError::Database);
+        }
         let payload =
             serde_json::to_value(position).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(

@@ -444,7 +444,7 @@ release.
 2. Telegram проходит независимые gates:
    implemented `telegram_core_operational_v1`,
    `telegram_runtime_reconfiguration_v1`,
-   `telegram_folder_reassignment_v1`,
+   implemented `telegram_folder_reassignment_v1`,
    `telegram_automation_v1`,
    `telegram_calls_operational_v1`. Calls umbrella отдельно требует
    `telegram_call_history_v1`, `telegram_call_signaling_v1` и

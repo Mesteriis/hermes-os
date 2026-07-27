@@ -12,6 +12,10 @@ typedef struct {
     size_t head;
     size_t tail;
     char current[HERMES_PAYLOAD_CAPACITY];
+    int folder_7;
+    int folder_9;
+    int folder_11;
+    int folder_reassignment_failure_emitted;
 } HermesTdJsonClient;
 
 static int enqueue(HermesTdJsonClient *client, const char *payload) {
@@ -56,6 +60,8 @@ void *td_json_client_create(void) {
     if (client == NULL) {
         return NULL;
     }
+    client->folder_7 = 1;
+    client->folder_9 = 1;
     enqueue(
         client,
         "{\"@type\":\"updateAuthorizationState\",\"authorization_state\":{\"@type\":\"authorizationStateReady\"}}"
@@ -98,7 +104,58 @@ void td_json_client_send(void *raw_client, const char *request) {
         return;
     }
     const char *format;
-    if (strstr(request, "\"@type\":\"getMe\"") != NULL) {
+    if (strstr(request, "\"@type\":\"getChat\"") != NULL) {
+        const char *positions;
+        if (client->folder_7 && client->folder_9 && client->folder_11) {
+            positions =
+                "[{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":7},\"order\":7,\"is_pinned\":false},{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":9},\"order\":9,\"is_pinned\":false},{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":11},\"order\":11,\"is_pinned\":false}]";
+        } else if (client->folder_7 && client->folder_9) {
+            positions =
+                "[{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":7},\"order\":7,\"is_pinned\":false},{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":9},\"order\":9,\"is_pinned\":false}]";
+        } else if (client->folder_9 && client->folder_11) {
+            positions =
+                "[{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":9},\"order\":9,\"is_pinned\":false},{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":11},\"order\":11,\"is_pinned\":false}]";
+        } else {
+            positions = "[]";
+        }
+        int written = snprintf(
+            response,
+            sizeof(response),
+            "{\"@type\":\"chat\",\"id\":9002,\"positions\":%s,\"@extra\":\"%s\"}",
+            positions,
+            extra
+        );
+        if (written > 0 && (size_t)written < sizeof(response)) {
+            enqueue(client, response);
+        }
+        return;
+    } else if (strstr(request, "\"@type\":\"getChatFolder\"") != NULL) {
+        format =
+            "{\"@type\":\"chatFolder\",\"name\":{\"@type\":\"chatFolderName\",\"text\":\"Managed folder\"},\"icon\":{\"@type\":\"chatFolderIcon\",\"name\":\"Custom\"},\"included_chat_ids\":[9002],\"@extra\":\"%s\"}";
+    } else if (strstr(request, "\"@type\":\"addChatToList\"") != NULL
+        && strstr(request, "\"chat_folder_id\":11") != NULL) {
+        client->folder_11 = 1;
+        enqueue(
+            client,
+            "{\"@type\":\"updateChatPosition\",\"chat_id\":9002,\"position\":{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":11},\"order\":11,\"is_pinned\":false}}"
+        );
+        if (strstr(extra, "managed-telegram-folder-reassign-retry:add:11") != NULL
+            && !client->folder_reassignment_failure_emitted) {
+            client->folder_reassignment_failure_emitted = 1;
+            format =
+                "{\"@type\":\"error\",\"code\":503,\"message\":\"private fixture failure\",\"@extra\":\"%s\"}";
+        } else {
+            format = "{\"@type\":\"ok\",\"@extra\":\"%s\"}";
+        }
+    } else if (strstr(request, "\"@type\":\"editChatFolder\"") != NULL
+        && strstr(request, "\"chat_folder_id\":7") != NULL) {
+        client->folder_7 = 0;
+        enqueue(
+            client,
+            "{\"@type\":\"updateChatPosition\",\"chat_id\":9002,\"position\":{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":7},\"order\":0,\"is_pinned\":false}}"
+        );
+        format = "{\"@type\":\"ok\",\"@extra\":\"%s\"}";
+    } else if (strstr(request, "\"@type\":\"getMe\"") != NULL) {
         format = "{\"@type\":\"user\",\"id\":777,\"@extra\":\"%s\"}";
     } else if (strstr(request, "\"@type\":\"getChatHistory\"") != NULL) {
         format =
@@ -160,6 +217,10 @@ void td_json_client_send(void *raw_client, const char *request) {
         enqueue(
             client,
             "{\"@type\":\"updateChatPosition\",\"chat_id\":9002,\"position\":{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":7},\"order\":9,\"is_pinned\":true}}"
+        );
+        enqueue(
+            client,
+            "{\"@type\":\"updateChatPosition\",\"chat_id\":9002,\"position\":{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":9},\"order\":8,\"is_pinned\":false}}"
         );
         enqueue(
             client,

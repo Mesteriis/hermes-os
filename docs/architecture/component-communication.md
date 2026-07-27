@@ -278,6 +278,13 @@ WhatsApp и Zulip не обязаны изображать один универ
 operational contract и может использовать общий presentation shell через
 узкие provider-neutral props.
 
+Provider multi-step mutation не объявляется атомарной только потому, что client
+видит один command. Telegram folder reassignment использует один owner-local
+durable operation, fresh current snapshot, deterministic add/remove delta и
+обязательную final provider equality. Partial success повторно планируется от
+current provider state; intent не становится projection до provider
+observation, а intermediate `ok` не является terminal completion.
+
 Контекстные домены не видят этот operational contract. Плагин сам публикует
 отдельное neutral evidence observation:
 
