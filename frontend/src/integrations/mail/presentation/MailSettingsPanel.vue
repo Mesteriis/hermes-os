@@ -8,6 +8,7 @@ import {
 } from '../../../platform/gateway/publicModuleSettings'
 import ModuleSettingsPanel from '../../../shared/ui/settings/ModuleSettingsPanel.vue'
 import type { ModuleSettingsPanelModel } from '../../../shared/ui/settings/ModuleSettingsPanelModel'
+import MailAccountManagementPanel from './MailAccountManagementPanel.vue'
 import MailAccountSetupPanel from './MailAccountSetupPanel.vue'
 import MailPortabilityPanel from './MailPortabilityPanel.vue'
 
@@ -35,6 +36,7 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 	<div class="mail-settings-owner">
 		<ModuleSettingsPanel :model="model" />
 		<MailAccountSetupPanel :module="module" />
+		<MailAccountManagementPanel :module="module" />
 		<MailPortabilityPanel :module="module" />
 	</div>
 </template>

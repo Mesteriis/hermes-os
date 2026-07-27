@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 
 import { describe, expect, it } from 'vitest'
 
-describe('Telegram automation settings boundary', () => {
-	it('keeps generated query, command, controller and presentation responsibilities separate', () => {
+describe('Telegram automation integration boundary', () => {
+	it('keeps generated query, command, controller and presentation responsibilities separate from account Settings', () => {
 		const route = read('./TelegramAutomationSettingsRoute.vue')
 		const controller = read('../queries/useTelegramAutomationManagement.ts')
 		const presentation = read('../presentation/TelegramAutomationPanel.vue')
@@ -41,9 +41,9 @@ describe('Telegram automation settings boundary', () => {
 		expect(presentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(model).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(route).toContain('useTelegramAutomationManagement')
-		expect(settingsComposition).toContain('TelegramAutomationSettingsRoute')
-		expect(settingsComposition).toContain("'telegram.automation.command.v1'")
-		expect(settingsComposition).toContain("'telegram.automation.query.v1'")
+		expect(settingsComposition).not.toContain('TelegramAutomationSettingsRoute')
+		expect(settingsComposition).not.toContain("'telegram.automation.command.v1'")
+		expect(settingsComposition).not.toContain("'telegram.automation.query.v1'")
 		expect(generator).toContain('telegram-automation-api')
 	})
 })

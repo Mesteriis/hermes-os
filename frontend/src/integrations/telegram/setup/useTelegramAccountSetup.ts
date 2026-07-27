@@ -44,7 +44,7 @@ export function useTelegramAccountSetup(
 				apiHash: new TextEncoder().encode(apiHash.value),
 			})
 			apiHash.value = ''
-			message.value = 'Telegram account provisioned. Continue provider authorization on the Communications page.'
+			message.value = 'Telegram account provisioned. Continue with the QR authorization panel below.'
 			messageTone.value = 'success'
 		} catch {
 			apiHash.value = ''

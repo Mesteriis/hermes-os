@@ -1,0 +1,228 @@
+.integration-account-lifecycle {
+	--integration-account-lifecycle-accent: var(--h-color-accent);
+	display: grid;
+	gap: var(--h-space-4);
+	padding: var(--h-space-5);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background:
+		linear-gradient(135deg, color-mix(in srgb, var(--integration-account-lifecycle-accent) 8%, transparent), transparent 50%),
+		var(--h-color-bg-muted);
+}
+
+.integration-account-lifecycle[data-provider-tone='mail'] {
+	--integration-account-lifecycle-accent: #d94f45;
+}
+
+.integration-account-lifecycle[data-provider-tone='telegram'] {
+	--integration-account-lifecycle-accent: #229ed9;
+}
+
+.integration-account-lifecycle[data-provider-tone='whatsapp'] {
+	--integration-account-lifecycle-accent: #159447;
+}
+
+.integration-account-lifecycle[data-provider-tone='zulip'] {
+	--integration-account-lifecycle-accent: #6542c4;
+}
+
+.integration-account-lifecycle__header {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: start;
+	gap: var(--h-space-4);
+}
+
+.integration-account-lifecycle__header > div {
+	display: grid;
+	gap: var(--h-space-1);
+}
+
+.integration-account-lifecycle__header h3,
+.integration-account-lifecycle__header p,
+.integration-account-lifecycle footer p {
+	margin: 0;
+}
+
+.integration-account-lifecycle__header small {
+	color: var(--integration-account-lifecycle-accent);
+	font-weight: 750;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.integration-account-lifecycle__header p,
+.integration-account-lifecycle__message--neutral {
+	color: var(--h-color-text-muted);
+}
+
+.integration-account-lifecycle__header > strong {
+	padding: var(--h-space-2) var(--h-space-3);
+	border-radius: var(--h-radius-pill);
+	color: var(--integration-account-lifecycle-accent);
+	background: color-mix(in srgb, var(--integration-account-lifecycle-accent) 12%, var(--h-color-surface));
+	font-size: var(--h-font-size-xs);
+}
+
+.integration-account-lifecycle__icon {
+	display: grid;
+	place-items: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	border-radius: var(--h-radius-lg);
+	color: var(--h-color-bg);
+	background: var(--integration-account-lifecycle-accent);
+}
+
+.integration-account-lifecycle__summary {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: var(--h-space-3);
+}
+
+.integration-account-lifecycle__summary > div {
+	display: grid;
+	gap: var(--h-space-1);
+	min-width: 0;
+	padding: var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface);
+}
+
+.integration-account-lifecycle__summary small {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	text-transform: uppercase;
+}
+
+.integration-account-lifecycle__summary strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.integration-account-lifecycle__controls {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--h-space-3);
+	padding: var(--h-space-4);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface);
+}
+
+.integration-account-lifecycle__controls label {
+	display: grid;
+	gap: var(--h-space-2);
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-sm);
+}
+
+.integration-account-lifecycle__controls input {
+	min-width: 0;
+	padding: var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-bg);
+	font: inherit;
+}
+
+.integration-account-lifecycle__controls input:focus {
+	border-color: var(--integration-account-lifecycle-accent);
+	outline: 2px solid color-mix(in srgb, var(--integration-account-lifecycle-accent) 28%, transparent);
+}
+
+.integration-account-lifecycle footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--h-space-3);
+}
+
+.integration-account-lifecycle footer > p {
+	flex: 1;
+	overflow-wrap: anywhere;
+}
+
+.integration-account-lifecycle__actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: var(--h-space-2);
+}
+
+.integration-account-lifecycle__actions button {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--h-space-2);
+	padding: var(--h-space-2) var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-surface);
+	font: inherit;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.integration-account-lifecycle__actions button.primary {
+	border-color: var(--integration-account-lifecycle-accent);
+	color: var(--h-color-bg);
+	background: var(--integration-account-lifecycle-accent);
+}
+
+.integration-account-lifecycle__actions button.danger {
+	border-color: color-mix(in srgb, var(--h-color-danger) 55%, var(--h-color-border));
+	color: var(--h-color-danger);
+}
+
+.integration-account-lifecycle__actions button:disabled {
+	opacity: 0.48;
+	cursor: not-allowed;
+}
+
+.integration-account-lifecycle__message--success {
+	color: var(--h-color-success);
+}
+
+.integration-account-lifecycle__message--error {
+	color: var(--h-color-danger);
+}
+
+@media (max-width: 900px) {
+	.integration-account-lifecycle__summary {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 720px) {
+	.integration-account-lifecycle {
+		padding: var(--h-space-4);
+	}
+
+	.integration-account-lifecycle__header,
+	.integration-account-lifecycle__summary,
+	.integration-account-lifecycle__controls {
+		grid-template-columns: 1fr;
+	}
+
+	.integration-account-lifecycle__header > strong {
+		justify-self: start;
+	}
+
+	.integration-account-lifecycle footer {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.integration-account-lifecycle__actions {
+		justify-content: stretch;
+	}
+
+	.integration-account-lifecycle__actions button {
+		flex: 1;
+		justify-content: center;
+	}
+}

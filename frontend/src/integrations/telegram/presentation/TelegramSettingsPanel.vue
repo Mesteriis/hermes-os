@@ -8,6 +8,7 @@ import {
 } from '../../../platform/gateway/publicModuleSettings'
 import ModuleSettingsPanel from '../../../shared/ui/settings/ModuleSettingsPanel.vue'
 import type { ModuleSettingsPanelModel } from '../../../shared/ui/settings/ModuleSettingsPanelModel'
+import TelegramAccountManagementPanel from './TelegramAccountManagementPanel.vue'
 import TelegramAccountSetupPanel from './TelegramAccountSetupPanel.vue'
 import TelegramQrPairingPanel from './TelegramQrPairingPanel.vue'
 
@@ -35,6 +36,7 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 	<div class="provider-settings-stack">
 		<ModuleSettingsPanel :model="model" />
 		<TelegramAccountSetupPanel :module="module" />
+		<TelegramAccountManagementPanel :module="module" />
 		<TelegramQrPairingPanel :module="module" />
 	</div>
 </template>
