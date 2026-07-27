@@ -36,9 +36,43 @@ const paths = {
   ),
   build: new URL('src/mail-api/build.rs', BACKEND_ROOT),
   api: new URL('src/mail-api/src/lib.rs', BACKEND_ROOT),
+  frontendGenerator: new URL('frontend/scripts/generate-proto.mjs', PROJECT_ROOT),
+  frontendGenerated: new URL(
+    'frontend/src/gen/hermes/mail/sync_health/v1/client_pb.ts',
+    PROJECT_ROOT,
+  ),
+  frontendClient: new URL(
+    'frontend/src/integrations/mail/api/mailSyncHealthClient.ts',
+    PROJECT_ROOT,
+  ),
+  frontendGateway: new URL(
+    'frontend/src/integrations/mail/api/mailSyncHealthGateway.ts',
+    PROJECT_ROOT,
+  ),
+  frontendConnections: new URL(
+    'frontend/src/integrations/mail/queries/mailSyncHealthConnections.ts',
+    PROJECT_ROOT,
+  ),
+  frontendController: new URL(
+    'frontend/src/integrations/mail/queries/useMailSyncHealth.ts',
+    PROJECT_ROOT,
+  ),
+  frontendModel: new URL(
+    'frontend/src/integrations/mail/presentation/mailSyncHealthModel.ts',
+    PROJECT_ROOT,
+  ),
+  frontendPanel: new URL(
+    'frontend/src/integrations/mail/presentation/MailSyncHealthPanel.vue',
+    PROJECT_ROOT,
+  ),
+  frontendRoute: new URL(
+    'frontend/src/integrations/mail/views/MailOperationalRoute.vue',
+    PROJECT_ROOT,
+  ),
+  frontendApp: new URL('frontend/src/app/layout/AppLayoutRoot.vue', PROJECT_ROOT),
 };
 
-test('Mail sync health backend is exact, restart-safe and remains frontend-gated', async () => {
+test('Mail sync health is exact, restart-safe and cut over through its generated client', async () => {
   const [
     adr,
     inventorySource,
@@ -55,6 +89,16 @@ test('Mail sync health backend is exact, restart-safe and remains frontend-gated
     managedFlow,
     build,
     api,
+    frontendGenerator,
+    frontendGenerated,
+    frontendClient,
+    frontendGateway,
+    frontendConnections,
+    frontendController,
+    frontendModel,
+    frontendPanel,
+    frontendRoute,
+    frontendApp,
   ] = await Promise.all(
     Object.values(paths).map((path) => readFile(path, 'utf8')),
   );
@@ -67,14 +111,14 @@ test('Mail sync health backend is exact, restart-safe and remains frontend-gated
     gate: 'mail_sync_health_v1',
     role: 'integration',
     owner: 'mail',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['mail_account_lifecycle_v1', 'mail.sync.v1'],
   });
   assert.match(adr, /Mail integration владеет/);
   assert.match(adr, /Mail не владеет/);
   assert.match(adr, /Mail runtime не запускает detached polling timer/);
-  assert.match(adr, /frontend cutover/);
-  assert.match(adr, /общий\s+gate остаётся `planned`/);
+  assert.match(adr, /First-party frontend cutover выполнен/);
+  assert.match(adr, /Gate `mail_sync_health_v1` открыт как `implemented`/);
 
   assert.match(proto, /package hermes\.mail\.sync_health\.v1/);
   assert.match(
@@ -146,8 +190,39 @@ test('Mail sync health backend is exact, restart-safe and remains frontend-gated
     /proto\/hermes\/mail\/sync_health\/v1\/client\.proto/,
   );
   assert.match(api, /pub mod sync_health;/);
+  assert.match(
+    frontendGenerator,
+    /mail', 'sync_health', 'v1', 'client\.proto'/,
+  );
+  assert.match(frontendGenerated, /MailSyncHealthQueryService/);
+  assert.match(frontendClient, /MailSyncHealthQueryService/);
+  assert.match(frontendClient, /createBrowserGatewayConnectTransport/);
+  assert.match(frontendGateway, /MailSyncHealthQueryV1Schema/);
+  assert.match(frontendGateway, /GetMailSyncStatusQueryV1Schema/);
+  assert.match(frontendGateway, /ListMailSyncRunsQueryV1Schema/);
+  assert.match(frontendGateway, /GetMailSyncRunQueryV1Schema/);
+  assert.match(frontendConnections, /mail\.sync\.health\.query\.v1/);
+  assert.match(frontendController, /getMailSyncStatus/);
+  assert.match(frontendController, /listMailSyncRuns/);
+  assert.match(frontendModel, /MailSyncFailureCodeV1/);
+  assert.match(frontendPanel, /Sync health/);
+  assert.match(frontendPanel, /Run history/);
+  assert.match(frontendRoute, /useMailSyncHealth/);
+  assert.match(frontendApp, /mail\.sync\.health\.query\.v1/);
   assert.doesNotMatch(
-    `${proto}\n${validator}\n${wire}\n${persistence}`,
+    [
+      proto,
+      validator,
+      wire,
+      persistence,
+      frontendClient,
+      frontendGateway,
+      frontendConnections,
+      frontendController,
+      frontendModel,
+      frontendPanel,
+      frontendRoute,
+    ].join('\n'),
     /hermes_communications|domains\/communications|hermes_scheduler|hermes_kernel/i,
   );
 });

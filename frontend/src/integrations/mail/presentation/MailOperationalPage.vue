@@ -2,11 +2,14 @@
 import MailOperationalReadPanel from './MailOperationalReadPanel.vue'
 import type { MailOperationalReadModel } from './mailOperationalReadModel'
 import type { MailOperationalPageModel } from './mailOperationalPageModel'
+import MailSyncHealthPanel from './MailSyncHealthPanel.vue'
+import type { MailSyncHealthModel } from './mailSyncHealthModel'
 import './mailOperationalPage.css'
 
 defineProps<{
 	model: MailOperationalPageModel
 	readModel: MailOperationalReadModel
+	syncHealthModel: MailSyncHealthModel
 }>()
 
 const emit = defineEmits<{
@@ -21,6 +24,9 @@ const emit = defineEmits<{
 	selectMessage: [providerMessageId: string]
 	selectThread: [providerThreadId: string]
 	sync: []
+	syncHealthLoadMore: []
+	syncHealthRefresh: []
+	selectSyncHealthConnection: [connectionId: string]
 	updateOperationId: [value: string]
 	updateProviderConversationId: [value: string]
 	updateRecipients: [value: string]
@@ -44,6 +50,13 @@ const emit = defineEmits<{
 				</button>
 			</section>
 		</header>
+
+		<MailSyncHealthPanel
+			:model="syncHealthModel"
+			@load-more="emit('syncHealthLoadMore')"
+			@refresh="emit('syncHealthRefresh')"
+			@select-connection="emit('selectSyncHealthConnection', $event)"
+		/>
 
 		<MailOperationalReadPanel
 			:model="readModel"

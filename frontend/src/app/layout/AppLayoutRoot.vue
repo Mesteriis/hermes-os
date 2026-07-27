@@ -57,6 +57,9 @@ const mailSyncAvailable = computed(() =>
 const mailOperationalQueryAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.operational.query.v1'),
 )
+const mailSyncHealthAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.sync.health.query.v1'),
+)
 const zulipCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'zulip.command.v1'),
 )
@@ -115,6 +118,7 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					:can-deliver="mailDeliveryAvailable"
 					:can-query="mailOperationalQueryAvailable"
 					:can-sync="mailSyncAvailable"
+					:can-sync-health="mailSyncHealthAvailable"
 					:modules="bootstrap.modules"
 				/>
 				<TelegramOperationalRoute

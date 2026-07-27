@@ -307,7 +307,7 @@
       "gate": "mail_sync_health_v1",
       "role": "integration",
       "owner": "mail",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["mail_account_lifecycle_v1", "mail.sync.v1"]
     },
     {

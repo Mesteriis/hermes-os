@@ -3,9 +3,9 @@
 - Статус: принято
 - Дата: 2026-07-27
 - Состояние реализации: backend contract, V10 owner-local persistence,
-  runtime instrumentation, exact query route и IMAP/Gmail managed conformance
-  реализованы. First-party frontend ещё не реализован, поэтому gate
-  `mail_sync_health_v1` остаётся `planned`.
+  runtime instrumentation, exact query route, IMAP/Gmail managed conformance,
+  generated first-party client и Mail-owned status/history UI реализованы.
+  Gate `mail_sync_health_v1` открыт как `implemented`.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0213, ADR-0214, ADR-0222,
   ADR-0239, ADR-0270, ADR-0282, ADR-0292, ADR-0294, ADR-0298
 
@@ -144,7 +144,8 @@ Mail runtime не запускает detached polling timer.
 - runtime instrumentation меняется с provider execution lifecycle;
 - client port меняется с exact route mapping;
 - assembly только включает обновлённые Mail artifacts и migrations;
-- frontend client/controller/presentation меняются после backend admission.
+- frontend generated client, Gateway adapter, controller и presentation
+  меняются после backend admission как отдельные Mail-owned units.
 
 Runtime не является assembly. Mail не является domain. Query не является
 command. Kernel/Gateway не импортируют Mail schema и не интерпретируют
@@ -174,12 +175,12 @@ failure/outcome.
 7. architecture guards proving no Communications, Scheduler or Kernel
    implementation import.
 
-До frontend cutover backend slice может быть подтверждён отдельно, но общий
-gate остаётся `planned`.
+First-party frontend cutover выполнен поверх exact admitted query capability;
+общий gate открыт только после его validation вместе с backend evidence.
 
 ## Состояние реализации
 
-Backend slice реализован:
+Backend и first-party frontend slice реализованы:
 
 - `hermes.mail.sync_health.v1` имеет exact canonical Protobuf mapping;
 - Mail descriptor revision 5 предоставляет отдельную capability
@@ -195,13 +196,23 @@ Backend slice реализован:
 - scoped cursor, cross-account, privacy и stale-generation negative paths
   покрыты static/managed conformance;
 - live authenticated managed contours подтверждены отдельно для IMAP и Gmail.
-
-Не реализован first-party generated frontend client/status-history UI. Это
-единственная причина, по которой общий reconstruction gate пока не открыт.
+- `frontend/scripts/generate-proto.mjs` включает exact
+  `hermes.mail.sync_health.v1` contract в generated client bundle;
+- отдельные Mail-local Connect client и Gateway adapter реализуют `GetStatus`,
+  `ListRuns` и `GetRun` без handwritten REST;
+- controller выбирает только admitted Mail connection с exact capability
+  `mail.sync.health.query.v1`, fail closed при её отсутствии и сохраняет
+  connection-scoped cursor semantics;
+- Mail operational page показывает provider-path readiness, last success,
+  consecutive failures и bounded restart-safe run history, не раскрывая
+  provider cursor, credential state, raw diagnostics или Communications data;
+- architecture guard подтверждает generated contract, client/controller/
+  presentation boundaries и отсутствие запрещённых owner imports.
 
 ## Последствия
 
 Mail sync получает restart-safe operational evidence без возврата legacy
 workflow facade. Scheduler остаётся platform owner расписаний, Communications
 остаётся canonical evidence owner, а newsletter analytics не маскируется под
-provider subscription state.
+provider subscription state. First-party UI показывает только persisted
+Mail-owned evidence и не подменяет его session-only результатом команды.

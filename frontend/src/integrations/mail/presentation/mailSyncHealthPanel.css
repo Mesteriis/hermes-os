@@ -1,0 +1,239 @@
+.mail-sync-health {
+	display: grid;
+	gap: var(--h-space-4);
+	padding: var(--h-space-5);
+	border: 1px solid color-mix(in srgb, #c74c1b 28%, var(--h-color-border));
+	border-radius: var(--h-radius-lg);
+	background:
+		linear-gradient(135deg, color-mix(in srgb, #e76735 7%, transparent), transparent 42%),
+		var(--h-color-surface);
+	box-shadow: var(--h-shadow-sm);
+}
+
+.mail-sync-health__header,
+.mail-sync-health__history > header,
+.mail-sync-health__run-heading {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--h-space-4);
+}
+
+.mail-sync-health__header h2,
+.mail-sync-health__history h3,
+.mail-sync-health__header p {
+	margin: 0;
+}
+
+.mail-sync-health__header > div:first-child > span,
+.mail-sync-health__history header span {
+	display: block;
+	margin-bottom: var(--h-space-1);
+	color: #c74c1b;
+	font-size: var(--h-font-size-xs);
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.mail-sync-health__header p {
+	margin-top: var(--h-space-2);
+	color: var(--h-color-text-muted);
+}
+
+.mail-sync-health__actions {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--h-space-2);
+}
+
+.mail-sync-health__actions label {
+	display: grid;
+	gap: var(--h-space-1);
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	font-weight: 650;
+}
+
+.mail-sync-health__actions select,
+.mail-sync-health__actions button,
+.mail-sync-health__more {
+	min-height: 2.6rem;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+}
+
+.mail-sync-health__actions select {
+	min-width: 12rem;
+	padding: 0 var(--h-space-3);
+	color: var(--h-color-text);
+	background: var(--h-color-bg);
+}
+
+.mail-sync-health__actions button,
+.mail-sync-health__more {
+	padding: 0 var(--h-space-4);
+	color: var(--h-color-bg);
+	font-weight: 700;
+	background: #c74c1b;
+}
+
+.mail-sync-health__actions button:disabled,
+.mail-sync-health__more:disabled {
+	opacity: 0.5;
+}
+
+.mail-sync-health__notice,
+.mail-sync-health__empty {
+	margin: 0;
+	padding: var(--h-space-3) var(--h-space-4);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text-muted);
+	background: var(--h-color-bg);
+}
+
+.mail-sync-health__notice.error {
+	border-color: color-mix(in srgb, var(--h-color-danger, #d34b4b) 55%, var(--h-color-border));
+	color: var(--h-color-danger, #d34b4b);
+}
+
+.mail-sync-health__content,
+.mail-sync-health__history {
+	display: grid;
+	gap: var(--h-space-4);
+}
+
+.mail-sync-health__summary {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: var(--h-space-2);
+}
+
+.mail-sync-health__summary article {
+	display: grid;
+	align-content: start;
+	gap: var(--h-space-2);
+	min-height: 5.7rem;
+	padding: var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-bg);
+}
+
+.mail-sync-health__summary article span,
+.mail-sync-health__history small,
+.mail-sync-health__run-heading code,
+.mail-sync-health__history dt {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+}
+
+.mail-sync-health__summary article strong {
+	overflow-wrap: anywhere;
+	font-size: var(--h-font-size-sm);
+}
+
+.mail-sync-health__history ol {
+	display: grid;
+	gap: var(--h-space-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.mail-sync-health__history li {
+	display: grid;
+	gap: var(--h-space-3);
+	padding: var(--h-space-4);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-bg);
+}
+
+.mail-sync-health__run-heading > div {
+	display: grid;
+	gap: var(--h-space-1);
+	min-width: 0;
+}
+
+.mail-sync-health__run-heading code {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mail-sync-health__run-heading > span {
+	padding: 0.25rem 0.55rem;
+	border-radius: 999px;
+	background: color-mix(in srgb, currentColor 11%, transparent);
+	font-size: var(--h-font-size-xs);
+	font-weight: 750;
+}
+
+.mail-sync-health__history dl {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--h-space-3);
+	margin: 0;
+}
+
+.mail-sync-health__history dl > div {
+	min-width: 0;
+}
+
+.mail-sync-health__history dd {
+	margin: var(--h-space-1) 0 0;
+	overflow-wrap: anywhere;
+	font-size: var(--h-font-size-sm);
+	font-weight: 650;
+}
+
+.tone-success {
+	color: var(--h-color-success, #1c9b6c);
+}
+
+.tone-danger {
+	color: var(--h-color-danger, #d34b4b);
+}
+
+.tone-progress {
+	color: #c74c1b;
+}
+
+.tone-neutral {
+	color: var(--h-color-text-muted);
+}
+
+.mail-sync-health__more {
+	justify-self: start;
+}
+
+@media (max-width: 980px) {
+	.mail-sync-health__summary {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 680px) {
+	.mail-sync-health {
+		padding: var(--h-space-4);
+	}
+
+	.mail-sync-health__header,
+	.mail-sync-health__history > header {
+		flex-direction: column;
+	}
+
+	.mail-sync-health__actions,
+	.mail-sync-health__actions label,
+	.mail-sync-health__actions select,
+	.mail-sync-health__actions button {
+		width: 100%;
+	}
+
+	.mail-sync-health__summary,
+	.mail-sync-health__history dl {
+		grid-template-columns: 1fr;
+	}
+}
