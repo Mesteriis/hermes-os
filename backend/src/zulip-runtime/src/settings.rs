@@ -10,27 +10,31 @@ use prost::Message;
 
 const ACCOUNT_ID: &str = "zulip.account_id";
 const REALM_URL: &str = "zulip.realm_url";
-const BOT_EMAIL: &str = "zulip.bot_email";
+const ACCOUNT_EMAIL: &str = "zulip.account_email";
 
-pub const ZULIP_SETTINGS_SCHEMA_MAJOR_V2: u32 = 2;
-pub const ZULIP_SETTINGS_SCHEMA_REVISION_V2: u32 = 1;
+pub const ZULIP_SETTINGS_SCHEMA_MAJOR_V3: u32 = 3;
+pub const ZULIP_SETTINGS_SCHEMA_REVISION_V3: u32 = 1;
 
 #[must_use]
-pub fn zulip_settings_schema_v2() -> SettingsSchemaV1 {
+pub fn zulip_settings_schema_v3() -> SettingsSchemaV1 {
     SettingsSchemaV1 {
-        major: ZULIP_SETTINGS_SCHEMA_MAJOR_V2,
-        revision: ZULIP_SETTINGS_SCHEMA_REVISION_V2,
+        major: ZULIP_SETTINGS_SCHEMA_MAJOR_V3,
+        revision: ZULIP_SETTINGS_SCHEMA_REVISION_V3,
         definitions: vec![
+            definition(
+                ACCOUNT_EMAIL,
+                SettingValueTypeV1::String,
+                "Zulip account email",
+            ),
             definition(ACCOUNT_ID, SettingValueTypeV1::String, "Zulip account ID"),
-            definition(BOT_EMAIL, SettingValueTypeV1::String, "Zulip bot email"),
             definition(REALM_URL, SettingValueTypeV1::String, "Zulip realm URL"),
         ],
     }
 }
 
 #[must_use]
-pub fn zulip_settings_schema_bytes_v2() -> Vec<u8> {
-    zulip_settings_schema_v2().encode_to_vec()
+pub fn zulip_settings_schema_bytes_v3() -> Vec<u8> {
+    zulip_settings_schema_v3().encode_to_vec()
 }
 
 fn definition(
@@ -61,7 +65,7 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<ZulipRuntimeSettingsV1, S
     let account = ZulipAccountV1 {
         account_id: required_string(snapshot, ACCOUNT_ID)?,
         realm_url: required_string(snapshot, REALM_URL)?,
-        bot_email: required_string(snapshot, BOT_EMAIL)?,
+        account_email: required_string(snapshot, ACCOUNT_EMAIL)?,
     };
     if !validate_account(&account) {
         return Err(invalid_settings());
@@ -103,11 +107,11 @@ mod tests {
         validation::descriptor::validate_settings_schema_v1,
     };
 
-    use super::{decode, zulip_settings_schema_v2};
+    use super::{decode, zulip_settings_schema_v3};
 
     #[test]
     fn canonical_schema_is_configuration_scoped_editable_and_non_secret() {
-        let schema = zulip_settings_schema_v2();
+        let schema = zulip_settings_schema_v3();
 
         assert_eq!(validate_settings_schema_v1(&schema), Ok(()));
         assert_eq!(
@@ -116,7 +120,7 @@ mod tests {
                 .iter()
                 .map(|definition| definition.setting_id.as_str())
                 .collect::<Vec<_>>(),
-            ["zulip.account_id", "zulip.bot_email", "zulip.realm_url",]
+            ["zulip.account_email", "zulip.account_id", "zulip.realm_url",]
         );
         assert!(schema.definitions.iter().all(|definition| {
             definition.client_visibility == SettingClientVisibilityV1::Editable as i32
@@ -136,8 +140,8 @@ mod tests {
                     Value::StringValue("account-1".to_owned()),
                 ),
                 entry(
-                    "zulip.bot_email",
-                    Value::StringValue("bot@example.com".to_owned()),
+                    "zulip.account_email",
+                    Value::StringValue("account@example.com".to_owned()),
                 ),
                 entry(
                     "zulip.realm_url",

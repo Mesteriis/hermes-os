@@ -9,7 +9,7 @@ export function useZulipAccountSetup(
 ) {
 	const accountId = ref('')
 	const realmUrl = ref('')
-	const botEmail = ref('')
+	const accountEmail = ref('')
 	const apiKey = ref('')
 	const busy = ref(false)
 	const message = ref('')
@@ -20,7 +20,7 @@ export function useZulipAccountSetup(
 		module()?.settings
 		&& accountId.value.trim()
 		&& realmUrl.value.trim()
-		&& botEmail.value.trim()
+		&& accountEmail.value.trim()
 		&& apiKey.value,
 	))
 
@@ -40,7 +40,7 @@ export function useZulipAccountSetup(
 				expectedDesiredRevision: current.settings.desiredRevision,
 				accountId: accountId.value,
 				realmUrl: realmUrl.value,
-				botEmail: botEmail.value,
+				accountEmail: accountEmail.value,
 				apiKey: new TextEncoder().encode(apiKey.value),
 			})
 			apiKey.value = ''
@@ -58,7 +58,7 @@ export function useZulipAccountSetup(
 	return {
 		accountId,
 		realmUrl,
-		botEmail,
+		accountEmail,
 		apiKey,
 		busy,
 		message,

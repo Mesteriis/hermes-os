@@ -12,7 +12,7 @@ export type TelegramAccountAccessModel = {
 	accounts: readonly TelegramAccountRow[]
 	selectedAccountId: string
 	authorizationState: string
-	authorizationQrLink: string
+	authorizationQrDataUrl: string
 	authorizationPasswordHint: string
 	password: string
 	provisionAccountId: string

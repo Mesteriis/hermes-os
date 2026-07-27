@@ -64,6 +64,14 @@
 	gap: var(--h-space-2);
 }
 
+.telegram-account-access__qr {
+	max-width: 100%;
+	height: auto;
+	padding: var(--h-space-2);
+	border-radius: var(--h-radius-lg);
+	background: #fff;
+}
+
 .telegram-account-access__accounts button {
 	display: grid;
 	gap: var(--h-space-1);

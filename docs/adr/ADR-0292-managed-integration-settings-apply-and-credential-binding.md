@@ -308,9 +308,9 @@ adapter.
   generation, fresh Storage/Vault binding, bounded ready и только затем
   effective/current acknowledgement. Ни один integration package туда не
   импортируется.
-- Zulip Settings schema major 2 содержит только `account_id`, `bot_email` и
-  `realm_url`. Credential revision, record ID, secret reference и plaintext
-  отсутствуют.
+- Zulip Settings schema major 3 содержит только `account_id`,
+  `account_email` и `realm_url`; bot-only schema major 2 заменён ADR-0304.
+  Credential revision, record ID, secret reference и plaintext отсутствуют.
 - `zulip.account.lifecycle.v1` и Zulip Storage bundle revision 3 реализуют
   typed CAS binding `pending_restart | active | retired`; provider HTTP
   отключается сразу после bind/retire.

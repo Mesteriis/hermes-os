@@ -202,7 +202,7 @@ fn serve_connection(
     let connection = rustls::ServerConnection::new(config).map_err(std::io::Error::other)?;
     let mut stream = rustls::StreamOwned::new(connection, tcp);
     let request = read_request(&mut stream)?;
-    let credential_v2 = STANDARD.encode(b"managed-bot@example.test:managed-zulip-api-key-v2");
+    let credential_v2 = STANDARD.encode(b"managed-account@example.test:managed-zulip-api-key-v2");
     if request
         .windows(credential_v2.len())
         .any(|window| window == credential_v2.as_bytes())
@@ -249,7 +249,7 @@ fn history_response(request_line: &str) -> String {
     if request_line.contains("anchor=9002") {
         return r#"{"result":"success","msg":"","found_oldest":true,"found_newest":false,"messages":[{"id":9001,"sender_id":71,"sender_email":"history@example.test","stream_id":44,"display_recipient":"operations","subject":"history","content":"oldest managed history","timestamp":100,"reactions":[]}]}"#.to_owned();
     }
-    r#"{"result":"success","msg":"","found_oldest":false,"found_newest":true,"messages":[{"id":9002,"sender_id":72,"sender_email":"history@example.test","stream_id":44,"display_recipient":"operations","subject":"history","content":"searchable managed history","timestamp":101,"reactions":[{"user_id":73,"emoji_name":"thumbs_up","emoji_code":"1f44d","reaction_type":"unicode_emoji"}]},{"id":9003,"sender_id":73,"sender_email":"bot@example.test","recipient_id":55,"content":"direct managed history","timestamp":102,"reactions":[]}]}"#.to_owned()
+    r#"{"result":"success","msg":"","found_oldest":false,"found_newest":true,"messages":[{"id":9002,"sender_id":72,"sender_email":"history@example.test","stream_id":44,"display_recipient":"operations","subject":"history","content":"searchable managed history","timestamp":101,"reactions":[{"user_id":73,"emoji_name":"thumbs_up","emoji_code":"1f44d","reaction_type":"unicode_emoji"}]},{"id":9003,"sender_id":73,"sender_email":"account@example.test","recipient_id":55,"content":"direct managed history","timestamp":102,"reactions":[]}]}"#.to_owned()
 }
 
 fn next_event_response(state: &ZulipHttpsFixtureState) -> String {

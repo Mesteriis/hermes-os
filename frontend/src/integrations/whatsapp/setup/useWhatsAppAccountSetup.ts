@@ -24,7 +24,7 @@ export function useWhatsAppAccountSetup(
 				expectedDesiredRevision: current.settings.desiredRevision,
 				accountId: accountId.value,
 			})
-			message.value = 'WhatsApp account configuration accepted. The desktop host can now present the linking flow.'
+			message.value = 'WhatsApp account profile configured. Continue in the separate QR pairing panel.'
 			messageTone.value = 'success'
 		} catch {
 			message.value = 'WhatsApp account setup failed. The admitted runtime or host bridge is unavailable.'

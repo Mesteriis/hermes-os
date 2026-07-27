@@ -10,8 +10,8 @@ const setup = useZulipAccountSetup(() => props.module)
 <template>
 	<IntegrationAccountSetupCard
 		eyebrow="Provider account"
-		title="Connect a Zulip bot"
-		description="Realm and bot identity stay in Zulip Settings; the API key is sealed directly to Vault."
+		title="Connect Zulip"
+		description="Realm and account identity stay in Zulip Settings; the API key is sealed directly to Vault."
 		tone="zulip"
 		icon="tabler:brand-zulip"
 		:account-state="setup.configured.value ? 'Configured' : 'No account'"
@@ -28,8 +28,8 @@ const setup = useZulipAccountSetup(() => props.module)
 			<input v-model="setup.accountId.value" required maxlength="128" placeholder="work-zulip">
 		</label>
 		<label>
-			<span>Bot email</span>
-			<input v-model="setup.botEmail.value" required type="email" autocomplete="username" placeholder="bot@example.com">
+			<span>Account email</span>
+			<input v-model="setup.accountEmail.value" required type="email" autocomplete="username" placeholder="you@example.com">
 		</label>
 		<label class="wide">
 			<span>Realm URL</span>

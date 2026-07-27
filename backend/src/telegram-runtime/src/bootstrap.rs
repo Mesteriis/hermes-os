@@ -315,7 +315,7 @@ pub async fn open_admitted_runtime(
         display_name: persisted_account.display_name,
         external_account_id: persisted_account.external_account_id,
         credentials: credential_bindings,
-        qr_authorized: true,
+        qr_authorized: false,
     };
     let mut composition =
         TelegramRuntimeComposition::new_with_account_setup(library, account_setup, parameters)

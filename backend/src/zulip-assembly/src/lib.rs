@@ -14,7 +14,7 @@ use hermes_runtime_protocol::validation::descriptor::{
 use hermes_storage_protocol::validation::validate_storage_bundle;
 use hermes_zulip_persistence::zulip_storage_bundle_v1;
 use hermes_zulip_runtime::admission::zulip_module_descriptor_v1;
-use hermes_zulip_runtime::settings::zulip_settings_schema_v2;
+use hermes_zulip_runtime::settings::zulip_settings_schema_v3;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
@@ -118,7 +118,7 @@ pub fn materialize_zulip_release_assembly_v1(
     validate_inputs(output_directory, build_id, runtime_source)?;
 
     let descriptor = zulip_module_descriptor_v1(build_id);
-    let settings_schema = zulip_settings_schema_v2();
+    let settings_schema = zulip_settings_schema_v3();
     let storage_bundle = zulip_storage_bundle_v1();
     if validate_descriptor_v1(&descriptor).is_err()
         || validate_settings_schema_v1(&settings_schema).is_err()
@@ -289,12 +289,12 @@ mod tests {
             descriptor_bytes,
             zulip_module_descriptor_v1("build-1").encode_to_vec()
         );
-        assert_eq!(settings_bytes, zulip_settings_schema_v2().encode_to_vec());
+        assert_eq!(settings_bytes, zulip_settings_schema_v3().encode_to_vec());
         assert_eq!(storage_bytes, zulip_storage_bundle_v1().encode_to_vec());
         assert_eq!(descriptor.module_id, ZULIP_ASSEMBLY_MODULE_ID);
         assert_eq!(
             settings.major,
-            hermes_zulip_runtime::settings::ZULIP_SETTINGS_SCHEMA_MAJOR_V2
+            hermes_zulip_runtime::settings::ZULIP_SETTINGS_SCHEMA_MAJOR_V3
         );
         assert_eq!(storage.owner_id, ZULIP_ASSEMBLY_OWNER_ID);
         assert_eq!(

@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 
 import type { TelegramAccountResponse } from '../../../gen/hermes/telegram/v1/client_pb'
 import {
@@ -18,6 +18,7 @@ import {
 	buildTelegramAccountRows,
 } from '../presentation/telegramAccountAccessModel'
 import type { TelegramAccountAccessModel } from '../presentation/telegramAccountAccessModel'
+import { telegramQrDataUrl } from '../linking/telegramQrArtifact'
 
 export function useTelegramAccountAccess(capabilities: {
 	canAuthorize: () => boolean
@@ -27,6 +28,7 @@ export function useTelegramAccountAccess(capabilities: {
 	const accounts = ref<readonly TelegramAccountResponse[]>([])
 	const selectedAccountId = ref('')
 	const authorization = ref<TelegramAuthorizationStatus | null>(null)
+	const authorizationQrDataUrl = ref('')
 	const password = ref('')
 	const provisionAccountId = ref('')
 	const provisionDisplayName = ref('')
@@ -40,7 +42,7 @@ export function useTelegramAccountAccess(capabilities: {
 			accounts: buildTelegramAccountRows(accounts.value, selectedAccountId.value),
 			selectedAccountId: selectedAccountId.value,
 			authorizationState: authorizationState.state,
-			authorizationQrLink: authorizationState.qrLink,
+			authorizationQrDataUrl: authorizationQrDataUrl.value,
 			authorizationPasswordHint: authorizationState.passwordHint,
 			password: password.value,
 			provisionAccountId: provisionAccountId.value,
@@ -64,6 +66,9 @@ export function useTelegramAccountAccess(capabilities: {
 			])
 			accounts.value = nextAccounts
 			authorization.value = nextAuthorization
+			authorizationQrDataUrl.value = nextAuthorization?.qrLink
+				? await telegramQrDataUrl(nextAuthorization.qrLink)
+				: ''
 			if (!selectedAccountId.value && nextAccounts[0]) {
 				selectedAccountId.value = nextAccounts[0].accountId
 			}
@@ -71,6 +76,7 @@ export function useTelegramAccountAccess(capabilities: {
 				? 'No Telegram accounts are provisioned.'
 				: `${nextAccounts.length} Telegram account${nextAccounts.length === 1 ? '' : 's'} available.`
 		} catch (error) {
+			authorizationQrDataUrl.value = ''
 			statusMessage.value = message(error, 'Telegram account access is unavailable.')
 		} finally {
 			pending.value = false
@@ -85,7 +91,7 @@ export function useTelegramAccountAccess(capabilities: {
 				displayName: provisionDisplayName.value,
 				externalAccountId: provisionExternalAccountId.value,
 				credentials: [],
-				qrAuthorized: true,
+				qrAuthorized: false,
 			})
 			selectedAccountId.value = account.accountId
 			statusMessage.value = `Telegram account ${account.accountId} provisioned.`
@@ -140,6 +146,9 @@ export function useTelegramAccountAccess(capabilities: {
 			await submitTelegramAuthorizationPassword(password.value)
 			password.value = ''
 			authorization.value = await getTelegramAuthorizationStatus()
+			authorizationQrDataUrl.value = authorization.value.qrLink
+				? await telegramQrDataUrl(authorization.value.qrLink)
+				: ''
 			statusMessage.value = 'Telegram authorization password accepted.'
 		} catch (error) {
 			statusMessage.value = message(error, 'Telegram authorization failed.')
@@ -198,6 +207,11 @@ export function useTelegramAccountAccess(capabilities: {
 		}
 		return selectedAccountId.value
 	}
+
+	onBeforeUnmount(() => {
+		authorizationQrDataUrl.value = ''
+		password.value = ''
+	})
 
 	return {
 		model,

@@ -34,7 +34,7 @@ pub const PACKAGE: &str = "hermes-zulip-api";
 pub struct ZulipAccountV1 {
     pub account_id: String,
     pub realm_url: String,
-    pub bot_email: String,
+    pub account_email: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -509,7 +509,7 @@ pub enum ZulipEventV1 {
 pub fn validate_account(account: &ZulipAccountV1) -> bool {
     !account.account_id.trim().is_empty()
         && account.realm_url.starts_with("https://")
-        && account.bot_email.contains('@')
+        && account.account_email.contains('@')
 }
 
 #[must_use]

@@ -397,3 +397,13 @@ ADR-0301 закрывает отсутствующий generic seam между s
 pending registration: Kernel проверяет installed manifest и создаёт только
 proposal, owner отдельно approve/bind/start-ит units, а development assembly
 координирует exact platform/domain/integration plan без provider secrets.
+ADR-0302 определяет deterministic development bootstrap для managed Settings и
+runtime: assembly применяет только declared typed defaults и generic owner
+control operations, не забирая provider semantics у integration units.
+ADR-0303 фиксирует provider-owned QR linking: Telegram передаёт transient
+TDLib link через existing opaque authorization route и рендерит QR локально,
+а WhatsApp оставляет QR внутри owner-visible Tauri WebView. Kernel не становится
+generic QR/account service, browser не подделывает native pairing.
+ADR-0304 заменяет ложную Zulip bot-only identity на Settings schema major 3 с
+`zulip.account_email`: Zulip integration владеет email/API semantics, Kernel
+применяет только generic typed settings и не выбирает bot/user behavior.

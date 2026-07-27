@@ -22,7 +22,7 @@ describe('ZulipAccountSetupWorkflowV1', () => {
 			registrationId: 'zulip-registration',
 			expectedDesiredRevision: 1n,
 			accountId: 'work',
-			botEmail: 'bot@example.com',
+			accountEmail: 'account@example.com',
 			realmUrl: 'https://example.zulipchat.com',
 			apiKey: new TextEncoder().encode('secret'),
 		})

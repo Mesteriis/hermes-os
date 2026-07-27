@@ -9,6 +9,7 @@ import {
 import ModuleSettingsPanel from '../../../shared/ui/settings/ModuleSettingsPanel.vue'
 import type { ModuleSettingsPanelModel } from '../../../shared/ui/settings/ModuleSettingsPanelModel'
 import TelegramAccountSetupPanel from './TelegramAccountSetupPanel.vue'
+import TelegramQrPairingPanel from './TelegramQrPairingPanel.vue'
 
 const TELEGRAM_MODULE_ID = 'hermes-telegram-runtime'
 const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
@@ -34,5 +35,6 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 	<div class="provider-settings-stack">
 		<ModuleSettingsPanel :model="model" />
 		<TelegramAccountSetupPanel :module="module" />
+		<TelegramQrPairingPanel :module="module" />
 	</div>
 </template>

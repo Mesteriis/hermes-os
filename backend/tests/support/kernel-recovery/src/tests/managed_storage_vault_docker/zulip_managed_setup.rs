@@ -22,7 +22,7 @@ use hermes_zulip_runtime::{
         ZULIP_BLOB_CAPABILITY_ID, ZULIP_CREDENTIALS_CAPABILITY_ID, ZULIP_EVENTS_CAPABILITY_ID,
         ZULIP_STORAGE_CAPABILITY_ID, zulip_module_descriptor_v1,
     },
-    settings::zulip_settings_schema_bytes_v2,
+    settings::zulip_settings_schema_bytes_v3,
 };
 
 use crate::modules::capability::router::{
@@ -64,7 +64,7 @@ pub(super) fn installed_communications_zulip_release(root: &Path) -> InstalledSi
             zulip_binary(),
             zulip_module_descriptor_v1("managed-zulip-live").encode_to_vec(),
         )
-        .with_settings_schema(zulip_settings_schema_bytes_v2()),
+        .with_settings_schema(zulip_settings_schema_bytes_v3()),
     );
     InstalledSignedBundle::install(root, &artifacts)
         .expect("install signed Communications and Zulip release")
@@ -150,7 +150,7 @@ pub(super) fn admit_zulip_runtime(
         &capability_ids,
     )
     .expect("approve exact Zulip query capabilities");
-    let schema = zulip_settings_schema_bytes_v2();
+    let schema = zulip_settings_schema_bytes_v3();
     crate::modules::settings::schema::admit(
         store,
         registration.registration_id(),
@@ -451,8 +451,8 @@ pub(super) fn zulip_settings_snapshot(
                 Value::StringValue(ZULIP_ACCOUNT_ID.to_owned()),
             ),
             entry(
-                "zulip.bot_email",
-                Value::StringValue("managed-bot@example.test".to_owned()),
+                "zulip.account_email",
+                Value::StringValue("managed-account@example.test".to_owned()),
             ),
             entry("zulip.realm_url", Value::StringValue(realm_url.to_owned())),
         ],

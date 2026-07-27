@@ -19,8 +19,8 @@ use hermes_zulip_core::ZULIP_API_KEY_PURPOSE_ID;
 use sha2::{Digest, Sha256};
 
 use crate::settings::{
-    ZULIP_SETTINGS_SCHEMA_MAJOR_V2, ZULIP_SETTINGS_SCHEMA_REVISION_V2,
-    zulip_settings_schema_bytes_v2,
+    ZULIP_SETTINGS_SCHEMA_MAJOR_V3, ZULIP_SETTINGS_SCHEMA_REVISION_V3,
+    zulip_settings_schema_bytes_v3,
 };
 
 pub const ZULIP_BLOB_CAPABILITY_ID: &str = "zulip.blob.v1";
@@ -165,7 +165,7 @@ fn zulip_storage_capability_v1() -> CapabilityDescriptorV1 {
 
 #[must_use]
 pub fn zulip_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
-    let settings_schema = zulip_settings_schema_bytes_v2();
+    let settings_schema = zulip_settings_schema_bytes_v3();
     ModuleDescriptorV1 {
         descriptor_major: 1,
         descriptor_revision: 1,
@@ -181,8 +181,8 @@ pub fn zulip_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
         }),
         capabilities: zulip_admission_capabilities_v1(),
         settings_schema_ref: Some(SettingsSchemaRefV1 {
-            major: ZULIP_SETTINGS_SCHEMA_MAJOR_V2,
-            revision: ZULIP_SETTINGS_SCHEMA_REVISION_V2,
+            major: ZULIP_SETTINGS_SCHEMA_MAJOR_V3,
+            revision: ZULIP_SETTINGS_SCHEMA_REVISION_V3,
             artifact_size_bytes: settings_schema.len() as u64,
             sha256: Sha256::digest(&settings_schema).to_vec(),
         }),

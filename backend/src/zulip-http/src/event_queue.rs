@@ -40,7 +40,7 @@ mod attachment_tests {
             ZulipAccountV1 {
                 account_id: "account".into(),
                 realm_url: "https://zulip.test/".into(),
-                bot_email: "bot@zulip.test".into(),
+                account_email: "account@zulip.test".into(),
             },
             "secret".into(),
         )
@@ -164,7 +164,7 @@ pub(crate) fn message_snapshot(
     let is_outgoing = message
         .get("sender_email")
         .and_then(Value::as_str)
-        .is_some_and(|email| email.eq_ignore_ascii_case(&config.account.bot_email));
+        .is_some_and(|email| email.eq_ignore_ascii_case(&config.account.account_email));
     Ok(ZulipMessageSnapshotV1 {
         account_id: config.account.account_id.clone(),
         provider_message_id,
@@ -415,7 +415,7 @@ mod tests {
             ZulipAccountV1 {
                 account_id: "account-1".to_owned(),
                 realm_url: "https://zulip.test/".to_owned(),
-                bot_email: "bot@zulip.test".to_owned(),
+                account_email: "account@zulip.test".to_owned(),
             },
             "secret".to_owned(),
         )
@@ -434,7 +434,7 @@ mod tests {
                     "stream_id": 9,
                     "subject": "topic",
                     "sender_id": 10,
-                    "sender_email": "bot@zulip.test"
+                    "sender_email": "account@zulip.test"
                 }
             }),
         )

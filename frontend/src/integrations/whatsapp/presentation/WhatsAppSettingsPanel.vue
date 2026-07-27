@@ -9,6 +9,7 @@ import {
 import ModuleSettingsPanel from '../../../shared/ui/settings/ModuleSettingsPanel.vue'
 import type { ModuleSettingsPanelModel } from '../../../shared/ui/settings/ModuleSettingsPanelModel'
 import WhatsAppAccountSetupPanel from './WhatsAppAccountSetupPanel.vue'
+import WhatsAppPairingPanel from './WhatsAppPairingPanel.vue'
 
 const WHATSAPP_MODULE_ID = 'hermes-whatsapp-runtime'
 const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
@@ -34,5 +35,6 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 	<div class="provider-settings-stack">
 		<ModuleSettingsPanel :model="model" />
 		<WhatsAppAccountSetupPanel :module="module" />
+		<WhatsAppPairingPanel :module="module" />
 	</div>
 </template>

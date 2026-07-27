@@ -17,7 +17,7 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 	const settings = owned?.settings
 	return {
 		title: 'Zulip',
-		description: 'Zulip owns bot identity, provider delivery and attachment operation settings.',
+		description: 'Zulip owns account identity, provider delivery and attachment operation settings.',
 		icon: 'tabler:brand-zulip',
 		tone: 'zulip',
 		moduleId: ZULIP_MODULE_ID,

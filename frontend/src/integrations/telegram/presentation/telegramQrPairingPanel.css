@@ -1,0 +1,77 @@
+.telegram-qr-pairing {
+	display: grid;
+	gap: var(--h-space-4);
+	padding: var(--h-space-5);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background:
+		linear-gradient(135deg, color-mix(in srgb, #229ed9 9%, transparent), transparent 50%),
+		var(--h-color-bg-muted);
+}
+
+.telegram-qr-pairing header,
+.telegram-qr-pairing footer,
+.telegram-qr-pairing__password {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--h-space-3);
+}
+
+.telegram-qr-pairing header div {
+	display: grid;
+	gap: var(--h-space-1);
+}
+
+.telegram-qr-pairing h3,
+.telegram-qr-pairing p {
+	margin: 0;
+}
+
+.telegram-qr-pairing header p,
+.telegram-qr-pairing header small,
+.telegram-qr-pairing__message--neutral {
+	color: var(--h-color-text-muted);
+}
+
+.telegram-qr-pairing__artifact {
+	display: grid;
+	place-items: center;
+	min-height: 18rem;
+}
+
+.telegram-qr-pairing__artifact img {
+	max-width: 100%;
+	height: auto;
+	padding: var(--h-space-2);
+	border-radius: var(--h-radius-lg);
+	background: #fff;
+}
+
+.telegram-qr-pairing__password label {
+	display: grid;
+	gap: var(--h-space-1);
+}
+
+.telegram-qr-pairing__message--success {
+	color: var(--h-color-success);
+}
+
+.telegram-qr-pairing__message--error {
+	color: var(--h-color-danger);
+}
+
+.telegram-qr-pairing button {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--h-space-2);
+}
+
+@media (max-width: 760px) {
+	.telegram-qr-pairing header,
+	.telegram-qr-pairing footer,
+	.telegram-qr-pairing__password {
+		align-items: stretch;
+		flex-direction: column;
+	}
+}

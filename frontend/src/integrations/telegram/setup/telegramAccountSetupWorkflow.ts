@@ -103,7 +103,7 @@ export class TelegramAccountSetupWorkflowV1 {
 					revision: sessionKey.secretRevision,
 				},
 			],
-			qrAuthorized: true,
+			qrAuthorized: false,
 		})
 		return { apiHash, sessionKey, configuration, account }
 	}

@@ -57,14 +57,14 @@ const emit = defineEmits<{
 					<button class="danger" type="button" :disabled="!model.selectedAccountId || !model.canManageLifecycle || model.pending" @click="emit('retire')">Retire</button>
 				</div>
 
-				<a
-					v-if="model.authorizationQrLink"
-					:href="model.authorizationQrLink"
-					rel="noreferrer"
-					target="_blank"
+				<img
+					v-if="model.authorizationQrDataUrl"
+					class="telegram-account-access__qr"
+					:src="model.authorizationQrDataUrl"
+					alt="Telegram authorization QR code"
+					width="280"
+					height="280"
 				>
-					Open Telegram authorization QR
-				</a>
 
 				<form v-if="model.canAuthorize" @submit.prevent="emit('submitPassword')">
 					<label for="telegram-authorization-password">

@@ -59,7 +59,7 @@ mod tests {
             ZulipAccountV1 {
                 account_id: "account".into(),
                 realm_url: "https://zulip.test/".into(),
-                bot_email: "bot@zulip.test".into(),
+                account_email: "account@zulip.test".into(),
             },
             "secret".into(),
         )

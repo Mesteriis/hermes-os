@@ -41,12 +41,12 @@ export class ZulipAccountSetupWorkflowV1 {
 		registrationId: string
 		expectedDesiredRevision: bigint
 		accountId: string
-		botEmail: string
+		accountEmail: string
 		realmUrl: string
 		apiKey: Uint8Array
 	}): Promise<ZulipAccountSetupReceiptV1> {
 		const accountId = required(input.accountId, 'zulip_account_id_invalid')
-		const botEmail = required(input.botEmail, 'zulip_bot_email_invalid')
+		const accountEmail = required(input.accountEmail, 'zulip_account_email_invalid')
 		const realmUrl = validRealm(input.realmUrl)
 		const vault = await this.ports.vault.provision({
 			targetRegistrationId: input.registrationId,
@@ -66,7 +66,7 @@ export class ZulipAccountSetupWorkflowV1 {
 			requestHostBridge: false,
 			values: [
 				stringInput('zulip.account_id', accountId),
-				stringInput('zulip.bot_email', botEmail),
+				stringInput('zulip.account_email', accountEmail),
 				stringInput('zulip.realm_url', realmUrl),
 			],
 		})

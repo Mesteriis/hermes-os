@@ -1240,7 +1240,7 @@
 	"Exception route required": "Exception route required",
 	"Callback and QR stay primary. Manual credentials stay hidden unless an exception recovery flow is explicitly required.": "Callback and QR stay primary. Manual credentials stay hidden unless an exception recovery flow is explicitly required.",
 	"Telegram setup continues in a dedicated runtime when callback or QR onboarding is unavailable.": "Telegram setup continues in a dedicated runtime when callback or QR onboarding is unavailable.",
-	"Zulip bot setup continues in a dedicated runtime so secrets never leak into the generic settings surface.": "Zulip bot setup continues in a dedicated runtime so secrets never leak into the generic settings surface.",
+	"Zulip account setup continues in a dedicated runtime so secrets never leak into the generic settings surface.": "Zulip account setup continues in a dedicated runtime so secrets never leak into the generic settings surface.",
 	"Component removed after logic extraction. Rebuild will land in the next UI pass.": "Component removed after logic extraction. Rebuild will land in the next UI pass.",
 	"Integration logic is preserved": "Integration logic is preserved",
 	"Provider queries, connection routing and wizard state now live outside Vue components. This screen stays intentionally empty until the new render layer is rebuilt.": "Provider queries, connection routing and wizard state now live outside Vue components. This screen stays intentionally empty until the new render layer is rebuilt.",

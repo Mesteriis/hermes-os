@@ -103,7 +103,7 @@ async fn execute_once(
         .connect(&endpoint.host, tcp)
         .await
         .map_err(|_| unavailable("tls_connect"))?;
-    let authorization = basic_authorization(&config.account.bot_email, &config.api_key);
+    let authorization = basic_authorization(&config.account.account_email, &config.api_key);
     let mut request_bytes = format!(
         "{} {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Basic {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         request.method,
