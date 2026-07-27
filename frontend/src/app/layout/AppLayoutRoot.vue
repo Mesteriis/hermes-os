@@ -48,6 +48,12 @@ const telegramQueryAvailable = computed(() =>
 const whatsAppCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'whatsapp.command.v1'),
 )
+const whatsAppOperationalQueryAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'whatsapp.operational.query.v1'),
+)
+const whatsAppOperationalRealtimeAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'whatsapp.operational.realtime.v1'),
+)
 const mailDeliveryAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.delivery.v1'),
 )
@@ -131,7 +137,10 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 				/>
 				<WhatsAppOperationalRoute
 					v-else-if="selectedRouteId === 'communications-whatsapp'"
+					:can-query="whatsAppOperationalQueryAvailable"
+					:can-replay="whatsAppOperationalRealtimeAvailable"
 					:can-send="whatsAppCommandAvailable"
+					:modules="bootstrap.modules"
 				/>
 				<ZulipOperationalRoute
 					v-else-if="selectedRouteId === 'communications-zulip'"

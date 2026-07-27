@@ -31,6 +31,8 @@ const protoFiles = [
   join(telegramProtoRoot, 'hermes', 'telegram', 'v1', 'client.proto'),
   join(telegramAutomationProtoRoot, 'hermes', 'telegram', 'automation', 'v1', 'automation.proto'),
   join(whatsappProtoRoot, 'hermes', 'whatsapp', 'v1', 'client.proto'),
+  join(whatsappProtoRoot, 'hermes', 'whatsapp', 'operational', 'v1', 'client.proto'),
+  join(whatsappProtoRoot, 'hermes', 'whatsapp', 'operational', 'realtime', 'v1', 'client.proto'),
   join(zulipProtoRoot, 'hermes', 'zulip', 'account', 'v1', 'client.proto'),
   join(zulipProtoRoot, 'hermes', 'zulip', 'operational', 'v1', 'client.proto'),
   join(zulipProtoRoot, 'hermes', 'zulip', 'v1', 'client.proto'),

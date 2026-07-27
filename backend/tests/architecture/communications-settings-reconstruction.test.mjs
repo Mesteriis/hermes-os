@@ -71,6 +71,58 @@ const WHATSAPP_OPERATIONAL_ADR_PATH = new URL(
   'docs/adr/ADR-0286-whatsapp-operational-read-and-realtime-boundary.md',
   PROJECT_ROOT,
 );
+const WHATSAPP_FRONTEND_GENERATED_READ_PATH = new URL(
+  'frontend/src/gen/hermes/whatsapp/operational/v1/client_pb.ts',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_GENERATED_REPLAY_PATH = new URL(
+  'frontend/src/gen/hermes/whatsapp/operational/realtime/v1/client_pb.ts',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_READ_CLIENT_PATH = new URL(
+  'frontend/src/integrations/whatsapp/api/whatsAppOperationalReadClient.ts',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_READ_GATEWAY_PATH = new URL(
+  'frontend/src/integrations/whatsapp/api/whatsAppOperationalReadGateway.ts',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_REPLAY_CLIENT_PATH = new URL(
+  'frontend/src/integrations/whatsapp/api/whatsAppOperationalRealtimeClient.ts',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_REPLAY_GATEWAY_PATH = new URL(
+  'frontend/src/integrations/whatsapp/api/whatsAppOperationalReplayGateway.ts',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_ACCOUNTS_PATH = new URL(
+  'frontend/src/integrations/whatsapp/queries/whatsAppOperationalAccounts.ts',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_READ_CONTROLLER_PATH = new URL(
+  'frontend/src/integrations/whatsapp/queries/useWhatsAppOperationalRead.ts',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_REPLAY_CONTROLLER_PATH = new URL(
+  'frontend/src/integrations/whatsapp/queries/useWhatsAppOperationalReplay.ts',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_READ_PANEL_PATH = new URL(
+  'frontend/src/integrations/whatsapp/presentation/WhatsAppOperationalReadPanel.vue',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_REPLAY_PANEL_PATH = new URL(
+  'frontend/src/integrations/whatsapp/presentation/WhatsAppOperationalReplayPanel.vue',
+  PROJECT_ROOT,
+);
+const WHATSAPP_FRONTEND_ROUTE_PATH = new URL(
+  'frontend/src/integrations/whatsapp/views/WhatsAppOperationalRoute.vue',
+  PROJECT_ROOT,
+);
+const FRONTEND_APP_LAYOUT_PATH = new URL(
+  'frontend/src/app/layout/AppLayoutRoot.vue',
+  PROJECT_ROOT,
+);
 const ZULIP_OPERATIONAL_ADR_PATH = new URL(
   'docs/adr/ADR-0291-zulip-account-history-query-and-replay-boundary.md',
   PROJECT_ROOT,
@@ -389,10 +441,39 @@ test('Telegram completion remains closed behind its independent capability slice
   );
 });
 
-test('WhatsApp completion remains closed behind independent read and realtime slices', async () => {
-  const [inventorySource, whatsappAdrSource] = await Promise.all([
+test('WhatsApp completion admits independent read, realtime and frontend cutover units', async () => {
+  const [
+    inventorySource,
+    whatsappAdrSource,
+    generatedReadSource,
+    generatedReplaySource,
+    readClientSource,
+    readGatewaySource,
+    replayClientSource,
+    replayGatewaySource,
+    accountsSource,
+    readControllerSource,
+    replayControllerSource,
+    readPanelSource,
+    replayPanelSource,
+    routeSource,
+    appLayoutSource,
+  ] = await Promise.all([
     readFile(INVENTORY_PATH, 'utf8'),
     readFile(WHATSAPP_OPERATIONAL_ADR_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_GENERATED_READ_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_GENERATED_REPLAY_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_READ_CLIENT_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_READ_GATEWAY_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_REPLAY_CLIENT_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_REPLAY_GATEWAY_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_ACCOUNTS_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_READ_CONTROLLER_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_REPLAY_CONTROLLER_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_READ_PANEL_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_REPLAY_PANEL_PATH, 'utf8'),
+    readFile(WHATSAPP_FRONTEND_ROUTE_PATH, 'utf8'),
+    readFile(FRONTEND_APP_LAYOUT_PATH, 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const whatsappSlices = new Map(
@@ -409,7 +490,7 @@ test('WhatsApp completion remains closed behind independent read and realtime sl
   ]);
   assert.ok([...whatsappSlices.values()].every(({ role }) => role === 'integration'));
   assert.equal(whatsappSlices.get('whatsapp_integration_v1').state, 'implemented');
-  assert.equal(whatsappSlices.get('whatsapp_full_operational_v1').state, 'planned');
+  assert.equal(whatsappSlices.get('whatsapp_full_operational_v1').state, 'implemented');
   assert.equal(whatsappSlices.get('whatsapp_operational_read_v1').state, 'implemented');
   assert.equal(whatsappSlices.get('whatsapp_operational_realtime_v1').state, 'implemented');
   assert.deepEqual(whatsappSlices.get('whatsapp_operational_read_v1').dependsOn, [
@@ -435,6 +516,22 @@ test('WhatsApp completion remains closed behind independent read and realtime sl
   assert.match(whatsappAdrSource, /hermes-whatsapp-persistence/);
   assert.match(whatsappAdrSource, /DDL-only/);
   assert.match(whatsappAdrSource, /Fake backfill запрещён/);
+  assert.match(whatsappAdrSource, /Gate открыт как `implemented`/);
+  assert.match(generatedReadSource, /WhatsAppOperationalQueryService/);
+  assert.match(generatedReplaySource, /WhatsAppOperationalRealtimeService/);
+  assert.match(readClientSource, /WhatsAppOperationalQueryService/);
+  assert.match(readGatewaySource, /WhatsAppOperationalQueryV1Schema/);
+  assert.match(replayClientSource, /WhatsAppOperationalRealtimeService/);
+  assert.match(replayGatewaySource, /WhatsAppOperationalReplayRequestV1Schema/);
+  assert.match(accountsSource, /whatsapp\.operational\.query\.v1/);
+  assert.match(accountsSource, /whatsapp\.operational\.realtime\.v1/);
+  assert.match(readControllerSource, /useWhatsAppOperationalRead/);
+  assert.match(replayControllerSource, /useWhatsAppOperationalReplay/);
+  assert.doesNotMatch(readPanelSource, /queries\/|api\/|connect\/|fetch\(/);
+  assert.doesNotMatch(replayPanelSource, /queries\/|api\/|connect\/|fetch\(/);
+  assert.match(routeSource, /whatsAppOperationalAccountFingerprint/);
+  assert.match(appLayoutSource, /whatsapp\.operational\.query\.v1/);
+  assert.match(appLayoutSource, /whatsapp\.operational\.realtime\.v1/);
 });
 
 test('Zulip completion remains closed behind lifecycle, history, read and realtime slices', async () => {

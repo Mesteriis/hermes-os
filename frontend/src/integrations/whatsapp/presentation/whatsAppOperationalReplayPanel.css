@@ -1,0 +1,151 @@
+.whatsapp-replay-panel {
+	display: grid;
+	gap: var(--h-space-4);
+	padding: var(--h-space-5);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-sm);
+}
+
+.whatsapp-replay-panel > header {
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+	gap: var(--h-space-4);
+}
+
+.whatsapp-replay-panel h2,
+.whatsapp-replay-panel p {
+	margin: 0;
+}
+
+.whatsapp-replay-panel > header > div > span {
+	color: #159447;
+	font-size: var(--h-font-size-xs);
+	font-weight: 750;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.whatsapp-replay-panel > header > div > p {
+	margin-top: var(--h-space-2);
+	color: var(--h-color-text-muted);
+}
+
+.whatsapp-replay-panel form {
+	display: grid;
+	gap: var(--h-space-2);
+	min-width: min(100%, 27rem);
+}
+
+.whatsapp-replay-panel form > div {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: var(--h-space-2);
+}
+
+.whatsapp-replay-panel label,
+.whatsapp-replay-window dt {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	font-weight: 650;
+}
+
+.whatsapp-replay-panel select,
+.whatsapp-replay-panel button {
+	min-height: 2.5rem;
+	padding: 0 var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-bg);
+}
+
+.whatsapp-replay-panel button:disabled {
+	opacity: 0.5;
+}
+
+.whatsapp-replay-panel__status {
+	padding: var(--h-space-3);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text-muted);
+	background: var(--h-color-bg);
+}
+
+.whatsapp-replay-panel__status.reset {
+	border: 1px solid color-mix(in srgb, #cf5b44 55%, var(--h-color-border));
+	color: #cf5b44;
+}
+
+.whatsapp-replay-window {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	margin: 0;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	overflow: hidden;
+}
+
+.whatsapp-replay-window > div {
+	display: grid;
+	gap: var(--h-space-1);
+	padding: var(--h-space-3);
+}
+
+.whatsapp-replay-window > div + div {
+	border-left: 1px solid var(--h-color-border);
+}
+
+.whatsapp-replay-window dd {
+	margin: 0;
+	font-weight: 700;
+}
+
+.whatsapp-replay-frames {
+	display: grid;
+	gap: var(--h-space-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.whatsapp-replay-frames li {
+	display: grid;
+	grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+	gap: var(--h-space-3);
+	padding: var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+}
+
+.whatsapp-replay-frames code {
+	color: #159447;
+}
+
+.whatsapp-replay-more {
+	width: 100%;
+}
+
+@media (max-width: 800px) {
+	.whatsapp-replay-panel > header {
+		align-items: stretch;
+		flex-direction: column;
+	}
+}
+
+@media (max-width: 640px) {
+	.whatsapp-replay-panel {
+		padding: var(--h-space-3);
+	}
+
+	.whatsapp-replay-panel form > div,
+	.whatsapp-replay-window {
+		grid-template-columns: 1fr;
+	}
+
+	.whatsapp-replay-window > div + div {
+		border-top: 1px solid var(--h-color-border);
+		border-left: 0;
+	}
+}

@@ -82,7 +82,7 @@
       "gate": "whatsapp_full_operational_v1",
       "role": "integration",
       "owner": "whatsapp",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "client_gateway_v1",
         "nats_data_plane_v1",

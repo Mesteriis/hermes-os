@@ -2,11 +2,11 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: `whatsapp_operational_read_v1` и
-`whatsapp_operational_realtime_v1` реализованы; `whatsapp_full_operational_v1`
-остаётся запланированным. ADR разделяет full gate на независимые backend gates;
-реализация обоих backend gates не является evidence provider extractor,
-generated frontend client или UI cutover.
+Состояние реализации: `whatsapp_operational_read_v1`,
+`whatsapp_operational_realtime_v1` и `whatsapp_full_operational_v1`
+реализованы. Full gate закрыт только после отдельного frontend cutover поверх
+ранее принятых backend gates; frontend не является evidence provider extractor
+или backend ownership.
 
 Уточняет:
 
@@ -216,6 +216,23 @@ Frontend controller живёт только в `frontend/src/integrations/whatsa
 generated client, integration-owned controller и UI cutover. Backend gates не
 считаются закрытыми по наличию frontend facade.
 
+Frontend cutover реализован отдельными SRP units:
+
+- generated query/replay messages и service descriptors в
+  `frontend/src/gen/hermes/whatsapp/operational`;
+- route-specific ConnectRPC factories и validating gateways в
+  `frontend/src/integrations/whatsapp/api`;
+- exact effective-account discovery и независимые read/replay controllers в
+  `frontend/src/integrations/whatsapp/queries`;
+- pure presentation models и отдельные read/replay panels в
+  `frontend/src/integrations/whatsapp/presentation`;
+- `WhatsAppOperationalRoute.vue` композирует integration-owned units, а
+  `AppLayoutRoot.vue` передаёт только exact admitted capabilities и bootstrap
+  modules.
+
+Frontend не импортирует Communications domain, provider WebView host bridge,
+NATS, PostgreSQL или handwritten REST/realtime aliases.
+
 ## Phase gates
 
 ### `whatsapp_operational_read_v1`
@@ -297,13 +314,19 @@ privacy fence.
 
 ### `whatsapp_full_operational_v1`
 
-Остаётся закрытым до одновременного evidence:
+Gate открыт как `implemented` по одновременному evidence:
 
 - `whatsapp_operational_read_v1`;
 - `whatsapp_operational_realtime_v1`;
 - public generated frontend clients;
 - integration-owned controller and complete WhatsApp UI cutover;
 - absence of scoped legacy WhatsApp client state, REST and realtime aliases.
+
+Generated query и replay clients создаются из canonical backend protobuf через
+`frontend/scripts/generate-proto.mjs`. Read controller не принимает command или
+Communications state, replay controller отдельно хранит monotonic cursor и
+показывает `reset_required` без silent restart. Pure panels получают только
+presentation models и emit actions; transport остаётся в gateways.
 
 ## Последствия
 

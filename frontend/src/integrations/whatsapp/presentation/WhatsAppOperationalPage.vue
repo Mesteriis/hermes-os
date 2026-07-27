@@ -1,16 +1,37 @@
 <script setup lang="ts">
+import WhatsAppOperationalReadPanel from './WhatsAppOperationalReadPanel.vue'
+import type { WhatsAppOperationalReadModel } from './whatsAppOperationalReadModel'
+import WhatsAppOperationalReplayPanel from './WhatsAppOperationalReplayPanel.vue'
+import type { WhatsAppOperationalReplayModel } from './whatsAppOperationalReplayModel'
 import type { WhatsAppOperationalPageModel } from './whatsAppOperationalPageModel'
 import './whatsAppOperationalPage.css'
 
-defineProps<{ model: WhatsAppOperationalPageModel }>()
+defineProps<{
+	model: WhatsAppOperationalPageModel
+	readModel: WhatsAppOperationalReadModel
+	replayModel: WhatsAppOperationalReplayModel
+}>()
 
 const emit = defineEmits<{
+	loadMoreDialogs: []
+	loadMoreEvents: []
+	loadMoreMessages: []
+	loadMoreParticipants: []
+	loadMoreReplay: []
+	loadMoreSearchResults: []
+	readRefresh: []
 	refreshStatus: []
+	replayRefresh: []
+	search: []
+	selectReadAccount: [accountId: string]
+	selectReplayAccount: [accountId: string]
+	selectDialog: [providerChatId: string]
 	send: []
 	updateAccountId: [value: string]
 	updateProviderChatId: [value: string]
 	updateDraft: [value: string]
 	updateOperationId: [value: string]
+	updateSearchQuery: [value: string]
 }>()
 </script>
 
@@ -24,6 +45,27 @@ const emit = defineEmits<{
 				remains isolated in the first-party host WebView.
 			</p>
 		</header>
+
+		<WhatsAppOperationalReadPanel
+			:model="readModel"
+			@load-more-dialogs="emit('loadMoreDialogs')"
+			@load-more-events="emit('loadMoreEvents')"
+			@load-more-messages="emit('loadMoreMessages')"
+			@load-more-participants="emit('loadMoreParticipants')"
+			@load-more-search-results="emit('loadMoreSearchResults')"
+			@refresh="emit('readRefresh')"
+			@search="emit('search')"
+			@select-account="emit('selectReadAccount', $event)"
+			@select-dialog="emit('selectDialog', $event)"
+			@update-search-query="emit('updateSearchQuery', $event)"
+		/>
+
+		<WhatsAppOperationalReplayPanel
+			:model="replayModel"
+			@load-more="emit('loadMoreReplay')"
+			@refresh="emit('replayRefresh')"
+			@select-account="emit('selectReplayAccount', $event)"
+		/>
 
 		<div class="whatsapp-operational-grid">
 			<form class="whatsapp-operational-card" @submit.prevent="emit('send')">
