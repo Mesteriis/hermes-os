@@ -32,7 +32,8 @@ const protoFiles = [
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_realtime.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'browser_session.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_bootstrap.proto'),
-  join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'owner_vault_provisioning.proto')
+  join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'owner_vault_provisioning.proto'),
+  join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'owner_module_settings.proto')
 ]
 
 mkdirSync(outputDir, { recursive: true })

@@ -11,9 +11,13 @@ import {
 } from '../../gen/hermes/gateway/v1/owner_vault_provisioning_pb'
 import { createBrowserGatewayConnectTransport } from '../gateway/browserGatewayConnect'
 import {
-	BrowserOwnerVaultDeviceProofV1,
-	type OwnerVaultDeviceProofV1,
-} from './ownerVaultDeviceProof'
+	BrowserOwnerDeviceProofV1,
+	type OwnerDeviceProofV1,
+} from '../gateway/ownerDeviceProof'
+import {
+	isOwnerOperationIdV1,
+	resolveOwnerOperationIdV1,
+} from '../gateway/ownerOperationId'
 import {
 	NativeOwnerVaultProvisioningHostV1,
 	type OwnerVaultProvisioningHostV1,
@@ -40,13 +44,13 @@ export class OwnerVaultProvisioningClientV1 {
 		),
 		private readonly host: OwnerVaultProvisioningHostV1 =
 			new NativeOwnerVaultProvisioningHostV1(),
-		private readonly deviceProof: OwnerVaultDeviceProofV1 =
-			new BrowserOwnerVaultDeviceProofV1(),
+		private readonly deviceProof: OwnerDeviceProofV1 =
+			new BrowserOwnerDeviceProofV1(),
 	) {}
 
 	async provision(input: OwnerVaultProvisioningInputV1): Promise<SanitizedProvisioningHostReceiptV1> {
 		validateInput(input)
-		const operationId = input.operationId?.slice() ?? randomOperationId()
+		const operationId = resolveOwnerOperationIdV1(input.operationId)
 		const started = await this.host.start()
 		let completed = false
 		try {
@@ -136,19 +140,9 @@ function validateInput(input: OwnerVaultProvisioningInputV1): void {
 		|| input.secretPayload.byteLength > 65_536
 		|| !isSecretClass(input.secretClass)
 		|| !isAction(input.action)
-		|| (input.operationId !== undefined && !validOperationId(input.operationId))) {
+		|| (input.operationId !== undefined && !isOwnerOperationIdV1(input.operationId))) {
 		throw new Error('owner Vault provisioning input is invalid')
 	}
-}
-
-function randomOperationId(): Uint8Array {
-	const value = crypto.getRandomValues(new Uint8Array(16))
-	if (value.every((byte) => byte === 0)) value[0] = 1
-	return value
-}
-
-function validOperationId(value: Uint8Array): boolean {
-	return value.byteLength === 16 && value.some((byte) => byte !== 0)
 }
 
 function requireBytes(value: Uint8Array, length: number): void {

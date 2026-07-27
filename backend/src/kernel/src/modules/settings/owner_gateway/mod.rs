@@ -1,6 +1,7 @@
 //! Fresh-proof public owner application for Kernel-owned module Settings.
 
 mod authorization;
+mod export;
 mod operation;
 mod state;
 mod values;
@@ -156,6 +157,9 @@ impl OwnerModuleSettingsHandlerV1 for KernelOwnerModuleSettingsHandlerV1 {
                 operation_id,
                 apply,
             ),
+            Some(prepare_owner_module_settings_request_v1::Operation::ExportEffective(export)) => {
+                export::effective(&self.store, operation_id, export)
+            }
             None => Err(OwnerModuleSettingsRouteErrorV1::InvalidArgument),
         }
     }
@@ -184,6 +188,9 @@ fn operation_registration_id(
         Some(prepare_owner_module_settings_request_v1::Operation::ApplyManagedIntegration(
             apply,
         )) => Ok(&apply.registration_id),
+        Some(prepare_owner_module_settings_request_v1::Operation::ExportEffective(export)) => {
+            Ok(&export.registration_id)
+        }
         None => Err(OwnerModuleSettingsRouteErrorV1::InvalidArgument),
     }
 }

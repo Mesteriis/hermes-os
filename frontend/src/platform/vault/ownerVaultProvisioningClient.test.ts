@@ -10,7 +10,7 @@ import {
 	OwnerVaultSecretClassV1,
 	PrepareOwnerVaultProvisioningResponseV1Schema,
 } from '../../gen/hermes/gateway/v1/owner_vault_provisioning_pb'
-import type { OwnerVaultDeviceProofV1 } from './ownerVaultDeviceProof'
+import type { OwnerDeviceProofV1 } from '../gateway/ownerDeviceProof'
 import {
 	OwnerVaultProvisioningClientV1,
 } from './ownerVaultProvisioningClient'
@@ -45,7 +45,7 @@ describe('OwnerVaultProvisioningClientV1', () => {
 			}),
 			cancel: vi.fn().mockResolvedValue(undefined),
 		}
-		const deviceProof: OwnerVaultDeviceProofV1 = {
+		const deviceProof: OwnerDeviceProofV1 = {
 			sign: vi.fn().mockResolvedValue(new Uint8Array(64).fill(8)),
 		}
 		const gateway = gatewayClient()

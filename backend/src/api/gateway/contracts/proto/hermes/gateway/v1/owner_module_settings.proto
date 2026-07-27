@@ -42,11 +42,17 @@ message ApplyOwnerManagedIntegrationSettingsV1 {
   bool request_host_bridge = 5;
 }
 
+message ExportEffectiveOwnerModuleSettingsV1 {
+  string registration_id = 1;
+  uint64 expected_effective_revision = 2;
+}
+
 message PrepareOwnerModuleSettingsRequestV1 {
   bytes operation_id = 1;
   oneof operation {
     UpdateOwnerModuleSettingsV1 update_desired = 2;
     ApplyOwnerManagedIntegrationSettingsV1 apply_managed_integration = 3;
+    ExportEffectiveOwnerModuleSettingsV1 export_effective = 4;
   }
 }
 
@@ -76,11 +82,20 @@ message ApplyOwnerManagedIntegrationSettingsReceiptV1 {
   optional string host_bridge_socket_path = 5;
 }
 
+message ExportEffectiveOwnerModuleSettingsReceiptV1 {
+  string registration_id = 1;
+  uint32 schema_major = 2;
+  uint32 schema_revision = 3;
+  uint64 effective_revision = 4;
+  repeated OwnerSettingEntryV1 values = 5;
+}
+
 message CommitOwnerModuleSettingsResponseV1 {
   uint32 major = 1;
   bytes operation_id = 2;
   oneof result {
     UpdateOwnerModuleSettingsReceiptV1 updated = 3;
     ApplyOwnerManagedIntegrationSettingsReceiptV1 applied = 4;
+    ExportEffectiveOwnerModuleSettingsReceiptV1 exported = 5;
   }
 }

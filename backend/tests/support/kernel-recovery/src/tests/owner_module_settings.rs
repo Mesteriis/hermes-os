@@ -1,9 +1,11 @@
 //! Public owner Settings proof, mutation authority and Gateway admission.
 
 use hermes_gateway_protocol::v1::{
-    CommitOwnerModuleSettingsRequestV1, CommitOwnerModuleSettingsResponseV1, OwnerSettingEntryV1,
-    OwnerSettingValueV1, PrepareOwnerModuleSettingsRequestV1, PrepareOwnerModuleSettingsResponseV1,
-    UpdateOwnerModuleSettingsV1, owner_setting_value_v1, prepare_owner_module_settings_request_v1,
+    CommitOwnerModuleSettingsRequestV1, CommitOwnerModuleSettingsResponseV1,
+    ExportEffectiveOwnerModuleSettingsV1, OwnerSettingEntryV1, OwnerSettingValueV1,
+    PrepareOwnerModuleSettingsRequestV1, PrepareOwnerModuleSettingsResponseV1,
+    UpdateOwnerModuleSettingsV1, commit_owner_module_settings_response_v1, owner_setting_value_v1,
+    prepare_owner_module_settings_request_v1,
 };
 use hermes_gateway_runtime::{
     OWNER_MODULE_SETTINGS_COMMIT_PATH, OWNER_MODULE_SETTINGS_PREPARE_PATH, OwnerBrowserPrincipalV1,
@@ -223,6 +225,64 @@ fn owner_settings_gateway_requires_authenticated_same_origin_and_denies_lan_mode
     assert_eq!(denied.status(), StatusCode::FORBIDDEN);
 }
 
+#[test]
+fn owner_settings_export_returns_only_current_client_visible_values() {
+    let fixture = OwnerSettingsFixture::new("hermes-owner-settings-export");
+    make_export_snapshot_current(&fixture.store);
+    let handler = fixture.handler();
+    let current_principal = principal(SESSION);
+    let signing_key = super::browser_gateway_session::browser_signing_key();
+
+    let exported = commit_direct(
+        &handler,
+        &current_principal,
+        &signing_key,
+        export_request([9; 16], 1),
+    )
+    .expect("export current Settings");
+    let Some(commit_owner_module_settings_response_v1::Result::Exported(exported)) =
+        exported.result
+    else {
+        panic!("expected exported Settings receipt");
+    };
+    assert_eq!(exported.registration_id, REGISTRATION);
+    assert_eq!(exported.schema_major, 1);
+    assert_eq!(exported.schema_revision, 1);
+    assert_eq!(exported.effective_revision, 1);
+    assert_eq!(exported.values.len(), 1);
+    assert_eq!(exported.values[0].setting_id, "mail.sync.window");
+
+    assert_eq!(
+        commit_direct(
+            &handler,
+            &current_principal,
+            &signing_key,
+            export_request([10; 16], 2),
+        )
+        .expect_err("stale export revision must fail"),
+        OwnerModuleSettingsRouteErrorV1::Conflict
+    );
+
+    fixture
+        .store
+        .commit_desired_settings_snapshot(&SettingsDesiredSnapshot {
+            registration_id: REGISTRATION.to_owned(),
+            expected_revision: 1,
+            snapshot_bytes: canonical_snapshot(2, 2).encode_to_vec(),
+        })
+        .expect("move Settings out of current state");
+    assert_eq!(
+        commit_direct(
+            &handler,
+            &current_principal,
+            &signing_key,
+            export_request([11; 16], 1),
+        )
+        .expect_err("non-current Settings must not export"),
+        OwnerModuleSettingsRouteErrorV1::Conflict
+    );
+}
+
 struct OwnerSettingsFixture {
     root: std::path::PathBuf,
     data: std::path::PathBuf,
@@ -317,18 +377,32 @@ fn settings_schema() -> SettingsSchemaV1 {
     SettingsSchemaV1 {
         major: 1,
         revision: 1,
-        definitions: vec![SettingDefinitionV1 {
-            setting_id: "mail.sync.window".to_owned(),
-            capability_id: String::new(),
-            value_type: SettingValueTypeV1::UnsignedInteger as i32,
-            mutation_authority: SettingMutationAuthorityV1::OperatorManaged as i32,
-            target_scope: SettingTargetScopeV1::ModuleRegistration as i32,
-            apply_mode: SettingApplyModeV1::RestartModule as i32,
-            client_visibility: SettingClientVisibilityV1::Editable as i32,
-            fresh_owner_proof_required: true,
-            kernel_controller_id: String::new(),
-            display_name: "Sync window".to_owned(),
-        }],
+        definitions: vec![
+            SettingDefinitionV1 {
+                setting_id: "mail.internal.hidden".to_owned(),
+                capability_id: String::new(),
+                value_type: SettingValueTypeV1::String as i32,
+                mutation_authority: SettingMutationAuthorityV1::KernelManaged as i32,
+                target_scope: SettingTargetScopeV1::ModuleRegistration as i32,
+                apply_mode: SettingApplyModeV1::RestartModule as i32,
+                client_visibility: SettingClientVisibilityV1::Hidden as i32,
+                fresh_owner_proof_required: false,
+                kernel_controller_id: "mail.controller".to_owned(),
+                display_name: "Internal".to_owned(),
+            },
+            SettingDefinitionV1 {
+                setting_id: "mail.sync.window".to_owned(),
+                capability_id: String::new(),
+                value_type: SettingValueTypeV1::UnsignedInteger as i32,
+                mutation_authority: SettingMutationAuthorityV1::OperatorManaged as i32,
+                target_scope: SettingTargetScopeV1::ModuleRegistration as i32,
+                apply_mode: SettingApplyModeV1::RestartModule as i32,
+                client_visibility: SettingClientVisibilityV1::Editable as i32,
+                fresh_owner_proof_required: true,
+                kernel_controller_id: String::new(),
+                display_name: "Sync window".to_owned(),
+            },
+        ],
     }
 }
 
@@ -347,6 +421,49 @@ fn canonical_snapshot(revision: u64, value: u64) -> SettingsSnapshotV1 {
             }),
         }],
     }
+}
+
+fn export_snapshot(revision: u64, value: u64) -> SettingsSnapshotV1 {
+    SettingsSnapshotV1 {
+        target_id: REGISTRATION.to_owned(),
+        revision,
+        values: vec![
+            SettingsValueEntryV1 {
+                setting_id: "mail.internal.hidden".to_owned(),
+                value: Some(SettingValueV1 {
+                    value: Some(
+                        hermes_runtime_protocol::v1::setting_value_v1::Value::StringValue(
+                            "private".to_owned(),
+                        ),
+                    ),
+                }),
+            },
+            canonical_snapshot(revision, value)
+                .values
+                .into_iter()
+                .next()
+                .expect("visible Settings value"),
+        ],
+    }
+}
+
+fn make_export_snapshot_current(store: &SqliteControlStore) {
+    store
+        .commit_desired_settings_snapshot(&SettingsDesiredSnapshot {
+            registration_id: REGISTRATION.to_owned(),
+            expected_revision: 0,
+            snapshot_bytes: export_snapshot(1, 1).encode_to_vec(),
+        })
+        .expect("commit export Settings");
+    store
+        .transition_settings_apply_state(REGISTRATION, 1, SettingsApplyState::PendingApply, None)
+        .expect("accept export Settings validation");
+    store
+        .transition_settings_apply_state(REGISTRATION, 1, SettingsApplyState::Applying, None)
+        .expect("start export Settings apply");
+    store
+        .confirm_effective_settings_revision(REGISTRATION, 1)
+        .expect("confirm export Settings");
 }
 
 fn principal(session: &str) -> OwnerBrowserPrincipalV1 {
@@ -369,6 +486,23 @@ fn update_request(
                         setting_id: "mail.sync.window".to_owned(),
                         value: Some(value),
                     }],
+                },
+            ),
+        ),
+    }
+}
+
+fn export_request(
+    operation_id: [u8; 16],
+    expected_effective_revision: u64,
+) -> PrepareOwnerModuleSettingsRequestV1 {
+    PrepareOwnerModuleSettingsRequestV1 {
+        operation_id: operation_id.to_vec(),
+        operation: Some(
+            prepare_owner_module_settings_request_v1::Operation::ExportEffective(
+                ExportEffectiveOwnerModuleSettingsV1 {
+                    registration_id: REGISTRATION.to_owned(),
+                    expected_effective_revision,
                 },
             ),
         ),

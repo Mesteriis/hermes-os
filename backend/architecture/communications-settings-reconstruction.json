@@ -262,7 +262,7 @@
       "gate": "owner_module_settings_export_v1",
       "role": "platform",
       "owner": "kernel_settings_registry",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "owner_module_settings_gateway_v1"
       ]
