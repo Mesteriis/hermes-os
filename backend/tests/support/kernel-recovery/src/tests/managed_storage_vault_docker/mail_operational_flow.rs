@@ -5,7 +5,11 @@ use std::time::Duration;
 use hermes_mail_api::{
     MailClientRequestV1, MailClientResponseV1, MailSyncInboxRequestV1,
     client_contract::MailClientContractV1,
-    operational::{MailOperationalQueryResponseV1, MailOperationalQueryV1},
+    message_flags::{
+        MailMessageFlagCommandV1, MailMessageFlagKindV1, MailMessageFlagOperationOutcomeV1,
+        MailMessageFlagStatusRequestV1,
+    },
+    operational::{MailMessageFlagV1, MailOperationalQueryResponseV1, MailOperationalQueryV1},
 };
 use hermes_mail_runtime::client_port::{
     MailClientPortErrorV1, decode_module_response, encode_module_request,
@@ -106,6 +110,174 @@ pub(super) fn assert_mail_operational_read(
         "managed-mail-operational-cursor-stale",
     );
     assert_stale_cursor_is_rejected(store, supervisor, mail, &cursor);
+}
+
+pub(super) fn assert_mail_message_flags(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    imap: &MailImapFixture,
+) {
+    let messages = query_operational(
+        store,
+        supervisor,
+        mail,
+        78,
+        MailOperationalQueryV1::ListMessages {
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            folder_id: Some("INBOX".to_owned()),
+            provider_thread_id: None,
+            cursor: None,
+            limit: 1,
+        },
+    );
+    let MailOperationalQueryResponseV1::Messages(messages) = messages else {
+        panic!("Mail message flag setup returned the wrong response")
+    };
+    let provider_message_id = messages.items[0].provider_message_id.clone();
+    let command = MailMessageFlagCommandV1 {
+        operation_id: "managed-mail-message-read-1".to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        provider_message_id: provider_message_id.clone(),
+        kind: MailMessageFlagKindV1::Read,
+        target_value: true,
+    };
+    let provider_mutations_before = imap.message_flag_mutations();
+
+    let accepted = route_message_flag_command(store, supervisor, mail, 79, command.clone());
+    assert_eq!(accepted, command.operation_id);
+
+    let status = (0..50)
+        .find_map(|attempt| {
+            let status = query_message_flag_status(
+                store,
+                supervisor,
+                mail,
+                80 + attempt,
+                &command.operation_id,
+            );
+            match status.outcome {
+                MailMessageFlagOperationOutcomeV1::Pending => {
+                    std::thread::sleep(Duration::from_millis(100));
+                    None
+                }
+                _ => Some(status),
+            }
+        })
+        .expect("Mail message flag operation reaches a terminal status");
+    assert_eq!(status.outcome, MailMessageFlagOperationOutcomeV1::Succeeded);
+    assert!(
+        status
+            .projection_revision
+            .is_some_and(|revision| revision > 0)
+    );
+    assert_eq!(
+        imap.message_flag_mutations(),
+        provider_mutations_before + 1,
+        "managed flag command must reach the provider exactly once"
+    );
+
+    let detail = query_operational(
+        store,
+        supervisor,
+        mail,
+        131,
+        MailOperationalQueryV1::GetMessage {
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            provider_message_id,
+        },
+    );
+    let MailOperationalQueryResponseV1::Message(detail) = detail else {
+        panic!("Mail message flag projection returned the wrong response")
+    };
+    assert!(detail.summary.flags.contains(&MailMessageFlagV1::Read));
+    let folders = query_operational(
+        store,
+        supervisor,
+        mail,
+        132,
+        MailOperationalQueryV1::ListFolders {
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            cursor: None,
+            limit: 20,
+        },
+    );
+    let MailOperationalQueryResponseV1::Folders(folders) = folders else {
+        panic!("Mail message flag folder reconciliation returned the wrong response")
+    };
+    assert_eq!(folders.items[0].unread_messages, 0);
+
+    let replayed = route_message_flag_command(store, supervisor, mail, 133, command);
+    assert_eq!(replayed, accepted);
+    std::thread::sleep(Duration::from_millis(250));
+    assert_eq!(
+        imap.message_flag_mutations(),
+        provider_mutations_before + 1,
+        "an exact replayed message flag command must not reach the provider twice"
+    );
+}
+
+fn route_message_flag_command(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    command: MailMessageFlagCommandV1,
+) -> String {
+    let request = encode_module_request(
+        request_id,
+        &MailClientRequestV1::MessageFlagCommand(command),
+    )
+    .expect("encode Mail message flag command");
+    let bytes = route(
+        store,
+        supervisor,
+        mail,
+        MailClientContractV1::MessageFlagCommand,
+        &request,
+    )
+    .expect("route Mail message flag command");
+    let (actual_request_id, response) =
+        decode_module_response(MailClientContractV1::MessageFlagCommand, &bytes)
+            .expect("decode Mail message flag command response");
+    assert_eq!(actual_request_id, request_id);
+    let MailClientResponseV1::MessageFlagAccepted(response) = response else {
+        panic!("Mail message flag command returned the wrong response")
+    };
+    response.operation_id
+}
+
+fn query_message_flag_status(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    operation_id: &str,
+) -> hermes_mail_api::message_flags::MailMessageFlagOperationStatusV1 {
+    let request = encode_module_request(
+        request_id,
+        &MailClientRequestV1::MessageFlagStatus(MailMessageFlagStatusRequestV1 {
+            operation_id: operation_id.to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        }),
+    )
+    .expect("encode Mail message flag status query");
+    let bytes = route(
+        store,
+        supervisor,
+        mail,
+        MailClientContractV1::MessageFlagQuery,
+        &request,
+    )
+    .expect("route Mail message flag status query");
+    let (actual_request_id, response) =
+        decode_module_response(MailClientContractV1::MessageFlagQuery, &bytes)
+            .expect("decode Mail message flag status response");
+    assert_eq!(actual_request_id, request_id);
+    let MailClientResponseV1::MessageFlagStatus(Some(response)) = response else {
+        panic!("Mail message flag status returned the wrong response")
+    };
+    response
 }
 
 fn query_operational(
@@ -296,7 +468,7 @@ fn assert_stale_operational_generation_is_rejected(
     );
 }
 
-fn sync_mail(
+pub(super) fn sync_mail(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     mail: &StartedMailRuntime,

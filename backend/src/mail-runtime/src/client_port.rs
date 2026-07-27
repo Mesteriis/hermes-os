@@ -4,7 +4,7 @@ use hermes_mail_api::client_contract::{
 };
 use hermes_mail_api::{
     MailClientRequestV1, MailClientResponseV1, account_lifecycle_wire, account_wire, client_wire,
-    composition_wire, oauth_wire, operational_wire, sync_health_wire,
+    composition_wire, message_flags_wire, oauth_wire, operational_wire, sync_health_wire,
 };
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
@@ -64,6 +64,8 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
         MailClientRequestV1::GmailOAuthStatus(_) => MailClientContractV1::GmailOAuthQuery,
         MailClientRequestV1::CompositionCommand(_) => MailClientContractV1::CompositionCommand,
         MailClientRequestV1::CompositionQuery(_) => MailClientContractV1::CompositionQuery,
+        MailClientRequestV1::MessageFlagCommand(_) => MailClientContractV1::MessageFlagCommand,
+        MailClientRequestV1::MessageFlagStatus(_) => MailClientContractV1::MessageFlagQuery,
         MailClientRequestV1::OperationalQuery(_) => MailClientContractV1::OperationalQuery,
         MailClientRequestV1::SyncHealthQuery(_) => MailClientContractV1::SyncHealthQuery,
     }
@@ -109,6 +111,14 @@ fn encode_request_payload(request: &MailClientRequestV1) -> Result<Vec<u8>, Mail
         }
         MailClientRequestV1::CompositionQuery(value) => {
             composition_wire::encode_composition_query(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::MessageFlagCommand(value) => {
+            message_flags_wire::encode_message_flag_command(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::MessageFlagStatus(value) => {
+            message_flags_wire::encode_message_flag_status_request(value)
                 .map_err(|_| MailClientPortErrorV1::Protocol)
         }
         MailClientRequestV1::OperationalQuery(value) => {
@@ -176,6 +186,16 @@ fn decode_request_payload(
         MailClientContractV1::CompositionQuery => composition_wire::decode_composition_query(bytes)
             .map(MailClientRequestV1::CompositionQuery)
             .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::MessageFlagCommand => {
+            message_flags_wire::decode_message_flag_command(bytes)
+                .map(MailClientRequestV1::MessageFlagCommand)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientContractV1::MessageFlagQuery => {
+            message_flags_wire::decode_message_flag_status_request(bytes)
+                .map(MailClientRequestV1::MessageFlagStatus)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
         MailClientContractV1::OperationalQuery => operational_wire::decode_operational_query(bytes)
             .map(MailClientRequestV1::OperationalQuery)
             .map_err(|_| MailClientPortErrorV1::Protocol),
@@ -326,6 +346,16 @@ pub async fn handle_client_request(
             .await
             .map(MailClientResponseV1::CompositionQuery)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::MessageFlagCommand(value) => runtime
+            .submit_message_flag_command(&value, requested_at_unix_seconds)
+            .await
+            .map(MailClientResponseV1::MessageFlagAccepted)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::MessageFlagStatus(value) => runtime
+            .message_flag_operation_status(&value)
+            .await
+            .map(MailClientResponseV1::MessageFlagStatus)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
         MailClientRequestV1::OperationalQuery(value) => runtime
             .operational_query(&value)
             .await
@@ -399,6 +429,16 @@ fn encode_module_response(
             MailClientContractV1::CompositionQuery,
             MailClientResponseV1::CompositionQuery(response),
         ) => composition_wire::encode_composition_query_response(response)
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
+        (
+            MailClientContractV1::MessageFlagCommand,
+            MailClientResponseV1::MessageFlagAccepted(accepted),
+        ) => message_flags_wire::encode_message_flag_accepted(accepted)
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
+        (
+            MailClientContractV1::MessageFlagQuery,
+            MailClientResponseV1::MessageFlagStatus(status),
+        ) => message_flags_wire::encode_message_flag_status_response(status.as_ref())
             .map_err(|_| MailClientPortErrorV1::Protocol)?,
         (
             MailClientContractV1::OperationalQuery,
@@ -484,6 +524,14 @@ pub fn decode_module_response(
             composition_wire::decode_composition_query_response(&envelope.response_payload)
                 .map(MailClientResponseV1::CompositionQuery)
         }
+        MailClientContractV1::MessageFlagCommand => {
+            message_flags_wire::decode_message_flag_accepted(&envelope.response_payload)
+                .map(MailClientResponseV1::MessageFlagAccepted)
+        }
+        MailClientContractV1::MessageFlagQuery => {
+            message_flags_wire::decode_message_flag_status_response(&envelope.response_payload)
+                .map(MailClientResponseV1::MessageFlagStatus)
+        }
         MailClientContractV1::OperationalQuery => {
             operational_wire::decode_operational_query_response(&envelope.response_payload)
                 .map(MailClientResponseV1::OperationalQuery)
@@ -507,6 +555,11 @@ mod tests {
         account_lifecycle::{
             MailAccountLifecycleCommandV1, MailAccountLifecycleRetryV1,
             MailAccountLifecycleStatusRequestV1,
+        },
+        message_flags::{
+            MailMessageFlagAcceptedV1, MailMessageFlagCommandV1, MailMessageFlagKindV1,
+            MailMessageFlagOperationOutcomeV1, MailMessageFlagOperationStatusV1,
+            MailMessageFlagStatusRequestV1,
         },
         operational::{
             MailOperationalPageV1, MailOperationalQueryResponseV1, MailOperationalQueryV1,
@@ -554,6 +607,23 @@ mod tests {
 
     fn sync_health_query() -> MailClientRequestV1 {
         MailClientRequestV1::SyncHealthQuery(MailSyncHealthQueryV1::GetStatus {
+            connection_id: "mail-account".to_owned(),
+        })
+    }
+
+    fn message_flag_command() -> MailClientRequestV1 {
+        MailClientRequestV1::MessageFlagCommand(MailMessageFlagCommandV1 {
+            operation_id: "flag-operation".to_owned(),
+            connection_id: "mail-account".to_owned(),
+            provider_message_id: "provider-message".to_owned(),
+            kind: MailMessageFlagKindV1::Read,
+            target_value: true,
+        })
+    }
+
+    fn message_flag_query() -> MailClientRequestV1 {
+        MailClientRequestV1::MessageFlagStatus(MailMessageFlagStatusRequestV1 {
+            operation_id: "flag-operation".to_owned(),
             connection_id: "mail-account".to_owned(),
         })
     }
@@ -686,6 +756,51 @@ mod tests {
             decode_module_response(contract, &encoded_response),
             Ok((8, response))
         );
+    }
+
+    #[test]
+    fn message_flag_command_and_status_use_independent_exact_contracts() {
+        let command = message_flag_command();
+        let encoded = encode_module_request(9, &command).expect("message flag command");
+        let (_, command_contract, decoded) =
+            decode_module_request(&encoded).expect("decode message flag command");
+        assert_eq!(command_contract, MailClientContractV1::MessageFlagCommand);
+        assert_eq!(decoded, command);
+        let response = MailClientResponseV1::MessageFlagAccepted(MailMessageFlagAcceptedV1 {
+            operation_id: "flag-operation".to_owned(),
+        });
+        let bytes =
+            encode_module_response(9, command_contract, &response).expect("accepted response");
+        assert_eq!(
+            decode_module_response(command_contract, &bytes),
+            Ok((9, response))
+        );
+
+        let query = message_flag_query();
+        let encoded = encode_module_request(10, &query).expect("message flag query");
+        let (_, query_contract, decoded) =
+            decode_module_request(&encoded).expect("decode message flag query");
+        assert_eq!(query_contract, MailClientContractV1::MessageFlagQuery);
+        assert_eq!(decoded, query);
+        let response =
+            MailClientResponseV1::MessageFlagStatus(Some(MailMessageFlagOperationStatusV1 {
+                operation_id: "flag-operation".to_owned(),
+                connection_id: "mail-account".to_owned(),
+                provider_message_id: "provider-message".to_owned(),
+                kind: MailMessageFlagKindV1::Read,
+                target_value: true,
+                outcome: MailMessageFlagOperationOutcomeV1::Succeeded,
+                requested_at_unix_seconds: 100,
+                completed_at_unix_seconds: Some(101),
+                projection_revision: Some(2),
+            }));
+        let bytes = encode_module_response(10, query_contract, &response)
+            .expect("message flag status response");
+        assert_eq!(
+            decode_module_response(query_contract, &bytes),
+            Ok((10, response))
+        );
+        assert_ne!(command_contract, query_contract);
     }
 
     #[test]

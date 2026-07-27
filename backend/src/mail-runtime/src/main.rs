@@ -6,7 +6,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use hermes_mail_runtime::managed::MailDeliveryDispatchErrorV1;
+use hermes_mail_runtime::managed::{MailDeliveryDispatchErrorV1, MailMessageFlagDispatchErrorV1};
 use hermes_mail_runtime::{
     MailRuntimeAdmission,
     attachment_security_outbox::MailAttachmentSecurityOutboxRelayError,
@@ -162,6 +162,23 @@ where
             Err(MailDeliveryDispatchErrorV1::Persistence) => {
                 developer_diagnostic("developer_mail_delivery_persistence_failed");
                 return Err("Mail runtime delivery persistence failed".to_owned());
+            }
+        }
+        match runtime.block_on(admitted.execute_next_message_flag_command(now)) {
+            Ok(_) => {}
+            Err(MailMessageFlagDispatchErrorV1::ProviderRejected) => {
+                developer_diagnostic("developer_mail_message_flag_rejected");
+            }
+            Err(MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown) => {
+                developer_diagnostic("developer_mail_message_flag_outcome_unknown");
+            }
+            Err(MailMessageFlagDispatchErrorV1::InvalidStoredCommand) => {
+                developer_diagnostic("developer_mail_message_flag_command_invalid");
+                return Err("Mail runtime message flag command is invalid".to_owned());
+            }
+            Err(MailMessageFlagDispatchErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_message_flag_persistence_failed");
+                return Err("Mail runtime message flag persistence failed".to_owned());
             }
         }
         runtime

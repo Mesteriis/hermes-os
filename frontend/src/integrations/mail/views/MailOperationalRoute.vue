@@ -14,6 +14,7 @@ import {
 import { useMailComposition } from '../queries/useMailComposition'
 import { useMailDelivery } from '../queries/useMailDelivery'
 import { useMailOperationalRead } from '../queries/useMailOperationalRead'
+import { useMailMessageFlags } from '../queries/useMailMessageFlags'
 import { useMailSync } from '../queries/useMailSync'
 import { useMailSyncHealth } from '../queries/useMailSyncHealth'
 
@@ -21,7 +22,9 @@ const props = defineProps<{
 	canCompose: boolean
 	canComposeQuery: boolean
 	canDeliver: boolean
+	canMutateFlags: boolean
 	canQuery: boolean
+	canQueryFlagStatus: boolean
 	canSync: boolean
 	canSyncHealth: boolean
 	modules: readonly ClientModuleBootstrapV1[]
@@ -37,6 +40,22 @@ const sync = useMailSync({ canSync: () => props.canSync })
 const read = useMailOperationalRead({
 	canQuery: () => props.canQuery,
 	modules: () => props.modules,
+})
+const messageFlags = useMailMessageFlags({
+	canMutate: () => props.canMutateFlags,
+	canQueryStatus: () => props.canQueryFlagStatus,
+	selection: () => {
+		const detail = read.model.value.detail
+		const connectionId = read.model.value.selectedConnectionId
+		if (!detail || !connectionId) return null
+		return {
+			connectionId,
+			providerMessageId: detail.id,
+			isRead: detail.isRead,
+			isStarred: detail.isStarred,
+		}
+	},
+	refreshProjection: read.refresh,
 })
 const syncHealth = useMailSyncHealth({
 	canQuery: () => props.canSyncHealth,
@@ -66,6 +85,7 @@ watch(
 	<MailOperationalPage
 		:composition-model="composition.model.value"
 		:delivery-model="delivery.model.value"
+		:flag-model="messageFlags.model.value"
 		:read-model="read.model.value"
 		:sync-health-model="syncHealth.model.value"
 		:sync-model="sync.model.value"
@@ -93,6 +113,9 @@ watch(
 		@load-more-messages="read.loadMoreMessages"
 		@load-more-threads="read.loadMoreThreads"
 		@read-refresh="read.refresh"
+		@flag-refresh-status="messageFlags.refreshStatus"
+		@flag-set-read="messageFlags.setRead"
+		@flag-set-starred="messageFlags.setStarred"
 		@refresh-status="delivery.refreshStatus"
 		@select-connection="read.selectConnection"
 		@select-folder="read.selectFolder"

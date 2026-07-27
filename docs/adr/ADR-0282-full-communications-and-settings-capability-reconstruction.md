@@ -391,7 +391,9 @@ runtime не является domain, а app composition не становитс
 | Mail sync, subscriptions and mailbox health | Mail | `mail_sync_health_v1` |
 | Mail accounts/sync/folders/threads/messages | Mail | `mail_operational_read_v1` |
 | Mail drafts/compose/templates/signatures | Mail | `mail_composition_v1` |
-| Mail mutations and delivery | Mail | `mail_operational_command_v1` |
+| Mail read/unread and star/unstar | Mail | `mail_message_flags_command_v1` |
+| Mail archive/trash/restore/move/delete | Mail | `mail_message_location_command_v1` |
+| Mail full mutation and delivery closure | Mail | `mail_operational_command_v1` |
 | Telegram authorization, history, search, media, mutations and operation audit | Telegram | `telegram_core_operational_v1` |
 | Telegram atomic runtime restart/reconfiguration | Telegram | `telegram_runtime_reconfiguration_v1` |
 | Telegram folder reassignment | Telegram | `telegram_folder_reassignment_v1` |

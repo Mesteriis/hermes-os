@@ -12,6 +12,10 @@ describe('Mail operational active route boundary', () => {
 		const deliveryController = read('../queries/useMailDelivery.ts')
 		const syncController = read('../queries/useMailSync.ts')
 		const readController = read('../queries/useMailOperationalRead.ts')
+		const flagController = read('../queries/useMailMessageFlags.ts')
+		const flagGateway = read('../api/mailMessageFlagsGateway.ts')
+		const flagCommandClient = read('../api/mailMessageFlagCommandClient.ts')
+		const flagQueryClient = read('../api/mailMessageFlagQueryClient.ts')
 		const gateway = read('../api/mailOperationalGateway.ts')
 		const compositionGateway = read('../api/mailCompositionGateway.ts')
 		const compositionCommandClient = read('../api/mailCompositionCommandClient.ts')
@@ -32,6 +36,7 @@ describe('Mail operational active route boundary', () => {
 		const signaturePresentation = read('../presentation/MailSignatureLibrary.vue')
 		const deliveryPresentation = read('../presentation/MailDeliveryPanel.vue')
 		const readPresentation = read('../presentation/MailOperationalReadPanel.vue')
+		const flagPresentation = read('../presentation/MailMessageFlagActions.vue')
 		const appLayout = read('../../../app/layout/AppLayoutRoot.vue')
 		const compiledAdapters = read('../../../app/client-surfaces/compiledClientSurfaceAdapters.ts')
 
@@ -44,6 +49,10 @@ describe('Mail operational active route boundary', () => {
 			deliveryController,
 			syncController,
 			readController,
+			flagController,
+			flagGateway,
+			flagCommandClient,
+			flagQueryClient,
 			gateway,
 			compositionGateway,
 			compositionCommandClient,
@@ -64,6 +73,7 @@ describe('Mail operational active route boundary', () => {
 			signaturePresentation,
 			deliveryPresentation,
 			readPresentation,
+			flagPresentation,
 		]) {
 			expect(source).not.toMatch(/\/api\/v1\//)
 			expect(source).not.toMatch(/domains\/communications/)
@@ -85,6 +95,12 @@ describe('Mail operational active route boundary', () => {
 		expect(compositionConnections).toContain("'mail.composition.query.v1'")
 		expect(readClient).toContain('MailOperationalQueryService')
 		expect(readGateway).toContain('MailOperationalQueryV1Schema')
+		expect(flagGateway).toContain('MailMessageFlagCommandV1Schema')
+		expect(flagGateway).toContain('MailMessageFlagStatusRequestV1Schema')
+		expect(flagCommandClient).toContain('MailMessageFlagCommandService')
+		expect(flagQueryClient).toContain('MailMessageFlagQueryService')
+		expect(flagController).toContain('mutateMailMessageFlag')
+		expect(flagController).toContain('getMailMessageFlagStatus')
 		expect(healthClient).toContain('MailSyncHealthQueryService')
 		expect(healthGateway).toContain('MailSyncHealthQueryV1Schema')
 		expect(healthConnections).toContain("'mail.sync.health.query.v1'")
@@ -95,12 +111,15 @@ describe('Mail operational active route boundary', () => {
 		expect(signaturePresentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(deliveryPresentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(readPresentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
+		expect(flagPresentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(healthPresentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(appLayout).toContain('MailOperationalRoute')
 		expect(appLayout).toContain("'mail.delivery.v1'")
 		expect(appLayout).toContain("'mail.composition.command.v1'")
 		expect(appLayout).toContain("'mail.composition.query.v1'")
 		expect(appLayout).toContain("'mail.operational.query.v1'")
+		expect(appLayout).toContain("'mail.message-flags.command.v1'")
+		expect(appLayout).toContain("'mail.message-flags.query.v1'")
 		expect(appLayout).toContain("'mail.sync.v1'")
 		expect(appLayout).toContain("'mail.sync.health.query.v1'")
 		expect(compiledAdapters).toContain("'mail-integration'")

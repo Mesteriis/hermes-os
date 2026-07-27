@@ -94,6 +94,7 @@ fn managed_mail_runtime_uses_kernel_leases_and_route_specific_admission() {
     assert_mail_event_only_communications_handoff(&store, &supervisor, &mail);
     assert_mail_attachment_lifecycle(&store, &supervisor, &mail);
     assert_mail_operational_read(&store, &supervisor, &mail);
+    assert_mail_message_flags(&store, &supervisor, &mail, &imap);
     assert_mail_composition(&store, &supervisor, &mail);
     let accepted_connections = imap.accepted_connections();
     assert_mail_sync_replay_and_health(

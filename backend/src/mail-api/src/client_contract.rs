@@ -1,7 +1,7 @@
 pub const MAIL_CLIENT_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.mail.v1.bin"));
 pub const MAIL_CLIENT_CONTRACT_MAJOR: u32 = 1;
-pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 8;
+pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 9;
 pub const MAIL_MODULE_ID: &str = "hermes-mail-runtime";
 pub const MAIL_OWNER_ID: &str = "mail";
 
@@ -22,12 +22,14 @@ pub enum MailClientContractV1 {
     GmailOAuthQuery,
     CompositionCommand,
     CompositionQuery,
+    MessageFlagCommand,
+    MessageFlagQuery,
     OperationalQuery,
     SyncHealthQuery,
 }
 
 impl MailClientContractV1 {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 19] = [
         Self::AccountCredentialBind,
         Self::AccountDelete,
         Self::AccountLifecycleQuery,
@@ -42,6 +44,8 @@ impl MailClientContractV1 {
         Self::GmailOAuthStart,
         Self::CompositionCommand,
         Self::CompositionQuery,
+        Self::MessageFlagCommand,
+        Self::MessageFlagQuery,
         Self::OperationalQuery,
         Self::Sync,
         Self::SyncHealthQuery,
@@ -65,6 +69,8 @@ impl MailClientContractV1 {
             Self::GmailOAuthQuery => "mail.oauth.query.v1",
             Self::CompositionCommand => "mail.composition.command.v1",
             Self::CompositionQuery => "mail.composition.query.v1",
+            Self::MessageFlagCommand => "mail.message-flags.command.v1",
+            Self::MessageFlagQuery => "mail.message-flags.query.v1",
             Self::OperationalQuery => "mail.operational.query.v1",
             Self::SyncHealthQuery => "mail.sync.health.query.v1",
         }
@@ -106,6 +112,12 @@ impl MailClientContractV1 {
             }
             Self::CompositionQuery => {
                 "/hermes.mail.composition.v1.MailCompositionQueryService/Query"
+            }
+            Self::MessageFlagCommand => {
+                "/hermes.mail.message_flags.v1.MailMessageFlagCommandService/Mutate"
+            }
+            Self::MessageFlagQuery => {
+                "/hermes.mail.message_flags.v1.MailMessageFlagQueryService/GetOperationStatus"
             }
             Self::OperationalQuery => {
                 "/hermes.mail.operational.v1.MailOperationalQueryService/Query"

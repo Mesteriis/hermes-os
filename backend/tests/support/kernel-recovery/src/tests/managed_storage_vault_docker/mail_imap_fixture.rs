@@ -36,6 +36,7 @@ pub(super) struct MailImapFixture {
     port: u16,
     shutdown: Arc<AtomicBool>,
     accepted_connections: Arc<AtomicUsize>,
+    message_flag_mutations: Arc<AtomicUsize>,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -51,8 +52,10 @@ impl MailImapFixture {
             .port();
         let shutdown = Arc::new(AtomicBool::new(false));
         let accepted_connections = Arc::new(AtomicUsize::new(0));
+        let message_flag_mutations = Arc::new(AtomicUsize::new(0));
         let worker_shutdown = Arc::clone(&shutdown);
         let worker_connections = Arc::clone(&accepted_connections);
+        let worker_message_flag_mutations = Arc::clone(&message_flag_mutations);
         let worker = thread::spawn(move || {
             while !worker_shutdown.load(Ordering::Acquire) {
                 match listener.accept() {
@@ -61,7 +64,7 @@ impl MailImapFixture {
                             break;
                         }
                         worker_connections.fetch_add(1, Ordering::AcqRel);
-                        serve_connection(stream);
+                        serve_connection(stream, Arc::clone(&worker_message_flag_mutations));
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(5));
@@ -74,6 +77,7 @@ impl MailImapFixture {
             port,
             shutdown,
             accepted_connections,
+            message_flag_mutations,
             worker: Some(worker),
         }
     }
@@ -84,6 +88,10 @@ impl MailImapFixture {
 
     pub(super) fn accepted_connections(&self) -> usize {
         self.accepted_connections.load(Ordering::Acquire)
+    }
+
+    pub(super) fn message_flag_mutations(&self) -> usize {
+        self.message_flag_mutations.load(Ordering::Acquire)
     }
 }
 
@@ -100,7 +108,7 @@ impl Drop for MailImapFixture {
     }
 }
 
-fn serve_connection(mut stream: TcpStream) {
+fn serve_connection(mut stream: TcpStream, message_flag_mutations: Arc<AtomicUsize>) {
     stream
         .set_nonblocking(false)
         .and_then(|_| stream.set_read_timeout(Some(Duration::from_secs(15))))
@@ -133,6 +141,13 @@ fn serve_connection(mut stream: TcpStream) {
                  {tag} OK [READ-ONLY] EXAMINE completed\r\n"
             )
             .expect("write IMAP EXAMINE response");
+        } else if upper.contains(" SELECT ") {
+            write!(
+                stream,
+                "* FLAGS (\\Seen \\Flagged)\r\n* 1 EXISTS\r\n* OK [UIDVALIDITY 1] valid\r\n\
+                 {tag} OK [READ-WRITE] SELECT completed\r\n"
+            )
+            .expect("write IMAP SELECT response");
         } else if upper.contains(" UID SEARCH ") {
             write!(
                 stream,
@@ -150,6 +165,15 @@ fn serve_connection(mut stream: TcpStream) {
             .and_then(|_| stream.write_all(FIXTURE_MESSAGE))
             .and_then(|_| write!(stream, ")\r\n{tag} OK UID FETCH completed\r\n"))
             .expect("write IMAP UID FETCH response");
+        } else if upper.contains(" UID STORE ") {
+            assert!(
+                upper.contains(&format!("UID STORE {FIXTURE_UID}"))
+                    && upper.contains("FLAGS.SILENT")
+                    && (upper.contains("\\SEEN") || upper.contains("\\FLAGGED")),
+                "Mail flag mutation must use exact bounded UID and supported provider flag"
+            );
+            message_flag_mutations.fetch_add(1, Ordering::AcqRel);
+            write_tagged(&mut stream, tag, "OK UID STORE completed");
         } else if upper.contains(" LOGOUT") {
             write!(
                 stream,

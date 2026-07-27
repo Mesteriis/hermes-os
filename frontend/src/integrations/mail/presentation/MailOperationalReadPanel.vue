@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import type { MailOperationalReadModel } from './mailOperationalReadModel'
+import type { MailMessageFlagModel } from './mailMessageFlagModel'
+import MailMessageFlagActions from './MailMessageFlagActions.vue'
 import './mailOperationalReadPanel.css'
 
-defineProps<{ model: MailOperationalReadModel }>()
+defineProps<{
+	flagModel: MailMessageFlagModel
+	model: MailOperationalReadModel
+}>()
 
 const emit = defineEmits<{
 	loadMoreFolders: []
@@ -13,6 +18,9 @@ const emit = defineEmits<{
 	selectFolder: [folderId: string]
 	selectMessage: [providerMessageId: string]
 	selectThread: [providerThreadId: string]
+	flagRefreshStatus: []
+	flagSetRead: [targetValue: boolean]
+	flagSetStarred: [targetValue: boolean]
 }>()
 </script>
 
@@ -129,6 +137,12 @@ const emit = defineEmits<{
 			</dl>
 			<p>{{ model.detail.snippet }}</p>
 			<small>{{ model.detail.contentState }}</small>
+			<MailMessageFlagActions
+				:model="flagModel"
+				@refresh-status="emit('flagRefreshStatus')"
+				@set-read="emit('flagSetRead', $event)"
+				@set-starred="emit('flagSetStarred', $event)"
+			/>
 		</article>
 	</section>
 </template>

@@ -318,11 +318,29 @@
       "dependsOn": ["client_gateway_v1", "mail.delivery.v1"]
     },
     {
+      "gate": "mail_message_flags_command_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "implemented",
+      "dependsOn": ["mail_operational_read_v1", "mail_gmail_oauth_v1"]
+    },
+    {
+      "gate": "mail_message_location_command_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "planned",
+      "dependsOn": ["mail_message_flags_command_v1", "mail_operational_read_v1"]
+    },
+    {
       "gate": "mail_operational_command_v1",
       "role": "integration",
       "owner": "mail",
       "state": "planned",
-      "dependsOn": ["mail_operational_read_v1", "mail.delivery.v1"]
+      "dependsOn": [
+        "mail.delivery.v1",
+        "mail_message_flags_command_v1",
+        "mail_message_location_command_v1"
+      ]
     },
     {
       "gate": "communications_canonical_read_v2",

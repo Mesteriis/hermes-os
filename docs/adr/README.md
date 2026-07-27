@@ -115,6 +115,7 @@ policy через ссылки из новых документов.
 - [ADR-0304: Zulip account identity and Settings schema v3](ADR-0304-zulip-account-identity-and-settings-schema-v3.md)
 - [ADR-0305: Mail-owned composition, drafts, templates and signatures](ADR-0305-mail-owned-composition-drafts-templates-and-signatures.md)
 - [ADR-0306: Repeatable development release refresh and successor fencing](ADR-0306-repeatable-development-release-refresh-and-successor-fencing.md)
+- [ADR-0307: Mail-owned message flag mutations and provider reconciliation](ADR-0307-mail-message-flag-mutations-and-provider-reconciliation.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -411,3 +412,7 @@ generic QR/account service, browser не подделывает native pairing.
 ADR-0304 заменяет ложную Zulip bot-only identity на Settings schema major 3 с
 `zulip.account_email`: Zulip integration владеет email/API semantics, Kernel
 применяет только generic typed settings и не выбирает bot/user behavior.
+ADR-0307 разделяет Mail operational mutations по различным failure semantics:
+read/star flags идут через exact convergent command и owner-local journal,
+folder moves/delete остаются отдельным gate, а Kernel/Core Gateway переносят
+opaque payload и не становятся generic provider-command service.

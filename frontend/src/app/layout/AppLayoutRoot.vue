@@ -69,6 +69,12 @@ const mailSyncAvailable = computed(() =>
 const mailOperationalQueryAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.operational.query.v1'),
 )
+const mailMessageFlagCommandAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.message-flags.command.v1'),
+)
+const mailMessageFlagQueryAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.message-flags.query.v1'),
+)
 const mailSyncHealthAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.sync.health.query.v1'),
 )
@@ -136,7 +142,9 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					:can-compose="mailCompositionCommandAvailable"
 					:can-compose-query="mailCompositionQueryAvailable"
 					:can-deliver="mailDeliveryAvailable"
+					:can-mutate-flags="mailMessageFlagCommandAvailable"
 					:can-query="mailOperationalQueryAvailable"
+					:can-query-flag-status="mailMessageFlagQueryAvailable"
 					:can-sync="mailSyncAvailable"
 					:can-sync-health="mailSyncHealthAvailable"
 					:modules="bootstrap.modules"

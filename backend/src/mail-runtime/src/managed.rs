@@ -108,6 +108,12 @@ use hermes_mail_api::{
         MailCompositionQueryV1, composition_command_connection_id, composition_query_connection_id,
     },
     composition_wire::encode_composition_command,
+    message_flags::{
+        MailMessageFlagAcceptedV1, MailMessageFlagCommandV1, MailMessageFlagKindV1,
+        MailMessageFlagOperationOutcomeV1, MailMessageFlagOperationStatusV1,
+        MailMessageFlagStatusRequestV1,
+    },
+    message_flags_wire::{decode_message_flag_command, encode_message_flag_command},
     operational::{
         MailFolderKindV1, MailMessageFlagV1, MailOperationalQueryResponseV1,
         MailOperationalQueryV1, operational_query_connection_id,
@@ -130,16 +136,18 @@ use hermes_mail_core::{
     draft_ingress_observation_with_body, validate_sync_request,
 };
 use hermes_mail_gmail::{
-    GmailAdapterErrorV1, GmailApiClientV1, GmailListMessagesRequestV1, decode_raw_rfc822,
-    history_message_ids,
+    GmailAdapterErrorV1, GmailApiClientV1, GmailListMessagesRequestV1, GmailMutableMessageFlagV1,
+    decode_raw_rfc822, history_message_ids,
 };
+use hermes_mail_imap::ImapMutableMessageFlagV1;
 use hermes_mail_persistence::{
     MailAttachmentBlobAdmissionCompletionV1,
     MailAttachmentDispositionV1 as PersistedAttachmentDispositionV1,
     MailAttachmentMaterializationV1, MailCredentialBindingV1, MailDeliveryAttemptOutcomeV1,
     MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailDurablePersistenceError,
     MailOperationalFolderSnapshotV1, MailOperationalMaterializationV1,
-    MailOperationalMessageSnapshotV1, MailQueuedDeliveryV1, MailSyncRunStartOutcomeV1,
+    MailOperationalMessageSnapshotV1, MailQueuedDeliveryV1, MailQueuedMessageFlagCommandV1,
+    MailSyncRunStartOutcomeV1,
 };
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
@@ -245,6 +253,14 @@ pub enum MailBootstrapError {
 pub enum MailDeliveryDispatchErrorV1 {
     InvalidStoredCommand,
     AttachmentRejected,
+    Persistence,
+    ProviderRejected,
+    ProviderOutcomeUnknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailMessageFlagDispatchErrorV1 {
+    InvalidStoredCommand,
     Persistence,
     ProviderRejected,
     ProviderOutcomeUnknown,
@@ -753,6 +769,171 @@ impl MailAdmittedRuntime {
             .execute_operational_query(query)
             .await
             .map_err(|_| MailBootstrapError::Persistence)
+    }
+
+    pub async fn submit_message_flag_command(
+        &self,
+        command: &MailMessageFlagCommandV1,
+        requested_at_unix_seconds: i64,
+    ) -> Result<MailMessageFlagAcceptedV1, MailBootstrapError> {
+        if !self.provider_io_permitted() || command.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        match &self.account.inbound {
+            MailInboundTransportV1::Imap(_) if self.imap_password.is_none() => {
+                return Err(MailBootstrapError::Credential);
+            }
+            MailInboundTransportV1::Gmail(_)
+                if self
+                    .durable
+                    .gmail_oauth_credential_binding(&self.account.connection_id)
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?
+                    .is_none() =>
+            {
+                return Err(MailBootstrapError::Credential);
+            }
+            MailInboundTransportV1::Imap(_) | MailInboundTransportV1::Gmail(_) => {}
+        }
+        let canonical_command_bytes =
+            encode_message_flag_command(command).map_err(|_| MailBootstrapError::Admission)?;
+        self.durable
+            .enqueue_message_flag_command(
+                command,
+                &canonical_command_bytes,
+                requested_at_unix_seconds,
+            )
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)
+    }
+
+    pub async fn message_flag_operation_status(
+        &self,
+        request: &MailMessageFlagStatusRequestV1,
+    ) -> Result<Option<MailMessageFlagOperationStatusV1>, MailBootstrapError> {
+        if request.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        self.durable
+            .message_flag_operation_status(request)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)
+    }
+
+    pub async fn execute_next_message_flag_command(
+        &mut self,
+        completed_at_unix_seconds: i64,
+    ) -> Result<bool, MailMessageFlagDispatchErrorV1> {
+        if !self.provider_io_permitted() {
+            return Ok(false);
+        }
+        let Some(queued) = self
+            .durable
+            .next_message_flag_command(&self.account.connection_id)
+            .await
+            .map_err(|_| MailMessageFlagDispatchErrorV1::Persistence)?
+        else {
+            return Ok(false);
+        };
+        let command = decode_message_flag_command(&queued.exact_command_bytes)
+            .map_err(|_| MailMessageFlagDispatchErrorV1::InvalidStoredCommand)?;
+        if !queued_matches_command(&queued, &command) {
+            return Err(MailMessageFlagDispatchErrorV1::InvalidStoredCommand);
+        }
+        let provider_result = match self.account.inbound.clone() {
+            MailInboundTransportV1::Imap(configuration) => (|| {
+                let password = self
+                    .imap_password
+                    .as_ref()
+                    .ok_or(MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown)?;
+                let password = Zeroizing::new(password.to_vec());
+                let password = std::str::from_utf8(&password)
+                    .map_err(|_| MailMessageFlagDispatchErrorV1::InvalidStoredCommand)?;
+                let uid = command
+                    .provider_message_id
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|uid| *uid > 0)
+                    .ok_or(MailMessageFlagDispatchErrorV1::InvalidStoredCommand)?;
+                hermes_mail_imap::set_inbox_message_flag(
+                    &configuration.host,
+                    configuration.port,
+                    &configuration.username,
+                    password,
+                    uid,
+                    imap_message_flag(command.kind),
+                    command.target_value,
+                )
+                .map_err(|_| MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown)
+            })(),
+            MailInboundTransportV1::Gmail(configuration) => {
+                async {
+                    let token =
+                        self.resolve_gmail_access_token()
+                            .await
+                            .map_err(|error| match error {
+                                MailBootstrapError::Persistence => {
+                                    MailMessageFlagDispatchErrorV1::Persistence
+                                }
+                                MailBootstrapError::Credential => {
+                                    MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown
+                                }
+                                _ => MailMessageFlagDispatchErrorV1::InvalidStoredCommand,
+                            })?;
+                    let token = std::str::from_utf8(&token)
+                        .map_err(|_| MailMessageFlagDispatchErrorV1::InvalidStoredCommand)?;
+                    let client = gmail_api_client(&configuration)
+                        .map_err(|_| MailMessageFlagDispatchErrorV1::ProviderRejected)?;
+                    client
+                        .set_message_flag(
+                            token,
+                            &command.provider_message_id,
+                            gmail_message_flag(command.kind),
+                            command.target_value,
+                        )
+                        .await
+                        .map_err(|error| match error {
+                            GmailAdapterErrorV1::InvalidRequest
+                            | GmailAdapterErrorV1::ProviderStatus(400..=499) => {
+                                MailMessageFlagDispatchErrorV1::ProviderRejected
+                            }
+                            GmailAdapterErrorV1::Transport
+                            | GmailAdapterErrorV1::ProviderStatus(_)
+                            | GmailAdapterErrorV1::InvalidResponse => {
+                                MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown
+                            }
+                        })
+                }
+                .await
+            }
+        };
+        if let Err(error) = provider_result {
+            let outcome = match error {
+                MailMessageFlagDispatchErrorV1::ProviderRejected
+                | MailMessageFlagDispatchErrorV1::InvalidStoredCommand => {
+                    MailMessageFlagOperationOutcomeV1::Rejected
+                }
+                MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown => {
+                    MailMessageFlagOperationOutcomeV1::OutcomeUnknown
+                }
+                MailMessageFlagDispatchErrorV1::Persistence => return Err(error),
+            };
+            self.durable
+                .complete_message_flag_failure(
+                    &queued.operation_id,
+                    &queued.connection_id,
+                    outcome,
+                    completed_at_unix_seconds,
+                )
+                .await
+                .map_err(|_| MailMessageFlagDispatchErrorV1::Persistence)?;
+            return Err(error);
+        }
+        self.durable
+            .complete_message_flag_success(&queued, completed_at_unix_seconds)
+            .await
+            .map_err(|_| MailMessageFlagDispatchErrorV1::Persistence)?;
+        Ok(true)
     }
 
     pub async fn composition_command(
@@ -2361,6 +2542,31 @@ fn gmail_operational_flags(label_ids: &[String]) -> Vec<MailMessageFlagV1> {
     flags
 }
 
+fn queued_matches_command(
+    queued: &MailQueuedMessageFlagCommandV1,
+    command: &MailMessageFlagCommandV1,
+) -> bool {
+    queued.operation_id == command.operation_id
+        && queued.connection_id == command.connection_id
+        && queued.provider_message_id == command.provider_message_id
+        && queued.kind == command.kind
+        && queued.target_value == command.target_value
+}
+
+const fn imap_message_flag(kind: MailMessageFlagKindV1) -> ImapMutableMessageFlagV1 {
+    match kind {
+        MailMessageFlagKindV1::Read => ImapMutableMessageFlagV1::Read,
+        MailMessageFlagKindV1::Starred => ImapMutableMessageFlagV1::Starred,
+    }
+}
+
+const fn gmail_message_flag(kind: MailMessageFlagKindV1) -> GmailMutableMessageFlagV1 {
+    match kind {
+        MailMessageFlagKindV1::Read => GmailMutableMessageFlagV1::Read,
+        MailMessageFlagKindV1::Starred => GmailMutableMessageFlagV1::Starred,
+    }
+}
+
 fn valid_gmail_operational_label(value: &str) -> bool {
     !value.trim().is_empty() && value.len() <= 512 && !value.contains(['\0', '\r', '\n'])
 }
@@ -2739,6 +2945,18 @@ mod tests {
     use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
 
     use super::*;
+
+    #[test]
+    fn message_flag_provider_mappings_are_exact_and_owner_local() {
+        assert_eq!(
+            imap_message_flag(MailMessageFlagKindV1::Read),
+            ImapMutableMessageFlagV1::Read
+        );
+        assert_eq!(
+            gmail_message_flag(MailMessageFlagKindV1::Starred),
+            GmailMutableMessageFlagV1::Starred
+        );
+    }
 
     #[test]
     fn attachment_blob_admission_requires_its_exact_publish_subject() {

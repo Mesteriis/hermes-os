@@ -25,6 +25,11 @@ pub mod composition_wire;
 pub mod composition_wire_generated {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail.composition.v1.rs"));
 }
+pub mod message_flags;
+pub mod message_flags_wire;
+pub mod message_flags_wire_generated {
+    include!(concat!(env!("OUT_DIR"), "/hermes.mail.message_flags.v1.rs"));
+}
 pub mod oauth;
 pub mod oauth_wire;
 pub mod operational;
@@ -72,6 +77,8 @@ pub enum MailClientRequestV1 {
     GmailOAuthStatus(GmailOAuthStatusRequestV1),
     CompositionCommand(composition::MailCompositionCommandV1),
     CompositionQuery(composition::MailCompositionQueryV1),
+    MessageFlagCommand(message_flags::MailMessageFlagCommandV1),
+    MessageFlagStatus(message_flags::MailMessageFlagStatusRequestV1),
     OperationalQuery(operational::MailOperationalQueryV1),
     SyncHealthQuery(sync_health::MailSyncHealthQueryV1),
 }
@@ -114,6 +121,8 @@ pub enum MailClientResponseV1 {
     GmailOAuthStatus(Option<GmailOAuthOperationStatusV1>),
     CompositionMutation(composition::MailCompositionMutationReceiptV1),
     CompositionQuery(composition::MailCompositionQueryResponseV1),
+    MessageFlagAccepted(message_flags::MailMessageFlagAcceptedV1),
+    MessageFlagStatus(Option<message_flags::MailMessageFlagOperationStatusV1>),
     OperationalQuery(operational::MailOperationalQueryResponseV1),
     SyncHealthQuery(sync_health::MailSyncHealthQueryResponseV1),
 }

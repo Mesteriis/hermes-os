@@ -119,11 +119,14 @@ https://accounts.google.com/o/oauth2/v2/auth
 https://oauth2.googleapis.com/token
 openid
 email
-https://www.googleapis.com/auth/gmail.readonly
+https://www.googleapis.com/auth/gmail.modify
 https://www.googleapis.com/auth/gmail.send
 ```
 
 Client не передаёт произвольный authorization/token endpoint или scope.
+Первоначальный read-only scope заменён ADR-0307 при открытии typed message flag
+mutations. Existing grant с `gmail.readonly` не повышается автоматически и
+требует явной повторной authorization.
 Loopback TLS provider endpoint/custom CA допускаются только compile-time
 `conformance-test-support`. HTTPS exchange имеет whole-operation deadline и
 bounded response.

@@ -919,7 +919,7 @@ async fn upsert_operational_message(
     Ok(())
 }
 
-async fn refresh_thread(
+pub(crate) async fn refresh_thread(
     transaction: &mut Transaction<'_, Postgres>,
     connection_id: &str,
     provider_thread_id: &str,
@@ -980,7 +980,7 @@ async fn refresh_thread(
     Ok(())
 }
 
-async fn refresh_folder(
+pub(crate) async fn refresh_folder(
     transaction: &mut Transaction<'_, Postgres>,
     connection_id: &str,
     folder_id: &str,

@@ -144,6 +144,8 @@ mod mail_gmail_delivery_flow;
 mod mail_gmail_oauth_flow;
 #[path = "managed_storage_vault_docker/mail_managed_flow.rs"]
 mod mail_managed_flow;
+#[path = "managed_storage_vault_docker/mail_message_flag_flow.rs"]
+mod mail_message_flag_flow;
 #[path = "managed_storage_vault_docker/mail_outbound_attachment_flow.rs"]
 mod mail_outbound_attachment_flow;
 #[path = "managed_storage_vault_docker/zulip_https_fixture.rs"]

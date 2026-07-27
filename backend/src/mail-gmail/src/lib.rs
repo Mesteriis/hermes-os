@@ -24,7 +24,7 @@ const GMAIL_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
 const GMAIL_OAUTH_SCOPES: [&str; 4] = [
     "openid",
     "email",
-    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.send",
 ];
 
@@ -34,6 +34,12 @@ pub struct GmailApiClientV1 {
     port: u16,
     ca_certificate_pem: Option<String>,
     user_id: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GmailMutableMessageFlagV1 {
+    Read,
+    Starred,
 }
 
 pub fn decode_raw_rfc822(raw: &str) -> Result<Vec<u8>, GmailAdapterErrorV1> {
@@ -365,6 +371,25 @@ impl GmailApiClientV1 {
             )
             .await?;
         Ok(())
+    }
+
+    pub async fn set_message_flag(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+        flag: GmailMutableMessageFlagV1,
+        target_value: bool,
+    ) -> Result<(), GmailAdapterErrorV1> {
+        let (add_label_ids, remove_label_ids) = gmail_labels_for_message_flag(flag, target_value);
+        self.batch_modify(
+            access_token,
+            &GmailBatchModifyRequestV1 {
+                message_ids: vec![provider_message_id.to_owned()],
+                add_label_ids,
+                remove_label_ids,
+            },
+        )
+        .await
     }
 
     async fn get<T: for<'de> Deserialize<'de>>(
@@ -725,6 +750,18 @@ fn provider_id(value: &str) -> Result<String, GmailAdapterErrorV1> {
         .then(|| value.to_owned())
         .ok_or(GmailAdapterErrorV1::InvalidRequest)
 }
+
+fn gmail_labels_for_message_flag(
+    flag: GmailMutableMessageFlagV1,
+    target_value: bool,
+) -> (Vec<String>, Vec<String>) {
+    match (flag, target_value) {
+        (GmailMutableMessageFlagV1::Read, true) => (Vec::new(), vec!["UNREAD".to_owned()]),
+        (GmailMutableMessageFlagV1::Read, false) => (vec!["UNREAD".to_owned()], Vec::new()),
+        (GmailMutableMessageFlagV1::Starred, true) => (vec!["STARRED".to_owned()], Vec::new()),
+        (GmailMutableMessageFlagV1::Starred, false) => (Vec::new(), vec!["STARRED".to_owned()]),
+    }
+}
 fn percent_encode(value: &str) -> Result<String, GmailAdapterErrorV1> {
     if value.len() > 4096 || value.contains('\r') || value.contains('\n') {
         return Err(GmailAdapterErrorV1::InvalidRequest);
@@ -791,8 +828,9 @@ mod tests {
         assert!(url.contains("code_challenge=challenge-value"));
         assert!(url.contains("code_challenge_method=S256"));
         assert!(url.contains("state=state-value"));
-        assert!(url.contains("gmail.readonly"));
+        assert!(url.contains("gmail.modify"));
         assert!(url.contains("gmail.send"));
+        assert!(!url.contains("gmail.readonly"));
         assert!(!url.contains("client_secret"));
     }
     #[test]
@@ -886,5 +924,17 @@ mod tests {
             next_page_token: None,
         };
         assert_eq!(history_message_ids(&page), vec!["message-1", "message-2"]);
+    }
+
+    #[test]
+    fn message_flag_mapping_is_convergent_and_provider_owned() {
+        assert_eq!(
+            gmail_labels_for_message_flag(GmailMutableMessageFlagV1::Read, true),
+            (Vec::new(), vec!["UNREAD".to_owned()])
+        );
+        assert_eq!(
+            gmail_labels_for_message_flag(GmailMutableMessageFlagV1::Starred, false),
+            (Vec::new(), vec!["STARRED".to_owned()])
+        );
     }
 }

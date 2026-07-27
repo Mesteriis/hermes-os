@@ -1,6 +1,7 @@
-//! IMAP read-only adapter boundary for ADR-0239.
+//! IMAP provider adapter boundary for ADR-0239 and ADR-0307.
 //!
-//! Supports IMAPS (`993`) against `INBOX` with read-only `EXAMINE`.
+//! Supports IMAPS (`993`) against `INBOX`; sync uses read-only `EXAMINE` and
+//! convergent flag mutations use read-write `SELECT` plus `UID STORE`.
 
 #![allow(clippy::items_after_test_module)]
 
@@ -65,6 +66,12 @@ pub enum ImapMessageFlag {
     Starred,
     Draft,
     Trashed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImapMutableMessageFlagV1 {
+    Read,
+    Starred,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -149,6 +156,55 @@ pub fn sync_inbox(
     }
     let limit = window as u64 * windows as u64;
     sync_inbox_with_retry(host, port, username, password, limit, run_imap_sync)
+}
+
+pub fn set_inbox_message_flag(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+    uid: u32,
+    flag: ImapMutableMessageFlagV1,
+    target_value: bool,
+) -> Result<(), ImapError> {
+    if uid == 0 || username.trim().is_empty() || password.is_empty() {
+        return Err(ImapError::new(
+            "validation",
+            "imap message flag mutation input is invalid",
+        ));
+    }
+    task::block_on(async move {
+        let mut session = open_session(host, port, username, password).await?;
+        session.select("INBOX").await.map_err(|error| {
+            ImapError::new("protocol", format!("imap SELECT INBOX failed: {error}"))
+        })?;
+        let flag_name = match flag {
+            ImapMutableMessageFlagV1::Read => "\\Seen",
+            ImapMutableMessageFlagV1::Starred => "\\Flagged",
+        };
+        let operation = if target_value {
+            format!("+FLAGS.SILENT ({flag_name})")
+        } else {
+            format!("-FLAGS.SILENT ({flag_name})")
+        };
+        let updates = session
+            .uid_store(uid.to_string(), operation)
+            .await
+            .map_err(|error| {
+                ImapError::new("protocol", format!("imap UID STORE failed: {error}"))
+            })?;
+        let _: Vec<_> = updates.try_collect().await.map_err(|error| {
+            ImapError::new(
+                "protocol",
+                format!("imap UID STORE response failed: {error}"),
+            )
+        })?;
+        session
+            .logout()
+            .await
+            .map_err(|error| ImapError::new("protocol", format!("imap logout failed: {error}")))?;
+        Ok(())
+    })
 }
 
 fn sync_inbox_with_retry<F>(
@@ -595,6 +651,22 @@ mod tests {
         assert!(!supports_read_only_sync(MAX_WINDOW + 1));
         assert!(supports_read_only_windows(MAX_WINDOWS));
         assert!(!supports_read_only_windows(MAX_WINDOWS + 1));
+    }
+
+    #[test]
+    fn message_flag_mutation_rejects_an_invalid_uid_before_network_io() {
+        assert!(
+            set_inbox_message_flag(
+                "mail.example.com",
+                993,
+                "alice",
+                "secret",
+                0,
+                ImapMutableMessageFlagV1::Read,
+                true,
+            )
+            .is_err()
+        );
     }
 
     #[test]

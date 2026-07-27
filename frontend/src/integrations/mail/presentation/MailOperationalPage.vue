@@ -9,6 +9,7 @@ import MailCompositionPanel from './MailCompositionPanel.vue'
 import type { MailDeliveryModel } from './mailDeliveryModel'
 import MailDeliveryPanel from './MailDeliveryPanel.vue'
 import MailOperationalReadPanel from './MailOperationalReadPanel.vue'
+import type { MailMessageFlagModel } from './mailMessageFlagModel'
 import type { MailOperationalReadModel } from './mailOperationalReadModel'
 import MailSyncHealthPanel from './MailSyncHealthPanel.vue'
 import type { MailSyncHealthModel } from './mailSyncHealthModel'
@@ -19,6 +20,7 @@ import './mailOperationalPage.css'
 defineProps<{
 	compositionModel: MailCompositionModel
 	deliveryModel: MailDeliveryModel
+	flagModel: MailMessageFlagModel
 	readModel: MailOperationalReadModel
 	syncHealthModel: MailSyncHealthModel
 	syncModel: MailSyncModel
@@ -45,6 +47,9 @@ const emit = defineEmits<{
 	compositionUpdateTemplate: [patch: MailTemplateEditorPatch]
 	compositionUseSignature: [signatureId: string]
 	deliver: []
+	flagRefreshStatus: []
+	flagSetRead: [targetValue: boolean]
+	flagSetStarred: [targetValue: boolean]
 	loadMoreFolders: []
 	loadMoreMessages: []
 	loadMoreThreads: []
@@ -81,7 +86,11 @@ const emit = defineEmits<{
 		/>
 
 		<MailOperationalReadPanel
+			:flag-model="flagModel"
 			:model="readModel"
+			@flag-refresh-status="emit('flagRefreshStatus')"
+			@flag-set-read="emit('flagSetRead', $event)"
+			@flag-set-starred="emit('flagSetStarred', $event)"
 			@load-more-folders="emit('loadMoreFolders')"
 			@load-more-messages="emit('loadMoreMessages')"
 			@load-more-threads="emit('loadMoreThreads')"

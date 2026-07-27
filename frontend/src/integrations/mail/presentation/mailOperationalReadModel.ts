@@ -67,6 +67,8 @@ export type MailMessageDetailCard = {
 	flags: string
 	evidenceState: string
 	contentState: string
+	isRead: boolean
+	isStarred: boolean
 }
 
 export function buildMailConnectionOptions(
@@ -139,6 +141,8 @@ export function buildMailMessageDetail(
 		contentState: message.hasPlainText
 			? 'Authorized body content is Communications-owned and is not part of this Mail projection.'
 			: 'No plain-text content was observed.',
+		isRead: message.flag.includes(MailMessageFlagV1.MAIL_MESSAGE_FLAG_READ),
+		isStarred: message.flag.includes(MailMessageFlagV1.MAIL_MESSAGE_FLAG_STARRED),
 	}
 }
 
