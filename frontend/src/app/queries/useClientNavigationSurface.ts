@@ -87,11 +87,8 @@ export function useClientNavigationSurface() {
 	))
 
 	function selectNavigationItem(itemId: string): void {
-		const path = findRoutePath(routeTree.value, itemId)
-		const target = path?.at(-1)
-		if (!target || target.disabled) return
-		if (target.id === 'communications') return
-		selectedRouteId.value = target.id as ClientSurfaceRouteId
+		const target = resolveClientNavigationTarget(routeTree.value, itemId)
+		if (target) selectedRouteId.value = target
 	}
 
 	async function refreshBootstrap(): Promise<void> {
@@ -295,6 +292,16 @@ export function buildClientRouteTree(bootstrap: ClientBootstrapSnapshot): readon
 		toNavigationNode('documents', bootstrap),
 		toNavigationNode('settings', bootstrap),
 	]
+}
+
+export function resolveClientNavigationTarget(
+	nodes: readonly NavigationNode[],
+	itemId: string,
+): ClientSurfaceRouteId | undefined {
+	const target = findRoutePath(nodes, itemId)?.at(-1)
+	if (!target || target.disabled) return undefined
+	const defaultChild = target.children?.find((child) => !child.disabled)
+	return (defaultChild?.id ?? target.id) as ClientSurfaceRouteId
 }
 
 function toNavigationNode(routeId: ClientSurfaceRouteId, bootstrap: ClientBootstrapSnapshot): NavigationNode {

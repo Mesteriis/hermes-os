@@ -4,7 +4,10 @@ import { ClientSurfaceAvailabilityStateV1 } from '../../gen/hermes/gateway/v1/cl
 import { clientSurfaceCatalog } from '../../platform/client-runtime/clientSurfaces'
 import { recoveryClientBootstrap } from '../../platform/gateway/clientBootstrap'
 import { compiledClientSurfaceAdapterIds } from '../client-surfaces/compiledClientSurfaceAdapters'
-import { buildClientRouteTree } from './useClientNavigationSurface'
+import {
+	buildClientRouteTree,
+	resolveClientNavigationTarget,
+} from './useClientNavigationSurface'
 
 describe('compiled client navigation', () => {
 	it('keeps every product route disabled in the recovery shell', () => {
@@ -88,6 +91,21 @@ describe('compiled client navigation', () => {
 				&& item.id !== 'communications-zulip',
 		)
 			.every((item) => item.disabled)).toBe(true)
+		expect(resolveClientNavigationTarget(
+			buildClientRouteTree(bootstrap),
+			'communications',
+		)).toBe('communications-all')
+		expect(resolveClientNavigationTarget(
+			buildClientRouteTree(bootstrap),
+			'communications-mail',
+		)).toBe('communications-mail')
+	})
+
+	it('does not route through a parent whose children are all unavailable', () => {
+		expect(resolveClientNavigationTarget(
+			buildClientRouteTree(recoveryClientBootstrap()),
+			'communications',
+		)).toBeUndefined()
 	})
 
 	it('enables only routes with exact compiled adapters when Gateway marks every route available', () => {
