@@ -12,7 +12,9 @@ use hermes_managed_vault_client::{
     ManagedProviderCredentialErrorV1, ManagedProviderCredentialRequestV1,
 };
 use hermes_runtime_protocol::{
-    managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
+    managed_control::{
+        ManagedControlChannelV2, ManagedControlRequestDispatcherV2, RejectManagedControlRequestsV2,
+    },
     v1::{ManagedIntegrationRuntimeConfigurationV1, ManagedStorageRuntimeConfigurationV1},
     validation::managed_integration_runtime::validate_managed_integration_runtime_configuration,
 };
@@ -100,6 +102,7 @@ pub struct TelegramAdmittedRuntime {
     pub durable: TelegramDurablePersistence,
     pub automation: TelegramAutomationPersistence,
     pub calls: TelegramCallsPersistence,
+    pub(crate) reconfiguration_context: TelegramProviderReconfigurationContextV1,
     pub(crate) event_connection: RuntimeJetStreamConnection,
     pub(crate) event_publish_permit: RuntimePublishPermitV1,
 }
@@ -112,8 +115,19 @@ pub struct TelegramAdmittedProviderLoop {
     pub durable: TelegramDurablePersistence,
     pub automation: TelegramAutomationPersistence,
     pub calls: TelegramCallsPersistence,
+    pub(crate) reconfiguration_context: TelegramProviderReconfigurationContextV1,
     pub(crate) event_connection: RuntimeJetStreamConnection,
     pub(crate) event_publish_permit: RuntimePublishPermitV1,
+}
+
+#[derive(Clone)]
+pub(crate) struct TelegramProviderReconfigurationContextV1 {
+    provider_credentials: ManagedProviderCredentialContextV1,
+    configuration_instance_id: String,
+    api_id: i64,
+    database_directory: PathBuf,
+    api_hash_revision: u64,
+    session_encryption_key_revision: u64,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -287,6 +301,7 @@ pub async fn open_admitted_runtime(
     )
     .await
     .map_err(|_| TelegramBootstrapError::EventHub)?;
+    let reconfiguration_database_directory = database_directory.clone();
     let parameters = TdlibAuthorizationParameters::from_secret_material(
         api_id,
         api_hash,
@@ -326,6 +341,14 @@ pub async fn open_admitted_runtime(
         durable,
         automation,
         calls,
+        reconfiguration_context: TelegramProviderReconfigurationContextV1 {
+            provider_credentials: provider_context,
+            configuration_instance_id: admission.configuration_instance_id,
+            api_id,
+            database_directory: reconfiguration_database_directory,
+            api_hash_revision: admission.api_hash_revision,
+            session_encryption_key_revision: admission.session_encryption_key_revision,
+        },
         event_connection,
         event_publish_permit,
     })
@@ -407,6 +430,7 @@ impl TelegramAdmittedRuntime {
             durable: self.durable,
             automation: self.automation,
             calls: self.calls,
+            reconfiguration_context: self.reconfiguration_context,
             event_connection: self.event_connection,
             event_publish_permit: self.event_publish_permit,
         }
@@ -438,6 +462,70 @@ impl TelegramAdmittedProviderLoop {
             published_at_unix_seconds,
         )
         .await
+    }
+}
+
+pub(crate) fn resolve_provider_reconfiguration_parameters<D>(
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut D,
+    context: &TelegramProviderReconfigurationContextV1,
+) -> Result<TdlibAuthorizationParameters, TelegramCredentialRouteError>
+where
+    D: ManagedControlRequestDispatcherV2<UnixStream>,
+{
+    let api_hash_purpose = credential_lease_purpose_for_purpose(
+        &context.configuration_instance_id,
+        TelegramCredentialPurpose::ApiHash,
+    )
+    .map_err(|_| TelegramCredentialRouteError::Rejected)?;
+    let session_purpose = credential_lease_purpose_for_purpose(
+        &context.configuration_instance_id,
+        TelegramCredentialPurpose::SessionEncryptionKey,
+    )
+    .map_err(|_| TelegramCredentialRouteError::Rejected)?;
+    let mut credentials = ManagedProviderCredentialClientV2::new(control_channel);
+    let api_hash = credentials
+        .resolve(
+            dispatcher,
+            &context.provider_credentials,
+            ManagedProviderCredentialRequestV1 {
+                configuration_instance_id: &context.configuration_instance_id,
+                purpose_id: api_hash_purpose.purpose_id(),
+                credential_revision: context.api_hash_revision,
+                ttl_seconds: TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS,
+                secret_class: SecretClassV1::ProviderCredential,
+            },
+        )
+        .map_err(map_reconfiguration_credential_error)?;
+    let session_encryption_key = credentials
+        .resolve(
+            dispatcher,
+            &context.provider_credentials,
+            ManagedProviderCredentialRequestV1 {
+                configuration_instance_id: &context.configuration_instance_id,
+                purpose_id: session_purpose.purpose_id(),
+                credential_revision: context.session_encryption_key_revision,
+                ttl_seconds: TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS,
+                secret_class: SecretClassV1::SessionStoreKey,
+            },
+        )
+        .map_err(map_reconfiguration_credential_error)?;
+    TdlibAuthorizationParameters::from_secret_material(
+        context.api_id,
+        api_hash,
+        context.database_directory.clone(),
+        Some(session_encryption_key),
+    )
+    .map_err(|_| TelegramCredentialRouteError::Rejected)
+}
+
+fn map_reconfiguration_credential_error(
+    error: ManagedProviderCredentialErrorV1,
+) -> TelegramCredentialRouteError {
+    match error {
+        ManagedProviderCredentialErrorV1::Unavailable => TelegramCredentialRouteError::Unavailable,
+        ManagedProviderCredentialErrorV1::InvalidContext
+        | ManagedProviderCredentialErrorV1::Rejected => TelegramCredentialRouteError::Rejected,
     }
 }
 

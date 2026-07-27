@@ -29,22 +29,25 @@ use hermes_events_protocol::delivery::OutboxRecordV1;
 use hermes_runtime_protocol::v1::BlobDataSessionGrantV1;
 use hermes_telegram_api::{
     TelegramAccount, TelegramAccountSetup, TelegramAccountState, TelegramContractError,
-    TelegramCredentialPurpose, TelegramDeliveryState, TelegramDownloadFile, TelegramFileSnapshot,
-    TelegramMessageObservation, TelegramMessageTombstone, TelegramOperation,
-    TelegramParticipantFilter, TelegramParticipantPage, TelegramProviderCommand,
-    TelegramProviderKind, TelegramProviderQuery, TelegramProviderQueryResponse,
-    TelegramRealtimeFrame, TelegramRuntimeLease, TelegramRuntimeLeaseState, TelegramRuntimeState,
-    TelegramSendMessage, TelegramTombstoneReason, TelegramTopic, provider_command_account_id,
-    provider_command_operation_id, provider_query_account_id, validate_provider_command,
-    validate_provider_query, validate_setup,
+    TelegramDeliveryState, TelegramDownloadFile, TelegramFileSnapshot, TelegramMessageObservation,
+    TelegramMessageTombstone, TelegramOperation, TelegramParticipantFilter,
+    TelegramParticipantPage, TelegramProviderCommand, TelegramProviderKind, TelegramProviderQuery,
+    TelegramProviderQueryResponse, TelegramRealtimeFrame, TelegramRuntimeLease,
+    TelegramRuntimeLeaseState, TelegramRuntimeReconfiguration,
+    TelegramRuntimeReconfigurationRequest, TelegramRuntimeReconfigurationState,
+    TelegramRuntimeState, TelegramSendMessage, TelegramTombstoneReason, TelegramTopic,
+    provider_command_account_id, provider_command_operation_id, provider_query_account_id,
+    validate_provider_command, validate_provider_query, validate_runtime_reconfiguration_request,
+    validate_setup,
 };
 use hermes_telegram_call_media_contract::{TelegramCallReadyMaterialV1, TelegramCallSecretBytesV1};
 use hermes_telegram_core::{
-    TelegramLifecycle, accept_operation, credential_lease_purposes, event_chat_state,
-    event_message_mutation, observation_draft, operation_awaiting_provider, operation_completed,
-    operation_failed, operation_retry_scheduled, project_message, provider_event_draft,
-    qr_login_password_required, qr_login_password_submitted, qr_login_preparing,
-    qr_login_qr_issued, qr_login_ready,
+    TelegramLifecycle, accept_operation, accept_runtime_reconfiguration,
+    complete_runtime_reconfiguration, credential_lease_purposes, event_chat_state,
+    event_message_mutation, fail_runtime_reconfiguration, observation_draft,
+    operation_awaiting_provider, operation_completed, operation_failed, operation_retry_scheduled,
+    project_message, provider_event_draft, qr_login_password_required, qr_login_password_submitted,
+    qr_login_preparing, qr_login_qr_issued, qr_login_ready,
 };
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{
@@ -116,6 +119,33 @@ fn event_chat_operational_state(
 pub enum TelegramDurableLifecycleError {
     Contract(TelegramContractError),
     Persistence(TelegramDurablePersistenceError),
+}
+
+fn map_reconfiguration_persistence_error(
+    error: TelegramDurablePersistenceError,
+) -> TelegramDurableLifecycleError {
+    let contract = match error {
+        TelegramDurablePersistenceError::RuntimeEpochConflict => {
+            Some(TelegramContractError::RuntimeEpochConflict)
+        }
+        TelegramDurablePersistenceError::ReconfigurationCollision => {
+            Some(TelegramContractError::ReconfigurationCollision)
+        }
+        TelegramDurablePersistenceError::ReconfigurationInProgress => {
+            Some(TelegramContractError::ReconfigurationInProgress)
+        }
+        TelegramDurablePersistenceError::ReconfigurationUnknown => {
+            Some(TelegramContractError::ReconfigurationUnknown)
+        }
+        TelegramDurablePersistenceError::InvalidReconfigurationTransition => {
+            Some(TelegramContractError::InvalidTransition)
+        }
+        _ => None,
+    };
+    contract.map_or(
+        TelegramDurableLifecycleError::Persistence(error),
+        TelegramDurableLifecycleError::Contract,
+    )
 }
 
 #[derive(Debug)]
@@ -551,8 +581,8 @@ pub struct TelegramBlobMaterializationSession {
 mod tests {
     use super::*;
     use hermes_telegram_api::{
-        TelegramAccountSetup, TelegramCredentialPurpose, TelegramMessageObservation,
-        TelegramMessageReferences, TelegramProviderEvent, TelegramProviderKind,
+        TelegramMessageObservation, TelegramMessageReferences, TelegramProviderEvent,
+        TelegramProviderKind,
     };
 
     struct PollingTransport {
@@ -651,99 +681,39 @@ mod tests {
     }
 
     #[test]
-    fn account_start_rejects_missing_credential_leases() {
+    fn admitted_runtime_lease_is_derived_from_current_runtime_identity() {
         let mut runtime = TelegramRuntime::new(PollingTransport { events: Vec::new() });
-        runtime
-            .provision_account(TelegramAccountSetup {
-                account_id: "account".to_owned(),
-                provider_kind: TelegramProviderKind::User,
-                display_name: "Telegram".to_owned(),
-                external_account_id: "telegram:1".to_owned(),
-                credentials: vec![hermes_telegram_api::TelegramCredentialBinding {
-                    purpose: TelegramCredentialPurpose::ApiHash,
-                    revision: 1,
-                }],
-                qr_authorized: false,
-            })
-            .expect("account provision");
-
-        let admission = TelegramRuntimeAdmission {
+        runtime.persistence.put_account(TelegramAccount {
+            account_id: "account".to_owned(),
+            provider_kind: TelegramProviderKind::User,
+            display_name: "Telegram".to_owned(),
+            external_account_id: "telegram:1".to_owned(),
+            state: TelegramAccountState::Ready,
+            runtime_state: TelegramRuntimeState::Running,
+            runtime_epoch: 7,
+        });
+        runtime.set_admission(Some(TelegramRuntimeAdmission {
             logical_owner_id: "owner".to_owned(),
             configuration_instance_id: "cfg".to_owned(),
             module_registration_id: "registration".to_owned(),
-            runtime_instance_id: "runtime".to_owned(),
-            runtime_generation: 1,
-            grant_epoch: 1,
-            vault_runtime_generation: 1,
-            api_hash_revision: 0,
-            session_encryption_key_revision: 0,
-        };
-        assert_eq!(
-            runtime.start_account("account", "process", "holder", 100, 10, &admission),
-            Err(TelegramContractError::CredentialLeaseRejected)
-        );
-    }
-
-    #[test]
-    fn account_restart_replaces_the_runtime_lease_without_a_stopped_result() {
-        let mut runtime = TelegramRuntime::new(PollingTransport { events: Vec::new() });
-        runtime
-            .provision_account(TelegramAccountSetup {
-                account_id: "account".to_owned(),
-                provider_kind: TelegramProviderKind::User,
-                display_name: "Telegram".to_owned(),
-                external_account_id: "telegram:1".to_owned(),
-                credentials: vec![
-                    hermes_telegram_api::TelegramCredentialBinding {
-                        purpose: TelegramCredentialPurpose::ApiHash,
-                        revision: 1,
-                    },
-                    hermes_telegram_api::TelegramCredentialBinding {
-                        purpose: TelegramCredentialPurpose::SessionEncryptionKey,
-                        revision: 2,
-                    },
-                ],
-                qr_authorized: true,
-            })
-            .expect("account provision");
-        let admission = TelegramRuntimeAdmission {
-            logical_owner_id: "owner".to_owned(),
-            configuration_instance_id: "cfg".to_owned(),
-            module_registration_id: "registration".to_owned(),
-            runtime_instance_id: "runtime".to_owned(),
-            runtime_generation: 1,
-            grant_epoch: 1,
-            vault_runtime_generation: 1,
+            runtime_instance_id: "admitted-runtime".to_owned(),
+            runtime_generation: 4,
+            grant_epoch: 5,
+            vault_runtime_generation: 6,
             api_hash_revision: 1,
             session_encryption_key_revision: 2,
-        };
-
-        let started = runtime
-            .start_account("account", "process", "holder-1", 100, 10, &admission)
-            .expect("account start");
-        let restarted = runtime
-            .restart_account(
-                &TelegramRuntimeRestart {
-                    account_id: "account".to_owned(),
-                    topology: "process".to_owned(),
-                    holder: "holder-2".to_owned(),
-                    expires_at_unix_seconds: 200,
-                    now_unix_seconds: 20,
-                },
-                &admission,
-            )
-            .expect("account restart");
-
-        assert_eq!(restarted.runtime_state, TelegramRuntimeState::Running);
-        assert_eq!(restarted.runtime_epoch, started.runtime_epoch + 1);
-        assert_eq!(
-            runtime
-                .persistence
-                .runtime_lease("account")
-                .expect("replacement lease")
-                .holder,
-            "holder-2"
-        );
+        }));
+        runtime
+            .install_admitted_runtime_lease("account")
+            .expect("internal admitted lease");
+        let lease = runtime
+            .persistence
+            .runtime_lease("account")
+            .expect("runtime lease");
+        assert_eq!(lease.topology, "managed_account_v1");
+        assert_eq!(lease.holder, "admitted-runtime");
+        assert_eq!(lease.epoch, 7);
+        assert_eq!(lease.expires_at_unix_seconds, u64::MAX);
     }
 
     #[test]
@@ -936,16 +906,19 @@ pub struct TelegramRuntime<T> {
         Option<Box<dyn hermes_telegram_call_media_contract::TelegramCallSignalingMediaPort>>,
     active_call_media: Option<calls_execution::TelegramActiveCallMediaSession>,
     admission: Option<TelegramRuntimeAdmission>,
+    pending_reconfiguration: Option<TelegramRuntimeReconfiguration>,
 }
 
 pub struct TelegramRuntimeComposition {
     account_id: String,
     account_setup: TelegramAccountSetup,
+    library: TdJsonLibrary,
     authorization: Option<TdlibAuthorizationDriver>,
     runtime: Option<TelegramRuntime<TdJsonTransport>>,
     call_media:
         Option<Box<dyn hermes_telegram_call_media_contract::TelegramCallSignalingMediaPort>>,
     admission: Option<TelegramRuntimeAdmission>,
+    pending_reconfiguration: Option<TelegramRuntimeReconfiguration>,
 }
 
 #[derive(Clone)]
@@ -959,14 +932,6 @@ pub struct TelegramRuntimeAdmission {
     pub vault_runtime_generation: u64,
     pub api_hash_revision: u64,
     pub session_encryption_key_revision: u64,
-}
-
-pub struct TelegramRuntimeRestart {
-    pub account_id: String,
-    pub topology: String,
-    pub holder: String,
-    pub expires_at_unix_seconds: u64,
-    pub now_unix_seconds: u64,
 }
 
 impl TelegramRuntimeComposition {
@@ -1010,10 +975,12 @@ impl TelegramRuntimeComposition {
         Ok(Self {
             account_id,
             account_setup,
+            library,
             authorization: Some(TdlibAuthorizationDriver::new(client, parameters)),
             runtime: None,
             call_media: None,
             admission: None,
+            pending_reconfiguration: None,
         })
     }
 
@@ -1093,6 +1060,54 @@ impl TelegramRuntimeComposition {
             .and_then(|runtime| runtime.admission.as_ref())
     }
 
+    pub fn begin_runtime_reconfiguration(
+        &mut self,
+        reconfiguration: TelegramRuntimeReconfiguration,
+        authorization_parameters: TdlibAuthorizationParameters,
+    ) -> Result<(), TdlibError> {
+        if self.authorization.is_some()
+            || self.pending_reconfiguration.is_some()
+            || reconfiguration.account_id != self.account_id
+            || reconfiguration.state != TelegramRuntimeReconfigurationState::Applying
+        {
+            return Err(TdlibError::RuntimeUnavailable);
+        }
+        let runtime = self
+            .runtime
+            .as_ref()
+            .ok_or(TdlibError::RuntimeUnavailable)?;
+        let account = runtime
+            .account(&self.account_id)
+            .ok_or(TdlibError::RuntimeUnavailable)?;
+        if account.runtime_epoch != reconfiguration.expected_runtime_epoch {
+            return Err(TdlibError::RuntimeUnavailable);
+        }
+        let client = self.library.create_client()?;
+        let call_media = self
+            .runtime
+            .as_mut()
+            .ok_or(TdlibError::RuntimeUnavailable)?
+            .take_call_media_for_reconfiguration()
+            .map_err(|_| TdlibError::RuntimeUnavailable)?;
+        self.runtime = None;
+        self.call_media = call_media;
+        self.authorization = Some(TdlibAuthorizationDriver::new(
+            client,
+            authorization_parameters,
+        ));
+        self.pending_reconfiguration = Some(reconfiguration);
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn pending_runtime_reconfiguration(&self) -> Option<&TelegramRuntimeReconfiguration> {
+        self.pending_reconfiguration.as_ref()
+    }
+
+    pub fn clear_pending_runtime_reconfiguration(&mut self) {
+        self.pending_reconfiguration = None;
+    }
+
     pub fn poll_runtime_events(
         &mut self,
         provider_cursor: Option<String>,
@@ -1118,6 +1133,7 @@ where
             call_media: None,
             active_call_media: None,
             admission: None,
+            pending_reconfiguration: None,
         }
     }
 
@@ -1125,68 +1141,168 @@ where
         self.admission = admission;
     }
 
-    pub fn start_admitted_account(
+    fn install_admitted_runtime_lease(
         &mut self,
         account_id: &str,
-        topology: &str,
-        holder: &str,
-        expires_at_unix_seconds: u64,
-        now_unix_seconds: u64,
-    ) -> Result<TelegramAccount, TelegramContractError> {
+    ) -> Result<(), TelegramContractError> {
         let admission = self
             .admission
-            .clone()
+            .as_ref()
             .ok_or(TelegramContractError::RuntimeBlocked)?;
-        self.start_account(
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            now_unix_seconds,
-            &admission,
-        )
+        let account = self
+            .persistence
+            .account(account_id)
+            .ok_or(TelegramContractError::AccountUnknown)?;
+        if account.runtime_epoch == 0
+            || !matches!(
+                account.runtime_state,
+                TelegramRuntimeState::Running | TelegramRuntimeState::Degraded
+            )
+        {
+            return Err(TelegramContractError::RuntimeBlocked);
+        }
+        self.persistence.put_runtime_lease(TelegramRuntimeLease {
+            account_id: account_id.to_owned(),
+            topology: "managed_account_v1".to_owned(),
+            holder: admission.runtime_instance_id.clone(),
+            epoch: account.runtime_epoch,
+            state: TelegramRuntimeLeaseState::Active,
+            expires_at_unix_seconds: u64::MAX,
+        });
+        Ok(())
     }
 
-    pub async fn start_admitted_account_durable(
+    pub async fn runtime_reconfiguration_durable(
+        &mut self,
+        durable: &TelegramDurablePersistence,
+        request: &TelegramRuntimeReconfigurationRequest,
+    ) -> Result<TelegramRuntimeReconfiguration, TelegramDurableLifecycleError> {
+        validate_runtime_reconfiguration_request(request)
+            .map_err(TelegramDurableLifecycleError::Contract)?;
+        match request {
+            TelegramRuntimeReconfigurationRequest::Begin {
+                reconfiguration_id,
+                account_id,
+                expected_runtime_epoch,
+            } => {
+                if let Some(existing) = durable
+                    .runtime_reconfiguration(reconfiguration_id)
+                    .await
+                    .map_err(TelegramDurableLifecycleError::Persistence)?
+                {
+                    return if existing.account_id == *account_id
+                        && existing.expected_runtime_epoch == *expected_runtime_epoch
+                        && existing.target_runtime_epoch
+                            == expected_runtime_epoch.checked_add(1).ok_or(
+                                TelegramDurableLifecycleError::Contract(
+                                    TelegramContractError::RuntimeEpochConflict,
+                                ),
+                            )?
+                    {
+                        Ok(existing)
+                    } else {
+                        Err(TelegramDurableLifecycleError::Contract(
+                            TelegramContractError::ReconfigurationCollision,
+                        ))
+                    };
+                }
+                let (account, _) = durable
+                    .account(account_id)
+                    .await
+                    .map_err(TelegramDurableLifecycleError::Persistence)?
+                    .ok_or(TelegramDurableLifecycleError::Contract(
+                        TelegramContractError::AccountUnknown,
+                    ))?;
+                let proposed = accept_runtime_reconfiguration(
+                    &account,
+                    reconfiguration_id,
+                    *expected_runtime_epoch,
+                )
+                .map_err(TelegramDurableLifecycleError::Contract)?;
+                let accepted = durable
+                    .accept_runtime_reconfiguration(&proposed)
+                    .await
+                    .map_err(map_reconfiguration_persistence_error)?;
+                if accepted.state == TelegramRuntimeReconfigurationState::Accepted
+                    && self.pending_reconfiguration.is_none()
+                {
+                    let runtime_account = self.persistence.account(account_id).ok_or(
+                        TelegramDurableLifecycleError::Contract(
+                            TelegramContractError::RuntimeBlocked,
+                        ),
+                    )?;
+                    if runtime_account.runtime_epoch != accepted.expected_runtime_epoch {
+                        return Err(TelegramDurableLifecycleError::Contract(
+                            TelegramContractError::RuntimeEpochConflict,
+                        ));
+                    }
+                    self.pending_reconfiguration = Some(accepted.clone());
+                }
+                Ok(accepted)
+            }
+            TelegramRuntimeReconfigurationRequest::Status { reconfiguration_id } => durable
+                .runtime_reconfiguration(reconfiguration_id)
+                .await
+                .map_err(TelegramDurableLifecycleError::Persistence)?
+                .ok_or(TelegramDurableLifecycleError::Contract(
+                    TelegramContractError::ReconfigurationUnknown,
+                )),
+        }
+    }
+
+    pub fn take_pending_runtime_reconfiguration(
+        &mut self,
+    ) -> Option<TelegramRuntimeReconfiguration> {
+        self.pending_reconfiguration.take()
+    }
+
+    #[must_use]
+    pub fn has_pending_runtime_reconfiguration(&self) -> bool {
+        self.pending_reconfiguration.is_some()
+    }
+
+    pub async fn complete_pending_runtime_reconfiguration_durable(
         &mut self,
         durable: &TelegramDurablePersistence,
         account_id: &str,
-        topology: &str,
-        holder: &str,
-        expires_at_unix_seconds: u64,
-        now_unix_seconds: u64,
-    ) -> Result<TelegramAccount, TelegramDurableLifecycleError> {
-        let admission = self
-            .admission
-            .clone()
+    ) -> Result<Option<TelegramRuntimeReconfiguration>, TelegramDurableLifecycleError> {
+        let Some(pending) = durable
+            .pending_runtime_reconfiguration(account_id)
+            .await
+            .map_err(TelegramDurableLifecycleError::Persistence)?
+        else {
+            return Ok(None);
+        };
+        let account = self
+            .persistence
+            .account(account_id)
             .ok_or(TelegramDurableLifecycleError::Contract(
-                TelegramContractError::RuntimeBlocked,
-            ))?;
-        self.start_account_durable(
-            durable,
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            now_unix_seconds,
-            &admission,
-        )
-        .await
+                TelegramContractError::AccountUnknown,
+            ))?
+            .clone();
+        let (account, completed) = complete_runtime_reconfiguration(&account, &pending)
+            .map_err(TelegramDurableLifecycleError::Contract)?;
+        let completed = durable
+            .complete_runtime_reconfiguration(&account, &completed)
+            .await
+            .map_err(map_reconfiguration_persistence_error)?;
+        self.persistence.put_account(account);
+        self.install_admitted_runtime_lease(account_id)
+            .map_err(TelegramDurableLifecycleError::Contract)?;
+        Ok(Some(completed))
     }
 
-    pub async fn restart_admitted_account_durable(
-        &mut self,
+    pub async fn fail_runtime_reconfiguration_durable(
         durable: &TelegramDurablePersistence,
-        restart: &TelegramRuntimeRestart,
-    ) -> Result<TelegramAccount, TelegramDurableLifecycleError> {
-        let admission = self
-            .admission
-            .clone()
-            .ok_or(TelegramDurableLifecycleError::Contract(
-                TelegramContractError::RuntimeBlocked,
-            ))?;
-        self.restart_account_durable(durable, restart, &admission)
+        reconfiguration: &TelegramRuntimeReconfiguration,
+        sanitized_reason_code: &str,
+    ) -> Result<TelegramRuntimeReconfiguration, TelegramDurableLifecycleError> {
+        let failed = fail_runtime_reconfiguration(reconfiguration, sanitized_reason_code)
+            .map_err(TelegramDurableLifecycleError::Contract)?;
+        durable
+            .fail_runtime_reconfiguration(&failed)
             .await
+            .map_err(map_reconfiguration_persistence_error)
     }
 
     pub fn authorize_media_session(
@@ -1267,219 +1383,6 @@ where
         self.persistence.put_credentials(account_id, credentials);
         self.persistence.put_account(account.clone());
         Ok(Some(account))
-    }
-
-    pub fn start_account(
-        &mut self,
-        account_id: &str,
-        topology: &str,
-        holder: &str,
-        expires_at_unix_seconds: u64,
-        now_unix_seconds: u64,
-        admission: &TelegramRuntimeAdmission,
-    ) -> Result<TelegramAccount, TelegramContractError> {
-        let account = self
-            .persistence
-            .account(account_id)
-            .ok_or(TelegramContractError::AccountUnknown)?;
-        let lease = self.runtime_lease_for_start(
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            admission,
-        )?;
-        let starting = self.lifecycle.start(account, &lease, now_unix_seconds)?;
-        self.persistence.put_runtime_lease(lease);
-        let running = self.lifecycle.mark_running(&starting);
-        self.persistence.put_account(running.clone());
-        Ok(running)
-    }
-
-    fn runtime_lease_for_start(
-        &self,
-        account_id: &str,
-        topology: &str,
-        holder: &str,
-        expires_at_unix_seconds: u64,
-        admission: &TelegramRuntimeAdmission,
-    ) -> Result<TelegramRuntimeLease, TelegramContractError> {
-        if topology.trim().is_empty() || holder.trim().is_empty() {
-            return Err(TelegramContractError::RuntimeBlocked);
-        }
-        let bindings = self
-            .persistence
-            .credentials(account_id)
-            .ok_or(TelegramContractError::AccountUnknown)?;
-        let mut api_hash = false;
-        let mut session_key = false;
-        for binding in bindings {
-            match binding.purpose {
-                TelegramCredentialPurpose::ApiHash
-                    if binding.revision == admission.api_hash_revision && !api_hash =>
-                {
-                    api_hash = true;
-                }
-                TelegramCredentialPurpose::SessionEncryptionKey
-                    if binding.revision == admission.session_encryption_key_revision
-                        && !session_key =>
-                {
-                    session_key = true;
-                }
-                _ => return Err(TelegramContractError::CredentialLeaseRejected),
-            }
-        }
-        if !api_hash || !session_key {
-            return Err(TelegramContractError::CredentialLeaseRejected);
-        }
-        Ok(TelegramRuntimeLease {
-            account_id: account_id.to_owned(),
-            topology: topology.to_owned(),
-            holder: holder.to_owned(),
-            epoch: self.persistence.next_runtime_epoch(account_id),
-            state: TelegramRuntimeLeaseState::Active,
-            expires_at_unix_seconds,
-        })
-    }
-
-    pub fn restart_account(
-        &mut self,
-        restart: &TelegramRuntimeRestart,
-        admission: &TelegramRuntimeAdmission,
-    ) -> Result<TelegramAccount, TelegramContractError> {
-        let account = self
-            .persistence
-            .account(&restart.account_id)
-            .ok_or(TelegramContractError::AccountUnknown)?
-            .clone();
-        let current_lease = self
-            .persistence
-            .runtime_lease(&restart.account_id)
-            .ok_or(TelegramContractError::RuntimeBlocked)?
-            .clone();
-        let replacement_lease = self.runtime_lease_for_start(
-            &restart.account_id,
-            &restart.topology,
-            &restart.holder,
-            restart.expires_at_unix_seconds,
-            admission,
-        )?;
-        let running = self.lifecycle.restart(
-            &account,
-            &current_lease,
-            &replacement_lease,
-            restart.now_unix_seconds,
-        )?;
-        self.persistence.put_runtime_lease(replacement_lease);
-        self.persistence.put_account(running.clone());
-        Ok(running)
-    }
-
-    pub fn stop_account(
-        &mut self,
-        account_id: &str,
-    ) -> Result<TelegramAccount, TelegramContractError> {
-        let account = self
-            .persistence
-            .account(account_id)
-            .ok_or(TelegramContractError::AccountUnknown)?;
-        let lease = self
-            .persistence
-            .runtime_lease(account_id)
-            .ok_or(TelegramContractError::RuntimeBlocked)?;
-        let stopped = self.lifecycle.stop(account, lease)?;
-        self.persistence.revoke_runtime_lease(account_id);
-        self.persistence.put_account(stopped.clone());
-        Ok(stopped)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub async fn start_account_durable(
-        &mut self,
-        durable: &TelegramDurablePersistence,
-        account_id: &str,
-        topology: &str,
-        holder: &str,
-        expires_at_unix_seconds: u64,
-        now_unix_seconds: u64,
-        admission: &TelegramRuntimeAdmission,
-    ) -> Result<TelegramAccount, TelegramDurableLifecycleError> {
-        let account = self
-            .start_account(
-                account_id,
-                topology,
-                holder,
-                expires_at_unix_seconds,
-                now_unix_seconds,
-                admission,
-            )
-            .map_err(TelegramDurableLifecycleError::Contract)?;
-        let credentials = self
-            .persistence
-            .credentials(account_id)
-            .unwrap_or_default()
-            .to_vec();
-        durable
-            .upsert_account(&account, &credentials)
-            .await
-            .map_err(TelegramDurableLifecycleError::Persistence)?;
-        Ok(account)
-    }
-
-    pub async fn stop_account_durable(
-        &mut self,
-        durable: &TelegramDurablePersistence,
-        account_id: &str,
-    ) -> Result<TelegramAccount, TelegramDurableLifecycleError> {
-        let account = self
-            .stop_account(account_id)
-            .map_err(TelegramDurableLifecycleError::Contract)?;
-        let credentials = self
-            .persistence
-            .credentials(account_id)
-            .unwrap_or_default()
-            .to_vec();
-        durable
-            .upsert_account(&account, &credentials)
-            .await
-            .map_err(TelegramDurableLifecycleError::Persistence)?;
-        Ok(account)
-    }
-
-    pub async fn restart_account_durable(
-        &mut self,
-        durable: &TelegramDurablePersistence,
-        restart: &TelegramRuntimeRestart,
-        admission: &TelegramRuntimeAdmission,
-    ) -> Result<TelegramAccount, TelegramDurableLifecycleError> {
-        let previous_account = self
-            .persistence
-            .account(&restart.account_id)
-            .ok_or(TelegramDurableLifecycleError::Contract(
-                TelegramContractError::AccountUnknown,
-            ))?
-            .clone();
-        let previous_lease = self
-            .persistence
-            .runtime_lease(&restart.account_id)
-            .ok_or(TelegramDurableLifecycleError::Contract(
-                TelegramContractError::RuntimeBlocked,
-            ))?
-            .clone();
-        let account = self
-            .restart_account(restart, admission)
-            .map_err(TelegramDurableLifecycleError::Contract)?;
-        let credentials = self
-            .persistence
-            .credentials(&restart.account_id)
-            .unwrap_or_default()
-            .to_vec();
-        if let Err(error) = durable.upsert_account(&account, &credentials).await {
-            self.persistence.put_runtime_lease(previous_lease);
-            self.persistence.put_account(previous_account);
-            return Err(TelegramDurableLifecycleError::Persistence(error));
-        }
-        Ok(account)
     }
 
     pub fn retire_account(
@@ -2396,14 +2299,58 @@ where
         account_id: &str,
         chat_limit: i64,
     ) -> Result<usize, TelegramDurableProjectionError> {
-        durable_restore::restore_account_projection_cache(
+        self.restore_account_durable(durable, account_id)
+            .await
+            .map_err(|error| match error {
+                TelegramDurableLifecycleError::Contract(error) => {
+                    TelegramDurableProjectionError::Contract(error)
+                }
+                TelegramDurableLifecycleError::Persistence(error) => {
+                    TelegramDurableProjectionError::Persistence(error)
+                }
+            })?
+            .ok_or(TelegramDurableProjectionError::Contract(
+                TelegramContractError::AccountUnknown,
+            ))?;
+        let restored = durable_restore::restore_account_projection_cache(
             &mut self.persistence,
             durable,
             account_id,
             chat_limit,
         )
         .await
-        .map_err(TelegramDurableProjectionError::Persistence)
+        .map_err(TelegramDurableProjectionError::Persistence)?;
+        let account = self
+            .persistence
+            .account(account_id)
+            .ok_or(TelegramDurableProjectionError::Contract(
+                TelegramContractError::AccountUnknown,
+            ))?
+            .clone();
+        if account.state == TelegramAccountState::Retired || account.runtime_epoch == 0 {
+            return Err(TelegramDurableProjectionError::Contract(
+                TelegramContractError::RuntimeBlocked,
+            ));
+        }
+        if !matches!(
+            account.runtime_state,
+            TelegramRuntimeState::Running | TelegramRuntimeState::Degraded
+        ) {
+            let running = self.lifecycle.mark_running(&account);
+            let credentials = self
+                .persistence
+                .credentials(account_id)
+                .unwrap_or_default()
+                .to_vec();
+            durable
+                .upsert_account(&running, &credentials)
+                .await
+                .map_err(TelegramDurableProjectionError::Persistence)?;
+            self.persistence.put_account(running);
+        }
+        self.install_admitted_runtime_lease(account_id)
+            .map_err(TelegramDurableProjectionError::Contract)?;
+        Ok(restored)
     }
 
     pub async fn restore_message_lifecycle_durable(

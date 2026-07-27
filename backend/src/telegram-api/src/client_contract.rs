@@ -3,7 +3,7 @@
 pub const TELEGRAM_CLIENT_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.telegram.v1.bin"));
 pub const TELEGRAM_CLIENT_CONTRACT_MAJOR: u32 = 1;
-pub const TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 4;
+pub const TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 5;
 pub const TELEGRAM_MODULE_ID: &str = "hermes-telegram-runtime";
 pub const TELEGRAM_OWNER_ID: &str = "telegram";
 
@@ -14,15 +14,17 @@ pub enum TelegramClientContractV1 {
     Command,
     Query,
     Realtime,
+    Reconfiguration,
 }
 
 impl TelegramClientContractV1 {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Authorization,
         Self::Lifecycle,
         Self::Command,
         Self::Query,
         Self::Realtime,
+        Self::Reconfiguration,
     ];
 
     pub const fn capability_id(self) -> &'static str {
@@ -32,6 +34,7 @@ impl TelegramClientContractV1 {
             Self::Command => "telegram.command.v1",
             Self::Query => "telegram.query.v1",
             Self::Realtime => "telegram.realtime.v1",
+            Self::Reconfiguration => "telegram.reconfiguration.v1",
         }
     }
 
@@ -46,6 +49,7 @@ impl TelegramClientContractV1 {
             Self::Command => "/hermes.telegram.v1.TelegramOperationalService/ExecuteCommand",
             Self::Query => "/hermes.telegram.v1.TelegramOperationalService/ExecuteQuery",
             Self::Realtime => "/hermes.telegram.v1.TelegramRealtimeService/Replay",
+            Self::Reconfiguration => "/hermes.telegram.v1.TelegramReconfigurationService/Execute",
         }
     }
 

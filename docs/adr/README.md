@@ -98,6 +98,7 @@ policy через ссылки из новых документов.
 - [ADR-0287: Telegram operational realtime replay boundary](ADR-0287-telegram-operational-realtime-replay-boundary.md)
 - [ADR-0288: Managed successor quiesce and Storage fence order](ADR-0288-managed-successor-quiesce-and-storage-fence-order.md)
 - [ADR-0289: Telegram folder reassignment convergence boundary](ADR-0289-telegram-folder-reassignment-convergence-boundary.md)
+- [ADR-0290: Telegram account runtime reconfiguration boundary](ADR-0290-telegram-account-runtime-reconfiguration-boundary.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -326,3 +327,8 @@ ADR-0289 фиксирует честную Telegram folder reassignment semantic
 command сходится к exact target через fresh provider delta и обязательную
 финальную проверку, а partial success повторно планируется от текущего TDLib
 state. Provider atomicity, stale saved plan и fake terminal `ok` запрещены.
+ADR-0290 заменяет fake lifecycle restart отдельным Telegram-owned
+`telegram.reconfiguration.v1`: client задаёт только exact intent и expected
+epoch, runtime получает fresh Vault leases, физически заменяет TDLib client и
+завершает durable target epoch только после restore. Kernel переносит opaque
+route и grant, не интерпретируя Telegram lifecycle.

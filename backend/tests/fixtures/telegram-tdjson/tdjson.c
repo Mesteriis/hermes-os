@@ -6,11 +6,13 @@
 
 #define HERMES_QUEUE_CAPACITY 32
 #define HERMES_PAYLOAD_CAPACITY 4096
+#define HERMES_STARTUP_RECEIVE_DELAYS 80
 
 typedef struct {
     char queue[HERMES_QUEUE_CAPACITY][HERMES_PAYLOAD_CAPACITY];
     size_t head;
     size_t tail;
+    size_t startup_receive_delays_remaining;
     char current[HERMES_PAYLOAD_CAPACITY];
     int folder_7;
     int folder_9;
@@ -60,6 +62,7 @@ void *td_json_client_create(void) {
     if (client == NULL) {
         return NULL;
     }
+    client->startup_receive_delays_remaining = HERMES_STARTUP_RECEIVE_DELAYS;
     client->folder_7 = 1;
     client->folder_9 = 1;
     enqueue(
@@ -240,6 +243,14 @@ void td_json_client_send(void *raw_client, const char *request) {
 const char *td_json_client_receive(void *raw_client, double timeout) {
     HermesTdJsonClient *client = raw_client;
     if (client == NULL) {
+        return NULL;
+    }
+    if (client->startup_receive_delays_remaining > 0) {
+        client->startup_receive_delays_remaining -= 1;
+        if (timeout > 0.0) {
+            double bounded = timeout > 0.05 ? 0.05 : timeout;
+            usleep((useconds_t)(bounded * 1000000.0));
+        }
         return NULL;
     }
     if (client->head == client->tail) {

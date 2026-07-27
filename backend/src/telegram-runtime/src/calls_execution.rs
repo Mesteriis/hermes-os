@@ -153,6 +153,16 @@ impl<T: TdlibTransport> TelegramRuntime<T> {
         result
     }
 
+    pub(crate) fn take_call_media_for_reconfiguration(
+        &mut self,
+    ) -> Result<Option<Box<dyn TelegramCallSignalingMediaPort>>, TelegramCallExecutionError> {
+        if let Some(active) = self.active_call_media.as_ref() {
+            let call_session_id = active.call_session_id.clone();
+            self.stop_call_media_session(&call_session_id)?;
+        }
+        Ok(self.call_media.take())
+    }
+
     pub(crate) fn poll_active_call_media_event(
         &mut self,
     ) -> Result<

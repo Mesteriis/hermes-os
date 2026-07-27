@@ -29,6 +29,14 @@ const TELEGRAM_FOLDER_ADR_PATH = new URL(
   'docs/adr/ADR-0289-telegram-folder-reassignment-convergence-boundary.md',
   PROJECT_ROOT,
 );
+const TELEGRAM_RECONFIGURATION_ADR_PATH = new URL(
+  'docs/adr/ADR-0290-telegram-account-runtime-reconfiguration-boundary.md',
+  PROJECT_ROOT,
+);
+const TELEGRAM_CLIENT_PROTO_PATH = new URL(
+  'src/telegram-api/proto/hermes/telegram/v1/client.proto',
+  BACKEND_ROOT,
+);
 const TELEGRAM_CLIENT_CONTRACT_PATH = new URL(
   'src/telegram-api/src/client_contract.rs',
   BACKEND_ROOT,
@@ -44,6 +52,15 @@ const TELEGRAM_PERSISTENCE_PATH = new URL(
 );
 const TELEGRAM_PROJECTION_CACHE_PATH = new URL(
   'src/telegram-runtime/src/projection_cache.rs',
+  BACKEND_ROOT,
+);
+const TELEGRAM_RUNTIME_PATH = new URL('src/telegram-runtime/src/lib.rs', BACKEND_ROOT);
+const TELEGRAM_RUNTIME_PROCESS_PATH = new URL(
+  'src/telegram-runtime/src/process.rs',
+  BACKEND_ROOT,
+);
+const TELEGRAM_TDJSON_FIXTURE_PATH = new URL(
+  'tests/fixtures/telegram-tdjson/tdjson.c',
   BACKEND_ROOT,
 );
 const TELEGRAM_MANAGED_FLOW_PATH = new URL(
@@ -143,11 +160,16 @@ test('Telegram completion remains closed behind its independent capability slice
     callsAdrSource,
     realtimeAdrSource,
     folderAdrSource,
+    reconfigurationAdrSource,
+    clientProtoSource,
     clientContractSource,
     runtimeAdmissionSource,
     tdlibSource,
     telegramPersistenceSource,
     telegramProjectionCacheSource,
+    telegramRuntimeSource,
+    telegramRuntimeProcessSource,
+    tdjsonFixtureSource,
     managedFlowSource,
   ] = await Promise.all([
     readFile(INVENTORY_PATH, 'utf8'),
@@ -155,11 +177,16 @@ test('Telegram completion remains closed behind its independent capability slice
     readFile(TELEGRAM_CALLS_ADR_PATH, 'utf8'),
     readFile(TELEGRAM_REALTIME_ADR_PATH, 'utf8'),
     readFile(TELEGRAM_FOLDER_ADR_PATH, 'utf8'),
+    readFile(TELEGRAM_RECONFIGURATION_ADR_PATH, 'utf8'),
+    readFile(TELEGRAM_CLIENT_PROTO_PATH, 'utf8'),
     readFile(TELEGRAM_CLIENT_CONTRACT_PATH, 'utf8'),
     readFile(TELEGRAM_RUNTIME_ADMISSION_PATH, 'utf8'),
     readFile(TELEGRAM_TDLIB_PATH, 'utf8'),
     readFile(TELEGRAM_PERSISTENCE_PATH, 'utf8'),
     readFile(TELEGRAM_PROJECTION_CACHE_PATH, 'utf8'),
+    readFile(TELEGRAM_RUNTIME_PATH, 'utf8'),
+    readFile(TELEGRAM_RUNTIME_PROCESS_PATH, 'utf8'),
+    readFile(TELEGRAM_TDJSON_FIXTURE_PATH, 'utf8'),
     readFile(TELEGRAM_MANAGED_FLOW_PATH, 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
@@ -195,6 +222,10 @@ test('Telegram completion remains closed behind its independent capability slice
   assert.equal(telegramSlices.get('telegram_core_operational_v1').state, 'implemented');
   assert.equal(
     telegramSlices.get('telegram_folder_reassignment_v1').state,
+    'implemented',
+  );
+  assert.equal(
+    telegramSlices.get('telegram_runtime_reconfiguration_v1').state,
     'implemented',
   );
   assert.equal(fullGate.state, 'planned');
@@ -238,7 +269,7 @@ test('Telegram completion remains closed behind its independent capability slice
   assert.match(realtimeAdrSource, /reset_required/);
   assert.match(realtimeAdrSource, /Состояние реализации: Реализовано/);
   assert.match(clientContractSource, /TelegramClientContractV1[\s\S]*Realtime/);
-  assert.match(clientContractSource, /TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 4/);
+  assert.match(clientContractSource, /TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 5/);
   assert.match(runtimeAdmissionSource, /TelegramClientContractV1::Realtime/);
   assert.match(
     managedFlowSource,
@@ -262,6 +293,72 @@ test('Telegram completion remains closed behind its independent capability slice
   assert.match(
     telegramProjectionCacheSource,
     /position\.order <= 0[\s\S]*chat_positions\.remove/,
+  );
+
+  const beginReconfigurationBlock = clientProtoSource.match(
+    /message BeginTelegramReconfigurationRequest \{[\s\S]*?\n\}/,
+  )?.[0];
+  assert.ok(beginReconfigurationBlock, 'missing typed Telegram Begin reconfiguration request');
+  assert.match(beginReconfigurationBlock, /string reconfiguration_id = 1/);
+  assert.match(beginReconfigurationBlock, /string account_id = 2/);
+  assert.match(beginReconfigurationBlock, /uint64 expected_runtime_epoch = 3/);
+  assert.doesNotMatch(
+    beginReconfigurationBlock,
+    /topology|holder|expires|now_unix|runtime_generation|grant_epoch/,
+  );
+  assert.match(
+    clientProtoSource,
+    /reserved "start_account", "stop_account", "restart_account"/,
+  );
+  assert.match(
+    clientProtoSource,
+    /service TelegramReconfigurationService[\s\S]*rpc Execute/,
+  );
+  assert.match(reconfigurationAdrSource, /Состояние реализации: Реализовано/);
+  assert.match(reconfigurationAdrSource, /accepted\/applying crash recovery/);
+  assert.match(clientContractSource, /telegram\.reconfiguration\.v1/);
+  assert.match(
+    clientContractSource,
+    /hermes\.telegram\.v1\.TelegramReconfigurationService\/Execute/,
+  );
+  assert.match(runtimeAdmissionSource, /TelegramClientContractV1::Reconfiguration/);
+  assert.match(
+    telegramPersistenceSource,
+    /telegram_runtime_reconfigurations_active_account_idx[\s\S]*state IN \('accepted', 'applying'\)/,
+  );
+  assert.match(
+    telegramPersistenceSource,
+    /complete_runtime_reconfiguration[\s\S]*transaction[\s\S]*state = 'completed'/,
+  );
+  assert.match(
+    telegramRuntimeSource,
+    /begin_runtime_reconfiguration[\s\S]*self\.runtime = None[\s\S]*TdlibAuthorizationDriver::new/,
+  );
+  assert.match(
+    telegramRuntimeProcessSource,
+    /resolve_provider_reconfiguration_parameters[\s\S]*begin_pending_runtime_reconfiguration/,
+  );
+  assert.match(
+    telegramRuntimeProcessSource,
+    /restore_account_state_durable[\s\S]*complete_pending_runtime_reconfiguration_durable/,
+  );
+  assert.match(tdlibSource, /pub fn create_client\(&self\)[\s\S]*self\.inner\.create/);
+  assert.match(
+    tdlibSource,
+    /impl Drop for TdJsonClient[\s\S]*self\.library\.inner\.destroy/,
+  );
+  assert.match(tdjsonFixtureSource, /HERMES_STARTUP_RECEIVE_DELAYS/);
+  assert.match(
+    managedFlowSource,
+    /managed_telegram_reconfiguration_route_requires_exact_grant/,
+  );
+  assert.match(
+    managedFlowSource,
+    /managed_telegram_runtime_reconfiguration_replaces_provider_session_once/,
+  );
+  assert.match(
+    managedFlowSource,
+    /managed_telegram_runtime_reconfiguration_recovers_same_epoch_after_process_crash/,
   );
 });
 

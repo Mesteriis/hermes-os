@@ -15,8 +15,9 @@ use crate::{
     TelegramParticipantFilter, TelegramParticipantPage, TelegramProviderCommand,
     TelegramProviderEvent, TelegramProviderKind, TelegramProviderQuery,
     TelegramProviderQueryResponse, TelegramReactionObservation, TelegramReactionSummary,
-    TelegramRealtimeFrame, TelegramRealtimeReplayPage, TelegramSendMedia, TelegramSendMessage,
-    TelegramTombstoneReason, TelegramTopic, TelegramTypingState,
+    TelegramRealtimeFrame, TelegramRealtimeReplayPage, TelegramRuntimeReconfiguration,
+    TelegramRuntimeReconfigurationRequest, TelegramRuntimeReconfigurationState, TelegramSendMedia,
+    TelegramSendMessage, TelegramTombstoneReason, TelegramTopic, TelegramTypingState,
     wire::{
         self, telegram_authorization_request_v1::Request,
         telegram_authorization_response_v1::Response,
@@ -2350,23 +2351,6 @@ pub enum TelegramLifecycleRequest {
     RetireAccount {
         account_id: String,
     },
-    StartAccount {
-        account_id: String,
-        topology: String,
-        holder: String,
-        expires_at_unix_seconds: u64,
-        now_unix_seconds: u64,
-    },
-    RestartAccount {
-        account_id: String,
-        topology: String,
-        holder: String,
-        expires_at_unix_seconds: u64,
-        now_unix_seconds: u64,
-    },
-    StopAccount {
-        account_id: String,
-    },
     Replay {
         account_id: String,
         after_sequence: u64,
@@ -2445,6 +2429,96 @@ pub fn decode_realtime_response(
     })
 }
 
+pub fn encode_reconfiguration_request(request: &TelegramRuntimeReconfigurationRequest) -> Vec<u8> {
+    use wire::telegram_reconfiguration_request_v1::Request;
+    let request = match request {
+        TelegramRuntimeReconfigurationRequest::Begin {
+            reconfiguration_id,
+            account_id,
+            expected_runtime_epoch,
+        } => Request::Begin(wire::BeginTelegramReconfigurationRequest {
+            reconfiguration_id: reconfiguration_id.clone(),
+            account_id: account_id.clone(),
+            expected_runtime_epoch: *expected_runtime_epoch,
+        }),
+        TelegramRuntimeReconfigurationRequest::Status { reconfiguration_id } => {
+            Request::Status(wire::TelegramReconfigurationStatusRequest {
+                reconfiguration_id: reconfiguration_id.clone(),
+            })
+        }
+    };
+    wire::TelegramReconfigurationRequestV1 {
+        request: Some(request),
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_reconfiguration_request(
+    bytes: &[u8],
+) -> Result<TelegramRuntimeReconfigurationRequest, TelegramAuthorizationWireError> {
+    use wire::telegram_reconfiguration_request_v1::Request;
+    let request = wire::TelegramReconfigurationRequestV1::decode(bytes)
+        .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?
+        .request
+        .ok_or(TelegramAuthorizationWireError::MissingVariant)?;
+    Ok(match request {
+        Request::Begin(value) => TelegramRuntimeReconfigurationRequest::Begin {
+            reconfiguration_id: value.reconfiguration_id,
+            account_id: value.account_id,
+            expected_runtime_epoch: value.expected_runtime_epoch,
+        },
+        Request::Status(value) => TelegramRuntimeReconfigurationRequest::Status {
+            reconfiguration_id: value.reconfiguration_id,
+        },
+    })
+}
+
+pub fn encode_reconfiguration_response(
+    reconfiguration: &TelegramRuntimeReconfiguration,
+) -> Vec<u8> {
+    wire::TelegramReconfigurationResponseV1 {
+        reconfiguration_id: reconfiguration.reconfiguration_id.clone(),
+        account_id: reconfiguration.account_id.clone(),
+        expected_runtime_epoch: reconfiguration.expected_runtime_epoch,
+        target_runtime_epoch: reconfiguration.target_runtime_epoch,
+        state: match reconfiguration.state {
+            TelegramRuntimeReconfigurationState::Accepted => "accepted",
+            TelegramRuntimeReconfigurationState::Applying => "applying",
+            TelegramRuntimeReconfigurationState::Completed => "completed",
+            TelegramRuntimeReconfigurationState::Failed => "failed",
+        }
+        .to_owned(),
+        sanitized_reason_code: reconfiguration.sanitized_reason_code.clone(),
+        contract_major: 1,
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_reconfiguration_response(
+    bytes: &[u8],
+) -> Result<TelegramRuntimeReconfiguration, TelegramAuthorizationWireError> {
+    let response = wire::TelegramReconfigurationResponseV1::decode(bytes)
+        .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
+    if response.contract_major != 1 {
+        return Err(TelegramAuthorizationWireError::InvalidPayload);
+    }
+    let state = match response.state.as_str() {
+        "accepted" => TelegramRuntimeReconfigurationState::Accepted,
+        "applying" => TelegramRuntimeReconfigurationState::Applying,
+        "completed" => TelegramRuntimeReconfigurationState::Completed,
+        "failed" => TelegramRuntimeReconfigurationState::Failed,
+        _ => return Err(TelegramAuthorizationWireError::InvalidPayload),
+    };
+    Ok(TelegramRuntimeReconfiguration {
+        reconfiguration_id: response.reconfiguration_id,
+        account_id: response.account_id,
+        expected_runtime_epoch: response.expected_runtime_epoch,
+        target_runtime_epoch: response.target_runtime_epoch,
+        state,
+        sanitized_reason_code: response.sanitized_reason_code,
+    })
+}
+
 pub fn encode_lifecycle_request(request: &TelegramLifecycleRequest) -> Vec<u8> {
     use wire::telegram_lifecycle_request_v1::Request;
     let request = match request {
@@ -2484,37 +2558,6 @@ pub fn encode_lifecycle_request(request: &TelegramLifecycleRequest) -> Vec<u8> {
         }
         TelegramLifecycleRequest::RetireAccount { account_id } => {
             Request::RetireAccount(wire::AccountIdRequest {
-                account_id: account_id.clone(),
-            })
-        }
-        TelegramLifecycleRequest::StartAccount {
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            now_unix_seconds,
-        } => Request::StartAccount(wire::StartAccountRequest {
-            account_id: account_id.clone(),
-            topology: topology.clone(),
-            holder: holder.clone(),
-            expires_at_unix_seconds: *expires_at_unix_seconds,
-            now_unix_seconds: *now_unix_seconds,
-        }),
-        TelegramLifecycleRequest::RestartAccount {
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            now_unix_seconds,
-        } => Request::RestartAccount(wire::RestartAccountRequest {
-            account_id: account_id.clone(),
-            topology: topology.clone(),
-            holder: holder.clone(),
-            expires_at_unix_seconds: *expires_at_unix_seconds,
-            now_unix_seconds: *now_unix_seconds,
-        }),
-        TelegramLifecycleRequest::StopAccount { account_id } => {
-            Request::StopAccount(wire::AccountIdRequest {
                 account_id: account_id.clone(),
             })
         }
@@ -2587,23 +2630,6 @@ pub fn decode_lifecycle_request(
             account_id: value.account_id,
         }),
         Request::RetireAccount(value) => Ok(TelegramLifecycleRequest::RetireAccount {
-            account_id: value.account_id,
-        }),
-        Request::StartAccount(value) => Ok(TelegramLifecycleRequest::StartAccount {
-            account_id: value.account_id,
-            topology: value.topology,
-            holder: value.holder,
-            expires_at_unix_seconds: value.expires_at_unix_seconds,
-            now_unix_seconds: value.now_unix_seconds,
-        }),
-        Request::RestartAccount(value) => Ok(TelegramLifecycleRequest::RestartAccount {
-            account_id: value.account_id,
-            topology: value.topology,
-            holder: value.holder,
-            expires_at_unix_seconds: value.expires_at_unix_seconds,
-            now_unix_seconds: value.now_unix_seconds,
-        }),
-        Request::StopAccount(value) => Ok(TelegramLifecycleRequest::StopAccount {
             account_id: value.account_id,
         }),
         Request::Replay(value) => Ok(TelegramLifecycleRequest::Replay {

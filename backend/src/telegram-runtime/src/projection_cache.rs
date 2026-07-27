@@ -701,11 +701,6 @@ impl TelegramRuntimeProjectionCache {
         self.runtime_leases.get(account_id)
     }
 
-    pub fn next_runtime_epoch(&self, account_id: &str) -> u64 {
-        self.runtime_lease(account_id)
-            .map_or(1, |lease| lease.epoch.saturating_add(1))
-    }
-
     pub fn revoke_runtime_lease(&mut self, account_id: &str) -> bool {
         let Some(lease) = self.runtime_leases.get_mut(account_id) else {
             return false;

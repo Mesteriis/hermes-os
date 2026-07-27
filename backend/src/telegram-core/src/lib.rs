@@ -12,9 +12,9 @@ use hermes_telegram_api::{
     TelegramDeliveryState, TelegramMessageMutation, TelegramMessageObservation,
     TelegramMessageProjection, TelegramOperation, TelegramOperationState, TelegramProviderCommand,
     TelegramProviderEvent, TelegramQrLoginSession, TelegramQrLoginState,
-    TelegramReconciliationState, TelegramRuntimeLease, TelegramRuntimeLeaseState,
-    TelegramRuntimeState, provider_command_account_id, provider_command_kind,
-    provider_command_operation_id, validate_text,
+    TelegramReconciliationState, TelegramRuntimeReconfiguration,
+    TelegramRuntimeReconfigurationState, TelegramRuntimeState, provider_command_account_id,
+    provider_command_kind, provider_command_operation_id, validate_text,
 };
 use hermes_vault_protocol::{DEFAULT_LEASE_TTL_SECONDS, SecretClassV1, VaultActionV1};
 use sha2::{Digest, Sha256};
@@ -144,70 +144,102 @@ pub use hermes_communications_ingress::CommunicationObservationDraft;
 #[derive(Default)]
 pub struct TelegramLifecycle;
 
-impl TelegramLifecycle {
-    pub fn start(
-        &self,
-        account: &TelegramAccount,
-        lease: &TelegramRuntimeLease,
-        now_unix_seconds: u64,
-    ) -> Result<TelegramAccount, TelegramContractError> {
-        if account.state == TelegramAccountState::Retired {
-            return Err(TelegramContractError::AccountRetired);
-        }
-        if lease.account_id != account.account_id
-            || lease.state != TelegramRuntimeLeaseState::Active
-            || lease.epoch == 0
-            || lease.expires_at_unix_seconds <= now_unix_seconds
-        {
-            return Err(TelegramContractError::RuntimeBlocked);
-        }
-        Ok(TelegramAccount {
-            runtime_state: TelegramRuntimeState::Starting,
-            runtime_epoch: lease.epoch,
-            ..account.clone()
-        })
+pub fn accept_runtime_reconfiguration(
+    account: &TelegramAccount,
+    reconfiguration_id: &str,
+    expected_runtime_epoch: u64,
+) -> Result<TelegramRuntimeReconfiguration, TelegramContractError> {
+    if reconfiguration_id.trim().is_empty() {
+        return Err(TelegramContractError::EmptyField);
     }
+    if account.runtime_epoch != expected_runtime_epoch
+        || expected_runtime_epoch == 0
+        || !matches!(
+            account.runtime_state,
+            TelegramRuntimeState::Running | TelegramRuntimeState::Degraded
+        )
+    {
+        return Err(TelegramContractError::RuntimeEpochConflict);
+    }
+    let target_runtime_epoch = expected_runtime_epoch
+        .checked_add(1)
+        .ok_or(TelegramContractError::RuntimeEpochConflict)?;
+    Ok(TelegramRuntimeReconfiguration {
+        reconfiguration_id: reconfiguration_id.to_owned(),
+        account_id: account.account_id.clone(),
+        expected_runtime_epoch,
+        target_runtime_epoch,
+        state: TelegramRuntimeReconfigurationState::Accepted,
+        sanitized_reason_code: None,
+    })
+}
 
+pub fn apply_runtime_reconfiguration(
+    reconfiguration: &TelegramRuntimeReconfiguration,
+) -> Result<TelegramRuntimeReconfiguration, TelegramContractError> {
+    if reconfiguration.state != TelegramRuntimeReconfigurationState::Accepted {
+        return Err(TelegramContractError::InvalidTransition);
+    }
+    Ok(TelegramRuntimeReconfiguration {
+        state: TelegramRuntimeReconfigurationState::Applying,
+        ..reconfiguration.clone()
+    })
+}
+
+pub fn complete_runtime_reconfiguration(
+    account: &TelegramAccount,
+    reconfiguration: &TelegramRuntimeReconfiguration,
+) -> Result<(TelegramAccount, TelegramRuntimeReconfiguration), TelegramContractError> {
+    if !matches!(
+        reconfiguration.state,
+        TelegramRuntimeReconfigurationState::Accepted
+            | TelegramRuntimeReconfigurationState::Applying
+    ) || account.account_id != reconfiguration.account_id
+        || account.runtime_epoch != reconfiguration.expected_runtime_epoch
+    {
+        return Err(TelegramContractError::InvalidTransition);
+    }
+    Ok((
+        TelegramAccount {
+            runtime_state: TelegramRuntimeState::Running,
+            runtime_epoch: reconfiguration.target_runtime_epoch,
+            ..account.clone()
+        },
+        TelegramRuntimeReconfiguration {
+            state: TelegramRuntimeReconfigurationState::Completed,
+            sanitized_reason_code: None,
+            ..reconfiguration.clone()
+        },
+    ))
+}
+
+pub fn fail_runtime_reconfiguration(
+    reconfiguration: &TelegramRuntimeReconfiguration,
+    sanitized_reason_code: &str,
+) -> Result<TelegramRuntimeReconfiguration, TelegramContractError> {
+    if reconfiguration.state.is_terminal()
+        || sanitized_reason_code.trim().is_empty()
+        || sanitized_reason_code.len() > 64
+        || !sanitized_reason_code
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte == b'_')
+    {
+        return Err(TelegramContractError::InvalidTransition);
+    }
+    Ok(TelegramRuntimeReconfiguration {
+        state: TelegramRuntimeReconfigurationState::Failed,
+        sanitized_reason_code: Some(sanitized_reason_code.to_owned()),
+        ..reconfiguration.clone()
+    })
+}
+
+impl TelegramLifecycle {
     pub fn mark_running(&self, account: &TelegramAccount) -> TelegramAccount {
         TelegramAccount {
             state: TelegramAccountState::Ready,
             runtime_state: TelegramRuntimeState::Running,
             ..account.clone()
         }
-    }
-
-    pub fn stop(
-        &self,
-        account: &TelegramAccount,
-        lease: &TelegramRuntimeLease,
-    ) -> Result<TelegramAccount, TelegramContractError> {
-        if lease.account_id != account.account_id || lease.epoch != account.runtime_epoch {
-            return Err(TelegramContractError::RuntimeBlocked);
-        }
-        Ok(TelegramAccount {
-            runtime_state: TelegramRuntimeState::Stopped,
-            ..account.clone()
-        })
-    }
-
-    pub fn restart(
-        &self,
-        account: &TelegramAccount,
-        current_lease: &TelegramRuntimeLease,
-        replacement_lease: &TelegramRuntimeLease,
-        now_unix_seconds: u64,
-    ) -> Result<TelegramAccount, TelegramContractError> {
-        if current_lease.state != TelegramRuntimeLeaseState::Active
-            || !matches!(
-                account.runtime_state,
-                TelegramRuntimeState::Running | TelegramRuntimeState::Degraded
-            )
-        {
-            return Err(TelegramContractError::RuntimeBlocked);
-        }
-        let stopped = self.stop(account, current_lease)?;
-        let starting = self.start(&stopped, replacement_lease, now_unix_seconds)?;
-        Ok(self.mark_running(&starting))
     }
 
     pub fn retire(
@@ -890,44 +922,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_lifecycle_rejects_expired_or_foreign_lease() {
-        let account = TelegramAccount {
-            account_id: "telegram-account".to_owned(),
-            provider_kind: TelegramProviderKind::User,
-            display_name: "Personal Telegram".to_owned(),
-            external_account_id: "telegram:42".to_owned(),
-            state: TelegramAccountState::Provisioning,
-            runtime_state: TelegramRuntimeState::Stopped,
-            runtime_epoch: 0,
-        };
-        let lifecycle = TelegramLifecycle;
-        let expired = TelegramRuntimeLease {
-            account_id: account.account_id.clone(),
-            topology: "process".to_owned(),
-            holder: "runtime-1".to_owned(),
-            epoch: 1,
-            state: TelegramRuntimeLeaseState::Active,
-            expires_at_unix_seconds: 10,
-        };
-        assert_eq!(
-            lifecycle.start(&account, &expired, 10),
-            Err(TelegramContractError::RuntimeBlocked)
-        );
-
-        let foreign = TelegramRuntimeLease {
-            account_id: "another-account".to_owned(),
-            expires_at_unix_seconds: 100,
-            ..expired
-        };
-        assert_eq!(
-            lifecycle.start(&account, &foreign, 1),
-            Err(TelegramContractError::RuntimeBlocked)
-        );
-    }
-
-    #[test]
-    fn runtime_restart_is_one_validated_state_transition() {
-        let lifecycle = TelegramLifecycle;
+    fn runtime_reconfiguration_fences_epoch_before_any_transition() {
         let account = TelegramAccount {
             account_id: "telegram-account".to_owned(),
             provider_kind: TelegramProviderKind::User,
@@ -937,34 +932,44 @@ mod tests {
             runtime_state: TelegramRuntimeState::Running,
             runtime_epoch: 4,
         };
-        let current = TelegramRuntimeLease {
-            account_id: account.account_id.clone(),
-            topology: "process".to_owned(),
-            holder: "runtime-4".to_owned(),
-            epoch: 4,
-            state: TelegramRuntimeLeaseState::Active,
-            expires_at_unix_seconds: 100,
-        };
-        let replacement = TelegramRuntimeLease {
-            holder: "runtime-5".to_owned(),
-            epoch: 5,
-            expires_at_unix_seconds: 200,
-            ..current.clone()
-        };
-
-        let restarted = lifecycle
-            .restart(&account, &current, &replacement, 20)
-            .expect("atomic restart");
-        assert_eq!(restarted.runtime_state, TelegramRuntimeState::Running);
-        assert_eq!(restarted.runtime_epoch, 5);
-
-        let expired = TelegramRuntimeLease {
-            expires_at_unix_seconds: 20,
-            ..replacement
-        };
         assert_eq!(
-            lifecycle.restart(&account, &current, &expired, 20),
-            Err(TelegramContractError::RuntimeBlocked)
+            accept_runtime_reconfiguration(&account, "reconfiguration-1", 3),
+            Err(TelegramContractError::RuntimeEpochConflict)
+        );
+        assert_eq!(account.runtime_epoch, 4);
+        assert_eq!(account.runtime_state, TelegramRuntimeState::Running);
+    }
+
+    #[test]
+    fn runtime_reconfiguration_applies_one_target_epoch_only_at_completion() {
+        let account = TelegramAccount {
+            account_id: "telegram-account".to_owned(),
+            provider_kind: TelegramProviderKind::User,
+            display_name: "Personal Telegram".to_owned(),
+            external_account_id: "telegram:42".to_owned(),
+            state: TelegramAccountState::Ready,
+            runtime_state: TelegramRuntimeState::Running,
+            runtime_epoch: 4,
+        };
+        let accepted = accept_runtime_reconfiguration(&account, "reconfiguration-1", 4)
+            .expect("accepted reconfiguration");
+        assert_eq!(accepted.target_runtime_epoch, 5);
+        assert_eq!(
+            accepted.state,
+            TelegramRuntimeReconfigurationState::Accepted
+        );
+        let applying = apply_runtime_reconfiguration(&accepted).expect("applying reconfiguration");
+        assert_eq!(account.runtime_epoch, 4);
+        let (completed_account, completed) =
+            complete_runtime_reconfiguration(&account, &applying).expect("completed");
+        assert_eq!(completed_account.runtime_epoch, 5);
+        assert_eq!(
+            completed.state,
+            TelegramRuntimeReconfigurationState::Completed
+        );
+        assert_eq!(
+            complete_runtime_reconfiguration(&completed_account, &applying),
+            Err(TelegramContractError::InvalidTransition)
         );
     }
 }

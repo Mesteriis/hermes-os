@@ -5,6 +5,7 @@ use std::ffi::{CStr, CString};
 use std::fmt;
 use std::os::raw::{c_char, c_void};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
@@ -2767,7 +2768,12 @@ type TdJsonClientExecute = unsafe extern "C" fn(*mut c_void, *const c_char) -> *
 type TdJsonClientDestroy = unsafe extern "C" fn(*mut c_void);
 
 /// Loaded libtdjson handle. The unsafe C ABI is isolated to this adapter file.
+#[derive(Clone)]
 pub struct TdJsonLibrary {
+    inner: Arc<TdJsonLibraryInner>,
+}
+
+struct TdJsonLibraryInner {
     create: TdJsonClientCreate,
     send: TdJsonClientSend,
     receive: TdJsonClientReceive,
@@ -2813,17 +2819,19 @@ impl TdJsonLibrary {
 
     fn from_library(library: Library, candidate: &Path) -> Result<Self, TdlibError> {
         Ok(Self {
-            create: load_symbol(&library, b"td_json_client_create\0", candidate)?,
-            send: load_symbol(&library, b"td_json_client_send\0", candidate)?,
-            receive: load_symbol(&library, b"td_json_client_receive\0", candidate)?,
-            execute: load_symbol(&library, b"td_json_client_execute\0", candidate)?,
-            destroy: load_symbol(&library, b"td_json_client_destroy\0", candidate)?,
-            _library: library,
+            inner: Arc::new(TdJsonLibraryInner {
+                create: load_symbol(&library, b"td_json_client_create\0", candidate)?,
+                send: load_symbol(&library, b"td_json_client_send\0", candidate)?,
+                receive: load_symbol(&library, b"td_json_client_receive\0", candidate)?,
+                execute: load_symbol(&library, b"td_json_client_execute\0", candidate)?,
+                destroy: load_symbol(&library, b"td_json_client_destroy\0", candidate)?,
+                _library: library,
+            }),
         })
     }
 
-    pub fn create_client(self) -> Result<TdJsonClient, TdlibError> {
-        let client = unsafe { (self.create)() };
+    pub fn create_client(&self) -> Result<TdJsonClient, TdlibError> {
+        let client = unsafe { (self.inner.create)() };
         if client.is_null() {
             return Err(TdlibError::Transport(
                 "td_json_client_create returned null".to_owned(),
@@ -2831,7 +2839,7 @@ impl TdJsonLibrary {
         }
         Ok(TdJsonClient {
             client,
-            library: self,
+            library: self.clone(),
         })
     }
 }
@@ -2845,19 +2853,19 @@ impl TdJsonClient {
     pub fn send_json(&self, request: &Value) -> Result<(), TdlibError> {
         let request = CString::new(request.to_string())
             .map_err(|_| TdlibError::Protocol("TDLib request contains NUL".to_owned()))?;
-        unsafe { (self.library.send)(self.client, request.as_ptr()) };
+        unsafe { (self.library.inner.send)(self.client, request.as_ptr()) };
         Ok(())
     }
 
     pub fn receive_json(&self, timeout_seconds: f64) -> Result<Option<Value>, TdlibError> {
-        let response = unsafe { (self.library.receive)(self.client, timeout_seconds) };
+        let response = unsafe { (self.library.inner.receive)(self.client, timeout_seconds) };
         parse_response(response)
     }
 
     pub fn execute_json(&self, request: &Value) -> Result<Option<Value>, TdlibError> {
         let request = CString::new(request.to_string())
             .map_err(|_| TdlibError::Protocol("TDLib request contains NUL".to_owned()))?;
-        let response = unsafe { (self.library.execute)(self.client, request.as_ptr()) };
+        let response = unsafe { (self.library.inner.execute)(self.client, request.as_ptr()) };
         parse_response(response)
     }
 }
@@ -2865,7 +2873,7 @@ impl TdJsonClient {
 impl Drop for TdJsonClient {
     fn drop(&mut self) {
         if !self.client.is_null() {
-            unsafe { (self.library.destroy)(self.client) };
+            unsafe { (self.library.inner.destroy)(self.client) };
             self.client = std::ptr::null_mut();
         }
     }

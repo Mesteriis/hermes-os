@@ -17,7 +17,7 @@ use hermes_telegram_tdlib::{TdlibError, TdlibTransport};
 use prost::Message;
 use sha2::{Digest, Sha256};
 
-use crate::{TelegramRuntime, TelegramRuntimeRestart};
+use crate::{TelegramDurableLifecycleError, TelegramRuntime};
 
 #[derive(Debug)]
 pub enum TelegramClientPortError {
@@ -25,6 +25,26 @@ pub enum TelegramClientPortError {
     Persistence(TelegramDurablePersistenceError),
     Protocol(String),
     Codec(String),
+    Reconfiguration(&'static str),
+}
+
+fn reconfiguration_error_code(error: TelegramDurableLifecycleError) -> &'static str {
+    match error {
+        TelegramDurableLifecycleError::Contract(
+            hermes_telegram_api::TelegramContractError::RuntimeEpochConflict,
+        ) => "RUNTIME_EPOCH_CONFLICT",
+        TelegramDurableLifecycleError::Contract(
+            hermes_telegram_api::TelegramContractError::ReconfigurationCollision,
+        ) => "RECONFIGURATION_COLLISION",
+        TelegramDurableLifecycleError::Contract(
+            hermes_telegram_api::TelegramContractError::ReconfigurationInProgress,
+        ) => "RECONFIGURATION_IN_PROGRESS",
+        TelegramDurableLifecycleError::Contract(
+            hermes_telegram_api::TelegramContractError::ReconfigurationUnknown,
+        ) => "RECONFIGURATION_UNKNOWN",
+        TelegramDurableLifecycleError::Contract(_) => "RECONFIGURATION_REJECTED",
+        TelegramDurableLifecycleError::Persistence(_) => "RECONFIGURATION_UNAVAILABLE",
+    }
 }
 
 pub(crate) const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
@@ -68,13 +88,11 @@ fn request_contract(
         | TelegramClientRequest::RetryCommand { .. }
         | TelegramClientRequest::ListAccounts
         | TelegramClientRequest::GetAccount { .. }
-        | TelegramClientRequest::RetireAccount { .. }
-        | TelegramClientRequest::StartAccount { .. }
-        | TelegramClientRequest::RestartAccount { .. }
-        | TelegramClientRequest::StopAccount { .. } => Ok(TelegramClientContractV1::Lifecycle),
+        | TelegramClientRequest::RetireAccount { .. } => Ok(TelegramClientContractV1::Lifecycle),
         TelegramClientRequest::Command(_) => Ok(TelegramClientContractV1::Command),
         TelegramClientRequest::Query(_) => Ok(TelegramClientContractV1::Query),
         TelegramClientRequest::Replay { .. } => Ok(TelegramClientContractV1::Realtime),
+        TelegramClientRequest::Reconfiguration(_) => Ok(TelegramClientContractV1::Reconfiguration),
     }
 }
 
@@ -106,37 +124,6 @@ fn lifecycle_wire_request(
                 account_id: account_id.clone(),
             })
         }
-        TelegramClientRequest::StartAccount {
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            now_unix_seconds,
-        } => Some(TelegramLifecycleRequest::StartAccount {
-            account_id: account_id.clone(),
-            topology: topology.clone(),
-            holder: holder.clone(),
-            expires_at_unix_seconds: *expires_at_unix_seconds,
-            now_unix_seconds: *now_unix_seconds,
-        }),
-        TelegramClientRequest::RestartAccount {
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            now_unix_seconds,
-        } => Some(TelegramLifecycleRequest::RestartAccount {
-            account_id: account_id.clone(),
-            topology: topology.clone(),
-            holder: holder.clone(),
-            expires_at_unix_seconds: *expires_at_unix_seconds,
-            now_unix_seconds: *now_unix_seconds,
-        }),
-        TelegramClientRequest::StopAccount { account_id } => {
-            Some(TelegramLifecycleRequest::StopAccount {
-                account_id: account_id.clone(),
-            })
-        }
         _ => None,
     }
 }
@@ -164,35 +151,6 @@ fn client_request_from_lifecycle(
         }
         TelegramLifecycleRequest::RetireAccount { account_id } => {
             TelegramClientRequest::RetireAccount { account_id }
-        }
-        TelegramLifecycleRequest::StartAccount {
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            now_unix_seconds,
-        } => TelegramClientRequest::StartAccount {
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            now_unix_seconds,
-        },
-        TelegramLifecycleRequest::RestartAccount {
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            now_unix_seconds,
-        } => TelegramClientRequest::RestartAccount {
-            account_id,
-            topology,
-            holder,
-            expires_at_unix_seconds,
-            now_unix_seconds,
-        },
-        TelegramLifecycleRequest::StopAccount { account_id } => {
-            TelegramClientRequest::StopAccount { account_id }
         }
         TelegramLifecycleRequest::Replay {
             account_id,
@@ -279,6 +237,16 @@ pub fn encode_module_request(
                 ));
             }
         },
+        TelegramClientContractV1::Reconfiguration => match request {
+            TelegramClientRequest::Reconfiguration(request) => {
+                hermes_telegram_api::client_wire::encode_reconfiguration_request(request)
+            }
+            _ => {
+                return Err(TelegramClientPortError::Protocol(
+                    "Telegram reconfiguration route received another request family".to_owned(),
+                ));
+            }
+        },
     };
     let envelope = ModuleClientRequestV1 {
         protocol_major: MODULE_CLIENT_PROTOCOL_MAJOR,
@@ -359,6 +327,15 @@ pub fn decode_module_request(
                 after_sequence,
                 limit,
             }
+        }
+        TelegramClientContractV1::Reconfiguration => {
+            hermes_telegram_api::client_wire::decode_reconfiguration_request(&request_payload)
+                .map(TelegramClientRequest::Reconfiguration)
+                .map_err(|_| {
+                    TelegramClientPortError::Protocol(
+                        "Telegram reconfiguration request payload is invalid".to_owned(),
+                    )
+                })?
         }
     };
     Ok((request_id, contract, request))
@@ -481,6 +458,16 @@ pub fn encode_module_response(
                 ));
             }
         },
+        TelegramClientContractV1::Reconfiguration => match response {
+            TelegramClientResponse::Reconfiguration(reconfiguration) => {
+                hermes_telegram_api::client_wire::encode_reconfiguration_response(reconfiguration)
+            }
+            _ => {
+                return Err(TelegramClientPortError::Protocol(
+                    "Telegram reconfiguration response has another response family".to_owned(),
+                ));
+            }
+        },
     };
     encode_module_response_payload(request_id, response_payload)
 }
@@ -555,6 +542,17 @@ pub fn decode_module_response(
                     )
                 })?
         }
+        TelegramClientContractV1::Reconfiguration => {
+            hermes_telegram_api::client_wire::decode_reconfiguration_response(
+                &envelope.response_payload,
+            )
+            .map(TelegramClientResponse::Reconfiguration)
+            .map_err(|_| {
+                TelegramClientPortError::Protocol(
+                    "Telegram reconfiguration response payload is invalid".to_owned(),
+                )
+            })?
+        }
     };
     Ok((envelope.request_id, response))
 }
@@ -624,52 +622,14 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                 .await
                 .map(TelegramClientResponse::Operation)
                 .map_err(|error| TelegramClientPortError::Protocol(format!("{error:?}")))?,
-            TelegramClientRequest::StartAccount {
-                account_id,
-                topology,
-                holder,
-                expires_at_unix_seconds,
-                now_unix_seconds,
-            } => self
+            TelegramClientRequest::Reconfiguration(request) => self
                 .runtime
-                .start_admitted_account_durable(
-                    durable,
-                    &account_id,
-                    &topology,
-                    &holder,
-                    expires_at_unix_seconds,
-                    now_unix_seconds,
-                )
+                .runtime_reconfiguration_durable(durable, &request)
                 .await
-                .map(TelegramClientResponse::Account)
-                .map_err(|error| TelegramClientPortError::Protocol(format!("{error:?}")))?,
-            TelegramClientRequest::RestartAccount {
-                account_id,
-                topology,
-                holder,
-                expires_at_unix_seconds,
-                now_unix_seconds,
-            } => self
-                .runtime
-                .restart_admitted_account_durable(
-                    durable,
-                    &TelegramRuntimeRestart {
-                        account_id,
-                        topology,
-                        holder,
-                        expires_at_unix_seconds,
-                        now_unix_seconds,
-                    },
-                )
-                .await
-                .map(TelegramClientResponse::Account)
-                .map_err(|error| TelegramClientPortError::Protocol(format!("{error:?}")))?,
-            TelegramClientRequest::StopAccount { account_id } => self
-                .runtime
-                .stop_account_durable(durable, &account_id)
-                .await
-                .map(TelegramClientResponse::Account)
-                .map_err(|error| TelegramClientPortError::Protocol(format!("{error:?}")))?,
+                .map(TelegramClientResponse::Reconfiguration)
+                .map_err(|error| {
+                    TelegramClientPortError::Reconfiguration(reconfiguration_error_code(error))
+                })?,
             TelegramClientRequest::Replay {
                 account_id,
                 after_sequence,
@@ -988,24 +948,24 @@ mod tests {
         assert_eq!(contract.owner, "telegram");
         assert_eq!(contract.name, "telegram.query.v1");
         assert_eq!(contract.major, 1);
-        assert_eq!(contract.revision, 4);
+        assert_eq!(contract.revision, 5);
         assert_eq!(contract.schema_sha256.len(), 32);
     }
 
     #[test]
-    fn restart_request_round_trips_only_through_the_lifecycle_contract() {
-        let request = TelegramClientRequest::RestartAccount {
-            account_id: "account-1".to_owned(),
-            topology: "process".to_owned(),
-            holder: "runtime-2".to_owned(),
-            expires_at_unix_seconds: 200,
-            now_unix_seconds: 20,
-        };
-        let encoded = encode_module_request(46, &request).expect("encode restart");
+    fn reconfiguration_request_round_trips_only_through_the_exact_contract() {
+        let request = TelegramClientRequest::Reconfiguration(
+            hermes_telegram_api::TelegramRuntimeReconfigurationRequest::Begin {
+                reconfiguration_id: "reconfiguration-1".to_owned(),
+                account_id: "account-1".to_owned(),
+                expected_runtime_epoch: 7,
+            },
+        );
+        let encoded = encode_module_request(46, &request).expect("encode reconfiguration");
 
         assert_eq!(
-            decode_module_request(&encoded).expect("decode restart"),
-            (46, TelegramClientContractV1::Lifecycle, request)
+            decode_module_request(&encoded).expect("decode reconfiguration"),
+            (46, TelegramClientContractV1::Reconfiguration, request)
         );
     }
 

@@ -64,6 +64,7 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         telegram_client_capability_v1(TelegramClientContractV1::Lifecycle),
         telegram_client_capability_v1(TelegramClientContractV1::Query),
         telegram_client_capability_v1(TelegramClientContractV1::Realtime),
+        telegram_client_capability_v1(TelegramClientContractV1::Reconfiguration),
         telegram_runtime_capability_v1(),
         telegram_storage_capability_v1(),
     ]
@@ -258,7 +259,7 @@ pub fn telegram_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
     let settings_schema = telegram_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 4,
+        descriptor_revision: 5,
         module_id: TELEGRAM_MODULE_ID.to_owned(),
         owner_id: TELEGRAM_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Integration as i32,
@@ -331,6 +332,7 @@ mod tests {
                 "telegram.lifecycle.v1",
                 "telegram.query.v1",
                 "telegram.realtime.v1",
+                "telegram.reconfiguration.v1",
                 TELEGRAM_RUNTIME_CAPABILITY_ID,
                 TELEGRAM_STORAGE_CAPABILITY_ID,
             ]

@@ -36,15 +36,20 @@ use hermes_telegram_calls_core::{
 use hermes_telegram_calls_persistence::{TelegramCallsPersistence, TelegramCallsPersistenceError};
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{
-    TdlibAuthorizationEvent, TdlibAuthorizationUpdate, TdlibCallDirection, TdlibCallDiscardReason,
-    TdlibCallFailureCategory, TdlibCallObservation, TdlibCallState, TdlibError,
+    TdJsonTransport, TdlibAuthorizationEvent, TdlibAuthorizationUpdate, TdlibCallDirection,
+    TdlibCallDiscardReason, TdlibCallFailureCategory, TdlibCallObservation, TdlibCallState,
+    TdlibError,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    TelegramCallProviderUpdate, TelegramDurableProjectionError, TelegramRuntimeComposition,
-    bootstrap::{TelegramAdmittedProviderLoop, TelegramAdmittedRuntime},
+    TelegramCallProviderUpdate, TelegramDurableProjectionError, TelegramRuntime,
+    TelegramRuntimeComposition,
+    bootstrap::{
+        TelegramAdmittedProviderLoop, TelegramAdmittedRuntime,
+        TelegramProviderReconfigurationContextV1, resolve_provider_reconfiguration_parameters,
+    },
     calls_execution::TelegramCallExecutionError,
     client_transport::{self, TelegramClientTransportError},
 };
@@ -72,6 +77,7 @@ pub struct TelegramProcessLoop {
     composition: TelegramRuntimeComposition,
     provider_cursor: Option<String>,
     authorization_status: Option<hermes_telegram_api::TelegramAuthorizationStatus>,
+    durable_restore_required: bool,
 }
 
 impl TelegramProcessLoop {
@@ -81,6 +87,7 @@ impl TelegramProcessLoop {
             composition,
             provider_cursor: None,
             authorization_status: None,
+            durable_restore_required: true,
         }
     }
 
@@ -108,13 +115,70 @@ impl TelegramProcessLoop {
         calls: &TelegramCallsPersistence,
         handle: &tokio::runtime::Handle,
     ) -> Result<(), TelegramClientTransportError> {
-        let runtime = self
+        {
+            let runtime = self
+                .composition
+                .runtime_mut()
+                .ok_or(TelegramClientTransportError::RuntimeUnavailable)?;
+            client_transport::serve_connection_durable(
+                stream, runtime, durable, automation, calls, handle,
+            )?;
+        }
+        if self.has_pending_runtime_reconfiguration() {
+            Err(TelegramClientTransportError::Reconfiguration)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn begin_pending_runtime_reconfiguration(
+        &mut self,
+        durable: &TelegramDurablePersistence,
+        handle: &tokio::runtime::Handle,
+        authorization_parameters: hermes_telegram_tdlib::TdlibAuthorizationParameters,
+    ) -> Result<(), TelegramClientTransportError> {
+        let pending = self
             .composition
             .runtime_mut()
-            .ok_or(TelegramClientTransportError::RuntimeUnavailable)?;
-        client_transport::serve_connection_durable(
-            stream, runtime, durable, automation, calls, handle,
-        )
+            .and_then(TelegramRuntime::take_pending_runtime_reconfiguration);
+        let Some(pending) = pending else {
+            return Ok(());
+        };
+        let applying = handle
+            .block_on(durable.mark_runtime_reconfiguration_applying(&pending.reconfiguration_id))
+            .map_err(|_| TelegramClientTransportError::Reconfiguration)?;
+        if self
+            .composition
+            .begin_runtime_reconfiguration(applying.clone(), authorization_parameters)
+            .is_err()
+        {
+            let _ = handle.block_on(
+                TelegramRuntime::<TdJsonTransport>::fail_runtime_reconfiguration_durable(
+                    durable,
+                    &applying,
+                    "PROVIDER_RESTART_UNAVAILABLE",
+                ),
+            );
+            return Err(TelegramClientTransportError::Reconfiguration);
+        }
+        self.durable_restore_required = true;
+        Ok(())
+    }
+
+    fn has_pending_runtime_reconfiguration(&mut self) -> bool {
+        self.composition
+            .runtime_mut()
+            .is_some_and(|runtime| runtime.has_pending_runtime_reconfiguration())
+    }
+
+    #[must_use]
+    pub fn durable_restore_required(&self) -> bool {
+        self.durable_restore_required
+    }
+
+    pub fn mark_durable_restore_complete(&mut self) {
+        self.durable_restore_required = false;
+        self.composition.clear_pending_runtime_reconfiguration();
     }
 
     pub fn poll_once(&mut self, timeout: Duration) -> Result<TelegramProcessTick, TdlibError> {
@@ -383,11 +447,11 @@ pub fn serve_admitted_provider_loop(
         durable,
         automation,
         calls,
+        reconfiguration_context,
         event_connection,
         event_publish_permit,
     } = admitted;
     let mut process = TelegramProcessLoop::new(composition);
-    let mut restored = false;
 
     loop {
         handle_client_delivery(
@@ -396,6 +460,7 @@ pub fn serve_admitted_provider_loop(
             &durable,
             &automation,
             &calls,
+            &reconfiguration_context,
             executor,
         )?;
         let poll = {
@@ -409,7 +474,7 @@ pub fn serve_admitted_provider_loop(
             ))
         };
         poll.map_err(|error| format!("Telegram runtime provider loop failed: {error:?}"))?;
-        if !restored && process.composition().has_runtime() {
+        if process.durable_restore_required() && process.composition().has_runtime() {
             let runtime = process
                 .composition_mut()
                 .runtime_mut()
@@ -417,7 +482,14 @@ pub fn serve_admitted_provider_loop(
             executor
                 .block_on(runtime.restore_account_state_durable(&durable, &account_id, 10_000))
                 .map_err(|error| format!("Telegram durable state restore failed: {error:?}"))?;
-            restored = true;
+            executor
+                .block_on(
+                    runtime.complete_pending_runtime_reconfiguration_durable(&durable, &account_id),
+                )
+                .map_err(|error| {
+                    format!("Telegram runtime reconfiguration completion failed: {error:?}")
+                })?;
+            process.mark_durable_restore_complete();
         }
         if let Some(runtime) = process.composition_mut().runtime_mut() {
             let now_unix_seconds = SystemTime::now()
@@ -691,6 +763,7 @@ fn handle_client_delivery(
     durable: &TelegramDurablePersistence,
     automation: &TelegramAutomationPersistence,
     calls: &TelegramCallsPersistence,
+    reconfiguration_context: &TelegramProviderReconfigurationContextV1,
     executor: &tokio::runtime::Runtime,
 ) -> Result<(), String> {
     let Some((correlation_id, control_request)) = channel
@@ -761,7 +834,20 @@ fn handle_client_delivery(
     };
     validate_module_client_response_v1(&response)
         .map_err(|_| "Telegram runtime client response is invalid".to_owned())?;
-    write_client_delivery_response(channel, correlation_id, response)
+    write_client_delivery_response(channel, correlation_id, response)?;
+    if !process.has_pending_runtime_reconfiguration() {
+        return Ok(());
+    }
+    let mut dispatcher = TelegramBusyControlDispatcher;
+    let authorization_parameters = resolve_provider_reconfiguration_parameters(
+        channel,
+        &mut dispatcher,
+        reconfiguration_context,
+    )
+    .map_err(|_| "Telegram runtime reconfiguration credentials are unavailable".to_owned())?;
+    process
+        .begin_pending_runtime_reconfiguration(durable, executor.handle(), authorization_parameters)
+        .map_err(|_| "Telegram runtime reconfiguration failed".to_owned())
 }
 
 fn authorize_media_for_request<T: hermes_telegram_tdlib::TdlibTransport>(

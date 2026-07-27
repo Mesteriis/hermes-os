@@ -18,6 +18,7 @@ pub const MAX_PAGE_SIZE: u32 = 5_000;
 pub type TelegramAccountId = String;
 pub type TelegramOperationId = String;
 pub type TelegramSetupId = String;
+pub type TelegramRuntimeReconfigurationId = String;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TelegramProviderKind {
@@ -142,6 +143,43 @@ pub struct TelegramRuntimeLease {
     pub epoch: u64,
     pub state: TelegramRuntimeLeaseState,
     pub expires_at_unix_seconds: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum TelegramRuntimeReconfigurationState {
+    Accepted,
+    Applying,
+    Completed,
+    Failed,
+}
+
+impl TelegramRuntimeReconfigurationState {
+    #[must_use]
+    pub const fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct TelegramRuntimeReconfiguration {
+    pub reconfiguration_id: TelegramRuntimeReconfigurationId,
+    pub account_id: TelegramAccountId,
+    pub expected_runtime_epoch: u64,
+    pub target_runtime_epoch: u64,
+    pub state: TelegramRuntimeReconfigurationState,
+    pub sanitized_reason_code: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum TelegramRuntimeReconfigurationRequest {
+    Begin {
+        reconfiguration_id: TelegramRuntimeReconfigurationId,
+        account_id: TelegramAccountId,
+        expected_runtime_epoch: u64,
+    },
+    Status {
+        reconfiguration_id: TelegramRuntimeReconfigurationId,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -983,23 +1021,7 @@ pub enum TelegramClientRequest {
     SubmitAuthorizationPassword {
         password: String,
     },
-    StartAccount {
-        account_id: TelegramAccountId,
-        topology: String,
-        holder: String,
-        expires_at_unix_seconds: u64,
-        now_unix_seconds: u64,
-    },
-    RestartAccount {
-        account_id: TelegramAccountId,
-        topology: String,
-        holder: String,
-        expires_at_unix_seconds: u64,
-        now_unix_seconds: u64,
-    },
-    StopAccount {
-        account_id: TelegramAccountId,
-    },
+    Reconfiguration(TelegramRuntimeReconfigurationRequest),
     Replay {
         account_id: TelegramAccountId,
         after_sequence: u64,
@@ -1016,6 +1038,7 @@ pub enum TelegramClientResponse {
     AuthorizationStatus(TelegramAuthorizationStatus),
     AuthorizationPasswordAccepted,
     Account(TelegramAccount),
+    Reconfiguration(TelegramRuntimeReconfiguration),
     Realtime(TelegramRealtimeReplayPage),
 }
 
@@ -1864,6 +1887,10 @@ pub enum TelegramContractError {
     AccountUnknown,
     AccountRetired,
     RuntimeBlocked,
+    RuntimeEpochConflict,
+    ReconfigurationCollision,
+    ReconfigurationInProgress,
+    ReconfigurationUnknown,
     CredentialLeaseRejected,
 }
 
@@ -1886,6 +1913,28 @@ pub fn validate_setup(setup: &TelegramAccountSetup) -> Result<(), TelegramContra
     }
     if !has_provider_credential && !setup.qr_authorized {
         return Err(TelegramContractError::EmptyField);
+    }
+    Ok(())
+}
+
+pub fn validate_runtime_reconfiguration_request(
+    request: &TelegramRuntimeReconfigurationRequest,
+) -> Result<(), TelegramContractError> {
+    match request {
+        TelegramRuntimeReconfigurationRequest::Begin {
+            reconfiguration_id,
+            account_id,
+            expected_runtime_epoch,
+        } => {
+            validate_id(reconfiguration_id)?;
+            validate_id(account_id)?;
+            if *expected_runtime_epoch == 0 || expected_runtime_epoch.checked_add(1).is_none() {
+                return Err(TelegramContractError::RuntimeEpochConflict);
+            }
+        }
+        TelegramRuntimeReconfigurationRequest::Status { reconfiguration_id } => {
+            validate_id(reconfiguration_id)?
+        }
     }
     Ok(())
 }

@@ -10,8 +10,9 @@ use hermes_telegram_api::{
     TelegramMessageTombstone, TelegramMessageVersion, TelegramOperation, TelegramOperationState,
     TelegramParticipantFilter, TelegramParticipantPage, TelegramProviderCommand,
     TelegramProviderEvent, TelegramReactionObservation, TelegramReactionSummary,
-    TelegramRealtimeFrame, TelegramReconciliationState, TelegramTopic, provider_command_chat_id,
-    provider_command_kind, provider_command_message_id,
+    TelegramRealtimeFrame, TelegramReconciliationState, TelegramRuntimeReconfiguration,
+    TelegramRuntimeReconfigurationState, TelegramRuntimeState, TelegramTopic,
+    provider_command_chat_id, provider_command_kind, provider_command_message_id,
 };
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -68,6 +69,25 @@ CREATE TABLE IF NOT EXISTS hermes_data.telegram_accounts (
     credentials_payload JSONB NOT NULL,
     CHECK (length(trim(account_id)) > 0)
 );
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_runtime_reconfigurations (
+    reconfiguration_id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES hermes_data.telegram_accounts(account_id),
+    expected_runtime_epoch BIGINT NOT NULL,
+    target_runtime_epoch BIGINT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('accepted', 'applying', 'completed', 'failed')),
+    sanitized_reason_code TEXT,
+    CHECK (length(trim(reconfiguration_id)) > 0),
+    CHECK (length(trim(account_id)) > 0),
+    CHECK (expected_runtime_epoch > 0),
+    CHECK (target_runtime_epoch = expected_runtime_epoch + 1),
+    CHECK (
+        (state = 'failed' AND sanitized_reason_code IS NOT NULL)
+        OR (state <> 'failed' AND sanitized_reason_code IS NULL)
+    )
+);
+CREATE UNIQUE INDEX IF NOT EXISTS telegram_runtime_reconfigurations_active_account_idx
+    ON hermes_data.telegram_runtime_reconfigurations (account_id)
+    WHERE state IN ('accepted', 'applying');
 CREATE TABLE IF NOT EXISTS hermes_data.telegram_chat_projections (
     account_id TEXT NOT NULL,
     provider_chat_id TEXT NOT NULL,
@@ -227,6 +247,11 @@ pub enum TelegramDurablePersistenceError {
     Codec,
     InvalidRow,
     ProjectionLimitExceeded,
+    RuntimeEpochConflict,
+    ReconfigurationCollision,
+    ReconfigurationInProgress,
+    ReconfigurationUnknown,
+    InvalidReconfigurationTransition,
 }
 
 impl TelegramDurablePersistence {
@@ -427,6 +452,286 @@ impl TelegramDurablePersistence {
                 serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
+    }
+
+    pub async fn accept_runtime_reconfiguration(
+        &self,
+        reconfiguration: &TelegramRuntimeReconfiguration,
+    ) -> Result<TelegramRuntimeReconfiguration, TelegramDurablePersistenceError> {
+        if reconfiguration.state != TelegramRuntimeReconfigurationState::Accepted
+            || reconfiguration.sanitized_reason_code.is_some()
+            || reconfiguration.expected_runtime_epoch == 0
+            || reconfiguration.target_runtime_epoch
+                != reconfiguration
+                    .expected_runtime_epoch
+                    .checked_add(1)
+                    .ok_or(TelegramDurablePersistenceError::RuntimeEpochConflict)?
+        {
+            return Err(TelegramDurablePersistenceError::InvalidReconfigurationTransition);
+        }
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        let account_row = sqlx::query(
+            "SELECT account_payload FROM hermes_data.telegram_accounts WHERE account_id = $1 FOR UPDATE",
+        )
+        .bind(&reconfiguration.account_id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?
+        .ok_or(TelegramDurablePersistenceError::RuntimeEpochConflict)?;
+        let account_payload: Value = account_row
+            .try_get("account_payload")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+        let account: TelegramAccount = serde_json::from_value(account_payload)
+            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+
+        if let Some(row) = sqlx::query(
+            "SELECT * FROM hermes_data.telegram_runtime_reconfigurations WHERE reconfiguration_id = $1",
+        )
+        .bind(&reconfiguration.reconfiguration_id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?
+        {
+            let existing = row_to_runtime_reconfiguration(&row)?;
+            transaction
+                .commit()
+                .await
+                .map_err(|_| TelegramDurablePersistenceError::Database)?;
+            return if existing.account_id == reconfiguration.account_id
+                && existing.expected_runtime_epoch == reconfiguration.expected_runtime_epoch
+                && existing.target_runtime_epoch == reconfiguration.target_runtime_epoch
+            {
+                Ok(existing)
+            } else {
+                Err(TelegramDurablePersistenceError::ReconfigurationCollision)
+            };
+        }
+
+        if account.runtime_epoch != reconfiguration.expected_runtime_epoch
+            || !matches!(
+                account.runtime_state,
+                TelegramRuntimeState::Running | TelegramRuntimeState::Degraded
+            )
+        {
+            return Err(TelegramDurablePersistenceError::RuntimeEpochConflict);
+        }
+        let active_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                SELECT 1 FROM hermes_data.telegram_runtime_reconfigurations
+                WHERE account_id = $1 AND state IN ('accepted', 'applying')
+            )",
+        )
+        .bind(&reconfiguration.account_id)
+        .fetch_one(&mut *transaction)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        if active_exists {
+            return Err(TelegramDurablePersistenceError::ReconfigurationInProgress);
+        }
+
+        sqlx::query(
+            "INSERT INTO hermes_data.telegram_runtime_reconfigurations (
+                reconfiguration_id, account_id, expected_runtime_epoch,
+                target_runtime_epoch, state, sanitized_reason_code
+            ) VALUES ($1, $2, $3, $4, 'accepted', NULL)",
+        )
+        .bind(&reconfiguration.reconfiguration_id)
+        .bind(&reconfiguration.account_id)
+        .bind(
+            i64::try_from(reconfiguration.expected_runtime_epoch)
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )
+        .bind(
+            i64::try_from(reconfiguration.target_runtime_epoch)
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        Ok(reconfiguration.clone())
+    }
+
+    pub async fn runtime_reconfiguration(
+        &self,
+        reconfiguration_id: &str,
+    ) -> Result<Option<TelegramRuntimeReconfiguration>, TelegramDurablePersistenceError> {
+        sqlx::query(
+            "SELECT * FROM hermes_data.telegram_runtime_reconfigurations WHERE reconfiguration_id = $1",
+        )
+        .bind(reconfiguration_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?
+        .map(|row| row_to_runtime_reconfiguration(&row))
+        .transpose()
+    }
+
+    pub async fn pending_runtime_reconfiguration(
+        &self,
+        account_id: &str,
+    ) -> Result<Option<TelegramRuntimeReconfiguration>, TelegramDurablePersistenceError> {
+        sqlx::query(
+            "SELECT * FROM hermes_data.telegram_runtime_reconfigurations
+             WHERE account_id = $1 AND state IN ('accepted', 'applying')
+             ORDER BY reconfiguration_id ASC LIMIT 1",
+        )
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?
+        .map(|row| row_to_runtime_reconfiguration(&row))
+        .transpose()
+    }
+
+    pub async fn mark_runtime_reconfiguration_applying(
+        &self,
+        reconfiguration_id: &str,
+    ) -> Result<TelegramRuntimeReconfiguration, TelegramDurablePersistenceError> {
+        let row = sqlx::query(
+            "UPDATE hermes_data.telegram_runtime_reconfigurations
+             SET state = 'applying'
+             WHERE reconfiguration_id = $1 AND state = 'accepted'
+             RETURNING *",
+        )
+        .bind(reconfiguration_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        if let Some(row) = row {
+            return row_to_runtime_reconfiguration(&row);
+        }
+        let existing = self
+            .runtime_reconfiguration(reconfiguration_id)
+            .await?
+            .ok_or(TelegramDurablePersistenceError::ReconfigurationUnknown)?;
+        if existing.state == TelegramRuntimeReconfigurationState::Applying {
+            Ok(existing)
+        } else {
+            Err(TelegramDurablePersistenceError::InvalidReconfigurationTransition)
+        }
+    }
+
+    pub async fn complete_runtime_reconfiguration(
+        &self,
+        account: &TelegramAccount,
+        completed: &TelegramRuntimeReconfiguration,
+    ) -> Result<TelegramRuntimeReconfiguration, TelegramDurablePersistenceError> {
+        if completed.state != TelegramRuntimeReconfigurationState::Completed
+            || completed.sanitized_reason_code.is_some()
+            || account.account_id != completed.account_id
+            || account.runtime_epoch != completed.target_runtime_epoch
+            || account.runtime_state != TelegramRuntimeState::Running
+        {
+            return Err(TelegramDurablePersistenceError::InvalidReconfigurationTransition);
+        }
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        let row = sqlx::query(
+            "SELECT * FROM hermes_data.telegram_runtime_reconfigurations
+             WHERE reconfiguration_id = $1 FOR UPDATE",
+        )
+        .bind(&completed.reconfiguration_id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?
+        .ok_or(TelegramDurablePersistenceError::ReconfigurationUnknown)?;
+        let existing = row_to_runtime_reconfiguration(&row)?;
+        if existing.account_id != completed.account_id
+            || existing.expected_runtime_epoch != completed.expected_runtime_epoch
+            || existing.target_runtime_epoch != completed.target_runtime_epoch
+        {
+            return Err(TelegramDurablePersistenceError::ReconfigurationCollision);
+        }
+        if existing.state == TelegramRuntimeReconfigurationState::Completed {
+            transaction
+                .commit()
+                .await
+                .map_err(|_| TelegramDurablePersistenceError::Database)?;
+            return Ok(existing);
+        }
+        if !matches!(
+            existing.state,
+            TelegramRuntimeReconfigurationState::Accepted
+                | TelegramRuntimeReconfigurationState::Applying
+        ) {
+            return Err(TelegramDurablePersistenceError::InvalidReconfigurationTransition);
+        }
+        let account_row = sqlx::query(
+            "SELECT account_payload FROM hermes_data.telegram_accounts
+             WHERE account_id = $1 FOR UPDATE",
+        )
+        .bind(&completed.account_id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?
+        .ok_or(TelegramDurablePersistenceError::RuntimeEpochConflict)?;
+        let account_payload: Value = account_row
+            .try_get("account_payload")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+        let durable_account: TelegramAccount = serde_json::from_value(account_payload)
+            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        if durable_account.runtime_epoch != completed.expected_runtime_epoch {
+            return Err(TelegramDurablePersistenceError::RuntimeEpochConflict);
+        }
+        let account_payload =
+            serde_json::to_value(account).map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        sqlx::query(
+            "UPDATE hermes_data.telegram_accounts SET account_payload = $2 WHERE account_id = $1",
+        )
+        .bind(&account.account_id)
+        .bind(account_payload)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        sqlx::query(
+            "UPDATE hermes_data.telegram_runtime_reconfigurations
+             SET state = 'completed', sanitized_reason_code = NULL
+             WHERE reconfiguration_id = $1",
+        )
+        .bind(&completed.reconfiguration_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        Ok(completed.clone())
+    }
+
+    pub async fn fail_runtime_reconfiguration(
+        &self,
+        failed: &TelegramRuntimeReconfiguration,
+    ) -> Result<TelegramRuntimeReconfiguration, TelegramDurablePersistenceError> {
+        if failed.state != TelegramRuntimeReconfigurationState::Failed
+            || failed.sanitized_reason_code.is_none()
+        {
+            return Err(TelegramDurablePersistenceError::InvalidReconfigurationTransition);
+        }
+        let row = sqlx::query(
+            "UPDATE hermes_data.telegram_runtime_reconfigurations
+             SET state = 'failed', sanitized_reason_code = $2
+             WHERE reconfiguration_id = $1 AND state IN ('accepted', 'applying')
+             RETURNING *",
+        )
+        .bind(&failed.reconfiguration_id)
+        .bind(&failed.sanitized_reason_code)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?
+        .ok_or(TelegramDurablePersistenceError::InvalidReconfigurationTransition)?;
+        row_to_runtime_reconfiguration(&row)
     }
 
     pub async fn upsert_chat(
@@ -2124,6 +2429,42 @@ fn validated_projection_query_limit(limit: i64) -> Result<i64, TelegramDurablePe
         .contains(&limit)
         .then(|| limit + 1)
         .ok_or(TelegramDurablePersistenceError::InvalidRow)
+}
+
+fn row_to_runtime_reconfiguration(
+    row: &sqlx::postgres::PgRow,
+) -> Result<TelegramRuntimeReconfiguration, TelegramDurablePersistenceError> {
+    let state = match row
+        .try_get::<String, _>("state")
+        .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?
+        .as_str()
+    {
+        "accepted" => TelegramRuntimeReconfigurationState::Accepted,
+        "applying" => TelegramRuntimeReconfigurationState::Applying,
+        "completed" => TelegramRuntimeReconfigurationState::Completed,
+        "failed" => TelegramRuntimeReconfigurationState::Failed,
+        _ => return Err(TelegramDurablePersistenceError::InvalidRow),
+    };
+    Ok(TelegramRuntimeReconfiguration {
+        reconfiguration_id: row
+            .try_get("reconfiguration_id")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        account_id: row
+            .try_get("account_id")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        expected_runtime_epoch: bounded_u64(
+            row.try_get("expected_runtime_epoch")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
+        target_runtime_epoch: bounded_u64(
+            row.try_get("target_runtime_epoch")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
+        state,
+        sanitized_reason_code: row
+            .try_get("sanitized_reason_code")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+    })
 }
 
 fn row_to_operation(

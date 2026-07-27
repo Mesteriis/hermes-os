@@ -74,11 +74,13 @@ pub enum TelegramClientTransportError {
     Io(String),
     Frame(String),
     RuntimeUnavailable,
+    Reconfiguration,
 }
 
 #[must_use]
 pub fn module_error_code(error: &TelegramClientTransportError) -> &'static str {
     match error {
+        TelegramClientTransportError::Port(TelegramClientPortError::Reconfiguration(code)) => code,
         TelegramClientTransportError::Port(
             TelegramClientPortError::Protocol(_) | TelegramClientPortError::Codec(_),
         )
@@ -87,7 +89,8 @@ pub fn module_error_code(error: &TelegramClientTransportError) -> &'static str {
             TelegramClientPortError::Provider(_) | TelegramClientPortError::Persistence(_),
         )
         | TelegramClientTransportError::Io(_)
-        | TelegramClientTransportError::RuntimeUnavailable => "RUNTIME_UNAVAILABLE",
+        | TelegramClientTransportError::RuntimeUnavailable
+        | TelegramClientTransportError::Reconfiguration => "RUNTIME_UNAVAILABLE",
     }
 }
 

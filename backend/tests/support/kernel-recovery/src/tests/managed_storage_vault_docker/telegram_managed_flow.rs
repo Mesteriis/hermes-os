@@ -10,6 +10,7 @@ use hermes_runtime_protocol::v1::{
 use hermes_telegram_api::{
     TelegramClientRequest, TelegramClientResponse, TelegramHistorySyncMode, TelegramOperationState,
     TelegramProviderCommand, TelegramProviderQuery, TelegramProviderQueryResponse,
+    TelegramRuntimeReconfigurationRequest, TelegramRuntimeReconfigurationState,
     TelegramRuntimeState, TelegramSendMessage, client_contract::TelegramClientContractV1,
 };
 use hermes_telegram_automation_api::{
@@ -375,6 +376,260 @@ fn managed_telegram_realtime_route_requires_exact_grant() {
         .expect_err("ungranted Telegram realtime route"),
         "capability is not granted to this registration"
     );
+}
+
+#[test]
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Communications and Telegram binaries"]
+fn managed_telegram_reconfiguration_route_requires_exact_grant() {
+    let capability = TelegramClientContractV1::Reconfiguration.capability_id();
+    let mut fixture = prepare_managed_telegram_fixture_without_capability(Some(capability));
+    let store = Arc::clone(&fixture.store);
+    let telegram = fixture.start_telegram();
+    let request = encode_module_request(
+        70,
+        &TelegramClientRequest::Reconfiguration(TelegramRuntimeReconfigurationRequest::Begin {
+            reconfiguration_id: "ungranted-reconfiguration".to_owned(),
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            expected_runtime_epoch: 1,
+        }),
+    )
+    .expect("encode ungranted Telegram reconfiguration request");
+    let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+        &telegram.registration_id,
+        &telegram.runtime_instance_id,
+        telegram.runtime_generation,
+        telegram.grant_epoch,
+        capability,
+        &request,
+    );
+    assert_eq!(
+        crate::modules::capability::router::route_managed_client_request(
+            &*store,
+            &fixture.supervisor.relay_port(),
+            &route,
+        )
+        .expect_err("ungranted Telegram reconfiguration route"),
+        "capability is not granted to this registration"
+    );
+}
+
+#[test]
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Communications and Telegram binaries"]
+fn managed_telegram_runtime_reconfiguration_replaces_provider_session_once() {
+    let mut fixture = prepare_managed_telegram_fixture();
+    let store = Arc::clone(&fixture.store);
+    let telegram = fixture.start_telegram();
+    assert_telegram_lifecycle_query(&store, &fixture.supervisor, &telegram);
+    assert_telegram_account_started(&store, &fixture.supervisor, &telegram);
+
+    assert_telegram_command_accepted(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        "managed-telegram-reconfiguration-seed",
+        "managed Telegram operational fixture trigger",
+    );
+    assert_telegram_operation_completed(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        "managed-telegram-reconfiguration-seed",
+    );
+    wait_for_telegram_folder_ids(&store, &fixture.supervisor, &telegram, &[7, 9]);
+
+    const BEFORE_ID: &str = "managed-telegram-reconfiguration-before";
+    assert_telegram_provider_command_accepted(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        88,
+        BEFORE_ID,
+        TelegramProviderCommand::ReassignChatFolders {
+            operation_id: BEFORE_ID.to_owned(),
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            provider_chat_id: "9002".to_owned(),
+            target_provider_folder_ids: vec![9, 11],
+        },
+    );
+    let before =
+        assert_telegram_operation_completed(&store, &fixture.supervisor, &telegram, BEFORE_ID);
+    assert!(
+        before.retry_count >= 1,
+        "first provider client must expose the fixture's one ambiguous add"
+    );
+
+    const RECONFIGURATION_ID: &str = "managed-telegram-reconfiguration-1";
+    let accepted = route_telegram_client(
+        &store,
+        &fixture.supervisor.relay_port(),
+        &telegram,
+        TelegramClientContractV1::Reconfiguration,
+        89,
+        &TelegramClientRequest::Reconfiguration(TelegramRuntimeReconfigurationRequest::Begin {
+            reconfiguration_id: RECONFIGURATION_ID.to_owned(),
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            expected_runtime_epoch: 1,
+        }),
+    )
+    .expect("accept Telegram runtime reconfiguration");
+    let TelegramClientResponse::Reconfiguration(accepted) = accepted else {
+        panic!("Telegram reconfiguration returned the wrong response type");
+    };
+    assert_eq!(
+        accepted.state,
+        TelegramRuntimeReconfigurationState::Accepted
+    );
+    assert_eq!(accepted.expected_runtime_epoch, 1);
+    assert_eq!(accepted.target_runtime_epoch, 2);
+
+    let completed = wait_for_telegram_runtime_reconfiguration(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        RECONFIGURATION_ID,
+    );
+    assert_eq!(
+        completed.state,
+        TelegramRuntimeReconfigurationState::Completed
+    );
+    assert_eq!(completed.target_runtime_epoch, 2);
+
+    let exact_retry = route_telegram_reconfiguration_until_ready(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        90,
+        &TelegramClientRequest::Reconfiguration(TelegramRuntimeReconfigurationRequest::Begin {
+            reconfiguration_id: RECONFIGURATION_ID.to_owned(),
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            expected_runtime_epoch: 1,
+        }),
+    )
+    .expect("read exact reconfiguration retry");
+    assert_eq!(
+        exact_retry,
+        TelegramClientResponse::Reconfiguration(completed.clone())
+    );
+
+    let stale = route_telegram_reconfiguration_until_ready(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        91,
+        &TelegramClientRequest::Reconfiguration(TelegramRuntimeReconfigurationRequest::Begin {
+            reconfiguration_id: "managed-telegram-reconfiguration-stale".to_owned(),
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            expected_runtime_epoch: 1,
+        }),
+    )
+    .expect_err("stale runtime epoch must fail before another provider replacement");
+    assert!(matches!(
+        stale,
+        TelegramClientRouteError::Client(TelegramClientPortError::Protocol(code))
+            if code == "RUNTIME_EPOCH_CONFLICT"
+    ));
+
+    const AFTER_ID: &str = "managed-telegram-reconfiguration-after";
+    assert_telegram_provider_command_accepted(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        92,
+        AFTER_ID,
+        TelegramProviderCommand::ReassignChatFolders {
+            operation_id: AFTER_ID.to_owned(),
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            provider_chat_id: "9002".to_owned(),
+            target_provider_folder_ids: vec![9, 11],
+        },
+    );
+    let after =
+        assert_telegram_operation_completed(&store, &fixture.supervisor, &telegram, AFTER_ID);
+    assert!(
+        after.retry_count >= 1,
+        "fresh TDLib client must expose a fresh one-shot ambiguous add"
+    );
+    wait_for_telegram_folder_ids(&store, &fixture.supervisor, &telegram, &[9, 11]);
+}
+
+#[test]
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Communications and Telegram binaries"]
+fn managed_telegram_runtime_reconfiguration_recovers_same_epoch_after_process_crash() {
+    let mut fixture = prepare_managed_telegram_fixture();
+    let store = Arc::clone(&fixture.store);
+    let mut telegram = fixture.start_telegram();
+    assert_telegram_lifecycle_query(&store, &fixture.supervisor, &telegram);
+    assert_telegram_account_started(&store, &fixture.supervisor, &telegram);
+
+    const RECONFIGURATION_ID: &str = "managed-telegram-reconfiguration-crash";
+    let accepted = route_telegram_client(
+        &store,
+        &fixture.supervisor.relay_port(),
+        &telegram,
+        TelegramClientContractV1::Reconfiguration,
+        94,
+        &TelegramClientRequest::Reconfiguration(TelegramRuntimeReconfigurationRequest::Begin {
+            reconfiguration_id: RECONFIGURATION_ID.to_owned(),
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            expected_runtime_epoch: 1,
+        }),
+    )
+    .expect("accept Telegram runtime reconfiguration before process replacement");
+    let TelegramClientResponse::Reconfiguration(accepted) = accepted else {
+        panic!("Telegram reconfiguration returned the wrong response type");
+    };
+    assert_eq!(
+        accepted.state,
+        TelegramRuntimeReconfigurationState::Accepted
+    );
+    assert_eq!(accepted.target_runtime_epoch, 2);
+
+    let predecessor_generation = telegram.runtime_generation;
+    telegram = fixture.restart_telegram(telegram);
+    assert_eq!(telegram.runtime_generation, predecessor_generation + 1);
+
+    let completed = wait_for_telegram_runtime_reconfiguration(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        RECONFIGURATION_ID,
+    );
+    assert_eq!(
+        completed.state,
+        TelegramRuntimeReconfigurationState::Completed
+    );
+    assert_eq!(completed.expected_runtime_epoch, 1);
+    assert_eq!(completed.target_runtime_epoch, 2);
+    assert_telegram_account_runtime_epoch(&store, &fixture.supervisor, &telegram, 2);
+
+    let exact_retry = route_telegram_reconfiguration_until_ready(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        95,
+        &TelegramClientRequest::Reconfiguration(TelegramRuntimeReconfigurationRequest::Begin {
+            reconfiguration_id: RECONFIGURATION_ID.to_owned(),
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            expected_runtime_epoch: 1,
+        }),
+    )
+    .expect("read crash-recovered Telegram reconfiguration");
+    assert_eq!(
+        exact_retry,
+        TelegramClientResponse::Reconfiguration(completed.clone())
+    );
+
+    let recovered_generation = telegram.runtime_generation;
+    telegram = fixture.restart_telegram(telegram);
+    assert_eq!(telegram.runtime_generation, recovered_generation + 1);
+    assert_telegram_account_runtime_epoch(&store, &fixture.supervisor, &telegram, 2);
+    let persisted = wait_for_telegram_runtime_reconfiguration(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        RECONFIGURATION_ID,
+    );
+    assert_eq!(persisted, completed);
 }
 
 #[test]
@@ -2043,16 +2298,8 @@ fn assert_telegram_account_started(
 ) {
     let relay = supervisor.relay_port();
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
-    let now_unix_seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Telegram lifecycle clock")
-        .as_secs();
-    let request = TelegramClientRequest::StartAccount {
+    let request = TelegramClientRequest::GetAccount {
         account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
-        topology: "managed-local".to_owned(),
-        holder: telegram.runtime_instance_id.clone(),
-        expires_at_unix_seconds: now_unix_seconds.saturating_add(60),
-        now_unix_seconds,
     };
     loop {
         match route_telegram_client(
@@ -2067,15 +2314,129 @@ fn assert_telegram_account_started(
                 assert_eq!(account.runtime_state, TelegramRuntimeState::Running);
                 return;
             }
-            Ok(_) => panic!("Telegram lifecycle start returned the wrong response type"),
+            Ok(_) => panic!("Telegram lifecycle query returned the wrong response type"),
             Err(error) if error.is_retryable() => {
                 assert!(
                     std::time::Instant::now() < deadline,
-                    "Telegram lifecycle start remained busy"
+                    "Telegram managed account activation remained busy"
                 );
                 std::thread::sleep(Duration::from_millis(25));
             }
-            Err(error) => panic!("Telegram lifecycle start failed: {error:?}"),
+            Err(error) => panic!("Telegram managed account activation failed: {error:?}"),
+        }
+    }
+}
+
+fn assert_telegram_account_runtime_epoch(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    expected_runtime_epoch: u64,
+) {
+    let relay = supervisor.relay_port();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let request = TelegramClientRequest::GetAccount {
+        account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+    };
+    loop {
+        match route_telegram_client(
+            store,
+            &relay,
+            telegram,
+            TelegramClientContractV1::Lifecycle,
+            96,
+            &request,
+        ) {
+            Ok(TelegramClientResponse::Account(account))
+                if account.runtime_state == TelegramRuntimeState::Running
+                    && account.runtime_epoch == expected_runtime_epoch =>
+            {
+                return;
+            }
+            Ok(TelegramClientResponse::Account(_)) => {}
+            Ok(_) => panic!("Telegram lifecycle query returned the wrong response type"),
+            Err(error) if error.is_retryable() => {}
+            Err(error) => panic!("Telegram managed account query failed: {error:?}"),
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Telegram account did not converge to runtime epoch {expected_runtime_epoch}"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn wait_for_telegram_runtime_reconfiguration(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    reconfiguration_id: &str,
+) -> hermes_telegram_api::TelegramRuntimeReconfiguration {
+    let relay = supervisor.relay_port();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        match route_telegram_client(
+            store,
+            &relay,
+            telegram,
+            TelegramClientContractV1::Reconfiguration,
+            93,
+            &TelegramClientRequest::Reconfiguration(
+                TelegramRuntimeReconfigurationRequest::Status {
+                    reconfiguration_id: reconfiguration_id.to_owned(),
+                },
+            ),
+        ) {
+            Ok(TelegramClientResponse::Reconfiguration(reconfiguration))
+                if reconfiguration.state == TelegramRuntimeReconfigurationState::Completed =>
+            {
+                return reconfiguration;
+            }
+            Ok(TelegramClientResponse::Reconfiguration(reconfiguration)) => {
+                assert!(
+                    !reconfiguration.state.is_terminal(),
+                    "Telegram runtime reconfiguration failed: {:?}",
+                    reconfiguration.sanitized_reason_code
+                );
+            }
+            Ok(_) => panic!("Telegram reconfiguration status returned the wrong response type"),
+            Err(error) if error.is_retryable() => {}
+            Err(error) => panic!("Telegram reconfiguration status failed: {error:?}"),
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Telegram runtime reconfiguration did not complete"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn route_telegram_reconfiguration_until_ready(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    request_id: u64,
+    request: &TelegramClientRequest,
+) -> Result<TelegramClientResponse, TelegramClientRouteError> {
+    let relay = supervisor.relay_port();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        match route_telegram_client(
+            store,
+            &relay,
+            telegram,
+            TelegramClientContractV1::Reconfiguration,
+            request_id,
+            request,
+        ) {
+            Err(error) if error.is_retryable() => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Telegram reconfiguration route remained busy"
+                );
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            result => return result,
         }
     }
 }
@@ -2188,7 +2549,10 @@ fn assert_telegram_operation_completed(
             match operation.state {
                 TelegramOperationState::Completed => return operation.clone(),
                 TelegramOperationState::Failed | TelegramOperationState::DeadLetter => {
-                    panic!("Telegram provider command reached a failure terminal state")
+                    panic!(
+                        "Telegram provider command reached a failure terminal state: operation={} retries={}",
+                        operation.operation_id, operation.retry_count
+                    )
                 }
                 _ => {}
             }
