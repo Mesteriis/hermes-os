@@ -38,9 +38,37 @@ const paths = {
   ),
   build: new URL('src/mail-api/build.rs', BACKEND_ROOT),
   api: new URL('src/mail-api/src/lib.rs', BACKEND_ROOT),
+  generatedClient: new URL(
+    'frontend/src/gen/hermes/mail/operational/v1/client_pb.ts',
+    PROJECT_ROOT,
+  ),
+  frontendClient: new URL(
+    'frontend/src/integrations/mail/api/mailOperationalQueryClient.ts',
+    PROJECT_ROOT,
+  ),
+  frontendGateway: new URL(
+    'frontend/src/integrations/mail/api/mailOperationalReadGateway.ts',
+    PROJECT_ROOT,
+  ),
+  frontendController: new URL(
+    'frontend/src/integrations/mail/queries/useMailOperationalRead.ts',
+    PROJECT_ROOT,
+  ),
+  frontendPresentation: new URL(
+    'frontend/src/integrations/mail/presentation/MailOperationalReadPanel.vue',
+    PROJECT_ROOT,
+  ),
+  frontendRoute: new URL(
+    'frontend/src/integrations/mail/views/MailOperationalRoute.vue',
+    PROJECT_ROOT,
+  ),
+  frontendLayout: new URL(
+    'frontend/src/app/layout/AppLayoutRoot.vue',
+    PROJECT_ROOT,
+  ),
 };
 
-test('Mail operational read contract is typed, bounded and not falsely admitted', async () => {
+test('Mail operational read contract is typed, bounded and admitted with frontend evidence', async () => {
   const [
     adr,
     inventorySource,
@@ -56,6 +84,13 @@ test('Mail operational read contract is typed, bounded and not falsely admitted'
     managedFlow,
     build,
     api,
+    generatedClient,
+    frontendClient,
+    frontendGateway,
+    frontendController,
+    frontendPresentation,
+    frontendRoute,
+    frontendLayout,
   ] = await Promise.all(
     Object.values(paths).map((path) => readFile(path, 'utf8')),
   );
@@ -68,7 +103,7 @@ test('Mail operational read contract is typed, bounded and not falsely admitted'
     gate: 'mail_operational_read_v1',
     role: 'integration',
     owner: 'mail',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'client_gateway_v1',
       'mail_account_lifecycle_v1',
@@ -77,17 +112,18 @@ test('Mail operational read contract is typed, bounded and not falsely admitted'
   });
   assert.match(
     adr,
-    /owner-local persistence,\s+bounded scoped queries, атомарная IMAP\/Gmail sync materialization/,
+    /owner-local persistence,\s+bounded scoped queries, атомарная IMAP\/Gmail sync\s+materialization/,
   );
   assert.match(
     adr,
-    /exact\s+runtime client route и managed Gateway conformance реализованы/,
+    /exact runtime client route и managed Gateway conformance\s+подтверждены/,
   );
   assert.match(
     adr,
-    /managed Gateway conformance реализованы и подтверждены\s+live host contour/,
+    /managed Gateway conformance\s+подтверждены live host contour/,
   );
-  assert.match(adr, /frontend cutover ещё не завершён/);
+  assert.match(adr, /реализовано полностью/);
+  assert.match(adr, /visual\s+regression cutover подтверждены/);
   assert.match(adr, /Core Gateway[\s\S]*не декодирует Mail payload/);
   assert.match(adr, /Mail does not import Communications/);
   assert.match(adr, /full body[\s\S]*communications_content_read_v1/);
@@ -161,8 +197,27 @@ test('Mail operational read contract is typed, bounded and not falsely admitted'
     /proto\/hermes\/mail\/operational\/v1\/client\.proto/,
   );
   assert.match(api, /pub mod operational;/);
+  assert.match(generatedClient, /export const MailOperationalQueryService/);
+  assert.match(frontendClient, /createClient\([\s\S]*MailOperationalQueryService/);
+  assert.match(frontendGateway, /MailOperationalQueryV1Schema/);
+  assert.match(
+    frontendGateway,
+    /listFolders[\s\S]*listThreads[\s\S]*listMessages[\s\S]*getMessage/,
+  );
+  assert.match(frontendController, /mailOperationalConnections/);
+  assert.match(frontendController, /loadMoreFolders/);
+  assert.match(frontendController, /loadMoreThreads/);
+  assert.match(frontendController, /loadMoreMessages/);
+  assert.match(frontendPresentation, /Operational projection/);
+  assert.match(frontendPresentation, /Selected provider evidence/);
+  assert.match(frontendRoute, /useMailOperationalRead/);
+  assert.match(frontendLayout, /mail\.operational\.query\.v1/);
   assert.doesNotMatch(
     `${proto}\n${validator}\n${wire}\n${persistence}`,
     /hermes_communications|domains\/communications|mail-runtime|mail-persistence|hermes-kernel/i,
+  );
+  assert.doesNotMatch(
+    `${generatedClient}\n${frontendClient}\n${frontendGateway}\n${frontendController}\n${frontendPresentation}\n${frontendRoute}`,
+    /domains\/communications|integrations\/(?:telegram|whatsapp|zulip)/,
   );
 });

@@ -1,12 +1,25 @@
 <script setup lang="ts">
+import MailOperationalReadPanel from './MailOperationalReadPanel.vue'
+import type { MailOperationalReadModel } from './mailOperationalReadModel'
 import type { MailOperationalPageModel } from './mailOperationalPageModel'
 import './mailOperationalPage.css'
 
-defineProps<{ model: MailOperationalPageModel }>()
+defineProps<{
+	model: MailOperationalPageModel
+	readModel: MailOperationalReadModel
+}>()
 
 const emit = defineEmits<{
 	deliver: []
+	loadMoreFolders: []
+	loadMoreMessages: []
+	loadMoreThreads: []
+	readRefresh: []
 	refreshStatus: []
+	selectConnection: [connectionId: string]
+	selectFolder: [folderId: string]
+	selectMessage: [providerMessageId: string]
+	selectThread: [providerThreadId: string]
 	sync: []
 	updateOperationId: [value: string]
 	updateProviderConversationId: [value: string]
@@ -31,6 +44,18 @@ const emit = defineEmits<{
 				</button>
 			</section>
 		</header>
+
+		<MailOperationalReadPanel
+			:model="readModel"
+			@load-more-folders="emit('loadMoreFolders')"
+			@load-more-messages="emit('loadMoreMessages')"
+			@load-more-threads="emit('loadMoreThreads')"
+			@refresh="emit('readRefresh')"
+			@select-connection="emit('selectConnection', $event)"
+			@select-folder="emit('selectFolder', $event)"
+			@select-message="emit('selectMessage', $event)"
+			@select-thread="emit('selectThread', $event)"
+		/>
 
 		<div class="mail-operational-grid">
 			<form class="mail-operational-card" @submit.prevent="emit('deliver')">

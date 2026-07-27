@@ -54,6 +54,9 @@ const mailDeliveryAvailable = computed(() =>
 const mailSyncAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.sync.v1'),
 )
+const mailOperationalQueryAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.operational.query.v1'),
+)
 const zulipCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'zulip.command.v1'),
 )
@@ -110,7 +113,9 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 				<MailOperationalRoute
 					v-else-if="selectedRouteId === 'communications-mail'"
 					:can-deliver="mailDeliveryAvailable"
+					:can-query="mailOperationalQueryAvailable"
 					:can-sync="mailSyncAvailable"
+					:modules="bootstrap.modules"
 				/>
 				<TelegramOperationalRoute
 					v-else-if="selectedRouteId === 'communications-telegram'"
