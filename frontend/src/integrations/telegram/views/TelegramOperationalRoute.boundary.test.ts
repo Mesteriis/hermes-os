@@ -10,6 +10,7 @@ describe('Telegram operational active route boundary', () => {
 		const gateway = read('../api/telegramOperationalGateway.ts')
 		const authorizationGateway = read('../api/telegramAuthorizationGateway.ts')
 		const lifecycleGateway = read('../api/telegramLifecycleGateway.ts')
+		const reconfigurationClient = read('../api/telegramReconfigurationClient.ts')
 		const discoveryGateway = read('../api/telegramDiscoveryGateway.ts')
 		const inspectorGateway = read('../api/telegramMessageInspectorGateway.ts')
 		const commandGateways = [
@@ -41,6 +42,7 @@ describe('Telegram operational active route boundary', () => {
 			gateway,
 			authorizationGateway,
 			lifecycleGateway,
+			reconfigurationClient,
 			discoveryGateway,
 			inspectorGateway,
 			...commandGateways,
@@ -59,7 +61,10 @@ describe('Telegram operational active route boundary', () => {
 		expect(gateway).toContain('getTelegramOperationalConnectClient')
 		expect(authorizationGateway).toContain('getTelegramAuthorizationConnectClient')
 		expect(lifecycleGateway).toContain('getTelegramLifecycleConnectClient')
-		expect(lifecycleGateway).toContain("case: 'restartAccount'")
+		expect(lifecycleGateway).toContain('getTelegramReconfigurationConnectClient')
+		expect(lifecycleGateway).toContain("case: 'begin'")
+		expect(lifecycleGateway).not.toMatch(/startAccount|stopAccount|restartAccount/)
+		expect(reconfigurationClient).toContain('TelegramReconfigurationService')
 		expect(discoveryGateway).toContain('getTelegramOperationalConnectClient')
 		expect(discoveryGateway).not.toMatch(/as never|Record<|unknown as/)
 		expect(inspectorGateway).not.toMatch(/as never|Record<|unknown as|Object\.keys/)
@@ -99,6 +104,7 @@ describe('Telegram operational active route boundary', () => {
 		expect(appLayout).toContain('TelegramOperationalRoute')
 		expect(appLayout).toContain("'telegram.authorization.v1'")
 		expect(appLayout).toContain("'telegram.lifecycle.v1'")
+		expect(appLayout).toContain("'telegram.reconfiguration.v1'")
 		expect(appLayout).toContain("'telegram.query.v1'")
 		expect(appLayout).toContain("'telegram.command.v1'")
 		expect(capabilityComposition).toContain('module.sectionsEnabled')

@@ -12,8 +12,6 @@ import {
 	replayTelegramAccount,
 	restartTelegramAccount,
 	retireTelegramAccount,
-	startTelegramAccount,
-	stopTelegramAccount,
 } from '../api/telegramLifecycleGateway'
 import {
 	authorizationView,
@@ -24,6 +22,7 @@ import type { TelegramAccountAccessModel } from '../presentation/telegramAccount
 export function useTelegramAccountAccess(capabilities: {
 	canAuthorize: () => boolean
 	canManageLifecycle: () => boolean
+	canReconfigure: () => boolean
 }) {
 	const accounts = ref<readonly TelegramAccountResponse[]>([])
 	const selectedAccountId = ref('')
@@ -51,6 +50,7 @@ export function useTelegramAccountAccess(capabilities: {
 			pending: pending.value,
 			canAuthorize: capabilities.canAuthorize(),
 			canManageLifecycle: capabilities.canManageLifecycle(),
+			canReconfigure: capabilities.canReconfigure(),
 		}
 	})
 
@@ -93,32 +93,21 @@ export function useTelegramAccountAccess(capabilities: {
 		})
 	}
 
-	async function start(): Promise<void> {
-		await runSelectedAccountAction(async (accountId) => {
-			const operationId = await startTelegramAccount(
-				accountId,
-				'telegram-desktop-client',
-				BigInt(Math.floor(Date.now() / 1_000)),
-			)
-			return `Start operation ${operationId} accepted.`
-		})
-	}
-
-	async function stop(): Promise<void> {
-		await runSelectedAccountAction(async (accountId) => {
-			const operationId = await stopTelegramAccount(accountId)
-			return `Stop operation ${operationId} accepted.`
-		})
-	}
-
 	async function restart(): Promise<void> {
+		if (!capabilities.canReconfigure()) {
+			statusMessage.value = 'Telegram reconfiguration capability is not admitted.'
+			return
+		}
 		await runSelectedAccountAction(async (accountId) => {
-			const operationId = await restartTelegramAccount(
+			const account = accounts.value.find((candidate) => candidate.accountId === accountId)
+			if (!account || account.runtimeEpoch <= 0n) {
+				throw new Error('Telegram runtime epoch is unavailable')
+			}
+			const result = await restartTelegramAccount(
 				accountId,
-				'telegram-desktop-client',
-				BigInt(Math.floor(Date.now() / 1_000)),
+				account.runtimeEpoch,
 			)
-			return `Restart operation ${operationId} accepted.`
+			return `Reconfiguration ${result.reconfigurationId} is ${result.state}.`
 		})
 	}
 
@@ -215,9 +204,7 @@ export function useTelegramAccountAccess(capabilities: {
 		selectedAccountId,
 		refresh,
 		provision,
-		start,
 		restart,
-		stop,
 		replay,
 		retire,
 		submitPassword,

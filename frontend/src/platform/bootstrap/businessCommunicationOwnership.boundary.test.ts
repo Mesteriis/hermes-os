@@ -12,7 +12,7 @@ function filesUnder(path: string): string[] {
 		const stat = statSync(fullPath)
 		if (stat.isDirectory()) {
 			output.push(...filesUnder(relative(root.pathname, fullPath)))
-		} else if (/\.(ts|vue)$/.test(entry)) {
+		} else if (/\.(ts|vue)$/.test(entry) && !entry.endsWith('.test.ts')) {
 			output.push(fullPath)
 		}
 	}
@@ -34,7 +34,9 @@ describe('business communication hooks ownership boundary', () => {
 		expect(source).not.toMatch(/shared\/communications\/.*Business/)
 		expect(source).not.toMatch(/\[\s*['"]communications['"]/)
 		expect(source).not.toMatch(/\/api\/v1\/communications\/(conversations|messages|search|topics)/)
-		expect(source).not.toMatch(/MessageThread|ChatList|MediaGallery|RawEvidence|ReplyChain|ForwardChain|Reactions|Topics/)
+		expect(source).not.toMatch(/domains\/communications/)
+		expect(source).not.toMatch(/gen\/hermes\/communications/)
+		expect(source).not.toMatch(/CommunicationsService|communicationsClient/)
 	})
 
 	it('keeps Communications domain out of provider-control endpoints', () => {

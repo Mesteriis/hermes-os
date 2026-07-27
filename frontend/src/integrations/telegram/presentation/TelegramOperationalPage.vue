@@ -25,8 +25,6 @@ const emit = defineEmits<{
 	selectChat: [providerChatId: string]
 	selectMessage: [messageId: string, providerMessageId: string]
 	send: []
-	startAccount: []
-	stopAccount: []
 	submitAuthorizationPassword: []
 	updateAccountId: [value: string]
 	updateAuthorizationPassword: [value: string]
@@ -75,8 +73,6 @@ const emit = defineEmits<{
 			@restart="emit('restartAccount')"
 			@retire="emit('retireAccount')"
 			@select-account="emit('selectAccount', $event)"
-			@start="emit('startAccount')"
-			@stop="emit('stopAccount')"
 			@submit-password="emit('submitAuthorizationPassword')"
 			@update-password="emit('updateAuthorizationPassword', $event)"
 			@update-provision-account-id="emit('updateProvisionAccountId', $event)"

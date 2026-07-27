@@ -22,6 +22,7 @@ export type TelegramAccountAccessModel = {
 	pending: boolean
 	canAuthorize: boolean
 	canManageLifecycle: boolean
+	canReconfigure: boolean
 }
 
 export function buildTelegramAccountRows(

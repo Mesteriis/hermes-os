@@ -7,21 +7,28 @@ import {
 	restartTelegramAccount,
 	retireTelegramAccount,
 	retryTelegramOperation,
-	startTelegramAccount,
-	stopTelegramAccount,
 } from './telegramLifecycleGateway'
 import { getTelegramLifecycleConnectClient } from './telegramLifecycleClient'
+import { getTelegramReconfigurationConnectClient } from './telegramReconfigurationClient'
 
 vi.mock('./telegramLifecycleClient', () => ({
 	getTelegramLifecycleConnectClient: vi.fn(),
 }))
+vi.mock('./telegramReconfigurationClient', () => ({
+	getTelegramReconfigurationConnectClient: vi.fn(),
+}))
 
 const execute = vi.fn()
+const executeReconfiguration = vi.fn()
 
 describe('Telegram lifecycle Gateway adapter', () => {
 	beforeEach(() => {
 		execute.mockReset()
+		executeReconfiguration.mockReset()
 		vi.mocked(getTelegramLifecycleConnectClient).mockReturnValue({ execute } as never)
+		vi.mocked(getTelegramReconfigurationConnectClient).mockReturnValue({
+			execute: executeReconfiguration,
+		} as never)
 	})
 
 	it('lists and provisions owner-local accounts', async () => {
@@ -58,11 +65,8 @@ describe('Telegram lifecycle Gateway adapter', () => {
 		})
 	})
 
-	it('keeps start, restart, stop, replay and retire as exact lifecycle actions', async () => {
+	it('keeps reconfiguration separate from replay, retry and retire lifecycle actions', async () => {
 		execute
-			.mockResolvedValueOnce({ response: { case: 'accepted', value: { operationId: 'start-1' } } })
-			.mockResolvedValueOnce({ response: { case: 'accepted', value: { operationId: 'restart-1' } } })
-			.mockResolvedValueOnce({ response: { case: 'accepted', value: { operationId: 'stop-1' } } })
 			.mockResolvedValueOnce({
 				response: {
 					case: 'operation',
@@ -76,10 +80,20 @@ describe('Telegram lifecycle Gateway adapter', () => {
 				},
 			})
 			.mockResolvedValueOnce({ response: { case: 'accepted', value: { operationId: 'retire-1' } } })
+		executeReconfiguration.mockResolvedValueOnce({
+			reconfigurationId: 'reconfigure-1',
+			accountId: 'account-1',
+			expectedRuntimeEpoch: 7n,
+			targetRuntimeEpoch: 8n,
+			state: 'accepted',
+			contractMajor: 1,
+		})
 
-		await expect(startTelegramAccount('account-1', 'desktop', 100n)).resolves.toBe('start-1')
-		await expect(restartTelegramAccount('account-1', 'desktop', 110n)).resolves.toBe('restart-1')
-		await expect(stopTelegramAccount('account-1')).resolves.toBe('stop-1')
+		await expect(restartTelegramAccount(
+			'account-1',
+			7n,
+			'reconfigure-1',
+		)).resolves.toMatchObject({ targetRuntimeEpoch: 8n })
 		await expect(replayTelegramAccount('account-1', 8n)).resolves.toMatchObject({
 			operationId: 'replay-1',
 		})
@@ -88,40 +102,23 @@ describe('Telegram lifecycle Gateway adapter', () => {
 		})
 		await expect(retireTelegramAccount('account-1')).resolves.toBe('retire-1')
 
+		expect(executeReconfiguration).toHaveBeenCalledWith({
+			request: {
+				case: 'begin',
+				value: {
+					reconfigurationId: 'reconfigure-1',
+					accountId: 'account-1',
+					expectedRuntimeEpoch: 7n,
+				},
+			},
+		})
 		expect(execute).toHaveBeenNthCalledWith(1, {
-			request: {
-				case: 'startAccount',
-				value: {
-					accountId: 'account-1',
-					topology: 'managed',
-					holder: 'desktop',
-					nowUnixSeconds: 100n,
-					expiresAtUnixSeconds: 160n,
-				},
-			},
-		})
-		expect(execute).toHaveBeenNthCalledWith(2, {
-			request: {
-				case: 'restartAccount',
-				value: {
-					accountId: 'account-1',
-					topology: 'managed',
-					holder: 'desktop',
-					nowUnixSeconds: 110n,
-					expiresAtUnixSeconds: 170n,
-				},
-			},
-		})
-		expect(execute).toHaveBeenNthCalledWith(3, {
-			request: { case: 'stopAccount', value: { accountId: 'account-1' } },
-		})
-		expect(execute).toHaveBeenNthCalledWith(4, {
 			request: {
 				case: 'replay',
 				value: { accountId: 'account-1', afterSequence: 8n, limit: 100 },
 			},
 		})
-		expect(execute).toHaveBeenNthCalledWith(5, {
+		expect(execute).toHaveBeenNthCalledWith(2, {
 			request: {
 				case: 'retry',
 				value: {
@@ -131,19 +128,19 @@ describe('Telegram lifecycle Gateway adapter', () => {
 				},
 			},
 		})
-		expect(execute).toHaveBeenNthCalledWith(6, {
+		expect(execute).toHaveBeenNthCalledWith(3, {
 			request: { case: 'retireAccount', value: { accountId: 'account-1' } },
 		})
 	})
 
 	it('rejects missing lifecycle identifiers before transport', async () => {
-		await expect(stopTelegramAccount(' ')).rejects.toThrow('account ID is required')
-		await expect(startTelegramAccount('account-1', '', 100n)).rejects.toThrow(
-			'runtime holder is required',
+		await expect(restartTelegramAccount(' ', 1n, 'reconfigure-1')).rejects.toThrow(
+			'account ID is required',
 		)
-		await expect(restartTelegramAccount('account-1', '', 100n)).rejects.toThrow(
-			'runtime holder is required',
+		await expect(restartTelegramAccount('account-1', 0n, 'reconfigure-1')).rejects.toThrow(
+			'runtime epoch is required',
 		)
 		expect(execute).not.toHaveBeenCalled()
+		expect(executeReconfiguration).not.toHaveBeenCalled()
 	})
 })

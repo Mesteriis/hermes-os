@@ -17,12 +17,14 @@ const props = defineProps<{
 	canAuthorize: boolean
 	canManageLifecycle: boolean
 	canQuery: boolean
+	canReconfigure: boolean
 	canSend: boolean
 }>()
 const surface = useTelegramOperationalPage(() => props.canSend)
 const accountAccess = useTelegramAccountAccess({
 	canAuthorize: () => props.canAuthorize,
 	canManageLifecycle: () => props.canManageLifecycle,
+	canReconfigure: () => props.canReconfigure,
 })
 const discovery = useTelegramDiscovery({
 	accountId: () => accountAccess.selectedAccountId.value,
@@ -83,8 +85,6 @@ function updateAccountId(accountId: string): void {
 		@restart-account="accountAccess.restart"
 		@retire-account="accountAccess.retire"
 		@select-account="selectAccount"
-		@start-account="accountAccess.start"
-		@stop-account="accountAccess.stop"
 		@submit-authorization-password="accountAccess.submitPassword"
 		@load="surface.loadChats"
 		@search="discovery.search"

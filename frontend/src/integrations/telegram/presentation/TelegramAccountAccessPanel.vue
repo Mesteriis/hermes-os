@@ -11,8 +11,6 @@ const emit = defineEmits<{
 	restart: []
 	retire: []
 	selectAccount: [accountId: string]
-	start: []
-	stop: []
 	submitPassword: []
 	updatePassword: [value: string]
 	updateProvisionAccountId: [value: string]
@@ -54,9 +52,7 @@ const emit = defineEmits<{
 
 			<div class="telegram-account-access__actions">
 				<div class="telegram-account-access__action-row">
-					<button type="button" :disabled="!model.selectedAccountId || !model.canManageLifecycle || model.pending" @click="emit('start')">Start</button>
-					<button type="button" :disabled="!model.selectedAccountId || !model.canManageLifecycle || model.pending" @click="emit('restart')">Restart</button>
-					<button type="button" :disabled="!model.selectedAccountId || !model.canManageLifecycle || model.pending" @click="emit('stop')">Stop</button>
+					<button type="button" :disabled="!model.selectedAccountId || !model.canReconfigure || model.pending" @click="emit('restart')">Replace session</button>
 					<button type="button" :disabled="!model.selectedAccountId || !model.canManageLifecycle || model.pending" @click="emit('replay')">Replay</button>
 					<button class="danger" type="button" :disabled="!model.selectedAccountId || !model.canManageLifecycle || model.pending" @click="emit('retire')">Retire</button>
 				</div>
