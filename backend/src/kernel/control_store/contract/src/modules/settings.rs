@@ -118,3 +118,10 @@ pub struct SettingsDesiredSnapshot {
     pub expected_revision: u64,
     pub snapshot_bytes: Vec<u8>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettingsInitialSnapshot {
+    pub registration_id: String,
+    pub snapshot_bytes: Vec<u8>,
+    pub complete: bool,
+}

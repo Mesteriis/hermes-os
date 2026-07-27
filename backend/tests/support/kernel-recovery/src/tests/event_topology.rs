@@ -153,8 +153,15 @@ fn kernel_derives_exact_durable_consumer_grants_from_current_approved_topology()
 #[test]
 fn kernel_derives_scheduler_receipt_bindings_only_from_approved_topology() {
     let (root, store) = scheduler_receipt_fixture();
+    store
+        .record_platform_event_hub_topology(&event_hub_topology())
+        .expect("record multi-stream Event Hub topology");
     let contracts = catalog::resolve_contracts(&*store).expect("resolve catalog");
     let topology = topology::plan(&contracts, &event_hub_topology()).expect("build topology");
+    let recovery_snapshot =
+        reconciliation::recovery_snapshot(&store).expect("capture multi-stream topology");
+    reconciliation::validate_recovery_snapshot(&store, &recovery_snapshot)
+        .expect("multi-stream topology must satisfy the Events authority wire contract");
 
     let bindings = topology::scheduler_receipt_bindings(&topology, "scheduler_runtime", 2)
         .expect("Scheduler receipt bindings");

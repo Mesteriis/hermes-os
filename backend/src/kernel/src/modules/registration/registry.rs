@@ -1,9 +1,10 @@
 //! Module Registry mutations and read model shared by local control transports.
 
 use hermes_kernel_control_store::{
-    ExternalRuntimeAttestation, ExternalRuntimeIdentity, GrantSet, HealthRecoveryStore,
-    ModuleRegistration, ModuleRegistrationState, ModuleRegistryStore, OwnerIdentityStore,
-    RuntimeTrustStore,
+    BundledArtifactProposalStore, BundledManagedArtifactProposalInputV1,
+    BundledManagedArtifactProposalReceiptV1, ExternalRuntimeAttestation, ExternalRuntimeIdentity,
+    GrantSet, HealthRecoveryStore, ModuleRegistration, ModuleRegistrationState,
+    ModuleRegistryStore, OperationIdV1, OwnerIdentityStore, RuntimeTrustStore,
 };
 use hermes_kernel_control_store_sqlite::StoreError;
 
@@ -18,6 +19,23 @@ pub struct ModuleRegistryStatus {
     registration: ModuleRegistration,
     effective_capability_count: usize,
     external_runtime_attestation: Option<ExternalRuntimeAttestation>,
+}
+
+pub struct BundledArtifactProposal {
+    receipt: BundledManagedArtifactProposalReceiptV1,
+    requested_capability_ids: Vec<String>,
+}
+
+impl BundledArtifactProposal {
+    #[must_use]
+    pub const fn receipt(&self) -> &BundledManagedArtifactProposalReceiptV1 {
+        &self.receipt
+    }
+
+    #[must_use]
+    pub fn requested_capability_ids(&self) -> &[String] {
+        &self.requested_capability_ids
+    }
 }
 
 impl ModuleRegistryStatus {
@@ -48,6 +66,69 @@ where
     }
     let requests = DescriptorRegistrationRequests::decode(descriptor_bytes)?;
     persist_registration(store, requests)
+}
+
+pub fn propose_bundled_artifact<S>(
+    store: &S,
+    descriptor_bytes: &[u8],
+    operation_id: OperationIdV1,
+    request_digest: [u8; 32],
+    distribution_id: &str,
+    distribution_generation: u64,
+    artifact_id: &str,
+) -> Result<BundledArtifactProposal, String>
+where
+    S: BundledArtifactProposalStore<Error = StoreError> + OwnerIdentityStore<Error = StoreError>,
+{
+    if store
+        .initial_owner_identity()
+        .map_err(|error| format!("{error:?}"))?
+        .is_none()
+    {
+        return Err("module registration requires an enrolled initial owner".to_owned());
+    }
+    let requests = DescriptorRegistrationRequests::decode(descriptor_bytes)?;
+    let proposal = BundledManagedArtifactProposalInputV1::new(
+        operation_id,
+        request_digest,
+        distribution_id,
+        distribution_generation,
+        artifact_id,
+    );
+    for _ in 0..16 {
+        let registration = ModuleRegistration::new(
+            new_instance_id()?,
+            requests.module_id(),
+            requests.owner_id(),
+            requests.descriptor_sha256(),
+            ModuleRegistrationState::Pending,
+            1,
+        );
+        let bound = requests.bind(&registration);
+        match store.propose_bundled_managed_artifact(
+            &proposal,
+            &registration,
+            requests.capability_ids(),
+            hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1 {
+                storage: &bound.storage,
+                events: &bound.events,
+                blobs: &bound.blobs,
+                scheduler: &bound.scheduler,
+                vault_purposes: &bound.vault_purposes,
+                client_rpc_routes: &bound.client_rpc_routes,
+            },
+        ) {
+            Ok(receipt) => {
+                return Ok(BundledArtifactProposal {
+                    receipt,
+                    requested_capability_ids: requests.capability_ids().to_vec(),
+                });
+            }
+            Err(StoreError::ModuleRegistrationAlreadyExists) => {}
+            Err(error) => return Err(format!("{error:?}")),
+        }
+    }
+    Err("unable to allocate a unique module registration ID".to_owned())
 }
 
 fn persist_registration<S>(

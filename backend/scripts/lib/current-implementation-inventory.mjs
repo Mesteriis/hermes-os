@@ -111,26 +111,33 @@ export function validateCurrentImplementationInventory(policy, cargoMetadata) {
     (pkg) => pkg?.metadata?.[metadataKey]?.role === policy?.owners?.development,
   );
   const developmentProfile = policy?.implementation?.developmentProfile;
-  if (developmentPackages.length > 1) {
+  const expectedDevelopmentPackages = new Map(
+    list(developmentProfile?.packages).map((entry) => [entry.package, entry]),
+  );
+  if (
+    developmentPackages.length > 0
+    && developmentPackages.length !== expectedDevelopmentPackages.size
+  ) {
     violations.push(violation(
       'development_runtime_inventory',
       'cargo:workspace',
-      'only one explicit development platform runtime package is allowed',
+      'development packages must exactly match the explicit runtime and assembly units',
     ));
   }
   for (const pkg of developmentPackages) {
     const descriptor = pkg?.metadata?.[metadataKey];
+    const expected = expectedDevelopmentPackages.get(pkg.name);
     const metadataMatches = exactMetadataKeys(descriptor, ['role', 'owner', 'surface', 'components'])
-      && pkg.name === developmentProfile.package
+      && expected !== undefined
       && descriptor.role === 'development'
       && descriptor.owner === policy.owners.development
-      && descriptor.surface === 'runtime'
+      && descriptor.surface === expected.surface
       && exactOrderedList(descriptor.components, []);
     if (!metadataMatches) {
       violations.push(violation(
         'development_runtime_inventory',
         `cargo:${pkg.name}`,
-        'development operator must exactly match the explicit simulated-platform package descriptor',
+        'development package must exactly match an explicit simulated-platform unit descriptor',
       ));
     }
   }

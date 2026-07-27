@@ -414,6 +414,12 @@ pub fn validate_settings_schema_v1(
                 && (definition.kernel_controller_id.is_empty()
                     || definition.kernel_controller_id.len() > MAX_IDENTIFIER_BYTES
                     || !definition.kernel_controller_id.is_ascii()))
+            || definition.default_value.as_ref().is_some_and(|default| {
+                default.value.as_ref().is_none_or(|value| {
+                    !value_matches_setting_type(value, definition.value_type)
+                        || !value_within_protocol_limits(value)
+                })
+            })
         {
             return Err(SettingsSchemaValidationError::InvalidDefinition);
         }

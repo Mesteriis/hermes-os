@@ -108,6 +108,9 @@ policy через ссылки из новых документов.
 - [ADR-0297: Fresh owner-proof effective module Settings export](ADR-0297-fresh-owner-proof-effective-module-settings-export.md)
 - [ADR-0298: Mail operational read projection and client contract](ADR-0298-mail-operational-read-projection-and-client-contract.md)
 - [ADR-0299: Mail sync run history and provider-path health](ADR-0299-mail-sync-run-history-and-provider-path-health.md)
+- [ADR-0300: Loopback full-stack development assembly](ADR-0300-loopback-full-stack-development-assembly.md)
+- [ADR-0301: Bundled module discovery and development admission](ADR-0301-bundled-module-discovery-and-development-admission.md)
+- [ADR-0302: Bundled managed Settings and first runtime bootstrap](ADR-0302-bundled-managed-settings-and-runtime-bootstrap.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -386,3 +389,11 @@ ADR-0299 отделяет Mail-owned sync run journal и provider-path health о
 Scheduler schedules и Communications analytics: exact query возвращает только
 bounded sanitized run evidence, restart помечает stale generation как
 interrupted, а newsletter detection остаётся Communications-derived use case.
+ADR-0300 вводит отдельную непроизводственную assembly boundary для root
+`make dev`: loopback Core Gateway и Vite соединяются exact same-origin proxy с
+ephemeral server-side proof, readiness проверяется до открытия browser, а
+private-LAN technical profile не получает owner authority.
+ADR-0301 закрывает отсутствующий generic seam между signed bundled artifact и
+pending registration: Kernel проверяет installed manifest и создаёт только
+proposal, owner отдельно approve/bind/start-ит units, а development assembly
+координирует exact platform/domain/integration plan без provider secrets.

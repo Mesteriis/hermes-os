@@ -59,9 +59,7 @@ where
     .map_err(|_| "Telegram runtime configuration is invalid".to_owned())?;
     validate_managed_integration_runtime_configuration(&configuration)
         .map_err(|_| "Telegram runtime configuration is invalid".to_owned())?;
-    if configuration.runtime_instance_id != paths.runtime_instance_id
-        || snapshot.target_id != configuration.configuration_instance_id
-    {
+    if configuration.runtime_instance_id != paths.runtime_instance_id {
         return Err("Telegram runtime configuration is stale".to_owned());
     }
     let settings = settings::decode(&snapshot)?;

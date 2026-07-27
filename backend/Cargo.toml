@@ -44,6 +44,7 @@ members = [
   "src/communications-ingress",
   "src/communications-persistence",
   "src/communications-runtime",
+  "src/communications-assembly",
   "src/attachment-security-contract",
   "src/attachment-security-core",
   "src/attachment-security-clamav",
@@ -87,6 +88,7 @@ members = [
   "src/zulip-runtime",
   "src/zulip-assembly",
   "development/runtime",
+  "development/assembly",
   "tests/support/kernel-recovery",
   "tests/support/vault",
   "tests/support/clock",
@@ -99,3 +101,13 @@ members = [
   "tests/support/telegram-calls",
 ]
 resolver = "2"
+
+# Signed development bundles contain every managed runtime. Keep only the
+# cryptographic digest implementation optimized so trust verification remains
+# representative while ordinary workspace code retains debuginfo and fast
+# incremental development builds.
+[profile.dev.package."sha2:0.10.9"]
+opt-level = 3
+
+[profile.dev.package."sha2:0.11.0"]
+opt-level = 3

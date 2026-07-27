@@ -261,6 +261,16 @@ fn developer_diagnostic(
     stage: &str,
     error: hermes_attachment_security_runtime::runtime::AttachmentSecurityRuntimeErrorV1,
 ) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static EMPTY_CONSUME_REPORTED: AtomicBool = AtomicBool::new(false);
+    if stage == "consume"
+        && error
+            == hermes_attachment_security_runtime::runtime::AttachmentSecurityRuntimeErrorV1::Unavailable
+        && EMPTY_CONSUME_REPORTED.swap(true, Ordering::Relaxed)
+    {
+        return;
+    }
     if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
         eprintln!("developer_attachment_security_runtime_error stage={stage} error={error:?}");
     }

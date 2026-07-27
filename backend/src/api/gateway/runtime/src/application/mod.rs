@@ -27,6 +27,7 @@ const PAIRING_PREFIX: &str = "/browser/v1/pairing/";
 const REALTIME_PATH: &str = "/api/realtime/v1/events";
 const SESSION_STATUS_PATH: &str = "/hermes.gateway.v1.BrowserSessionService/GetStatus";
 const CLIENT_BOOTSTRAP_PATH: &str = "/hermes.gateway.v1.ClientBootstrapService/GetBootstrap";
+const DEVELOPMENT_PROXY_PROOF_HEADER: &str = "x-hermes-development-proxy-proof";
 
 /// Composes technical health, browser authentication and client-safe realtime
 /// without adding an owner API or mounting a listener.
@@ -41,13 +42,14 @@ pub struct GatewayApplicationRouter<A, S> {
     owner_module_settings: Option<OwnerModuleSettingsRouter<A>>,
     owner_vault_provisioning: Option<OwnerVaultProvisioningRouter<A>>,
     browser_realtime: BrowserRealtimeRouter<A, S>,
-    lan_development_policy: Option<LanDevelopmentRequestPolicyV1>,
+    development_policy: Option<DevelopmentRequestPolicyV1>,
 }
 
 #[derive(Clone)]
-struct LanDevelopmentRequestPolicyV1 {
+struct DevelopmentRequestPolicyV1 {
     exact_origin: String,
     exact_authority: String,
+    proxy_proof: Option<String>,
 }
 
 impl<A, S> Clone for GatewayApplicationRouter<A, S> {
@@ -63,7 +65,7 @@ impl<A, S> Clone for GatewayApplicationRouter<A, S> {
             owner_module_settings: self.owner_module_settings.clone(),
             owner_vault_provisioning: self.owner_vault_provisioning.clone(),
             browser_realtime: self.browser_realtime.clone(),
-            lan_development_policy: self.lan_development_policy.clone(),
+            development_policy: self.development_policy.clone(),
         }
     }
 }
@@ -86,7 +88,7 @@ where
             owner_module_settings: None,
             owner_vault_provisioning: None,
             browser_realtime: BrowserRealtimeRouter::new(service, source),
-            lan_development_policy: None,
+            development_policy: None,
         }
     }
 
@@ -134,9 +136,30 @@ where
             .strip_prefix("http://")
             .filter(|authority| !authority.is_empty() && !authority.contains('/'))
             .ok_or("developer mode origin is invalid")?;
-        self.lan_development_policy = Some(LanDevelopmentRequestPolicyV1 {
+        self.development_policy = Some(DevelopmentRequestPolicyV1 {
             exact_origin: exact_origin.to_owned(),
             exact_authority: exact_authority.to_owned(),
+            proxy_proof: None,
+        });
+        Ok(self)
+    }
+
+    pub fn with_loopback_development_proxy_policy(
+        mut self,
+        exact_origin: &str,
+        proxy_proof: &str,
+    ) -> Result<Self, &'static str> {
+        let exact_authority = exact_origin
+            .strip_prefix("http://")
+            .filter(|authority| !authority.is_empty() && !authority.contains('/'))
+            .ok_or("loopback development origin is invalid")?;
+        if proxy_proof.len() != 64 || !proxy_proof.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err("loopback development proxy proof is invalid");
+        }
+        self.development_policy = Some(DevelopmentRequestPolicyV1 {
+            exact_origin: exact_origin.to_owned(),
+            exact_authority: exact_authority.to_owned(),
+            proxy_proof: Some(proxy_proof.to_owned()),
         });
         Ok(self)
     }
@@ -149,7 +172,7 @@ where
         let path = request.uri().path();
         let route = route_class(path, &self.client_rpc_routes);
         let method = request.method().clone();
-        if let Some(policy) = &self.lan_development_policy
+        if let Some(policy) = &self.development_policy
             && !policy.admits(&request)
         {
             println!(
@@ -161,7 +184,7 @@ where
             return forbidden();
         }
         let response = self.route_admitted(request).await;
-        if self.lan_development_policy.is_some() {
+        if self.development_policy.is_some() {
             println!(
                 "developer_gateway_request method={} route={} status={} admission=accepted",
                 method,
@@ -219,13 +242,13 @@ where
             return router.route(request).await;
         }
         if path.starts_with(AUTHENTICATION_PREFIX) {
-            if self.lan_development_policy.is_some() {
+            if self.development_policy.is_some() {
                 return self.technical.route(request.method(), path);
             }
             return self.browser_authentication.route(request).await;
         }
         if path.starts_with(PAIRING_PREFIX) {
-            if self.lan_development_policy.is_some() {
+            if self.development_policy.is_some() {
                 return self.technical.route(request.method(), path);
             }
             return match &self.browser_pairing {
@@ -237,7 +260,7 @@ where
     }
 }
 
-impl LanDevelopmentRequestPolicyV1 {
+impl DevelopmentRequestPolicyV1 {
     fn admits<B>(&self, request: &Request<B>) -> bool {
         const FORWARDED_HEADERS: [&str; 7] = [
             "forwarded",
@@ -255,6 +278,15 @@ impl LanDevelopmentRequestPolicyV1 {
         {
             return false;
         }
+        let mut proof_headers = headers.get_all(DEVELOPMENT_PROXY_PROOF_HEADER).iter();
+        let first_proof = proof_headers.next();
+        match &self.proxy_proof {
+            Some(expected)
+                if first_proof.and_then(|value| value.to_str().ok()) == Some(expected.as_str())
+                    && proof_headers.next().is_none() => {}
+            None if first_proof.is_none() => {}
+            Some(_) | None => return false,
+        }
         let header_authority = headers.get(HOST).and_then(|value| value.to_str().ok());
         let uri_authority = request.uri().authority().map(|value| value.as_str());
         if header_authority
@@ -265,11 +297,11 @@ impl LanDevelopmentRequestPolicyV1 {
         {
             return false;
         }
-        if headers
-            .get(ORIGIN)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|origin| origin != self.exact_origin)
-        {
+        let origin = headers.get(ORIGIN).and_then(|value| value.to_str().ok());
+        if self.proxy_proof.is_some() && origin != Some(self.exact_origin.as_str()) {
+            return false;
+        }
+        if self.proxy_proof.is_none() && origin.is_some_and(|origin| origin != self.exact_origin) {
             return false;
         }
         headers
@@ -304,7 +336,7 @@ fn forbidden() -> GatewayHttpResponse {
         .status(StatusCode::FORBIDDEN)
         .header("cache-control", "no-store")
         .body(crate::full_gateway_body(Bytes::from_static(
-            b"developer LAN admission rejected\n",
+            b"developer admission rejected\n",
         )))
         .expect("Gateway rejection response is valid")
 }

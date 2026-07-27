@@ -13,6 +13,7 @@ use crate::platform::macos::native_launch;
 
 pub struct PlatformReleaseIdentity {
     pub process_id: &'static str,
+    pub artifact_id: &'static str,
     pub module_id: &'static str,
     pub owner_id: &'static str,
     pub target_triple: &'static str,
@@ -33,7 +34,11 @@ pub fn bind_installed_release(
     kernel: &Path,
     identity: &PlatformReleaseIdentity,
 ) -> Result<PlatformManagedProcessBinding, String> {
-    let bundle = native_launch::verify_selected_installed_bundle(kernel, identity.target_triple)?;
+    let bundle = native_launch::verify_selected_installed_bundle_artifact_ids(
+        kernel,
+        identity.target_triple,
+        &[identity.artifact_id],
+    )?;
     admit(store, &bundle, identity)
 }
 
@@ -85,6 +90,9 @@ fn matches_identity(
     artifact: &VerifiedDistributionArtifact,
     identity: &PlatformReleaseIdentity,
 ) -> bool {
+    if artifact.artifact_id() != identity.artifact_id {
+        return false;
+    }
     let Some(descriptor) = artifact.module_descriptor() else {
         return false;
     };

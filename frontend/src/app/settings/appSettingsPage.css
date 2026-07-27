@@ -118,10 +118,18 @@
 
 .app-settings-content {
 	display: grid;
-	grid-template-rows: minmax(0, 1fr);
+	align-content: start;
 	gap: var(--h-spacing-3);
-	overflow: hidden;
+	overflow: auto;
 	border-radius: var(--h-radius-lg);
+}
+
+.provider-settings-stack,
+.mail-settings-owner {
+	display: grid;
+	align-content: start;
+	gap: var(--h-spacing-3);
+	min-width: 0;
 }
 
 @media (max-width: 1120px) {

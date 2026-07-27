@@ -47,6 +47,12 @@ impl ControlStoreBrowserAuthority {
             developer_realtime_enabled: false,
         }
     }
+
+    #[must_use]
+    pub(crate) fn with_developer_realtime(mut self) -> Self {
+        self.developer_realtime_enabled = true;
+        self
+    }
 }
 
 impl BrowserDeviceAuthority for ControlStoreBrowserAuthority {
@@ -132,13 +138,13 @@ impl ClientBootstrapAuthority for ControlStoreBrowserAuthority {
         owner_id: &str,
         _device_id: &str,
     ) -> Result<ClientBootstrapProjectionV1, String> {
+        self.require_current_owner(owner_id)?;
         let snapshots = self
             .store
             .approved_module_grant_snapshots()
             .map_err(store_error)?;
         let mut modules = snapshots
             .into_iter()
-            .filter(|snapshot| snapshot.registration().owner_id() == owner_id)
             .map(|snapshot| project_module(&self.store, snapshot))
             .collect::<Result<Vec<_>, _>>()?;
         if modules.len() > 128 {

@@ -1,8 +1,8 @@
 //! Kernel-owned Settings Registry records.
 
 use hermes_kernel_control_store::{
-    ModuleRegistrationState, SettingsApplyState, SettingsDesiredSnapshot, SettingsSchemaBinding,
-    SettingsSchemaBindingInputV1,
+    ModuleRegistrationState, SettingsApplyState, SettingsDesiredSnapshot, SettingsInitialSnapshot,
+    SettingsSchemaBinding, SettingsSchemaBindingInputV1,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -110,6 +110,70 @@ impl SqliteControlStore {
             )?;
             transaction.commit()?;
             Ok(next)
+        })
+    }
+
+    pub fn materialize_initial_settings_snapshot(
+        &self,
+        update: &SettingsInitialSnapshot,
+    ) -> Result<u64, StoreError> {
+        validate_bounded_bytes(&update.snapshot_bytes)?;
+        if !valid_identity_token(&update.registration_id) {
+            return Err(StoreError::SettingsRevisionConflict);
+        }
+        let update = update.clone();
+        self.with_connection(move |connection| {
+            let transaction = connection.transaction()?;
+            let (desired, effective, state) =
+                read_apply_state(&transaction, &update.registration_id)?;
+            let expected_effective = u64::from(update.complete);
+            let expected_state = if update.complete {
+                SettingsApplyState::Current
+            } else {
+                SettingsApplyState::BlockedConfig
+            };
+            if desired == 1 && effective == expected_effective && state == expected_state {
+                let existing = transaction
+                    .query_row(
+                        "SELECT snapshot_bytes
+                         FROM hermes_kernel_settings_desired_snapshot
+                         WHERE registration_id=?1 AND revision=1",
+                        [&update.registration_id],
+                        |row| row.get::<_, Vec<u8>>(0),
+                    )
+                    .optional()?;
+                if existing.as_deref() == Some(update.snapshot_bytes.as_slice()) {
+                    transaction.commit()?;
+                    return Ok(1);
+                }
+                return Err(StoreError::SettingsRevisionConflict);
+            }
+            if desired != 0 || effective != 0 || state != SettingsApplyState::Current {
+                return Err(StoreError::SettingsRevisionConflict);
+            }
+            let inserted = transaction.execute(
+                "INSERT INTO hermes_kernel_settings_desired_snapshot
+                 (registration_id, revision, snapshot_bytes) VALUES (?1, 1, ?2)",
+                params![update.registration_id, update.snapshot_bytes],
+            )?;
+            let changed = transaction.execute(
+                "UPDATE hermes_kernel_settings_schema_binding
+                 SET desired_revision=1, effective_revision=?2,
+                     apply_state=?3, sanitized_reason_code=?4
+                 WHERE registration_id=?1 AND desired_revision=0
+                   AND effective_revision=0 AND apply_state='current'",
+                params![
+                    update.registration_id,
+                    as_sql(expected_effective)?,
+                    expected_state.as_str(),
+                    (!update.complete).then_some("required_settings_missing"),
+                ],
+            )?;
+            if inserted != 1 || changed != 1 {
+                return Err(StoreError::SettingsRevisionConflict);
+            }
+            transaction.commit()?;
+            Ok(1)
         })
     }
 

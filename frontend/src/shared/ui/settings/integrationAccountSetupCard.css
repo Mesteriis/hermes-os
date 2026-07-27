@@ -1,0 +1,217 @@
+.integration-account-setup {
+	--integration-account-accent: var(--h-color-accent);
+	display: grid;
+	gap: var(--h-space-4);
+	padding: var(--h-space-5);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background:
+		linear-gradient(135deg, color-mix(in srgb, var(--integration-account-accent) 8%, transparent), transparent 50%),
+		var(--h-color-bg-muted);
+}
+
+.integration-account-setup[data-provider-tone='mail'] {
+	--integration-account-accent: #d94f45;
+}
+
+.integration-account-setup[data-provider-tone='telegram'] {
+	--integration-account-accent: #229ed9;
+}
+
+.integration-account-setup[data-provider-tone='whatsapp'] {
+	--integration-account-accent: #159447;
+}
+
+.integration-account-setup[data-provider-tone='zulip'] {
+	--integration-account-accent: #6542c4;
+}
+
+.integration-account-setup__header {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: start;
+	gap: var(--h-space-4);
+}
+
+.integration-account-setup__header > div {
+	display: grid;
+	gap: var(--h-space-1);
+}
+
+.integration-account-setup__header h3,
+.integration-account-setup__header p {
+	margin: 0;
+}
+
+.integration-account-setup__header small {
+	color: var(--integration-account-accent);
+	font-weight: 750;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.integration-account-setup__header p,
+.integration-account-setup__message--neutral {
+	color: var(--h-color-text-muted);
+}
+
+.integration-account-setup__header > strong {
+	padding: var(--h-space-2) var(--h-space-3);
+	border-radius: var(--h-radius-pill);
+	color: var(--integration-account-accent);
+	background: color-mix(in srgb, var(--integration-account-accent) 12%, var(--h-color-surface));
+	font-size: var(--h-font-size-xs);
+}
+
+.integration-account-setup__icon {
+	display: grid;
+	place-items: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	border-radius: var(--h-radius-lg);
+	color: var(--h-color-bg);
+	background: var(--integration-account-accent);
+}
+
+.integration-account-setup details {
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface);
+}
+
+.integration-account-setup summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--h-space-3);
+	padding: var(--h-space-4);
+	cursor: pointer;
+	font-weight: 720;
+	list-style: none;
+}
+
+.integration-account-setup summary::-webkit-details-marker {
+	display: none;
+}
+
+.integration-account-setup summary > span {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--h-space-2);
+}
+
+.integration-account-setup details[open] summary > svg {
+	transform: rotate(180deg);
+}
+
+.integration-account-setup__form {
+	display: grid;
+	gap: var(--h-space-4);
+	padding: 0 var(--h-space-4) var(--h-space-4);
+}
+
+.integration-account-setup__fields {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--h-space-3);
+}
+
+.integration-account-setup__fields label {
+	display: grid;
+	gap: var(--h-space-2);
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-sm);
+}
+
+.integration-account-setup__fields .wide {
+	grid-column: 1 / -1;
+}
+
+.integration-account-setup__fields input,
+.integration-account-setup__fields select {
+	min-width: 0;
+	padding: var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-bg);
+	font: inherit;
+}
+
+.integration-account-setup__fields input:focus,
+.integration-account-setup__fields select:focus {
+	border-color: var(--integration-account-accent);
+	outline: 2px solid color-mix(in srgb, var(--integration-account-accent) 28%, transparent);
+}
+
+.integration-account-setup__form footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: var(--h-space-3);
+}
+
+.integration-account-setup__form footer p {
+	flex: 1;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.integration-account-setup__form button {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--h-space-2);
+	padding: var(--h-space-3) var(--h-space-4);
+	border: 0;
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-bg);
+	background: var(--integration-account-accent);
+	font: inherit;
+	font-weight: 750;
+	cursor: pointer;
+}
+
+.integration-account-setup__form button:disabled {
+	opacity: 0.48;
+	cursor: not-allowed;
+}
+
+.integration-account-setup__message--success {
+	color: var(--h-color-success);
+}
+
+.integration-account-setup__message--error {
+	color: var(--h-color-danger);
+}
+
+@media (max-width: 720px) {
+	.integration-account-setup {
+		padding: var(--h-space-4);
+	}
+
+	.integration-account-setup__header {
+		grid-template-columns: auto minmax(0, 1fr);
+	}
+
+	.integration-account-setup__header > strong {
+		grid-column: 1 / -1;
+		justify-self: start;
+	}
+
+	.integration-account-setup__fields {
+		grid-template-columns: 1fr;
+	}
+
+	.integration-account-setup__fields label.wide {
+		grid-column: auto;
+	}
+
+	.integration-account-setup__form footer {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.integration-account-setup__form button {
+		justify-content: center;
+	}
+}

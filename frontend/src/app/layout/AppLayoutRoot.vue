@@ -137,7 +137,11 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					v-else-if="selectedTopLevelRouteId === 'settings'"
 					:bootstrap="bootstrap"
 					:route-downgrade-reason="routeDowngradeReason"
-					:developer-mode="props.gatewayAccessMode === BrowserGatewayAccessModeV1.LAN_DEVELOPMENT"
+					:development-profile="props.gatewayAccessMode === BrowserGatewayAccessModeV1.LAN_DEVELOPMENT
+						? 'private-lan'
+						: props.gatewayAccessMode === BrowserGatewayAccessModeV1.LOCAL_DEVELOPMENT
+							? 'loopback-full-stack'
+							: 'disabled'"
 					:current-language="navbar.currentLanguage.value"
 					:language-options="navbar.languageOptions"
 					:compiled-adapter-ids="compiledClientSurfaceAdapterIds"

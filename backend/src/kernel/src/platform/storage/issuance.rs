@@ -103,12 +103,41 @@ fn issue_authorized(
     let previous = store
         .platform_storage_binding(registration_id, capability_id)
         .map_err(|_| "Storage binding is unavailable".to_owned())?;
+    if previous
+        .as_ref()
+        .is_some_and(|binding| exact_retry(binding, &authorization, &topology, &issue))
+    {
+        return Ok(previous.expect("checked exact Storage binding retry"));
+    }
     validate_successor(previous.as_ref(), &issue)?;
     let binding = bind(authorization, &topology, previous.as_ref(), issue)?;
     store
         .record_platform_storage_binding(&binding)
         .map_err(|_| "Storage binding cannot be recorded".to_owned())?;
     Ok(binding)
+}
+
+fn exact_retry(
+    binding: &PlatformStorageBindingV1,
+    authorization: &StorageBindingAuthorizationV1,
+    topology: &hermes_kernel_control_store::PlatformStorageTopology,
+    issue: &StorageBindingIssueV1,
+) -> bool {
+    binding.state() == PlatformStorageBindingStateV1::Active
+        && binding.registration_id() == authorization.registration_id()
+        && binding.capability_id() == authorization.capability_id()
+        && binding.owner_id() == authorization.owner_id()
+        && binding.topology_revision() == topology.revision()
+        && binding.storage_generation() == topology.storage_generation()
+        && binding.runtime_instance_id() == authorization.runtime_id()
+        && binding.runtime_generation() == authorization.runtime_generation()
+        && binding.grant_epoch() == authorization.grant_epoch()
+        && binding.connection_budget() == authorization.connection_budget()
+        && binding.statement_timeout_millis() == authorization.statement_timeout_millis()
+        && binding.role_epoch() == issue.role_epoch()
+        && binding.credential_lease_revision() == issue.credential_lease_revision()
+        && binding.storage_bundle_revision() == issue.storage_bundle_revision()
+        && binding.storage_bundle_digest() == issue.storage_bundle_digest()
 }
 
 fn verify_admitted_bundle(

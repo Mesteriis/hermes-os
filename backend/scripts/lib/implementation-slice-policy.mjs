@@ -280,6 +280,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-communications-domain', role: 'domain', owner: 'communications', surface: 'implementation' },
   { name: 'hermes-communications-persistence', role: 'domain', owner: 'communications', surface: 'persistence' },
   { name: 'hermes-communications-runtime', role: 'domain', owner: 'communications', surface: 'runtime' },
+  { name: 'hermes-communications-assembly', role: 'domain', owner: 'communications', surface: 'assembly' },
 ];
 
 const FIRST_OWNER_PRODUCTION_PACKAGES = [
@@ -290,6 +291,7 @@ const FIRST_OWNER_PRODUCTION_PACKAGES = [
   { name: 'hermes-communications-domain', role: 'domain', owner: 'communications', surface: 'implementation' },
   { name: 'hermes-communications-persistence', role: 'domain', owner: 'communications', surface: 'persistence' },
   { name: 'hermes-communications-runtime', role: 'domain', owner: 'communications', surface: 'runtime' },
+  { name: 'hermes-communications-assembly', role: 'domain', owner: 'communications', surface: 'assembly' },
 ];
 
 const ATTACHMENT_SECURITY_ENGINE_PRODUCTION_PACKAGES = [
@@ -589,6 +591,12 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
     { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+  'hermes-communications-assembly': [
+    { name: 'hermes-communications-persistence', kind: 'normal' },
+    { name: 'hermes-communications-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
 };
 
@@ -1132,6 +1140,11 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt', 'rt-multi-thread', 'time'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
+  'hermes-communications-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
 };
 
 const FIRST_OWNER_THIRD_PARTY_DEPENDENCY_ALLOWLIST = Object.fromEntries(
@@ -1445,7 +1458,7 @@ const DEVELOPMENT_PROFILE_KEYS = [
   'id',
   'purpose',
   'workspaceRoot',
-  'package',
+  'packages',
   'selection',
   'deviceProof',
   'privateKeyStorage',
@@ -1461,6 +1474,8 @@ const DEVELOPMENT_PROFILE_KEYS = [
   'automaticProductionFallbackAllowed',
   'simulatedTargets',
 ];
+
+const DEVELOPMENT_PACKAGE_KEYS = ['package', 'surface'];
 
 function hasExactKeys(value, expectedKeys) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -1742,8 +1757,14 @@ function isExactDevelopmentProfile(profile) {
   return hasExactKeys(profile, DEVELOPMENT_PROFILE_KEYS)
     && profile.id === 'development_full_platform_v1'
     && profile.purpose === 'full_local_platform_development_with_simulated_trust'
-    && profile.workspaceRoot === 'development/runtime'
-    && profile.package === 'hermes-development-kernel-operator'
+    && profile.workspaceRoot === 'development'
+    && Array.isArray(profile.packages)
+    && profile.packages.length === 2
+    && profile.packages.every((entry) => hasExactKeys(entry, DEVELOPMENT_PACKAGE_KEYS))
+    && profile.packages[0].package === 'hermes-development-kernel-operator'
+    && profile.packages[0].surface === 'runtime'
+    && profile.packages[1].package === 'hermes-development-assembly'
+    && profile.packages[1].surface === 'assembly'
     && profile.selection === 'explicit_development_invocation_only'
     && profile.deviceProof === 'file_adapter_es256'
     && profile.privateKeyStorage === 'owner_private_file_adapter'

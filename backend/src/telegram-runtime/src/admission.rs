@@ -35,10 +35,14 @@ use crate::settings::{
 };
 
 pub const TELEGRAM_BLOB_CAPABILITY_ID: &str = "telegram.blob.v1";
+pub const TELEGRAM_API_HASH_PROVISIONING_CAPABILITY_ID: &str =
+    "telegram.api-hash.credential-provisioning.v1";
 pub const TELEGRAM_CREDENTIALS_CAPABILITY_ID: &str = "telegram.credentials.v1";
 pub const TELEGRAM_EVENTS_CAPABILITY_ID: &str = "telegram.events.v1";
 pub const TELEGRAM_RUNTIME_CAPABILITY_ID: &str = "telegram.runtime.v1";
 pub const TELEGRAM_STORAGE_CAPABILITY_ID: &str = "telegram.storage.v1";
+pub const TELEGRAM_SESSION_STORE_KEY_PROVISIONING_CAPABILITY_ID: &str =
+    "telegram.session-store-key.credential-provisioning.v1";
 pub const TELEGRAM_TDJSON_ARTIFACT_ID: &str = "telegram.tdjson.v1";
 pub const TELEGRAM_TGCALLS_ARTIFACT_ID: &str = "telegram.tgcalls.v1";
 pub const TELEGRAM_STATE_LAYOUT_REVISION_V1: u32 = 1;
@@ -51,6 +55,11 @@ pub const TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
 #[must_use]
 pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
+        telegram_credential_provisioning_capability_v1(
+            TELEGRAM_API_HASH_PROVISIONING_CAPABILITY_ID,
+            TELEGRAM_API_HASH_PURPOSE_ID,
+            VaultSecretClassV1::ProviderCredential,
+        ),
         telegram_client_capability_v1(TelegramClientContractV1::Authorization),
         telegram_automation_client_capability_v1(TelegramAutomationContractV1::Command),
         telegram_automation_client_capability_v1(TelegramAutomationContractV1::Query),
@@ -66,6 +75,11 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         telegram_client_capability_v1(TelegramClientContractV1::Realtime),
         telegram_client_capability_v1(TelegramClientContractV1::Reconfiguration),
         telegram_runtime_capability_v1(),
+        telegram_credential_provisioning_capability_v1(
+            TELEGRAM_SESSION_STORE_KEY_PROVISIONING_CAPABILITY_ID,
+            TELEGRAM_SESSION_STORE_KEY_PURPOSE_ID,
+            VaultSecretClassV1::SessionStoreKey,
+        ),
         telegram_storage_capability_v1(),
     ]
 }
@@ -180,6 +194,32 @@ fn telegram_credentials_capability_v1() -> CapabilityDescriptorV1 {
                 VaultSecretClassV1::SessionStoreKey,
             ),
         ],
+        ..Default::default()
+    }
+}
+
+fn telegram_credential_provisioning_capability_v1(
+    capability_id: &str,
+    purpose_id: &str,
+    secret_class: VaultSecretClassV1,
+) -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: capability_id.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::VaultPurpose(VaultPurposeRequestV1 {
+                purpose_id: purpose_id.to_owned(),
+                requested_lease_ttl_seconds: TELEGRAM_CREDENTIAL_LEASE_TTL_SECONDS,
+                allowed_secret_classes: vec![secret_class as i32],
+                actions: vec![
+                    VaultActionV1::Create as i32,
+                    VaultActionV1::ReplaceCas as i32,
+                ],
+                target_scope: VaultTargetScopeV1::ConfigurationInstance as i32,
+                key_schema_revision: 0,
+            })),
+        }],
         ..Default::default()
     }
 }
@@ -301,8 +341,9 @@ mod tests {
     use hermes_telegram_calls_api::contract::TelegramCallsContractV1;
 
     use super::{
-        TELEGRAM_BLOB_CAPABILITY_ID, TELEGRAM_CREDENTIALS_CAPABILITY_ID,
-        TELEGRAM_EVENTS_CAPABILITY_ID, TELEGRAM_RUNTIME_CAPABILITY_ID,
+        TELEGRAM_API_HASH_PROVISIONING_CAPABILITY_ID, TELEGRAM_BLOB_CAPABILITY_ID,
+        TELEGRAM_CREDENTIALS_CAPABILITY_ID, TELEGRAM_EVENTS_CAPABILITY_ID,
+        TELEGRAM_RUNTIME_CAPABILITY_ID, TELEGRAM_SESSION_STORE_KEY_PROVISIONING_CAPABILITY_ID,
         TELEGRAM_STORAGE_CAPABILITY_ID, telegram_module_descriptor_v1,
     };
 
@@ -319,6 +360,7 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                TELEGRAM_API_HASH_PROVISIONING_CAPABILITY_ID,
                 "telegram.authorization.v1",
                 "telegram.automation.command.v1",
                 "telegram.automation.query.v1",
@@ -334,6 +376,7 @@ mod tests {
                 "telegram.realtime.v1",
                 "telegram.reconfiguration.v1",
                 TELEGRAM_RUNTIME_CAPABILITY_ID,
+                TELEGRAM_SESSION_STORE_KEY_PROVISIONING_CAPABILITY_ID,
                 TELEGRAM_STORAGE_CAPABILITY_ID,
             ]
         );

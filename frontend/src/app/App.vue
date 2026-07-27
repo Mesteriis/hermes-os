@@ -7,16 +7,11 @@ import { fetchBrowserGatewaySessionStatus } from '../platform/gateway/browserGat
 
 const authenticated = ref(false)
 const checkingSession = ref(true)
-const accessMode = ref<BrowserGatewayAccessModeV1.PAIRED | BrowserGatewayAccessModeV1.LAN_DEVELOPMENT>(BrowserGatewayAccessModeV1.PAIRED)
-const viteDeveloperMode = import.meta.env.DEV
-
-function redirectViteToDeveloperGateway(): boolean {
-	if (!viteDeveloperMode || window.location.port !== '5173') return false
-	const gateway = new URL(window.location.href)
-	gateway.port = '9444'
-	window.location.replace(gateway.toString())
-	return true
-}
+const accessMode = ref<
+	| BrowserGatewayAccessModeV1.PAIRED
+	| BrowserGatewayAccessModeV1.LAN_DEVELOPMENT
+	| BrowserGatewayAccessModeV1.LOCAL_DEVELOPMENT
+>(BrowserGatewayAccessModeV1.PAIRED)
 
 async function enterAuthenticatedShell(): Promise<void> {
 	const status = await fetchBrowserGatewaySessionStatus()
@@ -25,7 +20,6 @@ async function enterAuthenticatedShell(): Promise<void> {
 }
 
 onMounted(async () => {
-	if (redirectViteToDeveloperGateway()) return
 	try { await enterAuthenticatedShell() } catch { authenticated.value = false } finally { checkingSession.value = false }
 })
 </script>

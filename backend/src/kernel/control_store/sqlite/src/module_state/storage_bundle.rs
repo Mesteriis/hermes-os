@@ -12,7 +12,8 @@ impl SqliteControlStore {
     ) -> Result<(), StoreError> {
         let bundle = bundle.clone();
         self.with_connection(move |connection| {
-            let changed = connection.execute(
+            let transaction = connection.transaction()?;
+            let changed = transaction.execute(
                 "INSERT INTO hermes_kernel_platform_storage_bundle
                  (owner_id, revision, sha256, canonical_bytes)
                  VALUES (?1, ?2, ?3, ?4)
@@ -24,9 +25,22 @@ impl SqliteControlStore {
                     bundle.canonical_bytes(),
                 ],
             )?;
-            (changed == 1)
-                .then_some(())
-                .ok_or(StoreError::PlatformStorageBundleRevisionConflict)
+            if changed == 0 {
+                let existing = transaction.query_row(
+                    "SELECT sha256, canonical_bytes
+                     FROM hermes_kernel_platform_storage_bundle
+                     WHERE owner_id = ?1 AND revision = ?2",
+                    params![bundle.owner_id(), as_sql(bundle.revision())?],
+                    |row| Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, Vec<u8>>(1)?)),
+                )?;
+                if existing.0.as_slice() != bundle.digest()
+                    || existing.1.as_slice() != bundle.canonical_bytes()
+                {
+                    return Err(StoreError::PlatformStorageBundleRevisionConflict);
+                }
+            }
+            transaction.commit()?;
+            Ok(())
         })
     }
 

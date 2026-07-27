@@ -226,7 +226,7 @@ impl SqliteControlStore {
     }
 }
 
-fn validate_pending_registration(
+pub(crate) fn validate_pending_registration(
     registration: &ModuleRegistration,
     capabilities: &[String],
 ) -> Result<(), StoreError> {
@@ -241,7 +241,7 @@ fn validate_pending_registration(
         .ok_or(StoreError::InvalidModuleRegistration)
 }
 
-fn insert_pending_registration(
+pub(crate) fn insert_pending_registration(
     connection: &Connection,
     registration: &ModuleRegistration,
     capabilities: &[String],

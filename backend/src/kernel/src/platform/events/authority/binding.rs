@@ -12,6 +12,7 @@ pub const EVENTS_AUTHORITY_PROCESS_ID: &str = "events_authority";
 
 const IDENTITY: PlatformReleaseIdentity = PlatformReleaseIdentity {
     process_id: EVENTS_AUTHORITY_PROCESS_ID,
+    artifact_id: "platform.events-authority",
     module_id: "events",
     owner_id: "events",
     target_triple: "aarch64-apple-darwin",

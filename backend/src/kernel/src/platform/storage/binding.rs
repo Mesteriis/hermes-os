@@ -12,6 +12,7 @@ pub const STORAGE_PROCESS_ID: &str = "storage";
 
 const IDENTITY: PlatformReleaseIdentity = PlatformReleaseIdentity {
     process_id: STORAGE_PROCESS_ID,
+    artifact_id: "platform.storage",
     module_id: "storage",
     owner_id: "storage",
     target_triple: "aarch64-apple-darwin",

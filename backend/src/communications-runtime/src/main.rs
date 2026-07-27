@@ -224,7 +224,7 @@ async fn run_maintenance_tick(runtime: &mut CommunicationsEventRuntimeV1) -> Res
         .process_next_body_custody_transfer()
         .await
         .map_err(|error| maintenance_error("body_custody", error))?;
-    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+    if custody_processed && std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
         eprintln!("developer_communications_runtime_custody_processed={custody_processed}");
     }
     runtime

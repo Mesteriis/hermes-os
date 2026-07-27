@@ -22,11 +22,11 @@ import './systemControlPage.css'
 const props = withDefaults(defineProps<{
 	bootstrap?: ClientBootstrapSnapshot
 	routeDowngradeReason?: string
-	developerMode?: boolean
+	developmentProfile?: 'disabled' | 'private-lan' | 'loopback-full-stack'
 	currentLanguage?: string
 	languageOptions?: readonly { value: string; label: string }[]
 	compiledAdapterIds: readonly ClientSurfaceAdapterId[]
-}>(), { developerMode: false, currentLanguage: 'ru', languageOptions: () => [] })
+}>(), { developmentProfile: 'disabled', currentLanguage: 'ru', languageOptions: () => [] })
 const emit = defineEmits<{ languageChange: [value: string] }>()
 type SystemControlSection = 'system' | 'registry' | 'scheduler' | 'events' | 'composition' | 'interface'
 
@@ -41,6 +41,12 @@ const moduleRows = computed(() => systemControlModuleRows(bootstrap.value.module
 const schedulerRows = computed(() => systemControlComponentRows(schedulerComponents, bootstrap.value.systemStatus))
 const eventRows = computed(() => systemControlComponentRows(eventComponents, bootstrap.value.systemStatus))
 const publicSettingsRows = computed(() => publicModuleSettingRows(bootstrap.value.modules))
+const developmentMode = computed(() => props.developmentProfile !== 'disabled')
+const developmentProfileLabel = computed(() => {
+	if (props.developmentProfile === 'private-lan') return 'Private LAN diagnostics'
+	if (props.developmentProfile === 'loopback-full-stack') return 'Loopback full-stack assembly'
+	return 'Authentication required'
+})
 
 </script>
 
@@ -57,7 +63,7 @@ const publicSettingsRows = computed(() => publicModuleSettingRows(bootstrap.valu
 
 		<nav class="system-control-tabs" aria-label="System Control sections">
 			<button type="button" :aria-pressed="selectedSection === 'system'" @click="selectedSection = 'system'"><Icon icon="tabler:heart-rate-monitor" />System</button>
-			<button type="button" :aria-pressed="selectedSection === 'registry'" @click="selectedSection = 'registry'"><Icon icon="tabler:adjustments" />Registry <em>{{ publicSettingsRows.length }}</em></button>
+			<button type="button" :aria-pressed="selectedSection === 'registry'" @click="selectedSection = 'registry'"><Icon icon="tabler:adjustments" />Registry <em>{{ moduleRows.length }}</em></button>
 			<button type="button" :aria-pressed="selectedSection === 'scheduler'" @click="selectedSection = 'scheduler'"><Icon icon="tabler:calendar-time" />Scheduler</button>
 			<button type="button" :aria-pressed="selectedSection === 'events'" @click="selectedSection = 'events'"><Icon icon="tabler:route" />Events</button>
 			<button type="button" :aria-pressed="selectedSection === 'composition'" @click="selectedSection = 'composition'"><Icon icon="tabler:layout-grid" />Surfaces</button>
@@ -67,7 +73,7 @@ const publicSettingsRows = computed(() => publicModuleSettingRows(bootstrap.valu
 		<section v-if="selectedSection === 'system'" class="system-control-section">
 			<header class="system-control-section__header"><h3>System Control</h3></header>
 			<div v-if="routeDowngradeReason" class="inline-error" role="alert">Active product surface was closed: {{ routeDowngradeReason }}</div>
-			<div class="system-control-list" aria-label="Kernel operator settings"><article class="system-control-row" :class="{ disabled: !developerMode }"><Icon icon="tabler:code" /><span><strong>Developer mode</strong><small>{{ developerMode ? 'Private LAN' : 'Authentication required' }}</small></span><strong>{{ developerMode ? 'Enabled' : 'Disabled' }}</strong></article></div>
+			<div class="system-control-list" aria-label="Kernel operator settings"><article class="system-control-row" :class="{ disabled: !developmentMode }"><Icon icon="tabler:code" /><span><strong>Developer mode</strong><small>{{ developmentProfileLabel }}</small></span><strong>{{ developmentMode ? 'Enabled' : 'Disabled' }}</strong></article></div>
 		</section>
 		<section v-else-if="selectedSection === 'registry'" class="system-control-section">
 			<header class="system-control-section__header"><h3>Settings registry</h3></header>

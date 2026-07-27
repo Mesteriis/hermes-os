@@ -10,6 +10,7 @@ mod runtime;
 mod state;
 
 pub use distribution::{
+    BundledManagedArtifactProposalInputV1, BundledManagedArtifactProposalReceiptV1,
     BundledManagedLaunchBinding, ManagedLaunchRecord, OwnerPinnedArtifactBinding,
     OwnerPinnedArtifactBindingInputV1,
 };
@@ -24,13 +25,14 @@ pub use modules::{
     ModuleEventSubscriptionRequirementV1, ModuleGrantSnapshot, ModuleRegistration,
     ModuleRegistrationState, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
     ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1, SettingsApplyState,
-    SettingsDesiredSnapshot, SettingsSchemaBinding, SettingsSchemaBindingInputV1,
+    SettingsDesiredSnapshot, SettingsInitialSnapshot, SettingsSchemaBinding,
+    SettingsSchemaBindingInputV1,
 };
 pub use operation::{
     OperationAdmissionV1, OperationIdV1, OperationStatusV1, OperationTerminalOutcomeV1,
 };
 pub use ports::{
-    EventHubTopologyStore, EventsAuthorityStore, HealthRecoveryStore,
+    BundledArtifactProposalStore, EventHubTopologyStore, EventsAuthorityStore, HealthRecoveryStore,
     ModuleDescriptorRegistrationRequestsV1, ModuleRegistryStore, OperationJournalStore,
     OwnerIdentityStore, RuntimeTrustStore, SettingsRegistryStore, StorageBindingStore,
     StorageBundleStore, StorageTopologyStore,

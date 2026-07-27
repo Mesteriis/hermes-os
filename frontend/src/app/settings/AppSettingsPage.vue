@@ -19,7 +19,7 @@ import './appSettingsPage.css'
 const props = defineProps<{
 	bootstrap: ClientBootstrapSnapshot
 	routeDowngradeReason?: string
-	developerMode: boolean
+	developmentProfile: 'disabled' | 'private-lan' | 'loopback-full-stack'
 	currentLanguage: string
 	languageOptions: readonly { value: string; label: string }[]
 	compiledAdapterIds: readonly ClientSurfaceAdapterId[]
@@ -92,7 +92,7 @@ const providerNavigation = [
 					v-if="selectedOwner === 'system'"
 					:bootstrap="bootstrap"
 					:route-downgrade-reason="routeDowngradeReason"
-					:developer-mode="developerMode"
+					:development-profile="developmentProfile"
 					:current-language="currentLanguage"
 					:language-options="languageOptions"
 					:compiled-adapter-ids="compiledAdapterIds"

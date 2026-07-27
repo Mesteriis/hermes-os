@@ -10,3 +10,4 @@ export type {
 	OwnerVaultProvisioningHostV1,
 	SanitizedProvisioningHostReceiptV1,
 } from './ownerVaultProvisioningHost'
+export { hasNativeOwnerVaultProvisioningHostV1 } from './provisioningHostAvailability'

@@ -121,6 +121,42 @@ message BindBundledManagedReleaseResponseV1 {
   string artifact_id = 4;
 }
 
+message ProposeBundledManagedArtifactRequestV1 {
+  string owner_session_id = 1;
+  string artifact_id = 2;
+  string expected_distribution_id = 3;
+  uint64 expected_distribution_generation = 4;
+  bytes idempotency_key = 5;
+}
+
+message ProposeBundledManagedArtifactResponseV1 {
+  string registration_id = 1;
+  string module_id = 2;
+  string owner_id = 3;
+  bytes descriptor_sha256 = 4;
+  repeated string requested_capability_ids = 5;
+  string distribution_id = 6;
+  uint64 distribution_generation = 7;
+  string artifact_id = 8;
+  bool replayed = 9;
+}
+
+message AdmitBundledStorageArtifactRequestV1 {
+  string owner_session_id = 1;
+  string artifact_id = 2;
+  string expected_distribution_id = 3;
+  uint64 expected_distribution_generation = 4;
+}
+
+message AdmitBundledStorageArtifactResponseV1 {
+  string owner_id = 1;
+  uint64 storage_bundle_revision = 2;
+  bytes storage_bundle_digest = 3;
+  string distribution_id = 4;
+  uint64 distribution_generation = 5;
+  string artifact_id = 6;
+}
+
 message StartBundledManagedRuntimeRequestV1 {
   string registration_id = 1;
   string owner_session_id = 2;
@@ -567,6 +603,8 @@ message OwnerControlRequestV1 {
     StartReservedDomainRuntimeRequestV1 start_reserved_domain_runtime = 37;
     StartReservedEngineRuntimeRequestV1 start_reserved_engine_runtime = 38;
     ApplyManagedIntegrationSettingsRequestV1 apply_managed_integration_settings = 39;
+    ProposeBundledManagedArtifactRequestV1 propose_bundled_managed_artifact = 40;
+    AdmitBundledStorageArtifactRequestV1 admit_bundled_storage_artifact = 41;
   }
 }
 
@@ -611,6 +649,8 @@ message OwnerControlResponseV1 {
     StartReservedDomainRuntimeResponseV1 start_reserved_domain_runtime = 38;
     StartReservedEngineRuntimeResponseV1 start_reserved_engine_runtime = 39;
     ApplyManagedIntegrationSettingsResponseV1 apply_managed_integration_settings = 40;
+    ProposeBundledManagedArtifactResponseV1 propose_bundled_managed_artifact = 41;
+    AdmitBundledStorageArtifactResponseV1 admit_bundled_storage_artifact = 42;
   }
 
   // Sanitized stable code; details and private data remain local to Kernel.

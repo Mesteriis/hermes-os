@@ -12,6 +12,7 @@ pub const TELEMETRY_PROCESS_ID: &str = "telemetry";
 
 const IDENTITY: PlatformReleaseIdentity = PlatformReleaseIdentity {
     process_id: TELEMETRY_PROCESS_ID,
+    artifact_id: "platform.telemetry",
     module_id: "telemetry",
     owner_id: "telemetry",
     target_triple: "aarch64-apple-darwin",

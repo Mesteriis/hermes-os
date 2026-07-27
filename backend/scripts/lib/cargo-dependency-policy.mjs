@@ -95,7 +95,8 @@ export function validateDependencyEdges(policy, packages, descriptors) {
     const sourceIsStorageOwner = source.role === policy.storage.role
       && source.owner === policy.storage.owner;
     const isDevelopmentOperator = source.role === 'development'
-      && pkg.name === policy.implementation.developmentProfile.package;
+      && policy.implementation.developmentProfile.packages
+        .some((entry) => entry.package === pkg.name);
 
     for (const dependency of list(pkg.dependencies)) {
       const kind = dependency.kind ?? 'normal';

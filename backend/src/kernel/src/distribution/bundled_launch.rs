@@ -4,6 +4,7 @@ use hermes_kernel_control_store::{BundledManagedLaunchBinding, ModuleRegistratio
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 
 use crate::distribution::bundle_verifier::VerifiedDistributionBundle;
+use crate::modules::settings::schema as settings_schema;
 
 pub fn admit(
     store: &SqliteControlStore,
@@ -21,6 +22,16 @@ pub fn admit(
         .find(|artifact| artifact.artifact_id() == artifact_id)
         .ok_or_else(|| "managed launch artifact is absent from distribution manifest".to_owned())?;
     validate_registration_contract(&registration, artifact)?;
+    if let Some(schema_bytes) = artifact.settings_schema_bytes() {
+        settings_schema::admit_bundled_and_materialize_initial(
+            store,
+            registration_id,
+            artifact
+                .module_descriptor_bytes()
+                .ok_or_else(|| "managed launch artifact is not a module runtime".to_owned())?,
+            schema_bytes,
+        )?;
+    }
     let binding = BundledManagedLaunchBinding::new(
         registration_id,
         next_binding_revision(store, registration_id)?,

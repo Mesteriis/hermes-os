@@ -1727,6 +1727,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communications-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-persistence",
+ "hermes-communications-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-communications-attachment-contract"
 version = "0.1.0"
 dependencies = [
@@ -1793,6 +1806,19 @@ dependencies = [
  "sha2 0.11.0",
  "tokio",
  "zeroize",
+]
+
+[[package]]
+name = "hermes-development-assembly"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "directories",
+ "getrandom 0.4.3",
+ "hermes-gateway-protocol",
+ "nats-jwt",
+ "p256",
+ "sha2 0.11.0",
 ]
 
 [[package]]

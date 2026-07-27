@@ -119,7 +119,9 @@ fn start_development_foundation(
     runtime_dir: &Path,
     browser_gateway: Option<&BrowserGatewayConfigurationV1>,
 ) -> Result<(), String> {
-    if !browser_gateway.is_some_and(BrowserGatewayConfigurationV1::is_lan_development) {
+    if !browser_gateway
+        .is_some_and(BrowserGatewayConfigurationV1::starts_signed_development_foundation)
+    {
         return Ok(());
     }
     crate::platform::development::start_local_foundation(supervisor, store, data_dir, runtime_dir)
@@ -137,7 +139,7 @@ fn browser_pairing(
     browser_gateway: Option<&BrowserGatewayConfigurationV1>,
 ) -> Result<Option<Arc<BrowserPairingAdmissionV1>>, String> {
     browser_gateway
-        .filter(|configuration| !configuration.is_lan_development())
+        .filter(|configuration| !configuration.uses_automatic_development_session())
         .map(|configuration| {
             BrowserPairingAdmissionV1::new(Arc::clone(store), supervisor.clone(), configuration)
         })

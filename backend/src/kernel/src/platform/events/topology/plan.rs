@@ -297,5 +297,8 @@ fn sort_publishers(plans: &mut [EventPublisherPermitPlanV1]) {
 }
 
 fn sort_consumers(plans: &mut [EventConsumerPlanV1]) {
-    plans.sort_by(|left, right| left.durable_name.cmp(&right.durable_name));
+    plans.sort_by(|left, right| {
+        (left.subject.kind(), left.durable_name.as_str())
+            .cmp(&(right.subject.kind(), right.durable_name.as_str()))
+    });
 }

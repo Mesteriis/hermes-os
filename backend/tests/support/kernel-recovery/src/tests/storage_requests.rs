@@ -244,6 +244,9 @@ fn control_store_retains_one_immutable_canonical_bundle_per_owner_revision() {
     store
         .record_platform_storage_bundle(&first)
         .expect("record canonical Storage bundle");
+    store
+        .record_platform_storage_bundle(&first)
+        .expect("retry exact canonical Storage bundle");
     assert_eq!(
         store
             .platform_storage_bundle("owner_notes", 1)

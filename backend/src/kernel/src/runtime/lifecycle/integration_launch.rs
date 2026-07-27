@@ -135,7 +135,7 @@ fn host_bridge_configuration(
         return Ok(None);
     }
     let parent = runtime_dir.join("host-bridges");
-    crate::infrastructure::filesystem::ensure_owner_private_directory(&parent)
+    crate::infrastructure::filesystem::prepare_owner_private_directory(&parent)
         .map_err(|_| "host bridge socket parent is invalid".to_owned())?;
     let mut route_name = Sha256::new();
     for field in [

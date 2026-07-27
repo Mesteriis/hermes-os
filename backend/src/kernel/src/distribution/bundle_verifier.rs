@@ -1,4 +1,4 @@
-//! Verifies every artifact declared by a signed installed distribution bundle.
+//! Verifies exact artifacts from a signed installed distribution bundle.
 
 use std::fs::{File, Metadata};
 use std::io::Read;
@@ -19,6 +19,7 @@ use crate::distribution::trust_root::ReleaseTrustRoot;
 
 pub struct VerifiedDistributionArtifact {
     artifact_id: String,
+    artifact_kind: DistributionArtifactKindV1,
     canonical_path: PathBuf,
     size_bytes: u64,
     expected_sha256: [u8; 32],
@@ -38,6 +39,11 @@ impl VerifiedDistributionArtifact {
     #[must_use]
     pub fn artifact_id(&self) -> &str {
         &self.artifact_id
+    }
+
+    #[must_use]
+    pub fn artifact_kind(&self) -> DistributionArtifactKindV1 {
+        self.artifact_kind
     }
 
     #[must_use]
@@ -133,10 +139,7 @@ pub fn verify(
     trust_root: &ReleaseTrustRoot,
     expected_target_triple: &str,
 ) -> Result<VerifiedDistributionBundle, String> {
-    let manifest = distribution_manifest_verifier::verify(signed_manifest_bytes, trust_root)?;
-    if manifest.target_triple != expected_target_triple {
-        return Err("distribution manifest target triple does not match this Kernel".to_owned());
-    }
+    let manifest = verify_manifest(signed_manifest_bytes, trust_root, expected_target_triple)?;
     ensure_bundle_root(bundle_root)?;
     let artifacts = manifest
         .artifacts
@@ -147,6 +150,104 @@ pub fn verify(
         manifest,
         artifacts,
     })
+}
+
+/// Verifies the signed manifest and only artifacts of the requested kinds.
+///
+/// This is for consumers such as the browser bootstrap server that never stage
+/// or execute the other artifacts in the distribution. The returned manifest
+/// remains complete and signed; `artifacts()` contains only the verified
+/// selection.
+pub fn verify_artifact_kinds(
+    bundle_root: &Path,
+    signed_manifest_bytes: &[u8],
+    trust_root: &ReleaseTrustRoot,
+    expected_target_triple: &str,
+    artifact_kinds: &[DistributionArtifactKindV1],
+) -> Result<VerifiedDistributionBundle, String> {
+    if artifact_kinds.is_empty() {
+        return Err("distribution artifact kind selection must not be empty".to_owned());
+    }
+    let manifest = verify_manifest(signed_manifest_bytes, trust_root, expected_target_triple)?;
+    for kind in artifact_kinds {
+        if !manifest
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.artifact_kind == *kind as i32)
+        {
+            return Err("selected distribution artifact kind is unavailable".to_owned());
+        }
+    }
+    ensure_bundle_root(bundle_root)?;
+    let artifacts = manifest
+        .artifacts
+        .iter()
+        .filter(|artifact| {
+            artifact_kinds
+                .iter()
+                .any(|kind| artifact.artifact_kind == *kind as i32)
+        })
+        .map(|artifact| verify_artifact(bundle_root, artifact))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(VerifiedDistributionBundle {
+        manifest,
+        artifacts,
+    })
+}
+
+/// Verifies the signed manifest and only the exact artifact IDs requested by a
+/// launch or transport consumer.
+pub fn verify_artifact_ids(
+    bundle_root: &Path,
+    signed_manifest_bytes: &[u8],
+    trust_root: &ReleaseTrustRoot,
+    expected_target_triple: &str,
+    artifact_ids: &[&str],
+) -> Result<VerifiedDistributionBundle, String> {
+    if artifact_ids.is_empty()
+        || artifact_ids
+            .iter()
+            .any(|artifact_id| artifact_id.is_empty())
+    {
+        return Err("distribution artifact ID selection must not be empty".to_owned());
+    }
+    let manifest = verify_manifest(signed_manifest_bytes, trust_root, expected_target_triple)?;
+    for artifact_id in artifact_ids {
+        if !manifest
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.artifact_id == *artifact_id)
+        {
+            return Err("selected distribution artifact ID is unavailable".to_owned());
+        }
+    }
+    ensure_bundle_root(bundle_root)?;
+    let artifacts = manifest
+        .artifacts
+        .iter()
+        .filter(|artifact| {
+            artifact_ids
+                .iter()
+                .any(|artifact_id| artifact.artifact_id == *artifact_id)
+        })
+        .map(|artifact| verify_artifact(bundle_root, artifact))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(VerifiedDistributionBundle {
+        manifest,
+        artifacts,
+    })
+}
+
+fn verify_manifest(
+    signed_manifest_bytes: &[u8],
+    trust_root: &ReleaseTrustRoot,
+    expected_target_triple: &str,
+) -> Result<DistributionManifestV1, String> {
+    let manifest = distribution_manifest_verifier::verify(signed_manifest_bytes, trust_root)?;
+    if manifest.target_triple != expected_target_triple {
+        return Err("distribution manifest target triple does not match this Kernel".to_owned());
+    }
+    Ok(manifest)
 }
 
 fn ensure_bundle_root(bundle_root: &Path) -> Result<(), String> {
@@ -187,6 +288,8 @@ fn verify_artifact(
         };
     Ok(VerifiedDistributionArtifact {
         artifact_id: artifact.artifact_id.clone(),
+        artifact_kind: DistributionArtifactKindV1::try_from(artifact.artifact_kind)
+            .map_err(|_| "distribution artifact kind is invalid".to_owned())?,
         canonical_path: path,
         size_bytes: artifact.size_bytes,
         expected_sha256: artifact.sha256.as_slice().try_into().map_err(|_| {

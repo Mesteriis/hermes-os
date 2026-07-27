@@ -49,6 +49,7 @@ fn definition(
         fresh_owner_proof_required: true,
         kernel_controller_id: String::new(),
         display_name: display_name.to_owned(),
+        default_value: None,
     }
 }
 

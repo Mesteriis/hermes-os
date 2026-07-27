@@ -31,8 +31,8 @@ pub(super) use hermes_kernel_control_store::{
     BundledManagedLaunchBinding, ControlStore, ExternalRuntimeAttestation, ExternalRuntimeIdentity,
     InitialOwnerIdentity, ManagedLaunchRecord, ModuleRegistration, ModuleRegistrationState,
     PlatformManagedProcessBinding, PlatformManagedProcessLaunch, RecoveryFences,
-    ServerBootstrapPairing, SettingsApplyState, SettingsDesiredSnapshot, SettingsSchemaBinding,
-    StoreHealth,
+    ServerBootstrapPairing, SettingsApplyState, SettingsDesiredSnapshot, SettingsInitialSnapshot,
+    SettingsSchemaBinding, StoreHealth,
 };
 pub(super) use hermes_kernel_control_store_sqlite::{
     SqliteControlStore, StagedControlStoreRestore, StoreError,

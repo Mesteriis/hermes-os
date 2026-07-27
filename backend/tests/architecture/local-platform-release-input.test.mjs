@@ -81,6 +81,10 @@ function runBuilder(root, browserAssetsDirectory = null) {
       '--distribution-id', 'hermes-desktop',
       '--release-version', '0.1.0',
       '--build-id', 'local-platform-v1',
+      '--source-commit', '1'.repeat(40),
+      '--lockfile-sha256', '2'.repeat(64),
+      '--sbom-sha256', '3'.repeat(64),
+      '--toolchain-sha256', '4'.repeat(64),
       ...(browserAssetsDirectory === null ? [] : ['--browser-assets-dir', browserAssetsDirectory]),
     ], { cwd: backendRoot, encoding: 'utf8' }),
   };
@@ -103,6 +107,10 @@ test('creates exact local platform runtime contracts before compiling a distribu
     const { descriptorDirectory, output, result } = runBuilder(root);
     assert.equal(result.status, 0, result.stderr);
     const input = JSON.parse(readFileSync(output, 'utf8'));
+    assert.equal(input.source_commit, '1'.repeat(40));
+    assert.equal(input.lockfile_sha256, '2'.repeat(64));
+    assert.equal(input.sbom_sha256, '3'.repeat(64));
+    assert.equal(input.toolchain_sha256, '4'.repeat(64));
     assert.deepEqual(input.artifacts.map((artifact) => artifact.artifact_id), [
       'browser.bootstrap',
       'platform.blob',
@@ -134,9 +142,11 @@ test('includes exact compiled browser assets in the signed distribution input', 
   try {
     createFixture(root);
     const browserAssetsDirectory = join(root, 'browser-assets');
-    mkdirSync(join(browserAssetsDirectory, 'assets'), { recursive: true, mode: 0o700 });
-    writeFileSync(join(browserAssetsDirectory, 'assets', 'app.js'), 'compiled browser entry');
-    writeFileSync(join(browserAssetsDirectory, 'assets', 'theme.css'), 'compiled browser styles');
+    mkdirSync(browserAssetsDirectory, { recursive: true, mode: 0o700 });
+    writeFileSync(join(root, 'bootstrap.html'), '<script src="/assets/app.js"></script>');
+    writeFileSync(join(browserAssetsDirectory, 'app.js'), 'import "/assets/theme.css"');
+    writeFileSync(join(browserAssetsDirectory, 'theme.css'), 'compiled browser styles');
+    writeFileSync(join(browserAssetsDirectory, 'unused.png'), 'unreferenced source asset');
 
     const { output, result } = runBuilder(root, browserAssetsDirectory);
     assert.equal(result.status, 0, result.stderr);
@@ -147,19 +157,37 @@ test('includes exact compiled browser assets in the signed distribution input', 
         .map(({ artifact_id, relative_path, source_path, required }) => ({ artifact_id, relative_path, source_path, required })),
       [
         {
-          artifact_id: 'browser.asset.assets/app.js',
-          relative_path: 'browser/assets/assets/app.js',
-          source_path: join(browserAssetsDirectory, 'assets', 'app.js'),
+          artifact_id: 'browser.asset.app.js',
+          relative_path: 'browser/assets/app.js',
+          source_path: join(browserAssetsDirectory, 'app.js'),
           required: true,
         },
         {
-          artifact_id: 'browser.asset.assets/theme.css',
-          relative_path: 'browser/assets/assets/theme.css',
-          source_path: join(browserAssetsDirectory, 'assets', 'theme.css'),
+          artifact_id: 'browser.asset.theme.css',
+          relative_path: 'browser/assets/theme.css',
+          source_path: join(browserAssetsDirectory, 'theme.css'),
           required: true,
         },
       ],
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects a referenced browser asset outside the signed Gateway allowlist', () => {
+  const root = temporaryDirectory('hermes-local-platform-browser-invalid-asset-');
+  try {
+    createFixture(root);
+    const browserAssetsDirectory = join(root, 'browser-assets');
+    mkdirSync(browserAssetsDirectory, { mode: 0o700 });
+    writeFileSync(join(root, 'bootstrap.html'), '<script src="/assets/runtime.wasm"></script>');
+    writeFileSync(join(browserAssetsDirectory, 'runtime.wasm'), 'unsigned execution format');
+
+    const { output, result } = runBuilder(root, browserAssetsDirectory);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /browser asset reference is invalid/);
+    assert.equal(existsSync(output), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -18,6 +18,34 @@ import { canonicalPolicyForTests } from '../support/canonical-policy.mjs';
 
 import { eventsProtocol, metadata } from './support.mjs';
 
+test('accepts only explicitly configured development package surfaces', () => {
+  const operator = workspacePackage('hermes-development-kernel-operator', {
+    role: 'development',
+    owner: 'development',
+    surface: 'runtime',
+  });
+  const assembly = workspacePackage('hermes-development-assembly', {
+    role: 'development',
+    owner: 'development',
+    surface: 'assembly',
+  });
+
+  assert.deepEqual(
+    validateCargoMetadata(canonicalPolicyForTests(), metadata([kernel(), operator, assembly])),
+    [],
+  );
+
+  const invalidAssembly = workspacePackage('hermes-development-assembly', {
+    role: 'development',
+    owner: 'development',
+    surface: 'runtime',
+  });
+  assert.ok(
+    codes(validateCargoMetadata(canonicalPolicyForTests(), metadata([kernel(), invalidAssembly])))
+      .has('invalid_development_package'),
+  );
+});
+
 test('requires the canonical events protocol package when a workspace exists', () => {
   const violations = validateCargoMetadata(
     canonicalPolicyForTests(),

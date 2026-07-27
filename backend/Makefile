@@ -20,22 +20,8 @@ build:
 test:
 	node scripts/run-impacted-tests.mjs
 
-dev: docker
-	@set -euo pipefail; \
-	data_dir="$${HERMES_DEV_DATA_DIR:-$$(cd .. && pwd)/.local/kernel-dev}"; \
-	cleanup() { \
-		status=$$?; \
-		trap - EXIT INT TERM; \
-		kill "$${backend_pid:-}" "$${frontend_pid:-}" 2>/dev/null || true; \
-		wait "$${backend_pid:-}" "$${frontend_pid:-}" 2>/dev/null || true; \
-		exit "$$status"; \
-	}; \
-	trap cleanup EXIT INT TERM; \
-	(cargo +1.97.0 run --locked --package hermes-kernel -- --data-dir "$$data_dir" serve) & \
-	backend_pid=$$!; \
-	(cd ../frontend && pnpm dev --host "$${HERMES_DEV_FRONTEND_HOST:-0.0.0.0}") & \
-	frontend_pid=$$!; \
-	wait -n "$$backend_pid" "$$frontend_pid"
+dev:
+	@./scripts/dev-ensemble.sh
 
 docker:
 	docker compose -f development/compose.yaml up --detach --wait

@@ -3,7 +3,6 @@
 	display: grid;
 	align-content: start;
 	gap: var(--h-space-4);
-	min-height: 100%;
 	padding: var(--h-space-5);
 	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-lg);
@@ -11,7 +10,6 @@
 	background:
 		radial-gradient(circle at 0 0, color-mix(in srgb, var(--module-settings-accent) 12%, transparent), transparent 28rem),
 		var(--h-color-bg-muted);
-	overflow: auto;
 }
 
 .module-settings-panel[data-provider-tone='mail'] {

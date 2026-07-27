@@ -1,4 +1,6 @@
-use crate::{SettingsApplyState, SettingsDesiredSnapshot, SettingsSchemaBinding};
+use crate::{
+    SettingsApplyState, SettingsDesiredSnapshot, SettingsInitialSnapshot, SettingsSchemaBinding,
+};
 
 pub trait SettingsRegistryStore {
     type Error;
@@ -19,6 +21,10 @@ pub trait SettingsRegistryStore {
     fn commit_desired_settings_snapshot(
         &self,
         update: &SettingsDesiredSnapshot,
+    ) -> Result<u64, Self::Error>;
+    fn materialize_initial_settings_snapshot(
+        &self,
+        update: &SettingsInitialSnapshot,
     ) -> Result<u64, Self::Error>;
     fn desired_settings_snapshot(
         &self,

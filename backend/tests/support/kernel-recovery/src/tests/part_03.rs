@@ -1,4 +1,7 @@
 use super::common::*;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static REGISTRATION_FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[test]
 fn module_registration_has_explicit_state_transitions_and_grant_epoch_fencing() {
@@ -10,6 +13,138 @@ fn module_registration_has_explicit_state_transitions_and_grant_epoch_fencing() 
     fixture.assert_registration_fences();
 }
 
+#[test]
+fn initial_settings_materialization_is_atomic_exact_and_idempotent() {
+    let fixture = RegistrationFixture::new();
+    let schema =
+        SettingsSchemaBinding::new(hermes_kernel_control_store::SettingsSchemaBindingInputV1 {
+            registration_id: "registration-1".to_owned(),
+            schema_major: 1,
+            schema_revision: 1,
+            schema_sha256: [8; 32],
+            desired_revision: 0,
+            effective_revision: 0,
+            apply_state: SettingsApplyState::Current,
+            sanitized_reason_code: None,
+        });
+    fixture
+        .store
+        .register_settings_schema(&schema)
+        .expect("bind settings schema");
+    let initial = SettingsInitialSnapshot {
+        registration_id: "registration-1".to_owned(),
+        snapshot_bytes: vec![1, 2, 3],
+        complete: true,
+    };
+
+    assert_eq!(
+        fixture
+            .store
+            .materialize_initial_settings_snapshot(&initial)
+            .expect("materialize initial settings"),
+        1,
+    );
+    assert_eq!(
+        fixture
+            .store
+            .materialize_initial_settings_snapshot(&initial)
+            .expect("replay initial settings"),
+        1,
+    );
+    assert_eq!(
+        fixture
+            .store
+            .desired_settings_snapshot("registration-1")
+            .expect("read initial snapshot"),
+        Some((1, vec![1, 2, 3])),
+    );
+    let current = fixture.settings_binding();
+    assert_eq!(current.desired_revision(), 1);
+    assert_eq!(current.effective_revision(), 1);
+    assert_eq!(current.apply_state(), SettingsApplyState::Current);
+    assert!(
+        fixture
+            .store
+            .materialize_initial_settings_snapshot(&SettingsInitialSnapshot {
+                snapshot_bytes: vec![9],
+                ..initial
+            })
+            .is_err()
+    );
+}
+
+#[test]
+fn incomplete_initial_settings_are_atomically_blocked_without_effective_revision() {
+    let path = std::env::temp_dir().join(format!(
+        "hermes-control-store-incomplete-settings-{}.sqlite",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let store = SqliteControlStore::create(&path, "instance-incomplete", 1)
+        .expect("create incomplete settings store");
+    let registration = ModuleRegistration::new(
+        "registration-incomplete",
+        "module-incomplete",
+        "owner-incomplete",
+        [9; 32],
+        ModuleRegistrationState::Pending,
+        1,
+    );
+    store
+        .create_pending_registration(&registration, &[])
+        .expect("create incomplete registration");
+    store
+        .transition_module_registration(
+            "registration-incomplete",
+            ModuleRegistrationState::Approved,
+        )
+        .expect("approve incomplete registration");
+    store
+        .register_settings_schema(&SettingsSchemaBinding::new(
+            hermes_kernel_control_store::SettingsSchemaBindingInputV1 {
+                registration_id: "registration-incomplete".to_owned(),
+                schema_major: 1,
+                schema_revision: 1,
+                schema_sha256: [6; 32],
+                desired_revision: 0,
+                effective_revision: 0,
+                apply_state: SettingsApplyState::Current,
+                sanitized_reason_code: None,
+            },
+        ))
+        .expect("bind incomplete schema");
+    let initial = SettingsInitialSnapshot {
+        registration_id: "registration-incomplete".to_owned(),
+        snapshot_bytes: vec![4, 5, 6],
+        complete: false,
+    };
+
+    assert_eq!(
+        store
+            .materialize_initial_settings_snapshot(&initial)
+            .expect("materialize incomplete settings"),
+        1
+    );
+    assert_eq!(
+        store
+            .materialize_initial_settings_snapshot(&initial)
+            .expect("replay incomplete settings"),
+        1
+    );
+    let binding = store
+        .settings_schema_binding("registration-incomplete")
+        .expect("read incomplete binding")
+        .expect("incomplete binding");
+    assert_eq!(binding.desired_revision(), 1);
+    assert_eq!(binding.effective_revision(), 0);
+    assert_eq!(binding.apply_state(), SettingsApplyState::BlockedConfig);
+    assert_eq!(
+        binding.sanitized_reason_code(),
+        Some("required_settings_missing")
+    );
+    let _ = std::fs::remove_file(path);
+}
+
 struct RegistrationFixture {
     path: std::path::PathBuf,
     store: SqliteControlStore,
@@ -18,8 +153,9 @@ struct RegistrationFixture {
 impl RegistrationFixture {
     fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
-            "hermes-control-store-registration-{}.sqlite",
-            std::process::id()
+            "hermes-control-store-registration-{}-{}.sqlite",
+            std::process::id(),
+            REGISTRATION_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ));
         let _ = std::fs::remove_file(&path);
         let store = SqliteControlStore::create(&path, "instance-1", 1).expect("create store");

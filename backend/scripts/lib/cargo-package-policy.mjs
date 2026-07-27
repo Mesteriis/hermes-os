@@ -239,11 +239,29 @@ function validateDescriptor(policy, pkg, descriptor, violations) {
   if (role === 'test' && (owner !== policy.owners.test || surface !== 'test_support')) {
     violations.push(violation('invalid_test_package', location, 'test role requires owner=test and surface=test_support'));
   }
-  if (role === 'development' && (owner !== policy.owners.development || surface !== 'runtime')) {
+  const configuredDevelopmentPackage = list(
+    policy.implementation?.developmentProfile?.packages,
+  ).find((entry) => entry?.package === pkg.name);
+  if (role === 'development' && (
+    owner !== policy.owners.development
+    || !configuredDevelopmentPackage
+    || surface !== configuredDevelopmentPackage.surface
+  )) {
     violations.push(violation(
       'invalid_development_package',
       location,
-      'development role requires owner=development and surface=runtime',
+      'development role requires owner=development and an exact configured package surface',
+    ));
+  }
+  if (configuredDevelopmentPackage && (
+    role !== 'development'
+    || owner !== policy.owners.development
+    || surface !== configuredDevelopmentPackage.surface
+  )) {
+    violations.push(violation(
+      'invalid_development_package',
+      location,
+      'configured development package must use the development role, owner and declared surface',
     ));
   }
 

@@ -1,0 +1,124 @@
+import type { TelegramAccountResponse } from '../../../gen/hermes/telegram/v1/client_pb'
+import {
+	ManagedIntegrationSetupV1,
+	type ManagedIntegrationSetupReceiptV1,
+} from '../../../platform/settings'
+import {
+	OwnerVaultActionV1,
+	OwnerVaultProvisioningClientV1,
+	OwnerVaultSecretClassV1,
+	type SanitizedProvisioningHostReceiptV1,
+} from '../../../platform/vault'
+import { provisionTelegramAccount } from '../api/telegramLifecycleGateway'
+
+const TELEGRAM_STORAGE_CAPABILITY_ID = 'telegram.storage.v1'
+const API_HASH_PROVISIONING_CAPABILITY_ID =
+	'telegram.api-hash.credential-provisioning.v1'
+const SESSION_KEY_PROVISIONING_CAPABILITY_ID =
+	'telegram.session-store-key.credential-provisioning.v1'
+
+type TelegramAccountSetupPortsV1 = {
+	configuration: Pick<ManagedIntegrationSetupV1, 'apply'>
+	vault: Pick<OwnerVaultProvisioningClientV1, 'provision'>
+	lifecycle: {
+		provision(input: {
+			accountId: string
+			providerKind: string
+			displayName: string
+			externalAccountId: string
+			credentials: readonly { purpose: string; revision: bigint }[]
+			qrAuthorized: boolean
+		}): Promise<TelegramAccountResponse>
+	}
+}
+
+export type TelegramAccountSetupReceiptV1 = {
+	apiHash: SanitizedProvisioningHostReceiptV1
+	sessionKey: SanitizedProvisioningHostReceiptV1
+	configuration: ManagedIntegrationSetupReceiptV1
+	account: TelegramAccountResponse
+}
+
+export class TelegramAccountSetupWorkflowV1 {
+	constructor(private readonly ports: TelegramAccountSetupPortsV1 = defaultPorts()) {}
+
+	async setup(input: {
+		registrationId: string
+		expectedDesiredRevision: bigint
+		accountId: string
+		displayName: string
+		apiId: bigint
+		apiHash: Uint8Array
+	}): Promise<TelegramAccountSetupReceiptV1> {
+		const accountId = required(input.accountId, 'telegram_account_id_invalid')
+		const displayName = required(input.displayName, 'telegram_display_name_invalid')
+		if (input.apiId <= 0n) throw new Error('telegram_api_id_invalid')
+		const apiHash = await this.ports.vault.provision({
+			targetRegistrationId: input.registrationId,
+			capabilityId: API_HASH_PROVISIONING_CAPABILITY_ID,
+			configurationInstanceId: accountId,
+			purposeId: 'telegram_api_hash',
+			secretClass: OwnerVaultSecretClassV1.PROVIDER_CREDENTIAL,
+			action: OwnerVaultActionV1.CREATE,
+			secretRevision: 1n,
+			secretPayload: input.apiHash,
+		})
+		const sessionPayload = crypto.getRandomValues(new Uint8Array(32))
+		const sessionKey = await this.ports.vault.provision({
+			targetRegistrationId: input.registrationId,
+			capabilityId: SESSION_KEY_PROVISIONING_CAPABILITY_ID,
+			configurationInstanceId: accountId,
+			purposeId: 'telegram_session_encryption_key',
+			secretClass: OwnerVaultSecretClassV1.SESSION_STORE_KEY,
+			action: OwnerVaultActionV1.CREATE,
+			secretRevision: 1n,
+			secretPayload: sessionPayload,
+		})
+		const configuration = await this.ports.configuration.apply({
+			registrationId: input.registrationId,
+			expectedDesiredRevision: input.expectedDesiredRevision,
+			storageCapabilityId: TELEGRAM_STORAGE_CAPABILITY_ID,
+			configurationInstanceId: accountId,
+			requestHostBridge: false,
+			values: [
+				{
+					settingId: 'telegram.account_id',
+					value: { case: 'stringValue', value: accountId },
+				},
+				{
+					settingId: 'telegram.api_id',
+					value: { case: 'signedIntegerValue', value: input.apiId },
+				},
+			],
+		})
+		const account = await this.ports.lifecycle.provision({
+			accountId,
+			providerKind: 'telegram',
+			displayName,
+			externalAccountId: '',
+			credentials: [
+				{ purpose: 'telegram_api_hash', revision: apiHash.secretRevision },
+				{
+					purpose: 'telegram_session_encryption_key',
+					revision: sessionKey.secretRevision,
+				},
+			],
+			qrAuthorized: true,
+		})
+		return { apiHash, sessionKey, configuration, account }
+	}
+}
+
+function defaultPorts(): TelegramAccountSetupPortsV1 {
+	return {
+		configuration: new ManagedIntegrationSetupV1(),
+		vault: new OwnerVaultProvisioningClientV1(),
+		lifecycle: { provision: provisionTelegramAccount },
+	}
+}
+
+function required(value: string, code: string): string {
+	const normalized = value.trim()
+	if (!normalized || normalized.length > 128) throw new Error(code)
+	return normalized
+}

@@ -9,10 +9,20 @@ use prost::Message;
 
 use crate::owner_control_proof::owner_control_proof_message_v1;
 use crate::v1::{
+    AdmitBundledStorageArtifactRequestV1, AdmitBundledStorageArtifactResponseV1,
     ApplyManagedIntegrationSettingsRequestV1, ApplyManagedIntegrationSettingsResponseV1,
+    ApproveModuleRegistrationRequestV1, ApproveModuleRegistrationResponseV1,
     BeginBrowserPairingRequestV1, BeginOwnerControlSessionRequestV1,
-    BeginOwnerControlSessionResponseV1, CompleteOwnerControlSessionRequestV1,
-    OwnerControlRequestV1, OwnerControlResponseV1, TransitionModuleRegistrationRequestV1,
+    BeginOwnerControlSessionResponseV1, BindBundledManagedReleaseRequestV1,
+    BindBundledManagedReleaseResponseV1, CompleteOwnerControlSessionRequestV1,
+    GetModuleRegistrationStatusRequestV1, GetModuleRegistrationStatusResponseV1,
+    IssueManagedStorageBindingRequestV1, IssueManagedStorageBindingResponseV1,
+    OwnerControlRequestV1, OwnerControlResponseV1, ProposeBundledManagedArtifactRequestV1,
+    ProposeBundledManagedArtifactResponseV1, ReserveBundledManagedRuntimeRequestV1,
+    ReserveBundledManagedRuntimeResponseV1, StartReservedDomainRuntimeRequestV1,
+    StartReservedDomainRuntimeResponseV1, StartReservedEngineRuntimeRequestV1,
+    StartReservedEngineRuntimeResponseV1, StartReservedIntegrationRuntimeRequestV1,
+    StartReservedIntegrationRuntimeResponseV1, TransitionModuleRegistrationRequestV1,
     TransitionModuleRegistrationResponseV1, UpdateOperatorSettingsRequestV1,
     UpdateOperatorSettingsResponseV1, owner_control_request_v1, owner_control_response_v1,
 };
@@ -115,6 +125,305 @@ impl OwnerControlClientV1 {
                 Ok(value)
             }
             _ => Err("module registration transition is unavailable".to_owned()),
+        }
+    }
+
+    pub fn module_registration_status(
+        &self,
+        registration_id: &str,
+    ) -> Result<GetModuleRegistrationStatusResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::GetModuleRegistrationStatus(
+                GetModuleRegistrationStatusRequestV1 {
+                    registration_id: registration_id.to_owned(),
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::GetModuleRegistrationStatus(value))
+                if value.registration_id == registration_id =>
+            {
+                Ok(value)
+            }
+            _ => Err("module registration status is unavailable".to_owned()),
+        }
+    }
+
+    pub fn approve_module_registration(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        capability_ids: Vec<String>,
+    ) -> Result<ApproveModuleRegistrationResponseV1, String> {
+        let expected_capability_count = u32::try_from(capability_ids.len())
+            .map_err(|_| "module capability set is invalid".to_owned())?;
+        let response = self.request(
+            owner_control_request_v1::Operation::ApproveModuleRegistration(
+                ApproveModuleRegistrationRequestV1 {
+                    registration_id: registration_id.to_owned(),
+                    capability_id: capability_ids,
+                    owner_session_id: owner_session_id.to_owned(),
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::ApproveModuleRegistration(value))
+                if value.registration_id == registration_id
+                    && value.grant_epoch > 0
+                    && value.effective_capability_count == expected_capability_count =>
+            {
+                Ok(value)
+            }
+            _ => Err("module registration approval is unavailable".to_owned()),
+        }
+    }
+
+    pub fn propose_bundled_managed_artifact(
+        &self,
+        owner_session_id: &str,
+        artifact_id: &str,
+        expected_distribution_id: &str,
+        expected_distribution_generation: u64,
+        idempotency_key: [u8; 16],
+    ) -> Result<ProposeBundledManagedArtifactResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::ProposeBundledManagedArtifact(
+                ProposeBundledManagedArtifactRequestV1 {
+                    owner_session_id: owner_session_id.to_owned(),
+                    artifact_id: artifact_id.to_owned(),
+                    expected_distribution_id: expected_distribution_id.to_owned(),
+                    expected_distribution_generation,
+                    idempotency_key: idempotency_key.to_vec(),
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::ProposeBundledManagedArtifact(value))
+                if value.artifact_id == artifact_id
+                    && value.distribution_id == expected_distribution_id
+                    && value.distribution_generation == expected_distribution_generation
+                    && !value.registration_id.is_empty()
+                    && !value.module_id.is_empty()
+                    && !value.owner_id.is_empty()
+                    && value.descriptor_sha256.len() == 32 =>
+            {
+                Ok(value)
+            }
+            _ => Err("bundled managed artifact proposal is unavailable".to_owned()),
+        }
+    }
+
+    pub fn admit_bundled_storage_artifact(
+        &self,
+        owner_session_id: &str,
+        artifact_id: &str,
+        expected_distribution_id: &str,
+        expected_distribution_generation: u64,
+    ) -> Result<AdmitBundledStorageArtifactResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::AdmitBundledStorageArtifact(
+                AdmitBundledStorageArtifactRequestV1 {
+                    owner_session_id: owner_session_id.to_owned(),
+                    artifact_id: artifact_id.to_owned(),
+                    expected_distribution_id: expected_distribution_id.to_owned(),
+                    expected_distribution_generation,
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::AdmitBundledStorageArtifact(value))
+                if value.artifact_id == artifact_id
+                    && value.distribution_id == expected_distribution_id
+                    && value.distribution_generation == expected_distribution_generation
+                    && !value.owner_id.is_empty()
+                    && value.storage_bundle_revision > 0
+                    && value.storage_bundle_digest.len() == 32 =>
+            {
+                Ok(value)
+            }
+            _ => Err("bundled Storage artifact admission is unavailable".to_owned()),
+        }
+    }
+
+    pub fn bind_bundled_managed_release(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        artifact_id: &str,
+    ) -> Result<BindBundledManagedReleaseResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::BindBundledManagedRelease(
+                BindBundledManagedReleaseRequestV1 {
+                    registration_id: registration_id.to_owned(),
+                    artifact_id: artifact_id.to_owned(),
+                    owner_session_id: owner_session_id.to_owned(),
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::BindBundledManagedRelease(value))
+                if value.registration_id == registration_id
+                    && value.artifact_id == artifact_id
+                    && value.binding_revision > 0
+                    && !value.distribution_id.is_empty() =>
+            {
+                Ok(value)
+            }
+            _ => Err("bundled managed release binding is unavailable".to_owned()),
+        }
+    }
+
+    pub fn reserve_bundled_managed_runtime(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+    ) -> Result<ReserveBundledManagedRuntimeResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::ReserveBundledManagedRuntime(
+                ReserveBundledManagedRuntimeRequestV1 {
+                    registration_id: registration_id.to_owned(),
+                    owner_session_id: owner_session_id.to_owned(),
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::ReserveBundledManagedRuntime(value))
+                if value.registration_id == registration_id
+                    && !value.runtime_instance_id.is_empty()
+                    && value.runtime_generation > 0
+                    && value.grant_epoch > 0 =>
+            {
+                Ok(value)
+            }
+            _ => Err("bundled managed runtime reservation is unavailable".to_owned()),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn issue_managed_storage_binding(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        capability_id: &str,
+        runtime_instance_id: &str,
+        runtime_generation: u64,
+        role_epoch: u64,
+        credential_lease_revision: u64,
+        storage_bundle_revision: u64,
+        storage_bundle_digest: Vec<u8>,
+    ) -> Result<IssueManagedStorageBindingResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::IssueManagedStorageBinding(
+                IssueManagedStorageBindingRequestV1 {
+                    owner_session_id: owner_session_id.to_owned(),
+                    registration_id: registration_id.to_owned(),
+                    capability_id: capability_id.to_owned(),
+                    runtime_instance_id: runtime_instance_id.to_owned(),
+                    runtime_generation,
+                    role_epoch,
+                    credential_lease_revision,
+                    storage_bundle_revision,
+                    storage_bundle_digest,
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::IssueManagedStorageBinding(value))
+                if value.registration_id == registration_id
+                    && value.capability_id == capability_id
+                    && value.binding_revision > 0
+                    && value.topology_revision > 0
+                    && value.storage_generation > 0 =>
+            {
+                Ok(value)
+            }
+            _ => Err("managed Storage binding issuance is unavailable".to_owned()),
+        }
+    }
+
+    pub fn start_reserved_domain_runtime(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        storage_capability_id: &str,
+    ) -> Result<StartReservedDomainRuntimeResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::StartReservedDomainRuntime(
+                StartReservedDomainRuntimeRequestV1 {
+                    registration_id: registration_id.to_owned(),
+                    storage_capability_id: storage_capability_id.to_owned(),
+                    owner_session_id: owner_session_id.to_owned(),
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::StartReservedDomainRuntime(value))
+                if value.registration_id == registration_id
+                    && value.runtime_generation > 0
+                    && value.launch_state == "accepted" =>
+            {
+                Ok(value)
+            }
+            _ => Err("managed domain runtime start is unavailable".to_owned()),
+        }
+    }
+
+    pub fn start_reserved_engine_runtime(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        storage_capability_id: &str,
+    ) -> Result<StartReservedEngineRuntimeResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::StartReservedEngineRuntime(
+                StartReservedEngineRuntimeRequestV1 {
+                    registration_id: registration_id.to_owned(),
+                    storage_capability_id: storage_capability_id.to_owned(),
+                    owner_session_id: owner_session_id.to_owned(),
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::StartReservedEngineRuntime(value))
+                if value.registration_id == registration_id
+                    && value.runtime_generation > 0
+                    && value.launch_state == "accepted" =>
+            {
+                Ok(value)
+            }
+            _ => Err("managed engine runtime start is unavailable".to_owned()),
+        }
+    }
+
+    pub fn start_reserved_integration_runtime(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        storage_capability_id: &str,
+        configuration_instance_id: &str,
+        request_host_bridge: bool,
+    ) -> Result<StartReservedIntegrationRuntimeResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::StartReservedIntegrationRuntime(
+                StartReservedIntegrationRuntimeRequestV1 {
+                    registration_id: registration_id.to_owned(),
+                    storage_capability_id: storage_capability_id.to_owned(),
+                    configuration_instance_id: configuration_instance_id.to_owned(),
+                    owner_session_id: owner_session_id.to_owned(),
+                    request_host_bridge,
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::StartReservedIntegrationRuntime(value))
+                if value.registration_id == registration_id
+                    && ((value.runtime_generation > 0 && value.launch_state == "accepted")
+                        || (value.runtime_generation == 0
+                            && value.launch_state == "unconfigured")) =>
+            {
+                Ok(value)
+            }
+            _ => Err("managed integration runtime start is unavailable".to_owned()),
         }
     }
 

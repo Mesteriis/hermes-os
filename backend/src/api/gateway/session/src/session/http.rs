@@ -44,6 +44,15 @@ impl BrowserSameOriginSessionV1 {
             .then_some(())
             .ok_or_else(|| "browser development origin is invalid".to_owned())
     }
+
+    pub fn require_loopback_development_origin(
+        origin: &str,
+        exact_origin: &str,
+    ) -> Result<(), String> {
+        (origin == exact_origin && valid_exact_loopback_http_origin(origin))
+            .then_some(())
+            .ok_or_else(|| "browser loopback development origin is invalid".to_owned())
+    }
 }
 
 fn valid_exact_private_lan_http_origin(value: &str) -> bool {
@@ -62,6 +71,24 @@ fn valid_exact_private_lan_http_origin(value: &str) -> bool {
         });
     origin.scheme() == "http"
         && private_ip
+        && origin.port().is_some()
+        && origin.username().is_empty()
+        && origin.password().is_none()
+        && origin.path() == "/"
+        && origin.query().is_none()
+        && origin.fragment().is_none()
+        && origin
+            .as_str()
+            .strip_suffix('/')
+            .is_some_and(|raw| raw == value)
+}
+
+fn valid_exact_loopback_http_origin(value: &str) -> bool {
+    let Ok(origin) = Url::parse(value) else {
+        return false;
+    };
+    origin.scheme() == "http"
+        && origin.host_str() == Some("127.0.0.1")
         && origin.port().is_some()
         && origin.username().is_empty()
         && origin.password().is_none()

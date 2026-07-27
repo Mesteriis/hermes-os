@@ -8,6 +8,7 @@ import {
 } from '../../../platform/gateway/publicModuleSettings'
 import ModuleSettingsPanel from '../../../shared/ui/settings/ModuleSettingsPanel.vue'
 import type { ModuleSettingsPanelModel } from '../../../shared/ui/settings/ModuleSettingsPanelModel'
+import TelegramAccountSetupPanel from './TelegramAccountSetupPanel.vue'
 
 const TELEGRAM_MODULE_ID = 'hermes-telegram-runtime'
 const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
@@ -20,7 +21,7 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 		icon: 'tabler:brand-telegram',
 		tone: 'telegram',
 		moduleId: TELEGRAM_MODULE_ID,
-		registered: Boolean(owned?.sectionsEnabled),
+		registered: Boolean(owned),
 		applyState: settings ? settingsApplyStateLabel(settings.applyState) : 'No schema',
 		revision: settings ? `${settings.effectiveRevision}/${settings.desiredRevision}` : '—',
 		reasonCode: publicModuleSettingsReasonCode(owned),
@@ -30,5 +31,8 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 </script>
 
 <template>
-	<ModuleSettingsPanel :model="model" />
+	<div class="provider-settings-stack">
+		<ModuleSettingsPanel :model="model" />
+		<TelegramAccountSetupPanel :module="module" />
+	</div>
 </template>

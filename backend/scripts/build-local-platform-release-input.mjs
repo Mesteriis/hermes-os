@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, relative } from 'node:path';
+import { lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 
 const REQUIRED_OPTIONS = [
   '--target', '--artifact-dir', '--browser-bootstrap', '--output', '--descriptor-dir',
   '--distribution-id', '--release-version', '--build-id',
+  '--source-commit', '--lockfile-sha256', '--sbom-sha256', '--toolchain-sha256',
 ];
 
 const PLATFORM_ARTIFACTS = [
@@ -36,24 +37,66 @@ function parseArguments(argv) {
   return REQUIRED_OPTIONS.every((name) => options.has(name)) ? options : null;
 }
 
-function browserAssetArtifacts(directory) {
+const BROWSER_ASSET_REFERENCE = /\/assets\/[A-Za-z0-9][A-Za-z0-9._/-]*/g;
+const BROWSER_ASSET_EXTENSIONS = new Set(['.css', '.js', '.png', '.svg', '.webp']);
+const TEXT_BROWSER_ASSET_EXTENSIONS = new Set(['.css', '.js']);
+
+function browserAssetReferences(bytes) {
+  return [...bytes.toString('utf8').matchAll(BROWSER_ASSET_REFERENCE)]
+    .map((match) => match[0]);
+}
+
+function validateBrowserAssetName(name) {
+  const parts = name.split('/');
+  const extensionIndex = name.lastIndexOf('.');
+  const extension = extensionIndex < 0 ? '' : name.slice(extensionIndex).toLowerCase();
+  if (
+    name.length === 0
+    || parts.some((part) => part.length === 0 || part === '.' || part === '..')
+    || !BROWSER_ASSET_EXTENSIONS.has(extension)
+  ) {
+    throw new Error(`browser asset reference is invalid: /assets/${name}`);
+  }
+  return extension;
+}
+
+function requireBrowserAsset(directory, name) {
+  let current = directory;
+  for (const part of name.split('/')) {
+    current = join(current, part);
+    const metadata = lstatSync(current);
+    if (metadata.isSymbolicLink()) {
+      throw new Error(`browser asset must not traverse symlinks: /assets/${name}`);
+    }
+  }
+  const metadata = lstatSync(current);
+  if (!metadata.isFile()) {
+    throw new Error(`browser asset must be a regular file: /assets/${name}`);
+  }
+  return current;
+}
+
+function browserAssetArtifacts(directory, browserBootstrap) {
   if (!directory) return [];
   if (!isAbsolute(directory) || !lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink()) {
     throw new Error('browser assets directory must be an absolute non-symlink directory');
   }
-  const files = [];
-  const visit = (current) => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const path = join(current, entry.name);
-      if (entry.isSymbolicLink()) throw new Error('browser assets must not traverse symlinks');
-      if (entry.isDirectory()) visit(path);
-      else if (entry.isFile()) files.push(path);
-      else throw new Error('browser asset must be a regular file');
+
+  const pending = browserAssetReferences(readFileSync(browserBootstrap));
+  const discovered = new Map();
+  while (pending.length > 0) {
+    const reference = pending.pop();
+    const name = reference.slice('/assets/'.length);
+    const extension = validateBrowserAssetName(name);
+    if (discovered.has(name)) continue;
+    const path = requireBrowserAsset(directory, name);
+    discovered.set(name, path);
+    if (TEXT_BROWSER_ASSET_EXTENSIONS.has(extension)) {
+      pending.push(...browserAssetReferences(readFileSync(path)));
     }
-  };
-  visit(directory);
-  return files.sort().map((path) => {
-    const name = relative(directory, path).split('\\').join('/');
+  }
+
+  return [...discovered.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([name, path]) => {
     return {
       artifact_kind: 'browser_client_asset', artifact_id: `browser.asset.${name}`,
       relative_path: `browser/assets/${name}`, source_path: path, required: true,
@@ -158,12 +201,16 @@ function buildInput(options) {
     artifact_kind: 'browser_bootstrap_bundle', artifact_id: 'browser.bootstrap',
     relative_path: 'browser/bootstrap.html', source_path: browserBootstrap, required: true,
   });
-  artifacts.push(...browserAssetArtifacts(options.get('--browser-assets-dir')));
+  artifacts.push(...browserAssetArtifacts(options.get('--browser-assets-dir'), browserBootstrap));
   artifacts.sort((left, right) => left.artifact_id.localeCompare(right.artifact_id));
   return {
     verification_key_id: 'local-release-2026', trust_root_revision: 1, revision: 1,
     distribution_id: options.get('--distribution-id'), release_version: options.get('--release-version'),
     build_id: options.get('--build-id'), target_triple: options.get('--target'), generation: 1,
+    source_commit: options.get('--source-commit'),
+    lockfile_sha256: options.get('--lockfile-sha256'),
+    sbom_sha256: options.get('--sbom-sha256'),
+    toolchain_sha256: options.get('--toolchain-sha256'),
     additional_verification_keys: [], artifacts,
   };
 }
@@ -171,12 +218,20 @@ function buildInput(options) {
 export function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (!options) {
-    fail('usage: build-local-platform-release-input.mjs --target <triple> --artifact-dir <dir> --browser-bootstrap <html> [--browser-assets-dir <dir>] --output <json> --descriptor-dir <dir> --distribution-id <id> --release-version <version> --build-id <id>');
+    fail('usage: build-local-platform-release-input.mjs --target <triple> --artifact-dir <dir> --browser-bootstrap <html> [--browser-assets-dir <dir>] --output <json> --descriptor-dir <dir> --distribution-id <id> --release-version <version> --build-id <id> --source-commit <hex> --lockfile-sha256 <hex> --sbom-sha256 <hex> --toolchain-sha256 <hex>');
     return;
   }
   try {
     for (const option of ['--artifact-dir', '--descriptor-dir', '--output']) {
       if (!isAbsolute(options.get(option))) throw new Error(`${option} must be absolute`);
+    }
+    if (!/^[a-f0-9]{40}$|^[a-f0-9]{64}$/.test(options.get('--source-commit'))) {
+      throw new Error('--source-commit must be a 40-byte or 64-byte lowercase hex digest');
+    }
+    for (const option of ['--lockfile-sha256', '--sbom-sha256', '--toolchain-sha256']) {
+      if (!/^[a-f0-9]{64}$/.test(options.get(option))) {
+        throw new Error(`${option} must be a lowercase SHA-256 digest`);
+      }
     }
     writeFileSync(options.get('--output'), `${JSON.stringify(buildInput(options), null, 2)}\n`, { mode: 0o600, flag: 'wx' });
   } catch (error) {

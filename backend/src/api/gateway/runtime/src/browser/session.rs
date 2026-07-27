@@ -69,7 +69,9 @@ where
             Ok(session) => protobuf_response(BrowserSessionStatusResponseV1 {
                 major: 1,
                 session_expires_at_unix_millis: session.expires_at_unix_millis(),
-                access_mode: if self.service.is_lan_development() {
+                access_mode: if self.service.is_loopback_development() {
+                    BrowserGatewayAccessModeV1::LocalDevelopment as i32
+                } else if self.service.is_lan_development() {
                     BrowserGatewayAccessModeV1::LanDevelopment as i32
                 } else {
                     BrowserGatewayAccessModeV1::Paired as i32

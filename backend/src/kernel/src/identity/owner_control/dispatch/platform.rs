@@ -119,7 +119,7 @@ fn route_foundation(
             configure_storage_topology(store, supervisor, sessions, request)
         }
         Operation::IssueManagedStorageBinding(request) => {
-            issue_managed_storage_binding(store, sessions, request)
+            issue_managed_storage_binding(store, supervisor, sessions, request)
         }
         Operation::IssueExternalStorageBinding(request) => {
             issue_external_storage_binding(store, sessions, request)
@@ -131,6 +131,9 @@ fn route_foundation(
             external_binding::begin(store, sessions, request)
         }
         Operation::AdmitStorageBundle(request) => storage_bundle::admit(store, sessions, request),
+        Operation::AdmitBundledStorageArtifact(request) => {
+            storage_bundle::admit_bundled(store, sessions, request)
+        }
         _ => Err("owner control operation is unavailable".to_owned()),
     }
 }
@@ -321,6 +324,7 @@ fn configure_storage_topology(
 
 fn issue_managed_storage_binding(
     store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
     sessions: &mut OwnerControlSessions,
     request: IssueManagedStorageBindingRequestV1,
 ) -> Result<OwnerResult, String> {
@@ -336,14 +340,18 @@ fn issue_managed_storage_binding(
             request.storage_bundle_revision,
             digest,
         )?;
-        issue_managed(
+        let binding = issue_managed(
             store,
             &request.registration_id,
             &request.runtime_instance_id,
             request.runtime_generation,
             &request.capability_id,
             issue,
-        )
+        )?;
+        crate::platform::storage::provisioning::apply_reserved_binding(
+            supervisor, store, &binding,
+        )?;
+        Ok(binding)
     })()
     .map(|binding| {
         OwnerResult::IssueManagedStorageBinding(IssueManagedStorageBindingResponseV1 {

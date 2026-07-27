@@ -9,7 +9,10 @@ import {
 import { createBrowserGatewayConnectTransport } from './browserGatewayConnect'
 
 export type BrowserGatewaySessionStatus = {
-	accessMode: BrowserGatewayAccessModeV1.PAIRED | BrowserGatewayAccessModeV1.LAN_DEVELOPMENT
+	accessMode:
+		| BrowserGatewayAccessModeV1.PAIRED
+		| BrowserGatewayAccessModeV1.LAN_DEVELOPMENT
+		| BrowserGatewayAccessModeV1.LOCAL_DEVELOPMENT
 	expiresAtUnixMillis: bigint
 }
 
@@ -22,7 +25,8 @@ export async function fetchBrowserGatewaySessionStatus(
 	const response = await client.getStatus(create(BrowserSessionStatusRequestV1Schema))
 	if (response.major !== 1
 		|| (response.accessMode !== BrowserGatewayAccessModeV1.PAIRED
-			&& response.accessMode !== BrowserGatewayAccessModeV1.LAN_DEVELOPMENT)) {
+			&& response.accessMode !== BrowserGatewayAccessModeV1.LAN_DEVELOPMENT
+			&& response.accessMode !== BrowserGatewayAccessModeV1.LOCAL_DEVELOPMENT)) {
 		throw new Error('Unsupported browser Gateway session contract')
 	}
 	return {

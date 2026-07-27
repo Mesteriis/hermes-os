@@ -1,5 +1,81 @@
 //! Durable authority records for a managed child from a signed bundled release.
 
+use crate::{ModuleRegistration, OperationIdV1};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BundledManagedArtifactProposalInputV1 {
+    operation_id: OperationIdV1,
+    request_digest: [u8; 32],
+    distribution_id: String,
+    distribution_generation: u64,
+    artifact_id: String,
+}
+
+impl BundledManagedArtifactProposalInputV1 {
+    #[must_use]
+    pub fn new(
+        operation_id: OperationIdV1,
+        request_digest: [u8; 32],
+        distribution_id: impl Into<String>,
+        distribution_generation: u64,
+        artifact_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            operation_id,
+            request_digest,
+            distribution_id: distribution_id.into(),
+            distribution_generation,
+            artifact_id: artifact_id.into(),
+        }
+    }
+
+    #[must_use]
+    pub const fn operation_id(&self) -> OperationIdV1 {
+        self.operation_id
+    }
+    #[must_use]
+    pub const fn request_digest(&self) -> &[u8; 32] {
+        &self.request_digest
+    }
+    #[must_use]
+    pub fn distribution_id(&self) -> &str {
+        &self.distribution_id
+    }
+    #[must_use]
+    pub const fn distribution_generation(&self) -> u64 {
+        self.distribution_generation
+    }
+    #[must_use]
+    pub fn artifact_id(&self) -> &str {
+        &self.artifact_id
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BundledManagedArtifactProposalReceiptV1 {
+    registration: ModuleRegistration,
+    replayed: bool,
+}
+
+impl BundledManagedArtifactProposalReceiptV1 {
+    #[must_use]
+    pub const fn new(registration: ModuleRegistration, replayed: bool) -> Self {
+        Self {
+            registration,
+            replayed,
+        }
+    }
+
+    #[must_use]
+    pub const fn registration(&self) -> &ModuleRegistration {
+        &self.registration
+    }
+    #[must_use]
+    pub const fn replayed(&self) -> bool {
+        self.replayed
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BundledManagedLaunchBinding {
     registration_id: String,

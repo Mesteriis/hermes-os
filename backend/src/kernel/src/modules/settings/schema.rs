@@ -1,13 +1,15 @@
 //! Verifies and persists the immutable SettingsSchema artifact for one module registration.
 
 use hermes_kernel_control_store::{
-    ModuleRegistrationState, ModuleRegistryStore, SettingsApplyState, SettingsRegistryStore,
-    SettingsSchemaBinding, SettingsSchemaBindingInputV1,
+    ModuleRegistrationState, ModuleRegistryStore, SettingsApplyState, SettingsInitialSnapshot,
+    SettingsRegistryStore, SettingsSchemaBinding, SettingsSchemaBindingInputV1,
 };
 use hermes_kernel_control_store_sqlite::StoreError;
+use hermes_runtime_protocol::v1::{SettingsSnapshotV1, SettingsValueEntryV1};
 use hermes_runtime_protocol::validation::descriptor::{
-    decode_descriptor_v1, decode_settings_schema_v1,
+    decode_descriptor_v1, decode_settings_schema_v1, validate_settings_snapshot_against_schema_v1,
 };
+use prost::Message;
 use sha2::{Digest, Sha256};
 
 pub fn admit<S>(
@@ -18,6 +20,94 @@ pub fn admit<S>(
 ) -> Result<SettingsSchemaBinding, String>
 where
     S: ModuleRegistryStore<Error = StoreError> + SettingsRegistryStore<Error = StoreError>,
+{
+    let binding = validated_binding(store, registration_id, descriptor_bytes, schema_bytes)?;
+    store
+        .admit_settings_schema(&binding, schema_bytes)
+        .map_err(|error| format!("{error:?}"))?;
+    Ok(binding)
+}
+
+pub fn admit_bundled_and_materialize_initial<S>(
+    store: &S,
+    registration_id: &str,
+    descriptor_bytes: &[u8],
+    schema_bytes: &[u8],
+) -> Result<SettingsSchemaBinding, String>
+where
+    S: ModuleRegistryStore<Error = StoreError> + SettingsRegistryStore<Error = StoreError>,
+{
+    let binding = validated_binding(store, registration_id, descriptor_bytes, schema_bytes)?;
+    match store
+        .settings_schema_binding(registration_id)
+        .map_err(|error| format!("{error:?}"))?
+    {
+        None => store
+            .admit_settings_schema(&binding, schema_bytes)
+            .map_err(|error| format!("{error:?}"))?,
+        Some(existing)
+            if existing.schema_major() == binding.schema_major()
+                && existing.schema_revision() == binding.schema_revision()
+                && existing.schema_sha256() == binding.schema_sha256()
+                && store
+                    .settings_schema_artifact(registration_id)
+                    .map_err(|error| format!("{error:?}"))?
+                    .as_deref()
+                    == Some(schema_bytes) => {}
+        Some(_) => return Err("bundled settings schema conflicts with the registration".to_owned()),
+    }
+
+    let current = store
+        .settings_schema_binding(registration_id)
+        .map_err(|error| format!("{error:?}"))?
+        .ok_or_else(|| "bundled settings schema admission is unavailable".to_owned())?;
+    if current.desired_revision() == 0
+        && current.effective_revision() == 0
+        && current.apply_state() == SettingsApplyState::Current
+    {
+        let schema = decode_settings_schema_v1(schema_bytes).map_err(|_| {
+            "module settings schema is invalid or exceeds protocol limits".to_owned()
+        })?;
+        let values = schema
+            .definitions
+            .iter()
+            .filter_map(|definition| {
+                definition
+                    .default_value
+                    .clone()
+                    .map(|value| SettingsValueEntryV1 {
+                        setting_id: definition.setting_id.clone(),
+                        value: Some(value),
+                    })
+            })
+            .collect::<Vec<_>>();
+        let complete = values.len() == schema.definitions.len();
+        let snapshot = SettingsSnapshotV1 {
+            target_id: registration_id.to_owned(),
+            revision: 1,
+            values,
+        };
+        validate_settings_snapshot_against_schema_v1(&schema, &snapshot)
+            .map_err(|_| "initial module settings snapshot is invalid".to_owned())?;
+        store
+            .materialize_initial_settings_snapshot(&SettingsInitialSnapshot {
+                registration_id: registration_id.to_owned(),
+                snapshot_bytes: snapshot.encode_to_vec(),
+                complete,
+            })
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    Ok(binding)
+}
+
+fn validated_binding<S>(
+    store: &S,
+    registration_id: &str,
+    descriptor_bytes: &[u8],
+    schema_bytes: &[u8],
+) -> Result<SettingsSchemaBinding, String>
+where
+    S: ModuleRegistryStore<Error = StoreError>,
 {
     let registration = store
         .module_registration(registration_id)
@@ -59,9 +149,6 @@ where
         apply_state: SettingsApplyState::Current,
         sanitized_reason_code: None,
     });
-    store
-        .admit_settings_schema(&binding, schema_bytes)
-        .map_err(|error| format!("{error:?}"))?;
     Ok(binding)
 }
 

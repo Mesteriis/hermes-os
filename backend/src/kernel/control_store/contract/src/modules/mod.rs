@@ -21,7 +21,7 @@ pub use grant_snapshot::ModuleGrantSnapshot;
 pub use registration::{ModuleRegistration, ModuleRegistrationState};
 pub use scheduler_request::ModuleSchedulerJobRequestV1;
 pub use settings::{
-    SettingsApplyState, SettingsDesiredSnapshot, SettingsSchemaBinding,
+    SettingsApplyState, SettingsDesiredSnapshot, SettingsInitialSnapshot, SettingsSchemaBinding,
     SettingsSchemaBindingInputV1,
 };
 pub use storage_request::ModuleStorageRequestV1;

@@ -25,6 +25,7 @@ pub struct BrowserGatewaySessionService<A> {
 pub enum BrowserGatewayAccessModeV1 {
     Paired,
     LanDevelopment(BrowserSession),
+    LoopbackDevelopment(BrowserSession),
 }
 
 impl<A> BrowserGatewaySessionService<A>
@@ -74,11 +75,42 @@ where
         })
     }
 
+    pub fn new_loopback_development(
+        authority: A,
+        exact_origin: impl Into<String>,
+        owner_id: impl Into<String>,
+        device_id: impl Into<String>,
+    ) -> Result<Self, String> {
+        let exact_origin = exact_origin.into();
+        BrowserSameOriginSessionV1::require_loopback_development_origin(
+            &exact_origin,
+            &exact_origin,
+        )?;
+        Ok(Self {
+            authority,
+            verifier: None,
+            exact_https_origin: exact_origin,
+            authentications: Mutex::new(BrowserAuthenticationManager::default()),
+            sessions: Mutex::new(BrowserSessionManager::default()),
+            access_mode: BrowserGatewayAccessModeV1::LoopbackDevelopment(
+                BrowserSession::loopback_development(owner_id, device_id)?,
+            ),
+        })
+    }
+
     #[must_use]
     pub const fn is_lan_development(&self) -> bool {
         matches!(
             self.access_mode,
             BrowserGatewayAccessModeV1::LanDevelopment(_)
+        )
+    }
+
+    #[must_use]
+    pub const fn is_loopback_development(&self) -> bool {
+        matches!(
+            self.access_mode,
+            BrowserGatewayAccessModeV1::LoopbackDevelopment(_)
         )
     }
 
@@ -143,6 +175,7 @@ where
                 cookie_header.ok_or_else(|| "browser device session is unavailable".to_owned())?,
             ),
             BrowserGatewayAccessModeV1::LanDevelopment(session) => Ok(session.clone()),
+            BrowserGatewayAccessModeV1::LoopbackDevelopment(session) => Ok(session.clone()),
         }
     }
 
@@ -167,6 +200,12 @@ where
             }
             BrowserGatewayAccessModeV1::LanDevelopment(_) => {
                 BrowserSameOriginSessionV1::require_lan_development_origin(
+                    origin,
+                    &self.exact_https_origin,
+                )
+            }
+            BrowserGatewayAccessModeV1::LoopbackDevelopment(_) => {
+                BrowserSameOriginSessionV1::require_loopback_development_origin(
                     origin,
                     &self.exact_https_origin,
                 )

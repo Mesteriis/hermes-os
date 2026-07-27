@@ -156,6 +156,7 @@ mod tests {
     mod blob_service;
     mod browser_device_identity;
     mod browser_gateway_session;
+    mod bundled_artifact_proposal;
     mod capture_coordinator;
     mod client_rpc_routes;
     mod common;

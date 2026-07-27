@@ -8,6 +8,7 @@ import {
 } from '../../../platform/gateway/publicModuleSettings'
 import ModuleSettingsPanel from '../../../shared/ui/settings/ModuleSettingsPanel.vue'
 import type { ModuleSettingsPanelModel } from '../../../shared/ui/settings/ModuleSettingsPanelModel'
+import MailAccountSetupPanel from './MailAccountSetupPanel.vue'
 import MailPortabilityPanel from './MailPortabilityPanel.vue'
 
 const MAIL_MODULE_ID = 'hermes-mail-runtime'
@@ -21,7 +22,7 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 		icon: 'tabler:mail',
 		tone: 'mail',
 		moduleId: MAIL_MODULE_ID,
-		registered: Boolean(owned?.sectionsEnabled),
+		registered: Boolean(owned),
 		applyState: settings ? settingsApplyStateLabel(settings.applyState) : 'No schema',
 		revision: settings ? `${settings.effectiveRevision}/${settings.desiredRevision}` : '—',
 		reasonCode: publicModuleSettingsReasonCode(owned),
@@ -33,6 +34,7 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 <template>
 	<div class="mail-settings-owner">
 		<ModuleSettingsPanel :model="model" />
+		<MailAccountSetupPanel :module="module" />
 		<MailPortabilityPanel :module="module" />
 	</div>
 </template>

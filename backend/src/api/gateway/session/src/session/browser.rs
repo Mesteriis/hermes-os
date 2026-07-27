@@ -63,11 +63,26 @@ impl BrowserSession {
         owner_id: impl Into<String>,
         device_id: impl Into<String>,
     ) -> Result<Self, String> {
+        Self::development("lan-development", owner_id, device_id)
+    }
+
+    pub(crate) fn loopback_development(
+        owner_id: impl Into<String>,
+        device_id: impl Into<String>,
+    ) -> Result<Self, String> {
+        Self::development("loopback-development", owner_id, device_id)
+    }
+
+    fn development(
+        session_id: &str,
+        owner_id: impl Into<String>,
+        device_id: impl Into<String>,
+    ) -> Result<Self, String> {
         let owner_id = owner_id.into();
         let device_id = device_id.into();
         (!owner_id.is_empty() && !device_id.is_empty())
             .then_some(Self {
-                session_id: "lan-development".to_owned(),
+                session_id: session_id.to_owned(),
                 owner_id,
                 device_id,
                 expires_at_unix_millis: u64::MAX,

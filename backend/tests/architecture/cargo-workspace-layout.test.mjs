@@ -100,13 +100,17 @@ test('accepts test-support manifests in the dedicated test-only workspace root',
   );
 });
 
-test('accepts the explicit development runtime root and rejects another development package', () => {
+test('accepts explicit development unit roots and rejects production roles there', () => {
   assert.deepEqual(
     validateWorkspaceManifestCoverage(
       ['src/kernel/Cargo.toml'],
       [],
-      ['development/runtime/Cargo.toml'],
-      ['src/kernel/Cargo.toml', 'development/runtime/Cargo.toml'],
+      ['development/runtime/Cargo.toml', 'development/assembly/Cargo.toml'],
+      [
+        'src/kernel/Cargo.toml',
+        'development/runtime/Cargo.toml',
+        'development/assembly/Cargo.toml',
+      ],
     ),
     [],
   );

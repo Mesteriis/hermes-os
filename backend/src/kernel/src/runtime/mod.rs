@@ -6,10 +6,12 @@ pub(crate) mod managed;
 
 use std::path::PathBuf;
 
-use hermes_kernel_control_store::StoreHealth;
+use hermes_kernel_control_store::{InitialOwnerIdentity, StoreHealth};
+use hermes_kernel_control_store_sqlite::SqliteControlStore;
 
 use crate::cli::Command;
 use crate::control_store::lifecycle::bootstrap_control_store;
+use crate::identity::device::signer::{DeviceSigner, FileDeviceSigner};
 use crate::infrastructure::filesystem::{
     acquire_runtime_directory_lock, resolve_data_directory, resolve_runtime_directory,
 };
@@ -25,7 +27,7 @@ pub(crate) fn run(data_dir_override: Option<PathBuf>, command: Command) -> Resul
     let _lock = acquire_runtime_directory_lock(&runtime_dir)?;
     let store_path = data_dir.join("kernel-control-store.sqlite");
     match command {
-        Command::Status => print_status(bootstrap_control_store(&data_dir, &store_path)),
+        Command::Status => print_status(&data_dir, bootstrap_control_store(&data_dir, &store_path)),
         Command::Serve { browser_gateway } => {
             let store = bootstrap_control_store(&data_dir, &store_path);
             let browser_gateway = browser_gateway.into_configuration()?;
@@ -36,17 +38,58 @@ pub(crate) fn run(data_dir_override: Option<PathBuf>, command: Command) -> Resul
 }
 
 fn print_status(
-    store: Result<hermes_kernel_control_store_sqlite::SqliteControlStore, String>,
+    data_dir: &std::path::Path,
+    store: Result<SqliteControlStore, String>,
 ) -> Result<(), String> {
-    let (state, control_store) = match store {
+    let (state, control_store, owner_identity, owner_device_signer) = match store {
         Ok(store) if store.snapshot().health() == StoreHealth::Trustworthy => {
-            ("module_control_plane", "trustworthy")
+            let owner = store.initial_owner_identity();
+            let owner_identity = match &owner {
+                Ok(Some(_)) => "enrolled",
+                Ok(None) => "missing",
+                Err(_) => "unavailable",
+            };
+            let owner_device_signer = device_signer_status(data_dir, owner.ok().flatten().as_ref());
+            (
+                "module_control_plane",
+                "trustworthy",
+                owner_identity,
+                owner_device_signer,
+            )
         }
-        Ok(_) | Err(_) => ("recovery_only", "unavailable"),
+        Ok(_) | Err(_) => (
+            "recovery_only",
+            "unavailable",
+            "unavailable",
+            device_signer_status(data_dir, None),
+        ),
     };
     println!("state={state}");
     println!("control_store={control_store}");
+    println!("owner_identity={owner_identity}");
+    println!("owner_device_signer={owner_device_signer}");
     Ok(())
+}
+
+fn device_signer_status(
+    data_dir: &std::path::Path,
+    owner: Option<&InitialOwnerIdentity>,
+) -> &'static str {
+    match std::fs::symlink_metadata(FileDeviceSigner::key_path(data_dir)) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => "missing",
+        Err(_) => "unavailable",
+        Ok(_) => match FileDeviceSigner::open_for_instance(data_dir) {
+            Ok(signer)
+                if owner.is_some_and(|identity| {
+                    signer.public_key_sec1() != *identity.public_key_sec1()
+                }) =>
+            {
+                "mismatch"
+            }
+            Ok(_) => "ready",
+            Err(_) => "unavailable",
+        },
+    }
 }
 
 fn serve(

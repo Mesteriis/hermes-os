@@ -136,3 +136,31 @@ fn derived_platform_status(
         owner.sanitized_reason_code().map(str::to_owned),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use hermes_gateway_session_contract::{
+        ClientSystemComponentIdV1, ClientSystemComponentStateV1,
+    };
+
+    use super::realtime_status;
+
+    #[test]
+    fn development_realtime_status_tracks_the_admitted_source() {
+        let unavailable = realtime_status(false);
+        assert_eq!(unavailable.component_id(), ClientSystemComponentIdV1::Sse);
+        assert_eq!(
+            unavailable.state(),
+            ClientSystemComponentStateV1::Unavailable
+        );
+        assert_eq!(
+            unavailable.sanitized_reason_code(),
+            Some("client_realtime_owner_not_admitted")
+        );
+
+        let healthy = realtime_status(true);
+        assert_eq!(healthy.component_id(), ClientSystemComponentIdV1::Sse);
+        assert_eq!(healthy.state(), ClientSystemComponentStateV1::Healthy);
+        assert_eq!(healthy.sanitized_reason_code(), None);
+    }
+}

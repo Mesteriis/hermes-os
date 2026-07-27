@@ -6,27 +6,21 @@ Hermes Hub — local-first Personal Memory System / Personal Operating System.
 
 ## Текущее состояние
 
-> Clean-room backend ещё не реализован и не запускается.
-
-На 2026-07-16 репозиторий находится между предыдущей реализацией и новым
-модульным backend:
-
 | Область | Текущее состояние |
 |---|---|
-| Clean-room backend | В `backend/` есть virtual Cargo workspace и executable architecture guard; production packages и runtime отсутствуют |
+| Clean-room backend | Cargo workspace реализует Kernel/Core platform gates, Communications owner и отдельный Attachment Security engine; provider integrations остаются отдельными units и открываются по независимым capability gates |
 | Предыдущий backend | Перенесён в `references/backend-legacy/` и используется только как evidence/reference |
-| Desktop frontend | Vue 3 + Vite + Tauri сохранён как продуктовая и миграционная поверхность, но ещё не переключён на новый Core Gateway |
+| Desktop frontend | Vue 3 + Vite + Tauri страницы Communications/Settings используют generated clean-room Core Gateway contracts и capability-driven availability |
 | Android | Запланирован; код клиента и окончательная Kernel topology отсутствуют |
-| Active architecture | ADR-0200…ADR-0226 в `docs/adr/`; executable policy, scripts и tests находятся внутри `backend/` |
+| Local development | Root `make dev` поднимает Compose, Kernel/Core Gateway и Vite, проверяет readiness и открывает loopback browser contour |
+| Active architecture | Clean-room ADR находятся в `docs/adr/`; executable policy, scripts и tests находятся внутри `backend/` |
 | Предыдущая документация | Перенесена в `references/backend-legacy/docs/` и не является действующей policy |
 
-В новой реализации пока нет подтверждённых end-to-end функций, API routes,
-схемы базы данных, migrations или production crates.
-
-В предыдущей реализации только Mail, Telegram и Zulip сообщались как
-работающие. После переноса в reference они не считаются проверенными функциями
-новой системы. WhatsApp и остальные providers не считаются работающими без
-нового executable evidence.
+Наличие workspace package или UI route не означает release admission либо
+live provider readiness. `make dev` не создаёт provider credentials и не
+запускает managed domain/integration runtimes за пределами их отдельных
+assembly/admission units; клиент показывает фактическую availability из
+Gateway bootstrap.
 
 ## Запуск и validation
 
@@ -42,10 +36,14 @@ make clean
 ```
 
 `test` запускает только проверки, затронутые текущими изменениями (базовый
-commit можно переопределить через `HERMES_TEST_BASE`); `dev` поднимает
-development Compose contour, Kernel и Vite в одном lifecycle, а `tauri`
-собирает desktop app. По умолчанию Kernel использует
-`.local/kernel-dev`; другой data directory задаётся через `HERMES_DEV_DATA_DIR`.
+commit можно переопределить через `HERMES_TEST_BASE`). `dev` поднимает
+development Compose contour, создаёт только отсутствующую pristine
+development owner identity, запускает Kernel с loopback Core Gateway и Vite,
+ждёт direct и same-origin readiness, затем открывает
+`http://127.0.0.1:5173/`. Kernel и Vite имеют один foreground lifecycle;
+Compose остаётся запущенным после остановки. По умолчанию используется
+`.local/kernel-dev`; другой абсолютный data directory задаётся через
+`HERMES_DEV_DATA_DIR`. `tauri` собирает desktop app.
 
 Не следует использовать старые legacy `make`-цели,
 `/api/v1/**` routes или `X-Hermes-Secret` как описание новой системы. Legacy
@@ -169,15 +167,13 @@ Tauri / planned Android / headless client
 
 ## Структура репозитория
 
-- [`backend/`](backend/) — единственная граница clean-room backend: virtual
-  Cargo workspace, policy, scripts, tests и exact six-package
-  `kernel_recovery_only_v1` implementation. Kernel может достигнуть только
-  private `recovery_only`; external services, owners и business data plane ещё
-  не реализованы.
+- [`backend/`](backend/) — единственная граница clean-room backend: Cargo
+  workspace, owner-isolated packages, platform/runtime contracts, policy,
+  scripts и tests.
 - [`references/backend-legacy/`](references/backend-legacy/) — предыдущий Rust
   backend и workspace только для исследования.
-- [`frontend/`](frontend/) — существующий Vue 3 / Vite / Tauri client,
-  ожидающий перехода на новые contracts.
+- [`frontend/`](frontend/) — Vue 3 / Vite / Tauri client с generated Core
+  Gateway contracts для принятого clean-room surface.
 - [`docs/`](docs/) — только действующие clean-room ADR и минимальные
   architecture summaries.
 - [`references/backend-legacy/docs/`](references/backend-legacy/docs/) — вся

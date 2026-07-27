@@ -12,6 +12,7 @@ pub const BLOB_PROCESS_ID: &str = "blob";
 
 const IDENTITY: PlatformReleaseIdentity = PlatformReleaseIdentity {
     process_id: BLOB_PROCESS_ID,
+    artifact_id: "platform.blob",
     module_id: "blob",
     owner_id: "blob",
     target_triple: "aarch64-apple-darwin",

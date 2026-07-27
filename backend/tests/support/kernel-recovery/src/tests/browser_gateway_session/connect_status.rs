@@ -127,7 +127,88 @@ fn lan_development_mode_bypasses_cookie_only_for_direct_same_origin_requests() {
 }
 
 #[test]
-fn browser_bootstrap_contains_only_current_visible_settings_for_owner_modules() {
+fn loopback_development_mode_requires_the_exact_private_proxy_hop() {
+    const PROOF: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let root = unique_target_root("hermes-browser-gateway-loopback-development");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = Arc::new(
+        SqliteControlStore::create(&root.join("control.sqlite"), "instance-development", 1)
+            .expect("create store"),
+    );
+    store
+        .claim_initial_owner(&InitialOwnerIdentity::new("owner-1", "desktop-1", [4; 65]))
+        .expect("claim initial owner");
+    let service = BrowserGatewaySessionService::new_loopback_development(
+        browser_authority(Arc::clone(&store)),
+        "http://127.0.0.1:5173",
+        "owner-1",
+        "desktop-1",
+    )
+    .expect("loopback development session service");
+    let router = GatewayApplicationRouter::new(true, Arc::new(service), ClosedReplaySource)
+        .with_loopback_development_proxy_policy("http://127.0.0.1:5173", PROOF)
+        .expect("loopback development proxy policy");
+    let runtime = tokio::runtime::Runtime::new().expect("test runtime");
+    let admitted_headers = [
+        ("host", "127.0.0.1:5173"),
+        ("origin", "http://127.0.0.1:5173"),
+        ("x-hermes-development-proxy-proof", PROOF),
+    ];
+
+    let status_response = runtime
+        .block_on(router.route(session_status_request_with_headers(None, &admitted_headers)));
+    assert_eq!(status_response.status(), StatusCode::OK);
+    let body = runtime
+        .block_on(status_response.into_body().collect())
+        .expect("status body")
+        .to_bytes();
+    let status = BrowserSessionStatusResponseV1::decode(body).expect("typed status");
+    assert_eq!(
+        status.access_mode,
+        BrowserGatewayAccessModeV1::LocalDevelopment as i32
+    );
+
+    for rejected_headers in [
+        vec![
+            ("host", "127.0.0.1:5173"),
+            ("origin", "http://127.0.0.1:5173"),
+        ],
+        vec![
+            ("host", "127.0.0.1:5173"),
+            ("origin", "http://127.0.0.1:5173"),
+            ("x-hermes-development-proxy-proof", "bad"),
+        ],
+        vec![
+            ("host", "127.0.0.1:9444"),
+            ("origin", "http://127.0.0.1:5173"),
+            ("x-hermes-development-proxy-proof", PROOF),
+        ],
+        vec![
+            ("host", "127.0.0.1:5173"),
+            ("origin", "http://127.0.0.1:9444"),
+            ("x-hermes-development-proxy-proof", PROOF),
+        ],
+        vec![
+            ("host", "127.0.0.1:5173"),
+            ("origin", "http://127.0.0.1:5173"),
+            ("x-hermes-development-proxy-proof", PROOF),
+            ("x-forwarded-for", "203.0.113.4"),
+        ],
+    ] {
+        assert_eq!(
+            runtime
+                .block_on(
+                    router.route(session_status_request_with_headers(None, &rejected_headers,))
+                )
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn browser_bootstrap_contains_the_logical_owners_approved_module_composition() {
     let fixture = authentication_http_fixture();
     admit_bootstrap_modules(&fixture);
     let (authentication_id, challenge, browser_key_challenge) =
@@ -149,8 +230,12 @@ fn browser_bootstrap_contains_only_current_visible_settings_for_owner_modules() 
 }
 
 fn assert_current_owner_bootstrap(bootstrap: &ClientBootstrapResponseV1) {
-    assert_eq!(bootstrap.modules.len(), 1);
-    let module = &bootstrap.modules[0];
+    assert_eq!(bootstrap.modules.len(), 2);
+    let module = bootstrap
+        .modules
+        .iter()
+        .find(|module| module.module_id == "module-visible")
+        .expect("visible module");
     assert_eq!(module.module_id, "module-visible");
     assert!(module.sections_enabled);
     assert_eq!(
@@ -234,9 +319,14 @@ fn advance_visible_settings_revision(fixture: &AuthenticationHttpFixture) {
 }
 
 fn assert_pending_owner_bootstrap(pending: &ClientBootstrapResponseV1) {
-    assert!(!pending.modules[0].sections_enabled);
+    let module = pending
+        .modules
+        .iter()
+        .find(|module| module.module_id == "module-visible")
+        .expect("visible module");
+    assert!(!module.sections_enabled);
     assert!(
-        pending.modules[0]
+        module
             .settings
             .as_ref()
             .expect("settings package")
@@ -278,6 +368,20 @@ fn session_status_request_with_admission(
     host: Option<&str>,
     extra_header: Option<(&str, &str)>,
 ) -> Request<Full<Bytes>> {
+    let mut headers = Vec::new();
+    if let Some(host) = host {
+        headers.push(("host", host));
+    }
+    if let Some(extra_header) = extra_header {
+        headers.push(extra_header);
+    }
+    session_status_request_with_headers(cookie, &headers)
+}
+
+fn session_status_request_with_headers(
+    cookie: Option<&str>,
+    headers: &[(&str, &str)],
+) -> Request<Full<Bytes>> {
     let mut request = Request::builder()
         .method("POST")
         .uri(SESSION_STATUS_PATH)
@@ -286,10 +390,7 @@ fn session_status_request_with_admission(
     if let Some(cookie) = cookie {
         request = request.header("cookie", cookie);
     }
-    if let Some(host) = host {
-        request = request.header("host", host);
-    }
-    if let Some((name, value)) = extra_header {
+    for &(name, value) in headers {
         request = request.header(name, value);
     }
     request
@@ -401,6 +502,7 @@ fn visible_schema() -> SettingsSchemaV1 {
         fresh_owner_proof_required: false,
         kernel_controller_id: String::new(),
         display_name: setting_id.to_owned(),
+        default_value: None,
     };
     SettingsSchemaV1 {
         major: 1,

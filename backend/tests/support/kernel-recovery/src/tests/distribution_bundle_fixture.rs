@@ -5,6 +5,7 @@ fn distribution_bundle_verifier_requires_the_signed_target_and_exact_artifact_by
     let fixture = DistributionBundleFixture::new();
     let verified = fixture.verify();
     fixture.assert_verified_contract(&verified);
+    fixture.assert_pending_proposal(&verified);
     fixture.assert_launch_binding(&verified);
     fixture.assert_registration_identity_rejected(&verified);
     fixture.assert_path_and_target_rejected();
@@ -58,8 +59,107 @@ fn signed_browser_bootstrap_artifact_is_read_only_after_manifest_verification() 
             .expect("re-read guarded bytes"),
         bootstrap
     );
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-browser", 1)
+        .expect("create browser control store");
+    claim_test_owner(&store);
+    assert_eq!(
+        crate::platform::macos::bundled_release::propose_verified_artifact(
+            &store,
+            "browser.bootstrap",
+            "hermes-desktop",
+            1,
+            [3; 16],
+            &verified,
+        )
+        .err()
+        .expect("reject non-module artifact"),
+        "managed launch artifact is not a module runtime"
+    );
     std::fs::write(&bootstrap_path, b"tampered").expect("tamper bootstrap");
     assert!(artifact.read_verified_bytes().is_err());
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn browser_bundle_verification_hashes_only_the_signed_artifact_kinds_it_serves() {
+    let root = unique_target_root("hermes-selected-browser-artifacts");
+    let bootstrap_path = root.join("browser/bootstrap.html");
+    let infrastructure_path = root.join("bin/platform-runtime");
+    std::fs::create_dir_all(bootstrap_path.parent().expect("bootstrap parent"))
+        .expect("create bootstrap directory");
+    std::fs::create_dir_all(infrastructure_path.parent().expect("infrastructure parent"))
+        .expect("create infrastructure directory");
+    let bootstrap = b"<!doctype html><title>Hermes</title>".to_vec();
+    let infrastructure = b"signed but unused platform executable".to_vec();
+    std::fs::write(&bootstrap_path, &bootstrap).expect("write bootstrap");
+    std::fs::write(&infrastructure_path, &infrastructure).expect("write infrastructure");
+    let signing_key = SigningKey::from_bytes((&[29_u8; 32]).into()).expect("test signing key");
+    let manifest = DistributionManifestV1 {
+        major: 1,
+        revision: 1,
+        distribution_id: "hermes-desktop".to_owned(),
+        release_version: "1.0.0".to_owned(),
+        build_id: "selected-browser-artifacts".to_owned(),
+        target_triple: "aarch64-apple-darwin".to_owned(),
+        generation: 1,
+        artifacts: vec![
+            DistributionManifestArtifactV1 {
+                artifact_kind: DistributionArtifactKindV1::BrowserBootstrapBundle as i32,
+                artifact_id: "browser.bootstrap".to_owned(),
+                relative_path: "browser/bootstrap.html".to_owned(),
+                size_bytes: bootstrap.len() as u64,
+                sha256: Sha256::digest(&bootstrap).to_vec(),
+                required: true,
+                ..Default::default()
+            },
+            DistributionManifestArtifactV1 {
+                artifact_kind: DistributionArtifactKindV1::InfrastructureExecutable as i32,
+                artifact_id: "platform.runtime".to_owned(),
+                relative_path: "bin/platform-runtime".to_owned(),
+                size_bytes: infrastructure.len() as u64,
+                sha256: Sha256::digest(&infrastructure).to_vec(),
+                required: true,
+                ..Default::default()
+            },
+        ],
+    };
+    let (signed, trust_root) = sign_bundle_manifest(&manifest, &signing_key);
+    std::fs::write(&infrastructure_path, b"tampered but not served")
+        .expect("tamper unused infrastructure");
+
+    let verified = distribution_bundle_verifier::verify_artifact_kinds(
+        &root,
+        &signed.encode_to_vec(),
+        &trust_root,
+        "aarch64-apple-darwin",
+        &[DistributionArtifactKindV1::BrowserBootstrapBundle],
+    )
+    .expect("verify selected browser artifact");
+    assert_eq!(verified.manifest(), &manifest);
+    assert_eq!(verified.artifacts().len(), 1);
+    assert_eq!(verified.artifacts()[0].artifact_id(), "browser.bootstrap");
+    let verified_by_id = distribution_bundle_verifier::verify_artifact_ids(
+        &root,
+        &signed.encode_to_vec(),
+        &trust_root,
+        "aarch64-apple-darwin",
+        &["browser.bootstrap"],
+    )
+    .expect("verify exact browser artifact ID");
+    assert_eq!(verified_by_id.artifacts().len(), 1);
+    assert_eq!(
+        verified_by_id.artifacts()[0].artifact_id(),
+        "browser.bootstrap"
+    );
+    assert!(
+        distribution_bundle_verifier::verify(
+            &root,
+            &signed.encode_to_vec(),
+            &trust_root,
+            "aarch64-apple-darwin",
+        )
+        .is_err()
+    );
     std::fs::remove_dir_all(root).expect("remove fixture directory");
 }
 
@@ -155,7 +255,23 @@ impl DistributionBundleFixture {
         let settings_schema = SettingsSchemaV1 {
             major: 1,
             revision: 1,
-            ..Default::default()
+            definitions: vec![SettingDefinitionV1 {
+                setting_id: "runtime.enabled".to_owned(),
+                capability_id: String::new(),
+                value_type: SettingValueTypeV1::Boolean as i32,
+                mutation_authority: SettingMutationAuthorityV1::OperatorManaged as i32,
+                target_scope: SettingTargetScopeV1::ModuleRegistration as i32,
+                apply_mode: SettingApplyModeV1::RestartModule as i32,
+                client_visibility: SettingClientVisibilityV1::Editable as i32,
+                fresh_owner_proof_required: true,
+                kernel_controller_id: String::new(),
+                display_name: "Runtime enabled".to_owned(),
+                default_value: Some(SettingValueV1 {
+                    value: Some(
+                        hermes_runtime_protocol::v1::setting_value_v1::Value::BooleanValue(true),
+                    ),
+                }),
+            }],
         };
         let settings_schema_bytes = settings_schema.encode_to_vec();
         std::fs::write(&settings_schema_path, &settings_schema_bytes)
@@ -260,6 +376,94 @@ impl DistributionBundleFixture {
         assert_eq!(
             binding.settings_schema_sha256(),
             Some(&self.settings_schema_digest)
+        );
+        let settings = store
+            .settings_schema_binding("registration-mail")
+            .expect("read bundled settings binding")
+            .expect("bundled settings admitted");
+        assert_eq!(settings.desired_revision(), 1);
+        assert_eq!(settings.effective_revision(), 1);
+        assert_eq!(settings.apply_state(), SettingsApplyState::Current);
+        let (revision, snapshot_bytes) = store
+            .desired_settings_snapshot("registration-mail")
+            .expect("read bundled initial settings")
+            .expect("bundled initial settings exist");
+        assert_eq!(revision, 1);
+        assert_eq!(
+            SettingsSnapshotV1::decode(snapshot_bytes.as_slice())
+                .expect("decode bundled initial settings"),
+            SettingsSnapshotV1 {
+                target_id: "registration-mail".to_owned(),
+                revision: 1,
+                values: vec![SettingsValueEntryV1 {
+                    setting_id: "runtime.enabled".to_owned(),
+                    value: Some(SettingValueV1 {
+                        value: Some(
+                            hermes_runtime_protocol::v1::setting_value_v1::Value::BooleanValue(
+                                true,
+                            ),
+                        ),
+                    }),
+                }],
+            },
+        );
+    }
+
+    fn assert_pending_proposal(
+        &self,
+        verified: &distribution_bundle_verifier::VerifiedDistributionBundle,
+    ) {
+        let store = SqliteControlStore::create(
+            &self.root.join("proposal-control.sqlite"),
+            "instance-proposal",
+            1,
+        )
+        .expect("create proposal control store");
+        claim_test_owner(&store);
+        let proposal = crate::platform::macos::bundled_release::propose_verified_artifact(
+            &store,
+            "runtime.mail",
+            "hermes-desktop",
+            1,
+            [4; 16],
+            verified,
+        )
+        .expect("propose signed bundled runtime");
+        assert!(!proposal.receipt().replayed());
+        assert_eq!(proposal.requested_capability_ids(), &["read".to_owned()]);
+        assert_eq!(
+            proposal.receipt().registration().state(),
+            ModuleRegistrationState::Pending
+        );
+        assert!(
+            store
+                .module_grant_snapshot(proposal.receipt().registration().registration_id())
+                .expect("read proposal grants")
+                .expect("proposal registration exists")
+                .effective_grants()
+                .is_none()
+        );
+        assert!(
+            crate::platform::macos::bundled_release::propose_verified_artifact(
+                &store,
+                "runtime.mail",
+                "other-distribution",
+                1,
+                [5; 16],
+                verified,
+            )
+            .is_err()
+        );
+        assert!(
+            crate::platform::macos::bundled_release::propose_verified_artifact(
+                &store,
+                "runtime.mail",
+                "hermes-desktop",
+                2,
+                [6; 16],
+                verified,
+            )
+            .is_err()
         );
     }
 
@@ -374,6 +578,23 @@ impl DistributionBundleFixture {
     fn artifact_bytes() -> &'static [u8] {
         b"Hermes signed module runtime"
     }
+}
+
+fn claim_test_owner(store: &SqliteControlStore) {
+    let key = SigningKey::from_bytes((&[29_u8; 32]).into()).expect("owner signing key");
+    let public_key_sec1: [u8; 65] = key
+        .verifying_key()
+        .to_sec1_point(false)
+        .as_bytes()
+        .try_into()
+        .expect("uncompressed owner key");
+    store
+        .claim_initial_owner(&InitialOwnerIdentity::new(
+            "development-owner",
+            "development-device",
+            public_key_sec1,
+        ))
+        .expect("claim test owner");
 }
 
 #[derive(Clone, Copy)]

@@ -280,6 +280,18 @@ fn managed_storage_binding_issues_only_successive_durable_fences() {
     .expect("issue initial binding");
     assert_eq!(first.binding_revision(), 1);
     assert_eq!(first.runtime_principal(), "storage_9019e7125a029dd5_1");
+    assert_eq!(
+        issue_managed(
+            &store,
+            "registration_notes",
+            "managed_runtime_notes",
+            7,
+            "storage.access",
+            issue(1, 1),
+        )
+        .expect("retry exact initial binding"),
+        first,
+    );
     let revoking = store
         .begin_platform_storage_binding_revocation(
             "registration_notes",

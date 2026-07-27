@@ -86,6 +86,50 @@ fn developer_gateway_configuration_requires_one_exact_private_lan_origin() {
 }
 
 #[test]
+fn loopback_development_proxy_configuration_is_literal_and_proof_bound() {
+    let proof = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    BrowserGatewayConfigurationV1::new_loopback_development_proxy(
+        "127.0.0.1:9444".parse().expect("loopback address"),
+        "http://127.0.0.1:5173".to_owned(),
+        "127.0.0.1".to_owned(),
+        proof.to_owned(),
+    )
+    .expect("exact loopback development proxy");
+
+    for (address, origin, rp_id, proof) in [
+        ("0.0.0.0:9444", "http://127.0.0.1:5173", "127.0.0.1", proof),
+        (
+            "127.0.0.1:9444",
+            "http://localhost:5173",
+            "127.0.0.1",
+            proof,
+        ),
+        (
+            "127.0.0.1:9444",
+            "http://127.0.0.1:5173",
+            "localhost",
+            proof,
+        ),
+        (
+            "127.0.0.1:9444",
+            "http://127.0.0.1:5173",
+            "127.0.0.1",
+            "bad",
+        ),
+    ] {
+        assert!(
+            BrowserGatewayConfigurationV1::new_loopback_development_proxy(
+                address.parse().expect("socket address"),
+                origin.to_owned(),
+                rp_id.to_owned(),
+                proof.to_owned(),
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
 fn gateway_technical_router_exposes_only_health_and_readiness() {
     let ready = GatewayTechnicalRouter::new(true);
     let unready = GatewayTechnicalRouter::new(false);

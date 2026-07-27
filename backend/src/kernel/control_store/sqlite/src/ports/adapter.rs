@@ -1,10 +1,11 @@
 //! Narrow Control Store port implementations over the SQLite actor facade.
 
 use hermes_kernel_control_store::{
-    BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1, BundledManagedLaunchBinding, ControlStore,
-    EventHubTopologyStore, EventsAuthorityStore, ExternalRuntimeAttestation,
-    ExternalRuntimeIdentity, GrantSet, HealthRecoveryStore, InitialOwnerIdentity,
-    ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1,
+    BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1, BundledArtifactProposalStore,
+    BundledManagedArtifactProposalInputV1, BundledManagedArtifactProposalReceiptV1,
+    BundledManagedLaunchBinding, ControlStore, EventHubTopologyStore, EventsAuthorityStore,
+    ExternalRuntimeAttestation, ExternalRuntimeIdentity, GrantSet, HealthRecoveryStore,
+    InitialOwnerIdentity, ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1,
     ModuleEventRouteRequestV1, ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState,
     ModuleRegistryStore, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
     ModuleVaultPurposeRequestV1, OwnerIdentityStore, OwnerPinnedArtifactBinding,
@@ -20,6 +21,26 @@ use crate::{SqliteControlStore, StoreError};
 impl HealthRecoveryStore for SqliteControlStore {
     fn control_store_snapshot(&self) -> &hermes_kernel_control_store::ControlStore {
         self.snapshot()
+    }
+}
+
+impl BundledArtifactProposalStore for SqliteControlStore {
+    type Error = StoreError;
+
+    fn propose_bundled_managed_artifact(
+        &self,
+        proposal: &BundledManagedArtifactProposalInputV1,
+        registration: &ModuleRegistration,
+        capabilities: &[String],
+        requests: hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1<'_>,
+    ) -> Result<BundledManagedArtifactProposalReceiptV1, Self::Error> {
+        SqliteControlStore::propose_bundled_managed_artifact(
+            self,
+            proposal,
+            registration,
+            capabilities,
+            requests,
+        )
     }
 }
 
@@ -242,6 +263,12 @@ impl SettingsRegistryStore for SqliteControlStore {
         update: &SettingsDesiredSnapshot,
     ) -> Result<u64, Self::Error> {
         SqliteControlStore::commit_desired_settings_snapshot(self, update)
+    }
+    fn materialize_initial_settings_snapshot(
+        &self,
+        update: &hermes_kernel_control_store::SettingsInitialSnapshot,
+    ) -> Result<u64, Self::Error> {
+        SqliteControlStore::materialize_initial_settings_snapshot(self, update)
     }
     fn desired_settings_snapshot(&self, id: &str) -> Result<Option<(u64, Vec<u8>)>, Self::Error> {
         SqliteControlStore::desired_settings_snapshot(self, id)

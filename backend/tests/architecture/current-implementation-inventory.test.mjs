@@ -190,23 +190,25 @@ test('ignores a test-only workspace when enforcing the production slice', () => 
   assert.deepEqual(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages)), []);
 });
 
-test('allows only the explicit development Kernel operator outside production inventory', () => {
+test('allows only the explicit development runtime and assembly outside production inventory', () => {
   const policy = canonicalPolicyForTests();
-  const development = workspacePackage(policy.implementation.developmentProfile.package, {
-    role: 'development',
-    owner: 'development',
-    surface: 'runtime',
-    components: [],
-  });
+  const development = policy.implementation.developmentProfile.packages.map((entry) => (
+    workspacePackage(entry.package, {
+      role: 'development',
+      owner: 'development',
+      surface: entry.surface,
+      components: [],
+    })
+  ));
   assert.deepEqual(
-    validateCurrentImplementationInventory(policy, metadata([...recoveryOnlyPackages(), development])),
+    validateCurrentImplementationInventory(policy, metadata([...recoveryOnlyPackages(), ...development])),
     [],
   );
 
-  development.metadata.hermes.components = ['hidden_component'];
+  development[1].metadata.hermes.components = ['hidden_component'];
   assert.ok(codes(validateCurrentImplementationInventory(
     policy,
-    metadata([...recoveryOnlyPackages(), development]),
+    metadata([...recoveryOnlyPackages(), ...development]),
   )).has('development_runtime_inventory'));
 });
 

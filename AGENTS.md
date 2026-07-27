@@ -166,9 +166,12 @@ truth, если текущие ADR и реализация явно не зад�
 - отсутствие активных root CI workflows; будущий CI обязан вызывать
   `backend/Makefile`, а не дублировать backend logic в корне.
 
-Корневого Makefile и поддерживаемой full-stack команды запуска сейчас нет.
-Clean-room architecture validation и production runtime checks запускаются
-через `make -C backend ...`. Не восстанавливай legacy command surface из
+Корневой Makefile предоставляет узкий делегирующий command surface. `make dev`
+реализует ADR-0300: поднимает development Compose, Kernel/Core Gateway и Vite,
+ждёт loopback readiness и открывает browser. Lifecycle logic принадлежит
+`backend/scripts/dev-ensemble.sh`; root не дублирует backend orchestration.
+Clean-room architecture validation и production runtime checks по-прежнему
+принадлежат `backend/Makefile`. Не восстанавливай legacy command surface из
 `references/backend-legacy/` по собственной инициативе.
 
 Если внешняя память говорит, что frontend должен быть Svelte/SvelteKit, но

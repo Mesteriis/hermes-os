@@ -40,6 +40,12 @@ impl PreparedManagedIntegrationSettingsV1 {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ManagedIntegrationApplyKindV1 {
+    InitialLaunch,
+    Replacement,
+}
+
 pub(crate) fn prepare(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
@@ -47,7 +53,7 @@ pub(crate) fn prepare(
     storage_capability_id: &str,
     expected_desired_revision: u64,
 ) -> Result<PreparedManagedIntegrationSettingsV1, String> {
-    validate_current_target(
+    let apply_kind = validate_current_target(
         store,
         supervisor,
         registration_id,
@@ -79,8 +85,9 @@ pub(crate) fn prepare(
         expected_desired_revision,
         ApplyAcknowledgement::ApplyStarted,
     )?;
-    if let Err(error) =
-        reserve_successor_storage(store, supervisor, registration_id, storage_capability_id)
+    if apply_kind == ManagedIntegrationApplyKindV1::Replacement
+        && let Err(error) =
+            reserve_successor_storage(store, supervisor, registration_id, storage_capability_id)
     {
         block(
             store,
@@ -138,7 +145,7 @@ fn validate_current_target(
     registration_id: &str,
     storage_capability_id: &str,
     expected_desired_revision: u64,
-) -> Result<(), String> {
+) -> Result<ManagedIntegrationApplyKindV1, String> {
     let registration = store
         .module_registration(registration_id)
         .map_err(store_error)?
@@ -147,10 +154,10 @@ fn validate_current_target(
     if registration.registration_id() != registration_id
         || storage_capability_id.trim().is_empty()
         || expected_desired_revision == 0
-        || !supervisor.is_active(registration_id)?
     {
         return Err("managed integration settings target is unavailable".to_owned());
     }
+    let active = supervisor.is_active(registration_id)?;
     let settings = store
         .settings_schema_binding(registration_id)
         .map_err(store_error)?
@@ -171,7 +178,14 @@ fn validate_current_target(
     {
         return Err("managed integration Storage binding is unavailable".to_owned());
     }
-    Ok(())
+    match (settings.effective_revision(), active) {
+        (0, false) => Ok(ManagedIntegrationApplyKindV1::InitialLaunch),
+        (0, true) => {
+            Err("managed integration initial settings target is already active".to_owned())
+        }
+        (_, true) => Ok(ManagedIntegrationApplyKindV1::Replacement),
+        (_, false) => Err("managed integration settings target is unavailable".to_owned()),
+    }
 }
 
 fn validate_desired_snapshot(

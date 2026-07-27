@@ -12,6 +12,7 @@ pub const VAULT_PROCESS_ID: &str = "vault";
 
 const IDENTITY: PlatformReleaseIdentity = PlatformReleaseIdentity {
     process_id: VAULT_PROCESS_ID,
+    artifact_id: "platform.vault",
     module_id: "vault",
     owner_id: "vault",
     target_triple: "aarch64-apple-darwin",

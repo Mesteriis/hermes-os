@@ -344,6 +344,12 @@
         "surface": "runtime"
       },
       {
+        "name": "hermes-communications-assembly",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "assembly"
+      },
+      {
         "name": "hermes-attachment-security-contract",
         "role": "engine",
         "owner": "attachment_security",
@@ -956,6 +962,24 @@
         },
         {
           "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communications-assembly": [
+        {
+          "name": "hermes-communications-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -2793,6 +2817,35 @@
           "features": []
         }
       ],
+      "hermes-communications-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-attachment-security-contract": [
         {
           "name": "prost",
@@ -3466,6 +3519,10 @@
         "primaryKind": "bin",
         "customBuildAllowed": false
       },
+      "hermes-communications-assembly": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
       "hermes-attachment-security-contract": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -3526,8 +3583,17 @@
     "developmentProfile": {
       "id": "development_full_platform_v1",
       "purpose": "full_local_platform_development_with_simulated_trust",
-      "workspaceRoot": "development/runtime",
-      "package": "hermes-development-kernel-operator",
+      "workspaceRoot": "development",
+      "packages": [
+        {
+          "package": "hermes-development-kernel-operator",
+          "surface": "runtime"
+        },
+        {
+          "package": "hermes-development-assembly",
+          "surface": "assembly"
+        }
+      ],
       "selection": "explicit_development_invocation_only",
       "deviceProof": "file_adapter_es256",
       "privateKeyStorage": "owner_private_file_adapter",

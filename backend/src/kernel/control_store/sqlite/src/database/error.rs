@@ -39,6 +39,7 @@ pub enum StoreError {
     InvalidModuleClientRpcRoute,
     InvalidModuleSchedulerJobRequest,
     InvalidModuleVaultPurposeRequest,
+    InvalidBundledManagedArtifactProposal,
     InvalidExternalRuntimeAttestation,
     StaleExternalRuntimeAttestation,
     InvalidExternalRuntimeIdentity,

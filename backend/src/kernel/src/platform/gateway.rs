@@ -12,9 +12,10 @@ use std::time::Duration;
 use hermes_gateway_runtime::{
     BrowserBootstrapRouter, BrowserPairingRouter, ClientRpcRouteErrorV1, ClientRpcRouteHandler,
     ClientRpcRouteV1, ClientRpcRouter, GatewayApplicationRouter, GatewayHttp3ListenerV1,
-    GatewayLanDevelopmentListenerV1, GatewayLoopbackTlsListenerV1, GatewayTechnicalRouter,
-    GatewayTlsListenerV1, InMemoryBrowserRealtimeSource, OwnerModuleSettingsRouter,
-    OwnerVaultProvisioningRouter, PairedRemoteProfileV1, SharedBrowserPairingManager,
+    GatewayLanDevelopmentListenerV1, GatewayLoopbackListenerV1, GatewayLoopbackTlsListenerV1,
+    GatewayTechnicalRouter, GatewayTlsListenerV1, InMemoryBrowserRealtimeSource,
+    OwnerModuleSettingsRouter, OwnerVaultProvisioningRouter, PairedRemoteProfileV1,
+    SharedBrowserPairingManager,
 };
 use hermes_gateway_session::{
     BrowserGatewaySessionService, BrowserPairingChallengeV1, BrowserPairingManager,
@@ -55,6 +56,7 @@ pub(crate) struct BrowserGatewayConfigurationV1 {
     rp_id: String,
     certificate_der_path: Option<PathBuf>,
     private_key_der_path: Option<PathBuf>,
+    development_proxy_proof: Option<String>,
     exposure: BrowserGatewayExposureV1,
 }
 
@@ -63,6 +65,7 @@ enum BrowserGatewayExposureV1 {
     LocalEmbedded,
     PairedRemote,
     LanDevelopment,
+    LoopbackDevelopmentProxy,
 }
 
 /// Kernel-owned bridge between a private owner-control approval and the
@@ -145,6 +148,7 @@ impl BrowserGatewayConfigurationV1 {
             rp_id,
             certificate_der_path: Some(certificate_der_path),
             private_key_der_path: Some(private_key_der_path),
+            development_proxy_proof: None,
             exposure: BrowserGatewayExposureV1::LocalEmbedded,
         })
     }
@@ -167,6 +171,7 @@ impl BrowserGatewayConfigurationV1 {
             rp_id,
             certificate_der_path: Some(certificate_der_path),
             private_key_der_path: Some(private_key_der_path),
+            development_proxy_proof: None,
             exposure: BrowserGatewayExposureV1::PairedRemote,
         })
     }
@@ -194,12 +199,65 @@ impl BrowserGatewayConfigurationV1 {
             rp_id,
             certificate_der_path: None,
             private_key_der_path: None,
+            development_proxy_proof: None,
             exposure: BrowserGatewayExposureV1::LanDevelopment,
+        })
+    }
+
+    pub(crate) fn new_loopback_development_proxy(
+        listen_address: SocketAddr,
+        exact_origin: String,
+        rp_id: String,
+        development_proxy_proof: String,
+    ) -> Result<Self, String> {
+        (listen_address.ip() == std::net::Ipv4Addr::LOCALHOST)
+            .then_some(())
+            .ok_or_else(|| "loopback development Gateway must bind literal 127.0.0.1".to_owned())?;
+        let origin_address = exact_origin
+            .strip_prefix("http://")
+            .and_then(|authority| authority.parse::<SocketAddr>().ok())
+            .filter(|address| address.ip() == std::net::Ipv4Addr::LOCALHOST)
+            .ok_or_else(|| {
+                "loopback development origin must use literal http://127.0.0.1 with an explicit port"
+                    .to_owned()
+            })?;
+        (rp_id == "127.0.0.1" && origin_address.port() != 0)
+            .then_some(())
+            .ok_or_else(|| "loopback development RP ID must equal literal 127.0.0.1".to_owned())?;
+        (development_proxy_proof.len() == 64
+            && development_proxy_proof
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit()))
+        .then_some(())
+        .ok_or_else(|| "loopback development proxy proof is invalid".to_owned())?;
+        Ok(Self {
+            listen_address,
+            exact_https_origin: exact_origin,
+            rp_id,
+            certificate_der_path: None,
+            private_key_der_path: None,
+            development_proxy_proof: Some(development_proxy_proof),
+            exposure: BrowserGatewayExposureV1::LoopbackDevelopmentProxy,
         })
     }
 
     pub(crate) fn is_lan_development(&self) -> bool {
         matches!(self.exposure, BrowserGatewayExposureV1::LanDevelopment)
+    }
+
+    pub(crate) fn is_loopback_development_proxy(&self) -> bool {
+        matches!(
+            self.exposure,
+            BrowserGatewayExposureV1::LoopbackDevelopmentProxy
+        )
+    }
+
+    pub(crate) fn uses_automatic_development_session(&self) -> bool {
+        self.is_lan_development() || self.is_loopback_development_proxy()
+    }
+
+    pub(crate) fn starts_signed_development_foundation(&self) -> bool {
+        self.uses_automatic_development_session()
     }
 }
 
@@ -266,17 +324,31 @@ pub(crate) fn gateway_service(
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 ) -> Result<BrowserGatewayRouter, String> {
     let authority = ControlStoreBrowserAuthority::new(Arc::clone(&store), supervisor.clone());
-    let session = if configuration.is_lan_development() {
+    let authority = if configuration.uses_automatic_development_session() {
+        authority.with_developer_realtime()
+    } else {
+        authority
+    };
+    let session = if configuration.uses_automatic_development_session() {
         let owner = store
             .initial_owner_identity()
             .map_err(|_| "browser Gateway owner identity is unavailable".to_owned())?
             .ok_or_else(|| "browser Gateway owner identity is unavailable".to_owned())?;
-        BrowserGatewaySessionService::new_lan_development(
-            authority,
-            configuration.exact_https_origin.clone(),
-            owner.owner_id(),
-            owner.device_id(),
-        )
+        if configuration.is_loopback_development_proxy() {
+            BrowserGatewaySessionService::new_loopback_development(
+                authority,
+                configuration.exact_https_origin.clone(),
+                owner.owner_id(),
+                owner.device_id(),
+            )
+        } else {
+            BrowserGatewaySessionService::new_lan_development(
+                authority,
+                configuration.exact_https_origin.clone(),
+                owner.owner_id(),
+                owner.device_id(),
+            )
+        }
     } else {
         let verifier =
             BrowserWebauthnVerifier::new(&configuration.rp_id, &configuration.exact_https_origin)
@@ -381,6 +453,16 @@ pub(crate) fn gateway_service(
         service = service
             .with_lan_development_policy(&configuration.exact_https_origin)
             .map_err(str::to_owned)?;
+    } else if configuration.is_loopback_development_proxy() {
+        service = service
+            .with_loopback_development_proxy_policy(
+                &configuration.exact_https_origin,
+                configuration
+                    .development_proxy_proof
+                    .as_deref()
+                    .ok_or_else(|| "loopback development proxy proof is unavailable".to_owned())?,
+            )
+            .map_err(str::to_owned)?;
     }
     let owner_vault_provisioning = Arc::new(KernelOwnerVaultProvisioningHandlerV1::new(
         Arc::clone(&store),
@@ -469,20 +551,34 @@ async fn serve_configured_listener(
                 .serve_until_shutdown(GatewayTechnicalRouter::new(true), receiver)
                 .await
         }
+        BrowserGatewayExposureV1::LoopbackDevelopmentProxy => {
+            let listener = GatewayLoopbackListenerV1::bind(configuration.listen_address).await?;
+            println!("development_assembly=loopback_full_stack");
+            println!("development_assembly_authentication=process_local_proxy_proof");
+            println!("browser_gateway_listener={}", listener.local_address()?);
+            listener.serve_until_shutdown(service, receiver).await
+        }
     }
 }
 
 fn load_signed_browser_bootstrap() -> Result<Option<BrowserBootstrapRouter>, String> {
     let executable =
         std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
-    let bundle =
-        match native_launch::verify_selected_installed_bundle(&executable, MACOS_KERNEL_TARGET) {
-            Ok(bundle) => bundle,
-            Err(error) if error == "Kernel executable is not inside a macOS app bundle" => {
-                return Ok(None);
-            }
-            Err(_) => return Err("signed browser bootstrap release verification failed".to_owned()),
-        };
+    let browser_artifact_kinds = [
+        DistributionArtifactKindV1::BrowserBootstrapBundle,
+        DistributionArtifactKindV1::BrowserClientAsset,
+    ];
+    let bundle = match native_launch::verify_selected_installed_bundle_artifact_kinds(
+        &executable,
+        MACOS_KERNEL_TARGET,
+        &browser_artifact_kinds,
+    ) {
+        Ok(bundle) => bundle,
+        Err(error) if error == "Kernel executable is not inside a macOS app bundle" => {
+            return Ok(None);
+        }
+        Err(_) => return Err("signed browser bootstrap release verification failed".to_owned()),
+    };
     let manifest = required_browser_bootstrap_manifest(&bundle.manifest().artifacts)?;
     if manifest.artifact_kind != DistributionArtifactKindV1::BrowserBootstrapBundle as i32
         || !manifest.required

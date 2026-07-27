@@ -508,6 +508,19 @@ The corresponding local PostgreSQL and NATS JetStream contour is documented in
 [development platform](development/README.md). It is separate from both legacy
 `docker/` assets and the signed/digest-pinned Linux release topology.
 
+For the supported browser development contour, run from the repository root:
+
+```sh
+make dev
+```
+
+ADR-0300 keeps this as a development assembly unit: it starts the loopback-only
+Compose dependencies, Kernel/Core Gateway and Vite, waits for both direct and
+same-origin readiness, then opens `http://127.0.0.1:5173/`. A per-run
+owner-private proxy proof stays outside browser JavaScript. The command does
+not become a signed release assembly, create provider credentials, or silently
+admit managed domain/integration runtimes.
+
 For the two deployment profiles, the repository currently includes a macOS
 Apple-Silicon sidecar packaging target and a Linux release-manifest preflight.
 Linux Compose/systemd descriptors are generated only after each digest-pinned

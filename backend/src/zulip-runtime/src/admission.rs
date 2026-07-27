@@ -24,6 +24,8 @@ use crate::settings::{
 };
 
 pub const ZULIP_BLOB_CAPABILITY_ID: &str = "zulip.blob.v1";
+pub const ZULIP_API_KEY_PROVISIONING_CAPABILITY_ID: &str =
+    "zulip.api-key.credential-provisioning.v1";
 pub const ZULIP_CREDENTIALS_CAPABILITY_ID: &str = "zulip.credentials.v1";
 pub const ZULIP_EVENTS_CAPABILITY_ID: &str = "zulip.events.v1";
 pub const ZULIP_STORAGE_CAPABILITY_ID: &str = "zulip.storage.v1";
@@ -37,6 +39,7 @@ pub const ZULIP_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
 pub fn zulip_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
         zulip_client_capability_v1(ZulipClientContractV1::AccountLifecycle),
+        zulip_api_key_provisioning_capability_v1(),
         zulip_blob_capability_v1(),
         zulip_client_capability_v1(ZulipClientContractV1::Command),
         zulip_credentials_capability_v1(),
@@ -46,6 +49,28 @@ pub fn zulip_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         zulip_client_capability_v1(ZulipClientContractV1::Query),
         zulip_storage_capability_v1(),
     ]
+}
+
+fn zulip_api_key_provisioning_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: ZULIP_API_KEY_PROVISIONING_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::VaultPurpose(VaultPurposeRequestV1 {
+                purpose_id: ZULIP_API_KEY_PURPOSE_ID.to_owned(),
+                requested_lease_ttl_seconds: ZULIP_CREDENTIAL_LEASE_TTL_SECONDS,
+                allowed_secret_classes: vec![VaultSecretClassV1::ProviderCredential as i32],
+                actions: vec![
+                    VaultActionV1::Create as i32,
+                    VaultActionV1::ReplaceCas as i32,
+                ],
+                target_scope: VaultTargetScopeV1::ConfigurationInstance as i32,
+                key_schema_revision: 0,
+            })),
+        }],
+        ..Default::default()
+    }
 }
 
 fn zulip_client_capability_v1(contract: ZulipClientContractV1) -> CapabilityDescriptorV1 {
@@ -194,6 +219,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 ZulipClientContractV1::AccountLifecycle.capability_id(),
+                ZULIP_API_KEY_PROVISIONING_CAPABILITY_ID,
                 ZULIP_BLOB_CAPABILITY_ID,
                 ZulipClientContractV1::Command.capability_id(),
                 ZULIP_CREDENTIALS_CAPABILITY_ID,
@@ -239,6 +265,23 @@ mod tests {
             credentials.requests[0].request.as_ref(),
             Some(Request::VaultPurpose(request))
                 if request.purpose_id == ZULIP_API_KEY_PURPOSE_ID
+        ));
+        let provisioning = descriptor
+            .capabilities
+            .iter()
+            .find(|capability| capability.capability_id == ZULIP_API_KEY_PROVISIONING_CAPABILITY_ID)
+            .expect("Zulip API key provisioning capability");
+        assert_eq!(
+            provisioning.criticality,
+            CapabilityCriticalityV1::Optional as i32
+        );
+        assert!(matches!(
+            provisioning.requests[0].request.as_ref(),
+            Some(Request::VaultPurpose(request))
+                if request.actions == [
+                    VaultActionV1::Create as i32,
+                    VaultActionV1::ReplaceCas as i32,
+                ]
         ));
 
         let events = descriptor

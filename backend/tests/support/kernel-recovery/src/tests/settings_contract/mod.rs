@@ -18,9 +18,21 @@ fn settings_schema_requires_ordered_typed_non_secret_definitions() {
             fresh_owner_proof_required: true,
             kernel_controller_id: String::new(),
             display_name: "Sync interval".into(),
+            default_value: None,
         }],
     };
     assert!(decode_settings_schema_v1(&schema.encode_to_vec()).is_ok());
+    let mut defaulted = schema.clone();
+    defaulted.definitions[0].default_value = Some(SettingValueV1 {
+        value: Some(hermes_runtime_protocol::v1::setting_value_v1::Value::DurationMillis(5_000)),
+    });
+    assert!(decode_settings_schema_v1(&defaulted.encode_to_vec()).is_ok());
+    defaulted.definitions[0].default_value = Some(SettingValueV1 {
+        value: Some(
+            hermes_runtime_protocol::v1::setting_value_v1::Value::StringValue("wrong".into()),
+        ),
+    });
+    assert!(decode_settings_schema_v1(&defaulted.encode_to_vec()).is_err());
     let mut invalid = schema;
     invalid.definitions[0].mutation_authority = SettingMutationAuthorityV1::KernelManaged as i32;
     invalid.definitions[0].client_visibility = SettingClientVisibilityV1::Editable as i32;
@@ -82,6 +94,7 @@ fn duration_settings_schema() -> SettingsSchemaV1 {
             fresh_owner_proof_required: false,
             kernel_controller_id: String::new(),
             display_name: "Sync interval".into(),
+            default_value: None,
         }],
     }
 }

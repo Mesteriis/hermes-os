@@ -106,7 +106,11 @@ pub fn verify_selected_installed_release(
     artifact_id: &str,
     launch_directory: &Path,
 ) -> Result<StagedNativeArtifact, String> {
-    let bundle = verify_selected_installed_bundle(kernel_executable, target_triple)?;
+    let bundle = verify_selected_installed_bundle_artifact_ids(
+        kernel_executable,
+        target_triple,
+        &[artifact_id],
+    )?;
     stage_verified_artifact(&bundle, artifact_id, launch_directory)
 }
 
@@ -115,7 +119,11 @@ pub fn stage_bound_installed_release(
     binding: &BundledManagedLaunchBinding,
     launch_directory: &Path,
 ) -> Result<StagedNativeArtifact, String> {
-    let bundle = verify_selected_installed_bundle(kernel_executable, "aarch64-apple-darwin")?;
+    let bundle = verify_selected_installed_bundle_artifact_ids(
+        kernel_executable,
+        "aarch64-apple-darwin",
+        &[binding.artifact_id()],
+    )?;
     let artifact = bound_artifact(&bundle, binding)?;
     stage_artifact(artifact, launch_directory)
 }
@@ -125,7 +133,11 @@ pub fn prepare_bound_managed_runtime(
     binding: &BundledManagedLaunchBinding,
     launch_directory: &Path,
 ) -> Result<PreparedBundledManagedRuntime, String> {
-    let bundle = verify_selected_installed_bundle(kernel_executable, "aarch64-apple-darwin")?;
+    let bundle = verify_selected_installed_bundle_artifact_ids(
+        kernel_executable,
+        "aarch64-apple-darwin",
+        &[binding.artifact_id()],
+    )?;
     let artifact = bound_artifact(&bundle, binding)?;
     let descriptor_bytes = artifact
         .module_descriptor_bytes()
@@ -144,13 +156,33 @@ pub fn prepare_bound_managed_integration_runtime(
     launch_directory: &Path,
     granted_capability_ids: &[String],
 ) -> Result<PreparedBundledManagedIntegrationRuntime, String> {
-    let bundle = verify_selected_installed_bundle(kernel_executable, "aarch64-apple-darwin")?;
-    let executable = bound_artifact(&bundle, binding)?;
-    let descriptor = executable
+    let runtime_bundle = verify_selected_installed_bundle_artifact_ids(
+        kernel_executable,
+        "aarch64-apple-darwin",
+        &[binding.artifact_id()],
+    )?;
+    let descriptor = bound_artifact(&runtime_bundle, binding)?
         .module_descriptor()
         .ok_or_else(|| "managed launch artifact lacks a module descriptor".to_owned())?;
-    let requirements =
-        runtime_dependencies::select(descriptor, granted_capability_ids, bundle.manifest())?;
+    let requirements = runtime_dependencies::select(
+        descriptor,
+        granted_capability_ids,
+        runtime_bundle.manifest(),
+    )?;
+    let artifact_ids = std::iter::once(binding.artifact_id())
+        .chain(
+            requirements
+                .runtime_artifacts()
+                .iter()
+                .map(|artifact| artifact.artifact_id.as_str()),
+        )
+        .collect::<Vec<_>>();
+    let bundle = verify_selected_installed_bundle_artifact_ids(
+        kernel_executable,
+        "aarch64-apple-darwin",
+        &artifact_ids,
+    )?;
+    let executable = bound_artifact(&bundle, binding)?;
     let runtime = PreparedBundledManagedRuntime {
         staged_executable: stage_artifact(executable, launch_directory)?,
         descriptor_bytes: executable
@@ -184,7 +216,11 @@ pub fn prepare_bound_platform_process(
     binding: &PlatformManagedProcessBinding,
     launch_directory: &Path,
 ) -> Result<PreparedPlatformManagedProcess, String> {
-    let bundle = verify_selected_installed_bundle(kernel_executable, "aarch64-apple-darwin")?;
+    let bundle = verify_selected_installed_bundle_artifact_ids(
+        kernel_executable,
+        "aarch64-apple-darwin",
+        &[binding.artifact_id()],
+    )?;
     let artifact = platform_bound_artifact(&bundle, binding)?;
     let descriptor_bytes = artifact
         .module_descriptor_bytes()
@@ -209,6 +245,40 @@ pub fn verify_selected_installed_bundle(
         &signed_manifest_bytes,
         &trust_root,
         target_triple,
+    )
+}
+
+pub fn verify_selected_installed_bundle_artifact_kinds(
+    kernel_executable: &Path,
+    target_triple: &str,
+    artifact_kinds: &[hermes_runtime_protocol::v1::DistributionArtifactKindV1],
+) -> Result<VerifiedDistributionBundle, String> {
+    let resources = release_resources::discover_from_executable(kernel_executable)?;
+    let signed_manifest_bytes = read_stable_manifest(resources.signed_manifest_path())?;
+    let trust_root = ReleaseTrustRoot::load(resources.trust_root_path())?;
+    bundle_verifier::verify_artifact_kinds(
+        resources.distribution_root(),
+        &signed_manifest_bytes,
+        &trust_root,
+        target_triple,
+        artifact_kinds,
+    )
+}
+
+pub fn verify_selected_installed_bundle_artifact_ids(
+    kernel_executable: &Path,
+    target_triple: &str,
+    artifact_ids: &[&str],
+) -> Result<VerifiedDistributionBundle, String> {
+    let resources = release_resources::discover_from_executable(kernel_executable)?;
+    let signed_manifest_bytes = read_stable_manifest(resources.signed_manifest_path())?;
+    let trust_root = ReleaseTrustRoot::load(resources.trust_root_path())?;
+    bundle_verifier::verify_artifact_ids(
+        resources.distribution_root(),
+        &signed_manifest_bytes,
+        &trust_root,
+        target_triple,
+        artifact_ids,
     )
 }
 

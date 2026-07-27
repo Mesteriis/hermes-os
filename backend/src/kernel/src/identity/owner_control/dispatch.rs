@@ -14,6 +14,7 @@ use hermes_gateway_protocol::v1::{
     BindExternalRuntimeIdentityResponseV1, CompleteOwnerControlSessionRequestV1,
     CompleteOwnerControlSessionResponseV1, GetModuleRegistrationStatusRequestV1,
     GetModuleRegistrationStatusResponseV1, OwnerControlRequestV1, OwnerControlResponseV1,
+    ProposeBundledManagedArtifactRequestV1, ProposeBundledManagedArtifactResponseV1,
     ReserveBundledManagedRuntimeRequestV1, ReserveBundledManagedRuntimeResponseV1,
     StartBundledManagedRuntimeRequestV1, StartBundledManagedRuntimeResponseV1,
     StartReservedDomainRuntimeRequestV1, StartReservedDomainRuntimeResponseV1,
@@ -22,7 +23,9 @@ use hermes_gateway_protocol::v1::{
     TransitionModuleRegistrationRequestV1, TransitionModuleRegistrationResponseV1,
     UpdateOperatorSettingsRequestV1, UpdateOperatorSettingsResponseV1,
 };
-use hermes_kernel_control_store::{ModuleRegistrationState, PlatformStorageBindingStateV1};
+use hermes_kernel_control_store::{
+    ModuleRegistrationState, PlatformStorageBindingStateV1, SettingsApplyState,
+};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
     v1::{ManagedDomainRuntimeConfigurationV1, ManagedEngineRuntimeConfigurationV1},
@@ -125,6 +128,9 @@ fn route_operation(
         Operation::BindBundledManagedRelease(request) => {
             bind_managed_release(store, supervisor, sessions, request)
         }
+        Operation::ProposeBundledManagedArtifact(request) => {
+            propose_bundled_artifact(store, sessions, request)
+        }
         Operation::StartBundledManagedRuntime(request) => {
             start_managed_runtime(store, runtime_dir, supervisor, sessions, request)
         }
@@ -212,6 +218,22 @@ fn start_reserved_integration_runtime(
     request: StartReservedIntegrationRuntimeRequestV1,
 ) -> Result<OwnerResult, String> {
     sessions.authorize(store, &request.owner_session_id)?;
+    let settings = store
+        .settings_schema_binding(&request.registration_id)
+        .map_err(|_| "managed integration settings are unavailable".to_owned())?
+        .ok_or_else(|| "managed integration settings are unavailable".to_owned())?;
+    if settings.apply_state() == SettingsApplyState::BlockedConfig
+        && settings.effective_revision() == 0
+    {
+        return Ok(OwnerResult::StartReservedIntegrationRuntime(
+            StartReservedIntegrationRuntimeResponseV1 {
+                registration_id: request.registration_id,
+                runtime_generation: 0,
+                launch_state: "unconfigured".to_owned(),
+                host_bridge_socket_path: None,
+            },
+        ));
+    }
     managed_integration_launch::launch_reserved(
         store,
         data_dir,
@@ -604,6 +626,41 @@ fn bind_managed_release(
     ))
 }
 
+fn propose_bundled_artifact(
+    store: &SqliteControlStore,
+    sessions: &mut OwnerControlSessions,
+    request: ProposeBundledManagedArtifactRequestV1,
+) -> Result<OwnerResult, String> {
+    sessions.authorize(store, &request.owner_session_id)?;
+    let operation_id: [u8; 16] = request
+        .idempotency_key
+        .as_slice()
+        .try_into()
+        .map_err(|_| "bundled artifact proposal idempotency key is invalid".to_owned())?;
+    let proposal = macos_bundled_release_binding::propose_current_installed_artifact(
+        store,
+        &request.artifact_id,
+        &request.expected_distribution_id,
+        request.expected_distribution_generation,
+        operation_id,
+    )?;
+    let receipt = proposal.receipt();
+    let registration = receipt.registration();
+    Ok(OwnerResult::ProposeBundledManagedArtifact(
+        ProposeBundledManagedArtifactResponseV1 {
+            registration_id: registration.registration_id().to_owned(),
+            module_id: registration.module_id().to_owned(),
+            owner_id: registration.owner_id().to_owned(),
+            descriptor_sha256: registration.descriptor_sha256().to_vec(),
+            requested_capability_ids: proposal.requested_capability_ids().to_vec(),
+            distribution_id: request.expected_distribution_id,
+            distribution_generation: request.expected_distribution_generation,
+            artifact_id: request.artifact_id,
+            replayed: receipt.replayed(),
+        },
+    ))
+}
+
 fn start_managed_runtime(
     store: &SqliteControlStore,
     runtime_dir: &Path,
@@ -643,10 +700,15 @@ fn response(result: Result<OwnerResult, String>) -> OwnerControlResponseV1 {
             result: Some(result),
             error_code: String::new(),
         },
-        Err(_) => OwnerControlResponseV1 {
-            result: None,
-            error_code: "operation_denied".to_owned(),
-        },
+        Err(error) => {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_owner_control_denied error={error}");
+            }
+            OwnerControlResponseV1 {
+                result: None,
+                error_code: "operation_denied".to_owned(),
+            }
+        }
     }
 }
 

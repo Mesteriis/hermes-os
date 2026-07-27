@@ -83,6 +83,13 @@ pub fn decode_attachment_security_settings_v1(
 }
 
 fn definition(setting_id: &str, display_name: &str) -> SettingDefinitionV1 {
+    let default = match setting_id {
+        CONNECT_TIMEOUT_MILLIS => 2_000,
+        IO_TIMEOUT_MILLIS => 30_000,
+        PORT => 3_310,
+        MAX_SCAN_BYTES => 8 * 1024 * 1024,
+        _ => unreachable!("all Attachment Security settings are exhaustively declared"),
+    };
     SettingDefinitionV1 {
         setting_id: setting_id.to_owned(),
         capability_id: String::new(),
@@ -94,6 +101,9 @@ fn definition(setting_id: &str, display_name: &str) -> SettingDefinitionV1 {
         fresh_owner_proof_required: true,
         kernel_controller_id: String::new(),
         display_name: display_name.to_owned(),
+        default_value: Some(hermes_runtime_protocol::v1::SettingValueV1 {
+            value: Some(Value::UnsignedIntegerValue(default)),
+        }),
     }
 }
 

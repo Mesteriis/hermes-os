@@ -317,6 +317,7 @@ fn secret_class_from_code(value: i32) -> Result<SecretClassV1, OwnerVaultProvisi
         1 => Ok(SecretClassV1::ProviderCredential),
         2 => Ok(SecretClassV1::OAuthRefreshCredential),
         3 => Ok(SecretClassV1::SessionCredentialBlob),
+        5 => Ok(SecretClassV1::SessionStoreKey),
         _ => Err(OwnerVaultProvisioningHostErrorV1::InvalidInput),
     }
 }
@@ -359,6 +360,18 @@ impl std::error::Error for OwnerVaultProvisioningHostErrorV1 {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maps_session_store_key_without_accepting_unknown_classes() {
+        assert_eq!(
+            secret_class_from_code(5).expect("session store key"),
+            SecretClassV1::SessionStoreKey
+        );
+        assert_eq!(
+            secret_class_from_code(4).expect_err("unknown class must be rejected"),
+            OwnerVaultProvisioningHostErrorV1::InvalidInput
+        );
+    }
 
     #[test]
     fn seals_secret_and_opens_only_the_sanitized_receipt() {

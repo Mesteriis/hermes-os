@@ -1,4 +1,4 @@
-//! Private-LAN developer bootstrap for the signed platform foundation.
+//! Local developer bootstrap for the signed platform foundation.
 //!
 //! It starts only runtimes for which the private development profile has a
 //! complete local configuration. Event Hub and Scheduler remain owner-configured
@@ -36,7 +36,8 @@ use crate::{
 mod vault;
 
 /// Starts the signed local platform runtimes that have a complete local
-/// configuration. It is called only for the private-LAN developer Gateway.
+/// configuration. It is called only for an explicitly selected development
+/// Gateway profile.
 pub(crate) fn start_local_foundation(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,
@@ -241,7 +242,11 @@ fn ensure_scheduler(
     }
     let kernel =
         std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
-    let bundle = native_launch::verify_selected_installed_bundle(&kernel, "aarch64-apple-darwin")?;
+    let bundle = native_launch::verify_selected_installed_bundle_artifact_ids(
+        &kernel,
+        "aarch64-apple-darwin",
+        &["platform.scheduler"],
+    )?;
     let artifact = bundle
         .artifacts()
         .iter()

@@ -1,5 +1,6 @@
 //! Narrow persistence ports consumed by individual Kernel subsystems.
 
+mod bundled_artifact_proposal;
 mod event_hub_topology;
 mod events_authority;
 mod health_recovery;
@@ -12,6 +13,7 @@ mod storage_binding;
 mod storage_bundle;
 mod storage_topology;
 
+pub use bundled_artifact_proposal::BundledArtifactProposalStore;
 pub use event_hub_topology::EventHubTopologyStore;
 pub use events_authority::EventsAuthorityStore;
 pub use health_recovery::HealthRecoveryStore;

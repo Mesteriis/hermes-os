@@ -122,6 +122,7 @@ fn secret_class(value: i32) -> Result<SecretClassV1, OwnerVaultProvisioningRoute
         Some(OwnerVaultSecretClassV1::SessionCredentialBlob) => {
             Ok(SecretClassV1::SessionCredentialBlob)
         }
+        Some(OwnerVaultSecretClassV1::SessionStoreKey) => Ok(SecretClassV1::SessionStoreKey),
         _ => Err(OwnerVaultProvisioningRouteErrorV1::InvalidArgument),
     }
 }
@@ -155,13 +156,27 @@ mod tests {
     use hermes_vault_protocol::VaultResponseRecipientV1;
     use p256::ecdsa::{Signature, SigningKey, signature::Signer};
 
-    use super::{authorize_target, verify_fresh_proof};
+    use super::{authorize_target, secret_class, verify_fresh_proof};
 
     const HUMAN_OWNER: &str = "owner-primary";
     const DEVICE: &str = "browser-device";
     const REGISTRATION: &str = "mail-registration";
     const CAPABILITY: &str = "mail.credentials.setup";
     const PURPOSE: &str = "mail.imap.password";
+
+    #[test]
+    fn maps_session_store_key_without_widening_the_secret_class() {
+        assert_eq!(
+            secret_class(OwnerVaultSecretClassV1::SessionStoreKey as i32)
+                .expect("session store key"),
+            hermes_vault_protocol::SecretClassV1::SessionStoreKey
+        );
+        assert_eq!(
+            secret_class(OwnerVaultSecretClassV1::Unspecified as i32)
+                .expect_err("unspecified class must be rejected"),
+            OwnerVaultProvisioningRouteErrorV1::InvalidArgument
+        );
+    }
 
     #[test]
     fn admits_only_current_owner_device_and_exact_approved_purpose() {

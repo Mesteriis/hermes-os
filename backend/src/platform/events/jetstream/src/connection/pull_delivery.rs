@@ -49,7 +49,7 @@ pub async fn receive_runtime_pull_delivery(
 }
 
 fn unavailable_at(stage: &str) -> RuntimePullDeliveryErrorV1 {
-    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+    if stage != "empty" && std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
         eprintln!("developer_runtime_pull_delivery_unavailable stage={stage}");
     }
     RuntimePullDeliveryErrorV1::Unavailable
