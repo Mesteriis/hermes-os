@@ -126,6 +126,8 @@ use attachment_security_blob_fixture::*;
 use attachment_security_event_flow::*;
 use attachment_security_managed_setup::*;
 use mail_managed_setup::*;
+#[path = "managed_storage_vault_docker/mail_account_credential_flow.rs"]
+mod mail_account_credential_flow;
 #[path = "managed_storage_vault_docker/mail_delivery_flow.rs"]
 mod mail_delivery_flow;
 #[path = "managed_storage_vault_docker/mail_gmail_delivery_flow.rs"]

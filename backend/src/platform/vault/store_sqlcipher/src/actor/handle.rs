@@ -3,7 +3,7 @@
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};
 use std::time::Duration;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use zeroize::Zeroizing;
 
 use crate::database::store::VaultStoreError;
@@ -538,13 +538,43 @@ fn mutate_secret_lifecycle(
                     ],
                 )
                 .map_err(VaultStoreError::Sqlite)?;
-            if updated != 1 {
+            if updated == 0
+                && tombstone_state(&transaction, owner, configuration, purpose, class, revision)?
+                    != Some(2)
+            {
+                return Err(VaultStoreError::LifecycleConflict);
+            }
+        }
+        SecretLifecycleMutation::Retire if deleted == 0 => {
+            if tombstone_state(&transaction, owner, configuration, purpose, class, revision)?
+                != Some(1)
+            {
                 return Err(VaultStoreError::LifecycleConflict);
             }
         }
         _ => return Err(VaultStoreError::LifecycleConflict),
     }
     transaction.commit().map_err(VaultStoreError::Sqlite)
+}
+
+fn tombstone_state(
+    transaction: &rusqlite::Transaction<'_>,
+    owner: &str,
+    configuration: &str,
+    purpose: &str,
+    class: i64,
+    revision: i64,
+) -> Result<Option<i64>, VaultStoreError> {
+    transaction
+        .query_row(
+            "SELECT state FROM vault_secret_tombstones
+             WHERE logical_owner_id = ?1 AND configuration_instance_id = ?2
+               AND purpose_id = ?3 AND secret_class = ?4 AND secret_revision = ?5",
+            rusqlite::params![owner, configuration, purpose, class, revision],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(VaultStoreError::Sqlite)
 }
 
 type StoredRecord = (

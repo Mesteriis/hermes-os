@@ -86,7 +86,6 @@ where
         settings_revision: snapshot.revision,
         account: settings.account,
         gmail_oauth: settings.gmail_oauth,
-        credential_revisions: settings.credential_revisions,
     };
     let control_channel = inherited_control_channel()?;
     let runtime = tokio::runtime::Runtime::new()

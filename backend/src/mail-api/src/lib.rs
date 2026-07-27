@@ -5,6 +5,11 @@ pub const PACKAGE: &str = "hermes-mail-api";
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail.v1.rs"));
 }
+pub mod account;
+pub mod account_wire;
+pub mod account_wire_generated {
+    include!(concat!(env!("OUT_DIR"), "/hermes.mail.account.v1.rs"));
+}
 pub mod client_contract;
 pub mod client_wire;
 pub mod oauth;
@@ -21,6 +26,8 @@ pub use oauth::{
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MailClientRequestV1 {
+    BindCredential(account::MailBindCredentialRequestV1),
+    AccountStatus(account::MailAccountStatusRequestV1),
     SyncInbox(MailSyncInboxRequestV1),
     SendMail(MailSendMailRequestV1),
     DeliveryStatus(MailDeliveryStatusRequestV1),
@@ -48,6 +55,8 @@ pub struct MailDeliveryStatusRequestV1 {
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MailClientResponseV1 {
+    CredentialBinding(account::MailCredentialBindingReceiptV1),
+    AccountStatus(account::MailAccountStatusV1),
     SyncInboxCompleted {
         operation_id: String,
         observed_messages: u32,
@@ -250,13 +259,6 @@ impl MailCredentialPurpose {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MailCredentialBinding {
-    pub purpose: MailCredentialPurpose,
-    pub secret_ref: String,
-    pub revision: u64,
-}
-
-#[derive(Clone, Debug)]
 pub struct BeginImapConnection {
     pub connection_id: MailConnectionId,
     pub host: String,

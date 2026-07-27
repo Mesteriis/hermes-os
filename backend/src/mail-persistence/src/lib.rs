@@ -1,5 +1,6 @@
 //! Mail-owned PostgreSQL persistence for delivery state and Communications outbox.
 
+mod account;
 mod attachments;
 #[cfg(feature = "conformance-test-support")]
 mod conformance;
@@ -7,6 +8,7 @@ mod durable;
 mod oauth;
 mod schema;
 
+pub use account::{MAIL_SCHEMA_V7, MailCredentialBindingV1};
 pub use attachments::{
     MAIL_SCHEMA_V5, MailAttachmentDispositionV1, MailAttachmentMaterializationV1,
     MailAttachmentSafetyStateV1, MailAttachmentSafetyTransitionV1,
@@ -30,7 +32,8 @@ pub use oauth::{
 pub use schema::{
     MAIL_STORAGE_BUNDLE_REVISION_V1, MAIL_STORAGE_BUNDLE_REVISION_V2,
     MAIL_STORAGE_BUNDLE_REVISION_V3, MAIL_STORAGE_BUNDLE_REVISION_V4,
-    MAIL_STORAGE_BUNDLE_REVISION_V5, MAIL_STORAGE_BUNDLE_REVISION_V6, mail_storage_bundle_v1,
+    MAIL_STORAGE_BUNDLE_REVISION_V5, MAIL_STORAGE_BUNDLE_REVISION_V6,
+    MAIL_STORAGE_BUNDLE_REVISION_V7, mail_storage_bundle_v1,
 };
 
 pub const PACKAGE: &str = "hermes-mail-persistence";

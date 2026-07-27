@@ -441,6 +441,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-mail-persistence': [
     { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-mail-api', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
   'hermes-mail-runtime': [

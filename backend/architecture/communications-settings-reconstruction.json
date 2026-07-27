@@ -190,6 +190,18 @@
       "dependsOn": ["zulip_operational_read_v1", "zulip_integration_v1"]
     },
     {
+      "gate": "mail_gmail_oauth_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "implemented",
+      "dependsOn": [
+        "mail.oauth.complete.v1",
+        "mail.oauth.query.v1",
+        "mail.oauth.refresh.v1",
+        "mail.oauth.start.v1"
+      ]
+    },
+    {
       "gate": "mail_operational_read_v1",
       "role": "integration",
       "owner": "mail",
@@ -197,15 +209,48 @@
       "dependsOn": ["client_gateway_v1", "mail_account_lifecycle_v1", "mail.sync.v1"]
     },
     {
+      "gate": "mail_account_credential_binding_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "implemented",
+      "dependsOn": [
+        "client_gateway_v1",
+        "managed_integration_settings_apply_v1",
+        "vault_v1"
+      ]
+    },
+    {
+      "gate": "mail_account_retire_delete_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "planned",
+      "dependsOn": [
+        "mail_account_credential_binding_v1",
+        "vault_credential_retirement_v1"
+      ]
+    },
+    {
+      "gate": "mail_account_portability_v1",
+      "role": "app",
+      "owner": "first_party_client",
+      "state": "planned",
+      "dependsOn": [
+        "client_gateway_v1",
+        "mail_account_credential_binding_v1",
+        "managed_integration_settings_apply_v1",
+        "vault_v1"
+      ]
+    },
+    {
       "gate": "mail_account_lifecycle_v1",
       "role": "integration",
       "owner": "mail",
       "state": "planned",
       "dependsOn": [
-        "client_gateway_v1",
-        "managed_integration_settings_apply_v1",
-        "vault_credential_retirement_v1",
-        "vault_v1"
+        "mail_account_credential_binding_v1",
+        "mail_account_portability_v1",
+        "mail_account_retire_delete_v1",
+        "mail_gmail_oauth_v1"
       ]
     },
     {

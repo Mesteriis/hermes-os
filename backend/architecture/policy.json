@@ -1106,6 +1106,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-mail-api",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-storage-protocol",
           "kind": "normal"
         }

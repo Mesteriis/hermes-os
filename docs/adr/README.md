@@ -102,6 +102,7 @@ policy через ссылки из новых документов.
 - [ADR-0291: Zulip account, history, operational query and replay boundary](ADR-0291-zulip-account-history-query-and-replay-boundary.md)
 - [ADR-0292: Managed integration settings apply and credential binding](ADR-0292-managed-integration-settings-apply-and-credential-binding.md)
 - [ADR-0293: Scoped Vault credential retirement and deletion](ADR-0293-scoped-vault-credential-retirement-and-deletion.md)
+- [ADR-0294: Mail account credential lifecycle and portability](ADR-0294-mail-account-credential-lifecycle-and-portability.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -350,3 +351,8 @@ ADR-0293 закрывает недостающий Vault lifecycle primitive: ex
 `delete` повышает tombstone до deleted. Kernel согласует только declared
 action/grant/runtime fences и не интерпретирует provider logout; integration
 выбирает purpose через свой typed lifecycle contract.
+ADR-0294 переносит credential revisions из Mail Settings в Mail-owned CAS
+bindings: Bind и sanitized Query являются отдельными generated contracts,
+текущий runtime quiesce-ит изменённый provider path, а exact Vault revision
+активируется только Settings successor generation. Retire/delete и typed
+portability остаются отдельными незакрытыми gates.

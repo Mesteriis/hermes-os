@@ -81,9 +81,11 @@ Retirement не удаляет historical backups и не обещает physica
 - не возвращает payload или record ID.
 
 Если active record уже удалён успешным `retire`, `delete` разрешён только при
-совпадающем retired tombstone. Повтор той же mutation не считается новым
-успешным side effect: transport operation остаётся single-use, а store
-возвращает conflict.
+совпадающем retired tombstone. Fresh exact action lease может идемпотентно
+подтвердить уже достигнутый такой же tombstone state после потерянного
+transport response. Это не новый side effect и не hidden automatic retry:
+каждая transport operation остаётся single-use, а переход назад или к
+несовместимому state возвращает conflict.
 
 ### Store model
 
@@ -170,8 +172,9 @@ Gate требует одновременно:
 - Single-writer actor atomарно удаляет active ciphertext и создаёт retired
   tombstone; delete повышает retired tombstone либо сразу tombstone-ит active
   record.
-- Conformance доказывает resolve/recreate/repeat denial, direct delete,
-  retire → restart → delete и отсутствие direct SQLite access вне actor.
+- Conformance доказывает resolve/recreate denial, idempotent exact-state
+  reconcile, direct delete, retire → restart → delete и отсутствие direct
+  SQLite access вне actor.
 
 Validation evidence:
 

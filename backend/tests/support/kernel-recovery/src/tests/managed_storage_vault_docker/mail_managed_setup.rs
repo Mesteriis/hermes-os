@@ -4,10 +4,11 @@ use super::*;
 
 use hermes_mail_api::{
     MailCredentialPurpose,
+    account::{MailBindCredentialRequestV1, MailCredentialPurposeV1},
     client_contract::{MAIL_MODULE_ID, MAIL_OWNER_ID, MailClientContractV1},
 };
 use hermes_mail_persistence::{
-    GmailOAuthCredentialBindingV1, MAIL_STORAGE_BUNDLE_REVISION_V6, mail_storage_bundle_v1,
+    GmailOAuthCredentialBindingV1, MAIL_STORAGE_BUNDLE_REVISION_V7, mail_storage_bundle_v1,
 };
 use hermes_mail_runtime::{
     admission::{
@@ -20,12 +21,12 @@ use hermes_mail_runtime::{
         MAIL_GMAIL_OAUTH_SETUP_CREDENTIALS_CAPABILITY_ID, MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
         MAIL_SMTP_CREDENTIALS_CAPABILITY_ID, MAIL_STORAGE_CAPABILITY_ID, mail_module_descriptor_v1,
     },
-    settings::mail_settings_schema_bytes_v1,
+    settings::mail_settings_schema_bytes_v2,
 };
 use hermes_vault_key_provider::WrappingKeyProvider;
 use hermes_vault_key_provider_file::FileWrappingKeyProvider;
 use hermes_vault_protocol::{SecretClassV1, VaultActionV1, VaultPurposeRequestV1};
-use hermes_vault_store_sqlcipher::{SecretRecordScope, VaultStore};
+use hermes_vault_store_sqlcipher::{SecretRecordId, SecretRecordScope, VaultStore};
 
 const MAIL_RELEASE_ARTIFACT_ID: &str = "integration.mail";
 pub(super) const MAIL_ACCOUNT_ID: &str = "mail-account-1";
@@ -61,6 +62,8 @@ pub(super) struct MailGmailOAuthFixtureSettingsV1 {
 }
 
 pub(super) struct SeededGmailCredentialBindingV1 {
+    imap_password_record_id: SecretRecordId,
+    smtp_password_record_id: SecretRecordId,
     access_token_record_id: [u8; 16],
     refresh_credential_record_id: [u8; 16],
 }
@@ -81,6 +84,7 @@ impl SeededGmailCredentialBindingV1 {
 #[derive(Clone, Copy)]
 enum MailAdmissionProfileV1 {
     ImapSync,
+    AccountCredentialLifecycle,
     SmtpDelivery,
     SmtpAttachmentDelivery,
     GmailDelivery,
@@ -109,7 +113,7 @@ pub(super) fn mail_release_artifact() -> SignedRuntimeArtifact {
         mail_binary(),
         mail_module_descriptor_v1("managed-mail-live").encode_to_vec(),
     )
-    .with_settings_schema(mail_settings_schema_bytes_v1())
+    .with_settings_schema(mail_settings_schema_bytes_v2())
 }
 
 pub(super) fn seed_mail_vault(vault_dir: &Path) -> SeededGmailCredentialBindingV1 {
@@ -122,16 +126,11 @@ pub(super) fn seed_mail_vault(vault_dir: &Path) -> SeededGmailCredentialBindingV
         &key,
     )
     .expect("open initialized Vault");
-    for (purpose, secret) in [
-        (
-            MailCredentialPurpose::ImapPassword,
-            b"managed-mail-imap-password".as_slice(),
-        ),
-        (
-            MailCredentialPurpose::SmtpPassword,
-            b"managed-mail-smtp-password".as_slice(),
-        ),
-    ] {
+    fn store_basic_secret(
+        store: &VaultStore,
+        purpose: MailCredentialPurpose,
+        secret: &[u8],
+    ) -> SecretRecordId {
         let request = VaultPurposeRequestV1::new(
             purpose.as_str().to_owned(),
             MAIL_ACCOUNT_ID.to_owned(),
@@ -149,8 +148,18 @@ pub(super) fn seed_mail_vault(vault_dir: &Path) -> SeededGmailCredentialBindingV
         .expect("Mail secret scope");
         store
             .store_secret(&scope, secret)
-            .expect("store Mail test credential");
+            .expect("store Mail test credential")
     }
+    let imap_password_record_id = store_basic_secret(
+        &store,
+        MailCredentialPurpose::ImapPassword,
+        b"managed-mail-imap-password",
+    );
+    let smtp_password_record_id = store_basic_secret(
+        &store,
+        MailCredentialPurpose::SmtpPassword,
+        b"managed-mail-smtp-password",
+    );
     let access_token_record_id = store_mail_test_secret(
         &store,
         MailCredentialPurpose::GmailAccessToken,
@@ -164,8 +173,60 @@ pub(super) fn seed_mail_vault(vault_dir: &Path) -> SeededGmailCredentialBindingV
         b"managed-mail-gmail-refresh-credential",
     );
     SeededGmailCredentialBindingV1 {
+        imap_password_record_id,
+        smtp_password_record_id,
         access_token_record_id,
         refresh_credential_record_id,
+    }
+}
+
+pub(super) fn rotate_basic_mail_vault(vault_dir: &Path, seeded: &SeededGmailCredentialBindingV1) {
+    let key = FileWrappingKeyProvider::new(&vault_dir.join("platform-wrapping-key.bin"))
+        .load_or_create()
+        .expect("open Vault wrapping key");
+    let store = VaultStore::open(
+        &vault_dir.join("vault.db"),
+        &vault_dir.join("vault.anchor"),
+        &key,
+    )
+    .expect("open initialized Vault");
+    for (purpose, record_id, secret) in [
+        (
+            MailCredentialPurpose::ImapPassword,
+            seeded.imap_password_record_id.clone(),
+            b"managed-mail-imap-password".as_slice(),
+        ),
+        (
+            MailCredentialPurpose::SmtpPassword,
+            seeded.smtp_password_record_id.clone(),
+            b"managed-mail-smtp-password".as_slice(),
+        ),
+    ] {
+        let request = VaultPurposeRequestV1::new(
+            purpose.as_str().to_owned(),
+            MAIL_ACCOUNT_ID.to_owned(),
+            vec![SecretClassV1::ProviderCredential],
+            vec![VaultActionV1::Resolve],
+            MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+        )
+        .expect("Mail credential purpose");
+        let prior_scope = SecretRecordScope::new(
+            MAIL_OWNER_ID.to_owned(),
+            &request,
+            SecretClassV1::ProviderCredential,
+            1,
+        )
+        .expect("prior Mail credential scope");
+        let next_scope = SecretRecordScope::new(
+            MAIL_OWNER_ID.to_owned(),
+            &request,
+            SecretClassV1::ProviderCredential,
+            2,
+        )
+        .expect("next Mail credential scope");
+        store
+            .replace_secret(&record_id, &prior_scope, &next_scope, secret)
+            .expect("rotate Mail test credential");
     }
 }
 
@@ -197,6 +258,12 @@ pub(super) fn admit_mail_runtime(store: &SqliteControlStore) -> AdmittedMailRunt
 
 pub(super) fn admit_mail_delivery_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
     admit_mail_runtime_profile(store, MailAdmissionProfileV1::SmtpDelivery)
+}
+
+pub(super) fn admit_mail_account_credential_runtime(
+    store: &SqliteControlStore,
+) -> AdmittedMailRuntime {
+    admit_mail_runtime_profile(store, MailAdmissionProfileV1::AccountCredentialLifecycle)
 }
 
 pub(super) fn admit_mail_attachment_delivery_runtime(
@@ -236,6 +303,23 @@ fn admit_mail_runtime_profile(
             MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
             MAIL_IMAP_CREDENTIALS_CAPABILITY_ID.to_owned(),
             MAIL_STORAGE_CAPABILITY_ID.to_owned(),
+            MailClientContractV1::Sync.capability_id().to_owned(),
+        ],
+        MailAdmissionProfileV1::AccountCredentialLifecycle => vec![
+            MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID.to_owned(),
+            MAIL_IMAP_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_SMTP_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_STORAGE_CAPABILITY_ID.to_owned(),
+            MailClientContractV1::AccountCredentialBind
+                .capability_id()
+                .to_owned(),
+            MailClientContractV1::AccountQuery
+                .capability_id()
+                .to_owned(),
+            MailClientContractV1::Delivery.capability_id().to_owned(),
+            MailClientContractV1::DeliveryQuery
+                .capability_id()
+                .to_owned(),
             MailClientContractV1::Sync.capability_id().to_owned(),
         ],
         MailAdmissionProfileV1::SmtpDelivery => vec![
@@ -314,7 +398,14 @@ fn admit_mail_runtime_profile(
         &capability_ids,
     )
     .expect("approve exact Mail profile capabilities");
-    let schema = mail_settings_schema_bytes_v1();
+    let schema = mail_settings_schema_bytes_v2();
+    crate::modules::settings::schema::admit(
+        store,
+        registration.registration_id(),
+        &descriptor_bytes,
+        &schema,
+    )
+    .expect("admit exact Mail Settings schema");
     store
         .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
             registration.registration_id(),
@@ -331,7 +422,7 @@ fn admit_mail_runtime_profile(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 MAIL_OWNER_ID,
-                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V6),
+                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V7),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -354,7 +445,7 @@ pub(super) fn prepare_mail_runtime(
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
     let bundle = store
-        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V6))
+        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V7))
         .expect("read Mail Storage bundle")
         .expect("Mail Storage bundle");
     let binding = issue_managed(
@@ -366,7 +457,7 @@ pub(super) fn prepare_mail_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V6),
+            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V7),
             *bundle.digest(),
         )
         .expect("Mail Storage binding issue"),
@@ -385,6 +476,7 @@ pub(super) fn start_mail_runtime(
     admitted: AdmittedMailRuntime,
     imap_port: u16,
 ) -> StartedMailRuntime {
+    seed_basic_mail_bindings(false);
     start_mail_runtime_with_settings(
         supervisor,
         store,
@@ -407,6 +499,7 @@ pub(super) fn start_mail_delivery_runtime(
     imap_port: u16,
     smtp: MailSmtpFixtureSettingsV1,
 ) -> StartedMailRuntime {
+    seed_basic_mail_bindings(true);
     start_mail_runtime_with_settings(
         supervisor,
         store,
@@ -468,6 +561,27 @@ pub(super) fn restart_mail_delivery_runtime(
     successor
 }
 
+pub(super) fn current_mail_runtime(
+    store: &SqliteControlStore,
+    predecessor: &StartedMailRuntime,
+) -> StartedMailRuntime {
+    let binding = store
+        .platform_storage_binding(&predecessor.registration_id, MAIL_STORAGE_CAPABILITY_ID)
+        .expect("read current Mail Storage binding")
+        .expect("current Mail Storage binding");
+    let registration = store
+        .module_registration(&predecessor.registration_id)
+        .expect("read current Mail registration")
+        .expect("current Mail registration");
+    StartedMailRuntime {
+        registration_id: predecessor.registration_id.clone(),
+        runtime_instance_id: binding.runtime_instance_id().to_owned(),
+        runtime_generation: binding.runtime_generation(),
+        grant_epoch: registration.grant_epoch(),
+        capability_ids: predecessor.capability_ids.clone(),
+    }
+}
+
 pub(super) fn start_mail_gmail_delivery_runtime(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,
@@ -484,6 +598,43 @@ pub(super) fn start_mail_gmail_delivery_runtime(
         admitted,
         MailSettingsProfileV1::Gmail(gmail),
     )
+}
+
+fn seed_basic_mail_bindings(include_smtp: bool) {
+    let runtime = tokio::runtime::Runtime::new().expect("Mail binding runtime");
+    runtime.block_on(async {
+        let durable = super::mail_event_flow::connect_postgres().await;
+        let purposes = if include_smtp {
+            vec![
+                MailCredentialPurposeV1::ImapPassword,
+                MailCredentialPurposeV1::SmtpPassword,
+            ]
+        } else {
+            vec![MailCredentialPurposeV1::ImapPassword]
+        };
+        for purpose in purposes {
+            if durable
+                .account_credential_binding(MAIL_ACCOUNT_ID, purpose)
+                .await
+                .expect("query Mail credential binding")
+                .is_none()
+            {
+                durable
+                    .bind_account_credential(
+                        &MailBindCredentialRequestV1 {
+                            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+                            purpose,
+                            expected_binding_revision: 0,
+                            credential_revision: 1,
+                        },
+                        MAIL_ACCOUNT_ID,
+                        1,
+                    )
+                    .await
+                    .expect("seed Mail credential binding");
+            }
+        }
+    });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -541,7 +692,11 @@ fn start_mail_runtime_with_settings(
         reservation,
         managed_launch::ManagedIntegrationLaunchConfiguration {
             runtime: configuration,
-            settings_snapshot_bytes: mail_settings_snapshot(settings).encode_to_vec(),
+            settings_snapshot_bytes: current_mail_settings_snapshot(
+                store,
+                &admitted.registration_id,
+                settings,
+            ),
             granted_capability_ids: &admitted.capability_ids,
         },
     )
@@ -555,8 +710,26 @@ fn start_mail_runtime_with_settings(
     }
 }
 
+pub(super) fn mail_delivery_settings_snapshot(
+    registration_id: &str,
+    imap_port: u16,
+    smtp: MailSmtpFixtureSettingsV1,
+    revision: u64,
+) -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {
+    mail_settings_snapshot(
+        MailSettingsProfileV1::Imap {
+            port: imap_port,
+            smtp: Some(smtp),
+        },
+        revision,
+        registration_id,
+    )
+}
+
 fn mail_settings_snapshot(
     profile: MailSettingsProfileV1,
+    revision: u64,
+    target_id: &str,
 ) -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {
     use hermes_runtime_protocol::v1::{
         SettingValueV1, SettingsValueEntryV1, setting_value_v1::Value,
@@ -582,10 +755,6 @@ fn mail_settings_snapshot(
             values.extend([
                 entry("mail.imap.host", Value::StringValue("localhost".to_owned())),
                 entry(
-                    "mail.imap.password_revision",
-                    Value::UnsignedIntegerValue(1),
-                ),
-                entry(
                     "mail.imap.port",
                     Value::UnsignedIntegerValue(u64::from(port)),
                 ),
@@ -607,10 +776,6 @@ fn mail_settings_snapshot(
                         Value::StringValue("owner@example.test".to_owned()),
                     ),
                     entry("mail.smtp.host", Value::StringValue("localhost".to_owned())),
-                    entry(
-                        "mail.smtp.password_revision",
-                        Value::UnsignedIntegerValue(1),
-                    ),
                     entry(
                         "mail.smtp.port",
                         Value::UnsignedIntegerValue(u64::from(smtp.port)),
@@ -692,10 +857,51 @@ fn mail_settings_snapshot(
     }
     values.sort_by(|left, right| left.setting_id.cmp(&right.setting_id));
     hermes_runtime_protocol::v1::SettingsSnapshotV1 {
-        target_id: MAIL_ACCOUNT_ID.to_owned(),
-        revision: 1,
+        target_id: target_id.to_owned(),
+        revision,
         values,
     }
+}
+
+fn current_mail_settings_snapshot(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    profile: MailSettingsProfileV1,
+) -> Vec<u8> {
+    let binding = store
+        .settings_schema_binding(registration_id)
+        .expect("read Mail Settings binding")
+        .expect("Mail Settings binding");
+    if binding.desired_revision() == 0 {
+        let snapshot = mail_settings_snapshot(profile, 1, registration_id).encode_to_vec();
+        crate::modules::settings::mutation::commit_after_owner_authorization(
+            store,
+            registration_id,
+            0,
+            &snapshot,
+        )
+        .expect("commit initial Mail Settings");
+        for acknowledgement in [
+            crate::modules::settings::application::ApplyAcknowledgement::ValidationAccepted,
+            crate::modules::settings::application::ApplyAcknowledgement::ApplyStarted,
+            crate::modules::settings::application::ApplyAcknowledgement::RuntimeApplied,
+        ] {
+            crate::modules::settings::application::acknowledge(
+                store,
+                registration_id,
+                1,
+                acknowledgement,
+            )
+            .expect("admit initial Mail Settings state");
+        }
+        return snapshot;
+    }
+    let (revision, snapshot) = store
+        .desired_settings_snapshot(registration_id)
+        .expect("read desired Mail Settings")
+        .expect("desired Mail Settings");
+    assert_eq!(revision, binding.effective_revision());
+    snapshot
 }
 
 fn mail_binary() -> PathBuf {

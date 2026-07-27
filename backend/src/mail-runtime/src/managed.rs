@@ -89,6 +89,11 @@ use hermes_communications_ingress::{
 use hermes_mail_api::{
     MailCredentialPurpose, MailDeliveryOperationStatusV1, MailDeliveryOutcomeV1,
     MailGmailConfigurationV1, MailInboundTransportV1, MailSendMailRequestV1, OutgoingMailV1,
+    account::{
+        MailAccountReadinessV1, MailAccountStatusV1, MailBindCredentialRequestV1,
+        MailConnectorProfileV1, MailCredentialBindingReceiptV1, MailCredentialBindingStateV1,
+        MailCredentialBindingStatusV1, MailCredentialPurposeV1, MailProviderPathReadinessV1,
+    },
     valid_account_configuration, valid_port,
 };
 use hermes_mail_core::rfc822::{
@@ -108,8 +113,8 @@ use hermes_mail_gmail::{
 use hermes_mail_persistence::{
     MailAttachmentBlobAdmissionCompletionV1,
     MailAttachmentDispositionV1 as PersistedAttachmentDispositionV1,
-    MailAttachmentMaterializationV1, MailDeliveryAttemptOutcomeV1, MailDeliveryEnqueueRequestV1,
-    MailDurablePersistence, MailQueuedDeliveryV1,
+    MailAttachmentMaterializationV1, MailCredentialBindingV1, MailDeliveryAttemptOutcomeV1,
+    MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailQueuedDeliveryV1,
 };
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
@@ -119,7 +124,7 @@ const OUTBOX_RELAY_TIMEOUT: Duration = Duration::from_secs(2);
 pub struct MailAdmittedRuntime {
     pub control_channel: ManagedControlChannelV2<UnixStream>,
     pub durable: MailDurablePersistence,
-    inbound_credential: MailInboundCredentialV1,
+    imap_password: Option<Zeroizing<Vec<u8>>>,
     smtp_password: Option<Zeroizing<Vec<u8>>>,
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
@@ -143,11 +148,6 @@ struct MailAttachmentBlobWriteV1 {
     custody_transfer_source_proof: Vec<u8>,
     reference_binding_sha256: [u8; 32],
     declared_size: u64,
-}
-
-enum MailInboundCredentialV1 {
-    ImapPassword(Zeroizing<Vec<u8>>),
-    Gmail,
 }
 
 enum GmailHistorySyncError {
@@ -260,52 +260,6 @@ pub async fn open_admitted_runtime(
     }
 
     let provider_context = provider_credential_context(admission, &storage_configuration)?;
-    let (inbound_credential, smtp_password) = {
-        let mut provider_credentials = ManagedProviderCredentialClientV2::new(&mut control_channel);
-        let mut dispatcher = RejectManagedControlRequestsV2;
-        let inbound_credential = match &admission.account.inbound {
-            MailInboundTransportV1::Imap(_) => {
-                let revision = credential_revision(admission, MailCredentialPurpose::ImapPassword)?
-                    .ok_or(MailBootstrapError::Admission)?;
-                MailInboundCredentialV1::ImapPassword(
-                    provider_credentials
-                        .resolve(
-                            &mut dispatcher,
-                            &provider_context,
-                            ManagedProviderCredentialRequestV1 {
-                                configuration_instance_id: &admission.configuration_instance_id,
-                                purpose_id: MailCredentialPurpose::ImapPassword.as_str(),
-                                credential_revision: revision,
-                                ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
-                                secret_class: SecretClassV1::ProviderCredential,
-                            },
-                        )
-                        .map_err(map_provider_credential_error)?,
-                )
-            }
-            MailInboundTransportV1::Gmail(_) => MailInboundCredentialV1::Gmail,
-        };
-        let smtp_password =
-            match credential_revision(admission, MailCredentialPurpose::SmtpPassword)? {
-                Some(revision) => Some(
-                    provider_credentials
-                        .resolve(
-                            &mut dispatcher,
-                            &provider_context,
-                            ManagedProviderCredentialRequestV1 {
-                                configuration_instance_id: &admission.configuration_instance_id,
-                                purpose_id: MailCredentialPurpose::SmtpPassword.as_str(),
-                                credential_revision: revision,
-                                ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
-                                secret_class: SecretClassV1::ProviderCredential,
-                            },
-                        )
-                        .map_err(map_provider_credential_error)?,
-                ),
-                None => None,
-            };
-        (inbound_credential, smtp_password)
-    };
 
     let binding = storage_binding(&storage_configuration, admission)?;
     let storage_context = StorageVaultRouteContextV1::new(
@@ -351,6 +305,31 @@ pub async fn open_admitted_runtime(
     )
     .await
     .map_err(|_| MailBootstrapError::Persistence)?;
+    let imap_password = match &admission.account.inbound {
+        MailInboundTransportV1::Imap(_) => {
+            activate_bound_account_credential(
+                &mut control_channel,
+                &provider_context,
+                &durable,
+                admission,
+                MailCredentialPurposeV1::ImapPassword,
+            )
+            .await?
+        }
+        MailInboundTransportV1::Gmail(_) => None,
+    };
+    let smtp_password = if admission.account.smtp_endpoint.is_some() {
+        activate_bound_account_credential(
+            &mut control_channel,
+            &provider_context,
+            &durable,
+            admission,
+            MailCredentialPurposeV1::SmtpPassword,
+        )
+        .await?
+    } else {
+        None
+    };
     let event_access = request_managed_runtime_event_access_v2(
         &mut control_channel,
         &admission.logical_owner_id,
@@ -417,7 +396,7 @@ pub async fn open_admitted_runtime(
     Ok(MailAdmittedRuntime {
         control_channel,
         durable,
-        inbound_credential,
+        imap_password,
         smtp_password,
         event_connection,
         event_publish_permit,
@@ -466,6 +445,153 @@ impl MailAdmittedRuntime {
             return Err(ManagedProviderCredentialErrorV1::Unavailable);
         }
         result
+    }
+
+    pub async fn bind_account_credential(
+        &mut self,
+        request: &MailBindCredentialRequestV1,
+        requested_at_unix_seconds: i64,
+    ) -> Result<MailCredentialBindingReceiptV1, MailBootstrapError> {
+        if request.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        match request.purpose {
+            MailCredentialPurposeV1::ImapPassword
+                if matches!(&self.account.inbound, MailInboundTransportV1::Imap(_)) => {}
+            MailCredentialPurposeV1::SmtpPassword
+                if self.account.smtp_endpoint.is_some()
+                    && matches!(&self.account.inbound, MailInboundTransportV1::Imap(_)) => {}
+            MailCredentialPurposeV1::ImapPassword
+            | MailCredentialPurposeV1::SmtpPassword
+            | MailCredentialPurposeV1::GmailAccessToken
+            | MailCredentialPurposeV1::GmailRefreshCredential => {
+                return Err(MailBootstrapError::Admission);
+            }
+        }
+        let receipt = self
+            .durable
+            .bind_account_credential(
+                request,
+                &self.configuration_instance_id,
+                requested_at_unix_seconds,
+            )
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?;
+        match request.purpose {
+            MailCredentialPurposeV1::ImapPassword => self.imap_password = None,
+            MailCredentialPurposeV1::SmtpPassword => self.smtp_password = None,
+            MailCredentialPurposeV1::GmailAccessToken
+            | MailCredentialPurposeV1::GmailRefreshCredential => {
+                return Err(MailBootstrapError::Admission);
+            }
+        }
+        Ok(receipt)
+    }
+
+    pub async fn account_status(
+        &self,
+        connection_id: &str,
+    ) -> Result<MailAccountStatusV1, MailBootstrapError> {
+        if connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        let (mut bindings, connector_profile, sync_readiness, delivery_readiness) =
+            match &self.account.inbound {
+                MailInboundTransportV1::Imap(_) => {
+                    let persisted = self
+                        .durable
+                        .account_credential_bindings(connection_id)
+                        .await
+                        .map_err(|_| MailBootstrapError::Persistence)?;
+                    if persisted.iter().any(|binding| {
+                        binding.configuration_instance_id != self.configuration_instance_id
+                    }) {
+                        return Err(MailBootstrapError::Admission);
+                    }
+                    let imap_binding = basic_binding_status(
+                        persisted.iter().find(|binding| {
+                            binding.purpose == MailCredentialPurposeV1::ImapPassword
+                        }),
+                        MailCredentialPurposeV1::ImapPassword,
+                    );
+                    let sync_readiness = provider_path_readiness(
+                        std::slice::from_ref(&imap_binding),
+                        self.runtime_generation,
+                    );
+                    let mut bindings = vec![imap_binding];
+                    if self.account.smtp_endpoint.is_some() {
+                        let smtp_binding = basic_binding_status(
+                            persisted.iter().find(|binding| {
+                                binding.purpose == MailCredentialPurposeV1::SmtpPassword
+                            }),
+                            MailCredentialPurposeV1::SmtpPassword,
+                        );
+                        let delivery_readiness = provider_path_readiness(
+                            std::slice::from_ref(&smtp_binding),
+                            self.runtime_generation,
+                        );
+                        bindings.push(smtp_binding);
+                        (
+                            bindings,
+                            MailConnectorProfileV1::ImapSmtp,
+                            sync_readiness,
+                            delivery_readiness,
+                        )
+                    } else {
+                        (
+                            bindings,
+                            MailConnectorProfileV1::Imap,
+                            sync_readiness,
+                            MailProviderPathReadinessV1::NotConfigured,
+                        )
+                    }
+                }
+                MailInboundTransportV1::Gmail(_) => {
+                    let bindings = match self
+                        .durable
+                        .gmail_oauth_credential_binding(connection_id)
+                        .await
+                        .map_err(|_| MailBootstrapError::Persistence)?
+                    {
+                        Some(binding) => vec![
+                            gmail_binding_status(
+                                MailCredentialPurposeV1::GmailAccessToken,
+                                binding.access_token_revision,
+                                self.runtime_generation,
+                            ),
+                            gmail_binding_status(
+                                MailCredentialPurposeV1::GmailRefreshCredential,
+                                binding.refresh_credential_revision,
+                                self.runtime_generation,
+                            ),
+                        ],
+                        None => vec![
+                            unconfigured_binding_status(MailCredentialPurposeV1::GmailAccessToken),
+                            unconfigured_binding_status(
+                                MailCredentialPurposeV1::GmailRefreshCredential,
+                            ),
+                        ],
+                    };
+                    let readiness = provider_path_readiness(&bindings, self.runtime_generation);
+                    (
+                        bindings,
+                        MailConnectorProfileV1::Gmail,
+                        readiness,
+                        readiness,
+                    )
+                }
+            };
+        bindings.sort_by_key(|binding| binding.purpose);
+        Ok(MailAccountStatusV1 {
+            connection_id: connection_id.to_owned(),
+            settings_revision: self.settings_revision,
+            runtime_generation: self.runtime_generation,
+            readiness: account_readiness(&bindings, self.runtime_generation),
+            connector_profile,
+            sync_readiness,
+            delivery_readiness,
+            bindings,
+        })
     }
 
     pub async fn try_consume_attachment_anchor_handoff(
@@ -577,6 +703,22 @@ impl MailAdmittedRuntime {
         request: &MailSendMailRequestV1,
         requested_at_unix_seconds: i64,
     ) -> Result<String, MailBootstrapError> {
+        match &self.account.inbound {
+            MailInboundTransportV1::Imap(_) if self.smtp_password.is_none() => {
+                return Err(MailBootstrapError::Credential);
+            }
+            MailInboundTransportV1::Gmail(_)
+                if self
+                    .durable
+                    .gmail_oauth_credential_binding(&self.account.connection_id)
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?
+                    .is_none() =>
+            {
+                return Err(MailBootstrapError::Credential);
+            }
+            MailInboundTransportV1::Imap(_) | MailInboundTransportV1::Gmail(_) => {}
+        }
         let message = self.outgoing_message(request);
         let from_address = match &self.account.inbound {
             MailInboundTransportV1::Imap(_) => self
@@ -649,6 +791,18 @@ impl MailAdmittedRuntime {
         dispatched_at_unix_seconds: i64,
         completed_at_unix_seconds: i64,
     ) -> Result<bool, MailDeliveryDispatchErrorV1> {
+        let provider_ready = match &self.account.inbound {
+            MailInboundTransportV1::Imap(_) => self.smtp_password.is_some(),
+            MailInboundTransportV1::Gmail(_) => self
+                .durable
+                .gmail_oauth_credential_binding(&self.account.connection_id)
+                .await
+                .map_err(|_| MailDeliveryDispatchErrorV1::Persistence)?
+                .is_some(),
+        };
+        if !provider_ready {
+            return Ok(false);
+        }
         let Some(queued) = self
             .durable
             .claim_next_delivery(dispatched_at_unix_seconds)
@@ -1055,7 +1209,7 @@ impl MailAdmittedRuntime {
         }
         validate_sync_request(host, port, 0).map_err(|_| MailBootstrapError::Admission)?;
         let plan = bounded_window(window, windows).map_err(|_| MailBootstrapError::Admission)?;
-        let MailInboundCredentialV1::ImapPassword(password) = &self.inbound_credential else {
+        let Some(password) = self.imap_password.as_ref() else {
             return Err(MailBootstrapError::Credential);
         };
         let password = Zeroizing::new(password.to_vec());
@@ -1183,9 +1337,6 @@ impl MailAdmittedRuntime {
             return Err(MailBootstrapError::Admission);
         }
         let plan = bounded_window(window, windows).map_err(|_| MailBootstrapError::Admission)?;
-        if !matches!(self.inbound_credential, MailInboundCredentialV1::Gmail) {
-            return Err(MailBootstrapError::Credential);
-        }
         let token = self.resolve_gmail_access_token().await?;
         let token = std::str::from_utf8(&token).map_err(|_| MailBootstrapError::Credential)?;
         let max_results =
@@ -2223,21 +2374,207 @@ fn gmail_api_client(
     }
 }
 
-fn credential_revision(
-    admission: &MailRuntimeAdmission,
-    purpose: MailCredentialPurpose,
-) -> Result<Option<u64>, MailBootstrapError> {
-    let revision = match purpose {
-        MailCredentialPurpose::ImapPassword => admission.credential_revisions.imap_password,
-        MailCredentialPurpose::GmailAccessToken | MailCredentialPurpose::GmailRefreshCredential => {
-            None
+fn basic_binding_status(
+    binding: Option<&MailCredentialBindingV1>,
+    purpose: MailCredentialPurposeV1,
+) -> MailCredentialBindingStatusV1 {
+    binding.map_or_else(
+        || unconfigured_binding_status(purpose),
+        |binding| MailCredentialBindingStatusV1 {
+            purpose,
+            state: binding.state,
+            binding_revision: Some(binding.binding_revision),
+            credential_revision: Some(binding.credential_revision),
+            applied_runtime_generation: binding.applied_runtime_generation,
+        },
+    )
+}
+
+fn gmail_binding_status(
+    purpose: MailCredentialPurposeV1,
+    credential_revision: u64,
+    runtime_generation: u64,
+) -> MailCredentialBindingStatusV1 {
+    MailCredentialBindingStatusV1 {
+        purpose,
+        state: MailCredentialBindingStateV1::Active,
+        binding_revision: None,
+        credential_revision: Some(credential_revision),
+        applied_runtime_generation: Some(runtime_generation),
+    }
+}
+
+fn unconfigured_binding_status(purpose: MailCredentialPurposeV1) -> MailCredentialBindingStatusV1 {
+    MailCredentialBindingStatusV1 {
+        purpose,
+        state: MailCredentialBindingStateV1::Unconfigured,
+        binding_revision: None,
+        credential_revision: None,
+        applied_runtime_generation: None,
+    }
+}
+
+fn account_readiness(
+    bindings: &[MailCredentialBindingStatusV1],
+    runtime_generation: u64,
+) -> MailAccountReadinessV1 {
+    if bindings
+        .iter()
+        .any(|binding| binding.state == MailCredentialBindingStateV1::Deleted)
+    {
+        return MailAccountReadinessV1::Deleted;
+    }
+    if bindings
+        .iter()
+        .any(|binding| binding.state == MailCredentialBindingStateV1::Retired)
+    {
+        return MailAccountReadinessV1::Retired;
+    }
+    if bindings
+        .iter()
+        .any(|binding| binding.state == MailCredentialBindingStateV1::PendingRestart)
+    {
+        return MailAccountReadinessV1::PendingRestart;
+    }
+    if bindings.iter().all(|binding| {
+        binding.state == MailCredentialBindingStateV1::Active
+            && binding.applied_runtime_generation == Some(runtime_generation)
+    }) {
+        return MailAccountReadinessV1::Ready;
+    }
+    if bindings
+        .iter()
+        .all(|binding| binding.state == MailCredentialBindingStateV1::Unconfigured)
+    {
+        return MailAccountReadinessV1::ConfigurationOnly;
+    }
+    MailAccountReadinessV1::Degraded
+}
+
+fn provider_path_readiness(
+    bindings: &[MailCredentialBindingStatusV1],
+    runtime_generation: u64,
+) -> MailProviderPathReadinessV1 {
+    match account_readiness(bindings, runtime_generation) {
+        MailAccountReadinessV1::ConfigurationOnly => {
+            MailProviderPathReadinessV1::CredentialRequired
         }
-        MailCredentialPurpose::SmtpPassword => admission.credential_revisions.smtp_password,
+        MailAccountReadinessV1::PendingRestart => MailProviderPathReadinessV1::PendingRestart,
+        MailAccountReadinessV1::Ready => MailProviderPathReadinessV1::Ready,
+        MailAccountReadinessV1::Retired => MailProviderPathReadinessV1::Retired,
+        MailAccountReadinessV1::Deleted => MailProviderPathReadinessV1::Deleted,
+        MailAccountReadinessV1::Degraded => MailProviderPathReadinessV1::Degraded,
+    }
+}
+
+#[cfg(test)]
+mod account_status_tests {
+    use super::*;
+
+    #[test]
+    fn readiness_distinguishes_configuration_pending_active_and_stale_bindings() {
+        let unconfigured = unconfigured_binding_status(MailCredentialPurposeV1::ImapPassword);
+        assert_eq!(
+            account_readiness(std::slice::from_ref(&unconfigured), 2),
+            MailAccountReadinessV1::ConfigurationOnly
+        );
+
+        let pending = MailCredentialBindingStatusV1 {
+            purpose: MailCredentialPurposeV1::ImapPassword,
+            state: MailCredentialBindingStateV1::PendingRestart,
+            binding_revision: Some(1),
+            credential_revision: Some(2),
+            applied_runtime_generation: None,
+        };
+        assert_eq!(
+            account_readiness(std::slice::from_ref(&pending), 2),
+            MailAccountReadinessV1::PendingRestart
+        );
+
+        let active = MailCredentialBindingStatusV1 {
+            state: MailCredentialBindingStateV1::Active,
+            applied_runtime_generation: Some(2),
+            ..pending
+        };
+        assert_eq!(
+            account_readiness(std::slice::from_ref(&active), 2),
+            MailAccountReadinessV1::Ready
+        );
+        assert_eq!(
+            account_readiness(std::slice::from_ref(&active), 3),
+            MailAccountReadinessV1::Degraded
+        );
+    }
+}
+
+async fn activate_bound_account_credential(
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
+    provider_context: &ManagedProviderCredentialContextV1,
+    durable: &MailDurablePersistence,
+    admission: &MailRuntimeAdmission,
+    purpose: MailCredentialPurposeV1,
+) -> Result<Option<Zeroizing<Vec<u8>>>, MailBootstrapError> {
+    let Some(binding) = durable
+        .account_credential_binding(&admission.account.connection_id, purpose)
+        .await
+        .map_err(|_| MailBootstrapError::Persistence)?
+    else {
+        return Ok(None);
     };
-    revision
-        .is_none_or(|value| value != 0)
-        .then_some(revision)
-        .ok_or(MailBootstrapError::Admission)
+    if binding.configuration_instance_id != admission.configuration_instance_id {
+        return Err(MailBootstrapError::Admission);
+    }
+    if matches!(
+        binding.state,
+        MailCredentialBindingStateV1::Retired | MailCredentialBindingStateV1::Deleted
+    ) {
+        return Ok(None);
+    }
+    let provider_purpose = match purpose {
+        MailCredentialPurposeV1::ImapPassword => MailCredentialPurpose::ImapPassword,
+        MailCredentialPurposeV1::SmtpPassword => MailCredentialPurpose::SmtpPassword,
+        MailCredentialPurposeV1::GmailAccessToken
+        | MailCredentialPurposeV1::GmailRefreshCredential => {
+            return Err(MailBootstrapError::Admission);
+        }
+    };
+    let credential = {
+        let mut provider_credentials = ManagedProviderCredentialClientV2::new(control_channel);
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        match provider_credentials.resolve(
+            &mut dispatcher,
+            provider_context,
+            ManagedProviderCredentialRequestV1 {
+                configuration_instance_id: &admission.configuration_instance_id,
+                purpose_id: provider_purpose.as_str(),
+                credential_revision: binding.credential_revision,
+                ttl_seconds: MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+                secret_class: SecretClassV1::ProviderCredential,
+            },
+        ) {
+            Ok(credential) => credential,
+            Err(ManagedProviderCredentialErrorV1::InvalidContext) => {
+                return Err(MailBootstrapError::Admission);
+            }
+            Err(
+                ManagedProviderCredentialErrorV1::Rejected
+                | ManagedProviderCredentialErrorV1::Unavailable,
+            ) => return Ok(None),
+        }
+    };
+    durable
+        .mark_account_credential_active(
+            &binding.connection_id,
+            &binding.configuration_instance_id,
+            binding.purpose,
+            binding.binding_revision,
+            binding.credential_revision,
+            admission.runtime_generation,
+            current_unix_seconds()?,
+        )
+        .await
+        .map_err(|_| MailBootstrapError::Persistence)?;
+    Ok(Some(credential))
 }
 
 fn provider_credential_context(
@@ -2312,17 +2649,6 @@ fn storage_binding(
     )
     .map_err(|_| MailBootstrapError::Storage)?;
     StorageBindingV1::new(identity, fences, access).map_err(|_| MailBootstrapError::Storage)
-}
-
-fn map_provider_credential_error(error: ManagedProviderCredentialErrorV1) -> MailBootstrapError {
-    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
-        eprintln!("developer_mail_provider_credential_error={error:?}");
-    }
-    match error {
-        ManagedProviderCredentialErrorV1::InvalidContext => MailBootstrapError::Admission,
-        ManagedProviderCredentialErrorV1::Rejected
-        | ManagedProviderCredentialErrorV1::Unavailable => MailBootstrapError::Credential,
-    }
 }
 
 fn current_unix_seconds() -> Result<i64, MailBootstrapError> {

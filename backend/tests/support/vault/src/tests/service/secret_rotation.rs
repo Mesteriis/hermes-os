@@ -106,7 +106,9 @@ fn retirement_persists_a_tombstone_and_denies_resolution_or_recreation() {
             .store_secret(&scope, b"credential-revision-one-recreated")
             .is_err()
     );
-    assert!(store.retire_secret(&scope, 101).is_err());
+    store
+        .retire_secret(&scope, 101)
+        .expect("idempotent explicit retire retry");
 }
 
 #[test]
@@ -122,7 +124,9 @@ fn delete_promotes_a_retired_tombstone_and_directly_deletes_an_active_revision()
         .expect("retired credential");
     store.retire_secret(&retired, 100).expect("retire");
     store.delete_secret(&retired, 101).expect("delete retired");
-    assert!(store.delete_secret(&retired, 102).is_err());
+    store
+        .delete_secret(&retired, 102)
+        .expect("idempotent explicit delete retry");
     assert!(
         store
             .store_secret(&retired, b"credential-revision-one-recreated")

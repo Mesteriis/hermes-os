@@ -2,7 +2,9 @@ use hermes_mail_api::client_contract::{
     MAIL_CLIENT_CONTRACT_MAJOR, MAIL_CLIENT_CONTRACT_REVISION, MAIL_CLIENT_DESCRIPTOR_SET_V1,
     MAIL_MODULE_ID, MAIL_OWNER_ID, MailClientContractV1,
 };
-use hermes_mail_api::{MailClientRequestV1, MailClientResponseV1, client_wire, oauth_wire};
+use hermes_mail_api::{
+    MailClientRequestV1, MailClientResponseV1, account_wire, client_wire, oauth_wire,
+};
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
@@ -42,6 +44,8 @@ fn validate_contract(
 
 fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
     match request {
+        MailClientRequestV1::BindCredential(_) => MailClientContractV1::AccountCredentialBind,
+        MailClientRequestV1::AccountStatus(_) => MailClientContractV1::AccountQuery,
         MailClientRequestV1::SyncInbox(_) => MailClientContractV1::Sync,
         MailClientRequestV1::SendMail(_) => MailClientContractV1::Delivery,
         MailClientRequestV1::DeliveryStatus(_) => MailClientContractV1::DeliveryQuery,
@@ -52,19 +56,29 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
     }
 }
 
-fn encode_request_payload(request: &MailClientRequestV1) -> Vec<u8> {
+fn encode_request_payload(request: &MailClientRequestV1) -> Result<Vec<u8>, MailClientPortErrorV1> {
     match request {
-        MailClientRequestV1::SyncInbox(value) => client_wire::encode_sync_request(value),
-        MailClientRequestV1::SendMail(value) => client_wire::encode_delivery_request(value),
+        MailClientRequestV1::BindCredential(value) => {
+            account_wire::encode_bind_request(value).map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::AccountStatus(value) => {
+            account_wire::encode_status_request(value).map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::SyncInbox(value) => Ok(client_wire::encode_sync_request(value)),
+        MailClientRequestV1::SendMail(value) => Ok(client_wire::encode_delivery_request(value)),
         MailClientRequestV1::DeliveryStatus(value) => {
-            client_wire::encode_delivery_status_request(value)
+            Ok(client_wire::encode_delivery_status_request(value))
         }
-        MailClientRequestV1::GmailOAuthStart(value) => oauth_wire::encode_start_request(value),
+        MailClientRequestV1::GmailOAuthStart(value) => Ok(oauth_wire::encode_start_request(value)),
         MailClientRequestV1::GmailOAuthComplete(value) => {
-            oauth_wire::encode_complete_request(value)
+            Ok(oauth_wire::encode_complete_request(value))
         }
-        MailClientRequestV1::GmailOAuthRefresh(value) => oauth_wire::encode_refresh_request(value),
-        MailClientRequestV1::GmailOAuthStatus(value) => oauth_wire::encode_status_request(value),
+        MailClientRequestV1::GmailOAuthRefresh(value) => {
+            Ok(oauth_wire::encode_refresh_request(value))
+        }
+        MailClientRequestV1::GmailOAuthStatus(value) => {
+            Ok(oauth_wire::encode_status_request(value))
+        }
     }
 }
 
@@ -73,6 +87,12 @@ fn decode_request_payload(
     bytes: &[u8],
 ) -> Result<MailClientRequestV1, MailClientPortErrorV1> {
     match contract {
+        MailClientContractV1::AccountCredentialBind => account_wire::decode_bind_request(bytes)
+            .map(MailClientRequestV1::BindCredential)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::AccountQuery => account_wire::decode_status_request(bytes)
+            .map(MailClientRequestV1::AccountStatus)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
         MailClientContractV1::Sync => client_wire::decode_sync_request(bytes)
             .map(MailClientRequestV1::SyncInbox)
             .map_err(|_| MailClientPortErrorV1::Protocol),
@@ -111,7 +131,7 @@ pub fn encode_module_request(
         owner_id: MAIL_OWNER_ID.to_owned(),
         contract: Some(mail_client_contract(contract)),
         request_id,
-        request_payload: encode_request_payload(request),
+        request_payload: encode_request_payload(request)?,
     }
     .encode_to_vec())
 }
@@ -149,6 +169,16 @@ pub async fn handle_client_request(
     }
     let (request_id, contract, request) = decode_module_request(bytes)?;
     let response = match request {
+        MailClientRequestV1::BindCredential(value) => runtime
+            .bind_account_credential(&value, requested_at_unix_seconds)
+            .await
+            .map(MailClientResponseV1::CredentialBinding)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::AccountStatus(value) => runtime
+            .account_status(&value.connection_id)
+            .await
+            .map(MailClientResponseV1::AccountStatus)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
         MailClientRequestV1::SyncInbox(value) => {
             let observed_messages = runtime
                 .sync_configured_inbox(&value.operation_id)
@@ -203,6 +233,15 @@ fn encode_module_response(
         return Err(MailClientPortErrorV1::Protocol);
     }
     let response_payload = match (contract, response) {
+        (
+            MailClientContractV1::AccountCredentialBind,
+            MailClientResponseV1::CredentialBinding(receipt),
+        ) => account_wire::encode_binding_receipt(receipt)
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
+        (MailClientContractV1::AccountQuery, MailClientResponseV1::AccountStatus(status)) => {
+            account_wire::encode_account_status(status)
+                .map_err(|_| MailClientPortErrorV1::Protocol)?
+        }
         (
             MailClientContractV1::Sync,
             MailClientResponseV1::SyncInboxCompleted {
@@ -262,6 +301,14 @@ pub fn decode_module_response(
         return Err(MailClientPortErrorV1::Protocol);
     }
     let response = match contract {
+        MailClientContractV1::AccountCredentialBind => {
+            account_wire::decode_binding_receipt(&envelope.response_payload)
+                .map(MailClientResponseV1::CredentialBinding)
+        }
+        MailClientContractV1::AccountQuery => {
+            account_wire::decode_account_status(&envelope.response_payload)
+                .map(MailClientResponseV1::AccountStatus)
+        }
         MailClientContractV1::Sync => client_wire::decode_sync_response(&envelope.response_payload),
         MailClientContractV1::Delivery => {
             client_wire::decode_delivery_response(&envelope.response_payload)
@@ -287,6 +334,9 @@ pub fn decode_module_response(
 mod tests {
     use hermes_mail_api::{
         MailDeliveryStatusRequestV1, MailSendMailRequestV1, MailSyncInboxRequestV1,
+        account::{
+            MailAccountStatusRequestV1, MailBindCredentialRequestV1, MailCredentialPurposeV1,
+        },
     };
 
     use super::*;
@@ -312,6 +362,32 @@ mod tests {
         MailClientRequestV1::DeliveryStatus(MailDeliveryStatusRequestV1 {
             operation_id: "delivery-operation".to_owned(),
         })
+    }
+
+    #[test]
+    fn account_binding_and_query_use_independent_exact_contracts() {
+        let bind = MailClientRequestV1::BindCredential(MailBindCredentialRequestV1 {
+            connection_id: "mail-account".to_owned(),
+            purpose: MailCredentialPurposeV1::ImapPassword,
+            expected_binding_revision: 0,
+            credential_revision: 1,
+        });
+        let query = MailClientRequestV1::AccountStatus(MailAccountStatusRequestV1 {
+            connection_id: "mail-account".to_owned(),
+        });
+
+        let encoded_bind = encode_module_request(4, &bind).expect("account bind");
+        let (_, bind_contract, decoded_bind) =
+            decode_module_request(&encoded_bind).expect("decode account bind");
+        let encoded_query = encode_module_request(5, &query).expect("account query");
+        let (_, query_contract, decoded_query) =
+            decode_module_request(&encoded_query).expect("decode account query");
+
+        assert_eq!(bind_contract, MailClientContractV1::AccountCredentialBind);
+        assert_eq!(query_contract, MailClientContractV1::AccountQuery);
+        assert_eq!(decoded_bind, bind);
+        assert_eq!(decoded_query, query);
+        assert_ne!(bind_contract, query_contract);
     }
 
     #[test]

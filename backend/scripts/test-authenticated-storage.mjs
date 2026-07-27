@@ -298,6 +298,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_communications_domain_starts_with_owner_local_storage_and_events',
     'managed_attachment_security_engine_starts_with_exact_signed_contracts',
     'managed_mail_runtime_uses_kernel_leases_and_route_specific_admission',
+    'managed_mail_credential_rotation_quiesces_until_settings_successor',
     'managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event',
     'managed_mail_gmail_runtime_mutates_once_and_replays_event_without_private_payload',
     'managed_mail_gmail_oauth_rotates_credentials_once_and_fails_closed',

@@ -28,7 +28,7 @@ use hermes_runtime_protocol::v1::{
 use sha2::{Digest, Sha256};
 
 use crate::settings::{
-    MAIL_SETTINGS_SCHEMA_MAJOR_V1, MAIL_SETTINGS_SCHEMA_REVISION_V1, mail_settings_schema_bytes_v1,
+    MAIL_SETTINGS_SCHEMA_MAJOR_V2, MAIL_SETTINGS_SCHEMA_REVISION_V2, mail_settings_schema_bytes_v2,
 };
 
 pub const MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID: &str =
@@ -60,6 +60,8 @@ pub const MAIL_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
 #[must_use]
 pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
+        mail_client_capability_v1(MailClientContractV1::AccountCredentialBind),
+        mail_client_capability_v1(MailClientContractV1::AccountQuery),
         mail_attachment_anchor_consume_capability_v1(),
         mail_attachment_blob_admission_publish_capability_v1(),
         mail_attachment_safety_state_consume_capability_v1(),
@@ -322,10 +324,10 @@ pub fn mail_storage_capability_v1() -> CapabilityDescriptorV1 {
 
 #[must_use]
 pub fn mail_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
-    let settings_schema = mail_settings_schema_bytes_v1();
+    let settings_schema = mail_settings_schema_bytes_v2();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 3,
+        descriptor_revision: 4,
         module_id: MAIL_MODULE_ID.to_owned(),
         owner_id: MAIL_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Integration as i32,
@@ -338,8 +340,8 @@ pub fn mail_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
         }),
         capabilities: mail_admission_capabilities_v1(),
         settings_schema_ref: Some(SettingsSchemaRefV1 {
-            major: MAIL_SETTINGS_SCHEMA_MAJOR_V1,
-            revision: MAIL_SETTINGS_SCHEMA_REVISION_V1,
+            major: MAIL_SETTINGS_SCHEMA_MAJOR_V2,
+            revision: MAIL_SETTINGS_SCHEMA_REVISION_V2,
             artifact_size_bytes: settings_schema.len() as u64,
             sha256: Sha256::digest(&settings_schema).to_vec(),
         }),
@@ -372,6 +374,8 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                MailClientContractV1::AccountCredentialBind.capability_id(),
+                MailClientContractV1::AccountQuery.capability_id(),
                 MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
                 MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID,
                 MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID,

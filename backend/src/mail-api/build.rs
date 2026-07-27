@@ -9,6 +9,12 @@ fn main() {
     let mut config = prost_build::Config::new();
     config.file_descriptor_set_path(descriptor_set);
     config
-        .compile_protos(&["proto/hermes/mail/v1/client.proto"], &["proto"])
+        .compile_protos(
+            &[
+                "proto/hermes/mail/v1/client.proto",
+                "proto/hermes/mail/account/v1/client.proto",
+            ],
+            &["proto"],
+        )
         .expect("Mail client protocol must compile");
 }

@@ -13,22 +13,18 @@ use hermes_runtime_protocol::v1::{
 };
 use prost::Message;
 
-use crate::MailCredentialRevisionsV1;
-
 const CONNECTION_ID: &str = "mail.connection_id";
 const IMAP_HOST: &str = "mail.imap.host";
 const IMAP_PORT: &str = "mail.imap.port";
 const IMAP_USERNAME: &str = "mail.imap.username";
 const SYNC_WINDOW: &str = "mail.sync.window";
 const SYNC_WINDOWS: &str = "mail.sync.windows";
-const IMAP_PASSWORD_REVISION: &str = "mail.imap.password_revision";
 const SMTP_ENABLED: &str = "mail.smtp.enabled";
 const SMTP_CA_CERTIFICATE_PEM: &str = "mail.smtp.ca_certificate_pem";
 const SMTP_HOST: &str = "mail.smtp.host";
 const SMTP_PORT: &str = "mail.smtp.port";
 const SMTP_USERNAME: &str = "mail.smtp.username";
 const SMTP_FROM_ADDRESS: &str = "mail.smtp.from_address";
-const SMTP_PASSWORD_REVISION: &str = "mail.smtp.password_revision";
 const INBOUND_KIND: &str = "mail.inbound.kind";
 const GMAIL_API_HOST: &str = "mail.gmail.api_host";
 const GMAIL_API_PORT: &str = "mail.gmail.api_port";
@@ -59,17 +55,17 @@ const GMAIL_OAUTH_SETTING_IDS: [&str; 10] = [
     GMAIL_OAUTH_TOKEN_PORT,
 ];
 
-pub const MAIL_SETTINGS_SCHEMA_MAJOR_V1: u32 = 1;
-pub const MAIL_SETTINGS_SCHEMA_REVISION_V1: u32 = 4;
+pub const MAIL_SETTINGS_SCHEMA_MAJOR_V2: u32 = 2;
+pub const MAIL_SETTINGS_SCHEMA_REVISION_V2: u32 = 1;
 
-/// The Mail integration owns these configuration-instance settings. They are
-/// deliberately hidden from generic client reads: endpoint details and
-/// credential revisions are runtime configuration, not Communications state.
+/// The Mail integration owns these non-secret configuration-instance settings.
+/// They are owner-editable through Settings; credential bindings remain
+/// Mail-owned state and never enter Settings or Communications.
 #[must_use]
-pub fn mail_settings_schema_v1() -> SettingsSchemaV1 {
+pub fn mail_settings_schema_v2() -> SettingsSchemaV1 {
     SettingsSchemaV1 {
-        major: MAIL_SETTINGS_SCHEMA_MAJOR_V1,
-        revision: MAIL_SETTINGS_SCHEMA_REVISION_V1,
+        major: MAIL_SETTINGS_SCHEMA_MAJOR_V2,
+        revision: MAIL_SETTINGS_SCHEMA_REVISION_V2,
         definitions: vec![
             definition(CONNECTION_ID, SettingValueTypeV1::String, "Connection ID"),
             definition(GMAIL_API_HOST, SettingValueTypeV1::String, "Gmail API host"),
@@ -140,11 +136,6 @@ pub fn mail_settings_schema_v1() -> SettingsSchemaV1 {
             ),
             definition(GMAIL_USER_ID, SettingValueTypeV1::String, "Gmail user ID"),
             definition(IMAP_HOST, SettingValueTypeV1::String, "IMAP host"),
-            definition(
-                IMAP_PASSWORD_REVISION,
-                SettingValueTypeV1::UnsignedInteger,
-                "IMAP password revision",
-            ),
             definition(IMAP_PORT, SettingValueTypeV1::UnsignedInteger, "IMAP port"),
             definition(IMAP_USERNAME, SettingValueTypeV1::String, "IMAP username"),
             definition(
@@ -164,11 +155,6 @@ pub fn mail_settings_schema_v1() -> SettingsSchemaV1 {
                 "SMTP from address",
             ),
             definition(SMTP_HOST, SettingValueTypeV1::String, "SMTP host"),
-            definition(
-                SMTP_PASSWORD_REVISION,
-                SettingValueTypeV1::UnsignedInteger,
-                "SMTP password revision",
-            ),
             definition(SMTP_PORT, SettingValueTypeV1::UnsignedInteger, "SMTP port"),
             definition(SMTP_USERNAME, SettingValueTypeV1::String, "SMTP username"),
             definition(
@@ -186,8 +172,8 @@ pub fn mail_settings_schema_v1() -> SettingsSchemaV1 {
 }
 
 #[must_use]
-pub fn mail_settings_schema_bytes_v1() -> Vec<u8> {
-    mail_settings_schema_v1().encode_to_vec()
+pub fn mail_settings_schema_bytes_v2() -> Vec<u8> {
+    mail_settings_schema_v2().encode_to_vec()
 }
 
 fn definition(
@@ -202,7 +188,7 @@ fn definition(
         mutation_authority: SettingMutationAuthorityV1::OperatorManaged as i32,
         target_scope: SettingTargetScopeV1::ConfigurationInstance as i32,
         apply_mode: SettingApplyModeV1::RestartModule as i32,
-        client_visibility: SettingClientVisibilityV1::Hidden as i32,
+        client_visibility: SettingClientVisibilityV1::Editable as i32,
         fresh_owner_proof_required: true,
         kernel_controller_id: String::new(),
         display_name: display_name.to_owned(),
@@ -212,7 +198,6 @@ fn definition(
 pub struct MailRuntimeSettingsV1 {
     pub account: MailAccountConfigurationV1,
     pub gmail_oauth: Option<GmailOAuthConfigurationV1>,
-    pub credential_revisions: MailCredentialRevisionsV1,
 }
 
 pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, String> {
@@ -261,47 +246,21 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, St
     if !valid_account_configuration(&account) {
         return Err(invalid_settings());
     }
-    let imap_password = match &account.inbound {
-        MailInboundTransportV1::Imap(_) => {
-            let revision = required_unsigned(snapshot, IMAP_PASSWORD_REVISION)?;
-            if revision == 0 {
-                return Err(invalid_settings());
-            }
-            Some(revision)
-        }
+    match &account.inbound {
+        MailInboundTransportV1::Imap(_) => {}
         MailInboundTransportV1::Gmail(_) => {
             for setting_id in [IMAP_HOST, IMAP_PORT, IMAP_USERNAME] {
                 absent(snapshot, setting_id)?;
             }
-            absent(snapshot, IMAP_PASSWORD_REVISION)?;
-            None
         }
-    };
+    }
     let gmail_oauth = match &account.inbound {
         MailInboundTransportV1::Gmail(_) => optional_gmail_oauth_configuration(snapshot)?,
         MailInboundTransportV1::Imap(_) => None,
     };
-    let smtp_password = if account.smtp_endpoint.is_some() {
-        let revision = required_unsigned(snapshot, SMTP_PASSWORD_REVISION)?;
-        Some(
-            (revision != 0)
-                .then_some(revision)
-                .ok_or_else(invalid_settings)?,
-        )
-    } else {
-        absent(snapshot, SMTP_PASSWORD_REVISION)?;
-        None
-    };
-    if matches!(account.inbound, MailInboundTransportV1::Gmail(_)) && smtp_password.is_some() {
-        return Err(invalid_settings());
-    }
     Ok(MailRuntimeSettingsV1 {
         account,
         gmail_oauth,
-        credential_revisions: MailCredentialRevisionsV1 {
-            imap_password,
-            smtp_password,
-        },
     })
 }
 
@@ -443,17 +402,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn schema_is_versioned_hidden_and_configuration_scoped() {
-        let schema = mail_settings_schema_v1();
+    fn schema_is_versioned_owner_editable_and_configuration_scoped() {
+        let schema = mail_settings_schema_v2();
 
         assert_eq!(validate_settings_schema_v1(&schema), Ok(()));
         assert!(schema.definitions.iter().all(|definition| {
             definition.target_scope == SettingTargetScopeV1::ConfigurationInstance as i32
                 && definition.apply_mode == SettingApplyModeV1::RestartModule as i32
-                && definition.client_visibility == SettingClientVisibilityV1::Hidden as i32
+                && definition.client_visibility == SettingClientVisibilityV1::Editable as i32
                 && definition.fresh_owner_proof_required
         }));
-        assert_eq!(schema.definitions.len(), 30);
+        assert_eq!(schema.definitions.len(), 28);
     }
 
     #[test]
