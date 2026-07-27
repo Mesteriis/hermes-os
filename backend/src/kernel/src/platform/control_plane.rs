@@ -194,7 +194,7 @@ fn start_workers(
         completed.clone(),
         Arc::clone(&shutdown_requested),
         Arc::clone(&store),
-        data_dir,
+        data_dir.clone(),
         runtime_dir.clone(),
         managed_runtime_supervisor.clone(),
     ));
@@ -209,6 +209,7 @@ fn start_workers(
         &completed,
         &shutdown_requested,
         &store,
+        data_dir,
         managed_runtime_supervisor,
         browser_gateway,
         browser_pairing,
@@ -278,6 +279,7 @@ fn browser_gateway_worker(
     completed: &mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: &Arc<AtomicBool>,
     store: &Arc<SqliteControlStore>,
+    data_dir: std::path::PathBuf,
     supervisor: ManagedRuntimeSupervisor,
     browser_gateway: Option<BrowserGatewayConfigurationV1>,
     browser_pairing: Option<Arc<BrowserPairingAdmissionV1>>,
@@ -287,6 +289,7 @@ fn browser_gateway_worker(
         completed.clone(),
         shutdown_requested,
         Arc::clone(store),
+        data_dir,
         supervisor,
         configuration,
         browser_pairing,
@@ -335,6 +338,7 @@ fn start_browser_gateway_worker(
     completed: mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: &Arc<AtomicBool>,
     store: Arc<SqliteControlStore>,
+    data_dir: std::path::PathBuf,
     supervisor: ManagedRuntimeSupervisor,
     configuration: BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
@@ -347,6 +351,7 @@ fn start_browser_gateway_worker(
         move |shutdown| {
             gateway::serve(
                 Arc::clone(&store),
+                data_dir.clone(),
                 supervisor.clone(),
                 configuration.clone(),
                 pairing.clone(),

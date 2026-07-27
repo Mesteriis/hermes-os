@@ -1,7 +1,7 @@
 //! Kernel-owned admission for the narrow browser Gateway foundation.
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -10,8 +10,8 @@ use hermes_gateway_runtime::{
     BrowserBootstrapRouter, BrowserPairingRouter, ClientRpcRouteErrorV1, ClientRpcRouteHandler,
     ClientRpcRouteV1, ClientRpcRouter, GatewayApplicationRouter, GatewayHttp3ListenerV1,
     GatewayLanDevelopmentListenerV1, GatewayLoopbackTlsListenerV1, GatewayTechnicalRouter,
-    GatewayTlsListenerV1, InMemoryBrowserRealtimeSource, PairedRemoteProfileV1,
-    SharedBrowserPairingManager,
+    GatewayTlsListenerV1, InMemoryBrowserRealtimeSource, OwnerVaultProvisioningRouter,
+    PairedRemoteProfileV1, SharedBrowserPairingManager,
 };
 use hermes_gateway_session::{
     BrowserGatewaySessionService, BrowserPairingChallengeV1, BrowserPairingManager,
@@ -30,6 +30,7 @@ use crate::modules::capability::router::{
     ManagedCapabilityRouteRequest, route_managed_client_request,
 };
 use crate::platform::macos::native_launch;
+use crate::platform::vault::owner_provisioning::KernelOwnerVaultProvisioningHandlerV1;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 const SHUTDOWN_POLL: Duration = Duration::from_millis(25);
@@ -212,6 +213,7 @@ fn require_private_lan_address(address: SocketAddr) -> Result<(), String> {
 
 pub(crate) fn serve(
     store: Arc<SqliteControlStore>,
+    data_dir: PathBuf,
     supervisor: ManagedRuntimeSupervisor,
     configuration: BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
@@ -224,6 +226,7 @@ pub(crate) fn serve(
         .map_err(|_| "browser Gateway runtime is unavailable".to_owned())?;
     runtime.block_on(serve_async(
         store,
+        data_dir,
         supervisor,
         configuration,
         pairing,
@@ -233,12 +236,13 @@ pub(crate) fn serve(
 
 async fn serve_async(
     store: Arc<SqliteControlStore>,
+    data_dir: PathBuf,
     supervisor: ManagedRuntimeSupervisor,
     configuration: BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
     shutdown_requested: Arc<AtomicBool>,
 ) -> Result<(), String> {
-    let service = gateway_service(store, supervisor, &configuration, pairing)?;
+    let service = gateway_service(store, &data_dir, supervisor, &configuration, pairing)?;
     let (shutdown, receiver) = watch::channel(false);
     let watcher = shutdown_watcher(shutdown_requested, shutdown);
     let result = serve_configured_listener(configuration, service, receiver).await;
@@ -251,6 +255,7 @@ type BrowserGatewayRouter =
 
 pub(crate) fn gateway_service(
     store: Arc<SqliteControlStore>,
+    data_dir: &Path,
     supervisor: ManagedRuntimeSupervisor,
     configuration: &BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
@@ -355,6 +360,15 @@ pub(crate) fn gateway_service(
     let mut service = GatewayApplicationRouter::new(true, Arc::clone(&session), realtime)
         .with_client_rpc_routes(client_rpc_routes)
         .map_err(str::to_owned)?;
+    let owner_vault_provisioning = Arc::new(KernelOwnerVaultProvisioningHandlerV1::new(
+        Arc::clone(&store),
+        data_dir,
+        supervisor.relay_port(),
+    ));
+    service = service.with_owner_vault_provisioning(OwnerVaultProvisioningRouter::new(
+        Arc::clone(&session),
+        owner_vault_provisioning,
+    ));
     if let Some(pairing) = pairing {
         service = service.with_browser_pairing(pairing.router(configuration)?);
     }

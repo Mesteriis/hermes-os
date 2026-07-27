@@ -19,7 +19,7 @@ use crate::{
     BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter,
     BrowserRealtimeRouter, BrowserRealtimeSubscriptionSource, BrowserSessionStatusRouter,
     ClientBootstrapRouter, ClientRpcRouter, GatewayHttpResponse, GatewayTechnicalRouter,
-    SharedBrowserGatewaySessionService,
+    OwnerVaultProvisioningRouter, SharedBrowserGatewaySessionService,
 };
 
 const AUTHENTICATION_PREFIX: &str = "/browser/v1/authentication/";
@@ -38,6 +38,7 @@ pub struct GatewayApplicationRouter<A, S> {
     browser_session_status: BrowserSessionStatusRouter<A>,
     client_bootstrap: ClientBootstrapRouter<A>,
     client_rpc_routes: Vec<ClientRpcRouter<A>>,
+    owner_vault_provisioning: Option<OwnerVaultProvisioningRouter<A>>,
     browser_realtime: BrowserRealtimeRouter<A, S>,
     lan_development_policy: Option<LanDevelopmentRequestPolicyV1>,
 }
@@ -58,6 +59,7 @@ impl<A, S> Clone for GatewayApplicationRouter<A, S> {
             browser_session_status: self.browser_session_status.clone(),
             client_bootstrap: self.client_bootstrap.clone(),
             client_rpc_routes: self.client_rpc_routes.clone(),
+            owner_vault_provisioning: self.owner_vault_provisioning.clone(),
             browser_realtime: self.browser_realtime.clone(),
             lan_development_policy: self.lan_development_policy.clone(),
         }
@@ -79,6 +81,7 @@ where
             browser_session_status: BrowserSessionStatusRouter::from_shared(service.clone()),
             client_bootstrap: ClientBootstrapRouter::from_shared(service.clone()),
             client_rpc_routes: Vec::new(),
+            owner_vault_provisioning: None,
             browser_realtime: BrowserRealtimeRouter::new(service, source),
             lan_development_policy: None,
         }
@@ -106,6 +109,15 @@ where
         }
         self.client_rpc_routes = routes;
         Ok(self)
+    }
+
+    #[must_use]
+    pub fn with_owner_vault_provisioning(
+        mut self,
+        router: OwnerVaultProvisioningRouter<A>,
+    ) -> Self {
+        self.owner_vault_provisioning = Some(router);
+        self
     }
 
     pub fn with_lan_development_policy(mut self, exact_origin: &str) -> Result<Self, &'static str> {
@@ -177,6 +189,12 @@ where
         }
         if path == CLIENT_BOOTSTRAP_PATH {
             return self.client_bootstrap.route(request).await;
+        }
+        if OwnerVaultProvisioningRouter::<A>::admits_path(path) {
+            return match &self.owner_vault_provisioning {
+                Some(router) => router.route(request).await,
+                None => self.technical.route(request.method(), path),
+            };
         }
         if let Some(router) = self
             .client_rpc_routes

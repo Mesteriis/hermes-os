@@ -467,7 +467,7 @@ release.
    frontend client и integration-owned UI cutover открывается
    `zulip_full_operational_v1`.
 5. Vault закрывает provider-neutral `vault_credential_retirement_v1` по
-   ADR-0293 и отдельный `owner_vault_provisioning_backend_v1` по ADR-0295.
+   ADR-0293 и implemented `owner_vault_provisioning_backend_v1` по ADR-0295.
    First-party app отдельно закрывает `owner_vault_provisioning_v1`, включая
    generated client и host adapters; backend gate не подменяет client gate.
    Mail независимо проходит implemented

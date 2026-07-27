@@ -356,6 +356,7 @@ fn assert_communications_gateway_query_delivery(
     .expect("Gateway configuration");
     let router = crate::platform::gateway::gateway_service(
         Arc::clone(store),
+        root,
         supervisor.clone(),
         &configuration,
         None,

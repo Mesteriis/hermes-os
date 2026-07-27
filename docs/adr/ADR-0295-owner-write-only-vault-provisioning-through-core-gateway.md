@@ -2,8 +2,8 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: Planned. Backend и first-party client gates ниже ещё не
-открыты.
+Состояние реализации: Backend implemented. First-party client gate остаётся
+planned.
 
 Уточняет:
 
@@ -154,6 +154,8 @@ integration binding, generic Settings apply и provider readiness query.
 
 ### `owner_vault_provisioning_backend_v1`
 
+Состояние: Implemented.
+
 1. generated Prepare/Authorize/Commit contracts through Core Gateway;
 2. authenticated non-development owner device session;
 3. operation-bound fresh P-256 proof;
@@ -166,6 +168,8 @@ integration binding, generic Settings apply и provider readiness query.
 10. architecture, SRP, Cargo, Clippy and workspace gates.
 
 ### `owner_vault_provisioning_v1`
+
+Состояние: Planned.
 
 1. `owner_vault_provisioning_backend_v1`;
 2. desktop host adapter with non-extractable device key and zeroization;

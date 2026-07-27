@@ -467,7 +467,7 @@ fn base64_url_encode(value: &[u8]) -> String {
     encoded
 }
 
-fn browser_signing_key() -> SigningKey {
+pub(super) fn browser_signing_key() -> SigningKey {
     SigningKey::from_bytes((&[7_u8; 32]).into()).expect("test signing key")
 }
 

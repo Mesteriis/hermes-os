@@ -20,6 +20,7 @@ fn main() {
                 "proto/hermes/gateway/v1/client_realtime.proto",
                 "proto/hermes/gateway/v1/browser_session.proto",
                 "proto/hermes/gateway/v1/client_bootstrap.proto",
+                "proto/hermes/gateway/v1/owner_vault_provisioning.proto",
             ],
             &["proto", "../../../platform/runtime_protocol/proto"],
         )

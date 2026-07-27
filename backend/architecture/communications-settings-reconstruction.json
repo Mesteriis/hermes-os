@@ -233,7 +233,7 @@
       "gate": "owner_vault_provisioning_backend_v1",
       "role": "platform",
       "owner": "vault",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "client_gateway_v1",
         "vault_v1"

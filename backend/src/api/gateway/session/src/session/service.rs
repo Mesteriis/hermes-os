@@ -157,7 +157,7 @@ where
             .client_bootstrap(session.owner_id(), session.device_id())
     }
 
-    fn require_mutation_origin(&self, origin: &str) -> Result<(), String> {
+    pub fn require_mutation_origin(&self, origin: &str) -> Result<(), String> {
         match self.access_mode {
             BrowserGatewayAccessModeV1::Paired => {
                 BrowserSameOriginSessionV1::require_mutation_origin(

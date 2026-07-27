@@ -92,6 +92,8 @@ mod platform {
         pub(crate) mod managed_route;
         #[path = "../../../../../../src/kernel/src/platform/vault/owner_derived_key.rs"]
         pub(crate) mod owner_derived_key;
+        #[path = "../../../../../../src/kernel/src/platform/vault/owner_provisioning/mod.rs"]
+        pub(crate) mod owner_provisioning;
         #[path = "../../../../../../src/kernel/src/platform/vault/provider_credential.rs"]
         pub(crate) mod provider_credential;
         #[path = "../../../../../../src/kernel/src/platform/vault/status.rs"]
@@ -182,6 +184,7 @@ mod tests {
     mod managed_vault_route;
     mod module_grant_snapshot;
     mod operation_journal;
+    mod owner_vault_provisioning;
     mod part_01;
     mod part_02;
     mod part_03;

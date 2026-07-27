@@ -5,5 +5,6 @@ pub(crate) mod ciphertext_route;
 pub(crate) mod launch;
 pub(crate) mod managed_route;
 pub(crate) mod owner_derived_key;
+pub(crate) mod owner_provisioning;
 pub(crate) mod provider_credential;
 pub(crate) mod status;

@@ -15,6 +15,9 @@ pub use browser::{
     BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter,
     BrowserSessionStatusRouter, ClientBootstrapRouter, ClientRpcContractVersionV1,
     ClientRpcRouteErrorV1, ClientRpcRouteHandler, ClientRpcRouteV1, ClientRpcRouter,
+    OWNER_VAULT_AUTHORIZE_PATH, OWNER_VAULT_COMMIT_PATH, OWNER_VAULT_PREPARE_PATH,
+    OwnerVaultClientPrincipalV1, OwnerVaultProvisioningHandlerV1,
+    OwnerVaultProvisioningRouteErrorV1, OwnerVaultProvisioningRouter,
     SharedBrowserGatewaySessionService, SharedBrowserPairingManager,
 };
 pub use realtime::{

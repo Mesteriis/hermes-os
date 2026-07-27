@@ -52,7 +52,7 @@ impl ManagedRuntimeVaultRouteHandler for KernelManagedVaultRouteHandler {
     fn route_vault_ciphertext(
         &self,
         expectation: &ManagedRuntimeExpectation,
-        mut route: VaultCiphertextRouteV1,
+        route: VaultCiphertextRouteV1,
     ) -> Result<VaultCiphertextResponseV1, String> {
         validate_vault_ciphertext_route_v1(&route)
             .map_err(|_| "managed Vault ciphertext route is invalid".to_owned())?;
@@ -87,37 +87,7 @@ impl ManagedRuntimeVaultRouteHandler for KernelManagedVaultRouteHandler {
         } else {
             self.authorize_storage_delegated_route(expectation, &route)?;
         }
-        let vault = launch::current_launch(&self.store)?;
-        if route.vault_runtime_generation != vault.runtime_generation() {
-            return Err("managed Vault ciphertext route is stale".to_owned());
-        }
-        ciphertext_route::sign_for_kernel(
-            &self.data_dir,
-            self.store.snapshot().instance_id(),
-            &mut route,
-        )?;
-        let request = ManagedVaultRuntimeControlRequestV1 {
-            operation: Some(Operation::CiphertextRoute(route.clone())),
-        };
-        let response = self
-            .relay
-            .relay(VAULT_PROCESS_ID, request.encode_to_vec())?;
-        let response = ManagedVaultRuntimeControlResponseV1::decode(response.as_slice())
-            .map_err(|_| "managed Vault ciphertext response is invalid".to_owned())?;
-        if !response.error_code.is_empty() {
-            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
-                eprintln!(
-                    "developer_vault_ciphertext_response_error_code={}",
-                    response.error_code
-                );
-            }
-            return Err("managed Vault ciphertext response is unavailable".to_owned());
-        }
-        let response = match response.result {
-            Some(ResponseResult::CiphertextResponse(response)) => response,
-            _ => return Err("managed Vault ciphertext response is invalid".to_owned()),
-        };
-        ciphertext_route::validate_response(&route, response)
+        relay_kernel_authorized_route(&self.store, &self.data_dir, &*self.relay, route)
     }
 }
 
@@ -185,4 +155,39 @@ pub(crate) fn authorize_storage_delegated_route(
     .map_err(|_| "managed Vault ciphertext route is unavailable".to_owned())?
     .then_some(())
     .ok_or_else(|| "managed Vault ciphertext route is stale".to_owned())
+}
+
+pub(crate) fn relay_kernel_authorized_route(
+    store: &SqliteControlStore,
+    data_dir: &Path,
+    relay: &dyn ManagedRuntimeRelay,
+    mut route: VaultCiphertextRouteV1,
+) -> Result<VaultCiphertextResponseV1, String> {
+    validate_vault_ciphertext_route_v1(&route)
+        .map_err(|_| "managed Vault ciphertext route is invalid".to_owned())?;
+    let vault = launch::current_launch(store)?;
+    if route.vault_runtime_generation != vault.runtime_generation() {
+        return Err("managed Vault ciphertext route is stale".to_owned());
+    }
+    ciphertext_route::sign_for_kernel(data_dir, store.snapshot().instance_id(), &mut route)?;
+    let request = ManagedVaultRuntimeControlRequestV1 {
+        operation: Some(Operation::CiphertextRoute(route.clone())),
+    };
+    let response = relay.relay(VAULT_PROCESS_ID, request.encode_to_vec())?;
+    let response = ManagedVaultRuntimeControlResponseV1::decode(response.as_slice())
+        .map_err(|_| "managed Vault ciphertext response is invalid".to_owned())?;
+    if !response.error_code.is_empty() {
+        if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+            eprintln!(
+                "developer_vault_ciphertext_response_error_code={}",
+                response.error_code
+            );
+        }
+        return Err("managed Vault ciphertext response is unavailable".to_owned());
+    }
+    let response = match response.result {
+        Some(ResponseResult::CiphertextResponse(response)) => response,
+        _ => return Err("managed Vault ciphertext response is invalid".to_owned()),
+    };
+    ciphertext_route::validate_response(&route, response)
 }
