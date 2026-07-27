@@ -103,6 +103,7 @@ policy через ссылки из новых документов.
 - [ADR-0292: Managed integration settings apply and credential binding](ADR-0292-managed-integration-settings-apply-and-credential-binding.md)
 - [ADR-0293: Scoped Vault credential retirement and deletion](ADR-0293-scoped-vault-credential-retirement-and-deletion.md)
 - [ADR-0294: Mail account credential lifecycle and portability](ADR-0294-mail-account-credential-lifecycle-and-portability.md)
+- [ADR-0295: Owner write-only Vault provisioning through Core Gateway](ADR-0295-owner-write-only-vault-provisioning-through-core-gateway.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -358,3 +359,8 @@ bindings: Bind и sanitized Query являются отдельными generate
 Retry и lifecycle Status ведут Mail-owned per-purpose journal, quiesce-ят все
 provider paths до exact Vault mutation и сохраняют account tombstone; typed
 portability остаётся отдельным незакрытым gate.
+ADR-0295 вводит отсутствующий first-party write-only provisioning path:
+Core Gateway требует operation-bound fresh device proof, Kernel проверяет
+exact approved Vault-purpose capability и переносит только HPKE ciphertext, а
+Vault атомарно сохраняет mutation и durable idempotency receipt без record ID
+или credential read-back. Backend и client adapters остаются разными gates.
