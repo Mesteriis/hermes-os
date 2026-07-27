@@ -171,6 +171,14 @@ impl TelegramRuntimeProjectionCache {
         self.messages.insert(message.message_id.clone(), message);
     }
 
+    pub fn apply_message_text_edit(&mut self, message_id: &str, text: &str) -> bool {
+        let Some(message) = self.messages.get_mut(message_id) else {
+            return false;
+        };
+        message.text = Some(text.to_owned());
+        true
+    }
+
     pub fn put_topic(&mut self, topic: TelegramTopic) {
         self.topics.insert(
             format!(

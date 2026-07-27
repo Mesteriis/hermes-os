@@ -1,15 +1,16 @@
 //! Live managed Telegram process through Kernel leases into managed Communications.
 
 use super::*;
+use std::time::Instant;
 
 use hermes_events_protocol::validation::envelope::decode_envelope_v1;
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
 use hermes_telegram_api::{
-    TelegramClientRequest, TelegramClientResponse, TelegramOperationState, TelegramProviderCommand,
-    TelegramProviderQuery, TelegramProviderQueryResponse, TelegramRuntimeState,
-    TelegramSendMessage, client_contract::TelegramClientContractV1,
+    TelegramClientRequest, TelegramClientResponse, TelegramHistorySyncMode, TelegramOperationState,
+    TelegramProviderCommand, TelegramProviderQuery, TelegramProviderQueryResponse,
+    TelegramRuntimeState, TelegramSendMessage, client_contract::TelegramClientContractV1,
 };
 use hermes_telegram_automation_api::{
     contract::{
@@ -64,7 +65,9 @@ enum TelegramClientRouteError {
 impl TelegramClientRouteError {
     fn is_retryable(&self) -> bool {
         match self {
-            Self::Client(TelegramClientPortError::Protocol(code)) => code == "RUNTIME_BUSY",
+            Self::Client(TelegramClientPortError::Protocol(code)) => {
+                matches!(code.as_str(), "RUNTIME_BUSY" | "RUNTIME_UNAVAILABLE")
+            }
             Self::Kernel(error) => matches!(
                 error.as_str(),
                 "managed runtime V2 relay response is invalid"
@@ -120,6 +123,12 @@ impl Drop for PreparedManagedTelegramFixture {
 }
 
 fn prepare_managed_telegram_fixture() -> PreparedManagedTelegramFixture {
+    prepare_managed_telegram_fixture_without_capability(None)
+}
+
+fn prepare_managed_telegram_fixture_without_capability(
+    excluded_capability_id: Option<&str>,
+) -> PreparedManagedTelegramFixture {
     assert_eq!(
         std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
         Ok("1")
@@ -141,7 +150,8 @@ fn prepare_managed_telegram_fixture() -> PreparedManagedTelegramFixture {
             [4; 65],
         ))
         .expect("claim initial owner");
-    let admitted_telegram = admit_telegram_runtime(&store);
+    let admitted_telegram =
+        admit_telegram_runtime_without_capability(&store, excluded_capability_id);
     let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
@@ -329,6 +339,600 @@ fn managed_telegram_runtime_uses_kernel_leases_and_event_only_communications_han
         replayed_evidence_id, initial_evidence_id,
         "Communications durable query must expose the replayed evidence"
     );
+}
+
+#[test]
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Communications and Telegram binaries"]
+fn managed_telegram_realtime_route_requires_exact_grant() {
+    let realtime_capability = TelegramClientContractV1::Realtime.capability_id();
+    let mut fixture =
+        prepare_managed_telegram_fixture_without_capability(Some(realtime_capability));
+    let store = Arc::clone(&fixture.store);
+    let telegram = fixture.start_telegram();
+    let request = encode_module_request(
+        69,
+        &TelegramClientRequest::Replay {
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            after_sequence: 0,
+            limit: 10,
+        },
+    )
+    .expect("encode ungranted Telegram realtime request");
+    let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+        &telegram.registration_id,
+        &telegram.runtime_instance_id,
+        telegram.runtime_generation,
+        telegram.grant_epoch,
+        realtime_capability,
+        &request,
+    );
+    assert_eq!(
+        crate::modules::capability::router::route_managed_client_request(
+            &*store,
+            &fixture.supervisor.relay_port(),
+            &route,
+        )
+        .expect_err("ungranted Telegram realtime route"),
+        "capability is not granted to this registration"
+    );
+}
+
+#[test]
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Communications and Telegram binaries"]
+fn managed_telegram_core_operational_projection_is_restart_safe() {
+    let mut fixture = prepare_managed_telegram_fixture();
+    let store = Arc::clone(&fixture.store);
+    let mut telegram = fixture.start_telegram();
+    assert_telegram_lifecycle_query(&store, &fixture.supervisor, &telegram);
+    assert_telegram_account_started(&store, &fixture.supervisor, &telegram);
+
+    const OPERATIONAL_OPERATION_ID: &str = "managed-telegram-core-operational-1";
+    assert_telegram_command_accepted(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        OPERATIONAL_OPERATION_ID,
+        "managed Telegram operational fixture trigger",
+    );
+    assert_telegram_operation_completed(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        OPERATIONAL_OPERATION_ID,
+    );
+    let replay_cursor = assert_telegram_core_operational(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        OPERATIONAL_OPERATION_ID,
+    );
+    let predecessor_generation = telegram.runtime_generation;
+    telegram = fixture.restart_telegram(telegram);
+    assert_eq!(telegram.runtime_generation, predecessor_generation + 1);
+    assert_telegram_core_operational_after_restart(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        replay_cursor,
+    );
+}
+
+fn assert_telegram_core_operational(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    operation_id: &str,
+) -> u64 {
+    let deleted_message_id = format!("telegram:{TELEGRAM_ACCOUNT_ID}:9002:7101");
+    wait_for_telegram_tombstone(store, supervisor, telegram, &deleted_message_id);
+
+    let search = telegram_query(
+        store,
+        supervisor,
+        telegram,
+        71,
+        TelegramProviderQuery::SearchMessages {
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            provider_chat_id: Some("9002".to_owned()),
+            query: "edited operational fixture".to_owned(),
+            limit: 10,
+        },
+    );
+    let message = match search {
+        TelegramProviderQueryResponse::CachedMessages(messages) if messages.len() == 1 => {
+            messages.into_iter().next().expect("searched message")
+        }
+        response => panic!("unexpected Telegram search response: {response:?}"),
+    };
+    assert_eq!(message.provider_message_id, "7100");
+    assert_eq!(message.text.as_deref(), Some("edited operational fixture"));
+
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            72,
+            TelegramProviderQuery::MessageVersions {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                message_id: message.message_id.clone(),
+            },
+        ),
+        TelegramProviderQueryResponse::MessageVersions(versions)
+            if versions.len() >= 2
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            73,
+            TelegramProviderQuery::AttachmentForMessage {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+                provider_message_id: "7100".to_owned(),
+            },
+        ),
+        TelegramProviderQueryResponse::Attachment(Some(attachment))
+            if attachment.provider_file_id == "42"
+                && attachment.filename.as_deref() == Some("report.pdf")
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            74,
+            TelegramProviderQuery::File {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_file_id: "42".to_owned(),
+            },
+        ),
+        TelegramProviderQueryResponse::File(Some(file))
+            if file.is_downloaded && file.provider_unique_id.as_deref() == Some("managed-file-42")
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            75,
+            TelegramProviderQuery::ReactionSummary {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+                provider_message_id: "7100".to_owned(),
+            },
+        ),
+        TelegramProviderQueryResponse::ReactionSummary(summary)
+            if summary.len() == 1 && summary[0].emoji == "ok" && summary[0].count == 1
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            76,
+            TelegramProviderQuery::PinnedMessages {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+                limit: 10,
+            },
+        ),
+        TelegramProviderQueryResponse::CachedMessages(messages)
+            if messages.iter().any(|value| value.provider_message_id == "7100")
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            77,
+            TelegramProviderQuery::ChatPositions {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+            },
+        ),
+        TelegramProviderQueryResponse::ChatPositions(positions)
+            if positions.len() == 1
+                && positions[0].provider_folder_id == Some(7)
+                && positions[0].is_pinned
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            78,
+            TelegramProviderQuery::ChatOperationalState {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+            },
+        ),
+        TelegramProviderQueryResponse::ChatOperationalState(Some(state))
+            if state.is_pinned && state.is_muted && state.mute_for_seconds == 3600
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            79,
+            TelegramProviderQuery::MessageTombstones {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                message_id: deleted_message_id,
+            },
+        ),
+        TelegramProviderQueryResponse::MessageTombstones(tombstones)
+            if tombstones.len() == 1 && tombstones[0].is_provider_delete
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            80,
+            TelegramProviderQuery::Operations {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                limit: 100,
+            },
+        ),
+        TelegramProviderQueryResponse::Operations(operations)
+            if operations.iter().any(
+                |operation| operation.operation_id == operation_id
+                    && operation.state == TelegramOperationState::Completed
+            )
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            81,
+            TelegramProviderQuery::Commands {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: Some("9001".to_owned()),
+                provider_message_id: None,
+                command_kinds: vec!["send_text".to_owned()],
+                limit: 100,
+            },
+        ),
+        TelegramProviderQueryResponse::Commands(commands)
+            if commands.iter().any(|record| record.operation.operation_id == operation_id)
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            82,
+            TelegramProviderQuery::LoadHistory {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+                from_message_id: None,
+                mode: TelegramHistorySyncMode::Latest,
+                limit: 10,
+            },
+        ),
+        TelegramProviderQueryResponse::HistoryPage(page)
+            if page.items.len() == 1
+                && page.items[0].text.as_deref() == Some("managed Telegram history fixture")
+    ));
+
+    let replay = telegram_replay(store, supervisor, telegram, 83, 0);
+    assert!(!replay.is_empty());
+    assert!(
+        replay
+            .windows(2)
+            .all(|pair| pair[0].sequence < pair[1].sequence),
+        "Telegram operational replay must be strictly ascending",
+    );
+    replay.last().expect("Telegram replay cursor").sequence
+}
+
+fn wait_for_telegram_tombstone(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    message_id: &str,
+) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match telegram_query_result(
+            store,
+            supervisor,
+            telegram,
+            70,
+            TelegramProviderQuery::MessageTombstones {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                message_id: message_id.to_owned(),
+            },
+        ) {
+            Ok(TelegramProviderQueryResponse::MessageTombstones(tombstones))
+                if !tombstones.is_empty() =>
+            {
+                return;
+            }
+            Ok(_) => {}
+            Err(error) if error.is_retryable() => {}
+            Err(error) => panic!("Telegram operational projection failed: {error:?}"),
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Telegram operational projection did not reach its terminal tombstone",
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn assert_telegram_core_operational_after_restart(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    replay_cursor: u64,
+) {
+    let message = match telegram_query(
+        store,
+        supervisor,
+        telegram,
+        84,
+        TelegramProviderQuery::SearchMessages {
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            provider_chat_id: Some("9002".to_owned()),
+            query: "edited operational fixture".to_owned(),
+            limit: 10,
+        },
+    ) {
+        TelegramProviderQueryResponse::CachedMessages(messages) if messages.len() == 1 => {
+            messages.into_iter().next().expect("restored message")
+        }
+        response => panic!("unexpected restored Telegram search response: {response:?}"),
+    };
+    assert_eq!(message.provider_message_id, "7100");
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            85,
+            TelegramProviderQuery::MessageVersions {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                message_id: message.message_id,
+            },
+        ),
+        TelegramProviderQueryResponse::MessageVersions(versions)
+            if versions.len() >= 2
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            86,
+            TelegramProviderQuery::AttachmentForMessage {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+                provider_message_id: "7100".to_owned(),
+            },
+        ),
+        TelegramProviderQueryResponse::Attachment(Some(attachment))
+            if attachment.provider_file_id == "42"
+                && attachment.filename.as_deref() == Some("report.pdf")
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            87,
+            TelegramProviderQuery::File {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_file_id: "42".to_owned(),
+            },
+        ),
+        TelegramProviderQueryResponse::File(Some(file)) if file.is_downloaded
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            88,
+            TelegramProviderQuery::ReactionSummary {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+                provider_message_id: "7100".to_owned(),
+            },
+        ),
+        TelegramProviderQueryResponse::ReactionSummary(summary)
+            if summary.len() == 1 && summary[0].emoji == "ok" && summary[0].count == 1
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            89,
+            TelegramProviderQuery::PinnedMessages {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+                limit: 10,
+            },
+        ),
+        TelegramProviderQueryResponse::CachedMessages(messages)
+            if messages.iter().any(|value| value.provider_message_id == "7100")
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            90,
+            TelegramProviderQuery::ChatPositions {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+            },
+        ),
+        TelegramProviderQueryResponse::ChatPositions(positions)
+            if positions.len() == 1
+                && positions[0].provider_folder_id == Some(7)
+                && positions[0].is_pinned
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            91,
+            TelegramProviderQuery::ChatOperationalState {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                provider_chat_id: "9002".to_owned(),
+            },
+        ),
+        TelegramProviderQueryResponse::ChatOperationalState(Some(state))
+            if state.is_pinned && state.is_muted && state.mute_for_seconds == 3600
+    ));
+    assert!(matches!(
+        telegram_query(
+            store,
+            supervisor,
+            telegram,
+            92,
+            TelegramProviderQuery::MessageTombstones {
+                account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+                message_id: format!("telegram:{TELEGRAM_ACCOUNT_ID}:9002:7101"),
+            },
+        ),
+        TelegramProviderQueryResponse::MessageTombstones(tombstones)
+            if tombstones.len() == 1 && tombstones[0].is_provider_delete
+    ));
+    assert!(
+        telegram_replay(store, supervisor, telegram, 93, 0)
+            .iter()
+            .any(|frame| frame.sequence == replay_cursor),
+        "successor Telegram runtime must replay the predecessor cursor",
+    );
+    let reset = telegram_replay_page(
+        store,
+        supervisor,
+        telegram,
+        94,
+        replay_cursor.saturating_add(10_000),
+    );
+    assert!(reset.reset_required);
+    assert!(reset.frames.is_empty());
+    assert_eq!(reset.next_after_sequence, reset.latest_sequence);
+    assert!(matches!(
+        route_telegram_client(
+            store,
+            &supervisor.relay_port(),
+            telegram,
+            TelegramClientContractV1::Realtime,
+            95,
+            &TelegramClientRequest::Replay {
+                account_id: "another-account".to_owned(),
+                after_sequence: 0,
+                limit: 10,
+            },
+        ),
+        Err(TelegramClientRouteError::Client(
+            TelegramClientPortError::Protocol(error)
+        )) if error == "INVALID_ARGUMENT"
+    ));
+    assert!(
+        telegram_replay(store, supervisor, telegram, 96, 0)
+            .iter()
+            .any(|frame| frame.sequence == replay_cursor),
+        "invalid account scope must not terminate the Telegram runtime",
+    );
+}
+
+fn telegram_query(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    request_id: u64,
+    query: TelegramProviderQuery,
+) -> TelegramProviderQueryResponse {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match telegram_query_result(store, supervisor, telegram, request_id, query.clone()) {
+            Ok(response) => return response,
+            Err(error) if error.is_retryable() => {
+                assert!(
+                    Instant::now() < deadline,
+                    "Telegram query remained unavailable after restart: {error:?}; child failure: {:?}",
+                    supervisor.last_failure(&telegram.registration_id),
+                );
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(error) => panic!("Telegram query failed: {error:?}"),
+        }
+    }
+}
+
+fn telegram_query_result(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    request_id: u64,
+    query: TelegramProviderQuery,
+) -> Result<TelegramProviderQueryResponse, TelegramClientRouteError> {
+    match route_telegram_client(
+        store,
+        &supervisor.relay_port(),
+        telegram,
+        TelegramClientContractV1::Query,
+        request_id,
+        &TelegramClientRequest::Query(query),
+    )? {
+        TelegramClientResponse::Query(response) => Ok(response),
+        response => Err(TelegramClientRouteError::Kernel(format!(
+            "unexpected Telegram query response: {response:?}"
+        ))),
+    }
+}
+
+fn telegram_replay(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    request_id: u64,
+    after_sequence: u64,
+) -> Vec<hermes_telegram_api::TelegramRealtimeFrame> {
+    let page = telegram_replay_page(store, supervisor, telegram, request_id, after_sequence);
+    if page.reset_required {
+        panic!(
+            "Telegram replay unexpectedly required reset: earliest={}, latest={}",
+            page.earliest_available_sequence, page.latest_sequence
+        );
+    }
+    page.frames
+}
+
+fn telegram_replay_page(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    telegram: &StartedTelegramRuntime,
+    request_id: u64,
+    after_sequence: u64,
+) -> hermes_telegram_api::TelegramRealtimeReplayPage {
+    match route_telegram_client(
+        store,
+        &supervisor.relay_port(),
+        telegram,
+        TelegramClientContractV1::Realtime,
+        request_id,
+        &TelegramClientRequest::Replay {
+            account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
+            after_sequence,
+            limit: 5_000,
+        },
+    )
+    .unwrap_or_else(|error| panic!("Telegram replay failed: {error:?}"))
+    {
+        TelegramClientResponse::Realtime(page) => page,
+        response => panic!("unexpected Telegram replay response: {response:?}"),
+    }
 }
 
 #[test]

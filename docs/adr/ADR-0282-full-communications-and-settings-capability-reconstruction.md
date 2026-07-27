@@ -3,13 +3,13 @@
 Статус: Принято
 Дата: 2026-07-26
 Состояние реализации: решение и capability inventory приняты; implementation
-не завершена. Exact inventory уже открывает независимо доказанные slices,
-включая `whatsapp_operational_read_v1` и
-`whatsapp_operational_realtime_v1`, но planned
-`whatsapp_full_operational_v1` нельзя вывести из состояния backend gates. Этот
-ADR не открывает новые production capabilities сам по себе. Каждый описанный
-ниже slice требует отдельного exact admission в policy, реализации backend
-vertical slice, executable evidence и только затем frontend activation.
+не завершена. Exact inventory уже отмечает независимо доказанные backend
+slices, включая `telegram_core_operational_v1`,
+`whatsapp_operational_read_v1` и `whatsapp_operational_realtime_v1`, но planned
+provider umbrella нельзя вывести из состояния backend gates. Этот ADR не
+открывает новые production capabilities сам по себе. Каждый описанный ниже
+slice требует отдельного exact admission в policy, реализации backend vertical
+slice, executable evidence и только затем frontend activation.
 
 Зависит от:
 
@@ -22,7 +22,8 @@ vertical slice, executable evidence и только затем frontend activati
 - [ADR-0226: use-case-specific AI workflows](ADR-0226-ai-context-acquisition-through-use-case-workflows.md);
 - [ADR-0253: Communications legacy disposition](ADR-0253-communications-legacy-surface-disposition-and-clean-room-completion.md);
 - [ADR-0265: provider operational client transport](ADR-0265-provider-operational-client-transport-admission.md);
-- [ADR-0281: frontend clean-room composition](ADR-0281-communications-frontend-clean-room-composition.md).
+- [ADR-0281: frontend clean-room composition](ADR-0281-communications-frontend-clean-room-composition.md);
+- [ADR-0287: Telegram operational realtime](ADR-0287-telegram-operational-realtime-replay-boundary.md).
 
 ## Контекст
 
@@ -441,7 +442,7 @@ release.
 1. `communications_capability_reconstruction_inventory_v1` — этот ADR,
    executable inventory assertions и gap ledger.
 2. Telegram проходит независимые gates:
-   `telegram_core_operational_v1`,
+   implemented `telegram_core_operational_v1`,
    `telegram_runtime_reconfiguration_v1`,
    `telegram_folder_reassignment_v1`,
    `telegram_automation_v1`,

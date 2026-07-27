@@ -76,6 +76,21 @@ pub enum TelegramClientTransportError {
     RuntimeUnavailable,
 }
 
+#[must_use]
+pub fn module_error_code(error: &TelegramClientTransportError) -> &'static str {
+    match error {
+        TelegramClientTransportError::Port(
+            TelegramClientPortError::Protocol(_) | TelegramClientPortError::Codec(_),
+        )
+        | TelegramClientTransportError::Frame(_) => "INVALID_ARGUMENT",
+        TelegramClientTransportError::Port(
+            TelegramClientPortError::Provider(_) | TelegramClientPortError::Persistence(_),
+        )
+        | TelegramClientTransportError::Io(_)
+        | TelegramClientTransportError::RuntimeUnavailable => "RUNTIME_UNAVAILABLE",
+    }
+}
+
 pub fn serve_connection_durable<T: TdlibTransport>(
     mut stream: UnixStream,
     runtime: &mut TelegramRuntime<T>,
@@ -197,4 +212,27 @@ fn read_length(stream: &mut UnixStream) -> Result<usize, TelegramClientTransport
     Err(TelegramClientTransportError::Frame(
         "Telegram client frame length is invalid".to_owned(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_telegram_persistence::TelegramDurablePersistenceError;
+
+    use super::*;
+
+    #[test]
+    fn module_errors_are_typed_without_exposing_internal_details() {
+        assert_eq!(
+            module_error_code(&TelegramClientTransportError::Port(
+                TelegramClientPortError::Protocol("private detail".to_owned()),
+            )),
+            "INVALID_ARGUMENT"
+        );
+        assert_eq!(
+            module_error_code(&TelegramClientTransportError::Port(
+                TelegramClientPortError::Persistence(TelegramDurablePersistenceError::Database,),
+            )),
+            "RUNTIME_UNAVAILABLE"
+        );
+    }
 }

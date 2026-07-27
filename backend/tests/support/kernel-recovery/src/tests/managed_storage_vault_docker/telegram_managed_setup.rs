@@ -110,7 +110,10 @@ fn store_telegram_secret(
         .expect("store Telegram test credential");
 }
 
-pub(super) fn admit_telegram_runtime(store: &SqliteControlStore) -> AdmittedTelegramRuntime {
+pub(super) fn admit_telegram_runtime_without_capability(
+    store: &SqliteControlStore,
+    excluded_capability_id: Option<&str>,
+) -> AdmittedTelegramRuntime {
     let descriptor = telegram_module_descriptor_v1("managed-telegram-live");
     let descriptor_bytes = descriptor.encode_to_vec();
     let registration = crate::modules::registration::registry::register(store, &descriptor_bytes)
@@ -119,6 +122,7 @@ pub(super) fn admit_telegram_runtime(store: &SqliteControlStore) -> AdmittedTele
         .capabilities
         .iter()
         .map(|capability| capability.capability_id.clone())
+        .filter(|capability_id| excluded_capability_id != Some(capability_id.as_str()))
         .collect::<Vec<_>>();
     crate::modules::registration::registry::approve_after_owner_authorization(
         store,

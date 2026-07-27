@@ -95,6 +95,8 @@ policy через ссылки из новых документов.
 - [ADR-0284: Telegram one-to-one audio calls operational boundary](ADR-0284-telegram-one-to-one-audio-calls-operational-boundary.md)
 - [ADR-0285: Owner-local upgrade jobs and Telegram Calls realtime backfill](ADR-0285-owner-local-upgrade-jobs-and-telegram-calls-realtime-backfill.md)
 - [ADR-0286: WhatsApp operational read and realtime boundary](ADR-0286-whatsapp-operational-read-and-realtime-boundary.md)
+- [ADR-0287: Telegram operational realtime replay boundary](ADR-0287-telegram-operational-realtime-replay-boundary.md)
+- [ADR-0288: Managed successor quiesce and Storage fence order](ADR-0288-managed-successor-quiesce-and-storage-fence-order.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -310,3 +312,12 @@ gates: integration владеет typed projections, bounded search и replay jo
 а Kernel/Gateway только fence-ят exact routes и grants. Metadata-only history
 не превращается в fake content; upgrade требует bounded provider resync, а
 frontend остаётся вторичным integration-owned consumer.
+ADR-0287 добавляет отсутствующую Telegram operational realtime capability:
+integration владеет account-scoped ordered journal и explicit cursor reset, а
+Kernel/Gateway только допускают exact opaque route. Lifecycle/query aliases и
+выдача internal durable envelope клиенту запрещены.
+ADR-0288 закрывает общую managed-successor гонку: durable `revoking` остаётся
+authority fence, supervisor до physical Storage fence запрещает autorestart
+exact predecessor worker, а новый runtime generation резервируется только
+после fence и join. Provider-specific retries и перенос lifecycle в integration
+запрещены.

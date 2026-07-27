@@ -401,6 +401,12 @@ control channel только после проверки exact-byte `ManagedLaun
 manifest; external → managed transition требует fresh owner-approved executable,
 descriptor и settings schema digest pin. Integrity mismatch даёт
 `blocked_integrity` без repin, другого path/version или automatic rollback.
+Managed successor не резервирует новую generation одновременно со старым
+worker. После durable `revoking` supervisor сначала idempotently quiesce-ит
+exact predecessor через `stop_requested`, затем Storage/Vault physically
+fence-ят прежние credentials/alias/role, Kernel join-ит worker и только после
+этого выдаёт generation `N + 1`. Quiesce запрещает autorestart во время fence,
+но не является authorization или data-plane fence.
 
 `external` module запускается вне Kernel: Kernel проверяет proof-of-possession
 owner-bound runtime identity. Первый proof включает exact 32-byte observed

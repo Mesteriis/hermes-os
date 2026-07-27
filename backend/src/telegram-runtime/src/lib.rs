@@ -11,6 +11,7 @@ mod calls_execution;
 pub mod client_port;
 pub mod client_transport;
 pub mod communications_outbox;
+mod durable_restore;
 pub mod managed_control;
 pub mod process;
 mod projection_cache;
@@ -597,6 +598,56 @@ mod tests {
             Some("cursor-1")
         );
         assert_eq!(runtime.realtime_after("account", 0), frames.frames);
+    }
+
+    #[test]
+    fn provider_content_edit_advances_current_projection_by_frame_order() {
+        let message_id = "telegram:account:chat:message";
+        let mut runtime = TelegramRuntime::new(PollingTransport {
+            events: vec![
+                TelegramProviderEvent::MessageCreated(TelegramMessageObservation {
+                    account_id: "account".to_owned(),
+                    provider_chat_id: "chat".to_owned(),
+                    provider_message_id: "message".to_owned(),
+                    provider_topic_id: None,
+                    sender_id: "sender".to_owned(),
+                    sender_display_name: Some("Sender".to_owned()),
+                    is_outgoing: false,
+                    text: Some("original body".to_owned()),
+                    media: None,
+                    references: TelegramMessageReferences::default(),
+                    observed_at_unix_seconds: 1_782_504_000,
+                }),
+                TelegramProviderEvent::MessageEdited {
+                    account_id: "account".to_owned(),
+                    provider_chat_id: "chat".to_owned(),
+                    provider_message_id: "message".to_owned(),
+                    text: Some("edited body".to_owned()),
+                    observed_at_unix_seconds: 0,
+                },
+            ],
+        });
+
+        runtime
+            .poll_provider_events("account", Some("cursor-1".to_owned()))
+            .expect("provider polling");
+
+        let message = runtime
+            .persistence
+            .message(message_id)
+            .expect("current message projection");
+        assert_eq!(message.text.as_deref(), Some("edited body"));
+        assert_eq!(message.observed_at_unix_seconds, 1_782_504_000);
+        let versions = runtime
+            .persistence
+            .message_versions(message_id)
+            .expect("message version history");
+        assert_eq!(versions.len(), 2);
+        assert_eq!(versions[0].version_number, 1);
+        assert_eq!(versions[0].body_text.as_deref(), Some("original body"));
+        assert_eq!(versions[1].version_number, 2);
+        assert_eq!(versions[1].body_text.as_deref(), Some("edited body"));
+        assert_eq!(versions[1].observed_at_unix_seconds, 0);
     }
 
     #[test]
@@ -2345,42 +2396,14 @@ where
         account_id: &str,
         chat_limit: i64,
     ) -> Result<usize, TelegramDurableProjectionError> {
-        let chats = durable
-            .list_chats(account_id, chat_limit)
-            .await
-            .map_err(TelegramDurableProjectionError::Persistence)?;
-        for chat in &chats {
-            self.persistence.put_chat(chat.clone());
-        }
-        for avatar in durable
-            .list_chat_avatars(account_id)
-            .await
-            .map_err(TelegramDurableProjectionError::Persistence)?
-        {
-            self.persistence.put_chat_avatar(avatar);
-        }
-        self.persistence.put_chat_folders(
-            durable
-                .list_chat_folders(account_id)
-                .await
-                .map_err(TelegramDurableProjectionError::Persistence)?,
-        );
-        for position in durable
-            .list_chat_positions_for_account(account_id)
-            .await
-            .map_err(TelegramDurableProjectionError::Persistence)?
-        {
-            self.persistence.put_chat_position(position);
-        }
-        let operational_states = durable
-            .list_chat_operational_states(account_id)
-            .await
-            .map_err(TelegramDurableProjectionError::Persistence)?;
-        for (provider_chat_id, state) in operational_states {
-            self.persistence
-                .put_chat_operational_state(account_id, &provider_chat_id, state);
-        }
-        Ok(chats.len())
+        durable_restore::restore_account_projection_cache(
+            &mut self.persistence,
+            durable,
+            account_id,
+            chat_limit,
+        )
+        .await
+        .map_err(TelegramDurableProjectionError::Persistence)
     }
 
     pub async fn restore_message_lifecycle_durable(
@@ -2834,6 +2857,21 @@ where
         observation: hermes_telegram_api::TelegramMessageObservation,
     ) -> Result<CommunicationObservationDraft, TelegramContractError> {
         let projection = project_message(&observation)?;
+        let message_id = projection.message_id.clone();
+        if self.persistence.message_versions(&message_id).is_none() {
+            self.persistence
+                .append_message_version(hermes_telegram_api::TelegramMessageVersion {
+                    version_id: format!("{message_id}:version:1"),
+                    message_id: message_id.clone(),
+                    account_id: projection.account_id.clone(),
+                    provider_chat_id: projection.provider_chat_id.clone(),
+                    provider_message_id: projection.provider_message_id.clone(),
+                    version_number: 1,
+                    body_text: projection.text.clone(),
+                    observed_at_unix_seconds: projection.observed_at_unix_seconds,
+                    source: hermes_telegram_api::TelegramMessageVersionSource::Provider,
+                });
+        }
         self.persistence.put_message(projection);
         if let Some(media) = &observation.media {
             if let Some(provider_file_id) = &media.provider_file_id {
@@ -2906,6 +2944,18 @@ where
                     .upsert_message(&projection)
                     .await
                     .map_err(TelegramDurableProjectionError::Persistence)?;
+                if let Some(initial_version) = self
+                    .persistence
+                    .message_versions(&projection.message_id)
+                    .and_then(|versions| {
+                        versions.iter().find(|version| version.version_number == 1)
+                    })
+                {
+                    durable
+                        .upsert_message_version(initial_version)
+                        .await
+                        .map_err(TelegramDurableProjectionError::Persistence)?;
+                }
                 if let Some(media) = &observation.media {
                     if let Some(provider_file_id) = &media.provider_file_id {
                         let attachment = hermes_telegram_api::TelegramAttachmentProjection {
@@ -2972,6 +3022,12 @@ where
             } => {
                 let message_id =
                     format!("telegram:{account_id}:{provider_chat_id}:{provider_message_id}");
+                if let Some(message) = self.persistence.message(&message_id) {
+                    durable
+                        .upsert_message(message)
+                        .await
+                        .map_err(TelegramDurableProjectionError::Persistence)?;
+                }
                 let version_number = self
                     .persistence
                     .next_message_version_number(&message_id)
@@ -3004,7 +3060,7 @@ where
                 durable
                     .upsert_tombstone(&hermes_telegram_api::TelegramMessageTombstone {
                         tombstone_id: format!("{message_id}:tombstone:provider"),
-                        message_id,
+                        message_id: message_id.clone(),
                         account_id: account_id.clone(),
                         provider_chat_id: provider_chat_id.clone(),
                         provider_message_id: provider_message_id.clone(),
@@ -3218,7 +3274,7 @@ where
                 self.persistence.append_message_version(
                     hermes_telegram_api::TelegramMessageVersion {
                         version_id: format!("{message_id}:version:{version_number}"),
-                        message_id,
+                        message_id: message_id.clone(),
                         account_id: account_id.clone(),
                         provider_chat_id: provider_chat_id.clone(),
                         provider_message_id: provider_message_id.clone(),
@@ -3228,6 +3284,9 @@ where
                         source: hermes_telegram_api::TelegramMessageVersionSource::Provider,
                     },
                 );
+                if let Some(text) = text {
+                    self.persistence.apply_message_text_edit(&message_id, text);
+                }
             }
             hermes_telegram_api::TelegramProviderEvent::MessageDeleted {
                 account_id,

@@ -13,6 +13,7 @@ use hermes_telegram_api::{
     TelegramRealtimeFrame, TelegramReconciliationState, TelegramTopic, provider_command_chat_id,
     provider_command_kind, provider_command_message_id,
 };
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use sqlx::{
     PgPool, Row,
@@ -225,6 +226,7 @@ pub enum TelegramDurablePersistenceError {
     Database,
     Codec,
     InvalidRow,
+    ProjectionLimitExceeded,
 }
 
 impl TelegramDurablePersistence {
@@ -1126,6 +1128,36 @@ impl TelegramDurablePersistence {
             .collect()
     }
 
+    pub async fn provider_event_sequence_bounds(
+        &self,
+        account_id: &str,
+    ) -> Result<Option<(u64, u64)>, TelegramDurablePersistenceError> {
+        let row = sqlx::query(
+            r#"
+            SELECT MIN(sequence) AS earliest_sequence, MAX(sequence) AS latest_sequence
+            FROM hermes_data.telegram_provider_event_journal
+            WHERE account_id = $1
+            "#,
+        )
+        .bind(account_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        let earliest = row
+            .try_get::<Option<i64>, _>("earliest_sequence")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+        let latest = row
+            .try_get::<Option<i64>, _>("latest_sequence")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+        match (earliest, latest) {
+            (None, None) => Ok(None),
+            (Some(earliest), Some(latest)) => {
+                Ok(Some((bounded_u64(earliest)?, bounded_u64(latest)?)))
+            }
+            _ => Err(TelegramDurablePersistenceError::InvalidRow),
+        }
+    }
+
     pub async fn upsert_file(
         &self,
         file: &TelegramFileSnapshot,
@@ -1793,6 +1825,238 @@ impl TelegramDurablePersistence {
         serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
     }
 
+    pub async fn list_messages_for_account(
+        &self,
+        account_id: &str,
+        limit: i64,
+    ) -> Result<Vec<TelegramMessageProjection>, TelegramDurablePersistenceError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT projection_payload
+            FROM hermes_data.telegram_message_projections
+            WHERE account_id = $1
+            ORDER BY provider_chat_id, observed_at, message_id
+            LIMIT $2
+            "#,
+        )
+        .bind(account_id)
+        .bind(validated_projection_query_limit(limit)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter().map(projection_from_row).collect()
+    }
+
+    pub async fn list_files_for_account(
+        &self,
+        account_id: &str,
+        limit: i64,
+    ) -> Result<Vec<TelegramFileSnapshot>, TelegramDurablePersistenceError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT projection_payload
+            FROM hermes_data.telegram_file_projections
+            WHERE account_id = $1
+            ORDER BY provider_file_id
+            LIMIT $2
+            "#,
+        )
+        .bind(account_id)
+        .bind(validated_projection_query_limit(limit)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter().map(projection_from_row).collect()
+    }
+
+    pub async fn list_attachments_for_account(
+        &self,
+        account_id: &str,
+        limit: i64,
+    ) -> Result<Vec<TelegramAttachmentProjection>, TelegramDurablePersistenceError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT projection_payload
+            FROM hermes_data.telegram_attachment_projections
+            WHERE account_id = $1
+            ORDER BY attachment_id
+            LIMIT $2
+            "#,
+        )
+        .bind(account_id)
+        .bind(validated_projection_query_limit(limit)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter().map(projection_from_row).collect()
+    }
+
+    pub async fn list_participant_pages_for_account(
+        &self,
+        account_id: &str,
+        limit: i64,
+    ) -> Result<Vec<TelegramParticipantPage>, TelegramDurablePersistenceError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT projection_payload
+            FROM hermes_data.telegram_participant_projections
+            WHERE account_id = $1
+            ORDER BY provider_chat_id, participant_filter
+            LIMIT $2
+            "#,
+        )
+        .bind(account_id)
+        .bind(validated_projection_query_limit(limit)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter().map(projection_from_row).collect()
+    }
+
+    pub async fn list_topics_for_account(
+        &self,
+        account_id: &str,
+        limit: i64,
+    ) -> Result<Vec<TelegramTopic>, TelegramDurablePersistenceError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT projection_payload
+            FROM hermes_data.telegram_topic_projections
+            WHERE account_id = $1
+            ORDER BY provider_chat_id, provider_topic_id
+            LIMIT $2
+            "#,
+        )
+        .bind(account_id)
+        .bind(validated_projection_query_limit(limit)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter().map(projection_from_row).collect()
+    }
+
+    pub async fn list_message_versions_for_account(
+        &self,
+        account_id: &str,
+        limit: i64,
+    ) -> Result<Vec<TelegramMessageVersion>, TelegramDurablePersistenceError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT projection_payload
+            FROM hermes_data.telegram_message_versions
+            WHERE account_id = $1
+            ORDER BY message_id, version_number
+            LIMIT $2
+            "#,
+        )
+        .bind(account_id)
+        .bind(validated_projection_query_limit(limit)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter().map(projection_from_row).collect()
+    }
+
+    pub async fn list_tombstones_for_account(
+        &self,
+        account_id: &str,
+        limit: i64,
+    ) -> Result<Vec<TelegramMessageTombstone>, TelegramDurablePersistenceError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT projection_payload
+            FROM hermes_data.telegram_message_tombstones
+            WHERE account_id = $1
+            ORDER BY message_id, tombstone_id
+            LIMIT $2
+            "#,
+        )
+        .bind(account_id)
+        .bind(validated_projection_query_limit(limit)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter().map(projection_from_row).collect()
+    }
+
+    pub async fn list_reactions_for_account(
+        &self,
+        account_id: &str,
+        limit: i64,
+    ) -> Result<Vec<(String, Vec<TelegramReactionObservation>)>, TelegramDurablePersistenceError>
+    {
+        let rows = sqlx::query(
+            r#"
+            SELECT reactions.message_id, reactions.projection_payload
+            FROM hermes_data.telegram_message_reactions AS reactions
+            JOIN hermes_data.telegram_message_projections AS messages
+              ON messages.message_id = reactions.message_id
+            WHERE messages.account_id = $1
+            ORDER BY reactions.message_id
+            LIMIT $2
+            "#,
+        )
+        .bind(account_id)
+        .bind(validated_projection_query_limit(limit)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter().map(keyed_projection_from_row).collect()
+    }
+
+    pub async fn list_message_mutations_for_account(
+        &self,
+        account_id: &str,
+        limit: i64,
+    ) -> Result<Vec<(String, Vec<TelegramMessageMutation>)>, TelegramDurablePersistenceError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT mutations.message_id, mutations.projection_payload
+            FROM hermes_data.telegram_message_mutations AS mutations
+            JOIN hermes_data.telegram_message_projections AS messages
+              ON messages.message_id = mutations.message_id
+            WHERE messages.account_id = $1
+            ORDER BY mutations.message_id
+            LIMIT $2
+            "#,
+        )
+        .bind(account_id)
+        .bind(validated_projection_query_limit(limit)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter().map(keyed_projection_from_row).collect()
+    }
+
+    pub async fn list_chat_states_for_account(
+        &self,
+        account_id: &str,
+        limit: i64,
+    ) -> Result<Vec<(String, TelegramChatStateProjection)>, TelegramDurablePersistenceError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT provider_chat_id, projection_payload
+            FROM hermes_data.telegram_chat_states
+            WHERE account_id = $1
+            ORDER BY provider_chat_id
+            LIMIT $2
+            "#,
+        )
+        .bind(account_id)
+        .bind(validated_projection_query_limit(limit)?)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter()
+            .map(|row| {
+                let provider_chat_id = row
+                    .try_get("provider_chat_id")
+                    .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+                projection_from_row(row).map(|state| (provider_chat_id, state))
+            })
+            .collect()
+    }
+
     pub async fn reaction_summary(
         &self,
         message_id: &str,
@@ -1816,6 +2080,31 @@ impl TelegramDurablePersistence {
         values.sort_by(|left, right| left.emoji.cmp(&right.emoji));
         Ok(values)
     }
+}
+
+fn projection_from_row<T: DeserializeOwned>(
+    row: sqlx::postgres::PgRow,
+) -> Result<T, TelegramDurablePersistenceError> {
+    let payload: Value = row
+        .try_get("projection_payload")
+        .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+    serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
+}
+
+fn keyed_projection_from_row<T: DeserializeOwned>(
+    row: sqlx::postgres::PgRow,
+) -> Result<(String, T), TelegramDurablePersistenceError> {
+    let message_id = row
+        .try_get("message_id")
+        .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+    projection_from_row(row).map(|projection| (message_id, projection))
+}
+
+fn validated_projection_query_limit(limit: i64) -> Result<i64, TelegramDurablePersistenceError> {
+    (1..=100_000)
+        .contains(&limit)
+        .then(|| limit + 1)
+        .ok_or(TelegramDurablePersistenceError::InvalidRow)
 }
 
 fn row_to_operation(

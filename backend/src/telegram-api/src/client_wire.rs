@@ -15,8 +15,8 @@ use crate::{
     TelegramParticipantFilter, TelegramParticipantPage, TelegramProviderCommand,
     TelegramProviderEvent, TelegramProviderKind, TelegramProviderQuery,
     TelegramProviderQueryResponse, TelegramReactionObservation, TelegramReactionSummary,
-    TelegramRealtimeFrame, TelegramSendMedia, TelegramSendMessage, TelegramTombstoneReason,
-    TelegramTopic, TelegramTypingState,
+    TelegramRealtimeFrame, TelegramRealtimeReplayPage, TelegramSendMedia, TelegramSendMessage,
+    TelegramTombstoneReason, TelegramTopic, TelegramTypingState,
     wire::{
         self, telegram_authorization_request_v1::Request,
         telegram_authorization_response_v1::Response,
@@ -2374,39 +2374,53 @@ pub enum TelegramLifecycleRequest {
     },
 }
 
-pub fn encode_realtime_response(frames: &[TelegramRealtimeFrame]) -> Vec<u8> {
-    wire::TelegramProviderQueryResponseV1 {
-        response: Some(
-            wire::telegram_provider_query_response_v1::Response::Realtime(wire::RealtimeResponse {
-                frame: frames
-                    .iter()
-                    .map(|value| wire::TelegramRealtimeFrameProjection {
-                        account_id: value.account_id.clone(),
-                        sequence: value.sequence,
-                        provider_cursor: value.provider_cursor.clone(),
-                        event: Some(event_to_wire(&value.event)),
-                    })
-                    .collect(),
-            }),
-        ),
+pub fn encode_realtime_request(account_id: &str, after_sequence: u64, limit: u32) -> Vec<u8> {
+    wire::TelegramRealtimeReplayRequestV1 {
+        account_id: account_id.to_owned(),
+        after_sequence,
+        limit,
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_realtime_request(
+    bytes: &[u8],
+) -> Result<(String, u64, u32), TelegramAuthorizationWireError> {
+    let request = wire::TelegramRealtimeReplayRequestV1::decode(bytes)
+        .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
+    Ok((request.account_id, request.after_sequence, request.limit))
+}
+
+pub fn encode_realtime_response(page: &TelegramRealtimeReplayPage) -> Vec<u8> {
+    wire::TelegramRealtimeReplayResponseV1 {
+        frame: page
+            .frames
+            .iter()
+            .map(|value| wire::TelegramRealtimeFrameProjection {
+                account_id: value.account_id.clone(),
+                sequence: value.sequence,
+                provider_cursor: value.provider_cursor.clone(),
+                event: Some(event_to_wire(&value.event)),
+            })
+            .collect(),
+        earliest_available_sequence: page.earliest_available_sequence,
+        latest_sequence: page.latest_sequence,
+        next_after_sequence: page.next_after_sequence,
+        reset_required: page.reset_required,
+        contract_major: 1,
     }
     .encode_to_vec()
 }
 
 pub fn decode_realtime_response(
     bytes: &[u8],
-) -> Result<Vec<TelegramRealtimeFrame>, TelegramAuthorizationWireError> {
-    use wire::telegram_provider_query_response_v1::Response;
-    let message = wire::TelegramProviderQueryResponseV1::decode(bytes)
+) -> Result<TelegramRealtimeReplayPage, TelegramAuthorizationWireError> {
+    let response = wire::TelegramRealtimeReplayResponseV1::decode(bytes)
         .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
-    let response = match message
-        .response
-        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
-    {
-        Response::Realtime(value) => value,
-        _ => return Err(TelegramAuthorizationWireError::InvalidPayload),
-    };
-    response
+    if response.contract_major != 1 {
+        return Err(TelegramAuthorizationWireError::InvalidPayload);
+    }
+    let frames = response
         .frame
         .into_iter()
         .map(|value| {
@@ -2421,7 +2435,14 @@ pub fn decode_realtime_response(
                 )?,
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(TelegramRealtimeReplayPage {
+        frames,
+        earliest_available_sequence: response.earliest_available_sequence,
+        latest_sequence: response.latest_sequence,
+        next_after_sequence: response.next_after_sequence,
+        reset_required: response.reset_required,
+    })
 }
 
 pub fn encode_lifecycle_request(request: &TelegramLifecycleRequest) -> Vec<u8> {

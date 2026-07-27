@@ -81,6 +81,21 @@ message ReplayRequest {
   uint32 limit = 3;
 }
 
+message TelegramRealtimeReplayRequestV1 {
+  string account_id = 1;
+  uint64 after_sequence = 2;
+  uint32 limit = 3;
+}
+
+message TelegramRealtimeReplayResponseV1 {
+  repeated TelegramRealtimeFrameProjection frame = 1;
+  uint64 earliest_available_sequence = 2;
+  uint64 latest_sequence = 3;
+  uint64 next_after_sequence = 4;
+  bool reset_required = 5;
+  uint32 contract_major = 6;
+}
+
 message TelegramLifecycleResponseV1 {
   oneof response {
     TelegramAccountResponse account = 1;
@@ -366,4 +381,7 @@ service TelegramLifecycleService {
 service TelegramOperationalService {
   rpc ExecuteCommand(TelegramProviderCommandV1) returns (TelegramOperationResponse);
   rpc ExecuteQuery(TelegramProviderQueryV1) returns (TelegramProviderQueryResponseV1);
+}
+service TelegramRealtimeService {
+  rpc Replay(TelegramRealtimeReplayRequestV1) returns (TelegramRealtimeReplayResponseV1);
 }

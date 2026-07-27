@@ -11,7 +11,7 @@ use hermes_events_protocol::{
     NatsRuntimeCredentialDeliveryV1, NatsRuntimeCredentialRecipientV1, RuntimeNatsJwtCredentialV1,
 };
 use hermes_runtime_protocol::managed_control::{
-    ManagedControlChannelV2, ManagedControlTransportErrorV2,
+    ManagedControlChannelV2, RejectManagedControlRequestsV2,
 };
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
@@ -166,8 +166,9 @@ pub fn request_managed_runtime_event_access_v2(
 ) -> Result<ManagedRuntimeEventAccessV1, ManagedRuntimeEventAccessErrorV1> {
     let request_id = request_id()?;
     let recipient = NatsRuntimeCredentialRecipientV1::generate();
+    let mut bootstrap_dispatcher = RejectManagedControlRequestsV2;
     let response = channel
-        .request_next(
+        .request_next_with_dispatch(
             ManagedRuntimeControlRequestV1 {
                 operation: Some(Operation::IssueEventCredential(
                     ManagedRuntimeEventCredentialRequestV1 {
@@ -178,7 +179,7 @@ pub fn request_managed_runtime_event_access_v2(
                     },
                 )),
             },
-            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+            &mut bootstrap_dispatcher,
         )
         .map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)?;
     let (delivery, consumer_bindings, publish_subjects) = delivery(response)?;

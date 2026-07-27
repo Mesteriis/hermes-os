@@ -21,6 +21,22 @@ const TELEGRAM_CALLS_ADR_PATH = new URL(
   'docs/adr/ADR-0284-telegram-one-to-one-audio-calls-operational-boundary.md',
   PROJECT_ROOT,
 );
+const TELEGRAM_REALTIME_ADR_PATH = new URL(
+  'docs/adr/ADR-0287-telegram-operational-realtime-replay-boundary.md',
+  PROJECT_ROOT,
+);
+const TELEGRAM_CLIENT_CONTRACT_PATH = new URL(
+  'src/telegram-api/src/client_contract.rs',
+  BACKEND_ROOT,
+);
+const TELEGRAM_RUNTIME_ADMISSION_PATH = new URL(
+  'src/telegram-runtime/src/admission.rs',
+  BACKEND_ROOT,
+);
+const TELEGRAM_MANAGED_FLOW_PATH = new URL(
+  'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/telegram_managed_flow.rs',
+  BACKEND_ROOT,
+);
 const WHATSAPP_OPERATIONAL_ADR_PATH = new URL(
   'docs/adr/ADR-0286-whatsapp-operational-read-and-realtime-boundary.md',
   PROJECT_ROOT,
@@ -108,10 +124,22 @@ test('provider operational slices remain separate integrations', async () => {
 });
 
 test('Telegram completion remains closed behind its independent capability slices', async () => {
-  const [inventorySource, automationAdrSource, callsAdrSource] = await Promise.all([
+  const [
+    inventorySource,
+    automationAdrSource,
+    callsAdrSource,
+    realtimeAdrSource,
+    clientContractSource,
+    runtimeAdmissionSource,
+    managedFlowSource,
+  ] = await Promise.all([
     readFile(INVENTORY_PATH, 'utf8'),
     readFile(TELEGRAM_AUTOMATION_ADR_PATH, 'utf8'),
     readFile(TELEGRAM_CALLS_ADR_PATH, 'utf8'),
+    readFile(TELEGRAM_REALTIME_ADR_PATH, 'utf8'),
+    readFile(TELEGRAM_CLIENT_CONTRACT_PATH, 'utf8'),
+    readFile(TELEGRAM_RUNTIME_ADMISSION_PATH, 'utf8'),
+    readFile(TELEGRAM_MANAGED_FLOW_PATH, 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const telegramSlices = new Map(
@@ -143,6 +171,7 @@ test('Telegram completion remains closed behind its independent capability slice
 
   const automationGate = telegramSlices.get('telegram_automation_v1');
   assert.equal(automationGate.state, 'implemented');
+  assert.equal(telegramSlices.get('telegram_core_operational_v1').state, 'implemented');
   assert.equal(fullGate.state, 'planned');
   assert.equal(telegramSlices.get('telegram_calls_operational_v1').state, 'planned');
   assert.equal(telegramSlices.get('telegram_call_signaling_v1').state, 'implemented');
@@ -179,6 +208,18 @@ test('Telegram completion remains closed behind its independent capability slice
   assert.match(callsAdrSource, /telegram\.calls\.realtime\.v1/);
   assert.match(callsAdrSource, /call\.id.*непостоянным/);
   assert.match(callsAdrSource, /fixture PCM[\s\S]*не закрывают production admission/);
+
+  assert.match(realtimeAdrSource, /telegram\.realtime\.v1/);
+  assert.match(realtimeAdrSource, /reset_required/);
+  assert.match(realtimeAdrSource, /Состояние реализации: Реализовано/);
+  assert.match(clientContractSource, /TelegramClientContractV1[\s\S]*Realtime/);
+  assert.match(clientContractSource, /TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 4/);
+  assert.match(runtimeAdmissionSource, /TelegramClientContractV1::Realtime/);
+  assert.match(
+    managedFlowSource,
+    /managed_telegram_core_operational_projection_is_restart_safe/,
+  );
+  assert.match(managedFlowSource, /managed_telegram_realtime_route_requires_exact_grant/);
 });
 
 test('WhatsApp completion remains closed behind independent read and realtime slices', async () => {

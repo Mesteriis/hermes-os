@@ -1016,7 +1016,16 @@ pub enum TelegramClientResponse {
     AuthorizationStatus(TelegramAuthorizationStatus),
     AuthorizationPasswordAccepted,
     Account(TelegramAccount),
-    Realtime(Vec<TelegramRealtimeFrame>),
+    Realtime(TelegramRealtimeReplayPage),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct TelegramRealtimeReplayPage {
+    pub frames: Vec<TelegramRealtimeFrame>,
+    pub earliest_available_sequence: u64,
+    pub latest_sequence: u64,
+    pub next_after_sequence: u64,
+    pub reset_required: bool,
 }
 
 pub fn validate_provider_query(query: &TelegramProviderQuery) -> Result<(), TelegramContractError> {

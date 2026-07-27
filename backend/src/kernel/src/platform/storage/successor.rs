@@ -68,10 +68,9 @@ fn revoke_predecessor(
                 .map_err(|_| "Storage binding cannot be reserved for revocation".to_owned())?,
             PlatformStorageBindingStateV1::Revoking => predecessor,
         };
+        supervisor.request_stop_if_active(registration_id)?;
         revocation::fence_reserved_binding(supervisor, store, &revoking)?;
     }
-    if supervisor.is_active(registration_id)? {
-        supervisor.stop(registration_id)?;
-    }
+    supervisor.stop_if_active(registration_id)?;
     Ok(())
 }

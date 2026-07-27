@@ -15,7 +15,7 @@ use crate::{TelegramRuntime, TelegramRuntimeAdmission};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TelegramCallExecutionError {
-    Persistence,
+    Persistence(TelegramCallsPersistenceError),
     Admission,
     Provider,
     Media,
@@ -185,7 +185,7 @@ impl<T: TdlibTransport> TelegramRuntime<T> {
                 now_unix_seconds,
             )
             .await
-            .map_err(|_| TelegramCallExecutionError::Persistence)?;
+            .map_err(TelegramCallExecutionError::Persistence)?;
         let claimed = persistence
             .claim_accepted_call_operations(
                 account_id,
@@ -195,7 +195,7 @@ impl<T: TdlibTransport> TelegramRuntime<T> {
                 limit,
             )
             .await
-            .map_err(|_| TelegramCallExecutionError::Persistence)?;
+            .map_err(TelegramCallExecutionError::Persistence)?;
         let mut results = Vec::with_capacity(claimed.len());
 
         for operation in claimed {
@@ -209,7 +209,7 @@ impl<T: TdlibTransport> TelegramRuntime<T> {
                             now_unix_seconds,
                         )
                         .await
-                        .map_err(|_| TelegramCallExecutionError::Persistence)?,
+                        .map_err(TelegramCallExecutionError::Persistence)?,
                 );
                 continue;
             };
@@ -242,7 +242,7 @@ impl<T: TdlibTransport> TelegramRuntime<T> {
                         )
                         .await
                 }
-                .map_err(|_| TelegramCallExecutionError::Persistence)?;
+                .map_err(TelegramCallExecutionError::Persistence)?;
                 results.push(result);
                 continue;
             }
@@ -259,7 +259,7 @@ impl<T: TdlibTransport> TelegramRuntime<T> {
                                 now_unix_seconds,
                             )
                             .await
-                            .map_err(|_| TelegramCallExecutionError::Persistence)?,
+                            .map_err(TelegramCallExecutionError::Persistence)?,
                     );
                     continue;
                 }
@@ -312,7 +312,7 @@ impl<T: TdlibTransport> TelegramRuntime<T> {
                         .await
                 }
             }
-            .map_err(|_| TelegramCallExecutionError::Persistence)?;
+            .map_err(TelegramCallExecutionError::Persistence)?;
             results.push(saved);
         }
         Ok(results)

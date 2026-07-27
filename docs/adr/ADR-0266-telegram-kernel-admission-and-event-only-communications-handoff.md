@@ -5,7 +5,7 @@
 Состояние реализации: Phase gate; `telegram_integration_v1` не открыт.
 Owner-neutral ClientRpc admission ADR-0256, Telegram generated Protobuf,
 integration-owned runtime client port и integration-owned Communications
-outbox уже существуют. Exact Telegram `ModuleDescriptorV1`, четыре
+outbox уже существуют. Exact Telegram `ModuleDescriptorV1`, пять
 route-specific client capabilities, отдельные platform capability units и
 canonical non-secret settings schema реализованы. Telegram persistence
 публикует immutable owner-local `StorageBundleV1`, а отдельная
@@ -48,11 +48,12 @@ adapter boundary. Phase gate остаётся закрытым до финаль
 cutover без legacy integration REST/fallback. Telegram
 `/api/v1/communications/*` business facade, его query/inspector chain и
 Communications-prefixed provider realtime caches уже удалены без alias или
-replacement facade. Frontend generator и три независимых
-`TelegramAuthorizationService`, `TelegramLifecycleService` и
-`TelegramOperationalService` client units реализованы; их наличие не считается
-cutover, пока provider experience не удалит оставшиеся integration REST calls
-и не докажет live generated-client flow.
+replacement facade. Frontend generator и четыре независимых
+`TelegramAuthorizationService`, `TelegramLifecycleService`,
+`TelegramOperationalService` command/query и `TelegramRealtimeService` client
+units реализованы; их наличие не считается cutover, пока provider experience
+не удалит оставшиеся integration REST calls и не докажет live
+generated-client flow.
 
 Уточняет:
 
@@ -177,7 +178,7 @@ approved owner-declared ClientRpc route
 hermes-telegram-runtime
 ```
 
-Telegram descriptor объявляет четыре независимые client capabilities. Каждая
+Telegram descriptor объявляет пять независимых client capabilities. Каждая
 из них предоставляет ровно один exact ClientRpc route и один exact contract
 reference:
 
@@ -187,10 +188,11 @@ reference:
 | `telegram.lifecycle.v1` | `telegram.lifecycle.v1` | `/hermes.telegram.v1.TelegramLifecycleService/Execute` |
 | `telegram.command.v1` | `telegram.command.v1` | `/hermes.telegram.v1.TelegramOperationalService/ExecuteCommand` |
 | `telegram.query.v1` | `telegram.query.v1` | `/hermes.telegram.v1.TelegramOperationalService/ExecuteQuery` |
+| `telegram.realtime.v1` | `telegram.realtime.v1` | `/hermes.telegram.v1.TelegramRealtimeService/Replay` |
 
-Все четыре contracts имеют `major = 1`, `revision = 1` и exact SHA-256
-generated descriptor set. Совпадение schema digest не объединяет contracts:
-их stable names, routes, semantics и grants различны.
+Все пять contracts имеют `major = 1`, `revision = 4` и exact SHA-256 generated
+descriptor set. Совпадение schema digest не объединяет contracts: их stable
+names, routes, semantics и grants различны.
 
 Platform dependencies не прячутся в этих client grants. Descriptor отдельно
 объявляет `telegram.blob.v1`, `telegram.credentials.v1`,
@@ -279,7 +281,7 @@ domain event должен привести к внешнему действию,
 Gate открывается атомарно только когда существует всё evidence:
 
 1. exact Telegram package inventory и Cargo isolation guards;
-2. canonical `ModuleDescriptorV1` с четырьмя capabilities/routes, storage,
+2. canonical `ModuleDescriptorV1` с пятью capabilities/routes, storage,
    Vault, Blob, event, settings и runtime budget requests;
 3. deterministic descriptor/settings/storage bundle artifacts и exact digests;
 4. signed distribution manifest or explicit owner-pinned managed binding;
@@ -312,7 +314,7 @@ frontend cutover. Frontend не используется как proof backend ad
 ## Порядок реализации
 
 1. Создать exact Telegram descriptor builder и разделить client dispatch на
-   четыре capability-owned ports без decode probing.
+   пять capability-owned ports без decode probing.
 2. Добавить descriptor, settings/storage artifacts и signed managed-launch
    admission profile.
 3. Доказать Kernel route/grant/revoke/generation fences и managed runtime

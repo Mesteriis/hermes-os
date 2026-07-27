@@ -11,10 +11,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use prost::Message;
 
 use crate::v1::{
-    DescribeManagedRuntimeRequestV1, DescribeManagedRuntimeResponseV1, ManagedRuntimeControlAckV1,
+    DescribeManagedRuntimeRequestV1, DescribeManagedRuntimeResponseV1,
+    ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlAckV1,
     ManagedRuntimeControlFrameV2, ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
-    ManagedRuntimeReadyRequestV1, ModuleDescriptorV1, managed_runtime_control_frame_v2::Frame,
-    managed_runtime_control_request_v1::Operation,
+    ManagedRuntimeReadyRequestV1, ModuleClientResponseV1, ModuleDescriptorV1,
+    managed_runtime_control_frame_v2::Frame, managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use crate::validation::managed_control::{
@@ -103,8 +104,28 @@ impl<S: Read + Write> ManagedControlRequestDispatcherV2<S> for RejectManagedCont
         &mut self,
         channel: &mut ManagedControlChannelV2<S>,
         correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
-        _: ManagedRuntimeControlRequestV1,
+        request: ManagedRuntimeControlRequestV1,
     ) -> Result<(), ManagedControlTransportErrorV2> {
+        if let Some(Operation::ClientDelivery(delivery)) = request.operation
+            && let Some(request) = delivery.request
+        {
+            return channel.write_response(
+                correlation_id,
+                ManagedRuntimeControlResponseV1 {
+                    result: Some(ControlResult::ClientDelivery(
+                        ManagedRuntimeClientDeliveryResponseV1 {
+                            response: Some(ModuleClientResponseV1 {
+                                protocol_major: 1,
+                                request_id: request.request_id,
+                                response_payload: Vec::new(),
+                                error_code: "RUNTIME_UNAVAILABLE".to_owned(),
+                            }),
+                        },
+                    )),
+                    error_code: String::new(),
+                },
+            );
+        }
         channel.write_response(
             correlation_id,
             ManagedRuntimeControlResponseV1 {
@@ -140,14 +161,15 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
         descriptor_bytes: Vec<u8>,
         settings_schema_bytes: Vec<u8>,
     ) -> Result<DescribeManagedRuntimeResponseV1, ManagedControlTransportErrorV2> {
-        let response = self.request_next(
+        let mut bootstrap_dispatcher = RejectManagedControlRequestsV2;
+        let response = self.request_next_with_dispatch(
             ManagedRuntimeControlRequestV1 {
                 operation: Some(Operation::Describe(DescribeManagedRuntimeRequestV1 {
                     descriptor_bytes,
                     settings_schema_bytes,
                 })),
             },
-            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+            &mut bootstrap_dispatcher,
         )?;
         match response.result {
             Some(ControlResult::Describe(identity))
@@ -166,11 +188,12 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
         &mut self,
         ready: ManagedRuntimeReadyRequestV1,
     ) -> Result<(), ManagedControlTransportErrorV2> {
-        let response = self.request_next(
+        let mut bootstrap_dispatcher = RejectManagedControlRequestsV2;
+        let response = self.request_next_with_dispatch(
             ManagedRuntimeControlRequestV1 {
                 operation: Some(Operation::Ready(ready)),
             },
-            |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+            &mut bootstrap_dispatcher,
         )?;
         match response.result {
             Some(ControlResult::Ack(ManagedRuntimeControlAckV1 {}))
@@ -481,7 +504,8 @@ mod tests {
 
     use super::*;
     use crate::v1::{
-        ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1, ProtocolRangeV1,
+        ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeControlRequestV1,
+        ManagedRuntimeControlResponseV1, ModuleClientRequestV1, ProtocolRangeV1,
         managed_runtime_control_request_v1::Operation,
     };
 
@@ -522,6 +546,59 @@ mod tests {
             result: None,
             error_code: "REJECTED".to_owned(),
         }
+    }
+
+    fn client_delivery_request(request_id: u64) -> ManagedRuntimeControlRequestV1 {
+        ManagedRuntimeControlRequestV1 {
+            operation: Some(Operation::ClientDelivery(
+                ManagedRuntimeClientDeliveryRequestV1 {
+                    request: Some(ModuleClientRequestV1 {
+                        protocol_major: 1,
+                        request_id,
+                        ..ModuleClientRequestV1::default()
+                    }),
+                },
+            )),
+        }
+    }
+
+    #[test]
+    fn bootstrap_dispatcher_returns_typed_unavailable_without_losing_outer_response() {
+        let (left, right) = UnixStream::pair().expect("control pair");
+        let child = thread::spawn(move || {
+            let mut channel = ManagedControlChannelV2::new(left);
+            let mut dispatcher = RejectManagedControlRequestsV2;
+            channel.request(
+                [1; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+                ready_request(),
+                |channel, id, request| dispatcher.dispatch_request(channel, id, request),
+            )
+        });
+
+        let mut channel = ManagedControlChannelV2::new(right);
+        let response = channel
+            .request(
+                [2; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+                client_delivery_request(77),
+                |channel, id, _| channel.write_response(id, rejected_response()),
+            )
+            .expect("typed bootstrap response");
+        let Some(ControlResult::ClientDelivery(delivery)) = response.result else {
+            panic!("bootstrap response is not a client delivery");
+        };
+        let response = delivery.response.expect("module response");
+        assert_eq!(response.request_id, 77);
+        assert_eq!(response.error_code, "RUNTIME_UNAVAILABLE");
+        assert!(response.response_payload.is_empty());
+
+        assert_eq!(
+            child
+                .join()
+                .expect("join child")
+                .expect("outer correlated response")
+                .error_code,
+            "REJECTED"
+        );
     }
 
     #[test]

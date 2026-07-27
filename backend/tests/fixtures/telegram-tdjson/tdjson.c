@@ -100,6 +100,9 @@ void td_json_client_send(void *raw_client, const char *request) {
     const char *format;
     if (strstr(request, "\"@type\":\"getMe\"") != NULL) {
         format = "{\"@type\":\"user\",\"id\":777,\"@extra\":\"%s\"}";
+    } else if (strstr(request, "\"@type\":\"getChatHistory\"") != NULL) {
+        format =
+            "{\"@type\":\"messages\",\"total_count\":1,\"messages\":[{\"@type\":\"message\",\"id\":7200,\"chat_id\":9002,\"sender_id\":{\"@type\":\"messageSenderUser\",\"user_id\":44},\"is_outgoing\":false,\"date\":1783024100,\"content\":{\"@type\":\"messageText\",\"text\":{\"@type\":\"formattedText\",\"text\":\"managed Telegram history fixture\"}}}],\"@extra\":\"%s\"}";
     } else if (strstr(request, "\"@type\":\"createCall\"") != NULL) {
         format = "{\"@type\":\"callId\",\"id\":52,\"@extra\":\"%s\"}";
     } else if (strstr(request, "\"@type\":\"sendCallSignalingData\"") != NULL
@@ -131,6 +134,44 @@ void td_json_client_send(void *raw_client, const char *request) {
         enqueue(
             client,
             "{\"@type\":\"updateNewMessage\",\"message\":{\"id\":7002,\"chat_id\":9001,\"sender_id\":{\"@type\":\"messageSenderUser\",\"user_id\":42},\"is_outgoing\":false,\"date\":1783024001,\"content\":{\"@type\":\"messageText\",\"text\":{\"@type\":\"formattedText\",\"text\":\"managed Telegram outage replay evidence\"}}}}"
+        );
+    }
+    if (strstr(request, "operational fixture trigger") != NULL) {
+        enqueue(
+            client,
+            "{\"@type\":\"updateNewMessage\",\"message\":{\"id\":7100,\"chat_id\":9002,\"sender_id\":{\"@type\":\"messageSenderUser\",\"user_id\":44},\"is_outgoing\":false,\"date\":1783024101,\"content\":{\"@type\":\"messageDocument\",\"document\":{\"file_name\":\"report.pdf\",\"mime_type\":\"application/pdf\",\"document\":{\"@type\":\"file\",\"id\":42}},\"caption\":{\"@type\":\"formattedText\",\"text\":\"managed operational document\"}}}}"
+        );
+        enqueue(
+            client,
+            "{\"@type\":\"updateFile\",\"file\":{\"@type\":\"file\",\"id\":42,\"size\":100,\"expected_size\":100,\"local\":{\"downloaded_size\":100,\"is_downloading_active\":false,\"is_downloading_completed\":true},\"remote\":{\"unique_id\":\"managed-file-42\"}}}"
+        );
+        enqueue(
+            client,
+            "{\"@type\":\"updateMessageContent\",\"chat_id\":9002,\"message_id\":7100,\"new_content\":{\"@type\":\"messageText\",\"text\":{\"@type\":\"formattedText\",\"text\":\"edited operational fixture\"}}}"
+        );
+        enqueue(
+            client,
+            "{\"@type\":\"updateMessageIsPinned\",\"chat_id\":9002,\"message_id\":7100,\"is_pinned\":true}"
+        );
+        enqueue(
+            client,
+            "{\"@type\":\"updateMessageInteractionInfo\",\"chat_id\":9002,\"message_id\":7100,\"interaction_info\":{\"reactions\":{\"recent_reactions\":[{\"sender_id\":{\"@type\":\"messageSenderUser\",\"user_id\":44},\"type\":{\"@type\":\"reactionTypeEmoji\",\"emoji\":\"ok\"},\"is_outgoing\":false}]}}}"
+        );
+        enqueue(
+            client,
+            "{\"@type\":\"updateChatPosition\",\"chat_id\":9002,\"position\":{\"list\":{\"@type\":\"chatListFolder\",\"chat_folder_id\":7},\"order\":9,\"is_pinned\":true}}"
+        );
+        enqueue(
+            client,
+            "{\"@type\":\"updateChatNotificationSettings\",\"chat_id\":9002,\"notification_settings\":{\"use_default_mute_for\":false,\"mute_for\":3600}}"
+        );
+        enqueue(
+            client,
+            "{\"@type\":\"updateNewMessage\",\"message\":{\"id\":7101,\"chat_id\":9002,\"sender_id\":{\"@type\":\"messageSenderUser\",\"user_id\":44},\"is_outgoing\":false,\"date\":1783024102,\"content\":{\"@type\":\"messageText\",\"text\":{\"@type\":\"formattedText\",\"text\":\"managed tombstone fixture\"}}}}"
+        );
+        enqueue(
+            client,
+            "{\"@type\":\"updateDeleteMessages\",\"chat_id\":9002,\"message_ids\":[7101],\"is_permanent\":true}"
         );
     }
 }

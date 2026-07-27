@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::managed_control::{
-    ManagedControlChannelV2, ManagedControlTransportErrorV2,
+    ManagedControlChannelV2, RejectManagedControlRequestsV2,
 };
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
@@ -42,15 +42,16 @@ impl InheritedKernelVaultRouteV2 {
         &mut self,
         route: VaultCiphertextRouteV1,
     ) -> Result<VaultCiphertextResponseV1, StorageVaultRouteFailureV1> {
+        let mut bootstrap_dispatcher = RejectManagedControlRequestsV2;
         let response = self
             .channel
-            .request_next(
+            .request_next_with_dispatch(
                 ManagedRuntimeControlRequestV1 {
                     operation: Some(Operation::RouteVaultCiphertext(
                         ManagedRuntimeVaultRouteRequestV1 { route: Some(route) },
                     )),
                 },
-                |_, _, _| Err(ManagedControlTransportErrorV2::UnexpectedRequest),
+                &mut bootstrap_dispatcher,
             )
             .map_err(|_| StorageVaultRouteFailureV1::Unavailable)?;
         let response = response

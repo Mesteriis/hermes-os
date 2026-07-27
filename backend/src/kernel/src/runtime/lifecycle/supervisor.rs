@@ -476,6 +476,22 @@ impl ManagedRuntimeSupervisor {
             .ok_or_else(|| "managed runtime is unavailable".to_owned())
     }
 
+    /// Prevents an active worker from restarting its child while an external
+    /// authority fence is completed. The worker remains registered until
+    /// `stop_if_active` joins or reaps it.
+    pub(crate) fn request_stop_if_active(&self, registration_id: &str) -> Result<bool, String> {
+        let workers = self
+            .inner
+            .workers
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?;
+        let Some(worker) = workers.get(registration_id) else {
+            return Ok(false);
+        };
+        worker.stop_requested.store(true, Ordering::Release);
+        Ok(true)
+    }
+
     /// Stops the exact managed registration when present and treats an already
     /// inactive registration as a successful no-op.
     pub fn stop_if_active(&self, registration_id: &str) -> Result<bool, String> {

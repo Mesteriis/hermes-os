@@ -63,6 +63,7 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         telegram_events_capability_v1(),
         telegram_client_capability_v1(TelegramClientContractV1::Lifecycle),
         telegram_client_capability_v1(TelegramClientContractV1::Query),
+        telegram_client_capability_v1(TelegramClientContractV1::Realtime),
         telegram_runtime_capability_v1(),
         telegram_storage_capability_v1(),
     ]
@@ -329,6 +330,7 @@ mod tests {
                 TELEGRAM_EVENTS_CAPABILITY_ID,
                 "telegram.lifecycle.v1",
                 "telegram.query.v1",
+                "telegram.realtime.v1",
                 TELEGRAM_RUNTIME_CAPABILITY_ID,
                 TELEGRAM_STORAGE_CAPABILITY_ID,
             ]

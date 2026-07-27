@@ -22,7 +22,7 @@
       "gate": "telegram_core_operational_v1",
       "role": "integration",
       "owner": "telegram",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
     },
     {

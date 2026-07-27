@@ -74,9 +74,7 @@ fn request_contract(
         | TelegramClientRequest::StopAccount { .. } => Ok(TelegramClientContractV1::Lifecycle),
         TelegramClientRequest::Command(_) => Ok(TelegramClientContractV1::Command),
         TelegramClientRequest::Query(_) => Ok(TelegramClientContractV1::Query),
-        TelegramClientRequest::Replay { .. } => Err(TelegramClientPortError::Protocol(
-            "Telegram replay requires the separately admitted realtime contract".to_owned(),
-        )),
+        TelegramClientRequest::Replay { .. } => Ok(TelegramClientContractV1::Realtime),
     }
 }
 
@@ -265,6 +263,22 @@ pub fn encode_module_request(
                 ));
             }
         },
+        TelegramClientContractV1::Realtime => match request {
+            TelegramClientRequest::Replay {
+                account_id,
+                after_sequence,
+                limit,
+            } => hermes_telegram_api::client_wire::encode_realtime_request(
+                account_id,
+                *after_sequence,
+                *limit,
+            ),
+            _ => {
+                return Err(TelegramClientPortError::Protocol(
+                    "Telegram realtime route received another request family".to_owned(),
+                ));
+            }
+        },
     };
     let envelope = ModuleClientRequestV1 {
         protocol_major: MODULE_CLIENT_PROTOCOL_MAJOR,
@@ -331,6 +345,20 @@ pub fn decode_module_request(
                         "Telegram query request payload is invalid".to_owned(),
                     )
                 })?
+        }
+        TelegramClientContractV1::Realtime => {
+            let (account_id, after_sequence, limit) =
+                hermes_telegram_api::client_wire::decode_realtime_request(&request_payload)
+                    .map_err(|_| {
+                        TelegramClientPortError::Protocol(
+                            "Telegram realtime request payload is invalid".to_owned(),
+                        )
+                    })?;
+            TelegramClientRequest::Replay {
+                account_id,
+                after_sequence,
+                limit,
+            }
         }
     };
     Ok((request_id, contract, request))
@@ -443,6 +471,16 @@ pub fn encode_module_response(
                 ));
             }
         },
+        TelegramClientContractV1::Realtime => match response {
+            TelegramClientResponse::Realtime(page) => {
+                hermes_telegram_api::client_wire::encode_realtime_response(page)
+            }
+            _ => {
+                return Err(TelegramClientPortError::Protocol(
+                    "Telegram realtime response has another response family".to_owned(),
+                ));
+            }
+        },
     };
     encode_module_response_payload(request_id, response_payload)
 }
@@ -505,6 +543,15 @@ pub fn decode_module_response(
                 .map_err(|_| {
                     TelegramClientPortError::Protocol(
                         "Telegram query response payload is invalid".to_owned(),
+                    )
+                })?
+        }
+        TelegramClientContractV1::Realtime => {
+            hermes_telegram_api::client_wire::decode_realtime_response(&envelope.response_payload)
+                .map(TelegramClientResponse::Realtime)
+                .map_err(|_| {
+                    TelegramClientPortError::Protocol(
+                        "Telegram realtime response payload is invalid".to_owned(),
                     )
                 })?
         }
@@ -859,16 +906,64 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
         after_sequence: u64,
         limit: u32,
     ) -> Result<TelegramClientResponse, TelegramClientPortError> {
-        if limit == 0 || limit > MAX_PAGE_SIZE {
-            return Err(TelegramClientPortError::Provider(TdlibError::Protocol(
+        if account_id.trim().is_empty() || limit == 0 || limit > MAX_PAGE_SIZE {
+            return Err(TelegramClientPortError::Protocol(
                 "Telegram realtime replay limit is invalid".to_owned(),
-            )));
+            ));
         }
-        durable
-            .replay_provider_events_after(account_id, after_sequence, i64::from(limit))
+        if self.runtime.account(account_id).is_none() {
+            return Err(TelegramClientPortError::Protocol(
+                "Telegram realtime account is unknown".to_owned(),
+            ));
+        }
+        let bounds = durable
+            .provider_event_sequence_bounds(account_id)
             .await
-            .map(TelegramClientResponse::Realtime)
-            .map_err(TelegramClientPortError::Persistence)
+            .map_err(TelegramClientPortError::Persistence)?;
+        let (earliest_available_sequence, latest_sequence) = bounds.unwrap_or((0, 0));
+        let reset_required = match bounds {
+            None => after_sequence > 0,
+            Some((earliest, latest)) => {
+                after_sequence > latest
+                    || (after_sequence > 0 && after_sequence.saturating_add(1) < earliest)
+            }
+        };
+        let frames = if reset_required {
+            Vec::new()
+        } else {
+            durable
+                .replay_provider_events_after(account_id, after_sequence, i64::from(limit))
+                .await
+                .map_err(TelegramClientPortError::Persistence)?
+        };
+        if frames.iter().any(|frame| frame.account_id != account_id)
+            || !frames
+                .windows(2)
+                .all(|pair| pair[0].sequence < pair[1].sequence)
+        {
+            return Err(TelegramClientPortError::Protocol(
+                "Telegram realtime persistence returned an invalid page".to_owned(),
+            ));
+        }
+        let next_after_sequence = frames.last().map_or_else(
+            || {
+                if reset_required {
+                    latest_sequence
+                } else {
+                    after_sequence
+                }
+            },
+            |frame| frame.sequence,
+        );
+        Ok(TelegramClientResponse::Realtime(
+            hermes_telegram_api::TelegramRealtimeReplayPage {
+                frames,
+                earliest_available_sequence,
+                latest_sequence,
+                next_after_sequence,
+                reset_required,
+            },
+        ))
     }
 }
 
@@ -893,7 +988,7 @@ mod tests {
         assert_eq!(contract.owner, "telegram");
         assert_eq!(contract.name, "telegram.query.v1");
         assert_eq!(contract.major, 1);
-        assert_eq!(contract.revision, 3);
+        assert_eq!(contract.revision, 4);
         assert_eq!(contract.schema_sha256.len(), 32);
     }
 
@@ -944,6 +1039,21 @@ mod tests {
     }
 
     #[test]
+    fn replay_request_round_trips_only_through_the_realtime_contract() {
+        let request = TelegramClientRequest::Replay {
+            account_id: "account-1".to_owned(),
+            after_sequence: 41,
+            limit: 100,
+        };
+        let encoded = encode_module_request(48, &request).expect("encode replay");
+
+        assert_eq!(
+            decode_module_request(&encoded).expect("decode replay"),
+            (48, TelegramClientContractV1::Realtime, request)
+        );
+    }
+
+    #[test]
     fn query_payload_is_rejected_under_lifecycle_contract() {
         let encoded = encode_module_request(43, &load_chats_request()).expect("encode query");
         let mut envelope =
@@ -986,6 +1096,30 @@ mod tests {
         );
         assert!(matches!(
             decode_module_response(TelegramClientContractV1::Lifecycle, &encoded),
+            Err(TelegramClientPortError::Protocol(_))
+        ));
+    }
+
+    #[test]
+    fn realtime_response_decodes_only_with_realtime_contract() {
+        let response =
+            TelegramClientResponse::Realtime(hermes_telegram_api::TelegramRealtimeReplayPage {
+                frames: Vec::new(),
+                earliest_available_sequence: 0,
+                latest_sequence: 0,
+                next_after_sequence: 0,
+                reset_required: false,
+            });
+        let encoded = encode_module_response(TelegramClientContractV1::Realtime, 49, &response)
+            .expect("encode realtime");
+
+        assert_eq!(
+            decode_module_response(TelegramClientContractV1::Realtime, &encoded)
+                .expect("decode realtime response"),
+            (49, response)
+        );
+        assert!(matches!(
+            decode_module_response(TelegramClientContractV1::Query, &encoded),
             Err(TelegramClientPortError::Protocol(_))
         ));
     }

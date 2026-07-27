@@ -735,17 +735,22 @@ fn handle_client_delivery(
     }
     let response = if let Some(runtime) = process.composition_mut().runtime_mut() {
         authorize_media_for_request(channel, runtime, &request)?;
-        let payload = executor
-            .block_on(client_transport::handle_durable_request(
-                runtime,
-                durable,
-                automation,
-                calls,
-                &request.encode_to_vec(),
-            ))
-            .map_err(|_| "Telegram runtime client request failed".to_owned())?;
-        ModuleClientResponseV1::decode(payload.as_slice())
-            .map_err(|_| "Telegram runtime client response is invalid".to_owned())?
+        match executor.block_on(client_transport::handle_durable_request(
+            runtime,
+            durable,
+            automation,
+            calls,
+            &request.encode_to_vec(),
+        )) {
+            Ok(payload) => ModuleClientResponseV1::decode(payload.as_slice())
+                .map_err(|_| "Telegram runtime client response is invalid".to_owned())?,
+            Err(error) => ModuleClientResponseV1 {
+                protocol_major: 1,
+                request_id: request.request_id,
+                response_payload: Vec::new(),
+                error_code: client_transport::module_error_code(&error).to_owned(),
+            },
+        }
     } else {
         ModuleClientResponseV1 {
             protocol_major: 1,

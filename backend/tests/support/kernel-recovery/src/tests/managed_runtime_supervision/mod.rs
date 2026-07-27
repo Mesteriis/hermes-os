@@ -126,6 +126,46 @@ fn managed_runtime_supervisor_stops_one_rebound_process_without_global_shutdown(
 }
 
 #[test]
+fn managed_runtime_supervisor_quiesce_is_idempotent_until_join() {
+    let (root, staged, _, descriptor_digest) = prepare_supervisor_artifacts();
+    let shutdown_requested = Arc::new(AtomicBool::new(false));
+    let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown_requested));
+    let policy =
+        ManagedChildExecutionPolicy::new(1, Duration::from_secs(30)).expect("execution policy");
+    supervisor
+        .start(
+            "vault".to_owned(),
+            staged,
+            runtime_expectation(1, descriptor_digest),
+            policy,
+        )
+        .expect("start managed runtime");
+
+    assert!(
+        supervisor
+            .request_stop_if_active("vault")
+            .expect("request first quiesce")
+    );
+    assert!(
+        supervisor
+            .request_stop_if_active("vault")
+            .expect("request idempotent quiesce")
+    );
+    assert!(
+        supervisor
+            .stop_if_active("vault")
+            .expect("join quiesced runtime")
+    );
+    assert!(!shutdown_requested.load(Ordering::Acquire));
+    assert!(
+        !supervisor
+            .is_active("vault")
+            .expect("quiesced runtime is reaped")
+    );
+    std::fs::remove_dir_all(root).expect("remove supervisor fixture");
+}
+
+#[test]
 fn single_attempt_policy_does_not_reuse_a_crashed_runtime_identity() {
     let (root, staged, descriptor_digest, attempts) = prepare_crashing_supervisor_artifact();
     let shutdown_requested = Arc::new(AtomicBool::new(false));

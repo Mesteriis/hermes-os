@@ -189,6 +189,12 @@ Owner command `begin_managed_storage_binding_revocation` сначала атом
 поэтому restart не может снова stage-ить старый binding. Composition test
 пропускает Storage credential bootstrap через real Kernel route handler и live
 Vault service по inherited Unix channels; он не подменяет ciphertext response.
+При managed successor Kernel после durable `revoking`, но до physical Storage
+fence, ставит exact predecessor worker `stop_requested`. Этот supervisor-local
+marker запрещает autorestart child при ожидаемой потере старого PgBouncer alias,
+но не заменяет authority fence. Только после Vault/PgBouncer/PostgreSQL fence и
+join predecessor разрешена reservation generation `N + 1`; ошибка любого шага
+оставляет binding `revoking` и не выдаёт successor identity.
 Opt-in disposable Docker runner создаёт временный signed macOS release bundle
 для собранных Vault и Storage binaries, принимает оба через production
 release-binding path и запускает через production Kernel launch path. Он
