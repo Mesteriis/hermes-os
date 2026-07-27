@@ -14,6 +14,7 @@ fn main() {
     let mut operational_config = prost_build::Config::new();
     operational_config
         .file_descriptor_set_path(output_directory.join("hermes.zulip.operational.v1.bin"));
+    operational_config.extern_path(".hermes.zulip.account.v1", "crate::account_wire_generated");
     operational_config
         .compile_protos(
             &["proto/hermes/zulip/operational/v1/client.proto"],
@@ -35,4 +36,10 @@ fn main() {
             &["proto"],
         )
         .expect("Zulip operational realtime client protocol must compile");
+
+    let mut account_config = prost_build::Config::new();
+    account_config.file_descriptor_set_path(output_directory.join("hermes.zulip.account.v1.bin"));
+    account_config
+        .compile_protos(&["proto/hermes/zulip/account/v1/client.proto"], &["proto"])
+        .expect("Zulip account lifecycle client protocol must compile");
 }

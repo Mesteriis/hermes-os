@@ -56,9 +56,12 @@ test('Zulip subjects, routes, diagnostics and health expose no provider-private 
 
   assert.match(
     settings,
-    /client_visibility: SettingClientVisibilityV1::Hidden as i32/,
+    /client_visibility: SettingClientVisibilityV1::Editable as i32/,
   );
-  assert.doesNotMatch(settings, /const API_KEY:|["']zulip\.api_key["']/);
+  assert.doesNotMatch(
+    settings,
+    /const API_KEY:|["']zulip\.api_key["']|credential_revision|secret_ref|record_id/,
+  );
   assert.doesNotMatch(
     ownerSources,
     /(?:["'`]\/(?:health|ready)|\bHealth(?:Check|Response|Status)\b|\bfn\s+(?:health|readiness)\s*\()/i,

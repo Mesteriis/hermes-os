@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rcgen::{
     BasicConstraints, Certificate, CertificateParams, ExtendedKeyUsagePurpose, IsCa, KeyPair,
     KeyUsagePurpose,
@@ -25,6 +26,7 @@ struct ZulipHttpsFixtureState {
     served_events: AtomicU64,
     message_commands: AtomicU64,
     history_pages: AtomicU64,
+    credential_v2_requests: AtomicU64,
 }
 
 impl ZulipHttpsFixture {
@@ -55,6 +57,7 @@ impl ZulipHttpsFixture {
             served_events: AtomicU64::new(0),
             message_commands: AtomicU64::new(0),
             history_pages: AtomicU64::new(0),
+            credential_v2_requests: AtomicU64::new(0),
         });
         let server_state = Arc::clone(&state);
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -97,6 +100,10 @@ impl ZulipHttpsFixture {
 
     pub(super) fn history_pages(&self) -> u64 {
         self.state.history_pages.load(Ordering::Acquire)
+    }
+
+    pub(super) fn credential_v2_requests(&self) -> u64 {
+        self.state.credential_v2_requests.load(Ordering::Acquire)
     }
 }
 
@@ -195,6 +202,13 @@ fn serve_connection(
     let connection = rustls::ServerConnection::new(config).map_err(std::io::Error::other)?;
     let mut stream = rustls::StreamOwned::new(connection, tcp);
     let request = read_request(&mut stream)?;
+    let credential_v2 = STANDARD.encode(b"managed-bot@example.test:managed-zulip-api-key-v2");
+    if request
+        .windows(credential_v2.len())
+        .any(|window| window == credential_v2.as_bytes())
+    {
+        state.credential_v2_requests.fetch_add(1, Ordering::Release);
+    }
     let request_line = request
         .split(|byte| *byte == b'\n')
         .next()

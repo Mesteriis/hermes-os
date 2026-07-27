@@ -1,5 +1,6 @@
 //! Owner-local Zulip cursor and exact-byte observation outbox persistence.
 
+mod account;
 mod operational;
 mod schema;
 
@@ -11,10 +12,11 @@ use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 
+pub use account::ZulipCredentialBindingV1;
 pub use operational::ZulipOperationalIngestV1;
 pub use schema::{
-    ZULIP_SCHEMA_V2, ZULIP_STORAGE_BUNDLE_REVISION_V1, ZULIP_STORAGE_BUNDLE_REVISION_V2,
-    zulip_storage_bundle_v1,
+    ZULIP_SCHEMA_V2, ZULIP_SCHEMA_V3, ZULIP_STORAGE_BUNDLE_REVISION_V1,
+    ZULIP_STORAGE_BUNDLE_REVISION_V2, ZULIP_STORAGE_BUNDLE_REVISION_V3, zulip_storage_bundle_v1,
 };
 
 pub const PACKAGE: &str = "hermes-zulip-persistence";
@@ -150,6 +152,10 @@ impl ZulipDurablePersistence {
             .await
             .map_err(|_| ZulipDurablePersistenceError::Database)?;
         sqlx::raw_sql(ZULIP_SCHEMA_V2)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| ZulipDurablePersistenceError::Database)?;
+        sqlx::raw_sql(ZULIP_SCHEMA_V3)
             .execute(&self.pool)
             .await
             .map(|_| ())

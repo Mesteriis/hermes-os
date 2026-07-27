@@ -7,11 +7,13 @@ use crate::identity::device::signer::DeviceSigner;
 pub(super) struct ManagedZulipContour {
     pub(super) root: PathBuf,
     pub(super) data: PathBuf,
+    pub(super) vault_dir: PathBuf,
     pub(super) fixture: ZulipHttpsFixture,
     pub(super) store: Arc<SqliteControlStore>,
     pub(super) shutdown: Arc<AtomicBool>,
     pub(super) supervisor: ManagedRuntimeSupervisor,
     pub(super) owner_signer: FileDeviceSigner,
+    pub(super) seeded_credential: SeededZulipCredential,
     pub(super) zulip: StartedZulipRuntime,
 }
 
@@ -32,7 +34,7 @@ impl ManagedZulipContour {
         let data = private_directory(short_communications_kernel_data_directory());
         let vault_dir = private_directory(data.join("vault"));
         initialize_vault(&vault_dir, &credential_directory());
-        seed_zulip_vault(&vault_dir);
+        let seeded_credential = seed_zulip_vault(&vault_dir);
         let release = installed_communications_zulip_release(&root);
         unsafe {
             std::env::set_var("HERMES_TEST_KERNEL_EXECUTABLE", release.kernel());
@@ -84,7 +86,7 @@ impl ManagedZulipContour {
         let admitted_zulip = prepare_zulip_runtime(&supervisor, &store, admitted_zulip);
         configure_communications_jetstream(&store);
         start_communications_domain(&supervisor, &store, &root.join("runtime"));
-        let zulip = start_zulip_runtime(
+        let mut zulip = start_zulip_runtime(
             &supervisor,
             &store,
             &data,
@@ -92,14 +94,31 @@ impl ManagedZulipContour {
             admitted_zulip,
             fixture.realm_url(),
         );
+        assert_eq!(
+            fixture.accepted_connections(),
+            0,
+            "configuration-only Zulip runtime must not contact the provider",
+        );
+        let binding = bind_zulip_credential(&store, &supervisor, &zulip, 0, 1);
+        assert_eq!(binding.binding_revision, 1);
+        zulip = restart_zulip_runtime(
+            &supervisor,
+            &store,
+            &data,
+            &root.join("runtime"),
+            &zulip,
+            fixture.realm_url(),
+        );
         Self {
             root,
             data,
+            vault_dir,
             fixture,
             store,
             shutdown,
             supervisor,
             owner_signer,
+            seeded_credential,
             zulip,
         }
     }
@@ -116,11 +135,13 @@ impl ManagedZulipContour {
         let Self {
             root,
             data,
+            vault_dir,
             fixture,
             store,
             shutdown,
             supervisor,
             owner_signer,
+            seeded_credential: _,
             zulip,
         } = self;
         drop(zulip);
@@ -130,6 +151,7 @@ impl ManagedZulipContour {
         drop(store);
         drop(fixture);
         std::fs::remove_dir_all(root).expect("remove fixture");
+        drop(vault_dir);
         std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
     }
 }

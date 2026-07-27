@@ -62,7 +62,6 @@ pub struct ZulipRuntimeAdmissionV1 {
     pub runtime_generation: u64,
     pub grant_epoch: u64,
     pub vault_runtime_generation: u64,
-    pub api_key_revision: u64,
 }
 
 #[derive(Debug)]
@@ -317,14 +316,6 @@ impl ZulipRuntimeIdentityV1 {
             recorded_at_nanos,
         }
     }
-}
-
-pub fn api_key_revision(admission: &ZulipRuntimeAdmissionV1) -> Result<u64, ZulipRuntimeErrorV1> {
-    (admission.api_key_revision != 0)
-        .then_some(admission.api_key_revision)
-        .ok_or(ZulipRuntimeErrorV1::Core(
-            ZulipCoreError::CredentialLeaseRejected,
-        ))
 }
 
 pub async fn acquire_event_queue(

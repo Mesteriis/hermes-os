@@ -74,3 +74,14 @@ pub(super) fn transition_registration(
         grant_epoch: transition.grant_epoch,
     }
 }
+
+pub(super) fn open_owner_control_client(
+    owner_runtime_dir: &Path,
+    signer: &FileDeviceSigner,
+) -> (OwnerControlClientV1, String) {
+    let client = OwnerControlClientV1::new(owner_runtime_dir);
+    let owner_session = client
+        .open_owner_session(&LiveOwnerSigner(signer))
+        .expect("open owner-authorized control session");
+    (client, owner_session)
+}

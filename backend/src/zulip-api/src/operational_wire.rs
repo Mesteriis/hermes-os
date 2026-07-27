@@ -4,6 +4,9 @@ use prost::Message;
 
 use crate::{
     ZulipAttachmentV1,
+    account_wire::{
+        state_from_wire as credential_state_from_wire, state_to_wire as credential_state_to_wire,
+    },
     client_wire::ZulipClientWireErrorV1,
     operational::{
         ZulipAccountStatusV1, ZulipConversationKindV1, ZulipConversationV1, ZulipHistoryStateV1,
@@ -329,6 +332,10 @@ fn status_to_wire(status: &ZulipAccountStatusV1) -> wire::ZulipAccountStatusV1 {
         oldest_provider_message_id: status.oldest_provider_message_id.clone(),
         last_provider_event_id: status.last_provider_event_id,
         latest_event_sequence: status.latest_event_sequence,
+        credential_state: credential_state_to_wire(status.credential_state),
+        credential_revision: status.credential_revision,
+        binding_revision: status.binding_revision,
+        applied_runtime_generation: status.applied_runtime_generation,
     }
 }
 
@@ -343,6 +350,10 @@ fn status_from_wire(
         oldest_provider_message_id: status.oldest_provider_message_id,
         last_provider_event_id: status.last_provider_event_id,
         latest_event_sequence: status.latest_event_sequence,
+        credential_state: credential_state_from_wire(status.credential_state)?,
+        credential_revision: status.credential_revision,
+        binding_revision: status.binding_revision,
+        applied_runtime_generation: status.applied_runtime_generation,
     })
 }
 
@@ -476,6 +487,10 @@ mod tests {
             oldest_provider_message_id: Some("1".into()),
             last_provider_event_id: Some(9),
             latest_event_sequence: 11,
+            credential_state: crate::account::ZulipCredentialBindingStateV1::Active,
+            credential_revision: Some(3),
+            binding_revision: 2,
+            applied_runtime_generation: Some(4),
         });
         assert_eq!(
             decode_operational_query_response(&encode_operational_query_response(&response)),

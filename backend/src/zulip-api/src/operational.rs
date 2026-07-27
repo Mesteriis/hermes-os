@@ -88,6 +88,10 @@ pub struct ZulipAccountStatusV1 {
     pub oldest_provider_message_id: Option<String>,
     pub last_provider_event_id: Option<i64>,
     pub latest_event_sequence: u64,
+    pub credential_state: crate::account::ZulipCredentialBindingStateV1,
+    pub credential_revision: Option<u64>,
+    pub binding_revision: u64,
+    pub applied_runtime_generation: Option<u64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

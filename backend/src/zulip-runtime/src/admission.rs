@@ -19,8 +19,8 @@ use hermes_zulip_core::ZULIP_API_KEY_PURPOSE_ID;
 use sha2::{Digest, Sha256};
 
 use crate::settings::{
-    ZULIP_SETTINGS_SCHEMA_MAJOR_V1, ZULIP_SETTINGS_SCHEMA_REVISION_V1,
-    zulip_settings_schema_bytes_v1,
+    ZULIP_SETTINGS_SCHEMA_MAJOR_V2, ZULIP_SETTINGS_SCHEMA_REVISION_V2,
+    zulip_settings_schema_bytes_v2,
 };
 
 pub const ZULIP_BLOB_CAPABILITY_ID: &str = "zulip.blob.v1";
@@ -36,6 +36,7 @@ pub const ZULIP_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
 #[must_use]
 pub fn zulip_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
+        zulip_client_capability_v1(ZulipClientContractV1::AccountLifecycle),
         zulip_blob_capability_v1(),
         zulip_client_capability_v1(ZulipClientContractV1::Command),
         zulip_credentials_capability_v1(),
@@ -139,7 +140,7 @@ fn zulip_storage_capability_v1() -> CapabilityDescriptorV1 {
 
 #[must_use]
 pub fn zulip_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
-    let settings_schema = zulip_settings_schema_bytes_v1();
+    let settings_schema = zulip_settings_schema_bytes_v2();
     ModuleDescriptorV1 {
         descriptor_major: 1,
         descriptor_revision: 1,
@@ -155,8 +156,8 @@ pub fn zulip_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
         }),
         capabilities: zulip_admission_capabilities_v1(),
         settings_schema_ref: Some(SettingsSchemaRefV1 {
-            major: ZULIP_SETTINGS_SCHEMA_MAJOR_V1,
-            revision: ZULIP_SETTINGS_SCHEMA_REVISION_V1,
+            major: ZULIP_SETTINGS_SCHEMA_MAJOR_V2,
+            revision: ZULIP_SETTINGS_SCHEMA_REVISION_V2,
             artifact_size_bytes: settings_schema.len() as u64,
             sha256: Sha256::digest(&settings_schema).to_vec(),
         }),
@@ -192,6 +193,7 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                ZulipClientContractV1::AccountLifecycle.capability_id(),
                 ZULIP_BLOB_CAPABILITY_ID,
                 ZulipClientContractV1::Command.capability_id(),
                 ZULIP_CREDENTIALS_CAPABILITY_ID,

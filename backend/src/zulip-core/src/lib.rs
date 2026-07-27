@@ -65,10 +65,8 @@ mod attachment_tests {
 pub fn credential_lease_purpose(
     account_id: &str,
     configuration_instance_id: &str,
-    revision: u64,
 ) -> Result<VaultPurposeRequestV1, ZulipCoreError> {
-    if account_id.trim().is_empty() || configuration_instance_id.trim().is_empty() || revision == 0
-    {
+    if account_id.trim().is_empty() || configuration_instance_id.trim().is_empty() {
         return Err(ZulipCoreError::CredentialLeaseRejected);
     }
     VaultPurposeRequestV1::new(
@@ -286,8 +284,8 @@ mod tests {
 
     #[test]
     fn api_key_purpose_is_stable_and_configuration_scoped() {
-        let purpose = credential_lease_purpose("account-1", "configuration-1", 7)
-            .expect("credential purpose");
+        let purpose =
+            credential_lease_purpose("account-1", "configuration-1").expect("credential purpose");
 
         assert_eq!(purpose.purpose_id(), ZULIP_API_KEY_PURPOSE_ID);
         assert_eq!(purpose.configuration_instance_id(), "configuration-1");

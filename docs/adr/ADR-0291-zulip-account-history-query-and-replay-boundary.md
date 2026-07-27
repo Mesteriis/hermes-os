@@ -3,11 +3,11 @@
 Статус: Принято
 Дата: 2026-07-26
 Состояние реализации: `zulip_history_sync_v1`,
-`zulip_operational_read_v1` и `zulip_operational_realtime_v1` реализованы.
-`zulip_account_lifecycle_v1` и `zulip_full_operational_v1` остаются
-запланированными. Наличие ADR или отдельных backend contracts не закрывает
-full gate без supervised account-settings replacement, generated frontend
-client и integration-owned UI cutover.
+`zulip_operational_read_v1`, `zulip_operational_realtime_v1` и
+`zulip_account_lifecycle_v1` реализованы. `zulip_full_operational_v1` остаётся
+запланированным. Наличие backend contracts не закрывает full gate без
+generated frontend client, sealed owner credential provisioning и
+integration-owned UI cutover.
 
 Уточняет:
 
@@ -19,7 +19,8 @@ client и integration-owned UI cutover.
 - [ADR-0224: Storage Control](ADR-0224-storage-control-plane-owner-scoped-postgresql-and-migration-lifecycle.md);
 - [ADR-0265: provider operational client transport](ADR-0265-provider-operational-client-transport-admission.md);
 - [ADR-0271: Zulip Kernel admission](ADR-0271-zulip-kernel-admission-and-event-only-communications-handoff.md);
-- [ADR-0282: full Communications reconstruction](ADR-0282-full-communications-and-settings-capability-reconstruction.md).
+- [ADR-0282: full Communications reconstruction](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
+- [ADR-0292: managed settings apply and credential binding](ADR-0292-managed-integration-settings-apply-and-credential-binding.md).
 
 ## Контекст
 
@@ -249,7 +250,8 @@ provider-neutral evidence и ссылку на Zulip operational experience, н�
 Gate требует:
 
 1. typed settings schema без credential plaintext;
-2. independent Vault secret revision and purpose;
+2. independent Vault secret revision and integration-owned binding, never a
+   Settings value/reference;
 3. supervised desired/effective settings application;
 4. sanitized provider-owned account status;
 5. fresh process-bound credential lease after replacement;
@@ -316,12 +318,20 @@ Gate требует:
   degraded state и не завершает event/outbox runtime.
 - Invalid cross-account client payload возвращает bounded protocol error и не
   останавливает managed process.
+- Zulip Storage bundle revision 3 добавляет только owner-local CAS credential
+  binding. Settings schema major 2 остаётся non-secret, а managed runtime
+  поддерживает explicit configuration-only, active и retired states.
+- Generic Kernel Settings apply и Zulip account lifecycle реализованы по
+  ADR-0292. Live contour доказал Vault revision rotation, managed successor,
+  stale predecessor fence, configuration-only retirement и fail-closed
+  `blocked_config` для отсутствующей credential revision.
 
 Live managed conformance:
 
 ```bash
 HERMES_STORAGE_MANAGED_TEST_FILTER=managed_zulip_runtime_delivers_live_command_and_event_only_communications_handoff node scripts/test-authenticated-storage.mjs 1.97.0
 HERMES_STORAGE_MANAGED_TEST_FILTER=managed_zulip_runtime_uses_kernel_leases_and_route_specific_admission node scripts/test-authenticated-storage.mjs 1.97.0
+HERMES_STORAGE_MANAGED_TEST_FILTER=managed_zulip_account_rotation_and_retirement_use_settings_successors node scripts/test-authenticated-storage.mjs 1.97.0
 ```
 
 Первый contour доказал real TLS provider fixture, две bounded history pages,
@@ -331,10 +341,11 @@ NATS outage replay и сохранение history/query/replay state после
 successor generation. Второй contour повторно доказал exact query grant,
 ungranted command, stale generation, owner-authorized revoke и Storage fence.
 
-`zulip_account_lifecycle_v1` остаётся planned до отдельного live evidence
-desired/effective settings revision, fresh credential revision и supervised
-managed replacement. Existing settings schema и Vault lease сами по себе этот
-gate не закрывают.
+Третий contour закрыл `zulip_account_lifecycle_v1`: desired/effective Settings
+revision применяется только Kernel-managed successor, fresh credential
+revision разрешается через Vault только в новом generation, retire остаётся
+configuration-only, а отсутствующая revision оставляет desired intent в
+`blocked_config` без rollback.
 
 ## Provider protocol evidence
 

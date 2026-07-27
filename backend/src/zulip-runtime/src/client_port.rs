@@ -8,7 +8,8 @@ use hermes_zulip_api::client_contract::{
     ZulipClientContractV1,
 };
 use hermes_zulip_api::{
-    ZulipClientRequestV1, ZulipClientResponseV1, client_wire, operational_wire, realtime_wire,
+    ZulipClientRequestV1, ZulipClientResponseV1, account_wire, client_wire, operational_wire,
+    realtime_wire,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -46,6 +47,7 @@ fn validate_contract(
 
 fn request_contract(request: &ZulipClientRequestV1) -> ZulipClientContractV1 {
     match request {
+        ZulipClientRequestV1::AccountLifecycle(_) => ZulipClientContractV1::AccountLifecycle,
         ZulipClientRequestV1::Command(_) => ZulipClientContractV1::Command,
         ZulipClientRequestV1::OperationStatus { .. } => ZulipClientContractV1::Query,
         ZulipClientRequestV1::OperationalQuery(_) => ZulipClientContractV1::OperationalQuery,
@@ -57,6 +59,10 @@ fn encode_request_payload(
     request: &ZulipClientRequestV1,
 ) -> Result<Vec<u8>, ZulipClientPortErrorV1> {
     Ok(match request {
+        ZulipClientRequestV1::AccountLifecycle(command) => {
+            account_wire::encode_account_lifecycle_command(command)
+                .map_err(|_| ZulipClientPortErrorV1::Protocol)?
+        }
         ZulipClientRequestV1::Command(command) => client_wire::encode_command_request(command),
         ZulipClientRequestV1::OperationStatus { operation_id } => {
             client_wire::encode_operation_status_query(operation_id)
@@ -77,6 +83,11 @@ fn decode_request_payload(
     bytes: &[u8],
 ) -> Result<ZulipClientRequestV1, ZulipClientPortErrorV1> {
     match contract {
+        ZulipClientContractV1::AccountLifecycle => {
+            account_wire::decode_account_lifecycle_command(bytes)
+                .map(ZulipClientRequestV1::AccountLifecycle)
+                .map_err(|_| ZulipClientPortErrorV1::Protocol)
+        }
         ZulipClientContractV1::Command => client_wire::decode_command_request(bytes)
             .map(ZulipClientRequestV1::Command)
             .map_err(|_| ZulipClientPortErrorV1::Protocol),
@@ -148,6 +159,11 @@ pub async fn handle_client_request(
     }
     let (request_id, contract, request) = decode_module_request(bytes)?;
     let response = match request {
+        ZulipClientRequestV1::AccountLifecycle(command) => runtime
+            .apply_account_lifecycle(&command, requested_at_unix_seconds)
+            .await
+            .map(ZulipClientResponseV1::AccountLifecycle)
+            .map_err(|_| ZulipClientPortErrorV1::Runtime)?,
         ZulipClientRequestV1::Command(command) => runtime
             .submit_command(&command, requested_at_unix_seconds)
             .await
@@ -181,6 +197,11 @@ fn encode_module_response(
         return Err(ZulipClientPortErrorV1::Protocol);
     }
     let response_payload = match (contract, response) {
+        (
+            ZulipClientContractV1::AccountLifecycle,
+            ZulipClientResponseV1::AccountLifecycle(receipt),
+        ) => account_wire::encode_account_lifecycle_receipt(receipt)
+            .map_err(|_| ZulipClientPortErrorV1::Protocol)?,
         (ZulipClientContractV1::Command, ZulipClientResponseV1::CommandReceipt(receipt)) => {
             client_wire::encode_command_response(receipt)
         }
@@ -220,6 +241,10 @@ pub fn decode_module_response(
         return Err(ZulipClientPortErrorV1::Protocol);
     }
     let response = match contract {
+        ZulipClientContractV1::AccountLifecycle => {
+            account_wire::decode_account_lifecycle_receipt(&envelope.response_payload)
+                .map(ZulipClientResponseV1::AccountLifecycle)
+        }
         ZulipClientContractV1::Command => {
             client_wire::decode_command_response(&envelope.response_payload)
                 .map(ZulipClientResponseV1::CommandReceipt)
@@ -245,8 +270,9 @@ pub fn decode_module_response(
 mod tests {
     use hermes_runtime_protocol::v1::ModuleClientRequestV1;
     use hermes_zulip_api::{
-        ZulipCommandReceiptV1, ZulipCommandV1, client_contract::ZulipClientContractV1,
-        operational::ZulipOperationalQueryV1, realtime::ZulipOperationalReplayRequestV1,
+        ZulipCommandReceiptV1, ZulipCommandV1, account::ZulipAccountLifecycleCommandV1,
+        client_contract::ZulipClientContractV1, operational::ZulipOperationalQueryV1,
+        realtime::ZulipOperationalReplayRequestV1,
     };
     use prost::Message;
 
@@ -259,6 +285,14 @@ mod tests {
             stream: "stream".into(),
             topic: "topic".into(),
             content: "content".into(),
+        })
+    }
+
+    fn account_request() -> ZulipClientRequestV1 {
+        ZulipClientRequestV1::AccountLifecycle(ZulipAccountLifecycleCommandV1::BindCredential {
+            account_id: "account".to_owned(),
+            expected_binding_revision: 0,
+            credential_revision: 1,
         })
     }
 
@@ -284,6 +318,12 @@ mod tests {
 
     #[test]
     fn each_request_uses_only_its_exact_route_contract() {
+        assert_eq!(
+            decode_module_request(&encode_module_request(4, &account_request()).expect("encode"))
+                .expect("decode")
+                .1,
+            ZulipClientContractV1::AccountLifecycle,
+        );
         for (request, expected) in [
             (command_request(), ZulipClientContractV1::Command),
             (query_request(), ZulipClientContractV1::Query),

@@ -1,5 +1,7 @@
 //! Typed Zulip operational contract. It contains no transport or domain dependency.
 
+pub mod account;
+pub mod account_wire;
 pub mod client_contract;
 pub mod client_wire;
 pub mod operational;
@@ -21,6 +23,10 @@ pub mod realtime_wire_generated {
         "/hermes.zulip.operational.realtime.v1.rs"
     ));
 }
+#[allow(clippy::large_enum_variant)]
+pub mod account_wire_generated {
+    include!(concat!(env!("OUT_DIR"), "/hermes.zulip.account.v1.rs"));
+}
 
 pub const PACKAGE: &str = "hermes-zulip-api";
 
@@ -29,27 +35,6 @@ pub struct ZulipAccountV1 {
     pub account_id: String,
     pub realm_url: String,
     pub bot_email: String,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ZulipCredentialPurposeV1 {
-    ApiKey,
-}
-
-impl ZulipCredentialPurposeV1 {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ApiKey => "api_key",
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ZulipCredentialBindingV1 {
-    pub purpose: ZulipCredentialPurposeV1,
-    pub secret_ref: String,
-    pub revision: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -203,6 +188,7 @@ pub struct ZulipCommandReceiptV1 {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ZulipClientRequestV1 {
+    AccountLifecycle(account::ZulipAccountLifecycleCommandV1),
     Command(ZulipCommandV1),
     OperationStatus { operation_id: String },
     OperationalQuery(operational::ZulipOperationalQueryV1),
@@ -211,6 +197,7 @@ pub enum ZulipClientRequestV1 {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ZulipClientResponseV1 {
+    AccountLifecycle(account::ZulipAccountLifecycleReceiptV1),
     CommandReceipt(ZulipCommandReceiptV1),
     OperationStatus(Option<ZulipCommandOperationStatusV1>),
     OperationalQuery(operational::ZulipOperationalQueryResponseV1),

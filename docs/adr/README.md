@@ -99,6 +99,8 @@ policy через ссылки из новых документов.
 - [ADR-0288: Managed successor quiesce and Storage fence order](ADR-0288-managed-successor-quiesce-and-storage-fence-order.md)
 - [ADR-0289: Telegram folder reassignment convergence boundary](ADR-0289-telegram-folder-reassignment-convergence-boundary.md)
 - [ADR-0290: Telegram account runtime reconfiguration boundary](ADR-0290-telegram-account-runtime-reconfiguration-boundary.md)
+- [ADR-0291: Zulip account, history, operational query and replay boundary](ADR-0291-zulip-account-history-query-and-replay-boundary.md)
+- [ADR-0292: Managed integration settings apply and credential binding](ADR-0292-managed-integration-settings-apply-and-credential-binding.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -337,3 +339,8 @@ provider history convergence, owner-local operational query и realtime replay:
 Kernel/Core допускают только exact opaque routes и leases, Zulip integration
 владеет projection/storage/runtime, а Communications получает neutral evidence
 только через durable events.
+ADR-0292 устраняет обход Settings Registry при managed integration launch:
+Kernel выполняет provider-neutral desired/effective replacement, а credential
+revision хранится только как integration-owned Vault binding. Settings, Vault,
+integration persistence, runtime и release assembly остаются отдельными
+функциональными units.

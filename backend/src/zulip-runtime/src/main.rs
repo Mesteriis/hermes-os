@@ -73,7 +73,6 @@ where
         runtime_generation: configuration.runtime_generation,
         grant_epoch: configuration.grant_epoch,
         vault_runtime_generation: storage.vault_runtime_generation,
-        api_key_revision: provider_settings.api_key_revision,
     };
     let executor = tokio::runtime::Runtime::new()
         .map_err(|_| "Zulip runtime executor is unavailable".to_owned())?;

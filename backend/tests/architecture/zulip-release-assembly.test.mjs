@@ -67,7 +67,7 @@ test('Zulip storage and release assembly remain separate owner-local units', asy
     assemblySource,
     /zulip_module_descriptor_v1\(build_id\)/,
   );
-  assert.match(assemblySource, /zulip_settings_schema_v1\(\)/);
+  assert.match(assemblySource, /zulip_settings_schema_v2\(\)/);
   assert.match(assemblySource, /zulip_storage_bundle_v1\(\)/);
   assert.match(assemblySource, /"module_runtime"\.to_owned\(\)/);
   assert.match(assemblySource, /"storage_bundle"\.to_owned\(\)/);

@@ -6,6 +6,7 @@ use hermes_events_protocol::delivery::OutboxRecordV1;
 use hermes_zulip_api::{
     ZulipAttachmentV1, ZulipEventV1, ZulipHistoryPageV1, ZulipMessageSnapshotV1,
     ZulipReactionOperationV1,
+    account::ZulipCredentialBindingStateV1,
     operational::{
         ZulipAccountStatusV1, ZulipConversationKindV1, ZulipConversationV1, ZulipHistoryStateV1,
         ZulipMessageV1, ZulipOperationalEventKindV1, ZulipOperationalEventV1,
@@ -521,13 +522,23 @@ impl ZulipDurablePersistence {
         account_id: &str,
     ) -> Result<ZulipOperationalQueryResponseV1, ZulipDurablePersistenceError> {
         let row = sqlx::query(
-            "SELECT state.account_id, state.history_state, state.oldest_provider_message_id, \
-             state.last_provider_event_id, state.projection_ready, \
+            "SELECT COALESCE(state.account_id, binding.account_id) AS account_id, \
+             COALESCE(state.history_state, 1::SMALLINT) AS history_state, \
+             state.oldest_provider_message_id, state.last_provider_event_id, \
+             COALESCE(state.projection_ready, FALSE) AS projection_ready, \
+             binding.credential_revision, COALESCE(binding.binding_revision, 0) AS binding_revision, \
+             binding.state AS credential_state, binding.applied_runtime_generation, \
              COALESCE(MAX(events.sequence), 0) AS latest_event_sequence \
              FROM hermes_data.zulip_operational_account_state state \
-             LEFT JOIN hermes_data.zulip_operational_events events ON events.account_id = state.account_id \
-             WHERE state.account_id = $1 GROUP BY state.account_id, state.history_state, \
-             state.oldest_provider_message_id, state.last_provider_event_id, state.projection_ready",
+             FULL OUTER JOIN hermes_data.zulip_account_credential_bindings binding \
+               ON binding.account_id = state.account_id \
+             LEFT JOIN hermes_data.zulip_operational_events events \
+               ON events.account_id = COALESCE(state.account_id, binding.account_id) \
+             WHERE COALESCE(state.account_id, binding.account_id) = $1 \
+             GROUP BY state.account_id, state.history_state, state.oldest_provider_message_id, \
+             state.last_provider_event_id, state.projection_ready, binding.account_id, \
+             binding.credential_revision, binding.binding_revision, binding.state, \
+             binding.applied_runtime_generation",
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
@@ -548,6 +559,14 @@ impl ZulipDurablePersistence {
                 last_provider_event_id: row_optional_i64(&row, "last_provider_event_id")?,
                 latest_event_sequence: u64::try_from(row_i64(&row, "latest_event_sequence")?)
                     .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
+                credential_state: credential_state_from_optional_i16(
+                    row.try_get::<Option<i16>, _>("credential_state")
+                        .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
+                )?,
+                credential_revision: optional_u64(&row, "credential_revision")?,
+                binding_revision: u64::try_from(row_i64(&row, "binding_revision")?)
+                    .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
+                applied_runtime_generation: optional_u64(&row, "applied_runtime_generation")?,
             },
             None => ZulipAccountStatusV1 {
                 account_id: account_id.to_owned(),
@@ -556,6 +575,10 @@ impl ZulipDurablePersistence {
                 oldest_provider_message_id: None,
                 last_provider_event_id: None,
                 latest_event_sequence: 0,
+                credential_state: ZulipCredentialBindingStateV1::Unconfigured,
+                credential_revision: None,
+                binding_revision: 0,
+                applied_runtime_generation: None,
             },
         };
         Ok(ZulipOperationalQueryResponseV1::AccountStatus(status))
@@ -628,6 +651,28 @@ impl ZulipDurablePersistence {
         }
         Ok(values)
     }
+}
+
+fn credential_state_from_optional_i16(
+    state: Option<i16>,
+) -> Result<ZulipCredentialBindingStateV1, ZulipDurablePersistenceError> {
+    match state {
+        None => Ok(ZulipCredentialBindingStateV1::Unconfigured),
+        Some(2) => Ok(ZulipCredentialBindingStateV1::PendingRestart),
+        Some(3) => Ok(ZulipCredentialBindingStateV1::Active),
+        Some(4) => Ok(ZulipCredentialBindingStateV1::Retired),
+        Some(_) => Err(ZulipDurablePersistenceError::InvalidRow),
+    }
+}
+
+fn optional_u64(
+    row: &sqlx::postgres::PgRow,
+    field: &str,
+) -> Result<Option<u64>, ZulipDurablePersistenceError> {
+    row.try_get::<Option<i64>, _>(field)
+        .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?
+        .map(|value| u64::try_from(value).map_err(|_| ZulipDurablePersistenceError::InvalidRow))
+        .transpose()
 }
 
 async fn advance_cursor_in_transaction(

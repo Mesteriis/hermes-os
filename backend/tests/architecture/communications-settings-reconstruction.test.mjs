@@ -483,7 +483,7 @@ test('Zulip completion remains closed behind lifecycle, history, read and realti
     'zulip_operational_realtime_v1',
   ]);
   assert.ok([...zulipSlices.values()].every(({ role }) => role === 'integration'));
-  assert.equal(zulipSlices.get('zulip_account_lifecycle_v1').state, 'planned');
+  assert.equal(zulipSlices.get('zulip_account_lifecycle_v1').state, 'implemented');
   assert.equal(zulipSlices.get('zulip_history_sync_v1').state, 'implemented');
   assert.equal(zulipSlices.get('zulip_operational_read_v1').state, 'implemented');
   assert.equal(zulipSlices.get('zulip_operational_realtime_v1').state, 'implemented');

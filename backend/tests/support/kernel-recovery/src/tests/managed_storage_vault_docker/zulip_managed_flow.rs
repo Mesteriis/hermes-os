@@ -2,10 +2,14 @@
 
 use super::*;
 
-use hermes_kernel_control_store::{ModuleRegistrationState, PlatformStorageBindingStateV1};
+use hermes_kernel_control_store::{
+    ModuleRegistrationState, PlatformStorageBindingStateV1, SettingsApplyState,
+};
 use hermes_zulip_api::{
     ZulipClientRequestV1, ZulipClientResponseV1, ZulipCommandV1,
+    account::{ZulipAccountLifecycleCommandV1, ZulipCredentialBindingStateV1},
     client_contract::ZulipClientContractV1,
+    operational::{ZulipOperationalQueryResponseV1, ZulipOperationalQueryV1},
 };
 use hermes_zulip_runtime::{
     admission::ZULIP_STORAGE_CAPABILITY_ID,
@@ -52,6 +56,321 @@ fn managed_zulip_runtime_uses_kernel_leases_and_route_specific_admission() {
         .expect("join owner control server")
         .expect("owner control server");
     contour.finish();
+}
+
+#[test]
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, Zulip and NATS binaries"]
+fn managed_zulip_account_rotation_and_retirement_use_settings_successors() {
+    let contour = ManagedZulipContour::start(ZulipGrantProfileV1::CommandAndQuery);
+    let predecessor = contour.zulip.clone();
+    assert_zulip_query_is_admitted(&contour.store, &contour.supervisor, &predecessor);
+    assert!(
+        contour.fixture.accepted_connections() > 0,
+        "predecessor Zulip runtime must resolve revision one before Vault rotation",
+    );
+    let _rotated_credential = rotate_zulip_vault(&contour.vault_dir, &contour.seeded_credential);
+    let rotated = bind_zulip_credential(&contour.store, &contour.supervisor, &predecessor, 1, 2);
+    assert_eq!(rotated.binding_revision, 2);
+
+    let (owner_runtime_dir, owner_control) = start_owner_control(
+        &contour.data,
+        &contour.store,
+        &contour.shutdown,
+        &contour.supervisor,
+    );
+    let (client, owner_session) =
+        open_owner_control_client(&owner_runtime_dir, &contour.owner_signer);
+    let revision_two =
+        zulip_settings_snapshot(&predecessor.registration_id, 2, contour.fixture.realm_url())
+            .encode_to_vec();
+    client
+        .update_operator_settings(
+            &owner_session,
+            &predecessor.registration_id,
+            1,
+            revision_two,
+        )
+        .expect("commit Zulip Settings revision two");
+    let applied = client
+        .apply_managed_integration_settings(
+            &owner_session,
+            &predecessor.registration_id,
+            ZULIP_STORAGE_CAPABILITY_ID,
+            ZULIP_ACCOUNT_ID,
+            2,
+            false,
+        )
+        .expect("apply Zulip credential-rotation successor");
+    assert_eq!(
+        applied.runtime_generation,
+        predecessor.runtime_generation + 1
+    );
+    assert_eq!(
+        contour
+            .store
+            .settings_schema_binding(&predecessor.registration_id)
+            .expect("read applied Zulip Settings")
+            .expect("applied Zulip Settings")
+            .apply_state(),
+        SettingsApplyState::Current,
+    );
+    let successor = current_zulip_runtime(&contour, &predecessor);
+    let status = query_zulip_account_status(&contour, &successor);
+    assert_eq!(
+        status.credential_state,
+        ZulipCredentialBindingStateV1::Active
+    );
+    assert_eq!(status.credential_revision, Some(2));
+    assert_eq!(status.binding_revision, 2);
+    assert_eq!(
+        status.applied_runtime_generation,
+        Some(applied.runtime_generation)
+    );
+    wait_for_credential_v2_request(&contour);
+    assert_stale_zulip_query_generation_is_rejected(
+        contour.store.as_ref(),
+        &contour.supervisor,
+        &predecessor,
+    );
+
+    let retired = apply_zulip_account_lifecycle(
+        &contour,
+        &successor,
+        ZulipAccountLifecycleCommandV1::RetireAccount {
+            account_id: ZULIP_ACCOUNT_ID.to_owned(),
+            expected_binding_revision: 2,
+        },
+    );
+    assert_eq!(retired.binding_revision, 3);
+    assert_eq!(retired.state, ZulipCredentialBindingStateV1::Retired);
+    wait_for_provider_quiescence(&contour);
+    let provider_connections = contour.fixture.accepted_connections();
+    let revision_three =
+        zulip_settings_snapshot(&predecessor.registration_id, 3, contour.fixture.realm_url())
+            .encode_to_vec();
+    client
+        .update_operator_settings(
+            &owner_session,
+            &predecessor.registration_id,
+            2,
+            revision_three,
+        )
+        .expect("commit Zulip Settings revision three");
+    let retired_apply = client
+        .apply_managed_integration_settings(
+            &owner_session,
+            &predecessor.registration_id,
+            ZULIP_STORAGE_CAPABILITY_ID,
+            ZULIP_ACCOUNT_ID,
+            3,
+            false,
+        )
+        .expect("apply configuration-only retired Zulip successor");
+    let retired_runtime = current_zulip_runtime(&contour, &successor);
+    assert_eq!(
+        query_zulip_account_status(&contour, &retired_runtime).credential_state,
+        ZulipCredentialBindingStateV1::Retired,
+    );
+    assert_eq!(
+        retired_apply.runtime_generation,
+        successor.runtime_generation + 1
+    );
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        contour.fixture.accepted_connections(),
+        provider_connections,
+        "retired Zulip successor must remain configuration-only",
+    );
+    let missing_credential =
+        bind_zulip_credential(&contour.store, &contour.supervisor, &retired_runtime, 3, 3);
+    assert_eq!(missing_credential.binding_revision, 4);
+    let revision_four =
+        zulip_settings_snapshot(&predecessor.registration_id, 4, contour.fixture.realm_url())
+            .encode_to_vec();
+    client
+        .update_operator_settings(
+            &owner_session,
+            &predecessor.registration_id,
+            3,
+            revision_four,
+        )
+        .expect("commit Zulip Settings revision four");
+    client
+        .apply_managed_integration_settings(
+            &owner_session,
+            &predecessor.registration_id,
+            ZULIP_STORAGE_CAPABILITY_ID,
+            ZULIP_ACCOUNT_ID,
+            4,
+            false,
+        )
+        .expect_err("missing Zulip credential revision must block replacement");
+    let blocked = contour
+        .store
+        .settings_schema_binding(&predecessor.registration_id)
+        .expect("read blocked Zulip Settings")
+        .expect("blocked Zulip Settings");
+    assert_eq!(blocked.desired_revision(), 4);
+    assert_eq!(blocked.effective_revision(), 3);
+    assert_eq!(blocked.apply_state(), SettingsApplyState::BlockedConfig);
+    assert!(
+        !contour
+            .supervisor
+            .is_active(&predecessor.registration_id)
+            .expect("read failed Zulip successor state"),
+        "failed Zulip successor must not reactivate its predecessor",
+    );
+
+    contour.shutdown_processes();
+    owner_control
+        .join()
+        .expect("join owner control server")
+        .expect("owner control server");
+    contour.finish();
+}
+
+fn current_zulip_runtime(
+    contour: &ManagedZulipContour,
+    predecessor: &StartedZulipRuntime,
+) -> StartedZulipRuntime {
+    let binding = contour
+        .store
+        .platform_storage_binding(&predecessor.registration_id, ZULIP_STORAGE_CAPABILITY_ID)
+        .expect("read current Zulip Storage binding")
+        .expect("current Zulip Storage binding");
+    let registration = contour
+        .store
+        .module_registration(&predecessor.registration_id)
+        .expect("read current Zulip registration")
+        .expect("current Zulip registration");
+    StartedZulipRuntime {
+        registration_id: predecessor.registration_id.clone(),
+        runtime_instance_id: binding.runtime_instance_id().to_owned(),
+        runtime_generation: binding.runtime_generation(),
+        grant_epoch: registration.grant_epoch(),
+        capability_ids: predecessor.capability_ids.clone(),
+    }
+}
+
+fn query_zulip_account_status(
+    contour: &ManagedZulipContour,
+    runtime: &StartedZulipRuntime,
+) -> hermes_zulip_api::operational::ZulipAccountStatusV1 {
+    let request =
+        ZulipClientRequestV1::OperationalQuery(ZulipOperationalQueryV1::GetAccountStatus {
+            account_id: ZULIP_ACCOUNT_ID.to_owned(),
+        });
+    let encoded = encode_module_request(42, &request).expect("encode Zulip account status");
+    let response = route_zulip_until_available(
+        contour,
+        runtime,
+        ZulipClientContractV1::OperationalQuery,
+        &encoded,
+    );
+    let (_, response) = decode_module_response(ZulipClientContractV1::OperationalQuery, &response)
+        .expect("decode Zulip account status");
+    let ZulipClientResponseV1::OperationalQuery(ZulipOperationalQueryResponseV1::AccountStatus(
+        status,
+    )) = response
+    else {
+        panic!("Zulip operational query returned the wrong response")
+    };
+    status
+}
+
+fn apply_zulip_account_lifecycle(
+    contour: &ManagedZulipContour,
+    runtime: &StartedZulipRuntime,
+    command: ZulipAccountLifecycleCommandV1,
+) -> hermes_zulip_api::account::ZulipAccountLifecycleReceiptV1 {
+    let encoded = encode_module_request(43, &ZulipClientRequestV1::AccountLifecycle(command))
+        .expect("encode Zulip account lifecycle");
+    let response = route_zulip_until_available(
+        contour,
+        runtime,
+        ZulipClientContractV1::AccountLifecycle,
+        &encoded,
+    );
+    let (_, response) = decode_module_response(ZulipClientContractV1::AccountLifecycle, &response)
+        .expect("decode Zulip account lifecycle");
+    let ZulipClientResponseV1::AccountLifecycle(receipt) = response else {
+        panic!("Zulip account lifecycle returned the wrong response")
+    };
+    receipt
+}
+
+fn route_zulip_until_available(
+    contour: &ManagedZulipContour,
+    runtime: &StartedZulipRuntime,
+    contract: ZulipClientContractV1,
+    encoded: &[u8],
+) -> Vec<u8> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        let route = ManagedCapabilityRouteRequest::new(
+            &runtime.registration_id,
+            &runtime.runtime_instance_id,
+            runtime.runtime_generation,
+            runtime.grant_epoch,
+            contract.capability_id(),
+            encoded,
+        );
+        let response = match route_managed_client_request(
+            contour.store.as_ref(),
+            &contour.supervisor.relay_port(),
+            &route,
+        ) {
+            Ok(response) => response,
+            Err(error) => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Zulip client route remained unavailable: {error}",
+                );
+                std::thread::sleep(Duration::from_millis(25));
+                continue;
+            }
+        };
+        let envelope =
+            hermes_runtime_protocol::v1::ModuleClientResponseV1::decode(response.as_slice())
+                .expect("decode Zulip client response envelope");
+        if envelope.error_code.is_empty() {
+            return response;
+        }
+        assert!(
+            envelope.error_code == "RUNTIME_UNAVAILABLE" && std::time::Instant::now() < deadline,
+            "Zulip client request failed: {}",
+            envelope.error_code,
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn wait_for_credential_v2_request(contour: &ManagedZulipContour) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while contour.fixture.credential_v2_requests() == 0 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "rotated Zulip credential did not reach the provider fixture",
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn wait_for_provider_quiescence(contour: &ManagedZulipContour) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let mut prior = contour.fixture.accepted_connections();
+    loop {
+        std::thread::sleep(Duration::from_millis(100));
+        let current = contour.fixture.accepted_connections();
+        if current == prior {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "retired Zulip provider loop did not quiesce",
+        );
+        prior = current;
+    }
 }
 
 fn assert_zulip_query_is_admitted(

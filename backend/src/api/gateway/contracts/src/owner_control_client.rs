@@ -9,13 +9,15 @@ use prost::Message;
 
 use crate::owner_control_proof::owner_control_proof_message_v1;
 use crate::v1::{
+    ApplyManagedIntegrationSettingsRequestV1, ApplyManagedIntegrationSettingsResponseV1,
     BeginBrowserPairingRequestV1, BeginOwnerControlSessionRequestV1,
     BeginOwnerControlSessionResponseV1, CompleteOwnerControlSessionRequestV1,
     OwnerControlRequestV1, OwnerControlResponseV1, TransitionModuleRegistrationRequestV1,
-    TransitionModuleRegistrationResponseV1, owner_control_request_v1, owner_control_response_v1,
+    TransitionModuleRegistrationResponseV1, UpdateOperatorSettingsRequestV1,
+    UpdateOperatorSettingsResponseV1, owner_control_request_v1, owner_control_response_v1,
 };
 
-const IPC_TIMEOUT: Duration = Duration::from_secs(5);
+const IPC_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_FRAME_BYTES: usize = 64 * 1024;
 
 pub trait OwnerControlProofSignerV1 {
@@ -113,6 +115,69 @@ impl OwnerControlClientV1 {
                 Ok(value)
             }
             _ => Err("module registration transition is unavailable".to_owned()),
+        }
+    }
+
+    pub fn update_operator_settings(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        expected_revision: u64,
+        snapshot_bytes: Vec<u8>,
+    ) -> Result<UpdateOperatorSettingsResponseV1, String> {
+        let response =
+            self.request(owner_control_request_v1::Operation::UpdateOperatorSettings(
+                UpdateOperatorSettingsRequestV1 {
+                    registration_id: registration_id.to_owned(),
+                    expected_revision,
+                    snapshot_bytes,
+                    owner_session_id: owner_session_id.to_owned(),
+                },
+            ))?;
+        match response.result {
+            Some(owner_control_response_v1::Result::UpdateOperatorSettings(value))
+                if value.registration_id == registration_id
+                    && value.desired_revision == expected_revision.saturating_add(1)
+                    && value.apply_state == "pending_validation" =>
+            {
+                Ok(value)
+            }
+            _ => Err("operator settings update is unavailable".to_owned()),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn apply_managed_integration_settings(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        storage_capability_id: &str,
+        configuration_instance_id: &str,
+        expected_desired_revision: u64,
+        request_host_bridge: bool,
+    ) -> Result<ApplyManagedIntegrationSettingsResponseV1, String> {
+        let response = self.request(
+            owner_control_request_v1::Operation::ApplyManagedIntegrationSettings(
+                ApplyManagedIntegrationSettingsRequestV1 {
+                    registration_id: registration_id.to_owned(),
+                    storage_capability_id: storage_capability_id.to_owned(),
+                    configuration_instance_id: configuration_instance_id.to_owned(),
+                    expected_desired_revision,
+                    owner_session_id: owner_session_id.to_owned(),
+                    request_host_bridge,
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::ApplyManagedIntegrationSettings(value))
+                if value.registration_id == registration_id
+                    && value.effective_revision == expected_desired_revision
+                    && value.runtime_generation > 0
+                    && value.apply_state == "current" =>
+            {
+                Ok(value)
+            }
+            _ => Err("managed integration settings apply is unavailable".to_owned()),
         }
     }
 

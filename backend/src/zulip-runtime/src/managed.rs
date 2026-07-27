@@ -4,8 +4,8 @@
 //! not reach Communications persistence or construct business state.
 
 use std::os::unix::net::UnixStream;
-use std::sync::Mutex;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_blob_client::{
     BlobDataClient, ManagedBlobCustodyTargetV1, ManagedBlobSessionRequestV1,
@@ -50,6 +50,10 @@ use hermes_storage_vault::{
 use hermes_vault_protocol::SecretClassV1;
 use hermes_zulip_api::{
     ZulipAccountV1, ZulipCommandOperationStatusV1, ZulipCommandV1, ZulipEventQueueV1,
+    account::{
+        ZulipAccountLifecycleCommandV1, ZulipAccountLifecycleReceiptV1,
+        ZulipCredentialBindingStateV1,
+    },
     command_blob_intent,
     operational::{ZulipOperationalQueryResponseV1, ZulipOperationalQueryV1},
     realtime::{ZulipOperationalReplayRequestV1, ZulipOperationalReplayResponseV1},
@@ -73,7 +77,9 @@ const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct ZulipAdmittedRuntimeV1 {
     pub control_channel: ManagedControlChannelV2<UnixStream>,
     pub durable: ZulipDurablePersistence,
-    http: ZulipHttpConfigV1,
+    account: ZulipAccountV1,
+    configuration_instance_id: String,
+    http: Mutex<Option<Arc<ZulipHttpConfigV1>>>,
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
     identity: ZulipRuntimeIdentityV1,
@@ -147,35 +153,6 @@ pub async fn open_admitted_runtime(
         return Err(ZulipBootstrapErrorV1::Admission);
     }
 
-    let provider_context = provider_credential_context(admission, &storage_configuration)?;
-    let api_key_revision =
-        crate::api_key_revision(admission).map_err(|_| ZulipBootstrapErrorV1::Admission)?;
-    let purpose = credential_lease_purpose(
-        &account.account_id,
-        &admission.configuration_instance_id,
-        api_key_revision,
-    )
-    .map_err(|_| ZulipBootstrapErrorV1::Admission)?;
-    let api_key = {
-        let mut provider_credentials = ManagedProviderCredentialClientV2::new(&mut control_channel);
-        let mut dispatcher = RejectManagedControlRequestsV2;
-        provider_credentials
-            .resolve(
-                &mut dispatcher,
-                &provider_context,
-                ManagedProviderCredentialRequestV1 {
-                    configuration_instance_id: &admission.configuration_instance_id,
-                    purpose_id: purpose.purpose_id(),
-                    credential_revision: api_key_revision,
-                    ttl_seconds: ZULIP_CREDENTIAL_LEASE_TTL_SECONDS,
-                    secret_class: SecretClassV1::ProviderCredential,
-                },
-            )
-            .map_err(map_provider_credential_error)?
-    };
-    let http = http_config_from_resolved_api_key(account, api_key)
-        .map_err(|_| ZulipBootstrapErrorV1::Credential)?;
-
     let binding = storage_binding(&storage_configuration, admission)?;
     let storage_context = StorageVaultRouteContextV1::new(
         storage_configuration.vault_instance_id.clone(),
@@ -210,6 +187,63 @@ pub async fn open_admitted_runtime(
     )
     .await
     .map_err(|_| ZulipBootstrapErrorV1::PersistenceConnect)?;
+
+    let http = match durable
+        .credential_binding(&account.account_id)
+        .await
+        .map_err(|_| ZulipBootstrapErrorV1::PersistenceConnect)?
+    {
+        Some(binding)
+            if matches!(
+                binding.state,
+                ZulipCredentialBindingStateV1::PendingRestart
+                    | ZulipCredentialBindingStateV1::Active
+            ) =>
+        {
+            if binding.configuration_instance_id != admission.configuration_instance_id {
+                return Err(ZulipBootstrapErrorV1::Admission);
+            }
+            let provider_context = provider_credential_context(admission, &storage_configuration)?;
+            let purpose =
+                credential_lease_purpose(&account.account_id, &admission.configuration_instance_id)
+                    .map_err(|_| ZulipBootstrapErrorV1::Admission)?;
+            let api_key = {
+                let mut provider_credentials =
+                    ManagedProviderCredentialClientV2::new(&mut control_channel);
+                let mut dispatcher = RejectManagedControlRequestsV2;
+                provider_credentials
+                    .resolve(
+                        &mut dispatcher,
+                        &provider_context,
+                        ManagedProviderCredentialRequestV1 {
+                            configuration_instance_id: &admission.configuration_instance_id,
+                            purpose_id: purpose.purpose_id(),
+                            credential_revision: binding.credential_revision,
+                            ttl_seconds: ZULIP_CREDENTIAL_LEASE_TTL_SECONDS,
+                            secret_class: SecretClassV1::ProviderCredential,
+                        },
+                    )
+                    .map_err(map_provider_credential_error)?
+            };
+            let http = http_config_from_resolved_api_key(account.clone(), api_key)
+                .map_err(|_| ZulipBootstrapErrorV1::Credential)?;
+            durable
+                .mark_credential_binding_active(
+                    &account.account_id,
+                    &admission.configuration_instance_id,
+                    binding.binding_revision,
+                    binding.credential_revision,
+                    admission.runtime_generation,
+                    current_unix_seconds()?,
+                )
+                .await
+                .map_err(|_| ZulipBootstrapErrorV1::PersistenceConnect)?;
+            Some(Arc::new(http))
+        }
+        Some(binding) if binding.state == ZulipCredentialBindingStateV1::Retired => None,
+        Some(_) => return Err(ZulipBootstrapErrorV1::Admission),
+        None => None,
+    };
 
     let event_access = request_managed_runtime_event_access_v2(
         &mut control_channel,
@@ -258,7 +292,9 @@ pub async fn open_admitted_runtime(
     Ok(ZulipAdmittedRuntimeV1 {
         control_channel,
         durable,
-        http,
+        account,
+        configuration_instance_id: admission.configuration_instance_id.clone(),
+        http: Mutex::new(http),
         event_connection,
         event_publish_permit,
         identity: ZulipRuntimeIdentityV1 {
@@ -292,6 +328,15 @@ fn provider_credential_context(
         runtime_generation: admission.runtime_generation,
         grant_epoch: admission.grant_epoch,
     })
+}
+
+fn current_unix_seconds() -> Result<i64, ZulipBootstrapErrorV1> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_secs()).ok())
+        .filter(|seconds| *seconds > 0)
+        .ok_or(ZulipBootstrapErrorV1::Admission)
 }
 
 fn map_provider_credential_error(error: ManagedProviderCredentialErrorV1) -> ZulipBootstrapErrorV1 {
@@ -371,8 +416,11 @@ impl ZulipAdmittedRuntimeV1 {
 
     pub async fn acquire_event_queue(
         &self,
-    ) -> Result<ZulipEventQueueV1, super::ZulipRuntimeErrorV1> {
-        acquire_event_queue(&self.durable, &self.http).await
+    ) -> Result<Option<ZulipEventQueueV1>, super::ZulipRuntimeErrorV1> {
+        let Some(http) = self.provider_http()? else {
+            return Ok(None);
+        };
+        acquire_event_queue(&self.durable, &http).await.map(Some)
     }
 
     pub async fn poll_once(
@@ -381,14 +429,16 @@ impl ZulipAdmittedRuntimeV1 {
         recorded_at_unix_seconds: i64,
         recorded_at_nanos: i32,
     ) -> Result<usize, super::ZulipRuntimeErrorV1> {
+        let http = self
+            .provider_http()?
+            .ok_or(super::ZulipRuntimeErrorV1::Credential)?;
         let durable = &self.durable;
         let identity = &self.identity;
-        let http = &self.http;
         let control_channel = &mut self.control_channel;
         poll_once(
             durable,
             identity,
-            http,
+            &http,
             queue,
             recorded_at_unix_seconds,
             recorded_at_nanos,
@@ -402,7 +452,31 @@ impl ZulipAdmittedRuntimeV1 {
         command: &ZulipCommandV1,
         requested_at_unix_seconds: i64,
     ) -> Result<hermes_zulip_api::ZulipCommandReceiptV1, super::ZulipRuntimeErrorV1> {
+        if self.provider_http()?.is_none() {
+            return Err(super::ZulipRuntimeErrorV1::Credential);
+        }
         super::submit_command(&self.durable, command, requested_at_unix_seconds).await
+    }
+
+    pub async fn apply_account_lifecycle(
+        &self,
+        command: &ZulipAccountLifecycleCommandV1,
+        requested_at_unix_seconds: i64,
+    ) -> Result<ZulipAccountLifecycleReceiptV1, super::ZulipRuntimeErrorV1> {
+        let receipt = self
+            .durable
+            .apply_account_lifecycle(
+                command,
+                &self.configuration_instance_id,
+                requested_at_unix_seconds,
+            )
+            .await
+            .map_err(super::ZulipRuntimeErrorV1::Persistence)?;
+        self.http
+            .lock()
+            .map_err(|_| super::ZulipRuntimeErrorV1::Credential)?
+            .take();
+        Ok(receipt)
     }
 
     pub async fn execute_next_command(
@@ -410,9 +484,12 @@ impl ZulipAdmittedRuntimeV1 {
         dispatched_at_unix_seconds: i64,
         completed_at_unix_seconds: i64,
     ) -> Result<bool, super::ZulipRuntimeErrorV1> {
+        let Some(http) = self.provider_http()? else {
+            return Ok(false);
+        };
         super::execute_next_command_with_blob(
             &self.durable,
-            &self.http,
+            &http,
             Some(&self.blob_materializer),
             Some(&self.blob_write_materializer),
             |command, operation| {
@@ -441,21 +518,24 @@ impl ZulipAdmittedRuntimeV1 {
         &self,
         query: &ZulipOperationalQueryV1,
     ) -> Result<ZulipOperationalQueryResponseV1, super::ZulipRuntimeErrorV1> {
-        execute_operational_query(&self.durable, &self.http.account.account_id, query).await
+        execute_operational_query(&self.durable, &self.account.account_id, query).await
     }
 
     pub async fn operational_replay(
         &self,
         request: &ZulipOperationalReplayRequestV1,
     ) -> Result<ZulipOperationalReplayResponseV1, super::ZulipRuntimeErrorV1> {
-        replay_operational_events(&self.durable, &self.http.account.account_id, request).await
+        replay_operational_events(&self.durable, &self.account.account_id, request).await
     }
 
     pub async fn sync_history_page(
         &self,
         now_unix_seconds: i64,
     ) -> Result<bool, super::ZulipRuntimeErrorV1> {
-        sync_history_page(&self.durable, &self.http, now_unix_seconds).await
+        let Some(http) = self.provider_http()? else {
+            return Ok(false);
+        };
+        sync_history_page(&self.durable, &http, now_unix_seconds).await
     }
 
     pub async fn relay_communications_outbox(
@@ -476,29 +556,43 @@ impl ZulipAdmittedRuntimeV1 {
     /// the three provider-local runtime phases.
     pub async fn run_tick(
         &mut self,
-        queue: &mut ZulipEventQueueV1,
+        queue: &mut Option<ZulipEventQueueV1>,
         now_unix_seconds: i64,
         recorded_at_nanos: i32,
     ) -> Result<ZulipRuntimeTickV1, ZulipRuntimeTickErrorV1> {
-        let dispatched_command = self
-            .execute_next_command(now_unix_seconds, now_unix_seconds)
-            .await
-            .map_err(ZulipRuntimeTickErrorV1::Command)?;
-        let accepted_observations = self
-            .poll_once(queue, now_unix_seconds, recorded_at_nanos)
-            .await
-            .map_err(ZulipRuntimeTickErrorV1::Poll)?;
-        let synced_history_page = match self.sync_history_page(now_unix_seconds).await {
-            Ok(synced) => synced,
-            Err(ZulipRuntimeErrorV1::Http(_)) => {
-                self.durable
-                    .mark_history_degraded(&self.http.account.account_id, now_unix_seconds)
-                    .await
-                    .map_err(ZulipRuntimeErrorV1::Persistence)
-                    .map_err(ZulipRuntimeTickErrorV1::History)?;
-                false
+        let provider_available = self
+            .provider_http()
+            .map_err(ZulipRuntimeTickErrorV1::Command)?
+            .is_some();
+        let dispatched_command = if provider_available {
+            self.execute_next_command(now_unix_seconds, now_unix_seconds)
+                .await
+                .map_err(ZulipRuntimeTickErrorV1::Command)?
+        } else {
+            false
+        };
+        let accepted_observations = match (provider_available, queue.as_mut()) {
+            (true, Some(queue)) => self
+                .poll_once(queue, now_unix_seconds, recorded_at_nanos)
+                .await
+                .map_err(ZulipRuntimeTickErrorV1::Poll)?,
+            _ => 0,
+        };
+        let synced_history_page = if provider_available {
+            match self.sync_history_page(now_unix_seconds).await {
+                Ok(synced) => synced,
+                Err(ZulipRuntimeErrorV1::Http(_)) => {
+                    self.durable
+                        .mark_history_degraded(&self.account.account_id, now_unix_seconds)
+                        .await
+                        .map_err(ZulipRuntimeErrorV1::Persistence)
+                        .map_err(ZulipRuntimeTickErrorV1::History)?;
+                    false
+                }
+                Err(error) => return Err(ZulipRuntimeTickErrorV1::History(error)),
             }
-            Err(error) => return Err(ZulipRuntimeTickErrorV1::History(error)),
+        } else {
+            false
         };
         let relayed_observations = match self.relay_communications_outbox(now_unix_seconds).await {
             Ok(relayed) => relayed,
@@ -513,6 +607,13 @@ impl ZulipAdmittedRuntimeV1 {
             synced_history_page,
             relayed_observations,
         })
+    }
+
+    fn provider_http(&self) -> Result<Option<Arc<ZulipHttpConfigV1>>, super::ZulipRuntimeErrorV1> {
+        self.http
+            .lock()
+            .map(|http| http.clone())
+            .map_err(|_| super::ZulipRuntimeErrorV1::Credential)
     }
 }
 

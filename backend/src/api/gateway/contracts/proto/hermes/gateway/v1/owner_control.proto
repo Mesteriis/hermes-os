@@ -80,6 +80,25 @@ message UpdateOperatorSettingsResponseV1 {
   string apply_state = 3;
 }
 
+// Applies an already committed non-secret Settings revision by replacing one
+// managed integration runtime. Provider identities and credential bindings are
+// not accepted here; Kernel treats all integration-owned payloads as opaque.
+message ApplyManagedIntegrationSettingsRequestV1 {
+  string registration_id = 1;
+  string storage_capability_id = 2;
+  string configuration_instance_id = 3;
+  uint64 expected_desired_revision = 4;
+  string owner_session_id = 5;
+  bool request_host_bridge = 6;
+}
+message ApplyManagedIntegrationSettingsResponseV1 {
+  string registration_id = 1;
+  uint64 effective_revision = 2;
+  uint64 runtime_generation = 3;
+  string apply_state = 4;
+  optional string host_bridge_socket_path = 5;
+}
+
 message BindExternalRuntimeIdentityRequestV1 {
   string registration_id = 1;
   bytes public_key_sec1 = 2;
@@ -547,6 +566,7 @@ message OwnerControlRequestV1 {
     StartReservedIntegrationRuntimeRequestV1 start_reserved_integration_runtime = 36;
     StartReservedDomainRuntimeRequestV1 start_reserved_domain_runtime = 37;
     StartReservedEngineRuntimeRequestV1 start_reserved_engine_runtime = 38;
+    ApplyManagedIntegrationSettingsRequestV1 apply_managed_integration_settings = 39;
   }
 }
 
@@ -590,6 +610,7 @@ message OwnerControlResponseV1 {
     StartReservedIntegrationRuntimeResponseV1 start_reserved_integration_runtime = 37;
     StartReservedDomainRuntimeResponseV1 start_reserved_domain_runtime = 38;
     StartReservedEngineRuntimeResponseV1 start_reserved_engine_runtime = 39;
+    ApplyManagedIntegrationSettingsResponseV1 apply_managed_integration_settings = 40;
   }
 
   // Sanitized stable code; details and private data remain local to Kernel.

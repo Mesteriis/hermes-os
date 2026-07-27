@@ -80,10 +80,11 @@ test('Zulip admission uses exact route, settings and platform capability units',
   assert.match(admission, /communication_observed_publish_request_v1\(\)/);
   assert.match(admission, /minimum_major: 2/);
   assert.match(admission, /maximum_major: 2/);
-  assert.match(admission, /zulip_settings_schema_bytes_v1\(\)/);
+  assert.match(admission, /zulip_settings_schema_bytes_v2\(\)/);
 
-  assert.match(settings, /pub fn zulip_settings_schema_v1\(\)/);
-  assert.match(settings, /SettingClientVisibilityV1::Hidden/);
+  assert.match(settings, /pub fn zulip_settings_schema_v2\(\)/);
+  assert.match(settings, /SettingClientVisibilityV1::Editable/);
+  assert.doesNotMatch(settings, /api_key_revision/);
   assert.match(core, /ZULIP_API_KEY_PURPOSE_ID: &str = "zulip_api_key"/);
   assert.match(
     core,

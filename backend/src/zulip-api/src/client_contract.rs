@@ -1,5 +1,7 @@
 pub const ZULIP_CLIENT_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.zulip.v1.bin"));
+pub const ZULIP_ACCOUNT_DESCRIPTOR_SET_V1: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/hermes.zulip.account.v1.bin"));
 pub const ZULIP_OPERATIONAL_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.zulip.operational.v1.bin"));
 pub const ZULIP_OPERATIONAL_REALTIME_DESCRIPTOR_SET_V1: &[u8] = include_bytes!(concat!(
@@ -13,6 +15,7 @@ pub const ZULIP_OWNER_ID: &str = "zulip";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ZulipClientContractV1 {
+    AccountLifecycle,
     Command,
     Query,
     OperationalQuery,
@@ -20,7 +23,8 @@ pub enum ZulipClientContractV1 {
 }
 
 impl ZulipClientContractV1 {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
+        Self::AccountLifecycle,
         Self::Command,
         Self::Query,
         Self::OperationalQuery,
@@ -30,6 +34,7 @@ impl ZulipClientContractV1 {
     #[must_use]
     pub const fn capability_id(self) -> &'static str {
         match self {
+            Self::AccountLifecycle => "zulip.account.lifecycle.v1",
             Self::Command => "zulip.command.v1",
             Self::Query => "zulip.query.v1",
             Self::OperationalQuery => "zulip.operational.query.v1",
@@ -45,6 +50,7 @@ impl ZulipClientContractV1 {
     #[must_use]
     pub const fn connect_path(self) -> &'static str {
         match self {
+            Self::AccountLifecycle => "/hermes.zulip.account.v1.ZulipAccountLifecycleService/Apply",
             Self::Command => "/hermes.zulip.v1.ZulipCommandService/ExecuteCommand",
             Self::Query => "/hermes.zulip.v1.ZulipQueryService/GetOperationStatus",
             Self::OperationalQuery => {
@@ -59,6 +65,7 @@ impl ZulipClientContractV1 {
     #[must_use]
     pub const fn descriptor_set(self) -> &'static [u8] {
         match self {
+            Self::AccountLifecycle => ZULIP_ACCOUNT_DESCRIPTOR_SET_V1,
             Self::Command | Self::Query => ZULIP_CLIENT_DESCRIPTOR_SET_V1,
             Self::OperationalQuery => ZULIP_OPERATIONAL_DESCRIPTOR_SET_V1,
             Self::OperationalRealtime => ZULIP_OPERATIONAL_REALTIME_DESCRIPTOR_SET_V1,
@@ -82,6 +89,7 @@ mod tests {
     #[test]
     fn client_contracts_have_unique_capabilities_names_and_routes() {
         assert!(!ZULIP_CLIENT_DESCRIPTOR_SET_V1.is_empty());
+        assert!(!ZULIP_ACCOUNT_DESCRIPTOR_SET_V1.is_empty());
         assert!(!ZULIP_OPERATIONAL_DESCRIPTOR_SET_V1.is_empty());
         assert!(!ZULIP_OPERATIONAL_REALTIME_DESCRIPTOR_SET_V1.is_empty());
         assert_ne!(
