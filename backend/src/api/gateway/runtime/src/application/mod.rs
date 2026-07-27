@@ -19,7 +19,7 @@ use crate::{
     BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter,
     BrowserRealtimeRouter, BrowserRealtimeSubscriptionSource, BrowserSessionStatusRouter,
     ClientBootstrapRouter, ClientRpcRouter, GatewayHttpResponse, GatewayTechnicalRouter,
-    OwnerVaultProvisioningRouter, SharedBrowserGatewaySessionService,
+    OwnerModuleSettingsRouter, OwnerVaultProvisioningRouter, SharedBrowserGatewaySessionService,
 };
 
 const AUTHENTICATION_PREFIX: &str = "/browser/v1/authentication/";
@@ -38,6 +38,7 @@ pub struct GatewayApplicationRouter<A, S> {
     browser_session_status: BrowserSessionStatusRouter<A>,
     client_bootstrap: ClientBootstrapRouter<A>,
     client_rpc_routes: Vec<ClientRpcRouter<A>>,
+    owner_module_settings: Option<OwnerModuleSettingsRouter<A>>,
     owner_vault_provisioning: Option<OwnerVaultProvisioningRouter<A>>,
     browser_realtime: BrowserRealtimeRouter<A, S>,
     lan_development_policy: Option<LanDevelopmentRequestPolicyV1>,
@@ -59,6 +60,7 @@ impl<A, S> Clone for GatewayApplicationRouter<A, S> {
             browser_session_status: self.browser_session_status.clone(),
             client_bootstrap: self.client_bootstrap.clone(),
             client_rpc_routes: self.client_rpc_routes.clone(),
+            owner_module_settings: self.owner_module_settings.clone(),
             owner_vault_provisioning: self.owner_vault_provisioning.clone(),
             browser_realtime: self.browser_realtime.clone(),
             lan_development_policy: self.lan_development_policy.clone(),
@@ -81,6 +83,7 @@ where
             browser_session_status: BrowserSessionStatusRouter::from_shared(service.clone()),
             client_bootstrap: ClientBootstrapRouter::from_shared(service.clone()),
             client_rpc_routes: Vec::new(),
+            owner_module_settings: None,
             owner_vault_provisioning: None,
             browser_realtime: BrowserRealtimeRouter::new(service, source),
             lan_development_policy: None,
@@ -117,6 +120,12 @@ where
         router: OwnerVaultProvisioningRouter<A>,
     ) -> Self {
         self.owner_vault_provisioning = Some(router);
+        self
+    }
+
+    #[must_use]
+    pub fn with_owner_module_settings(mut self, router: OwnerModuleSettingsRouter<A>) -> Self {
+        self.owner_module_settings = Some(router);
         self
     }
 
@@ -192,6 +201,12 @@ where
         }
         if OwnerVaultProvisioningRouter::<A>::admits_path(path) {
             return match &self.owner_vault_provisioning {
+                Some(router) => router.route(request).await,
+                None => self.technical.route(request.method(), path),
+            };
+        }
+        if OwnerModuleSettingsRouter::<A>::admits_path(path) {
+            return match &self.owner_module_settings {
                 Some(router) => router.route(request).await,
                 None => self.technical.route(request.method(), path),
             };
@@ -277,6 +292,8 @@ where
         CLIENT_BOOTSTRAP_PATH => "client_bootstrap",
         path if path.starts_with(AUTHENTICATION_PREFIX) => "browser_authentication",
         path if path.starts_with(PAIRING_PREFIX) => "browser_pairing",
+        path if OwnerVaultProvisioningRouter::<A>::admits_path(path) => "owner_vault_provisioning",
+        path if OwnerModuleSettingsRouter::<A>::admits_path(path) => "owner_module_settings",
         path if client_rpc_routes.iter().any(|route| route.path() == path) => "client_rpc",
         _ => "unknown",
     }

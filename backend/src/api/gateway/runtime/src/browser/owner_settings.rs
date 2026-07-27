@@ -1,13 +1,12 @@
-//! Authenticated Connect adapter for platform-owned write-only Vault provisioning.
+//! Authenticated Connect adapter for owner-managed module Settings.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
 use hermes_gateway_protocol::v1::{
-    AuthorizeOwnerVaultProvisioningRequestV1, AuthorizeOwnerVaultProvisioningResponseV1,
-    CommitOwnerVaultProvisioningRequestV1, CommitOwnerVaultProvisioningResponseV1,
-    PrepareOwnerVaultProvisioningRequestV1, PrepareOwnerVaultProvisioningResponseV1,
+    CommitOwnerModuleSettingsRequestV1, CommitOwnerModuleSettingsResponseV1,
+    PrepareOwnerModuleSettingsRequestV1, PrepareOwnerModuleSettingsResponseV1,
 };
 use hermes_gateway_session_contract::BrowserAuthenticationAuthority;
 use http_body_util::{BodyExt, Limited};
@@ -21,42 +20,33 @@ use tokio::time::{Instant, timeout_at};
 use super::owner_principal::OwnerBrowserPrincipalV1;
 use crate::{GatewayHttpResponse, SharedBrowserGatewaySessionService, full_gateway_body};
 
-pub const OWNER_VAULT_PREPARE_PATH: &str =
-    "/hermes.gateway.v1.OwnerVaultProvisioningService/Prepare";
-pub const OWNER_VAULT_AUTHORIZE_PATH: &str =
-    "/hermes.gateway.v1.OwnerVaultProvisioningService/Authorize";
-pub const OWNER_VAULT_COMMIT_PATH: &str = "/hermes.gateway.v1.OwnerVaultProvisioningService/Commit";
+pub const OWNER_MODULE_SETTINGS_PREPARE_PATH: &str =
+    "/hermes.gateway.v1.OwnerModuleSettingsService/Prepare";
+pub const OWNER_MODULE_SETTINGS_COMMIT_PATH: &str =
+    "/hermes.gateway.v1.OwnerModuleSettingsService/Commit";
 
 const MAX_REQUEST_BYTES: usize = 128 * 1024;
-const MAX_REQUEST_DEADLINE: Duration = Duration::from_secs(10);
+const MAX_REQUEST_DEADLINE: Duration = Duration::from_secs(60);
 const CONNECT_PROTOCOL_VERSION: HeaderName = HeaderName::from_static("connect-protocol-version");
 const CONNECT_ERROR_CODE: HeaderName = HeaderName::from_static("connect-error-code");
 const CONNECT_TIMEOUT_MS: HeaderName = HeaderName::from_static("connect-timeout-ms");
 
-pub type OwnerVaultClientPrincipalV1 = OwnerBrowserPrincipalV1;
-
-pub trait OwnerVaultProvisioningHandlerV1: Send + Sync {
+pub trait OwnerModuleSettingsHandlerV1: Send + Sync {
     fn prepare(
         &self,
-        principal: &OwnerVaultClientPrincipalV1,
-        request: PrepareOwnerVaultProvisioningRequestV1,
-    ) -> Result<PrepareOwnerVaultProvisioningResponseV1, OwnerVaultProvisioningRouteErrorV1>;
-
-    fn authorize(
-        &self,
-        principal: &OwnerVaultClientPrincipalV1,
-        request: AuthorizeOwnerVaultProvisioningRequestV1,
-    ) -> Result<AuthorizeOwnerVaultProvisioningResponseV1, OwnerVaultProvisioningRouteErrorV1>;
+        principal: &OwnerBrowserPrincipalV1,
+        request: PrepareOwnerModuleSettingsRequestV1,
+    ) -> Result<PrepareOwnerModuleSettingsResponseV1, OwnerModuleSettingsRouteErrorV1>;
 
     fn commit(
         &self,
-        principal: &OwnerVaultClientPrincipalV1,
-        request: CommitOwnerVaultProvisioningRequestV1,
-    ) -> Result<CommitOwnerVaultProvisioningResponseV1, OwnerVaultProvisioningRouteErrorV1>;
+        principal: &OwnerBrowserPrincipalV1,
+        request: CommitOwnerModuleSettingsRequestV1,
+    ) -> Result<CommitOwnerModuleSettingsResponseV1, OwnerModuleSettingsRouteErrorV1>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum OwnerVaultProvisioningRouteErrorV1 {
+pub enum OwnerModuleSettingsRouteErrorV1 {
     InvalidArgument,
     PermissionDenied,
     NotFound,
@@ -65,12 +55,12 @@ pub enum OwnerVaultProvisioningRouteErrorV1 {
     Internal,
 }
 
-pub struct OwnerVaultProvisioningRouter<A> {
+pub struct OwnerModuleSettingsRouter<A> {
     service: SharedBrowserGatewaySessionService<A>,
-    handler: Arc<dyn OwnerVaultProvisioningHandlerV1>,
+    handler: Arc<dyn OwnerModuleSettingsHandlerV1>,
 }
 
-impl<A> Clone for OwnerVaultProvisioningRouter<A> {
+impl<A> Clone for OwnerModuleSettingsRouter<A> {
     fn clone(&self) -> Self {
         Self {
             service: self.service.clone(),
@@ -79,14 +69,14 @@ impl<A> Clone for OwnerVaultProvisioningRouter<A> {
     }
 }
 
-impl<A> OwnerVaultProvisioningRouter<A>
+impl<A> OwnerModuleSettingsRouter<A>
 where
     A: BrowserAuthenticationAuthority,
 {
     #[must_use]
     pub fn new(
         service: SharedBrowserGatewaySessionService<A>,
-        handler: Arc<dyn OwnerVaultProvisioningHandlerV1>,
+        handler: Arc<dyn OwnerModuleSettingsHandlerV1>,
     ) -> Self {
         Self { service, handler }
     }
@@ -95,7 +85,7 @@ where
     pub fn admits_path(path: &str) -> bool {
         matches!(
             path,
-            OWNER_VAULT_PREPARE_PATH | OWNER_VAULT_AUTHORIZE_PATH | OWNER_VAULT_COMMIT_PATH
+            OWNER_MODULE_SETTINGS_PREPARE_PATH | OWNER_MODULE_SETTINGS_COMMIT_PATH
         )
     }
 
@@ -151,7 +141,7 @@ where
             Ok(operation) => operation,
             Err(()) => return invalid_argument(),
         };
-        let principal = match OwnerVaultClientPrincipalV1::new(
+        let principal = match OwnerBrowserPrincipalV1::new(
             session.owner_id(),
             session.device_id(),
             session.session_id(),
@@ -175,24 +165,20 @@ where
     }
 }
 
-enum OwnerVaultProvisioningOperationV1 {
-    Prepare(PrepareOwnerVaultProvisioningRequestV1),
-    Authorize(AuthorizeOwnerVaultProvisioningRequestV1),
-    Commit(CommitOwnerVaultProvisioningRequestV1),
+enum OwnerModuleSettingsOperationV1 {
+    Prepare(PrepareOwnerModuleSettingsRequestV1),
+    Commit(CommitOwnerModuleSettingsRequestV1),
 }
 
-impl OwnerVaultProvisioningOperationV1 {
+impl OwnerModuleSettingsOperationV1 {
     fn execute(
         self,
-        handler: Arc<dyn OwnerVaultProvisioningHandlerV1>,
-        principal: &OwnerVaultClientPrincipalV1,
-    ) -> Result<Vec<u8>, OwnerVaultProvisioningRouteErrorV1> {
+        handler: Arc<dyn OwnerModuleSettingsHandlerV1>,
+        principal: &OwnerBrowserPrincipalV1,
+    ) -> Result<Vec<u8>, OwnerModuleSettingsRouteErrorV1> {
         match self {
             Self::Prepare(request) => handler
                 .prepare(principal, request)
-                .map(|value| value.encode_to_vec()),
-            Self::Authorize(request) => handler
-                .authorize(principal, request)
                 .map(|value| value.encode_to_vec()),
             Self::Commit(request) => handler
                 .commit(principal, request)
@@ -201,29 +187,26 @@ impl OwnerVaultProvisioningOperationV1 {
     }
 }
 
-fn decode_operation(path: &str, bytes: &[u8]) -> Result<OwnerVaultProvisioningOperationV1, ()> {
+fn decode_operation(path: &str, bytes: &[u8]) -> Result<OwnerModuleSettingsOperationV1, ()> {
     match path {
-        OWNER_VAULT_PREPARE_PATH => PrepareOwnerVaultProvisioningRequestV1::decode(bytes)
-            .map(OwnerVaultProvisioningOperationV1::Prepare)
+        OWNER_MODULE_SETTINGS_PREPARE_PATH => PrepareOwnerModuleSettingsRequestV1::decode(bytes)
+            .map(OwnerModuleSettingsOperationV1::Prepare)
             .map_err(|_| ()),
-        OWNER_VAULT_AUTHORIZE_PATH => AuthorizeOwnerVaultProvisioningRequestV1::decode(bytes)
-            .map(OwnerVaultProvisioningOperationV1::Authorize)
-            .map_err(|_| ()),
-        OWNER_VAULT_COMMIT_PATH => CommitOwnerVaultProvisioningRequestV1::decode(bytes)
-            .map(OwnerVaultProvisioningOperationV1::Commit)
+        OWNER_MODULE_SETTINGS_COMMIT_PATH => CommitOwnerModuleSettingsRequestV1::decode(bytes)
+            .map(OwnerModuleSettingsOperationV1::Commit)
             .map_err(|_| ()),
         _ => Err(()),
     }
 }
 
-fn route_error(error: OwnerVaultProvisioningRouteErrorV1) -> GatewayHttpResponse {
+fn route_error(error: OwnerModuleSettingsRouteErrorV1) -> GatewayHttpResponse {
     match error {
-        OwnerVaultProvisioningRouteErrorV1::InvalidArgument => invalid_argument(),
-        OwnerVaultProvisioningRouteErrorV1::PermissionDenied => permission_denied(),
-        OwnerVaultProvisioningRouteErrorV1::NotFound => not_found(),
-        OwnerVaultProvisioningRouteErrorV1::Conflict => conflict(),
-        OwnerVaultProvisioningRouteErrorV1::Unavailable => unavailable(),
-        OwnerVaultProvisioningRouteErrorV1::Internal => internal(),
+        OwnerModuleSettingsRouteErrorV1::InvalidArgument => invalid_argument(),
+        OwnerModuleSettingsRouteErrorV1::PermissionDenied => permission_denied(),
+        OwnerModuleSettingsRouteErrorV1::NotFound => not_found(),
+        OwnerModuleSettingsRouteErrorV1::Conflict => conflict(),
+        OwnerModuleSettingsRouteErrorV1::Unavailable => unavailable(),
+        OwnerModuleSettingsRouteErrorV1::Internal => internal(),
     }
 }
 
@@ -260,7 +243,7 @@ fn protobuf_response(response_payload: Vec<u8>) -> GatewayHttpResponse {
         .header(CACHE_CONTROL, "no-store")
         .header(CONNECT_PROTOCOL_VERSION, "1")
         .body(full_gateway_body(response_payload))
-        .expect("Gateway owner Vault response is valid")
+        .expect("Gateway owner module Settings response is valid")
 }
 
 fn invalid_argument() -> GatewayHttpResponse {
@@ -273,7 +256,7 @@ fn permission_denied() -> GatewayHttpResponse {
     connect_error(StatusCode::FORBIDDEN, "permission_denied")
 }
 fn not_found() -> GatewayHttpResponse {
-    connect_error(StatusCode::NOT_FOUND, "unimplemented")
+    connect_error(StatusCode::NOT_FOUND, "not_found")
 }
 fn conflict() -> GatewayHttpResponse {
     connect_error(StatusCode::CONFLICT, "already_exists")
@@ -295,5 +278,5 @@ fn connect_error(status: StatusCode, code: &'static str) -> GatewayHttpResponse 
         .header(CONNECT_PROTOCOL_VERSION, "1")
         .header(CONNECT_ERROR_CODE, code)
         .body(full_gateway_body(Bytes::new()))
-        .expect("Gateway owner Vault Connect error is valid")
+        .expect("Gateway owner module Settings Connect error is valid")
 }

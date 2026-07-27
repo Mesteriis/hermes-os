@@ -1,5 +1,8 @@
 //! Kernel-owned admission for the narrow browser Gateway foundation.
 
+#[path = "gateway/owner_device_proof.rs"]
+pub(crate) mod owner_device_proof;
+
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -10,8 +13,8 @@ use hermes_gateway_runtime::{
     BrowserBootstrapRouter, BrowserPairingRouter, ClientRpcRouteErrorV1, ClientRpcRouteHandler,
     ClientRpcRouteV1, ClientRpcRouter, GatewayApplicationRouter, GatewayHttp3ListenerV1,
     GatewayLanDevelopmentListenerV1, GatewayLoopbackTlsListenerV1, GatewayTechnicalRouter,
-    GatewayTlsListenerV1, InMemoryBrowserRealtimeSource, OwnerVaultProvisioningRouter,
-    PairedRemoteProfileV1, SharedBrowserPairingManager,
+    GatewayTlsListenerV1, InMemoryBrowserRealtimeSource, OwnerModuleSettingsRouter,
+    OwnerVaultProvisioningRouter, PairedRemoteProfileV1, SharedBrowserPairingManager,
 };
 use hermes_gateway_session::{
     BrowserGatewaySessionService, BrowserPairingChallengeV1, BrowserPairingManager,
@@ -26,9 +29,11 @@ use prost::Message;
 use tokio::sync::watch;
 
 use crate::identity::browser_gateway::ControlStoreBrowserAuthority;
+use crate::infrastructure::filesystem::resolve_runtime_directory;
 use crate::modules::capability::router::{
     ManagedCapabilityRouteRequest, route_managed_client_request,
 };
+use crate::modules::settings::owner_gateway::KernelOwnerModuleSettingsHandlerV1;
 use crate::platform::macos::native_launch;
 use crate::platform::vault::owner_provisioning::KernelOwnerVaultProvisioningHandlerV1;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
@@ -261,17 +266,29 @@ pub(crate) fn gateway_service(
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 ) -> Result<BrowserGatewayRouter, String> {
     let authority = ControlStoreBrowserAuthority::new(Arc::clone(&store), supervisor.clone());
-    let verifier =
-        BrowserWebauthnVerifier::new(&configuration.rp_id, &configuration.exact_https_origin)
-            .map_err(|_| "browser Gateway origin or RP ID is invalid".to_owned())?;
-    let session = Arc::new(
+    let session = if configuration.is_lan_development() {
+        let owner = store
+            .initial_owner_identity()
+            .map_err(|_| "browser Gateway owner identity is unavailable".to_owned())?
+            .ok_or_else(|| "browser Gateway owner identity is unavailable".to_owned())?;
+        BrowserGatewaySessionService::new_lan_development(
+            authority,
+            configuration.exact_https_origin.clone(),
+            owner.owner_id(),
+            owner.device_id(),
+        )
+    } else {
+        let verifier =
+            BrowserWebauthnVerifier::new(&configuration.rp_id, &configuration.exact_https_origin)
+                .map_err(|_| "browser Gateway origin or RP ID is invalid".to_owned())?;
         BrowserGatewaySessionService::new(
             authority,
             verifier,
             configuration.exact_https_origin.clone(),
         )
-        .map_err(|_| "browser Gateway session service is unavailable".to_owned())?,
-    );
+    }
+    .map(Arc::new)
+    .map_err(|_| "browser Gateway session service is unavailable".to_owned())?;
     let realtime = InMemoryBrowserRealtimeSource::new(1_024)
         .map_err(|_| "browser Gateway realtime source is unavailable".to_owned())?;
     let request_id_sequence = Arc::new(AtomicU64::new(0));
@@ -360,6 +377,11 @@ pub(crate) fn gateway_service(
     let mut service = GatewayApplicationRouter::new(true, Arc::clone(&session), realtime)
         .with_client_rpc_routes(client_rpc_routes)
         .map_err(str::to_owned)?;
+    if configuration.is_lan_development() {
+        service = service
+            .with_lan_development_policy(&configuration.exact_https_origin)
+            .map_err(str::to_owned)?;
+    }
     let owner_vault_provisioning = Arc::new(KernelOwnerVaultProvisioningHandlerV1::new(
         Arc::clone(&store),
         data_dir,
@@ -368,6 +390,16 @@ pub(crate) fn gateway_service(
     service = service.with_owner_vault_provisioning(OwnerVaultProvisioningRouter::new(
         Arc::clone(&session),
         owner_vault_provisioning,
+    ));
+    let owner_module_settings = Arc::new(KernelOwnerModuleSettingsHandlerV1::new(
+        Arc::clone(&store),
+        data_dir,
+        &resolve_runtime_directory(data_dir)?,
+        supervisor,
+    ));
+    service = service.with_owner_module_settings(OwnerModuleSettingsRouter::new(
+        Arc::clone(&session),
+        owner_module_settings,
     ));
     if let Some(pairing) = pairing {
         service = service.with_browser_pairing(pairing.router(configuration)?);

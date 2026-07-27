@@ -2,5 +2,7 @@
 pub(crate) mod control;
 #[path = "../../../../../../src/kernel/src/runtime/lifecycle/fence.rs"]
 pub(crate) mod fence;
+#[path = "../../../../../../src/kernel/src/runtime/lifecycle/integration_launch.rs"]
+pub(crate) mod integration_launch;
 #[path = "../../../../../../src/kernel/src/runtime/lifecycle/supervisor.rs"]
 pub(crate) mod supervisor;

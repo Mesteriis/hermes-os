@@ -4,14 +4,13 @@ use hermes_gateway_protocol::v1::{
     OwnerVaultActionV1, OwnerVaultSecretClassV1, PrepareOwnerVaultProvisioningRequestV1,
 };
 use hermes_gateway_runtime::{OwnerVaultClientPrincipalV1, OwnerVaultProvisioningRouteErrorV1};
-use hermes_kernel_control_store::{
-    BrowserDeviceStateV1, ModuleRegistrationState, ModuleVaultPurposeRequestV1,
-};
+use hermes_kernel_control_store::{ModuleRegistrationState, ModuleVaultPurposeRequestV1};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_vault_protocol::{
     SecretClassV1, VaultActionV1, VaultPurposeRequestV1, VaultTransportPublicKey,
 };
-use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
+
+use crate::platform::gateway::owner_device_proof::{self, OwnerDeviceProofErrorV1};
 
 #[derive(Debug)]
 pub(super) struct AuthorizedTargetV1 {
@@ -26,7 +25,7 @@ pub(super) fn authorize_target(
     principal: &OwnerVaultClientPrincipalV1,
     request: &PrepareOwnerVaultProvisioningRequestV1,
 ) -> Result<AuthorizedTargetV1, OwnerVaultProvisioningRouteErrorV1> {
-    validate_owner_device(store, principal)?;
+    owner_device_proof::validate_active_principal(store, principal).map_err(map_proof_error)?;
     if request.operation_id.len() != 16
         || request.operation_id.iter().all(|byte| *byte == 0)
         || request.secret_revision == 0
@@ -87,45 +86,20 @@ pub(super) fn verify_fresh_proof(
     challenge_bytes: &[u8; 32],
     signature_raw: &[u8],
 ) -> Result<(), OwnerVaultProvisioningRouteErrorV1> {
-    validate_owner_device(store, principal)?;
-    let device = store
-        .browser_device_identity(principal.device_id())
-        .map_err(|_| OwnerVaultProvisioningRouteErrorV1::Internal)?
-        .ok_or(OwnerVaultProvisioningRouteErrorV1::PermissionDenied)?;
-    let verifying_key = VerifyingKey::from_sec1_bytes(device.enrollment().browser_key_public_key())
-        .map_err(|_| OwnerVaultProvisioningRouteErrorV1::PermissionDenied)?;
-    let signature = Signature::from_slice(signature_raw)
-        .map_err(|_| OwnerVaultProvisioningRouteErrorV1::InvalidArgument)?;
-    verifying_key
-        .verify(challenge_bytes, &signature)
-        .map_err(|_| OwnerVaultProvisioningRouteErrorV1::PermissionDenied)
+    owner_device_proof::verify_fresh_proof(store, principal, challenge_bytes, signature_raw)
+        .map_err(map_proof_error)
 }
 
-fn validate_owner_device(
-    store: &SqliteControlStore,
-    principal: &OwnerVaultClientPrincipalV1,
-) -> Result<(), OwnerVaultProvisioningRouteErrorV1> {
-    let owner = store
-        .initial_owner_identity()
-        .map_err(|_| OwnerVaultProvisioningRouteErrorV1::Internal)?
-        .ok_or(OwnerVaultProvisioningRouteErrorV1::PermissionDenied)?;
-    let device = store
-        .browser_device_identity(principal.device_id())
-        .map_err(|_| OwnerVaultProvisioningRouteErrorV1::Internal)?
-        .ok_or(OwnerVaultProvisioningRouteErrorV1::PermissionDenied)?;
-    let enrollment = device.enrollment();
-    if owner.owner_id() != principal.owner_id()
-        || enrollment.owner_id() != principal.owner_id()
-        || enrollment.device_id() != principal.device_id()
-        || device.state() != BrowserDeviceStateV1::Active
-        || device.identity_epoch()
-            != store
-                .current_identity_epoch()
-                .map_err(|_| OwnerVaultProvisioningRouteErrorV1::Internal)?
-    {
-        return Err(OwnerVaultProvisioningRouteErrorV1::PermissionDenied);
+fn map_proof_error(error: OwnerDeviceProofErrorV1) -> OwnerVaultProvisioningRouteErrorV1 {
+    match error {
+        OwnerDeviceProofErrorV1::InvalidArgument => {
+            OwnerVaultProvisioningRouteErrorV1::InvalidArgument
+        }
+        OwnerDeviceProofErrorV1::PermissionDenied => {
+            OwnerVaultProvisioningRouteErrorV1::PermissionDenied
+        }
+        OwnerDeviceProofErrorV1::Internal => OwnerVaultProvisioningRouteErrorV1::Internal,
     }
-    Ok(())
 }
 
 fn purpose_matches(

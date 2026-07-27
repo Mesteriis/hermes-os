@@ -46,6 +46,10 @@ const paths = {
     'src/kernel/src/platform/vault/owner_provisioning/authorization.rs',
     BACKEND_ROOT,
   ),
+  kernelOwnerProof: new URL(
+    'src/kernel/src/platform/gateway/owner_device_proof.rs',
+    BACKEND_ROOT,
+  ),
   kernelCeremony: new URL(
     'src/kernel/src/platform/vault/owner_provisioning/mod.rs',
     BACKEND_ROOT,
@@ -72,6 +76,7 @@ test('owner Vault provisioning primitive is write-only durable and platform-neut
     gatewayContract,
     gatewayRouter,
     kernelAuthority,
+    kernelOwnerProof,
     kernelCeremony,
     kernelRoute,
     liveConformance,
@@ -87,6 +92,7 @@ test('owner Vault provisioning primitive is write-only durable and platform-neut
       readFile(paths.gatewayContract, 'utf8'),
       readFile(paths.gatewayRouter, 'utf8'),
       readFile(paths.kernelAuthority, 'utf8'),
+      readFile(paths.kernelOwnerProof, 'utf8'),
       readFile(paths.kernelCeremony, 'utf8'),
       readFile(paths.kernelRoute, 'utf8'),
       readFile(paths.liveConformance, 'utf8'),
@@ -122,9 +128,9 @@ test('owner Vault provisioning primitive is write-only durable and platform-neut
   assert.match(gatewayRouter, /authorize_request/);
   assert.match(gatewayRouter, /is_lan_development/);
   assert.match(gatewayRouter, /require_mutation_origin/);
-  assert.match(kernelAuthority, /BrowserDeviceStateV1::Active/);
+  assert.match(kernelOwnerProof, /BrowserDeviceStateV1::Active/);
   assert.match(kernelAuthority, /module_vault_purpose_requests/);
-  assert.match(kernelAuthority, /VerifyingKey::from_sec1_bytes/);
+  assert.match(kernelOwnerProof, /VerifyingKey::from_sec1_bytes/);
   assert.match(kernelCeremony, /challenge_digest/);
   assert.match(kernelCeremony, /operation_id/);
   assert.match(kernelCeremony, /audience_grant_epoch/);
@@ -133,7 +139,7 @@ test('owner Vault provisioning primitive is write-only durable and platform-neut
   assert.match(liveConformance, /pre-restart provisioning session must be stale/);
   assert.match(liveConformance, /assert_eq!\(replay, first\)/);
   assert.doesNotMatch(
-    `${command}\n${receipt}\n${service}\n${persistence}\n${gatewayContract}\n${gatewayRouter}\n${kernelAuthority}\n${kernelCeremony}\n${kernelRoute}`,
+    `${command}\n${receipt}\n${service}\n${persistence}\n${gatewayContract}\n${gatewayRouter}\n${kernelAuthority}\n${kernelOwnerProof}\n${kernelCeremony}\n${kernelRoute}`,
     /hermes_(?:mail|telegram|whatsapp|zulip|communications)|Mail|Telegram|WhatsApp|Zulip/,
   );
 });

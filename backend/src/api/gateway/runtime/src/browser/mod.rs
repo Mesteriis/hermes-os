@@ -2,6 +2,8 @@ mod auth;
 mod bootstrap;
 mod client_bootstrap;
 mod client_rpc;
+mod owner_principal;
+mod owner_settings;
 mod owner_vault;
 mod pairing;
 mod session;
@@ -12,6 +14,11 @@ pub use client_bootstrap::ClientBootstrapRouter;
 pub use client_rpc::{
     ClientRpcContractVersionV1, ClientRpcRouteErrorV1, ClientRpcRouteHandler, ClientRpcRouteV1,
     ClientRpcRouter,
+};
+pub use owner_principal::OwnerBrowserPrincipalV1;
+pub use owner_settings::{
+    OWNER_MODULE_SETTINGS_COMMIT_PATH, OWNER_MODULE_SETTINGS_PREPARE_PATH,
+    OwnerModuleSettingsHandlerV1, OwnerModuleSettingsRouteErrorV1, OwnerModuleSettingsRouter,
 };
 pub use owner_vault::{
     OWNER_VAULT_AUTHORIZE_PATH, OWNER_VAULT_COMMIT_PATH, OWNER_VAULT_PREPARE_PATH,

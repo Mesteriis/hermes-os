@@ -252,7 +252,7 @@
       "gate": "owner_module_settings_gateway_v1",
       "role": "platform",
       "owner": "kernel_settings_registry",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "client_gateway_v1",
         "managed_integration_settings_apply_v1"

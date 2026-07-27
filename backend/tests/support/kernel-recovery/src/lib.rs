@@ -184,6 +184,7 @@ mod tests {
     mod managed_vault_route;
     mod module_grant_snapshot;
     mod operation_journal;
+    mod owner_module_settings;
     mod owner_vault_provisioning;
     mod part_01;
     mod part_02;

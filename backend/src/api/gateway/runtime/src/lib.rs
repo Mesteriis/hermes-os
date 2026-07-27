@@ -15,8 +15,10 @@ pub use browser::{
     BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter,
     BrowserSessionStatusRouter, ClientBootstrapRouter, ClientRpcContractVersionV1,
     ClientRpcRouteErrorV1, ClientRpcRouteHandler, ClientRpcRouteV1, ClientRpcRouter,
+    OWNER_MODULE_SETTINGS_COMMIT_PATH, OWNER_MODULE_SETTINGS_PREPARE_PATH,
     OWNER_VAULT_AUTHORIZE_PATH, OWNER_VAULT_COMMIT_PATH, OWNER_VAULT_PREPARE_PATH,
-    OwnerVaultClientPrincipalV1, OwnerVaultProvisioningHandlerV1,
+    OwnerBrowserPrincipalV1, OwnerModuleSettingsHandlerV1, OwnerModuleSettingsRouteErrorV1,
+    OwnerModuleSettingsRouter, OwnerVaultClientPrincipalV1, OwnerVaultProvisioningHandlerV1,
     OwnerVaultProvisioningRouteErrorV1, OwnerVaultProvisioningRouter,
     SharedBrowserGatewaySessionService, SharedBrowserPairingManager,
 };
