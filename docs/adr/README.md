@@ -364,3 +364,8 @@ Core Gateway требует operation-bound fresh device proof, Kernel пров�
 exact approved Vault-purpose capability и переносит только HPKE ciphertext, а
 Vault атомарно сохраняет mutation и durable idempotency receipt без record ID
 или credential read-back. Backend и client adapters остаются разными gates.
+ADR-0296 открывает отсутствующий public Settings path без экспорта private
+owner-control protocol: Core Gateway принимает только typed provider-neutral
+update/apply intent, Kernel требует fresh active-device proof и сохраняет
+authority у Settings Registry, а managed integration replacement остаётся
+generic successor operation ADR-0292.
