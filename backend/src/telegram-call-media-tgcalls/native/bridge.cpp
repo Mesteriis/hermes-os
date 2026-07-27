@@ -27,6 +27,7 @@ constexpr size_t kMaximumSignalingBytes = 256 * 1024;
 constexpr size_t kMaximumServers = 64;
 constexpr size_t kMaximumQueuedEvents = 128;
 constexpr size_t kMaximumQueuedBytes = 1024 * 1024;
+constexpr auto kStopTimeout = std::chrono::seconds(10);
 
 struct QueuedEvent {
     uint32_t kind = 0;
@@ -115,10 +116,17 @@ struct BridgeState {
     }
 };
 
+struct StopCompletion {
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool completed = false;
+};
+
 struct Session {
     std::unique_ptr<tgcalls::Instance> instance;
     std::shared_ptr<std::array<uint8_t, HERMES_TGCALLS_KEY_BYTES_V1>> key;
     std::shared_ptr<BridgeState> bridge;
+    std::shared_ptr<StopCompletion> stop_completion;
     bool stopped = false;
     int64_t connection_id = 0;
 };
@@ -442,23 +450,29 @@ extern "C" int32_t hermes_tgcalls_session_stop_v1(
     }
     if (!typed->stopped) {
         typed->connection_id = typed->instance->getPreferredRelayId();
-        std::mutex stop_mutex;
-        std::condition_variable stopped;
-        bool completed = false;
-        typed->instance->stop([&](tgcalls::FinalState) {
-            {
-                std::lock_guard<std::mutex> lock(stop_mutex);
-                completed = true;
-            }
-            stopped.notify_one();
-        });
-        std::unique_lock<std::mutex> lock(stop_mutex);
-        stopped.wait(lock, [&] {
-            return completed;
-        });
+        if (!typed->stop_completion) {
+            typed->stop_completion = std::make_shared<StopCompletion>();
+            const auto completion = typed->stop_completion;
+            typed->instance->stop([completion](tgcalls::FinalState) {
+                {
+                    std::lock_guard<std::mutex> lock(completion->mutex);
+                    completion->completed = true;
+                }
+                completion->changed.notify_one();
+            });
+        }
+        const auto completion = typed->stop_completion;
+        std::unique_lock<std::mutex> lock(completion->mutex);
+        if (!completion->changed.wait_for(lock, kStopTimeout, [completion] {
+                return completion->completed;
+            })) {
+            return HERMES_TGCALLS_NATIVE_FAILURE_V1;
+        }
+        lock.unlock();
         typed->instance.reset();
         std::fill(typed->key->begin(), typed->key->end(), 0);
         typed->key.reset();
+        typed->stop_completion.reset();
         typed->stopped = true;
         {
             std::lock_guard<std::mutex> bridge_lock(typed->bridge->mutex);

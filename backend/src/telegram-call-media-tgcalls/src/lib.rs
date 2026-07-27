@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char, c_void};
 use std::path::Path;
 use std::ptr::{self, NonNull};
+use std::sync::Arc;
 
 use hermes_telegram_call_media_contract::{
     CALL_ENCRYPTION_KEY_BYTES, MAX_LIBRARY_VERSION_BYTES, MAX_LIBRARY_VERSIONS,
@@ -303,6 +304,7 @@ impl Drop for OwnedNativeServer {
 
 struct NativeSession {
     api: NativeSessionApi,
+    library_guard: Arc<NativeApi>,
     handle: Option<NonNull<c_void>>,
 }
 
@@ -324,12 +326,25 @@ impl NativeSession {
             .ok_or(TelegramCallMediaContractError::InvalidState)?;
         let mut snapshot = empty_snapshot();
         let result = unsafe { (self.api.stop)(handle.as_ptr(), &mut snapshot) };
-        map_native_result(result)?;
-        validate_snapshot(&snapshot)?;
+        if let Err(error) = map_native_result(result) {
+            self.abandon_active_native_session();
+            return Err(error);
+        }
+        let snapshot_result = validate_snapshot(&snapshot);
         let destroy_result = unsafe { (self.api.destroy)(handle.as_ptr()) };
-        map_native_result(destroy_result)?;
+        if let Err(error) = map_native_result(destroy_result) {
+            self.abandon_active_native_session();
+            return Err(error);
+        }
         self.handle = None;
+        snapshot_result?;
         Ok(snapshot)
+    }
+
+    fn abandon_active_native_session(&mut self) {
+        self.handle = None;
+        let library_guard = Arc::clone(&self.library_guard);
+        std::mem::forget(library_guard);
     }
 }
 
@@ -341,8 +356,13 @@ impl Drop for NativeSession {
         let mut snapshot = empty_snapshot();
         let stopped = unsafe { (self.api.stop)(handle.as_ptr(), &mut snapshot) };
         if stopped == RESULT_OK {
-            let _ = unsafe { (self.api.destroy)(handle.as_ptr()) };
+            let destroyed = unsafe { (self.api.destroy)(handle.as_ptr()) };
+            if destroyed == RESULT_OK {
+                return;
+            }
         }
+        let library_guard = Arc::clone(&self.library_guard);
+        std::mem::forget(library_guard);
     }
 }
 
@@ -350,17 +370,19 @@ pub struct TgCallsMediaAdapter {
     // Sessions must be dropped before the dynamic library that owns their code.
     sessions: HashMap<String, NativeSession>,
     protocol: TelegramCallProtocolV1,
-    native: Box<NativeApi>,
+    native: Arc<NativeApi>,
+    poisoned: bool,
 }
 
 impl TgCallsMediaAdapter {
     pub fn load_exact(path: &Path) -> Result<Self, TelegramCallMediaContractError> {
-        let native = Box::new(NativeApi::load_exact(path)?);
+        let native = Arc::new(NativeApi::load_exact(path)?);
         let protocol = native.protocol()?;
         Ok(Self {
             sessions: HashMap::new(),
             protocol,
             native,
+            poisoned: false,
         })
     }
 }
@@ -375,7 +397,8 @@ impl TelegramCallSignalingMediaPort for TgCallsMediaAdapter {
         plan: TelegramCallReadyPlanV1,
     ) -> Result<(), TelegramCallMediaContractError> {
         plan.validate()?;
-        if self.sessions.contains_key(&plan.call_session_id)
+        if self.poisoned
+            || self.sessions.contains_key(&plan.call_session_id)
             || !self
                 .protocol
                 .library_versions
@@ -456,6 +479,7 @@ impl TelegramCallSignalingMediaPort for TgCallsMediaAdapter {
             session_id,
             NativeSession {
                 api: self.native.session_api(),
+                library_guard: Arc::clone(&self.native),
                 handle: Some(handle),
             },
         );
@@ -543,7 +567,13 @@ impl TelegramCallSignalingMediaPort for TgCallsMediaAdapter {
             .sessions
             .remove(call_session_id)
             .ok_or(TelegramCallMediaContractError::SessionNotFound)?;
-        let snapshot = session.stop()?;
+        let snapshot = match session.stop() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.poisoned = true;
+                return Err(error);
+            }
+        };
         Ok(media_final(snapshot))
     }
 

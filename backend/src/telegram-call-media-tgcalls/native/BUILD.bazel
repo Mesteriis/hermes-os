@@ -38,3 +38,39 @@ cc_binary(
     ],
     visibility = ["//visibility:public"],
 )
+
+# Explicit, test-only CoreAudio probe. It is built only by the development
+# conformance profile and is never part of the Telegram release assembly.
+cc_binary(
+    name = "hermes_tgcalls_audio_device_conformance",
+    srcs = [
+        "audio_device_conformance.cpp",
+    ],
+    copts = [
+        "-Ithird-party/webrtc/webrtc",
+        "-Ithird-party/webrtc/dependencies",
+        "-Ithird-party/webrtc/absl",
+        "-DWEBRTC_MAC",
+        "-DWEBRTC_POSIX",
+        "-std=c++17",
+        "-fvisibility=hidden",
+    ],
+    linkopts = [
+        "-framework",
+        "ApplicationServices",
+        "-framework",
+        "AudioToolbox",
+        "-framework",
+        "CoreAudio",
+        "-framework",
+        "CoreFoundation",
+        "-framework",
+        "CoreGraphics",
+        "-framework",
+        "Foundation",
+    ],
+    testonly = True,
+    deps = [
+        "//third-party/webrtc:hermes_macos_audio_device",
+    ],
+)

@@ -28,6 +28,18 @@ terminal replay до readiness. Backfill и exact Calls Command/provider-result
 prerequisites signaling gate выполнены. Реализованное всё ещё не доказывает
 real input/output audio loop, upstream tgcalls memory/thread conformance или
 authorized live one-to-one call.
+Добавлен отдельный development-only CoreAudio conformance build unit: он
+использует те же exact upstream/Bazel/license pins, помечает artifact как
+`release_eligible: false` при несовпадении Xcode с release pin и требует явный
+runtime-флаг до доступа к microphone/speaker. Probe не входит в Telegram
+assembly, не сохраняет input samples, отдаёт в playout только silence,
+проверяет bounded full-duplex callbacks и восстанавливает исходный mute state.
+Само наличие или сборка probe не открывает gate: требуются его разрешённый
+запуск на real devices, exact Xcode 26.2 release build и authorized live call.
+Development profile подтверждён сборкой arm64 dylib и test-only probe на
+активном Xcode 26.6; provenance зафиксировал `release_eligible: false`, а exact
+Rust loader/protocol test прошёл с собранной dylib. Probe не запускался и доступ
+к microphone/speaker не запрашивался, поэтому real audio evidence отсутствует.
 Historical fixture transcript не является evidence ни для одного gate этого
 ADR.
 

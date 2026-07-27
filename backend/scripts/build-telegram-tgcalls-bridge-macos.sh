@@ -12,12 +12,14 @@ readonly BAZEL_VERSION="8.4.2"
 readonly BAZEL_SHA256="45e9388abf21d1107e146ea366ad080eb93cb6a5f3a4a3b048f78de0bc3faffa"
 readonly XCODE_VERSION="26.2"
 readonly ARTIFACT_NAME="libhermes_tgcalls_bridge.dylib"
+readonly AUDIO_CONFORMANCE_NAME="hermes_tgcalls_audio_device_conformance"
 
 usage() {
-  echo "usage: $0 --output-dir <new-absolute-directory>" >&2
+  echo "usage: $0 --output-dir <new-absolute-directory> [--development-audio-conformance]" >&2
 }
 
 output_directory=""
+build_profile="release"
 while (($# > 0)); do
   case "$1" in
     --output-dir)
@@ -27,6 +29,14 @@ while (($# > 0)); do
       }
       output_directory="$2"
       shift 2
+      ;;
+    --development-audio-conformance)
+      if [[ "$build_profile" != "release" ]]; then
+        usage
+        exit 2
+      fi
+      build_profile="development-audio-conformance"
+      shift
       ;;
     *)
       usage
@@ -43,7 +53,12 @@ if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
   echo "the pinned Telegram tgcalls bridge release target requires macOS arm64" >&2
   exit 1
 fi
-if [[ "$(xcodebuild -version | sed -n '1s/^Xcode //p')" != "$XCODE_VERSION" ]]; then
+installed_xcode_version="$(xcodebuild -version | sed -n '1s/^Xcode //p')"
+if [[ -z "$installed_xcode_version" ]]; then
+  echo "the active Xcode version is unavailable" >&2
+  exit 1
+fi
+if [[ "$build_profile" == "release" && "$installed_xcode_version" != "$XCODE_VERSION" ]]; then
   echo "the pinned Telegram-iOS release requires Xcode ${XCODE_VERSION}" >&2
   exit 1
 fi
@@ -131,6 +146,7 @@ bridge_directory="${checkout_directory}/hermes-tgcalls-bridge"
 mkdir "$bridge_directory"
 cp \
   "${native_directory}/BUILD.bazel" \
+  "${native_directory}/audio_device_conformance.cpp" \
   "${native_directory}/bridge.cpp" \
   "${native_directory}/bridge.h" \
   "$bridge_directory/"
@@ -139,8 +155,16 @@ git -C "$checkout_directory" apply "$patch_path"
 
 (
   cd "$checkout_directory"
+  build_targets=(
+    //hermes-tgcalls-bridge:libhermes_tgcalls_bridge.dylib
+  )
+  if [[ "$build_profile" == "development-audio-conformance" ]]; then
+    build_targets+=(
+      //hermes-tgcalls-bridge:hermes_tgcalls_audio_device_conformance
+    )
+  fi
   "$bazel_path" build \
-    //hermes-tgcalls-bridge:libhermes_tgcalls_bridge.dylib \
+    "${build_targets[@]}" \
     -c opt \
     --stamp=false
 )
@@ -152,6 +176,15 @@ install -m 0555 \
 install -m 0444 \
   "${checkout_directory}/submodules/TgVoipWebrtc/tgcalls/LICENSE" \
   "${release_directory}/LICENSE.tgcalls-LGPL-3.0"
+release_eligible=true
+audio_conformance_artifact=null
+if [[ "$build_profile" == "development-audio-conformance" ]]; then
+  install -m 0555 \
+    "${checkout_directory}/bazel-bin/hermes-tgcalls-bridge/${AUDIO_CONFORMANCE_NAME}" \
+    "${release_directory}/${AUDIO_CONFORMANCE_NAME}"
+  release_eligible=false
+  audio_conformance_artifact="\"${AUDIO_CONFORMANCE_NAME}\""
+fi
 
 artifact_sha="$(shasum -a 256 "${release_directory}/${ARTIFACT_NAME}" | awk '{print $1}')"
 patch_sha="$(shasum -a 256 "$patch_path" | awk '{print $1}')"
@@ -159,20 +192,24 @@ cat >"${release_directory}/provenance.json" <<EOF
 {
   "artifact": "${ARTIFACT_NAME}",
   "artifact_sha256": "${artifact_sha}",
+  "audio_device_conformance_artifact": ${audio_conformance_artifact},
   "bazel_sha256": "${BAZEL_SHA256}",
   "bazel_version": "${BAZEL_VERSION}",
   "bridge_abi": 1,
+  "build_profile": "${build_profile}",
   "build_target": "//hermes-tgcalls-bridge:libhermes_tgcalls_bridge.dylib",
   "dav1d_commit": "${DAV1D_COMMIT}",
   "libvpx_commit": "${LIBVPX_COMMIT}",
   "patch_sha256": "${patch_sha}",
   "platform": "darwin-arm64",
+  "release_eligible": ${release_eligible},
   "telegram_ios_commit": "${TELEGRAM_IOS_COMMIT}",
   "tgcalls_commit": "${TGCALLS_COMMIT}",
   "tgcalls_license": "LGPL-3.0",
   "tgcalls_license_sha256": "${TGCALLS_LICENSE_SHA256}",
   "webrtc_commit": "${WEBRTC_COMMIT}",
-  "xcode_version": "${XCODE_VERSION}"
+  "xcode_version": "${installed_xcode_version}",
+  "xcode_version_pin": "${XCODE_VERSION}"
 }
 EOF
 chmod 0444 "${release_directory}/provenance.json"

@@ -189,14 +189,18 @@ test('Telegram call media contract and tgcalls adapter remain separate integrati
 });
 
 test('Telegram tgcalls native build is pinned, system-audio backed and secret-negative', async () => {
-  const [bridge, bridgeBuild, patch, buildScript] = await Promise.all([
-    source('src/telegram-call-media-tgcalls/native/bridge.cpp'),
-    source('src/telegram-call-media-tgcalls/native/BUILD.bazel'),
-    source(
-      'src/telegram-call-media-tgcalls/native/patches/telegram-ios-macos-audio-device.patch',
-    ),
-    source('scripts/build-telegram-tgcalls-bridge-macos.sh'),
-  ]);
+  const [adapter, bridge, bridgeBuild, audioProbe, patch, buildScript, readme] =
+    await Promise.all([
+      source('src/telegram-call-media-tgcalls/src/lib.rs'),
+      source('src/telegram-call-media-tgcalls/native/bridge.cpp'),
+      source('src/telegram-call-media-tgcalls/native/BUILD.bazel'),
+      source('src/telegram-call-media-tgcalls/native/audio_device_conformance.cpp'),
+      source(
+        'src/telegram-call-media-tgcalls/native/patches/telegram-ios-macos-audio-device.patch',
+      ),
+      source('scripts/build-telegram-tgcalls-bridge-macos.sh'),
+      source('src/telegram-call-media-tgcalls/README.md'),
+    ]);
 
   assert.match(bridgeBuild, /\/\/submodules\/TgVoipWebrtc:tgcalls_core/);
   assert.match(bridgeBuild, /\/\/third-party\/webrtc:hermes_macos_audio_device/);
@@ -204,7 +208,12 @@ test('Telegram tgcalls native build is pinned, system-audio backed and secret-ne
   assert.match(bridge, /createAudioDeviceModule = \{\}/);
   assert.match(bridge, /SetLoggingFunction/);
   assert.match(bridge, /std::fill\(typed->key->begin\(\), typed->key->end\(\), 0\)/);
+  assert.match(bridge, /StopCompletion/);
+  assert.match(bridge, /wait_for\(lock, kStopTimeout/);
   assert.doesNotMatch(bridge, /fprintf|std::cout|std::cerr|printf\(/);
+  assert.match(adapter, /library_guard: Arc<NativeApi>/);
+  assert.match(adapter, /abandon_active_native_session/);
+  assert.match(adapter, /poisoned: bool/);
   assert.match(patch, /audio_device_impl\.cc/);
   assert.match(patch, /audio_device_mac\.cc/);
   assert.match(buildScript, /6ad963e5b62d354da79040f388ae2b9132fb17b8/);
@@ -213,7 +222,30 @@ test('Telegram tgcalls native build is pinned, system-audio backed and secret-ne
   assert.match(buildScript, /45e9388abf21d1107e146ea366ad080eb93cb6a5f3a4a3b048f78de0bc3faffa/);
   assert.match(buildScript, /da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768/);
   assert.match(buildScript, /readonly XCODE_VERSION="26\.2"/);
+  assert.match(buildScript, /--development-audio-conformance/);
+  assert.match(buildScript, /"release_eligible": \$\{release_eligible\}/);
   assert.doesNotMatch(buildScript, /submodule update --remote|--branch\s/);
+
+  const productionTarget = bridgeBuild.match(
+    /cc_binary\(\s*name = "libhermes_tgcalls_bridge\.dylib"[\s\S]*?\n\)/,
+  )?.[0];
+  assert.ok(productionTarget);
+  assert.doesNotMatch(productionTarget, /audio_device_conformance/);
+  assert.match(bridgeBuild, /name = "hermes_tgcalls_audio_device_conformance"/);
+  assert.match(
+    buildScript,
+    /"\$\{native_directory\}\/audio_device_conformance\.cpp"/,
+  );
+  assert.match(bridgeBuild, /testonly = True/);
+  assert.match(audioProbe, /AudioDeviceModule::Create/);
+  assert.match(audioProbe, /StartPlayout/);
+  assert.match(audioProbe, /StartRecording/);
+  assert.match(audioProbe, /class MicrophoneMuteGuard/);
+  assert.match(audioProbe, /microphone_mute_guard\.restore\(\)/);
+  assert.match(audioProbe, /--allow-microphone-and-speaker-access/);
+  assert.match(audioProbe, /std::memset\(audio_samples, 0/);
+  assert.doesNotMatch(audioProbe, /\b(?:fwrite|ofstream|open|write)\s*\(/);
+  assert.match(readme, /is not\s+referenced by Telegram assembly/);
 });
 
 test('Telegram release and runtime bind the exact staged tgcalls artifact', async () => {
