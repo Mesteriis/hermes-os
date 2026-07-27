@@ -2,9 +2,24 @@
 
 pub mod client_contract;
 pub mod client_wire;
+pub mod operational;
+pub mod operational_wire;
+pub mod realtime;
+pub mod realtime_wire;
 #[allow(clippy::large_enum_variant)]
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/hermes.zulip.v1.rs"));
+}
+#[allow(clippy::large_enum_variant)]
+pub mod operational_wire_generated {
+    include!(concat!(env!("OUT_DIR"), "/hermes.zulip.operational.v1.rs"));
+}
+#[allow(clippy::large_enum_variant)]
+pub mod realtime_wire_generated {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.zulip.operational.realtime.v1.rs"
+    ));
 }
 
 pub const PACKAGE: &str = "hermes-zulip-api";
@@ -47,6 +62,32 @@ pub struct ZulipEventQueueV1 {
 pub struct ZulipPolledEventV1 {
     pub event_id: i64,
     pub observations: Vec<ZulipEventV1>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ZulipHistoryPageV1 {
+    pub messages: Vec<ZulipMessageSnapshotV1>,
+    pub oldest_provider_message_id: Option<String>,
+    pub found_oldest: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ZulipMessageSnapshotV1 {
+    pub account_id: String,
+    pub provider_message_id: String,
+    pub provider_conversation_id: String,
+    pub conversation_kind: operational::ZulipConversationKindV1,
+    pub stream_id: Option<String>,
+    pub stream_name: Option<String>,
+    pub topic: Option<String>,
+    pub direct_recipient_id: Option<String>,
+    pub sender_id: String,
+    pub is_outgoing: bool,
+    pub content: Option<String>,
+    pub sent_at_unix_seconds: Option<i64>,
+    pub edited_at_unix_seconds: Option<i64>,
+    pub attachments: Vec<ZulipAttachmentV1>,
+    pub reactions: Vec<operational::ZulipReactionStateV1>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -164,12 +205,16 @@ pub struct ZulipCommandReceiptV1 {
 pub enum ZulipClientRequestV1 {
     Command(ZulipCommandV1),
     OperationStatus { operation_id: String },
+    OperationalQuery(operational::ZulipOperationalQueryV1),
+    OperationalReplay(realtime::ZulipOperationalReplayRequestV1),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ZulipClientResponseV1 {
     CommandReceipt(ZulipCommandReceiptV1),
     OperationStatus(Option<ZulipCommandOperationStatusV1>),
+    OperationalQuery(operational::ZulipOperationalQueryResponseV1),
+    OperationalReplay(realtime::ZulipOperationalReplayResponseV1),
 }
 
 #[must_use]
@@ -438,15 +483,25 @@ pub enum ZulipEventV1 {
         event_id: i64,
         provider_message_id: String,
         provider_conversation_id: String,
+        conversation_kind: operational::ZulipConversationKindV1,
+        stream_id: Option<String>,
+        stream_name: Option<String>,
+        topic: Option<String>,
+        direct_recipient_id: Option<String>,
         sender_id: String,
         is_outgoing: bool,
         content: Option<String>,
+        sent_at_unix_seconds: Option<i64>,
         attachments: Vec<ZulipAttachmentV1>,
+        reactions: Vec<operational::ZulipReactionStateV1>,
     },
     MessageUpdated {
         account_id: String,
         event_id: i64,
         provider_message_id: String,
+        content: Option<String>,
+        topic: Option<String>,
+        edited_at_unix_seconds: Option<i64>,
     },
     MessageDeleted {
         account_id: String,
@@ -458,6 +513,8 @@ pub enum ZulipEventV1 {
         event_id: i64,
         provider_message_id: String,
         actor_id: String,
+        reaction: operational::ZulipReactionStateV1,
+        operation: ZulipReactionOperationV1,
     },
 }
 

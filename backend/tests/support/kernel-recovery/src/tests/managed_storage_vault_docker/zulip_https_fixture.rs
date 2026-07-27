@@ -24,6 +24,7 @@ struct ZulipHttpsFixtureState {
     released_events: AtomicU64,
     served_events: AtomicU64,
     message_commands: AtomicU64,
+    history_pages: AtomicU64,
 }
 
 impl ZulipHttpsFixture {
@@ -53,6 +54,7 @@ impl ZulipHttpsFixture {
             released_events: AtomicU64::new(0),
             served_events: AtomicU64::new(0),
             message_commands: AtomicU64::new(0),
+            history_pages: AtomicU64::new(0),
         });
         let server_state = Arc::clone(&state);
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -91,6 +93,10 @@ impl ZulipHttpsFixture {
 
     pub(super) fn message_commands(&self) -> u64 {
         self.state.message_commands.load(Ordering::Acquire)
+    }
+
+    pub(super) fn history_pages(&self) -> u64 {
+        self.state.history_pages.load(Ordering::Acquire)
     }
 }
 
@@ -202,6 +208,9 @@ fn serve_connection(
         )
     } else if request_line.starts_with("GET /api/v1/events?") {
         ("200 OK", next_event_response(state))
+    } else if request_line.starts_with("GET /api/v1/messages?") {
+        state.history_pages.fetch_add(1, Ordering::Release);
+        ("200 OK", history_response(request_line))
     } else if request_line.starts_with("POST /api/v1/messages ") {
         state.message_commands.fetch_add(1, Ordering::Release);
         (
@@ -220,6 +229,13 @@ fn serve_connection(
     );
     stream.write_all(response.as_bytes())?;
     stream.flush()
+}
+
+fn history_response(request_line: &str) -> String {
+    if request_line.contains("anchor=9002") {
+        return r#"{"result":"success","msg":"","found_oldest":true,"found_newest":false,"messages":[{"id":9001,"sender_id":71,"sender_email":"history@example.test","stream_id":44,"display_recipient":"operations","subject":"history","content":"oldest managed history","timestamp":100,"reactions":[]}]}"#.to_owned();
+    }
+    r#"{"result":"success","msg":"","found_oldest":false,"found_newest":true,"messages":[{"id":9002,"sender_id":72,"sender_email":"history@example.test","stream_id":44,"display_recipient":"operations","subject":"history","content":"searchable managed history","timestamp":101,"reactions":[{"user_id":73,"emoji_name":"thumbs_up","emoji_code":"1f44d","reaction_type":"unicode_emoji"}]},{"id":9003,"sender_id":73,"sender_email":"bot@example.test","recipient_id":55,"content":"direct managed history","timestamp":102,"reactions":[]}]}"#.to_owned()
 }
 
 fn next_event_response(state: &ZulipHttpsFixtureState) -> String {

@@ -332,3 +332,8 @@ ADR-0290 заменяет fake lifecycle restart отдельным Telegram-own
 epoch, runtime получает fresh Vault leases, физически заменяет TDLib client и
 завершает durable target epoch только после restore. Kernel переносит opaque
 route и grant, не интерпретируя Telegram lifecycle.
+ADR-0291 разделяет полный Zulip experience на account lifecycle, bounded
+provider history convergence, owner-local operational query и realtime replay:
+Kernel/Core допускают только exact opaque routes и leases, Zulip integration
+владеет projection/storage/runtime, а Communications получает neutral evidence
+только через durable events.

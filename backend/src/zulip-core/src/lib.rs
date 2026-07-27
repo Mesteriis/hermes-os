@@ -22,7 +22,7 @@ pub enum ZulipCoreError {
 #[cfg(test)]
 mod attachment_tests {
     use hermes_communications_ingress::CommunicationEvidenceKindV1;
-    use hermes_zulip_api::{ZulipAttachmentV1, ZulipEventV1};
+    use hermes_zulip_api::{ZulipAttachmentV1, ZulipEventV1, operational::ZulipConversationKindV1};
 
     use super::observation_drafts;
 
@@ -33,13 +33,20 @@ mod attachment_tests {
             event_id: 1,
             provider_message_id: "message".into(),
             provider_conversation_id: "stream:1:topic".into(),
+            conversation_kind: ZulipConversationKindV1::StreamTopic,
+            stream_id: Some("1".into()),
+            stream_name: None,
+            topic: Some("topic".into()),
+            direct_recipient_id: None,
             sender_id: "sender".into(),
             is_outgoing: false,
             content: None,
+            sent_at_unix_seconds: None,
             attachments: vec![ZulipAttachmentV1 {
                 provider_attachment_id: "a/report.pdf".into(),
                 filename: Some("report.pdf".into()),
             }],
+            reactions: Vec::new(),
         })
         .expect("drafts");
         assert_eq!(drafts.len(), 2);
@@ -97,8 +104,7 @@ pub fn observation_drafts(
             provider_conversation_id,
             sender_id,
             is_outgoing,
-            content: _,
-            attachments: _,
+            ..
         } => ObservedEvent {
             account_id,
             event_id: *event_id,
@@ -116,6 +122,7 @@ pub fn observation_drafts(
             account_id,
             event_id,
             provider_message_id,
+            ..
         } => ObservedEvent::change(
             account_id,
             *event_id,
@@ -137,6 +144,7 @@ pub fn observation_drafts(
             event_id,
             provider_message_id,
             actor_id,
+            ..
         } => ObservedEvent {
             account_id,
             event_id: *event_id,
@@ -292,10 +300,17 @@ mod tests {
             event_id: 1,
             provider_message_id: "m".into(),
             provider_conversation_id: "s:t".into(),
+            conversation_kind: hermes_zulip_api::operational::ZulipConversationKindV1::StreamTopic,
+            stream_id: Some("1".into()),
+            stream_name: None,
+            topic: Some("t".into()),
+            direct_recipient_id: None,
             sender_id: "u".into(),
             is_outgoing: false,
             content: None,
+            sent_at_unix_seconds: None,
             attachments: Vec::new(),
+            reactions: Vec::new(),
         })
         .expect("draft");
 
@@ -311,10 +326,17 @@ mod tests {
             event_id: 2,
             provider_message_id: "m".into(),
             provider_conversation_id: "s:t".into(),
+            conversation_kind: hermes_zulip_api::operational::ZulipConversationKindV1::StreamTopic,
+            stream_id: Some("1".into()),
+            stream_name: None,
+            topic: Some("t".into()),
+            direct_recipient_id: None,
             sender_id: "u".into(),
             is_outgoing: false,
             content: Some("provider markdown body".into()),
+            sent_at_unix_seconds: None,
             attachments: Vec::new(),
+            reactions: Vec::new(),
         })
         .expect("draft");
 

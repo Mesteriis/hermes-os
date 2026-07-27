@@ -8,6 +8,11 @@ use hermes_events_protocol::validation::envelope::decode_envelope_v1;
 use hermes_zulip_api::{
     ZulipClientRequestV1, ZulipClientResponseV1, ZulipCommandOperationOutcomeV1, ZulipCommandV1,
     client_contract::{ZULIP_MODULE_ID, ZulipClientContractV1},
+    operational::{
+        ZulipHistoryStateV1, ZulipOperationalEventKindV1, ZulipOperationalQueryResponseV1,
+        ZulipOperationalQueryV1,
+    },
+    realtime::ZulipOperationalReplayRequestV1,
 };
 use hermes_zulip_runtime::client_port::{
     ZulipClientPortErrorV1, decode_module_response, encode_module_request,
@@ -24,7 +29,7 @@ const CANONICAL_EVENT_SUBJECT: &str =
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Communications and Zulip binaries"]
 fn managed_zulip_runtime_delivers_live_command_and_event_only_communications_handoff() {
-    let contour = ManagedZulipContour::start(ZulipGrantProfileV1::CommandAndQuery);
+    let mut contour = ManagedZulipContour::start(ZulipGrantProfileV1::CommandAndQuery);
     let events = contour
         .store
         .platform_event_hub_topology()
@@ -52,6 +57,8 @@ fn managed_zulip_runtime_delivers_live_command_and_event_only_communications_han
     });
 
     const OPERATION_ID: &str = "managed-zulip-live-command-1";
+    assert_zulip_history_and_operational_query(&contour);
+    assert_cross_account_operational_query_is_rejected(&contour);
     assert_zulip_command_accepted(&contour, OPERATION_ID);
     assert_zulip_operation_completed(&contour, OPERATION_ID);
     assert_eq!(
@@ -69,6 +76,19 @@ fn managed_zulip_runtime_delivers_live_command_and_event_only_communications_han
             &contour,
             "initial",
         );
+    assert_zulip_operational_replay(&contour, 9_101);
+    let predecessor_generation = contour.zulip.runtime_generation;
+    contour.zulip = restart_zulip_runtime(
+        &contour.supervisor,
+        contour.store.as_ref(),
+        &contour.data,
+        &contour.root.join("runtime"),
+        &contour.zulip,
+        contour.fixture.realm_url(),
+    );
+    assert_eq!(contour.zulip.runtime_generation, predecessor_generation + 1);
+    assert_zulip_history_and_operational_query(&contour);
+    assert_zulip_operational_replay(&contour, 9_101);
     event_runtime.block_on(async {
         client
             .publish(OBSERVATION_SUBJECT, observation_bytes.into())
@@ -137,6 +157,161 @@ fn managed_zulip_runtime_delivers_live_command_and_event_only_communications_han
 
     contour.shutdown_processes();
     contour.finish();
+}
+
+fn assert_zulip_history_and_operational_query(contour: &ManagedZulipContour) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let response = route_zulip_client(
+            contour,
+            ZulipClientContractV1::OperationalQuery,
+            21,
+            &ZulipClientRequestV1::OperationalQuery(ZulipOperationalQueryV1::GetAccountStatus {
+                account_id: ZULIP_ACCOUNT_ID.to_owned(),
+            }),
+        );
+        let ZulipClientResponseV1::OperationalQuery(
+            ZulipOperationalQueryResponseV1::AccountStatus(status),
+        ) = response
+        else {
+            panic!("Zulip account status returned the wrong response")
+        };
+        if status.history_state == ZulipHistoryStateV1::Ready {
+            assert!(status.projection_ready);
+            assert_eq!(status.oldest_provider_message_id.as_deref(), Some("9001"));
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Zulip history did not converge: {status:?}"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        contour.fixture.history_pages() >= 2,
+        "managed Zulip history must cross a real bounded multi-page provider contour"
+    );
+
+    let response = route_zulip_client(
+        contour,
+        ZulipClientContractV1::OperationalQuery,
+        22,
+        &ZulipClientRequestV1::OperationalQuery(ZulipOperationalQueryV1::SearchMessages {
+            account_id: ZULIP_ACCOUNT_ID.to_owned(),
+            provider_conversation_id: Some("stream:44:history".to_owned()),
+            query: "searchable".to_owned(),
+            cursor: None,
+            limit: 20,
+        }),
+    );
+    let ZulipClientResponseV1::OperationalQuery(ZulipOperationalQueryResponseV1::Messages(page)) =
+        response
+    else {
+        panic!("Zulip message search returned the wrong response")
+    };
+    assert_eq!(page.items.len(), 1);
+    assert_eq!(page.items[0].provider_message_id, "9002");
+    assert_eq!(page.items[0].reactions.len(), 1);
+
+    let response = route_zulip_client(
+        contour,
+        ZulipClientContractV1::OperationalQuery,
+        23,
+        &ZulipClientRequestV1::OperationalQuery(ZulipOperationalQueryV1::ListConversations {
+            account_id: ZULIP_ACCOUNT_ID.to_owned(),
+            cursor: None,
+            limit: 20,
+        }),
+    );
+    let ZulipClientResponseV1::OperationalQuery(ZulipOperationalQueryResponseV1::Conversations(
+        page,
+    )) = response
+    else {
+        panic!("Zulip conversations returned the wrong response")
+    };
+    assert!(
+        page.items.len() >= 2,
+        "history conversations remain present alongside later event-driven conversations"
+    );
+    assert!(
+        page.items
+            .iter()
+            .any(|conversation| conversation.provider_conversation_id == "stream:44:history")
+    );
+    assert!(
+        page.items
+            .iter()
+            .any(|conversation| conversation.provider_conversation_id == "direct:55")
+    );
+}
+
+fn assert_cross_account_operational_query_is_rejected(contour: &ManagedZulipContour) {
+    let request =
+        ZulipClientRequestV1::OperationalQuery(ZulipOperationalQueryV1::GetAccountStatus {
+            account_id: "other-account".to_owned(),
+        });
+    let encoded = encode_module_request(24, &request).expect("encode cross-account query");
+    let route = ManagedCapabilityRouteRequest::new(
+        &contour.zulip.registration_id,
+        &contour.zulip.runtime_instance_id,
+        contour.zulip.runtime_generation,
+        contour.zulip.grant_epoch,
+        ZulipClientContractV1::OperationalQuery.capability_id(),
+        &encoded,
+    );
+    let bytes = route_managed_client_request(
+        contour.store.as_ref(),
+        &contour.supervisor.relay_port(),
+        &route,
+    )
+    .expect("route rejected Zulip query response");
+    assert_eq!(
+        decode_module_response(ZulipClientContractV1::OperationalQuery, &bytes),
+        Err(ZulipClientPortErrorV1::Protocol)
+    );
+    assert!(
+        contour
+            .supervisor
+            .is_active(&contour.zulip.registration_id)
+            .expect("observe Zulip after rejected cross-account query"),
+        "cross-account client payload must not terminate the managed runtime"
+    );
+}
+
+fn assert_zulip_operational_replay(contour: &ManagedZulipContour, provider_message_id: i64) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let response = route_zulip_client(
+            contour,
+            ZulipClientContractV1::OperationalRealtime,
+            25,
+            &ZulipClientRequestV1::OperationalReplay(ZulipOperationalReplayRequestV1 {
+                account_id: ZULIP_ACCOUNT_ID.to_owned(),
+                after_sequence: 0,
+                limit: 20,
+            }),
+        );
+        let ZulipClientResponseV1::OperationalReplay(response) = response else {
+            panic!("Zulip operational replay returned the wrong response")
+        };
+        if let Some(frame) = response.frames.last() {
+            assert_eq!(
+                frame.event.provider_message_id,
+                provider_message_id.to_string()
+            );
+            assert_eq!(
+                frame.event.kind,
+                ZulipOperationalEventKindV1::MessageUpserted
+            );
+            assert!(!response.reset_required);
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Zulip operational replay did not expose the provider event"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
 }
 
 fn assert_zulip_command_accepted(contour: &ManagedZulipContour, operation_id: &str) {

@@ -116,7 +116,50 @@
       "role": "integration",
       "owner": "zulip",
       "state": "planned",
+      "dependsOn": [
+        "client_gateway_v1",
+        "nats_data_plane_v1",
+        "zulip_integration_v1",
+        "zulip_account_lifecycle_v1",
+        "zulip_history_sync_v1",
+        "zulip_operational_read_v1",
+        "zulip_operational_realtime_v1"
+      ]
+    },
+    {
+      "gate": "zulip_integration_v1",
+      "role": "integration",
+      "owner": "zulip",
+      "state": "implemented",
       "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
+    },
+    {
+      "gate": "zulip_account_lifecycle_v1",
+      "role": "integration",
+      "owner": "zulip",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1", "vault_v1", "zulip_integration_v1"]
+    },
+    {
+      "gate": "zulip_history_sync_v1",
+      "role": "integration",
+      "owner": "zulip",
+      "state": "implemented",
+      "dependsOn": ["zulip_account_lifecycle_v1", "zulip_integration_v1"]
+    },
+    {
+      "gate": "zulip_operational_read_v1",
+      "role": "integration",
+      "owner": "zulip",
+      "state": "implemented",
+      "dependsOn": ["zulip_history_sync_v1", "zulip_integration_v1"]
+    },
+    {
+      "gate": "zulip_operational_realtime_v1",
+      "role": "integration",
+      "owner": "zulip",
+      "state": "implemented",
+      "dependsOn": ["zulip_operational_read_v1", "zulip_integration_v1"]
     },
     {
       "gate": "mail_operational_read_v1",

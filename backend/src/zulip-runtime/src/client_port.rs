@@ -4,10 +4,12 @@ use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
 use hermes_zulip_api::client_contract::{
-    ZULIP_CLIENT_CONTRACT_MAJOR, ZULIP_CLIENT_CONTRACT_REVISION, ZULIP_CLIENT_DESCRIPTOR_SET_V1,
-    ZULIP_MODULE_ID, ZULIP_OWNER_ID, ZulipClientContractV1,
+    ZULIP_CLIENT_CONTRACT_MAJOR, ZULIP_CLIENT_CONTRACT_REVISION, ZULIP_MODULE_ID, ZULIP_OWNER_ID,
+    ZulipClientContractV1,
 };
-use hermes_zulip_api::{ZulipClientRequestV1, ZulipClientResponseV1, client_wire};
+use hermes_zulip_api::{
+    ZulipClientRequestV1, ZulipClientResponseV1, client_wire, operational_wire, realtime_wire,
+};
 use prost::Message;
 use sha2::{Digest, Sha256};
 
@@ -27,7 +29,7 @@ fn zulip_client_contract(contract: ZulipClientContractV1) -> ContractReferenceV1
         name: contract.contract_name().to_owned(),
         major: ZULIP_CLIENT_CONTRACT_MAJOR,
         revision: ZULIP_CLIENT_CONTRACT_REVISION,
-        schema_sha256: Sha256::digest(ZULIP_CLIENT_DESCRIPTOR_SET_V1).to_vec(),
+        schema_sha256: Sha256::digest(contract.descriptor_set()).to_vec(),
     }
 }
 
@@ -46,16 +48,28 @@ fn request_contract(request: &ZulipClientRequestV1) -> ZulipClientContractV1 {
     match request {
         ZulipClientRequestV1::Command(_) => ZulipClientContractV1::Command,
         ZulipClientRequestV1::OperationStatus { .. } => ZulipClientContractV1::Query,
+        ZulipClientRequestV1::OperationalQuery(_) => ZulipClientContractV1::OperationalQuery,
+        ZulipClientRequestV1::OperationalReplay(_) => ZulipClientContractV1::OperationalRealtime,
     }
 }
 
-fn encode_request_payload(request: &ZulipClientRequestV1) -> Vec<u8> {
-    match request {
+fn encode_request_payload(
+    request: &ZulipClientRequestV1,
+) -> Result<Vec<u8>, ZulipClientPortErrorV1> {
+    Ok(match request {
         ZulipClientRequestV1::Command(command) => client_wire::encode_command_request(command),
         ZulipClientRequestV1::OperationStatus { operation_id } => {
             client_wire::encode_operation_status_query(operation_id)
         }
-    }
+        ZulipClientRequestV1::OperationalQuery(query) => {
+            operational_wire::encode_operational_query(query)
+                .map_err(|_| ZulipClientPortErrorV1::Protocol)?
+        }
+        ZulipClientRequestV1::OperationalReplay(request) => {
+            realtime_wire::encode_operational_replay_request(request)
+                .map_err(|_| ZulipClientPortErrorV1::Protocol)?
+        }
+    })
 }
 
 fn decode_request_payload(
@@ -69,6 +83,16 @@ fn decode_request_payload(
         ZulipClientContractV1::Query => client_wire::decode_operation_status_query(bytes)
             .map(|operation_id| ZulipClientRequestV1::OperationStatus { operation_id })
             .map_err(|_| ZulipClientPortErrorV1::Protocol),
+        ZulipClientContractV1::OperationalQuery => {
+            operational_wire::decode_operational_query(bytes)
+                .map(ZulipClientRequestV1::OperationalQuery)
+                .map_err(|_| ZulipClientPortErrorV1::Protocol)
+        }
+        ZulipClientContractV1::OperationalRealtime => {
+            realtime_wire::decode_operational_replay_request(bytes)
+                .map(ZulipClientRequestV1::OperationalReplay)
+                .map_err(|_| ZulipClientPortErrorV1::Protocol)
+        }
     }
 }
 
@@ -86,7 +110,7 @@ pub fn encode_module_request(
         owner_id: ZULIP_OWNER_ID.to_owned(),
         contract: Some(zulip_client_contract(contract)),
         request_id,
-        request_payload: encode_request_payload(request),
+        request_payload: encode_request_payload(request)?,
     }
     .encode_to_vec())
 }
@@ -134,6 +158,16 @@ pub async fn handle_client_request(
             .await
             .map(ZulipClientResponseV1::OperationStatus)
             .map_err(|_| ZulipClientPortErrorV1::Runtime)?,
+        ZulipClientRequestV1::OperationalQuery(query) => runtime
+            .operational_query(&query)
+            .await
+            .map(ZulipClientResponseV1::OperationalQuery)
+            .map_err(|_| ZulipClientPortErrorV1::Runtime)?,
+        ZulipClientRequestV1::OperationalReplay(request) => runtime
+            .operational_replay(&request)
+            .await
+            .map(ZulipClientResponseV1::OperationalReplay)
+            .map_err(|_| ZulipClientPortErrorV1::Runtime)?,
     };
     encode_module_response(request_id, contract, &response)
 }
@@ -153,6 +187,15 @@ fn encode_module_response(
         (ZulipClientContractV1::Query, ZulipClientResponseV1::OperationStatus(status)) => {
             client_wire::encode_operation_status_response(status.as_ref())
         }
+        (
+            ZulipClientContractV1::OperationalQuery,
+            ZulipClientResponseV1::OperationalQuery(response),
+        ) => operational_wire::encode_operational_query_response(response),
+        (
+            ZulipClientContractV1::OperationalRealtime,
+            ZulipClientResponseV1::OperationalReplay(response),
+        ) => realtime_wire::encode_operational_replay_response(response)
+            .map_err(|_| ZulipClientPortErrorV1::Protocol)?,
         _ => return Err(ZulipClientPortErrorV1::Protocol),
     };
     Ok(ModuleClientResponseV1 {
@@ -185,6 +228,14 @@ pub fn decode_module_response(
             client_wire::decode_operation_status_response(&envelope.response_payload)
                 .map(ZulipClientResponseV1::OperationStatus)
         }
+        ZulipClientContractV1::OperationalQuery => {
+            operational_wire::decode_operational_query_response(&envelope.response_payload)
+                .map(ZulipClientResponseV1::OperationalQuery)
+        }
+        ZulipClientContractV1::OperationalRealtime => {
+            realtime_wire::decode_operational_replay_response(&envelope.response_payload)
+                .map(ZulipClientResponseV1::OperationalReplay)
+        }
     }
     .map_err(|_| ZulipClientPortErrorV1::Protocol)?;
     Ok((envelope.request_id, response))
@@ -195,6 +246,7 @@ mod tests {
     use hermes_runtime_protocol::v1::ModuleClientRequestV1;
     use hermes_zulip_api::{
         ZulipCommandReceiptV1, ZulipCommandV1, client_contract::ZulipClientContractV1,
+        operational::ZulipOperationalQueryV1, realtime::ZulipOperationalReplayRequestV1,
     };
     use prost::Message;
 
@@ -216,11 +268,33 @@ mod tests {
         }
     }
 
+    fn operational_query_request() -> ZulipClientRequestV1 {
+        ZulipClientRequestV1::OperationalQuery(ZulipOperationalQueryV1::GetAccountStatus {
+            account_id: "account".into(),
+        })
+    }
+
+    fn operational_replay_request() -> ZulipClientRequestV1 {
+        ZulipClientRequestV1::OperationalReplay(ZulipOperationalReplayRequestV1 {
+            account_id: "account".into(),
+            after_sequence: 0,
+            limit: 20,
+        })
+    }
+
     #[test]
     fn each_request_uses_only_its_exact_route_contract() {
         for (request, expected) in [
             (command_request(), ZulipClientContractV1::Command),
             (query_request(), ZulipClientContractV1::Query),
+            (
+                operational_query_request(),
+                ZulipClientContractV1::OperationalQuery,
+            ),
+            (
+                operational_replay_request(),
+                ZulipClientContractV1::OperationalRealtime,
+            ),
         ] {
             let encoded = encode_module_request(1, &request).expect("module request");
             let (request_id, contract, decoded) =

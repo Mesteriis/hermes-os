@@ -2,11 +2,14 @@
 
 mod command;
 mod event_queue;
+mod history;
 mod wire;
 
 use std::fmt::{Debug, Formatter};
 
-use hermes_zulip_api::{ZulipAccountV1, ZulipCommandV1, ZulipEventQueueV1, ZulipPolledEventV1};
+use hermes_zulip_api::{
+    ZulipAccountV1, ZulipCommandV1, ZulipEventQueueV1, ZulipHistoryPageV1, ZulipPolledEventV1,
+};
 use zeroize::Zeroizing;
 
 pub use command::ZulipHttpRequestV1;
@@ -99,6 +102,14 @@ pub async fn poll_event_queue(
     queue: &ZulipEventQueueV1,
 ) -> Result<Vec<ZulipPolledEventV1>, ZulipHttpErrorV1> {
     event_queue::poll(config, queue).await
+}
+
+pub async fn fetch_message_history_page(
+    config: &ZulipHttpConfigV1,
+    before_provider_message_id: Option<&str>,
+    limit: u32,
+) -> Result<ZulipHistoryPageV1, ZulipHttpErrorV1> {
+    history::fetch_page(config, before_provider_message_id, limit).await
 }
 
 #[must_use]

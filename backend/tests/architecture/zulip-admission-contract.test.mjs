@@ -50,7 +50,12 @@ test('Zulip admission uses exact route, settings and platform capability units',
 
   assert.match(contract, /"zulip\.command\.v1"/);
   assert.match(contract, /"zulip\.query\.v1"/);
+  assert.match(contract, /"zulip\.operational\.query\.v1"/);
+  assert.match(contract, /"zulip\.operational\.realtime\.v1"/);
   assert.match(contract, /ZULIP_CLIENT_DESCRIPTOR_SET_V1/);
+  assert.match(contract, /ZULIP_OPERATIONAL_DESCRIPTOR_SET_V1/);
+  assert.match(contract, /ZULIP_OPERATIONAL_REALTIME_DESCRIPTOR_SET_V1/);
+  assert.match(contract, /pub const fn descriptor_set\(self\)/);
   assert.match(
     contract,
     /\/hermes\.zulip\.v1\.ZulipCommandService\/ExecuteCommand/,
@@ -60,7 +65,7 @@ test('Zulip admission uses exact route, settings and platform capability units',
     /\/hermes\.zulip\.v1\.ZulipQueryService\/GetOperationStatus/,
   );
 
-  assert.match(clientPort, /Sha256::digest\(ZULIP_CLIENT_DESCRIPTOR_SET_V1\)/);
+  assert.match(clientPort, /Sha256::digest\(contract\.descriptor_set\(\)\)/);
   assert.match(clientPort, /match contract/);
   assert.doesNotMatch(clientPort, /schema_sha256: Vec::new\(\)/);
 

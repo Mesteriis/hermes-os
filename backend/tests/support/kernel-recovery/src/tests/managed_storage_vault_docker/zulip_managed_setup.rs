@@ -8,7 +8,7 @@ use hermes_vault_protocol::SecretClassV1;
 use hermes_vault_store_sqlcipher::{SecretRecordScope, VaultStore};
 use hermes_zulip_api::client_contract::{ZULIP_MODULE_ID, ZULIP_OWNER_ID, ZulipClientContractV1};
 use hermes_zulip_core::credential_lease_purpose;
-use hermes_zulip_persistence::{ZULIP_STORAGE_BUNDLE_REVISION_V1, zulip_storage_bundle_v1};
+use hermes_zulip_persistence::{ZULIP_STORAGE_BUNDLE_REVISION_V2, zulip_storage_bundle_v1};
 use hermes_zulip_runtime::{
     admission::{
         ZULIP_BLOB_CAPABILITY_ID, ZULIP_CREDENTIALS_CAPABILITY_ID, ZULIP_EVENTS_CAPABILITY_ID,
@@ -36,6 +36,7 @@ pub(super) struct StartedZulipRuntime {
     pub(super) runtime_instance_id: String,
     pub(super) runtime_generation: u64,
     pub(super) grant_epoch: u64,
+    pub(super) capability_ids: Vec<String>,
 }
 
 pub(super) fn installed_communications_zulip_release(root: &Path) -> InstalledSignedBundle {
@@ -109,7 +110,7 @@ pub(super) fn admit_zulip_runtime(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 ZULIP_OWNER_ID,
-                u64::from(ZULIP_STORAGE_BUNDLE_REVISION_V1),
+                u64::from(ZULIP_STORAGE_BUNDLE_REVISION_V2),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -125,7 +126,15 @@ pub(super) fn admit_zulip_runtime(
 fn granted_capability_ids(grant_profile: ZulipGrantProfileV1) -> Vec<String> {
     let mut capability_ids = vec![ZULIP_BLOB_CAPABILITY_ID.to_owned()];
     if matches!(grant_profile, ZulipGrantProfileV1::CommandAndQuery) {
-        capability_ids.push(ZulipClientContractV1::Command.capability_id().to_owned());
+        capability_ids.extend([
+            ZulipClientContractV1::Command.capability_id().to_owned(),
+            ZulipClientContractV1::OperationalQuery
+                .capability_id()
+                .to_owned(),
+            ZulipClientContractV1::OperationalRealtime
+                .capability_id()
+                .to_owned(),
+        ]);
     }
     capability_ids.extend([
         ZULIP_CREDENTIALS_CAPABILITY_ID.to_owned(),
@@ -133,6 +142,7 @@ fn granted_capability_ids(grant_profile: ZulipGrantProfileV1) -> Vec<String> {
         ZulipClientContractV1::Query.capability_id().to_owned(),
         ZULIP_STORAGE_CAPABILITY_ID.to_owned(),
     ]);
+    capability_ids.sort();
     capability_ids
 }
 
@@ -146,7 +156,7 @@ pub(super) fn prepare_zulip_runtime(
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
     let bundle = store
-        .platform_storage_bundle(ZULIP_OWNER_ID, u64::from(ZULIP_STORAGE_BUNDLE_REVISION_V1))
+        .platform_storage_bundle(ZULIP_OWNER_ID, u64::from(ZULIP_STORAGE_BUNDLE_REVISION_V2))
         .expect("read Zulip Storage bundle")
         .expect("Zulip Storage bundle");
     let binding = issue_managed(
@@ -158,7 +168,7 @@ pub(super) fn prepare_zulip_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(ZULIP_STORAGE_BUNDLE_REVISION_V1),
+            u64::from(ZULIP_STORAGE_BUNDLE_REVISION_V2),
             *bundle.digest(),
         )
         .expect("Zulip Storage binding issue"),
@@ -233,7 +243,52 @@ pub(super) fn start_zulip_runtime(
         runtime_instance_id,
         runtime_generation,
         grant_epoch,
+        capability_ids: admitted.capability_ids,
     }
+}
+
+pub(super) fn restart_zulip_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    predecessor: &StartedZulipRuntime,
+    realm_url: &str,
+) -> StartedZulipRuntime {
+    let predecessor_generation = predecessor.runtime_generation;
+    let predecessor_binding = store
+        .platform_storage_binding(&predecessor.registration_id, ZULIP_STORAGE_CAPABILITY_ID)
+        .expect("read predecessor Zulip Storage binding")
+        .expect("predecessor Zulip Storage binding");
+    let issue = storage_successor::issue_after(&predecessor_binding)
+        .expect("derive Zulip successor storage fences");
+    let (_, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        &predecessor.registration_id,
+        ZULIP_STORAGE_CAPABILITY_ID,
+        issue,
+    )
+    .expect("reserve successor Zulip launch and Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision successor Zulip Storage binding");
+    let successor = start_zulip_runtime(
+        supervisor,
+        store,
+        kernel_data,
+        runtime_dir,
+        AdmittedZulipRuntime {
+            registration_id: predecessor.registration_id.clone(),
+            capability_ids: predecessor.capability_ids.clone(),
+        },
+        realm_url,
+    );
+    assert_eq!(
+        successor.runtime_generation,
+        predecessor_generation + 1,
+        "Zulip restart must use the next managed runtime generation",
+    );
+    successor
 }
 
 fn zulip_settings_snapshot(realm_url: &str) -> hermes_runtime_protocol::v1::SettingsSnapshotV1 {

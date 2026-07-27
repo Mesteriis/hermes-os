@@ -1,4 +1,8 @@
-use hermes_zulip_api::{ZulipEventQueueV1, ZulipEventV1, ZulipPolledEventV1};
+use hermes_zulip_api::{
+    ZulipEventQueueV1, ZulipEventV1, ZulipMessageSnapshotV1, ZulipPolledEventV1,
+    ZulipReactionOperationV1,
+    operational::{ZulipConversationKindV1, ZulipReactionStateV1},
+};
 use serde_json::Value;
 
 use crate::{
@@ -104,42 +108,85 @@ fn message_event(
     event_id: i64,
 ) -> Result<ZulipEventV1, ZulipHttpErrorV1> {
     let message = value.get("message").ok_or(ZulipHttpErrorV1::Protocol)?;
-    let message_id = required_number_string(message, "id")?;
-    let conversation = message
+    let snapshot = message_snapshot(config, message)?;
+    Ok(ZulipEventV1::Message {
+        account_id: snapshot.account_id,
+        event_id,
+        provider_message_id: snapshot.provider_message_id,
+        provider_conversation_id: snapshot.provider_conversation_id,
+        conversation_kind: snapshot.conversation_kind,
+        stream_id: snapshot.stream_id,
+        stream_name: snapshot.stream_name,
+        topic: snapshot.topic,
+        direct_recipient_id: snapshot.direct_recipient_id,
+        sender_id: snapshot.sender_id,
+        is_outgoing: snapshot.is_outgoing,
+        content: snapshot.content,
+        sent_at_unix_seconds: snapshot.sent_at_unix_seconds,
+        attachments: snapshot.attachments,
+        reactions: snapshot.reactions,
+    })
+}
+
+pub(crate) fn message_snapshot(
+    config: &ZulipHttpConfigV1,
+    message: &Value,
+) -> Result<ZulipMessageSnapshotV1, ZulipHttpErrorV1> {
+    let provider_message_id = required_number_string(message, "id")?;
+    let stream_id = message
         .get("stream_id")
         .and_then(Value::as_i64)
-        .map(|stream_id| {
-            format!(
-                "stream:{stream_id}:{}",
-                message.get("subject").and_then(Value::as_str).unwrap_or("")
-            )
-        })
-        .unwrap_or_else(|| {
+        .map(|value| value.to_string());
+    let topic = message
+        .get("subject")
+        .or_else(|| message.get("topic"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let direct_recipient_id = message
+        .get("recipient_id")
+        .and_then(Value::as_i64)
+        .map(|value| value.to_string());
+    let (provider_conversation_id, conversation_kind) = if let Some(stream_id) = &stream_id {
+        (
+            format!("stream:{stream_id}:{}", topic.as_deref().unwrap_or("")),
+            ZulipConversationKindV1::StreamTopic,
+        )
+    } else {
+        (
             format!(
                 "direct:{}",
-                message
-                    .get("recipient_id")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(0)
-            )
-        });
+                direct_recipient_id.as_deref().unwrap_or("unknown")
+            ),
+            ZulipConversationKindV1::Direct,
+        )
+    };
     let sender_id = required_number_string(message, "sender_id")?;
     let is_outgoing = message
         .get("sender_email")
         .and_then(Value::as_str)
         .is_some_and(|email| email.eq_ignore_ascii_case(&config.account.bot_email));
-    Ok(ZulipEventV1::Message {
+    Ok(ZulipMessageSnapshotV1 {
         account_id: config.account.account_id.clone(),
-        event_id,
-        provider_message_id: message_id,
-        provider_conversation_id: conversation,
+        provider_message_id,
+        provider_conversation_id,
+        conversation_kind,
+        stream_id,
+        stream_name: message
+            .get("display_recipient")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        topic,
+        direct_recipient_id,
         sender_id,
         is_outgoing,
         content: message
             .get("content")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        sent_at_unix_seconds: message.get("timestamp").and_then(Value::as_i64),
+        edited_at_unix_seconds: message.get("last_edit_timestamp").and_then(Value::as_i64),
         attachments: message_attachments(message),
+        reactions: message_reactions(message),
     })
 }
 
@@ -176,6 +223,32 @@ fn message_attachments(message: &Value) -> Vec<hermes_zulip_api::ZulipAttachment
         }
     }
     unique
+}
+
+fn message_reactions(message: &Value) -> Vec<ZulipReactionStateV1> {
+    message
+        .get("reactions")
+        .and_then(Value::as_array)
+        .map(|reactions| {
+            reactions
+                .iter()
+                .filter_map(|reaction| {
+                    Some(ZulipReactionStateV1 {
+                        actor_id: required_number_string(reaction, "user_id").ok()?,
+                        emoji_name: required_string(reaction, "emoji_name").ok()?,
+                        emoji_code: reaction
+                            .get("emoji_code")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned),
+                        reaction_type: reaction
+                            .get("reaction_type")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn attachment_from_value(value: &Value) -> Option<hermes_zulip_api::ZulipAttachmentV1> {
@@ -259,6 +332,19 @@ fn message_change(
             account_id: config.account.account_id.clone(),
             event_id,
             provider_message_id,
+            content: value
+                .get("content")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            topic: value
+                .get("subject")
+                .or_else(|| value.get("topic"))
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            edited_at_unix_seconds: value
+                .get("edit_timestamp")
+                .or_else(|| value.get("last_edit_timestamp"))
+                .and_then(Value::as_i64),
         }
     } else {
         ZulipEventV1::MessageDeleted {
@@ -279,6 +365,23 @@ fn reaction_event(
         event_id,
         provider_message_id: required_number_string(value, "message_id")?,
         actor_id: required_number_string(value, "user_id")?,
+        reaction: ZulipReactionStateV1 {
+            actor_id: required_number_string(value, "user_id")?,
+            emoji_name: required_string(value, "emoji_name")?,
+            emoji_code: value
+                .get("emoji_code")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            reaction_type: value
+                .get("reaction_type")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        },
+        operation: match required_string(value, "op")?.as_str() {
+            "add" => ZulipReactionOperationV1::Add,
+            "remove" => ZulipReactionOperationV1::Remove,
+            _ => return Err(ZulipHttpErrorV1::Protocol),
+        },
     })
 }
 

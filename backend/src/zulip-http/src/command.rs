@@ -162,6 +162,32 @@ pub fn request_for_queue_poll(
     })
 }
 
+pub fn request_for_message_history(
+    config: &ZulipHttpConfigV1,
+    before_provider_message_id: Option<&str>,
+    limit: u32,
+) -> Result<ZulipHttpRequestV1, ZulipHttpErrorV1> {
+    if limit == 0 || limit > 200 {
+        return Err(ZulipHttpErrorV1::InvalidCommand);
+    }
+    let anchor = before_provider_message_id
+        .map(message_id)
+        .transpose()?
+        .map_or_else(|| "newest".to_owned(), |value| value.to_string());
+    let include_anchor = before_provider_message_id.is_none();
+    let base_path = realm_path(&config.account.realm_url)?;
+    Ok(ZulipHttpRequestV1 {
+        method: "GET",
+        path: format!(
+            "{base_path}api/v1/messages?anchor={}&include_anchor={include_anchor}&num_before={limit}&num_after=0&apply_markdown=false&allow_empty_topic_name=true",
+            percent_encode(&anchor)
+        ),
+        form_body: String::new(),
+        content_type: "application/x-www-form-urlencoded",
+        body: Vec::new(),
+    })
+}
+
 fn command_account_id(command: &ZulipCommandV1) -> &str {
     match command {
         ZulipCommandV1::SendStream { account_id, .. }

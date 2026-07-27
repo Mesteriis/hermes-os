@@ -71,6 +71,33 @@ const WHATSAPP_OPERATIONAL_ADR_PATH = new URL(
   'docs/adr/ADR-0286-whatsapp-operational-read-and-realtime-boundary.md',
   PROJECT_ROOT,
 );
+const ZULIP_OPERATIONAL_ADR_PATH = new URL(
+  'docs/adr/ADR-0291-zulip-account-history-query-and-replay-boundary.md',
+  PROJECT_ROOT,
+);
+const ZULIP_OPERATIONAL_PROTO_PATH = new URL(
+  'src/zulip-api/proto/hermes/zulip/operational/v1/client.proto',
+  BACKEND_ROOT,
+);
+const ZULIP_REALTIME_PROTO_PATH = new URL(
+  'src/zulip-api/proto/hermes/zulip/operational/realtime/v1/client.proto',
+  BACKEND_ROOT,
+);
+const ZULIP_CLIENT_CONTRACT_PATH = new URL(
+  'src/zulip-api/src/client_contract.rs',
+  BACKEND_ROOT,
+);
+const ZULIP_HISTORY_HTTP_PATH = new URL('src/zulip-http/src/history.rs', BACKEND_ROOT);
+const ZULIP_OPERATIONAL_PERSISTENCE_PATH = new URL(
+  'src/zulip-persistence/src/operational.rs',
+  BACKEND_ROOT,
+);
+const ZULIP_SCHEMA_PATH = new URL('src/zulip-persistence/src/schema.rs', BACKEND_ROOT);
+const ZULIP_RUNTIME_PATH = new URL('src/zulip-runtime/src/lib.rs', BACKEND_ROOT);
+const ZULIP_MANAGED_FLOW_PATH = new URL(
+  'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/zulip_event_flow.rs',
+  BACKEND_ROOT,
+);
 
 const ALLOWED_ROLES = new Set(['app', 'domain', 'engine', 'integration', 'platform', 'workflow']);
 const ALLOWED_STATES = new Set(['implemented', 'planned']);
@@ -408,6 +435,99 @@ test('WhatsApp completion remains closed behind independent read and realtime sl
   assert.match(whatsappAdrSource, /hermes-whatsapp-persistence/);
   assert.match(whatsappAdrSource, /DDL-only/);
   assert.match(whatsappAdrSource, /Fake backfill запрещён/);
+});
+
+test('Zulip completion remains closed behind lifecycle, history, read and realtime slices', async () => {
+  const [
+    inventorySource,
+    zulipAdrSource,
+    operationalProtoSource,
+    realtimeProtoSource,
+    clientContractSource,
+    historyHttpSource,
+    persistenceSource,
+    schemaSource,
+    runtimeSource,
+    managedFlowSource,
+  ] = await Promise.all([
+    readFile(INVENTORY_PATH, 'utf8'),
+    readFile(ZULIP_OPERATIONAL_ADR_PATH, 'utf8'),
+    readFile(ZULIP_OPERATIONAL_PROTO_PATH, 'utf8'),
+    readFile(ZULIP_REALTIME_PROTO_PATH, 'utf8'),
+    readFile(ZULIP_CLIENT_CONTRACT_PATH, 'utf8'),
+    readFile(ZULIP_HISTORY_HTTP_PATH, 'utf8'),
+    readFile(ZULIP_OPERATIONAL_PERSISTENCE_PATH, 'utf8'),
+    readFile(ZULIP_SCHEMA_PATH, 'utf8'),
+    readFile(ZULIP_RUNTIME_PATH, 'utf8'),
+    readFile(ZULIP_MANAGED_FLOW_PATH, 'utf8'),
+  ]);
+  const inventory = JSON.parse(inventorySource);
+  const zulipSlices = new Map(
+    inventory.slices
+      .filter(({ owner }) => owner === 'zulip')
+      .map((slice) => [slice.gate, slice]),
+  );
+  const backendGates = [
+    'zulip_account_lifecycle_v1',
+    'zulip_history_sync_v1',
+    'zulip_operational_read_v1',
+    'zulip_operational_realtime_v1',
+  ];
+
+  assert.deepEqual([...zulipSlices.keys()].sort(), [
+    'zulip_account_lifecycle_v1',
+    'zulip_full_operational_v1',
+    'zulip_history_sync_v1',
+    'zulip_integration_v1',
+    'zulip_operational_read_v1',
+    'zulip_operational_realtime_v1',
+  ]);
+  assert.ok([...zulipSlices.values()].every(({ role }) => role === 'integration'));
+  assert.equal(zulipSlices.get('zulip_account_lifecycle_v1').state, 'planned');
+  assert.equal(zulipSlices.get('zulip_history_sync_v1').state, 'implemented');
+  assert.equal(zulipSlices.get('zulip_operational_read_v1').state, 'implemented');
+  assert.equal(zulipSlices.get('zulip_operational_realtime_v1').state, 'implemented');
+  assert.equal(zulipSlices.get('zulip_integration_v1').state, 'implemented');
+  assert.equal(zulipSlices.get('zulip_full_operational_v1').state, 'planned');
+  assert.deepEqual(
+    [...zulipSlices.get('zulip_full_operational_v1').dependsOn].sort(),
+    ['client_gateway_v1', 'nats_data_plane_v1', 'zulip_integration_v1', ...backendGates].sort(),
+  );
+
+  assert.match(zulipAdrSource, /zulip\.operational\.query\.v1/);
+  assert.match(zulipAdrSource, /zulip\.operational\.realtime\.v1/);
+  assert.match(zulipAdrSource, /GET \/api\/v1\/messages/);
+  assert.match(zulipAdrSource, /Kernel\/Core согласуют только/);
+  assert.match(zulipAdrSource, /integration, а не domain/);
+  assert.match(zulipAdrSource, /generated frontend client/);
+  assert.match(
+    operationalProtoSource,
+    /service ZulipOperationalQueryService[\s\S]*rpc Query/,
+  );
+  assert.match(
+    realtimeProtoSource,
+    /service ZulipOperationalRealtimeService[\s\S]*rpc Replay/,
+  );
+  assert.match(clientContractSource, /zulip\.operational\.query\.v1/);
+  assert.match(clientContractSource, /zulip\.operational\.realtime\.v1/);
+  assert.match(historyHttpSource, /request_for_message_history/);
+  assert.match(historyHttpSource, /found_oldest/);
+  assert.match(
+    schemaSource,
+    /ZULIP_STORAGE_BUNDLE_REVISION_V2[\s\S]*zulip_operational_message_mutations/,
+  );
+  assert.match(
+    persistenceSource,
+    /record_operational_events_and_enqueue[\s\S]*advance_cursor_in_transaction/,
+  );
+  assert.match(
+    persistenceSource,
+    /record_history_page[\s\S]*persist_history_message/,
+  );
+  assert.match(runtimeSource, /sync_history_page[\s\S]*fetch_message_history_page/);
+  assert.match(managedFlowSource, /restart_zulip_runtime/);
+  assert.match(managedFlowSource, /assert_cross_account_operational_query_is_rejected/);
+  assert.match(managedFlowSource, /assert_zulip_operational_replay/);
 });
 
 test('cross-owner and AI use cases are distinct workflow units', async () => {

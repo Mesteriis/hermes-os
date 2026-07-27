@@ -51,6 +51,8 @@ use hermes_vault_protocol::SecretClassV1;
 use hermes_zulip_api::{
     ZulipAccountV1, ZulipCommandOperationStatusV1, ZulipCommandV1, ZulipEventQueueV1,
     command_blob_intent,
+    operational::{ZulipOperationalQueryResponseV1, ZulipOperationalQueryV1},
+    realtime::{ZulipOperationalReplayRequestV1, ZulipOperationalReplayResponseV1},
 };
 use hermes_zulip_core::credential_lease_purpose;
 use hermes_zulip_http::ZulipHttpConfigV1;
@@ -61,7 +63,8 @@ use sha2::{Digest, Sha256};
 use crate::admission::{ZULIP_BLOB_CAPABILITY_ID, ZULIP_CREDENTIAL_LEASE_TTL_SECONDS};
 use crate::{
     ZulipCommunicationsOutboxRelayError, ZulipRuntimeAdmissionV1, ZulipRuntimeErrorV1,
-    ZulipRuntimeIdentityV1, acquire_event_queue, poll_once, relay_communications_outbox_once,
+    ZulipRuntimeIdentityV1, acquire_event_queue, execute_operational_query, poll_once,
+    relay_communications_outbox_once, replay_operational_events, sync_history_page,
 };
 use zeroize::Zeroizing;
 
@@ -82,6 +85,7 @@ pub struct ZulipAdmittedRuntimeV1 {
 pub struct ZulipRuntimeTickV1 {
     pub dispatched_command: bool,
     pub accepted_observations: usize,
+    pub synced_history_page: bool,
     pub relayed_observations: usize,
 }
 
@@ -99,6 +103,7 @@ pub enum ZulipBootstrapErrorV1 {
 pub enum ZulipRuntimeTickErrorV1 {
     Command(super::ZulipRuntimeErrorV1),
     Poll(super::ZulipRuntimeErrorV1),
+    History(super::ZulipRuntimeErrorV1),
     Relay(ZulipCommunicationsOutboxRelayError),
 }
 
@@ -339,13 +344,23 @@ impl ZulipAdmittedRuntimeV1 {
                 return Ok(true);
             }
         };
-        let payload = crate::client_port::handle_client_request(
+        let request_id = request.request_id;
+        let payload = match crate::client_port::handle_client_request(
             self,
             &request.encode_to_vec(),
             requested_at_unix_seconds,
         )
         .await
-        .map_err(|_| ZulipBootstrapErrorV1::Admission)?;
+        {
+            Ok(payload) => payload,
+            Err(_) => ModuleClientResponseV1 {
+                protocol_major: 1,
+                request_id,
+                response_payload: Vec::new(),
+                error_code: "ZULIP_CLIENT_REQUEST_REJECTED".to_owned(),
+            }
+            .encode_to_vec(),
+        };
         let response = ModuleClientResponseV1::decode(payload.as_slice())
             .map_err(|_| ZulipBootstrapErrorV1::Admission)?;
         validate_module_client_response_v1(&response)
@@ -422,6 +437,27 @@ impl ZulipAdmittedRuntimeV1 {
         super::command_operation_status(&self.durable, operation_id).await
     }
 
+    pub async fn operational_query(
+        &self,
+        query: &ZulipOperationalQueryV1,
+    ) -> Result<ZulipOperationalQueryResponseV1, super::ZulipRuntimeErrorV1> {
+        execute_operational_query(&self.durable, &self.http.account.account_id, query).await
+    }
+
+    pub async fn operational_replay(
+        &self,
+        request: &ZulipOperationalReplayRequestV1,
+    ) -> Result<ZulipOperationalReplayResponseV1, super::ZulipRuntimeErrorV1> {
+        replay_operational_events(&self.durable, &self.http.account.account_id, request).await
+    }
+
+    pub async fn sync_history_page(
+        &self,
+        now_unix_seconds: i64,
+    ) -> Result<bool, super::ZulipRuntimeErrorV1> {
+        sync_history_page(&self.durable, &self.http, now_unix_seconds).await
+    }
+
     pub async fn relay_communications_outbox(
         &self,
         published_at_unix_seconds: i64,
@@ -452,6 +488,18 @@ impl ZulipAdmittedRuntimeV1 {
             .poll_once(queue, now_unix_seconds, recorded_at_nanos)
             .await
             .map_err(ZulipRuntimeTickErrorV1::Poll)?;
+        let synced_history_page = match self.sync_history_page(now_unix_seconds).await {
+            Ok(synced) => synced,
+            Err(ZulipRuntimeErrorV1::Http(_)) => {
+                self.durable
+                    .mark_history_degraded(&self.http.account.account_id, now_unix_seconds)
+                    .await
+                    .map_err(ZulipRuntimeErrorV1::Persistence)
+                    .map_err(ZulipRuntimeTickErrorV1::History)?;
+                false
+            }
+            Err(error) => return Err(ZulipRuntimeTickErrorV1::History(error)),
+        };
         let relayed_observations = match self.relay_communications_outbox(now_unix_seconds).await {
             Ok(relayed) => relayed,
             Err(ZulipCommunicationsOutboxRelayError::Unavailable) => 0,
@@ -462,6 +510,7 @@ impl ZulipAdmittedRuntimeV1 {
         Ok(ZulipRuntimeTickV1 {
             dispatched_command,
             accepted_observations,
+            synced_history_page,
             relayed_observations,
         })
     }

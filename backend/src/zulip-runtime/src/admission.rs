@@ -12,8 +12,7 @@ use hermes_runtime_protocol::v1::{
     VaultSecretClassV1, VaultTargetScopeV1, capability_request_v1::Request,
 };
 use hermes_zulip_api::client_contract::{
-    ZULIP_CLIENT_CONTRACT_MAJOR, ZULIP_CLIENT_CONTRACT_REVISION, ZULIP_CLIENT_DESCRIPTOR_SET_V1,
-    ZulipClientContractV1,
+    ZULIP_CLIENT_CONTRACT_MAJOR, ZULIP_CLIENT_CONTRACT_REVISION, ZulipClientContractV1,
 };
 pub use hermes_zulip_api::client_contract::{ZULIP_MODULE_ID, ZULIP_OWNER_ID};
 use hermes_zulip_core::ZULIP_API_KEY_PURPOSE_ID;
@@ -41,6 +40,8 @@ pub fn zulip_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         zulip_client_capability_v1(ZulipClientContractV1::Command),
         zulip_credentials_capability_v1(),
         zulip_events_capability_v1(),
+        zulip_client_capability_v1(ZulipClientContractV1::OperationalQuery),
+        zulip_client_capability_v1(ZulipClientContractV1::OperationalRealtime),
         zulip_client_capability_v1(ZulipClientContractV1::Query),
         zulip_storage_capability_v1(),
     ]
@@ -68,7 +69,7 @@ fn zulip_client_contract_reference_v1(contract: ZulipClientContractV1) -> Contra
         name: contract.contract_name().to_owned(),
         major: ZULIP_CLIENT_CONTRACT_MAJOR,
         revision: ZULIP_CLIENT_CONTRACT_REVISION,
-        schema_sha256: Sha256::digest(ZULIP_CLIENT_DESCRIPTOR_SET_V1).to_vec(),
+        schema_sha256: Sha256::digest(contract.descriptor_set()).to_vec(),
     }
 }
 
@@ -195,6 +196,8 @@ mod tests {
                 ZulipClientContractV1::Command.capability_id(),
                 ZULIP_CREDENTIALS_CAPABILITY_ID,
                 ZULIP_EVENTS_CAPABILITY_ID,
+                ZulipClientContractV1::OperationalQuery.capability_id(),
+                ZulipClientContractV1::OperationalRealtime.capability_id(),
                 ZulipClientContractV1::Query.capability_id(),
                 ZULIP_STORAGE_CAPABILITY_ID,
             ]

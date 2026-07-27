@@ -457,8 +457,13 @@ release.
    `whatsapp_operational_realtime_v1` по ADR-0286. Только после них,
    generated frontend client и integration-owned UI cutover открывается
    `whatsapp_full_operational_v1`.
-4. `zulip_full_operational_v1` — lifecycle/read projection/storage/runtime и
-   client.
+4. Zulip сохраняет реализованный backend foundation
+   `zulip_integration_v1` по ADR-0271 и проходит независимые
+   `zulip_account_lifecycle_v1`,
+   `zulip_history_sync_v1`, `zulip_operational_read_v1` и
+   `zulip_operational_realtime_v1` по ADR-0291. Только после них, generated
+   frontend client и integration-owned UI cutover открывается
+   `zulip_full_operational_v1`.
 5. Mail read, composition и command gates — независимо, без одного
    всесильного Mail capability.
 6. Communications canonical read/content/saved-search gates.

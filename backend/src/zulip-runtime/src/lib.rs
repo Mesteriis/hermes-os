@@ -17,17 +17,24 @@ use hermes_communications_ingress::{
 use hermes_runtime_protocol::v1::BlobDataOperationV1;
 use hermes_zulip_api::{
     ZulipCommandOperationStatusV1, ZulipCommandReceiptV1, ZulipCommandV1, ZulipEventQueueV1,
-    ZulipPolledEventV1, client_contract::ZULIP_MODULE_ID, command_account_id,
-    command_fingerprint_bytes, command_operation_id,
+    ZulipPolledEventV1,
+    client_contract::ZULIP_MODULE_ID,
+    command_account_id, command_fingerprint_bytes, command_operation_id,
+    operational::{
+        ZulipHistoryStateV1, ZulipOperationalQueryResponseV1, ZulipOperationalQueryV1,
+        operational_query_account_id,
+    },
+    realtime::{ZulipOperationalReplayRequestV1, ZulipOperationalReplayResponseV1},
 };
 use hermes_zulip_core::{ZulipCoreError, observation_drafts};
 use hermes_zulip_http::{
     ZulipHttpConfigV1, ZulipHttpErrorV1, download_user_upload,
-    execute_command as execute_http_command, poll_event_queue, register_event_queue, upload_file,
+    execute_command as execute_http_command, fetch_message_history_page, poll_event_queue,
+    register_event_queue, upload_file,
 };
 use hermes_zulip_persistence::{
     ZulipCommandOperationStateV1, ZulipDurablePersistence, ZulipDurablePersistenceError,
-    ZulipQueueCursorV1,
+    ZulipOperationalIngestV1, ZulipQueueCursorV1,
 };
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
@@ -399,12 +406,6 @@ where
         queue_id: context.queue_id.to_owned(),
         last_event_id: context.event.event_id,
     };
-    if context.event.observations.is_empty() {
-        return durable
-            .advance_cursor(&cursor)
-            .await
-            .map_err(ZulipRuntimeErrorV1::Persistence);
-    }
     let mut records = Vec::new();
     for observation in &context.event.observations {
         for draft in observation_drafts(observation).map_err(ZulipRuntimeErrorV1::Core)? {
@@ -422,7 +423,74 @@ where
         }
     }
     durable
-        .advance_cursor_and_enqueue_many(&cursor, &records, context.recorded_at_unix_seconds)
+        .record_operational_events_and_enqueue(&ZulipOperationalIngestV1 {
+            cursor: &cursor,
+            events: &context.event.observations,
+            communications_outbox: &records,
+            observed_at_unix_seconds: context.recorded_at_unix_seconds,
+        })
+        .await
+        .map_err(ZulipRuntimeErrorV1::Persistence)
+}
+
+pub async fn sync_history_page(
+    durable: &ZulipDurablePersistence,
+    config: &ZulipHttpConfigV1,
+    observed_at_unix_seconds: i64,
+) -> Result<bool, ZulipRuntimeErrorV1> {
+    let status = durable
+        .execute_operational_query(&ZulipOperationalQueryV1::GetAccountStatus {
+            account_id: config.account.account_id.clone(),
+        })
+        .await
+        .map_err(ZulipRuntimeErrorV1::Persistence)?;
+    let ZulipOperationalQueryResponseV1::AccountStatus(status) = status else {
+        return Err(ZulipRuntimeErrorV1::Persistence(
+            ZulipDurablePersistenceError::InvalidRow,
+        ));
+    };
+    if status.history_state == ZulipHistoryStateV1::Ready {
+        return Ok(false);
+    }
+    let page =
+        fetch_message_history_page(config, status.oldest_provider_message_id.as_deref(), 100)
+            .await
+            .map_err(ZulipRuntimeErrorV1::Http)?;
+    durable
+        .record_history_page(&config.account.account_id, &page, observed_at_unix_seconds)
+        .await
+        .map_err(ZulipRuntimeErrorV1::Persistence)?;
+    Ok(true)
+}
+
+pub async fn execute_operational_query(
+    durable: &ZulipDurablePersistence,
+    configured_account_id: &str,
+    query: &ZulipOperationalQueryV1,
+) -> Result<ZulipOperationalQueryResponseV1, ZulipRuntimeErrorV1> {
+    if operational_query_account_id(query) != configured_account_id {
+        return Err(ZulipRuntimeErrorV1::Persistence(
+            ZulipDurablePersistenceError::InvalidRow,
+        ));
+    }
+    durable
+        .execute_operational_query(query)
+        .await
+        .map_err(ZulipRuntimeErrorV1::Persistence)
+}
+
+pub async fn replay_operational_events(
+    durable: &ZulipDurablePersistence,
+    configured_account_id: &str,
+    request: &ZulipOperationalReplayRequestV1,
+) -> Result<ZulipOperationalReplayResponseV1, ZulipRuntimeErrorV1> {
+    if request.account_id != configured_account_id {
+        return Err(ZulipRuntimeErrorV1::Persistence(
+            ZulipDurablePersistenceError::InvalidRow,
+        ));
+    }
+    durable
+        .replay_operational_events(request)
         .await
         .map_err(ZulipRuntimeErrorV1::Persistence)
 }
