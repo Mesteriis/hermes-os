@@ -134,6 +134,7 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
             "mail_smtp_password",
         ),
         mail_storage_capability_v1(),
+        mail_client_capability_v1(MailClientContractV1::SyncHealthQuery),
         mail_client_capability_v1(MailClientContractV1::Sync),
     ]
 }
@@ -410,7 +411,7 @@ pub fn mail_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
     let settings_schema = mail_settings_schema_bytes_v2();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 4,
+        descriptor_revision: 5,
         module_id: MAIL_MODULE_ID.to_owned(),
         owner_id: MAIL_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Integration as i32,
@@ -488,6 +489,7 @@ mod tests {
                 MAIL_SMTP_CREDENTIAL_PROVISIONING_CAPABILITY_ID,
                 MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,
                 MAIL_STORAGE_CAPABILITY_ID,
+                MailClientContractV1::SyncHealthQuery.capability_id(),
                 MailClientContractV1::Sync.capability_id(),
             ]
         );

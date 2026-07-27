@@ -115,6 +115,8 @@ mod mail_managed_setup;
 mod mail_operational_flow;
 #[path = "managed_storage_vault_docker/mail_smtp_fixture.rs"]
 mod mail_smtp_fixture;
+#[path = "managed_storage_vault_docker/mail_sync_health_flow.rs"]
+mod mail_sync_health_flow;
 use mail_attachment_flow::*;
 use mail_delivery_test_support::*;
 use mail_event_flow::*;
@@ -129,6 +131,7 @@ use attachment_security_event_flow::*;
 use attachment_security_managed_setup::*;
 use mail_managed_setup::*;
 use mail_operational_flow::*;
+use mail_sync_health_flow::*;
 #[path = "managed_storage_vault_docker/mail_account_credential_flow.rs"]
 mod mail_account_credential_flow;
 #[path = "managed_storage_vault_docker/mail_delivery_flow.rs"]

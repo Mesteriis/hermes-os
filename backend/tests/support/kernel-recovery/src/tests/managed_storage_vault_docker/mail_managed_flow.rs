@@ -91,6 +91,20 @@ fn managed_mail_runtime_uses_kernel_leases_and_route_specific_admission() {
     assert_mail_event_only_communications_handoff(&store, &supervisor, &mail);
     assert_mail_attachment_lifecycle(&store, &supervisor, &mail);
     assert_mail_operational_read(&store, &supervisor, &mail);
+    let accepted_connections = imap.accepted_connections();
+    assert_mail_sync_replay_and_health(
+        &store,
+        &supervisor,
+        &mail,
+        "managed-mail-operational-cursor-stale",
+        1,
+        90,
+    );
+    assert_eq!(
+        imap.accepted_connections(),
+        accepted_connections,
+        "an exact replayed IMAP sync operation must not reach the provider twice"
+    );
     assert_ungranted_delivery_is_rejected(&store, &supervisor, &mail);
     assert_stale_sync_generation_is_rejected(&store, &supervisor, &mail);
     assert!(

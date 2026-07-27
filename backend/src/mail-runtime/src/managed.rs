@@ -107,6 +107,11 @@ use hermes_mail_api::{
         MailFolderKindV1, MailMessageFlagV1, MailOperationalQueryResponseV1,
         MailOperationalQueryV1, operational_query_connection_id,
     },
+    sync_health::{
+        MailSyncFailureCodeV1, MailSyncHealthQueryResponseV1, MailSyncHealthQueryV1,
+        MailSyncOutcomeV1, MailSyncProviderPathReadinessV1, MailSyncTriggerV1,
+        sync_health_query_connection_id,
+    },
     valid_account_configuration, valid_port,
 };
 use hermes_mail_core::rfc822::{
@@ -127,8 +132,9 @@ use hermes_mail_persistence::{
     MailAttachmentBlobAdmissionCompletionV1,
     MailAttachmentDispositionV1 as PersistedAttachmentDispositionV1,
     MailAttachmentMaterializationV1, MailCredentialBindingV1, MailDeliveryAttemptOutcomeV1,
-    MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailOperationalFolderSnapshotV1,
-    MailOperationalMaterializationV1, MailOperationalMessageSnapshotV1, MailQueuedDeliveryV1,
+    MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailDurablePersistenceError,
+    MailOperationalFolderSnapshotV1, MailOperationalMaterializationV1,
+    MailOperationalMessageSnapshotV1, MailQueuedDeliveryV1, MailSyncRunStartOutcomeV1,
 };
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
@@ -328,6 +334,10 @@ pub async fn open_admitted_runtime(
     )
     .await
     .map_err(|_| MailBootstrapError::Persistence)?;
+    durable
+        .interrupt_stale_sync_runs(admission.runtime_generation, current_unix_seconds()?)
+        .await
+        .map_err(|_| MailBootstrapError::Persistence)?;
     let lifecycle_quiesced = durable
         .latest_account_lifecycle(&admission.account.connection_id)
         .await
@@ -728,6 +738,26 @@ impl MailAdmittedRuntime {
         }
         self.durable
             .execute_operational_query(query)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)
+    }
+
+    pub async fn sync_health_query(
+        &self,
+        query: &MailSyncHealthQueryV1,
+    ) -> Result<MailSyncHealthQueryResponseV1, MailBootstrapError> {
+        let connection_id = sync_health_query_connection_id(query);
+        if connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        let account = self.account_status(connection_id).await?;
+        let readiness = if account.sync_readiness == MailProviderPathReadinessV1::Ready {
+            MailSyncProviderPathReadinessV1::Ready
+        } else {
+            MailSyncProviderPathReadinessV1::Unavailable
+        };
+        self.durable
+            .execute_sync_health_query(query, readiness)
             .await
             .map_err(|_| MailBootstrapError::Persistence)
     }
@@ -1300,7 +1330,67 @@ impl MailAdmittedRuntime {
         .map_err(|_| MailAttachmentSecurityOutboxRelayError::Unavailable)?
     }
 
-    pub async fn sync_configured_inbox(
+    pub async fn execute_sync_operation(
+        &mut self,
+        operation_id: &str,
+        started_at_unix_seconds: i64,
+    ) -> Result<usize, MailBootstrapError> {
+        let begin = self
+            .durable
+            .begin_sync_run(
+                operation_id,
+                &self.account.connection_id,
+                MailSyncTriggerV1::Manual,
+                self.runtime_generation,
+                started_at_unix_seconds,
+            )
+            .await
+            .map_err(map_sync_persistence_error)?;
+        if let MailSyncRunStartOutcomeV1::ExistingTerminal(run) = begin {
+            return match run.outcome {
+                MailSyncOutcomeV1::Succeeded => usize::try_from(run.observed_messages)
+                    .map_err(|_| MailBootstrapError::Persistence),
+                MailSyncOutcomeV1::Failed | MailSyncOutcomeV1::Interrupted => Err(run
+                    .failure_code
+                    .map(sync_failure_to_bootstrap_error)
+                    .unwrap_or(MailBootstrapError::Provider)),
+                MailSyncOutcomeV1::Running => Err(MailBootstrapError::Admission),
+            };
+        }
+        let result = self.sync_configured_inbox(operation_id).await;
+        let completed_at_unix_seconds = current_unix_seconds().unwrap_or(started_at_unix_seconds);
+        match result {
+            Ok(observed_messages) => {
+                self.durable
+                    .complete_sync_run(
+                        operation_id,
+                        MailSyncOutcomeV1::Succeeded,
+                        u64::try_from(observed_messages)
+                            .map_err(|_| MailBootstrapError::Persistence)?,
+                        None,
+                        completed_at_unix_seconds,
+                    )
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?;
+                Ok(observed_messages)
+            }
+            Err(error) => {
+                self.durable
+                    .complete_sync_run(
+                        operation_id,
+                        MailSyncOutcomeV1::Failed,
+                        0,
+                        Some(bootstrap_error_to_sync_failure(&error)),
+                        completed_at_unix_seconds,
+                    )
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?;
+                Err(error)
+            }
+        }
+    }
+
+    async fn sync_configured_inbox(
         &mut self,
         operation_id: &str,
     ) -> Result<usize, MailBootstrapError> {
@@ -2435,6 +2525,47 @@ fn map_account_lifecycle_error(error: MailAccountLifecycleRuntimeErrorV1) -> Mai
     match error {
         MailAccountLifecycleRuntimeErrorV1::Admission => MailBootstrapError::Admission,
         MailAccountLifecycleRuntimeErrorV1::Persistence(_) => MailBootstrapError::Persistence,
+    }
+}
+
+fn map_sync_persistence_error(error: MailDurablePersistenceError) -> MailBootstrapError {
+    match error {
+        MailDurablePersistenceError::ConflictingSyncOperation
+        | MailDurablePersistenceError::SyncRunInProgress
+        | MailDurablePersistenceError::InvalidSyncTransition
+        | MailDurablePersistenceError::InvalidRow => MailBootstrapError::Admission,
+        _ => MailBootstrapError::Persistence,
+    }
+}
+
+const fn bootstrap_error_to_sync_failure(error: &MailBootstrapError) -> MailSyncFailureCodeV1 {
+    match error {
+        MailBootstrapError::Admission => MailSyncFailureCodeV1::AdmissionRejected,
+        MailBootstrapError::Control => MailSyncFailureCodeV1::ControlUnavailable,
+        MailBootstrapError::Storage => MailSyncFailureCodeV1::StorageUnavailable,
+        MailBootstrapError::Credential => MailSyncFailureCodeV1::CredentialUnavailable,
+        MailBootstrapError::Persistence => MailSyncFailureCodeV1::PersistenceUnavailable,
+        MailBootstrapError::Provider => MailSyncFailureCodeV1::ProviderUnavailable,
+        MailBootstrapError::EventHub => MailSyncFailureCodeV1::EventHubUnavailable,
+        MailBootstrapError::AttachmentAnchorMapping => {
+            MailSyncFailureCodeV1::AttachmentAnchorUnavailable
+        }
+    }
+}
+
+const fn sync_failure_to_bootstrap_error(failure: MailSyncFailureCodeV1) -> MailBootstrapError {
+    match failure {
+        MailSyncFailureCodeV1::AdmissionRejected => MailBootstrapError::Admission,
+        MailSyncFailureCodeV1::ControlUnavailable => MailBootstrapError::Control,
+        MailSyncFailureCodeV1::StorageUnavailable => MailBootstrapError::Storage,
+        MailSyncFailureCodeV1::CredentialUnavailable => MailBootstrapError::Credential,
+        MailSyncFailureCodeV1::PersistenceUnavailable => MailBootstrapError::Persistence,
+        MailSyncFailureCodeV1::ProviderUnavailable => MailBootstrapError::Provider,
+        MailSyncFailureCodeV1::EventHubUnavailable => MailBootstrapError::EventHub,
+        MailSyncFailureCodeV1::AttachmentAnchorUnavailable => {
+            MailBootstrapError::AttachmentAnchorMapping
+        }
+        MailSyncFailureCodeV1::RuntimeRestarted => MailBootstrapError::Provider,
     }
 }
 

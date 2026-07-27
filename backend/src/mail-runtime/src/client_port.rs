@@ -4,7 +4,7 @@ use hermes_mail_api::client_contract::{
 };
 use hermes_mail_api::{
     MailClientRequestV1, MailClientResponseV1, account_lifecycle_wire, account_wire, client_wire,
-    oauth_wire, operational_wire,
+    oauth_wire, operational_wire, sync_health_wire,
 };
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
@@ -63,6 +63,7 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
         MailClientRequestV1::GmailOAuthRefresh(_) => MailClientContractV1::GmailOAuthRefresh,
         MailClientRequestV1::GmailOAuthStatus(_) => MailClientContractV1::GmailOAuthQuery,
         MailClientRequestV1::OperationalQuery(_) => MailClientContractV1::OperationalQuery,
+        MailClientRequestV1::SyncHealthQuery(_) => MailClientContractV1::SyncHealthQuery,
     }
 }
 
@@ -102,6 +103,10 @@ fn encode_request_payload(request: &MailClientRequestV1) -> Result<Vec<u8>, Mail
         }
         MailClientRequestV1::OperationalQuery(value) => {
             operational_wire::encode_operational_query(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::SyncHealthQuery(value) => {
+            sync_health_wire::encode_sync_health_query(value)
                 .map_err(|_| MailClientPortErrorV1::Protocol)
         }
     }
@@ -155,6 +160,9 @@ fn decode_request_payload(
             .map_err(|_| MailClientPortErrorV1::Protocol),
         MailClientContractV1::OperationalQuery => operational_wire::decode_operational_query(bytes)
             .map(MailClientRequestV1::OperationalQuery)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::SyncHealthQuery => sync_health_wire::decode_sync_health_query(bytes)
+            .map(MailClientRequestV1::SyncHealthQuery)
             .map_err(|_| MailClientPortErrorV1::Protocol),
     }
 }
@@ -251,7 +259,7 @@ pub async fn handle_client_request(
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
         MailClientRequestV1::SyncInbox(value) => {
             let observed_messages = runtime
-                .sync_configured_inbox(&value.operation_id)
+                .execute_sync_operation(&value.operation_id, requested_at_unix_seconds)
                 .await
                 .map_err(|_| MailClientPortErrorV1::Runtime)?;
             MailClientResponseV1::SyncInboxCompleted {
@@ -294,6 +302,11 @@ pub async fn handle_client_request(
             .operational_query(&value)
             .await
             .map(MailClientResponseV1::OperationalQuery)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::SyncHealthQuery(value) => runtime
+            .sync_health_query(&value)
+            .await
+            .map(MailClientResponseV1::SyncHealthQuery)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
     };
     encode_module_response(request_id, contract, &response)
@@ -353,6 +366,11 @@ fn encode_module_response(
             MailClientContractV1::OperationalQuery,
             MailClientResponseV1::OperationalQuery(response),
         ) => operational_wire::encode_operational_query_response(response)
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
+        (
+            MailClientContractV1::SyncHealthQuery,
+            MailClientResponseV1::SyncHealthQuery(response),
+        ) => sync_health_wire::encode_sync_health_response(response)
             .map_err(|_| MailClientPortErrorV1::Protocol)?,
         _ => return Err(MailClientPortErrorV1::Protocol),
     };
@@ -424,6 +442,10 @@ pub fn decode_module_response(
             operational_wire::decode_operational_query_response(&envelope.response_payload)
                 .map(MailClientResponseV1::OperationalQuery)
         }
+        MailClientContractV1::SyncHealthQuery => {
+            sync_health_wire::decode_sync_health_response(&envelope.response_payload)
+                .map(MailClientResponseV1::SyncHealthQuery)
+        }
     }
     .map_err(|_| MailClientPortErrorV1::Protocol)?;
     Ok((envelope.request_id, response))
@@ -442,6 +464,10 @@ mod tests {
         },
         operational::{
             MailOperationalPageV1, MailOperationalQueryResponseV1, MailOperationalQueryV1,
+        },
+        sync_health::{
+            MailSyncHealthQueryResponseV1, MailSyncHealthQueryV1, MailSyncProviderPathReadinessV1,
+            MailSyncStatusV1,
         },
     };
 
@@ -475,6 +501,12 @@ mod tests {
             connection_id: "mail-account".to_owned(),
             cursor: None,
             limit: 100,
+        })
+    }
+
+    fn sync_health_query() -> MailClientRequestV1 {
+        MailClientRequestV1::SyncHealthQuery(MailSyncHealthQueryV1::GetStatus {
+            connection_id: "mail-account".to_owned(),
         })
     }
 
@@ -578,6 +610,33 @@ mod tests {
         assert_eq!(
             decode_module_response(contract, &encoded_response),
             Ok((7, response))
+        );
+    }
+
+    #[test]
+    fn sync_health_query_uses_its_exact_contract_and_response_codec() {
+        let encoded = encode_module_request(8, &sync_health_query()).expect("sync health query");
+        let (request_id, contract, decoded) =
+            decode_module_request(&encoded).expect("decode sync health query");
+        assert_eq!(request_id, 8);
+        assert_eq!(contract, MailClientContractV1::SyncHealthQuery);
+        assert_eq!(decoded, sync_health_query());
+
+        let response = MailClientResponseV1::SyncHealthQuery(
+            MailSyncHealthQueryResponseV1::Status(MailSyncStatusV1 {
+                connection_id: "mail-account".to_owned(),
+                provider_path_readiness: MailSyncProviderPathReadinessV1::Ready,
+                latest_run: None,
+                consecutive_failures: 0,
+                last_success_at_unix_seconds: None,
+                projection_revision: 1,
+            }),
+        );
+        let encoded_response =
+            encode_module_response(8, contract, &response).expect("sync health response");
+        assert_eq!(
+            decode_module_response(contract, &encoded_response),
+            Ok((8, response))
         );
     }
 

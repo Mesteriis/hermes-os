@@ -419,6 +419,20 @@ fn managed_gmail_materializes_then_delivers_canonical_safe_attachment() {
         .expect("store Mail-owned Gmail credential binding");
 
     let attachment_anchor_id = assert_mail_attachment_lifecycle(&store, &supervisor, &mail);
+    let accepted_reads = gmail.accepted_reads();
+    assert_mail_sync_replay_and_health(
+        &store,
+        &supervisor,
+        &mail,
+        "managed-mail-attachment-replay",
+        1,
+        190,
+    );
+    assert_eq!(
+        gmail.accepted_reads(),
+        accepted_reads,
+        "an exact replayed Gmail sync operation must not reach the provider twice"
+    );
     assert!(
         gmail.accepted_reads() >= 4,
         "Gmail materialization must use bounded list/history and exact raw-message reads"

@@ -27,6 +27,11 @@ pub mod operational_wire;
 pub mod operational_wire_generated {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail.operational.v1.rs"));
 }
+pub mod sync_health;
+pub mod sync_health_wire;
+pub mod sync_health_wire_generated {
+    include!(concat!(env!("OUT_DIR"), "/hermes.mail.sync_health.v1.rs"));
+}
 pub mod portability;
 pub mod portability_wire_generated {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail.portability.v1.rs"));
@@ -61,6 +66,7 @@ pub enum MailClientRequestV1 {
     GmailOAuthRefresh(GmailOAuthRefreshRequestV1),
     GmailOAuthStatus(GmailOAuthStatusRequestV1),
     OperationalQuery(operational::MailOperationalQueryV1),
+    SyncHealthQuery(sync_health::MailSyncHealthQueryV1),
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailSyncInboxRequestV1 {
@@ -98,6 +104,7 @@ pub enum MailClientResponseV1 {
     },
     GmailOAuthStatus(Option<GmailOAuthOperationStatusV1>),
     OperationalQuery(operational::MailOperationalQueryResponseV1),
+    SyncHealthQuery(sync_health::MailSyncHealthQueryResponseV1),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

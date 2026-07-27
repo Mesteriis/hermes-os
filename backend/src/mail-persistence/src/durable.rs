@@ -171,6 +171,10 @@ pub enum MailDurablePersistenceError {
     ConflictingAttachmentSafetyProjection,
     UnsafeAttachment,
     InvalidAttachmentManifest,
+    MissingSyncRun,
+    ConflictingSyncOperation,
+    SyncRunInProgress,
+    InvalidSyncTransition,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -318,6 +322,22 @@ impl MailDurablePersistence {
             .await
             .map_err(|_| MailDurablePersistenceError::Database)?;
         sqlx::raw_sql(MAIL_SCHEMA_V6)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        sqlx::raw_sql(crate::MAIL_SCHEMA_V7)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        sqlx::raw_sql(crate::MAIL_SCHEMA_V8)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        sqlx::raw_sql(crate::MAIL_SCHEMA_V9)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        sqlx::raw_sql(crate::MAIL_SCHEMA_V10)
             .execute(&self.pool)
             .await
             .map(|_| ())

@@ -1,0 +1,153 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+const BACKEND_ROOT = new URL('../..', import.meta.url);
+const PROJECT_ROOT = new URL('../../../', import.meta.url);
+
+const paths = {
+  adr: new URL(
+    'docs/adr/ADR-0299-mail-sync-run-history-and-provider-path-health.md',
+    PROJECT_ROOT,
+  ),
+  inventory: new URL(
+    'architecture/communications-settings-reconstruction.json',
+    BACKEND_ROOT,
+  ),
+  proto: new URL(
+    'src/mail-api/proto/hermes/mail/sync_health/v1/client.proto',
+    BACKEND_ROOT,
+  ),
+  validator: new URL('src/mail-api/src/sync_health.rs', BACKEND_ROOT),
+  wire: new URL('src/mail-api/src/sync_health_wire.rs', BACKEND_ROOT),
+  contract: new URL('src/mail-api/src/client_contract.rs', BACKEND_ROOT),
+  persistence: new URL('src/mail-persistence/src/sync_health.rs', BACKEND_ROOT),
+  schema: new URL('src/mail-persistence/src/schema.rs', BACKEND_ROOT),
+  runtime: new URL('src/mail-runtime/src/managed.rs', BACKEND_ROOT),
+  clientPort: new URL('src/mail-runtime/src/client_port.rs', BACKEND_ROOT),
+  admission: new URL('src/mail-runtime/src/admission.rs', BACKEND_ROOT),
+  managedSetup: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_managed_setup.rs',
+    BACKEND_ROOT,
+  ),
+  managedFlow: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_sync_health_flow.rs',
+    BACKEND_ROOT,
+  ),
+  build: new URL('src/mail-api/build.rs', BACKEND_ROOT),
+  api: new URL('src/mail-api/src/lib.rs', BACKEND_ROOT),
+};
+
+test('Mail sync health backend is exact, restart-safe and remains frontend-gated', async () => {
+  const [
+    adr,
+    inventorySource,
+    proto,
+    validator,
+    wire,
+    contract,
+    persistence,
+    schema,
+    runtime,
+    clientPort,
+    admission,
+    managedSetup,
+    managedFlow,
+    build,
+    api,
+  ] = await Promise.all(
+    Object.values(paths).map((path) => readFile(path, 'utf8')),
+  );
+  const inventory = JSON.parse(inventorySource);
+  const slice = inventory.slices.find(
+    ({ gate }) => gate === 'mail_sync_health_v1',
+  );
+
+  assert.deepEqual(slice, {
+    gate: 'mail_sync_health_v1',
+    role: 'integration',
+    owner: 'mail',
+    state: 'planned',
+    dependsOn: ['mail_account_lifecycle_v1', 'mail.sync.v1'],
+  });
+  assert.match(adr, /Mail integration владеет/);
+  assert.match(adr, /Mail не владеет/);
+  assert.match(adr, /Mail runtime не запускает detached polling timer/);
+  assert.match(adr, /frontend cutover/);
+  assert.match(adr, /общий\s+gate остаётся `planned`/);
+
+  assert.match(proto, /package hermes\.mail\.sync_health\.v1/);
+  assert.match(
+    proto,
+    /oneof query[\s\S]*get_status[\s\S]*list_runs[\s\S]*get_run/,
+  );
+  assert.match(proto, /service MailSyncHealthQueryService/);
+  assert.match(proto, /MAIL_SYNC_OUTCOME_INTERRUPTED/);
+  assert.match(proto, /MAIL_SYNC_FAILURE_CODE_RUNTIME_RESTARTED/);
+  assert.doesNotMatch(
+    proto,
+    /\b(?:password|secret|token|cookie|provider_cursor|checkpoint|host|username|message_body)\b/i,
+  );
+  assert.doesNotMatch(proto, /\bmap\s*</);
+
+  assert.match(validator, /MAX_SYNC_HEALTH_PAGE_SIZE: u32 = 200/);
+  assert.match(validator, /validate_sync_health_query/);
+  assert.match(validator, /validate_sync_run/);
+  assert.match(wire, /encode_sync_health_query/);
+  assert.match(wire, /decode_sync_health_response/);
+  assert.match(wire, /encode_sync_health_response\(&response\)\? != bytes/);
+  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 7/);
+  assert.match(contract, /mail\.sync\.health\.query\.v1/);
+  assert.match(
+    contract,
+    /\/hermes\.mail\.sync_health\.v1\.MailSyncHealthQueryService\/Query/,
+  );
+
+  assert.match(
+    persistence,
+    /CREATE TABLE IF NOT EXISTS hermes_data\.mail_sync_runs/,
+  );
+  assert.match(
+    persistence,
+    /CREATE TABLE IF NOT EXISTS hermes_data\.mail_sync_status/,
+  );
+  assert.match(persistence, /mail_sync_runs_one_current_per_connection_idx/);
+  assert.match(persistence, /begin_sync_run/);
+  assert.match(persistence, /complete_sync_run/);
+  assert.match(persistence, /interrupt_stale_sync_runs/);
+  assert.match(persistence, /decode_cursor\(connection_id, value\)/);
+  assert.match(schema, /MAIL_STORAGE_BUNDLE_REVISION_V10/);
+  assert.match(schema, /migration_id: "mail_sync_health"/);
+
+  assert.match(runtime, /interrupt_stale_sync_runs/);
+  assert.match(runtime, /begin_sync_run/);
+  assert.match(runtime, /complete_sync_run/);
+  assert.match(runtime, /MailSyncTriggerV1::Manual/);
+  assert.match(
+    runtime,
+    /sync_health_query_connection_id\(query\)[\s\S]*self\.account\.connection_id/,
+  );
+  assert.match(clientPort, /MailClientRequestV1::SyncHealthQuery/);
+  assert.match(clientPort, /sync_health_wire::encode_sync_health_query/);
+  assert.match(clientPort, /sync_health_wire::decode_sync_health_response/);
+  assert.match(admission, /MailClientContractV1::SyncHealthQuery/);
+  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V10/);
+  assert.match(managedSetup, /MailClientContractV1::SyncHealthQuery/);
+  assert.match(managedFlow, /assert_mail_sync_replay_and_health/);
+  assert.match(
+    managedFlow,
+    /MailClientContractV1::Sync[\s\S]*MailClientResponseV1::SyncInboxCompleted/,
+  );
+  assert.match(managedFlow, /assert_stale_generation_is_interrupted/);
+  assert.match(managedFlow, /MailSyncOutcomeV1::Interrupted/);
+  assert.match(managedFlow, /MailSyncFailureCodeV1::RuntimeRestarted/);
+  assert.match(
+    build,
+    /proto\/hermes\/mail\/sync_health\/v1\/client\.proto/,
+  );
+  assert.match(api, /pub mod sync_health;/);
+  assert.doesNotMatch(
+    `${proto}\n${validator}\n${wire}\n${persistence}`,
+    /hermes_communications|domains\/communications|hermes_scheduler|hermes_kernel/i,
+  );
+});

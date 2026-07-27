@@ -107,6 +107,7 @@ policy через ссылки из новых документов.
 - [ADR-0296: Owner module Settings through Core Gateway](ADR-0296-owner-module-settings-through-core-gateway.md)
 - [ADR-0297: Fresh owner-proof effective module Settings export](ADR-0297-fresh-owner-proof-effective-module-settings-export.md)
 - [ADR-0298: Mail operational read projection and client contract](ADR-0298-mail-operational-read-projection-and-client-contract.md)
+- [ADR-0299: Mail sync run history and provider-path health](ADR-0299-mail-sync-run-history-and-provider-path-health.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -381,3 +382,7 @@ ADR-0298 разделяет Mail provider operational projection и Communicatio
 canonical content: Mail владеет bounded folders/threads/messages query, Core
 Gateway только маршрутизирует exact contract, а full body app получает через
 отдельный Communications content contract по opaque observation anchor.
+ADR-0299 отделяет Mail-owned sync run journal и provider-path health от
+Scheduler schedules и Communications analytics: exact query возвращает только
+bounded sanitized run evidence, restart помечает stale generation как
+interrupted, а newsletter detection остаётся Communications-derived use case.
