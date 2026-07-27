@@ -131,6 +131,8 @@ fn validate_storage_command(
             .ok_or(VaultTransportError::InvalidBinding),
         VaultTransportCommandV1::RevokeAudience => Ok(()),
         VaultTransportCommandV1::StoreLease { .. }
+        | VaultTransportCommandV1::RetireLease { .. }
+        | VaultTransportCommandV1::DeleteLease { .. }
         | VaultTransportCommandV1::EnsureOwnerDerivedKey { .. }
         | VaultTransportCommandV1::ReplaceLease { .. } => Err(VaultTransportError::InvalidBinding),
     }

@@ -154,6 +154,48 @@ impl ManagedProviderCredentialClientV1 {
             .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
     }
 
+    pub fn retire_once(
+        &mut self,
+        context: &ManagedProviderCredentialContextV1,
+        request: ManagedProviderCredentialRequestV1<'_>,
+    ) -> Result<(), ManagedProviderCredentialErrorV1> {
+        let audience = audience(context)?;
+        let lease_id =
+            self.issue_action_lease(context, audience.clone(), &request, VaultActionV1::Retire)?;
+        let response = self.execute_command(
+            context,
+            audience,
+            VaultTransportCommandV1::RetireLease {
+                lease_id,
+                secret_class: request.secret_class,
+            },
+        )?;
+        (response.as_slice() == [1])
+            .then_some(())
+            .ok_or(ManagedProviderCredentialErrorV1::Rejected)
+    }
+
+    pub fn delete_once(
+        &mut self,
+        context: &ManagedProviderCredentialContextV1,
+        request: ManagedProviderCredentialRequestV1<'_>,
+    ) -> Result<(), ManagedProviderCredentialErrorV1> {
+        let audience = audience(context)?;
+        let lease_id =
+            self.issue_action_lease(context, audience.clone(), &request, VaultActionV1::Delete)?;
+        let response = self.execute_command(
+            context,
+            audience,
+            VaultTransportCommandV1::DeleteLease {
+                lease_id,
+                secret_class: request.secret_class,
+            },
+        )?;
+        (response.as_slice() == [1])
+            .then_some(())
+            .ok_or(ManagedProviderCredentialErrorV1::Rejected)
+    }
+
     fn issue_action_lease(
         &mut self,
         context: &ManagedProviderCredentialContextV1,
@@ -440,6 +482,62 @@ impl<'a> ManagedProviderCredentialClientV2<'a> {
             .as_slice()
             .try_into()
             .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
+    }
+
+    pub fn retire_once(
+        &mut self,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+        context: &ManagedProviderCredentialContextV1,
+        request: ManagedProviderCredentialRequestV1<'_>,
+    ) -> Result<(), ManagedProviderCredentialErrorV1> {
+        let audience = audience(context)?;
+        let lease_id = self.issue_action_lease(
+            dispatcher,
+            context,
+            audience.clone(),
+            &request,
+            VaultActionV1::Retire,
+        )?;
+        let response = self.execute_command(
+            dispatcher,
+            context,
+            audience,
+            VaultTransportCommandV1::RetireLease {
+                lease_id,
+                secret_class: request.secret_class,
+            },
+        )?;
+        (response.as_slice() == [1])
+            .then_some(())
+            .ok_or(ManagedProviderCredentialErrorV1::Rejected)
+    }
+
+    pub fn delete_once(
+        &mut self,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+        context: &ManagedProviderCredentialContextV1,
+        request: ManagedProviderCredentialRequestV1<'_>,
+    ) -> Result<(), ManagedProviderCredentialErrorV1> {
+        let audience = audience(context)?;
+        let lease_id = self.issue_action_lease(
+            dispatcher,
+            context,
+            audience.clone(),
+            &request,
+            VaultActionV1::Delete,
+        )?;
+        let response = self.execute_command(
+            dispatcher,
+            context,
+            audience,
+            VaultTransportCommandV1::DeleteLease {
+                lease_id,
+                secret_class: request.secret_class,
+            },
+        )?;
+        (response.as_slice() == [1])
+            .then_some(())
+            .ok_or(ManagedProviderCredentialErrorV1::Rejected)
     }
 
     fn issue_action_lease(
@@ -786,6 +884,8 @@ mod tests {
             VaultActionV1::Resolve,
             VaultActionV1::Create,
             VaultActionV1::ReplaceCas,
+            VaultActionV1::Retire,
+            VaultActionV1::Delete,
         ] {
             assert_correlated_provider_credential_action(action);
         }

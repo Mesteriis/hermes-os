@@ -101,6 +101,7 @@ policy через ссылки из новых документов.
 - [ADR-0290: Telegram account runtime reconfiguration boundary](ADR-0290-telegram-account-runtime-reconfiguration-boundary.md)
 - [ADR-0291: Zulip account, history, operational query and replay boundary](ADR-0291-zulip-account-history-query-and-replay-boundary.md)
 - [ADR-0292: Managed integration settings apply and credential binding](ADR-0292-managed-integration-settings-apply-and-credential-binding.md)
+- [ADR-0293: Scoped Vault credential retirement and deletion](ADR-0293-scoped-vault-credential-retirement-and-deletion.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -344,3 +345,8 @@ Kernel выполняет provider-neutral desired/effective replacement, а cre
 revision хранится только как integration-owned Vault binding. Settings, Vault,
 integration persistence, runtime и release assembly остаются отдельными
 функциональными units.
+ADR-0293 закрывает недостающий Vault lifecycle primitive: exact scoped
+`retire` удаляет active ciphertext и создаёт durable tombstone, а отдельный
+`delete` повышает tombstone до deleted. Kernel согласует только declared
+action/grant/runtime fences и не интерпретирует provider logout; integration
+выбирает purpose через свой typed lifecycle contract.

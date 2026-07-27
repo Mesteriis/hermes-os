@@ -86,6 +86,92 @@ fn one_scope_revision_has_exactly_one_active_secret_record() {
     assert!(store.store_secret(&scope, b"duplicate-credential").is_err());
 }
 
+#[test]
+fn retirement_persists_a_tombstone_and_denies_resolution_or_recreation() {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let store = initialize_store(&temporary);
+    let scope = scope(&credential_purpose(), 1);
+    let record_id = store
+        .store_secret(&scope, b"credential-revision-one")
+        .expect("active credential");
+
+    store.retire_secret(&scope, 100).expect("retire credential");
+
+    assert!(store.resolve_current_secret(&scope).is_err());
+    assert!(store.resolve_scoped_secret(&record_id, &scope).is_err());
+    assert!(
+        store
+            .store_secret(&scope, b"credential-revision-one-recreated")
+            .is_err()
+    );
+    assert!(store.retire_secret(&scope, 101).is_err());
+}
+
+#[test]
+fn delete_promotes_a_retired_tombstone_and_directly_deletes_an_active_revision() {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let store = initialize_store(&temporary);
+    let purpose = credential_purpose();
+    let retired = scope(&purpose, 1);
+    store
+        .store_secret(&retired, b"credential-revision-one")
+        .expect("retired credential");
+    store.retire_secret(&retired, 100).expect("retire");
+    store.delete_secret(&retired, 101).expect("delete retired");
+    assert!(store.delete_secret(&retired, 102).is_err());
+    assert!(
+        store
+            .store_secret(&retired, b"credential-revision-one-recreated")
+            .is_err()
+    );
+
+    let direct = scope(&purpose, 2);
+    store
+        .store_secret(&direct, b"credential-revision-two")
+        .expect("active credential");
+    store.delete_secret(&direct, 103).expect("direct delete");
+    assert!(store.resolve_current_secret(&direct).is_err());
+    assert!(
+        store
+            .store_secret(&direct, b"credential-revision-two-recreated")
+            .is_err()
+    );
+}
+
+#[test]
+fn retirement_tombstone_survives_store_restart() {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let provider = FileWrappingKeyProvider::new(&temporary.path().join("wrapping-key.bin"));
+    let key = provider.load_or_create().expect("file wrapping key");
+    let database = temporary.path().join("vault.db");
+    let anchor = temporary.path().join("vault.anchor");
+    let scope = scope(&credential_purpose(), 1);
+    let store =
+        VaultStore::initialize(&database, &anchor, "vault-instance", &key).expect("Vault store");
+    store
+        .store_secret(&scope, b"credential-revision-one")
+        .expect("active credential");
+    store.retire_secret(&scope, 100).expect("retire credential");
+    drop(store);
+
+    let reopened = VaultStore::open(&database, &anchor, &key).expect("reopened Vault store");
+    assert!(reopened.resolve_current_secret(&scope).is_err());
+    assert!(
+        reopened
+            .store_secret(&scope, b"credential-revision-one-recreated")
+            .is_err()
+    );
+    reopened
+        .delete_secret(&scope, 101)
+        .expect("delete retired credential after restart");
+}
+
 fn initialize_store(temporary: &TempDir) -> VaultStore {
     let provider = FileWrappingKeyProvider::new(&temporary.path().join("wrapping-key.bin"));
     let key = provider.load_or_create().expect("file wrapping key");

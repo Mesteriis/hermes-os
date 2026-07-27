@@ -112,6 +112,16 @@
       "dependsOn": ["whatsapp_operational_read_v1"]
     },
     {
+      "gate": "vault_credential_retirement_v1",
+      "role": "platform",
+      "owner": "vault",
+      "state": "implemented",
+      "dependsOn": [
+        "module_control_plane_v1",
+        "vault_v1"
+      ]
+    },
+    {
       "gate": "managed_integration_settings_apply_v1",
       "role": "platform",
       "owner": "kernel_settings_apply",
@@ -191,7 +201,12 @@
       "role": "integration",
       "owner": "mail",
       "state": "planned",
-      "dependsOn": ["client_gateway_v1", "vault_v1"]
+      "dependsOn": [
+        "client_gateway_v1",
+        "managed_integration_settings_apply_v1",
+        "vault_credential_retirement_v1",
+        "vault_v1"
+      ]
     },
     {
       "gate": "mail_sync_health_v1",

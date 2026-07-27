@@ -8,7 +8,7 @@ const MANAGED_VAULT_CLIENT = new URL(
   BACKEND_ROOT,
 );
 
-test('correlated managed Vault client owns resolve create and replace actions', async () => {
+test('correlated managed Vault client owns exact credential lifecycle actions', async () => {
   const source = await readFile(MANAGED_VAULT_CLIENT, 'utf8');
   const implementationStart = source.indexOf(
     "impl<'a> ManagedProviderCredentialClientV2<'a>",
@@ -27,5 +27,9 @@ test('correlated managed Vault client owns resolve create and replace actions', 
   assert.match(implementation, /VaultActionV1::Create/);
   assert.match(implementation, /pub fn replace_once\(/);
   assert.match(implementation, /VaultActionV1::ReplaceCas/);
+  assert.match(implementation, /pub fn retire_once\(/);
+  assert.match(implementation, /VaultActionV1::Retire/);
+  assert.match(implementation, /pub fn delete_once\(/);
+  assert.match(implementation, /VaultActionV1::Delete/);
   assert.doesNotMatch(implementation, /\.try_clone\(/);
 });

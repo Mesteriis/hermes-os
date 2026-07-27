@@ -105,6 +105,34 @@ impl VaultStoreHandle {
         receive(receiver)
     }
 
+    pub(crate) fn retire_secret(
+        &self,
+        scope: &SecretRecordScope,
+        changed_at_unix_seconds: u64,
+    ) -> Result<(), VaultStoreError> {
+        let (response, receiver) = sync_channel(1);
+        self.submit(VaultStoreRequest::Retire {
+            scope: scope.clone(),
+            changed_at_unix_seconds,
+            response,
+        })?;
+        receive(receiver)
+    }
+
+    pub(crate) fn delete_secret(
+        &self,
+        scope: &SecretRecordScope,
+        changed_at_unix_seconds: u64,
+    ) -> Result<(), VaultStoreError> {
+        let (response, receiver) = sync_channel(1);
+        self.submit(VaultStoreRequest::Delete {
+            scope: scope.clone(),
+            changed_at_unix_seconds,
+            response,
+        })?;
+        receive(receiver)
+    }
+
     fn submit(&self, request: VaultStoreRequest) -> Result<(), VaultStoreError> {
         let sender = self.sender.as_ref().ok_or(VaultStoreError::ActorStopped)?;
         sender.try_send(request).map_err(|error| match error {
@@ -148,6 +176,16 @@ enum VaultStoreRequest {
         next_scope: SecretRecordScope,
         payload: Zeroizing<Vec<u8>>,
         response: SyncSender<Result<SecretRecordId, VaultStoreError>>,
+    },
+    Retire {
+        scope: SecretRecordScope,
+        changed_at_unix_seconds: u64,
+        response: SyncSender<Result<(), VaultStoreError>>,
+    },
+    Delete {
+        scope: SecretRecordScope,
+        changed_at_unix_seconds: u64,
+        response: SyncSender<Result<(), VaultStoreError>>,
     },
 }
 
@@ -200,6 +238,28 @@ fn actor_loop(
                     &prior_scope,
                     &next_scope,
                     &payload,
+                ));
+            }
+            VaultStoreRequest::Retire {
+                scope,
+                changed_at_unix_seconds,
+                response,
+            } => {
+                let _ = response.send(retire_secret(
+                    &mut connection,
+                    &scope,
+                    changed_at_unix_seconds,
+                ));
+            }
+            VaultStoreRequest::Delete {
+                scope,
+                changed_at_unix_seconds,
+                response,
+            } => {
+                let _ = response.send(delete_secret(
+                    &mut connection,
+                    &scope,
+                    changed_at_unix_seconds,
                 ));
             }
         }
@@ -366,6 +426,125 @@ fn replace_secret(
         .map_err(VaultStoreError::Sqlite)?;
     transaction.commit().map_err(VaultStoreError::Sqlite)?;
     Ok(encrypted.record_id)
+}
+
+fn retire_secret(
+    connection: &mut Connection,
+    scope: &SecretRecordScope,
+    changed_at_unix_seconds: u64,
+) -> Result<(), VaultStoreError> {
+    mutate_secret_lifecycle(
+        connection,
+        scope,
+        changed_at_unix_seconds,
+        SecretLifecycleMutation::Retire,
+    )
+}
+
+fn delete_secret(
+    connection: &mut Connection,
+    scope: &SecretRecordScope,
+    changed_at_unix_seconds: u64,
+) -> Result<(), VaultStoreError> {
+    mutate_secret_lifecycle(
+        connection,
+        scope,
+        changed_at_unix_seconds,
+        SecretLifecycleMutation::Delete,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum SecretLifecycleMutation {
+    Retire,
+    Delete,
+}
+
+fn mutate_secret_lifecycle(
+    connection: &mut Connection,
+    scope: &SecretRecordScope,
+    changed_at_unix_seconds: u64,
+    mutation: SecretLifecycleMutation,
+) -> Result<(), VaultStoreError> {
+    let changed_at_unix_seconds =
+        i64::try_from(changed_at_unix_seconds).map_err(|_| VaultStoreError::LifecycleConflict)?;
+    if changed_at_unix_seconds <= 0 {
+        return Err(VaultStoreError::LifecycleConflict);
+    }
+    let (owner, configuration, purpose, class, revision) = scope.metadata();
+    let transaction = connection
+        .unchecked_transaction()
+        .map_err(VaultStoreError::Sqlite)?;
+    let deleted = transaction
+        .execute(
+            "DELETE FROM vault_secret_records
+             WHERE logical_owner_id = ?1 AND configuration_instance_id = ?2 AND purpose_id = ?3
+               AND secret_class = ?4 AND secret_revision = ?5",
+            rusqlite::params![owner, configuration, purpose, class, revision],
+        )
+        .map_err(VaultStoreError::Sqlite)?;
+    match mutation {
+        SecretLifecycleMutation::Retire if deleted == 1 => {
+            transaction
+                .execute(
+                    "INSERT INTO vault_secret_tombstones (
+                        logical_owner_id, configuration_instance_id, purpose_id,
+                        secret_class, secret_revision, state, changed_at_unix_seconds
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6)",
+                    rusqlite::params![
+                        owner,
+                        configuration,
+                        purpose,
+                        class,
+                        revision,
+                        changed_at_unix_seconds,
+                    ],
+                )
+                .map_err(|_| VaultStoreError::LifecycleConflict)?;
+        }
+        SecretLifecycleMutation::Delete if deleted == 1 => {
+            transaction
+                .execute(
+                    "INSERT INTO vault_secret_tombstones (
+                        logical_owner_id, configuration_instance_id, purpose_id,
+                        secret_class, secret_revision, state, changed_at_unix_seconds
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, 2, ?6)",
+                    rusqlite::params![
+                        owner,
+                        configuration,
+                        purpose,
+                        class,
+                        revision,
+                        changed_at_unix_seconds,
+                    ],
+                )
+                .map_err(|_| VaultStoreError::LifecycleConflict)?;
+        }
+        SecretLifecycleMutation::Delete if deleted == 0 => {
+            let updated = transaction
+                .execute(
+                    "UPDATE vault_secret_tombstones
+                     SET state = 2, changed_at_unix_seconds = ?1
+                     WHERE logical_owner_id = ?2 AND configuration_instance_id = ?3
+                       AND purpose_id = ?4 AND secret_class = ?5 AND secret_revision = ?6
+                       AND state = 1",
+                    rusqlite::params![
+                        changed_at_unix_seconds,
+                        owner,
+                        configuration,
+                        purpose,
+                        class,
+                        revision,
+                    ],
+                )
+                .map_err(VaultStoreError::Sqlite)?;
+            if updated != 1 {
+                return Err(VaultStoreError::LifecycleConflict);
+            }
+        }
+        _ => return Err(VaultStoreError::LifecycleConflict),
+    }
+    transaction.commit().map_err(VaultStoreError::Sqlite)
 }
 
 type StoredRecord = (

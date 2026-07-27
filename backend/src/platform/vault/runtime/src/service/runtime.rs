@@ -110,6 +110,14 @@ impl VaultService {
                 lease_id,
                 secret_class,
             } => self.resolve_current_once(lease_id, audience, *secret_class, now_unix_seconds),
+            VaultTransportCommandV1::RetireLease {
+                lease_id,
+                secret_class,
+            } => self.retire_current_once(lease_id, audience, *secret_class, now_unix_seconds),
+            VaultTransportCommandV1::DeleteLease {
+                lease_id,
+                secret_class,
+            } => self.delete_current_once(lease_id, audience, *secret_class, now_unix_seconds),
             VaultTransportCommandV1::StoreLease {
                 lease_id,
                 secret_class,
@@ -242,6 +250,38 @@ impl VaultService {
         Ok(Zeroizing::new(record_id.as_bytes().to_vec()))
     }
 
+    fn retire_current_once(
+        &mut self,
+        lease_id: &LeaseIdV1,
+        audience: &LeaseAudienceV1,
+        secret_class: hermes_vault_protocol::SecretClassV1,
+        now_unix_seconds: u64,
+    ) -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {
+        let lease =
+            self.consume_action(lease_id, audience, VaultActionV1::Retire, now_unix_seconds)?;
+        let scope = scope_for_lease(&lease, secret_class, lease.request().secret_revision())?;
+        self.store
+            .retire_secret(&scope, now_unix_seconds)
+            .map_err(|_| VaultServiceError::SecretUnavailable)?;
+        Ok(Zeroizing::new(vec![1]))
+    }
+
+    fn delete_current_once(
+        &mut self,
+        lease_id: &LeaseIdV1,
+        audience: &LeaseAudienceV1,
+        secret_class: hermes_vault_protocol::SecretClassV1,
+        now_unix_seconds: u64,
+    ) -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {
+        let lease =
+            self.consume_action(lease_id, audience, VaultActionV1::Delete, now_unix_seconds)?;
+        let scope = scope_for_lease(&lease, secret_class, lease.request().secret_revision())?;
+        self.store
+            .delete_secret(&scope, now_unix_seconds)
+            .map_err(|_| VaultServiceError::SecretUnavailable)?;
+        Ok(Zeroizing::new(vec![1]))
+    }
+
     fn generate_opaque_token_once(
         &mut self,
         lease_id: &LeaseIdV1,
@@ -343,6 +383,8 @@ fn log_developer_command(command: &VaultTransportCommandV1) {
         VaultTransportCommandV1::RevokeAudience => "revoke_audience",
         VaultTransportCommandV1::IssueLease { .. } => "issue_lease",
         VaultTransportCommandV1::ResolveLease { .. } => "resolve_lease",
+        VaultTransportCommandV1::RetireLease { .. } => "retire_lease",
+        VaultTransportCommandV1::DeleteLease { .. } => "delete_lease",
         VaultTransportCommandV1::StoreLease { .. } => "store_lease",
         VaultTransportCommandV1::GenerateOpaqueToken { .. } => "generate_opaque_token",
         VaultTransportCommandV1::EnsureOwnerDerivedKey { .. } => "ensure_owner_derived_key",
@@ -371,6 +413,8 @@ fn supported_action(action: VaultActionV1) -> bool {
         VaultActionV1::Resolve
             | VaultActionV1::Create
             | VaultActionV1::ReplaceCas
+            | VaultActionV1::Retire
+            | VaultActionV1::Delete
             | VaultActionV1::IssueOwnerDerivedKey
     )
 }

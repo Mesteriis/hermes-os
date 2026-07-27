@@ -12,6 +12,8 @@ const REVOKE_AUDIENCE_OPERATION: u8 = 4;
 const ISSUE_LEASE_OPERATION: u8 = 5;
 const GENERATE_OPAQUE_TOKEN_OPERATION: u8 = 6;
 const ENSURE_OWNER_DERIVED_KEY_OPERATION: u8 = 7;
+const RETIRE_LEASE_OPERATION: u8 = 8;
+const DELETE_LEASE_OPERATION: u8 = 9;
 const RESOLVE_LEASE_BYTES: usize = 35;
 const STORE_LEASE_HEADER_BYTES: usize = RESOLVE_LEASE_BYTES;
 const REPLACE_LEASE_HEADER_BYTES: usize = STORE_LEASE_HEADER_BYTES + 16;
@@ -23,6 +25,14 @@ pub enum VaultTransportCommandV1 {
         request: VaultLeaseIssueRequestV1,
     },
     ResolveLease {
+        lease_id: LeaseIdV1,
+        secret_class: SecretClassV1,
+    },
+    RetireLease {
+        lease_id: LeaseIdV1,
+        secret_class: SecretClassV1,
+    },
+    DeleteLease {
         lease_id: LeaseIdV1,
         secret_class: SecretClassV1,
     },
@@ -66,6 +76,14 @@ impl VaultTransportCommandV1 {
                 bytes.extend_from_slice(lease_id.as_str().as_bytes());
                 bytes
             }
+            Self::RetireLease {
+                lease_id,
+                secret_class,
+            } => encode_lease_command(RETIRE_LEASE_OPERATION, lease_id, *secret_class),
+            Self::DeleteLease {
+                lease_id,
+                secret_class,
+            } => encode_lease_command(DELETE_LEASE_OPERATION, lease_id, *secret_class),
             Self::StoreLease {
                 lease_id,
                 secret_class,
@@ -117,6 +135,12 @@ impl VaultTransportCommandV1 {
                 .map_err(|_| VaultTransportCommandError::Malformed),
             RESOLVE_LEASE_OPERATION if bytes.len() == RESOLVE_LEASE_BYTES => {
                 decode_resolve_lease(bytes[2], &bytes[3..])
+            }
+            RETIRE_LEASE_OPERATION if bytes.len() == RESOLVE_LEASE_BYTES => {
+                decode_retire_lease(bytes[2], &bytes[3..])
+            }
+            DELETE_LEASE_OPERATION if bytes.len() == RESOLVE_LEASE_BYTES => {
+                decode_delete_lease(bytes[2], &bytes[3..])
             }
             GENERATE_OPAQUE_TOKEN_OPERATION if bytes.len() == RESOLVE_LEASE_BYTES => {
                 decode_generate_opaque_token(bytes[2], &bytes[3..])
@@ -201,6 +225,32 @@ fn decode_resolve_lease(
     })
 }
 
+fn decode_retire_lease(
+    secret_class: u8,
+    bytes: &[u8],
+) -> Result<VaultTransportCommandV1, VaultTransportCommandError> {
+    let secret_class = SecretClassV1::from_code(i64::from(secret_class))
+        .ok_or(VaultTransportCommandError::Malformed)?;
+    let lease_id = decode_lease_id(bytes)?;
+    Ok(VaultTransportCommandV1::RetireLease {
+        lease_id,
+        secret_class,
+    })
+}
+
+fn decode_delete_lease(
+    secret_class: u8,
+    bytes: &[u8],
+) -> Result<VaultTransportCommandV1, VaultTransportCommandError> {
+    let secret_class = SecretClassV1::from_code(i64::from(secret_class))
+        .ok_or(VaultTransportCommandError::Malformed)?;
+    let lease_id = decode_lease_id(bytes)?;
+    Ok(VaultTransportCommandV1::DeleteLease {
+        lease_id,
+        secret_class,
+    })
+}
+
 fn decode_generate_opaque_token(
     secret_class: u8,
     bytes: &[u8],
@@ -235,4 +285,33 @@ fn decode_lease_id(bytes: &[u8]) -> Result<LeaseIdV1, VaultTransportCommandError
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VaultTransportCommandError {
     Malformed,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn credential_retirement_commands_round_trip_and_have_distinct_digests() {
+        let lease_id = LeaseIdV1::new("0123456789abcdef0123456789abcdef".to_owned())
+            .expect("typed lease identifier");
+        let retire = VaultTransportCommandV1::RetireLease {
+            lease_id: lease_id.clone(),
+            secret_class: SecretClassV1::ProviderCredential,
+        };
+        let delete = VaultTransportCommandV1::DeleteLease {
+            lease_id,
+            secret_class: SecretClassV1::ProviderCredential,
+        };
+
+        assert_eq!(
+            VaultTransportCommandV1::decode(&retire.encode()),
+            Ok(retire.clone())
+        );
+        assert_eq!(
+            VaultTransportCommandV1::decode(&delete.encode()),
+            Ok(delete.clone())
+        );
+        assert_ne!(retire.operation_digest(), delete.operation_digest());
+    }
 }

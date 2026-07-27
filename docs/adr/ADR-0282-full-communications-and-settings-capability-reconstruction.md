@@ -387,6 +387,7 @@ runtime не является domain, а app composition не становитс
 | Top senders and provider-neutral sender insights | Communications derived projection | `communications_sender_insights_v1` |
 | Evidence export | `communications_export` workflow plus Blob | `communications_export_v1` |
 | Mail account import/export/logout/delete and authorization | Mail | `mail_account_lifecycle_v1` |
+| Scoped credential retire/delete | Vault platform | `vault_credential_retirement_v1` |
 | Mail sync, subscriptions and mailbox health | Mail | `mail_sync_health_v1` |
 | Mail accounts/sync/folders/threads/messages | Mail | `mail_operational_read_v1` |
 | Mail drafts/compose/templates/signatures | Mail | `mail_composition_v1` |
@@ -465,8 +466,10 @@ release.
    `zulip_operational_realtime_v1` по ADR-0291. Только после них, generated
    frontend client и integration-owned UI cutover открывается
    `zulip_full_operational_v1`.
-5. Mail read, composition и command gates — независимо, без одного
-   всесильного Mail capability.
+5. Vault закрывает provider-neutral `vault_credential_retirement_v1` по
+   ADR-0293; Mail account lifecycle использует его вместе с generic managed
+   Settings apply. Затем Mail read, composition и command gates проходят
+   независимо, без одного всесильного Mail capability.
 6. Communications canonical read/content/saved-search gates.
 7. Delivery/outbox workflows, каждый отдельным package/gate.
 8. AI use-case workflows, каждый отдельным package/gate.

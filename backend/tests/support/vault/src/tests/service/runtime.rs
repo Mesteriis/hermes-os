@@ -169,7 +169,7 @@ fn lease_issuance_rejects_declared_actions_without_an_executable_lifecycle() {
         "mail.credential".to_owned(),
         "account-a".to_owned(),
         vec![SecretClassV1::ProviderCredential],
-        vec![VaultActionV1::Delete],
+        vec![VaultActionV1::IssueSessionStoreKey],
         60,
     )
     .expect("typed unsupported purpose");
@@ -185,6 +185,99 @@ fn lease_issuance_rejects_declared_actions_without_an_executable_lifecycle() {
     assert_eq!(
         service.issue_lease(lease_request(purpose, audience, 1), 100),
         Err(VaultServiceError::UnsupportedLeaseAction)
+    );
+}
+
+#[test]
+fn transport_retire_and_delete_use_exact_one_time_action_leases() {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let store = initialize_store(&temporary);
+    let scope = SecretRecordScope::new(
+        "mail".to_owned(),
+        &credential_purpose(),
+        SecretClassV1::ProviderCredential,
+        1,
+    )
+    .expect("record scope");
+    store
+        .store_secret(&scope, b"service-credential-marker")
+        .expect("store secret");
+    let audience = LeaseAudienceV1::new(
+        "registration-mail".to_owned(),
+        "runtime-mail-1".to_owned(),
+        1,
+        7,
+    )
+    .expect("typed audience");
+    let mut service = VaultService::new(store, 3).expect("Vault service");
+
+    let retire = service
+        .issue_lease(
+            lease_request(
+                lifecycle_purpose(VaultActionV1::Retire),
+                audience.clone(),
+                1,
+            ),
+            100,
+        )
+        .expect("retire lease");
+    assert_eq!(
+        service
+            .execute_command_once(
+                &VaultTransportCommandV1::RetireLease {
+                    lease_id: retire.lease_id().clone(),
+                    secret_class: SecretClassV1::ProviderCredential,
+                },
+                &audience,
+                101,
+            )
+            .expect("retire")
+            .as_slice(),
+        [1]
+    );
+    let resolve = service
+        .issue_lease(
+            lease_request(credential_purpose(), audience.clone(), 1),
+            102,
+        )
+        .expect("resolve lease");
+    assert_eq!(
+        service.execute_command_once(
+            &VaultTransportCommandV1::ResolveLease {
+                lease_id: resolve.lease_id().clone(),
+                secret_class: SecretClassV1::ProviderCredential,
+            },
+            &audience,
+            103,
+        ),
+        Err(VaultServiceError::SecretUnavailable)
+    );
+
+    let delete = service
+        .issue_lease(
+            lease_request(
+                lifecycle_purpose(VaultActionV1::Delete),
+                audience.clone(),
+                1,
+            ),
+            104,
+        )
+        .expect("delete lease");
+    assert_eq!(
+        service
+            .execute_command_once(
+                &VaultTransportCommandV1::DeleteLease {
+                    lease_id: delete.lease_id().clone(),
+                    secret_class: SecretClassV1::ProviderCredential,
+                },
+                &audience,
+                105,
+            )
+            .expect("delete")
+            .as_slice(),
+        [1]
     );
 }
 
@@ -417,6 +510,17 @@ fn replace_purpose() -> VaultPurposeRequestV1 {
         60,
     )
     .expect("replace purpose")
+}
+
+fn lifecycle_purpose(action: VaultActionV1) -> VaultPurposeRequestV1 {
+    VaultPurposeRequestV1::new(
+        "mail.credential".to_owned(),
+        "account-a".to_owned(),
+        vec![SecretClassV1::ProviderCredential],
+        vec![action],
+        60,
+    )
+    .expect("credential lifecycle purpose")
 }
 
 fn lease_request(

@@ -15,7 +15,7 @@ use crate::identity::anchor as vault_anchor;
 use crate::records::secret::{self as secret_record, SecretRecordId, SecretRecordScope};
 use crate::recovery::root_rotation;
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 pub struct VaultStore {
     path: PathBuf,
@@ -193,6 +193,22 @@ impl VaultStore {
             .replace_secret(prior_record_id, prior_scope, next_scope, payload)
     }
 
+    pub fn retire_secret(
+        &self,
+        scope: &SecretRecordScope,
+        changed_at_unix_seconds: u64,
+    ) -> Result<(), VaultStoreError> {
+        self.handle.retire_secret(scope, changed_at_unix_seconds)
+    }
+
+    pub fn delete_secret(
+        &self,
+        scope: &SecretRecordScope,
+        changed_at_unix_seconds: u64,
+    ) -> Result<(), VaultStoreError> {
+        self.handle.delete_secret(scope, changed_at_unix_seconds)
+    }
+
     fn from_connection(
         path: PathBuf,
         instance_id: String,
@@ -225,7 +241,7 @@ fn initialize_database(
         .execute_batch(
             "CREATE TABLE vault_metadata (
                 singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-                schema_version INTEGER NOT NULL CHECK (schema_version = 2),
+                schema_version INTEGER NOT NULL CHECK (schema_version = 3),
                 instance_id TEXT NOT NULL
             ) STRICT;
             CREATE TABLE vault_secret_records (
@@ -243,7 +259,33 @@ fn initialize_database(
                 ON vault_secret_records (
                     logical_owner_id, configuration_instance_id, purpose_id,
                     secret_class, secret_revision, key_epoch
-                );",
+                );
+            CREATE TABLE vault_secret_tombstones (
+                logical_owner_id TEXT NOT NULL,
+                configuration_instance_id TEXT NOT NULL,
+                purpose_id TEXT NOT NULL,
+                secret_class INTEGER NOT NULL,
+                secret_revision INTEGER NOT NULL CHECK (secret_revision > 0),
+                state INTEGER NOT NULL CHECK (state IN (1, 2)),
+                changed_at_unix_seconds INTEGER NOT NULL CHECK (changed_at_unix_seconds > 0),
+                PRIMARY KEY (
+                    logical_owner_id, configuration_instance_id, purpose_id,
+                    secret_class, secret_revision
+                )
+            ) STRICT;
+            CREATE TRIGGER vault_secret_records_reject_tombstone
+                BEFORE INSERT ON vault_secret_records
+                WHEN EXISTS (
+                    SELECT 1 FROM vault_secret_tombstones
+                    WHERE logical_owner_id = NEW.logical_owner_id
+                      AND configuration_instance_id = NEW.configuration_instance_id
+                      AND purpose_id = NEW.purpose_id
+                      AND secret_class = NEW.secret_class
+                      AND secret_revision = NEW.secret_revision
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'retired Vault secret revision');
+                END;",
         )
         .map_err(VaultStoreError::Sqlite)?;
     connection
@@ -294,7 +336,11 @@ fn migrate_schema(connection: &mut Connection) -> Result<(), VaultStoreError> {
         .map_err(VaultStoreError::Sqlite)?;
     match version {
         SCHEMA_VERSION => Ok(()),
-        1 => migrate_v1_to_v2(connection),
+        1 => {
+            migrate_v1_to_v2(connection)?;
+            migrate_v2_to_v3(connection)
+        }
+        2 => migrate_v2_to_v3(connection),
         _ => Err(VaultStoreError::UnsupportedSchema),
     }
 }
@@ -319,6 +365,52 @@ fn migrate_v1_to_v2(connection: &mut Connection) -> Result<(), VaultStoreError> 
                     logical_owner_id, configuration_instance_id, purpose_id,
                     secret_class, secret_revision, key_epoch
                 );",
+        )
+        .map_err(VaultStoreError::Sqlite)?;
+    transaction.commit().map_err(VaultStoreError::Sqlite)
+}
+
+fn migrate_v2_to_v3(connection: &mut Connection) -> Result<(), VaultStoreError> {
+    let transaction = connection
+        .unchecked_transaction()
+        .map_err(VaultStoreError::Sqlite)?;
+    transaction
+        .execute_batch(
+            "CREATE TABLE vault_metadata_v3 (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                schema_version INTEGER NOT NULL CHECK (schema_version = 3),
+                instance_id TEXT NOT NULL
+             ) STRICT;
+             INSERT INTO vault_metadata_v3 (singleton, schema_version, instance_id)
+                SELECT singleton, 3, instance_id FROM vault_metadata;
+             DROP TABLE vault_metadata;
+             ALTER TABLE vault_metadata_v3 RENAME TO vault_metadata;
+             CREATE TABLE vault_secret_tombstones (
+                logical_owner_id TEXT NOT NULL,
+                configuration_instance_id TEXT NOT NULL,
+                purpose_id TEXT NOT NULL,
+                secret_class INTEGER NOT NULL,
+                secret_revision INTEGER NOT NULL CHECK (secret_revision > 0),
+                state INTEGER NOT NULL CHECK (state IN (1, 2)),
+                changed_at_unix_seconds INTEGER NOT NULL CHECK (changed_at_unix_seconds > 0),
+                PRIMARY KEY (
+                    logical_owner_id, configuration_instance_id, purpose_id,
+                    secret_class, secret_revision
+                )
+             ) STRICT;
+             CREATE TRIGGER vault_secret_records_reject_tombstone
+                BEFORE INSERT ON vault_secret_records
+                WHEN EXISTS (
+                    SELECT 1 FROM vault_secret_tombstones
+                    WHERE logical_owner_id = NEW.logical_owner_id
+                      AND configuration_instance_id = NEW.configuration_instance_id
+                      AND purpose_id = NEW.purpose_id
+                      AND secret_class = NEW.secret_class
+                      AND secret_revision = NEW.secret_revision
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'retired Vault secret revision');
+                END;",
         )
         .map_err(VaultStoreError::Sqlite)?;
     transaction.commit().map_err(VaultStoreError::Sqlite)
@@ -360,6 +452,7 @@ pub enum VaultStoreError {
     DeadlineExceeded,
     ActorStopped,
     AmbiguousScope,
+    LifecycleConflict,
     Sqlite(rusqlite::Error),
 }
 
@@ -379,6 +472,7 @@ impl std::fmt::Display for VaultStoreError {
             Self::DeadlineExceeded => "Vault store operation deadline exceeded",
             Self::ActorStopped => "Vault store actor is stopped",
             Self::AmbiguousScope => "Vault credential scope is ambiguous",
+            Self::LifecycleConflict => "Vault credential lifecycle state conflicts",
             Self::Sqlite(_) => "Vault encrypted store operation failed",
         })
     }
