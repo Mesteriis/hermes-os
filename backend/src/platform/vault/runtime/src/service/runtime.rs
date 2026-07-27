@@ -5,7 +5,9 @@ use hermes_vault_protocol::{
     CredentialLeaseV1, LeaseAudienceV1, LeaseIdV1, VaultActionV1, VaultLeaseIssueRequestV1,
     VaultTransportCommandV1,
 };
-use hermes_vault_store_sqlcipher::{SecretRecordId, SecretRecordScope, VaultStore};
+use hermes_vault_store_sqlcipher::{
+    SecretRecordId, SecretRecordScope, VaultProvisioningMutationV1, VaultStore,
+};
 use zeroize::Zeroizing;
 
 use crate::service::leases::{LeaseError, LeaseManager};
@@ -23,6 +25,14 @@ pub struct VaultSecretReplaceRequestV1<'a> {
     pub next_scope: &'a SecretRecordScope,
     pub payload: &'a [u8],
     pub now_unix_seconds: u64,
+}
+
+struct VaultProvisioningRequestV1<'a> {
+    lease_id: &'a LeaseIdV1,
+    operation_id: [u8; 16],
+    action: VaultActionV1,
+    secret_class: hermes_vault_protocol::SecretClassV1,
+    payload: &'a [u8],
 }
 
 impl VaultService {
@@ -149,6 +159,23 @@ impl VaultService {
                 *secret_class,
                 prior_record_id,
                 payload,
+                now_unix_seconds,
+            ),
+            VaultTransportCommandV1::ProvisionLease {
+                lease_id,
+                operation_id,
+                action,
+                secret_class,
+                payload,
+            } => self.provision_current_once(
+                &VaultProvisioningRequestV1 {
+                    lease_id,
+                    operation_id: *operation_id,
+                    action: *action,
+                    secret_class: *secret_class,
+                    payload,
+                },
+                audience,
                 now_unix_seconds,
             ),
         }
@@ -344,6 +371,33 @@ impl VaultService {
         Ok(Zeroizing::new(record_id.as_bytes().to_vec()))
     }
 
+    fn provision_current_once(
+        &mut self,
+        request: &VaultProvisioningRequestV1<'_>,
+        audience: &LeaseAudienceV1,
+        now_unix_seconds: u64,
+    ) -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {
+        let lease =
+            self.consume_action(request.lease_id, audience, request.action, now_unix_seconds)?;
+        let scope = scope_for_lease(
+            &lease,
+            request.secret_class,
+            lease.request().secret_revision(),
+        )?;
+        let mutation = VaultProvisioningMutationV1::new(
+            request.operation_id,
+            request.action,
+            scope,
+            request.payload.to_vec(),
+            now_unix_seconds,
+        )
+        .map_err(|_| VaultServiceError::LeaseScopeMismatch)?;
+        self.store
+            .provision(mutation)
+            .map(|receipt| Zeroizing::new(receipt.encode()))
+            .map_err(|_| VaultServiceError::SecretUnavailable)
+    }
+
     fn ensure_owner_derived_key_once(
         &mut self,
         lease_id: &LeaseIdV1,
@@ -389,6 +443,7 @@ fn log_developer_command(command: &VaultTransportCommandV1) {
         VaultTransportCommandV1::GenerateOpaqueToken { .. } => "generate_opaque_token",
         VaultTransportCommandV1::EnsureOwnerDerivedKey { .. } => "ensure_owner_derived_key",
         VaultTransportCommandV1::ReplaceLease { .. } => "replace_lease",
+        VaultTransportCommandV1::ProvisionLease { .. } => "provision_lease",
     };
     eprintln!("developer_vault_command={name}");
 }

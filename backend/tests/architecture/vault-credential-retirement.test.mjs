@@ -30,6 +30,10 @@ const paths = {
     'src/platform/vault/store_sqlcipher/src/actor/handle.rs',
     BACKEND_ROOT,
   ),
+  lifecycle: new URL(
+    'src/platform/vault/store_sqlcipher/src/actor/lifecycle.rs',
+    BACKEND_ROOT,
+  ),
   schema: new URL(
     'src/platform/vault/store_sqlcipher/src/database/store.rs',
     BACKEND_ROOT,
@@ -37,7 +41,7 @@ const paths = {
 };
 
 test('Vault retirement is an exact platform lifecycle with durable tombstones', async () => {
-  const [adr, inventorySource, protocol, client, service, store, schema] =
+  const [adr, inventorySource, protocol, client, service, store, lifecycle, schema] =
     await Promise.all([
       readFile(paths.adr, 'utf8'),
       readFile(paths.inventory, 'utf8'),
@@ -45,6 +49,7 @@ test('Vault retirement is an exact platform lifecycle with durable tombstones', 
       readFile(paths.client, 'utf8'),
       readFile(paths.service, 'utf8'),
       readFile(paths.store, 'utf8'),
+      readFile(paths.lifecycle, 'utf8'),
       readFile(paths.schema, 'utf8'),
     ]);
   const inventory = JSON.parse(inventorySource);
@@ -64,14 +69,15 @@ test('Vault retirement is an exact platform lifecycle with durable tombstones', 
   assert.match(client, /pub fn delete_once\(/);
   assert.match(service, /VaultActionV1::Retire/);
   assert.match(service, /VaultActionV1::Delete/);
-  assert.match(store, /fn mutate_secret_lifecycle\(/);
-  assert.match(store, /DELETE FROM vault_secret_records/);
-  assert.match(store, /INSERT INTO vault_secret_tombstones/);
-  assert.match(schema, /const SCHEMA_VERSION: i64 = 3/);
+  assert.match(store, /lifecycle::mutate\(/);
+  assert.match(lifecycle, /pub\(super\) fn mutate\(/);
+  assert.match(lifecycle, /DELETE FROM vault_secret_records/);
+  assert.match(lifecycle, /INSERT INTO vault_secret_tombstones/);
+  assert.match(schema, /const SCHEMA_VERSION: i64 = 4/);
   assert.match(schema, /CREATE TRIGGER vault_secret_records_reject_tombstone/);
   assert.match(adr, /Kernel не декодирует provider lifecycle command/);
   assert.doesNotMatch(
-    `${protocol}\n${client}\n${service}\n${store}\n${schema}`,
+    `${protocol}\n${client}\n${service}\n${store}\n${lifecycle}\n${schema}`,
     /hermes_(?:mail|telegram|whatsapp|zulip|communications)|Mail|Telegram|WhatsApp|Zulip/,
   );
 });

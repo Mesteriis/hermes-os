@@ -130,6 +130,19 @@ impl SecretRecordScope {
         )
     }
 
+    pub(crate) fn with_revision(&self, secret_revision: u64) -> Result<Self, SecretRecordError> {
+        if secret_revision == 0 {
+            return Err(SecretRecordError::InvalidRevision);
+        }
+        Ok(Self {
+            logical_owner_id: self.logical_owner_id.clone(),
+            configuration_instance_id: self.configuration_instance_id.clone(),
+            purpose_id: self.purpose_id.clone(),
+            secret_class: self.secret_class,
+            secret_revision,
+        })
+    }
+
     pub fn matches_lease_request(
         &self,
         request: &hermes_vault_protocol::VaultLeaseIssueRequestV1,

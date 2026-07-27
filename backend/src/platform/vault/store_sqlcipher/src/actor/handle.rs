@@ -3,11 +3,15 @@
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};
 use std::time::Duration;
 
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::Connection;
 use zeroize::Zeroizing;
 
 use crate::database::store::VaultStoreError;
+use crate::provisioning::{VaultProvisioningMutationReceiptV1, VaultProvisioningMutationV1};
 use crate::records::secret::{self as secret_record, SecretRecordId, SecretRecordScope};
+
+use super::lifecycle::{self, SecretLifecycleMutation};
+use super::provisioning::provision;
 
 const ACTOR_QUEUE_CAPACITY: usize = 64;
 const OPERATION_DEADLINE: Duration = Duration::from_secs(2);
@@ -133,6 +137,15 @@ impl VaultStoreHandle {
         receive(receiver)
     }
 
+    pub(crate) fn provision(
+        &self,
+        mutation: VaultProvisioningMutationV1,
+    ) -> Result<VaultProvisioningMutationReceiptV1, VaultStoreError> {
+        let (response, receiver) = sync_channel(1);
+        self.submit(VaultStoreRequest::Provision { mutation, response })?;
+        receive(receiver)
+    }
+
     fn submit(&self, request: VaultStoreRequest) -> Result<(), VaultStoreError> {
         let sender = self.sender.as_ref().ok_or(VaultStoreError::ActorStopped)?;
         sender.try_send(request).map_err(|error| match error {
@@ -186,6 +199,10 @@ enum VaultStoreRequest {
         scope: SecretRecordScope,
         changed_at_unix_seconds: u64,
         response: SyncSender<Result<(), VaultStoreError>>,
+    },
+    Provision {
+        mutation: VaultProvisioningMutationV1,
+        response: SyncSender<Result<VaultProvisioningMutationReceiptV1, VaultStoreError>>,
     },
 }
 
@@ -261,6 +278,9 @@ fn actor_loop(
                     &scope,
                     changed_at_unix_seconds,
                 ));
+            }
+            VaultStoreRequest::Provision { mutation, response } => {
+                let _ = response.send(provision(&mut connection, &record_key, &mutation));
             }
         }
     }
@@ -433,7 +453,7 @@ fn retire_secret(
     scope: &SecretRecordScope,
     changed_at_unix_seconds: u64,
 ) -> Result<(), VaultStoreError> {
-    mutate_secret_lifecycle(
+    lifecycle::mutate(
         connection,
         scope,
         changed_at_unix_seconds,
@@ -446,7 +466,7 @@ fn delete_secret(
     scope: &SecretRecordScope,
     changed_at_unix_seconds: u64,
 ) -> Result<(), VaultStoreError> {
-    mutate_secret_lifecycle(
+    lifecycle::mutate(
         connection,
         scope,
         changed_at_unix_seconds,
@@ -454,130 +474,7 @@ fn delete_secret(
     )
 }
 
-#[derive(Clone, Copy)]
-enum SecretLifecycleMutation {
-    Retire,
-    Delete,
-}
-
-fn mutate_secret_lifecycle(
-    connection: &mut Connection,
-    scope: &SecretRecordScope,
-    changed_at_unix_seconds: u64,
-    mutation: SecretLifecycleMutation,
-) -> Result<(), VaultStoreError> {
-    let changed_at_unix_seconds =
-        i64::try_from(changed_at_unix_seconds).map_err(|_| VaultStoreError::LifecycleConflict)?;
-    if changed_at_unix_seconds <= 0 {
-        return Err(VaultStoreError::LifecycleConflict);
-    }
-    let (owner, configuration, purpose, class, revision) = scope.metadata();
-    let transaction = connection
-        .unchecked_transaction()
-        .map_err(VaultStoreError::Sqlite)?;
-    let deleted = transaction
-        .execute(
-            "DELETE FROM vault_secret_records
-             WHERE logical_owner_id = ?1 AND configuration_instance_id = ?2 AND purpose_id = ?3
-               AND secret_class = ?4 AND secret_revision = ?5",
-            rusqlite::params![owner, configuration, purpose, class, revision],
-        )
-        .map_err(VaultStoreError::Sqlite)?;
-    match mutation {
-        SecretLifecycleMutation::Retire if deleted == 1 => {
-            transaction
-                .execute(
-                    "INSERT INTO vault_secret_tombstones (
-                        logical_owner_id, configuration_instance_id, purpose_id,
-                        secret_class, secret_revision, state, changed_at_unix_seconds
-                     ) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6)",
-                    rusqlite::params![
-                        owner,
-                        configuration,
-                        purpose,
-                        class,
-                        revision,
-                        changed_at_unix_seconds,
-                    ],
-                )
-                .map_err(|_| VaultStoreError::LifecycleConflict)?;
-        }
-        SecretLifecycleMutation::Delete if deleted == 1 => {
-            transaction
-                .execute(
-                    "INSERT INTO vault_secret_tombstones (
-                        logical_owner_id, configuration_instance_id, purpose_id,
-                        secret_class, secret_revision, state, changed_at_unix_seconds
-                     ) VALUES (?1, ?2, ?3, ?4, ?5, 2, ?6)",
-                    rusqlite::params![
-                        owner,
-                        configuration,
-                        purpose,
-                        class,
-                        revision,
-                        changed_at_unix_seconds,
-                    ],
-                )
-                .map_err(|_| VaultStoreError::LifecycleConflict)?;
-        }
-        SecretLifecycleMutation::Delete if deleted == 0 => {
-            let updated = transaction
-                .execute(
-                    "UPDATE vault_secret_tombstones
-                     SET state = 2, changed_at_unix_seconds = ?1
-                     WHERE logical_owner_id = ?2 AND configuration_instance_id = ?3
-                       AND purpose_id = ?4 AND secret_class = ?5 AND secret_revision = ?6
-                       AND state = 1",
-                    rusqlite::params![
-                        changed_at_unix_seconds,
-                        owner,
-                        configuration,
-                        purpose,
-                        class,
-                        revision,
-                    ],
-                )
-                .map_err(VaultStoreError::Sqlite)?;
-            if updated == 0
-                && tombstone_state(&transaction, owner, configuration, purpose, class, revision)?
-                    != Some(2)
-            {
-                return Err(VaultStoreError::LifecycleConflict);
-            }
-        }
-        SecretLifecycleMutation::Retire if deleted == 0 => {
-            if tombstone_state(&transaction, owner, configuration, purpose, class, revision)?
-                != Some(1)
-            {
-                return Err(VaultStoreError::LifecycleConflict);
-            }
-        }
-        _ => return Err(VaultStoreError::LifecycleConflict),
-    }
-    transaction.commit().map_err(VaultStoreError::Sqlite)
-}
-
-fn tombstone_state(
-    transaction: &rusqlite::Transaction<'_>,
-    owner: &str,
-    configuration: &str,
-    purpose: &str,
-    class: i64,
-    revision: i64,
-) -> Result<Option<i64>, VaultStoreError> {
-    transaction
-        .query_row(
-            "SELECT state FROM vault_secret_tombstones
-             WHERE logical_owner_id = ?1 AND configuration_instance_id = ?2
-               AND purpose_id = ?3 AND secret_class = ?4 AND secret_revision = ?5",
-            rusqlite::params![owner, configuration, purpose, class, revision],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(VaultStoreError::Sqlite)
-}
-
-type StoredRecord = (
+pub(super) type StoredRecord = (
     Vec<u8>,
     String,
     String,
@@ -589,7 +486,7 @@ type StoredRecord = (
     Vec<u8>,
 );
 
-fn read_record(row: &rusqlite::Row<'_>) -> Result<StoredRecord, rusqlite::Error> {
+pub(super) fn read_record(row: &rusqlite::Row<'_>) -> Result<StoredRecord, rusqlite::Error> {
     Ok((
         row.get::<_, Vec<u8>>(0)?,
         row.get::<_, String>(1)?,
@@ -603,7 +500,7 @@ fn read_record(row: &rusqlite::Row<'_>) -> Result<StoredRecord, rusqlite::Error>
     ))
 }
 
-fn decrypt_record(
+pub(super) fn decrypt_record(
     scope: &SecretRecordScope,
     record_key: &[u8; 32],
     record: StoredRecord,

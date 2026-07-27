@@ -2,7 +2,9 @@
 
 use sha2::{Digest, Sha256};
 
-use crate::{LeaseIdV1, MAX_SESSION_CREDENTIAL_BYTES, SecretClassV1, VaultLeaseIssueRequestV1};
+use crate::{
+    LeaseIdV1, MAX_SESSION_CREDENTIAL_BYTES, SecretClassV1, VaultActionV1, VaultLeaseIssueRequestV1,
+};
 
 const COMMAND_MAJOR: u8 = 1;
 const RESOLVE_LEASE_OPERATION: u8 = 1;
@@ -14,9 +16,11 @@ const GENERATE_OPAQUE_TOKEN_OPERATION: u8 = 6;
 const ENSURE_OWNER_DERIVED_KEY_OPERATION: u8 = 7;
 const RETIRE_LEASE_OPERATION: u8 = 8;
 const DELETE_LEASE_OPERATION: u8 = 9;
+const PROVISION_LEASE_OPERATION: u8 = 10;
 const RESOLVE_LEASE_BYTES: usize = 35;
 const STORE_LEASE_HEADER_BYTES: usize = RESOLVE_LEASE_BYTES;
 const REPLACE_LEASE_HEADER_BYTES: usize = STORE_LEASE_HEADER_BYTES + 16;
+const PROVISION_LEASE_HEADER_BYTES: usize = STORE_LEASE_HEADER_BYTES + 17;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VaultTransportCommandV1 {
@@ -52,6 +56,13 @@ pub enum VaultTransportCommandV1 {
         lease_id: LeaseIdV1,
         secret_class: SecretClassV1,
         prior_record_id: [u8; 16],
+        payload: Vec<u8>,
+    },
+    ProvisionLease {
+        lease_id: LeaseIdV1,
+        operation_id: [u8; 16],
+        action: VaultActionV1,
+        secret_class: SecretClassV1,
         payload: Vec<u8>,
     },
 }
@@ -119,6 +130,22 @@ impl VaultTransportCommandV1 {
                 bytes.extend_from_slice(payload);
                 bytes
             }
+            Self::ProvisionLease {
+                lease_id,
+                operation_id,
+                action,
+                secret_class,
+                payload,
+            } => {
+                let mut bytes = Vec::with_capacity(PROVISION_LEASE_HEADER_BYTES + payload.len());
+                bytes.extend_from_slice(&[COMMAND_MAJOR, PROVISION_LEASE_OPERATION]);
+                bytes.push(secret_class.code() as u8);
+                bytes.extend_from_slice(lease_id.as_str().as_bytes());
+                bytes.extend_from_slice(operation_id);
+                bytes.push(action.code() as u8);
+                bytes.extend_from_slice(payload);
+                bytes
+            }
         }
     }
 
@@ -150,6 +177,7 @@ impl VaultTransportCommandV1 {
             }
             STORE_LEASE_OPERATION => decode_store_lease(bytes[2], &bytes[3..]),
             REPLACE_LEASE_OPERATION => decode_replace_lease(bytes[2], &bytes[3..]),
+            PROVISION_LEASE_OPERATION => decode_provision_lease(bytes[2], &bytes[3..]),
             _ => Err(VaultTransportCommandError::Malformed),
         }
     }
@@ -158,6 +186,48 @@ impl VaultTransportCommandV1 {
     pub fn operation_digest(&self) -> [u8; 32] {
         Sha256::digest(self.encode()).into()
     }
+}
+
+fn decode_provision_lease(
+    secret_class: u8,
+    bytes: &[u8],
+) -> Result<VaultTransportCommandV1, VaultTransportCommandError> {
+    if bytes.len() < PROVISION_LEASE_HEADER_BYTES - 3
+        || bytes.len() > PROVISION_LEASE_HEADER_BYTES - 3 + MAX_SESSION_CREDENTIAL_BYTES
+    {
+        return Err(VaultTransportCommandError::Malformed);
+    }
+    let secret_class = SecretClassV1::from_code(i64::from(secret_class))
+        .ok_or(VaultTransportCommandError::Malformed)?;
+    let lease_id = decode_lease_id(&bytes[..RESOLVE_LEASE_BYTES - 3])?;
+    let operation_id = bytes[RESOLVE_LEASE_BYTES - 3..REPLACE_LEASE_HEADER_BYTES - 3]
+        .try_into()
+        .map_err(|_| VaultTransportCommandError::Malformed)?;
+    if operation_id == [0; 16] {
+        return Err(VaultTransportCommandError::Malformed);
+    }
+    let action = VaultActionV1::from_code(i64::from(bytes[REPLACE_LEASE_HEADER_BYTES - 3]))
+        .filter(|action| {
+            matches!(
+                action,
+                VaultActionV1::Create
+                    | VaultActionV1::ReplaceCas
+                    | VaultActionV1::Retire
+                    | VaultActionV1::Delete
+            )
+        })
+        .ok_or(VaultTransportCommandError::Malformed)?;
+    let payload = bytes[PROVISION_LEASE_HEADER_BYTES - 3..].to_vec();
+    if matches!(action, VaultActionV1::Create | VaultActionV1::ReplaceCas) == payload.is_empty() {
+        return Err(VaultTransportCommandError::Malformed);
+    }
+    Ok(VaultTransportCommandV1::ProvisionLease {
+        lease_id,
+        operation_id,
+        action,
+        secret_class,
+        payload,
+    })
 }
 
 fn encode_lease_command(
@@ -313,5 +383,34 @@ mod tests {
             Ok(delete.clone())
         );
         assert_ne!(retire.operation_digest(), delete.operation_digest());
+    }
+
+    #[test]
+    fn owner_provisioning_command_round_trips_and_rejects_action_payload_mismatch() {
+        let lease_id = LeaseIdV1::new("0123456789abcdef0123456789abcdef".to_owned())
+            .expect("typed lease identifier");
+        let command = VaultTransportCommandV1::ProvisionLease {
+            lease_id: lease_id.clone(),
+            operation_id: [9; 16],
+            action: VaultActionV1::Create,
+            secret_class: SecretClassV1::ProviderCredential,
+            payload: b"credential".to_vec(),
+        };
+        assert_eq!(
+            VaultTransportCommandV1::decode(&command.encode()),
+            Ok(command)
+        );
+
+        let invalid = VaultTransportCommandV1::ProvisionLease {
+            lease_id,
+            operation_id: [9; 16],
+            action: VaultActionV1::Retire,
+            secret_class: SecretClassV1::ProviderCredential,
+            payload: b"credential".to_vec(),
+        };
+        assert_eq!(
+            VaultTransportCommandV1::decode(&invalid.encode()),
+            Err(VaultTransportCommandError::Malformed)
+        );
     }
 }

@@ -5,7 +5,10 @@ mod operations;
 mod transport;
 
 pub use leases::{CredentialLeaseV1, LeaseAudienceV1, LeaseIdV1, VaultLeaseIssueRequestV1};
-pub use operations::{VaultTransportCommandError, VaultTransportCommandV1};
+pub use operations::{
+    VaultProvisioningReceiptError, VaultProvisioningReceiptV1, VaultProvisioningStateV1,
+    VaultTransportCommandError, VaultTransportCommandV1, state_for_action,
+};
 pub use transport::{
     VaultCiphertextFrameV1, VaultResponseRecipientV1, VaultTransportBindingV1,
     VaultTransportDirectionV1, VaultTransportError, VaultTransportPublicKey,
