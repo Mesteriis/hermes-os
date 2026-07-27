@@ -1,4 +1,8 @@
 const APP_COMMANDS: &[&str] = &[
+    "owner_vault_provisioning_host_start",
+    "owner_vault_provisioning_host_seal",
+    "owner_vault_provisioning_host_open_receipt",
+    "owner_vault_provisioning_host_cancel",
     "open_whatsapp_web_companion",
     "hide_whatsapp_web_companion",
     "start_hidden_whatsapp_webview",

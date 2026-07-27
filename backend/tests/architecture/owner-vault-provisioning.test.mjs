@@ -116,6 +116,9 @@ test('owner Vault provisioning primitive is write-only durable and platform-neut
   assert.match(adr, /Prepare[\s\S]*Authorize[\s\S]*Commit/);
   assert.match(gatewayContract, /service OwnerVaultProvisioningService/);
   assert.match(gatewayContract, /rpc Prepare[\s\S]*rpc Authorize[\s\S]*rpc Commit/);
+  assert.match(gatewayContract, /enum OwnerVaultSecretClassV1/);
+  assert.match(gatewayContract, /enum OwnerVaultActionV1/);
+  assert.doesNotMatch(gatewayContract, /hermes\/runtime\/v1\/recovery\.proto/);
   assert.match(gatewayRouter, /authorize_request/);
   assert.match(gatewayRouter, /is_lan_development/);
   assert.match(gatewayRouter, /require_mutation_origin/);

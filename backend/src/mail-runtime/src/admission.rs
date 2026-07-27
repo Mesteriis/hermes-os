@@ -52,8 +52,12 @@ pub const MAIL_GMAIL_OAUTH_SETUP_CREDENTIALS_CAPABILITY_ID: &str =
     "mail.gmail.oauth-setup.credentials.v1";
 pub const MAIL_IMAP_CREDENTIALS_CAPABILITY_ID: &str = "mail.imap.credentials.v1";
 pub const MAIL_IMAP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID: &str = "mail.imap.credential-lifecycle.v1";
+pub const MAIL_IMAP_CREDENTIAL_PROVISIONING_CAPABILITY_ID: &str =
+    "mail.imap.credential-provisioning.v1";
 pub const MAIL_SMTP_CREDENTIALS_CAPABILITY_ID: &str = "mail.smtp.credentials.v1";
 pub const MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID: &str = "mail.smtp.credential-lifecycle.v1";
+pub const MAIL_SMTP_CREDENTIAL_PROVISIONING_CAPABILITY_ID: &str =
+    "mail.smtp.credential-provisioning.v1";
 pub const MAIL_STORAGE_CAPABILITY_ID: &str = "mail.storage.v1";
 pub const MAIL_ATTACHMENT_BLOB_MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAIL_ATTACHMENT_BLOB_CUSTODY_SCOPE_ID: &str = "mail.attachment.content.v1";
@@ -101,6 +105,11 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
             "mail_imap_password",
             VaultSecretClassV1::ProviderCredential,
         ),
+        mail_provider_credential_provisioning_capability_v1(
+            MAIL_IMAP_CREDENTIAL_PROVISIONING_CAPABILITY_ID,
+            "mail_imap_password",
+            VaultSecretClassV1::ProviderCredential,
+        ),
         mail_provider_credential_capability_v1(
             MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
             "mail_imap_password",
@@ -111,6 +120,11 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_client_capability_v1(MailClientContractV1::GmailOAuthStart),
         mail_provider_credential_lifecycle_capability_v1(
             MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+            "mail_smtp_password",
+            VaultSecretClassV1::ProviderCredential,
+        ),
+        mail_provider_credential_provisioning_capability_v1(
+            MAIL_SMTP_CREDENTIAL_PROVISIONING_CAPABILITY_ID,
             "mail_smtp_password",
             VaultSecretClassV1::ProviderCredential,
         ),
@@ -210,6 +224,25 @@ fn mail_provider_credential_lifecycle_capability_v1(
             purpose_id,
             &[secret_class],
             &[VaultActionV1::Retire, VaultActionV1::Delete],
+        )],
+        ..Default::default()
+    }
+}
+
+#[must_use]
+fn mail_provider_credential_provisioning_capability_v1(
+    capability_id: &str,
+    purpose_id: &str,
+    secret_class: VaultSecretClassV1,
+) -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: capability_id.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![vault_purpose_request_v1(
+            purpose_id,
+            &[secret_class],
+            &[VaultActionV1::Create, VaultActionV1::ReplaceCas],
         )],
         ..Default::default()
     }
@@ -443,12 +476,14 @@ mod tests {
                 MAIL_GMAIL_OAUTH_SETUP_CREDENTIALS_CAPABILITY_ID,
                 MAIL_GMAIL_REFRESH_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
                 MAIL_IMAP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+                MAIL_IMAP_CREDENTIAL_PROVISIONING_CAPABILITY_ID,
                 MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
                 MailClientContractV1::GmailOAuthComplete.capability_id(),
                 MailClientContractV1::GmailOAuthQuery.capability_id(),
                 MailClientContractV1::GmailOAuthRefresh.capability_id(),
                 MailClientContractV1::GmailOAuthStart.capability_id(),
                 MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+                MAIL_SMTP_CREDENTIAL_PROVISIONING_CAPABILITY_ID,
                 MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,
                 MAIL_STORAGE_CAPABILITY_ID,
                 MailClientContractV1::Sync.capability_id(),
@@ -536,6 +571,33 @@ mod tests {
             assert!(matches!(
                 capability.requests[0].request.as_ref(),
                 Some(Request::VaultPurpose(request)) if request.purpose_id == purpose_id
+            ));
+        }
+
+        for (capability_id, purpose_id) in [
+            (
+                MAIL_IMAP_CREDENTIAL_PROVISIONING_CAPABILITY_ID,
+                "mail_imap_password",
+            ),
+            (
+                MAIL_SMTP_CREDENTIAL_PROVISIONING_CAPABILITY_ID,
+                "mail_smtp_password",
+            ),
+        ] {
+            let capability = descriptor
+                .capabilities
+                .iter()
+                .find(|capability| capability.capability_id == capability_id)
+                .expect("Mail credential provisioning capability");
+            assert!(matches!(
+                capability.requests[0].request.as_ref(),
+                Some(Request::VaultPurpose(request))
+                    if request.purpose_id == purpose_id
+                        && request.actions
+                            == [
+                                VaultActionV1::Create as i32,
+                                VaultActionV1::ReplaceCas as i32,
+                            ]
             ));
         }
 

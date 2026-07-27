@@ -2,7 +2,7 @@
 
 use hermes_gateway_protocol::v1::{
     AuthorizeOwnerVaultProvisioningRequestV1, CommitOwnerVaultProvisioningRequestV1,
-    PrepareOwnerVaultProvisioningRequestV1,
+    OwnerVaultActionV1, OwnerVaultSecretClassV1, PrepareOwnerVaultProvisioningRequestV1,
 };
 use hermes_gateway_runtime::{
     GatewayApplicationRouter, InMemoryBrowserRealtimeSource, OWNER_VAULT_AUTHORIZE_PATH,
@@ -242,8 +242,8 @@ fn prepare(
                 capability_id: CAPABILITY.to_owned(),
                 configuration_instance_id: "mail-account-1".to_owned(),
                 purpose_id: PURPOSE.to_owned(),
-                secret_class: VaultSecretClassV1::ProviderCredential as i32,
-                action: hermes_runtime_protocol::v1::VaultActionV1::Create as i32,
+                secret_class: OwnerVaultSecretClassV1::ProviderCredential as i32,
+                action: OwnerVaultActionV1::Create as i32,
                 secret_revision: 1,
                 response_recipient_hpke_public_key_x25519: response_public_key.to_vec(),
             },
@@ -365,8 +365,8 @@ fn provision_once_through_gateway(
                 capability_id: CAPABILITY.to_owned(),
                 configuration_instance_id: "mail-account-2".to_owned(),
                 purpose_id: PURPOSE.to_owned(),
-                secret_class: VaultSecretClassV1::ProviderCredential as i32,
-                action: hermes_runtime_protocol::v1::VaultActionV1::Create as i32,
+                secret_class: OwnerVaultSecretClassV1::ProviderCredential as i32,
+                action: OwnerVaultActionV1::Create as i32,
                 secret_revision: 1,
                 response_recipient_hpke_public_key_x25519: recipient
                     .public_key()

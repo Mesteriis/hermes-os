@@ -1,0 +1,18 @@
+[package]
+name = "hermes-owner-vault-provisioning-host"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "app"
+owner = "first_party_client"
+surface = "host_adapter"
+
+[dependencies]
+hermes-vault-protocol = { path = "../../../backend/src/platform/vault/protocol" }
+sha2 = { version = "=0.11.0", default-features = false }
+zeroize = "=1.9.0"

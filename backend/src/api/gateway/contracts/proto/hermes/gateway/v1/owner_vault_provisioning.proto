@@ -2,7 +2,20 @@ syntax = "proto3";
 
 package hermes.gateway.v1;
 
-import "hermes/runtime/v1/recovery.proto";
+enum OwnerVaultSecretClassV1 {
+  OWNER_VAULT_SECRET_CLASS_V1_UNSPECIFIED = 0;
+  OWNER_VAULT_SECRET_CLASS_V1_PROVIDER_CREDENTIAL = 1;
+  OWNER_VAULT_SECRET_CLASS_V1_OAUTH_REFRESH_CREDENTIAL = 2;
+  OWNER_VAULT_SECRET_CLASS_V1_SESSION_CREDENTIAL_BLOB = 3;
+}
+
+enum OwnerVaultActionV1 {
+  OWNER_VAULT_ACTION_V1_UNSPECIFIED = 0;
+  OWNER_VAULT_ACTION_V1_CREATE = 1;
+  OWNER_VAULT_ACTION_V1_REPLACE_CAS = 2;
+  OWNER_VAULT_ACTION_V1_RETIRE = 3;
+  OWNER_VAULT_ACTION_V1_DELETE = 4;
+}
 
 // Public write-only platform ceremony. The authenticated browser session
 // supplies the human owner and device; callers cannot select either identity.
@@ -12,8 +25,8 @@ message PrepareOwnerVaultProvisioningRequestV1 {
   string capability_id = 3;
   string configuration_instance_id = 4;
   string purpose_id = 5;
-  hermes.runtime.v1.VaultSecretClassV1 secret_class = 6;
-  hermes.runtime.v1.VaultActionV1 action = 7;
+  OwnerVaultSecretClassV1 secret_class = 6;
+  OwnerVaultActionV1 action = 7;
   uint64 secret_revision = 8;
   bytes response_recipient_hpke_public_key_x25519 = 9;
 }

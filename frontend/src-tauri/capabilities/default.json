@@ -1,9 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Recovery shell permissions only; provider host bridges are isolated to their companion windows.",
+  "description": "First-party shell permissions; provider host bridges remain isolated to their companion windows.",
   "windows": [
     "main"
   ],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "allow-owner-vault-provisioning-host-start",
+    "allow-owner-vault-provisioning-host-seal",
+    "allow-owner-vault-provisioning-host-open-receipt",
+    "allow-owner-vault-provisioning-host-cancel"
+  ]
 }

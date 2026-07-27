@@ -5,6 +5,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 
+mod owner_vault_provisioning;
 #[cfg(feature = "whatsapp-host-webview")]
 mod whatsapp_companion;
 #[cfg(feature = "telemost-host-companion")]
@@ -27,18 +28,32 @@ impl KernelSidecar {
 impl Drop for KernelSidecar {
     fn drop(&mut self) {
         self.stopping.store(true, Ordering::Release);
-        if let Ok(mut child) = self.child.lock() {
-            if let Some(child) = child.take() {
-                let _ = child.kill();
-            }
+        if let Ok(mut child) = self.child.lock()
+            && let Some(child) = child.take()
+        {
+            let _ = child.kill();
         }
     }
 }
 
 pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
-    #[cfg(feature = "whatsapp-host-webview")]
+    #[cfg(not(any(feature = "whatsapp-host-webview", feature = "telemost-host-companion")))]
     let builder = builder.invoke_handler(tauri::generate_handler![
+        owner_vault_provisioning::owner_vault_provisioning_host_start,
+        owner_vault_provisioning::owner_vault_provisioning_host_seal,
+        owner_vault_provisioning::owner_vault_provisioning_host_open_receipt,
+        owner_vault_provisioning::owner_vault_provisioning_host_cancel,
+    ]);
+    #[cfg(all(
+        feature = "whatsapp-host-webview",
+        not(feature = "telemost-host-companion")
+    ))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        owner_vault_provisioning::owner_vault_provisioning_host_start,
+        owner_vault_provisioning::owner_vault_provisioning_host_seal,
+        owner_vault_provisioning::owner_vault_provisioning_host_open_receipt,
+        owner_vault_provisioning::owner_vault_provisioning_host_cancel,
         whatsapp_companion::start_hidden_whatsapp_webview,
         whatsapp_companion::whatsapp_web_companion_manifest,
         whatsapp_companion::open_whatsapp_web_companion,
@@ -46,8 +61,34 @@ pub fn run() {
         whatsapp_companion::connect_whatsapp_runtime_bridge,
         whatsapp_companion::whatsapp_web_companion_relay_runtime_state,
     ]);
-    #[cfg(feature = "telemost-host-companion")]
+    #[cfg(all(
+        feature = "telemost-host-companion",
+        not(feature = "whatsapp-host-webview")
+    ))]
     let builder = builder.invoke_handler(tauri::generate_handler![
+        owner_vault_provisioning::owner_vault_provisioning_host_start,
+        owner_vault_provisioning::owner_vault_provisioning_host_seal,
+        owner_vault_provisioning::owner_vault_provisioning_host_open_receipt,
+        owner_vault_provisioning::owner_vault_provisioning_host_cancel,
+        yandex_telemost_companion::open_yandex_telemost_companion,
+        yandex_telemost_companion::yandex_telemost_companion_manifest,
+        yandex_telemost_companion::yandex_telemost_prepare_audio_device,
+        yandex_telemost_companion::yandex_telemost_recording_start,
+        yandex_telemost_companion::yandex_telemost_recording_stop,
+        yandex_telemost_companion::yandex_telemost_speaker_timeline_append,
+    ]);
+    #[cfg(all(feature = "whatsapp-host-webview", feature = "telemost-host-companion"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        owner_vault_provisioning::owner_vault_provisioning_host_start,
+        owner_vault_provisioning::owner_vault_provisioning_host_seal,
+        owner_vault_provisioning::owner_vault_provisioning_host_open_receipt,
+        owner_vault_provisioning::owner_vault_provisioning_host_cancel,
+        whatsapp_companion::start_hidden_whatsapp_webview,
+        whatsapp_companion::whatsapp_web_companion_manifest,
+        whatsapp_companion::open_whatsapp_web_companion,
+        whatsapp_companion::hide_whatsapp_web_companion,
+        whatsapp_companion::connect_whatsapp_runtime_bridge,
+        whatsapp_companion::whatsapp_web_companion_relay_runtime_state,
         yandex_telemost_companion::open_yandex_telemost_companion,
         yandex_telemost_companion::yandex_telemost_companion_manifest,
         yandex_telemost_companion::yandex_telemost_prepare_audio_device,
@@ -66,6 +107,7 @@ pub fn run() {
                 )?;
             }
             app.manage(KernelSidecar::default());
+            app.manage(owner_vault_provisioning::OwnerVaultProvisioningHostStateV1::default());
             #[cfg(feature = "whatsapp-host-webview")]
             app.manage(whatsapp_companion::WhatsAppHostRoutes::default());
             #[cfg(feature = "telemost-host-companion")]
@@ -120,12 +162,10 @@ fn start_kernel_sidecar<R: Runtime>(
                     );
                     if !app_for_events.state::<KernelSidecar>().stopping()
                         && restart_attempt < MAX_KERNEL_RESTARTS
-                    {
-                        if let Err(error) =
+                        && let Err(error) =
                             start_kernel_sidecar(app_for_events.clone(), restart_attempt + 1)
-                        {
-                            log::error!("Hermes Kernel bounded restart failed: {error}");
-                        }
+                    {
+                        log::error!("Hermes Kernel bounded restart failed: {error}");
                     }
                     return;
                 }

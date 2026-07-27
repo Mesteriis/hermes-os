@@ -177,6 +177,19 @@ validate typed export
 App не пишет Mail/Kernel/Vault stores и не создаёт hidden global transaction.
 Partial state остаётся видимым и resumable через exact receipts.
 
+Для sealed IMAP/SMTP import Mail descriptor объявляет две отдельные
+owner-provisioning capabilities:
+
+```text
+mail.imap.credential-provisioning.v1
+mail.smtp.credential-provisioning.v1
+```
+
+Каждая capability допускает только exact configuration-instance purpose,
+`provider_credential` и `create | replace_cas`. Они не дают Mail runtime
+generic Vault write, не заменяют отдельные resolve/lifecycle capabilities и не
+переносят credential bytes в Mail contract.
+
 ### Account query
 
 Реализованный Phase 1 sanitized query возвращает только:

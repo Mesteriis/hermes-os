@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-owner-vault-provisioning-host-cancel"
+description = "Enables the owner_vault_provisioning_host_cancel command without any pre-configured scope."
+commands.allow = ["owner_vault_provisioning_host_cancel"]
+
+[[permission]]
+identifier = "deny-owner-vault-provisioning-host-cancel"
+description = "Denies the owner_vault_provisioning_host_cancel command without any pre-configured scope."
+commands.deny = ["owner_vault_provisioning_host_cancel"]

@@ -2,8 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: Backend implemented. First-party client gate остаётся
-planned.
+Состояние реализации: Backend implemented. Desktop native host и generated
+client foundation реализуются отдельно; integration-owned setup UI и Android
+adapter остаются planned, поэтому first-party client gate ещё не открыт.
 
 Уточняет:
 
@@ -84,6 +85,10 @@ Commit
 Challenge связывает session, device, target registration, capability,
 configuration instance, purpose, class, action, expected revision, client
 operation ID и response-recipient key. Смена любого поля инвалидирует proof.
+
+Публичный Gateway descriptor объявляет собственные bounded enums secret class
+и action. Он не импортирует внутренний Kernel recovery/runtime descriptor:
+first-party client не получает internal control-plane schema транзитивно.
 
 Обычная cookie session необходима, но сама по себе не является fresh proof.
 LAN development mode не допускает provisioning.
@@ -178,6 +183,18 @@ integration binding, generic Settings apply и provider readiness query.
 5. browser code receives neither platform private key nor Vault root/wrapping
    material;
 6. integration-owned credential setup UI using only sanitized receipt.
+
+Desktop implementation разделяет функции:
+
+- non-extractable browser-profile P-256 key подписывает только fresh challenge;
+- отдельный provider-neutral native host crate владеет ephemeral X25519,
+  HPKE seal/open, bounded session state и zeroization;
+- Tauri command module является тонким host adapter, а не местом crypto
+  semantics или integration logic;
+- generated Connect client композирует Prepare/Authorize/Commit и никогда не
+  импортирует Mail/Telegram/WhatsApp/Zulip.
+
+Эти части не закрывают gate без integration-owned setup UI и Android adapter.
 
 ## Последствия
 

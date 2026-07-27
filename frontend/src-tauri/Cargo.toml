@@ -25,6 +25,7 @@ telemost-host-companion = []
 tauri-build = { version = "2.6.2", features = [] }
 
 [dependencies]
+hermes-owner-vault-provisioning-host = { path = "../native/owner-vault-provisioning-host" }
 hermes-runtime-protocol = { path = "../../backend/src/platform/runtime_protocol" }
 hermes-whatsapp-api = { path = "../../backend/src/whatsapp-api" }
 directories = "=6.0.0"

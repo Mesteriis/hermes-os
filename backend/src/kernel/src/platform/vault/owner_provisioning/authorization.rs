@@ -1,12 +1,13 @@
 //! Exact owner, browser-device, descriptor and grant admission checks.
 
-use hermes_gateway_protocol::v1::PrepareOwnerVaultProvisioningRequestV1;
+use hermes_gateway_protocol::v1::{
+    OwnerVaultActionV1, OwnerVaultSecretClassV1, PrepareOwnerVaultProvisioningRequestV1,
+};
 use hermes_gateway_runtime::{OwnerVaultClientPrincipalV1, OwnerVaultProvisioningRouteErrorV1};
 use hermes_kernel_control_store::{
     BrowserDeviceStateV1, ModuleRegistrationState, ModuleVaultPurposeRequestV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
-use hermes_runtime_protocol::v1::{VaultActionV1 as RuntimeVaultActionV1, VaultSecretClassV1};
 use hermes_vault_protocol::{
     SecretClassV1, VaultActionV1, VaultPurposeRequestV1, VaultTransportPublicKey,
 };
@@ -132,28 +133,31 @@ fn purpose_matches(
     request: &PrepareOwnerVaultProvisioningRequestV1,
 ) -> bool {
     declared.purpose_id() == request.purpose_id
-        && declared.secret_class() == request.secret_class as u8
-        && declared.action() == request.action as u8
+        && secret_class(request.secret_class)
+            .is_ok_and(|secret_class| declared.secret_class() == secret_class.code() as u8)
+        && action(request.action).is_ok_and(|action| declared.action() == action.code() as u8)
         && declared.target_scope() == 1
 }
 
 fn secret_class(value: i32) -> Result<SecretClassV1, OwnerVaultProvisioningRouteErrorV1> {
-    match VaultSecretClassV1::try_from(value).ok() {
-        Some(VaultSecretClassV1::ProviderCredential) => Ok(SecretClassV1::ProviderCredential),
-        Some(VaultSecretClassV1::OauthRefreshCredential) => {
+    match OwnerVaultSecretClassV1::try_from(value).ok() {
+        Some(OwnerVaultSecretClassV1::ProviderCredential) => Ok(SecretClassV1::ProviderCredential),
+        Some(OwnerVaultSecretClassV1::OauthRefreshCredential) => {
             Ok(SecretClassV1::OAuthRefreshCredential)
         }
-        Some(VaultSecretClassV1::SessionCredentialBlob) => Ok(SecretClassV1::SessionCredentialBlob),
+        Some(OwnerVaultSecretClassV1::SessionCredentialBlob) => {
+            Ok(SecretClassV1::SessionCredentialBlob)
+        }
         _ => Err(OwnerVaultProvisioningRouteErrorV1::InvalidArgument),
     }
 }
 
 fn action(value: i32) -> Result<VaultActionV1, OwnerVaultProvisioningRouteErrorV1> {
-    match RuntimeVaultActionV1::try_from(value).ok() {
-        Some(RuntimeVaultActionV1::Create) => Ok(VaultActionV1::Create),
-        Some(RuntimeVaultActionV1::ReplaceCas) => Ok(VaultActionV1::ReplaceCas),
-        Some(RuntimeVaultActionV1::Retire) => Ok(VaultActionV1::Retire),
-        Some(RuntimeVaultActionV1::Delete) => Ok(VaultActionV1::Delete),
+    match OwnerVaultActionV1::try_from(value).ok() {
+        Some(OwnerVaultActionV1::Create) => Ok(VaultActionV1::Create),
+        Some(OwnerVaultActionV1::ReplaceCas) => Ok(VaultActionV1::ReplaceCas),
+        Some(OwnerVaultActionV1::Retire) => Ok(VaultActionV1::Retire),
+        Some(OwnerVaultActionV1::Delete) => Ok(VaultActionV1::Delete),
         _ => Err(OwnerVaultProvisioningRouteErrorV1::InvalidArgument),
     }
 }
@@ -163,7 +167,9 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use hermes_gateway_protocol::v1::PrepareOwnerVaultProvisioningRequestV1;
+    use hermes_gateway_protocol::v1::{
+        OwnerVaultActionV1, OwnerVaultSecretClassV1, PrepareOwnerVaultProvisioningRequestV1,
+    };
     use hermes_gateway_runtime::{OwnerVaultClientPrincipalV1, OwnerVaultProvisioningRouteErrorV1};
     use hermes_kernel_control_store::{
         BrowserDeviceEnrollmentInputV1, BrowserDeviceEnrollmentV1, InitialOwnerIdentity,
@@ -205,7 +211,7 @@ mod tests {
         );
 
         let mut wrong_action = request.clone();
-        wrong_action.action = RuntimeVaultActionV1::Delete as i32;
+        wrong_action.action = OwnerVaultActionV1::Delete as i32;
         assert_eq!(
             authorize_target(&store, &principal, &wrong_action)
                 .expect_err("undeclared action must be denied"),
@@ -326,8 +332,8 @@ mod tests {
             capability_id: CAPABILITY.to_owned(),
             configuration_instance_id: "mail-account-1".to_owned(),
             purpose_id: PURPOSE.to_owned(),
-            secret_class: VaultSecretClassV1::ProviderCredential as i32,
-            action: RuntimeVaultActionV1::Create as i32,
+            secret_class: OwnerVaultSecretClassV1::ProviderCredential as i32,
+            action: OwnerVaultActionV1::Create as i32,
             secret_revision: 1,
             response_recipient_hpke_public_key_x25519: recipient.public_key().as_bytes().to_vec(),
         }

@@ -704,7 +704,7 @@ fn write_timeline_header(
     request: &YandexTelemostRecordingStartRequest,
     session_id: &str,
 ) -> Result<(), String> {
-    append_text_line(path, &format!("# Hermes Yandex Telemost speaker timeline"))?;
+    append_text_line(path, "# Hermes Yandex Telemost speaker timeline")?;
     append_text_line(path, &format!("# session_id={session_id}"))?;
     append_text_line(path, &format!("# account_id={}", request.account_id))?;
     append_text_line(

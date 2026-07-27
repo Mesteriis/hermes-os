@@ -23,13 +23,16 @@ const protoFiles = [
   join(protoRoot, 'hermes', 'communications', 'v1', 'communications.proto'),
   join(communicationsQueryProtoRoot, 'hermes', 'communications', 'query', 'v1', 'query.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'v1', 'client.proto'),
+  join(mailProtoRoot, 'hermes', 'mail', 'account', 'v1', 'client.proto'),
+  join(mailProtoRoot, 'hermes', 'mail', 'account_lifecycle', 'v1', 'client.proto'),
   join(telegramProtoRoot, 'hermes', 'telegram', 'v1', 'client.proto'),
   join(telegramAutomationProtoRoot, 'hermes', 'telegram', 'automation', 'v1', 'automation.proto'),
   join(whatsappProtoRoot, 'hermes', 'whatsapp', 'v1', 'client.proto'),
   join(zulipProtoRoot, 'hermes', 'zulip', 'v1', 'client.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_realtime.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'browser_session.proto'),
-  join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_bootstrap.proto')
+  join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_bootstrap.proto'),
+  join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'owner_vault_provisioning.proto')
 ]
 
 mkdirSync(outputDir, { recursive: true })

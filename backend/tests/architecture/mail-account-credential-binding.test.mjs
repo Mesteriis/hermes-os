@@ -106,6 +106,12 @@ test('Mail credential binding is owner-local, configuration-only and successor-a
   assert.match(contract, /mail\.account\.query\.v1/);
   assert.match(admission, /MailClientContractV1::AccountCredentialBind/);
   assert.match(admission, /MailClientContractV1::AccountQuery/);
+  assert.match(admission, /mail\.imap\.credential-provisioning\.v1/);
+  assert.match(admission, /mail\.smtp\.credential-provisioning\.v1/);
+  assert.match(
+    admission,
+    /\&\[VaultActionV1::Create, VaultActionV1::ReplaceCas\]/,
+  );
 
   assert.match(settings, /MAIL_SETTINGS_SCHEMA_MAJOR_V2: u32 = 2/);
   assert.match(

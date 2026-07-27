@@ -25,8 +25,19 @@ if (!Array.isArray(config.bundle?.externalBin) || !config.bundle.externalBin.inc
 if (/HERMES_GOOGLE_OAUTH_CLIENT_CONFIG|HERMES_LOCAL_API_SECRET/.test(source)) {
   failures.push('Tauri sidecar source must not forward legacy OAuth or local API secrets');
 }
-if (mainCapability.permissions.some((permission) => permission.startsWith('allow-'))) {
+const ownerVaultPermissions = new Set([
+  'allow-owner-vault-provisioning-host-start',
+  'allow-owner-vault-provisioning-host-seal',
+  'allow-owner-vault-provisioning-host-open-receipt',
+  'allow-owner-vault-provisioning-host-cancel',
+]);
+if (mainCapability.permissions.some(
+  (permission) => permission.startsWith('allow-') && !ownerVaultPermissions.has(permission),
+)) {
   failures.push('Tauri main window must not receive provider host-bridge permissions before route admission');
+}
+if ([...ownerVaultPermissions].some((permission) => !mainCapability.permissions.includes(permission))) {
+  failures.push('Tauri main window must receive the exact owner Vault host-adapter permissions');
 }
 if (/CommunicationsWorkspaceView|PersonasWorkspaceView|@\/integrations\//.test(appRoot)) {
   failures.push('Tauri recovery shell must not mount disabled product routes or provider host bridges');
@@ -34,7 +45,7 @@ if (/CommunicationsWorkspaceView|PersonasWorkspaceView|@\/integrations\//.test(a
 if (!source.includes('#[cfg(feature = "whatsapp-host-webview")]\nmod whatsapp_companion;')) {
   failures.push('Tauri provider companion module must be excluded from the default recovery build');
 }
-if (!/#\[cfg\(feature = "whatsapp-host-webview"\)\]\s+let builder = builder\.invoke_handler/.test(source)) {
+if (!/#\[cfg\(all\(\s*feature = "whatsapp-host-webview",[\s\S]*?let builder = builder\.invoke_handler[\s\S]*?whatsapp_companion::start_hidden_whatsapp_webview/.test(source)) {
   failures.push('Tauri provider host commands must be excluded from the default recovery invoke handler');
 }
 
