@@ -103,11 +103,12 @@ use hermes_mail_api::{
         MailAccountLifecycleStatusRequestV1, MailCredentialLifecycleProgressV1,
         MailCredentialLifecycleStateV1,
     },
+    operational::{MailFolderKindV1, MailMessageFlagV1},
     valid_account_configuration, valid_port,
 };
 use hermes_mail_core::rfc822::{
     AttachmentDispositionV1 as Rfc822AttachmentDispositionV1, attachment_metadata,
-    direct_plain_text_body, extract_attachment_part,
+    direct_plain_text_body, extract_attachment_part, operational_preview,
 };
 use hermes_mail_core::{
     MAX_OUTBOUND_ATTACHMENT_BYTES, OutboundAttachmentDispositionV1, OutboundAttachmentV1,
@@ -123,7 +124,8 @@ use hermes_mail_persistence::{
     MailAttachmentBlobAdmissionCompletionV1,
     MailAttachmentDispositionV1 as PersistedAttachmentDispositionV1,
     MailAttachmentMaterializationV1, MailCredentialBindingV1, MailDeliveryAttemptOutcomeV1,
-    MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailQueuedDeliveryV1,
+    MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailOperationalFolderSnapshotV1,
+    MailOperationalMaterializationV1, MailOperationalMessageSnapshotV1, MailQueuedDeliveryV1,
 };
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
@@ -203,6 +205,14 @@ struct MailAttachmentBlobAdmissionRequestV1<'a> {
     disposition: PersistedAttachmentDispositionV1,
     observed_at_unix_seconds: i64,
     observed_at_nanos: i32,
+}
+
+struct OwnedAttachmentBlobAdmissionV1 {
+    source_observation_id: [u8; 16],
+    bytes: Vec<u8>,
+    filename: Option<String>,
+    media_type: String,
+    disposition: PersistedAttachmentDispositionV1,
 }
 
 #[derive(Debug)]
@@ -1376,10 +1386,9 @@ impl MailAdmittedRuntime {
                 ),
             )
             .map_err(|_| MailBootstrapError::Admission)?;
-            self.durable
-                .enqueue_communications_outbox(&record, observed_at_unix_seconds)
-                .await
-                .map_err(|_| MailBootstrapError::Persistence)?;
+            let observation_anchor_id = *record.message_id();
+            let mut records = vec![record];
+            let mut attachment_observation_ids = Vec::with_capacity(message.attachments.len());
             for attachment in &message.attachments {
                 let source_id = format!("{connection_id}:{}", message.uid);
                 let media_id = format!("{}:{}", message.uid, attachment.part_id);
@@ -1420,12 +1429,59 @@ impl MailAdmittedRuntime {
                     ),
                 )
                 .map_err(|_| MailBootstrapError::Admission)?;
-                self.durable
-                    .enqueue_communications_outbox(&record, observed_at_unix_seconds)
-                    .await
-                    .map_err(|_| MailBootstrapError::Persistence)?;
+                attachment_observation_ids.push(*record.message_id());
+                records.push(record);
+            }
+            self.durable
+                .record_operational_materializations(
+                    &[MailOperationalMaterializationV1 {
+                        message: MailOperationalMessageSnapshotV1 {
+                            connection_id: connection_id.to_owned(),
+                            provider_message_id: message.uid.to_string(),
+                            provider_thread_id: format!("imap-message:{}", message.uid),
+                            folders: vec![MailOperationalFolderSnapshotV1 {
+                                folder_id: "INBOX".to_owned(),
+                                display_name: "Inbox".to_owned(),
+                                kind: MailFolderKindV1::Inbox,
+                            }],
+                            subject: Some(message.subject.clone()),
+                            sender: message.sender.clone(),
+                            recipients: message.recipients.clone(),
+                            snippet: Some(message.snippet.clone()),
+                            sent_at_unix_seconds: message.sent_at_unix_seconds,
+                            flags: message
+                                .flags
+                                .iter()
+                                .map(|flag| match flag {
+                                    hermes_mail_imap::ImapMessageFlag::Read => {
+                                        MailMessageFlagV1::Read
+                                    }
+                                    hermes_mail_imap::ImapMessageFlag::Starred => {
+                                        MailMessageFlagV1::Starred
+                                    }
+                                    hermes_mail_imap::ImapMessageFlag::Draft => {
+                                        MailMessageFlagV1::Draft
+                                    }
+                                    hermes_mail_imap::ImapMessageFlag::Trashed => {
+                                        MailMessageFlagV1::Trashed
+                                    }
+                                })
+                                .collect(),
+                            has_plain_text: message.has_plain_text,
+                            has_attachments: !message.attachments.is_empty(),
+                            observation_anchor_id,
+                        },
+                        communications_outbox: records,
+                    }],
+                    observed_at_unix_seconds,
+                )
+                .await
+                .map_err(|_| MailBootstrapError::Persistence)?;
+            for (attachment, source_observation_id) in
+                message.attachments.iter().zip(attachment_observation_ids)
+            {
                 self.try_admit_attachment_blob(MailAttachmentBlobAdmissionRequestV1 {
-                    source_observation_id: *record.message_id(),
+                    source_observation_id,
                     bytes: attachment.bytes(),
                     filename: attachment.filename.clone(),
                     media_type: attachment.media_type.clone(),
@@ -1522,7 +1578,7 @@ impl MailAdmittedRuntime {
             let next_page_token = page.next_page_token.clone();
             let listed_messages = page.messages;
             let page_message_count = listed_messages.len();
-            let (records, page_history_id) = self
+            let (materializations, attachment_admissions, page_history_id) = self
                 .gmail_message_records(
                     connection_id,
                     token,
@@ -1537,8 +1593,8 @@ impl MailAdmittedRuntime {
                 newer_gmail_history_id(observed_history_id.as_deref(), page_history_id.as_deref())
                     .map(str::to_owned);
             self.durable
-                .enqueue_communications_outbox_and_store_gmail_sync_progress(
-                    &records,
+                .record_operational_materializations_and_store_gmail_sync_progress(
+                    &materializations,
                     connection_id,
                     next_page_token.as_deref(),
                     observed_history_id.as_deref(),
@@ -1546,6 +1602,12 @@ impl MailAdmittedRuntime {
                 )
                 .await
                 .map_err(|_| MailBootstrapError::Persistence)?;
+            self.admit_owned_attachments(
+                attachment_admissions,
+                observed_at_unix_seconds,
+                observed_at_nanos,
+            )
+            .await?;
             let has_next_page = next_page_token.is_some();
             page_token = next_page_token;
             if !has_next_page {
@@ -1584,7 +1646,7 @@ impl MailAdmittedRuntime {
             let checkpoint_history_id = valid_gmail_history_id(page.history_id.as_deref())
                 .ok_or(GmailHistorySyncError::Runtime(MailBootstrapError::Provider))?;
             let message_ids = history_message_ids(&page);
-            let (records, _) = self
+            let (materializations, attachment_admissions, _) = self
                 .gmail_message_records(
                     connection_id,
                     token,
@@ -1603,8 +1665,8 @@ impl MailAdmittedRuntime {
                 checkpoint_history_id
             };
             self.durable
-                .enqueue_communications_outbox_and_store_gmail_history_checkpoint(
-                    &records,
+                .record_operational_materializations_and_store_gmail_history_checkpoint(
+                    &materializations,
                     connection_id,
                     next_checkpoint,
                     next_page_token.as_deref(),
@@ -1612,6 +1674,13 @@ impl MailAdmittedRuntime {
                 )
                 .await
                 .map_err(|_| GmailHistorySyncError::Runtime(MailBootstrapError::Persistence))?;
+            self.admit_owned_attachments(
+                attachment_admissions,
+                observed_at_unix_seconds,
+                observed_at_nanos,
+            )
+            .await
+            .map_err(GmailHistorySyncError::Runtime)?;
             let has_next_page = next_page_token.is_some();
             page_token = next_page_token;
             if !has_next_page {
@@ -1631,12 +1700,14 @@ impl MailAdmittedRuntime {
         observed_at_nanos: i32,
     ) -> Result<
         (
-            Vec<hermes_events_protocol::delivery::OutboxRecordV1>,
+            Vec<MailOperationalMaterializationV1>,
+            Vec<OwnedAttachmentBlobAdmissionV1>,
             Option<String>,
         ),
         MailBootstrapError,
     > {
-        let mut records = Vec::new();
+        let mut materializations = Vec::new();
+        let mut attachment_admissions = Vec::new();
         let mut observed_history_id = None;
         for message_id in message_ids {
             let raw = client
@@ -1654,6 +1725,16 @@ impl MailAdmittedRuntime {
                 newer_gmail_history_id(observed_history_id.as_deref(), raw.history_id.as_deref())
                     .map(str::to_owned);
             let provider_record_id = raw.id.unwrap_or(message_id);
+            let provider_thread_id = raw
+                .thread_id
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| format!("gmail-message:{provider_record_id}"));
+            let label_ids = raw.label_ids.unwrap_or_default();
+            let sent_at_unix_seconds = raw
+                .internal_date
+                .as_deref()
+                .and_then(gmail_internal_date_unix_seconds);
+            let preview = operational_preview(&bytes);
             let observation = self.draft_inbound_body_observation(
                 &inbound_observation_id(
                     ProviderProvenanceV1::MailGmail,
@@ -1666,18 +1747,18 @@ impl MailAdmittedRuntime {
                 format!("{connection_id}:{provider_record_id}"),
                 direct_plain_text_body(&bytes),
             )?;
-            records.push(
-                build_observation_outbox_record_v1(
-                    &observation,
-                    &observation_context(
-                        &self.runtime_instance_id,
-                        self.runtime_generation,
-                        observed_at_unix_seconds,
-                        observed_at_nanos,
-                    ),
-                )
-                .map_err(|_| MailBootstrapError::Admission)?,
-            );
+            let primary_record = build_observation_outbox_record_v1(
+                &observation,
+                &observation_context(
+                    &self.runtime_instance_id,
+                    self.runtime_generation,
+                    observed_at_unix_seconds,
+                    observed_at_nanos,
+                ),
+            )
+            .map_err(|_| MailBootstrapError::Admission)?;
+            let observation_anchor_id = *primary_record.message_id();
+            let mut records = vec![primary_record];
             for attachment in attachment_metadata(&bytes) {
                 let attachment_bytes = extract_attachment_part(&bytes, attachment.part_id)
                     .map_err(|_| MailBootstrapError::Provider)?;
@@ -1718,9 +1799,9 @@ impl MailAdmittedRuntime {
                     ),
                 )
                 .map_err(|_| MailBootstrapError::Admission)?;
-                self.try_admit_attachment_blob(MailAttachmentBlobAdmissionRequestV1 {
+                attachment_admissions.push(OwnedAttachmentBlobAdmissionV1 {
                     source_observation_id: *record.message_id(),
-                    bytes: &attachment_bytes,
+                    bytes: attachment_bytes,
                     filename: attachment.filename,
                     media_type: attachment.media_type,
                     disposition: match attachment.disposition {
@@ -1731,14 +1812,55 @@ impl MailAdmittedRuntime {
                             PersistedAttachmentDispositionV1::Inline
                         }
                     },
-                    observed_at_unix_seconds,
-                    observed_at_nanos,
-                })
-                .await?;
+                });
                 records.push(record);
             }
+            materializations.push(MailOperationalMaterializationV1 {
+                message: MailOperationalMessageSnapshotV1 {
+                    connection_id: connection_id.to_owned(),
+                    provider_message_id: provider_record_id,
+                    provider_thread_id,
+                    folders: gmail_operational_folders(&label_ids),
+                    subject: preview.as_ref().and_then(|preview| preview.subject.clone()),
+                    sender: preview.as_ref().and_then(|preview| preview.sender.clone()),
+                    recipients: preview
+                        .as_ref()
+                        .map(|preview| preview.recipients.clone())
+                        .unwrap_or_default(),
+                    snippet: preview.as_ref().and_then(|preview| preview.snippet.clone()),
+                    sent_at_unix_seconds,
+                    flags: gmail_operational_flags(&label_ids),
+                    has_plain_text: preview
+                        .as_ref()
+                        .is_some_and(|preview| preview.has_plain_text),
+                    has_attachments: records.len() > 1,
+                    observation_anchor_id,
+                },
+                communications_outbox: records,
+            });
         }
-        Ok((records, observed_history_id))
+        Ok((materializations, attachment_admissions, observed_history_id))
+    }
+
+    async fn admit_owned_attachments(
+        &mut self,
+        admissions: Vec<OwnedAttachmentBlobAdmissionV1>,
+        observed_at_unix_seconds: i64,
+        observed_at_nanos: i32,
+    ) -> Result<(), MailBootstrapError> {
+        for admission in admissions {
+            self.try_admit_attachment_blob(MailAttachmentBlobAdmissionRequestV1 {
+                source_observation_id: admission.source_observation_id,
+                bytes: &admission.bytes,
+                filename: admission.filename,
+                media_type: admission.media_type,
+                disposition: admission.disposition,
+                observed_at_unix_seconds,
+                observed_at_nanos,
+            })
+            .await?;
+        }
+        Ok(())
     }
 
     fn draft_inbound_body_observation(
@@ -2029,6 +2151,68 @@ impl MailAdmittedRuntime {
             declared_size,
         })
     }
+}
+
+fn gmail_internal_date_unix_seconds(value: &str) -> Option<i64> {
+    value
+        .parse::<i64>()
+        .ok()
+        .and_then(|milliseconds| milliseconds.checked_div(1_000))
+        .filter(|seconds| *seconds > 0)
+}
+
+fn gmail_operational_folders(label_ids: &[String]) -> Vec<MailOperationalFolderSnapshotV1> {
+    let mut folders = vec![MailOperationalFolderSnapshotV1 {
+        folder_id: "ALL_MAIL".to_owned(),
+        display_name: "All Mail".to_owned(),
+        kind: MailFolderKindV1::Archive,
+    }];
+    for label_id in label_ids {
+        let (display_name, kind) = match label_id.as_str() {
+            "INBOX" => ("Inbox", MailFolderKindV1::Inbox),
+            "SENT" => ("Sent", MailFolderKindV1::Sent),
+            "DRAFT" => ("Drafts", MailFolderKindV1::Drafts),
+            "TRASH" => ("Trash", MailFolderKindV1::Trash),
+            "SPAM" => ("Spam", MailFolderKindV1::Spam),
+            "UNREAD" | "STARRED" | "IMPORTANT" => continue,
+            _ if valid_gmail_operational_label(label_id) => {
+                (label_id.as_str(), MailFolderKindV1::ProviderLabel)
+            }
+            _ => continue,
+        };
+        if folders.iter().all(|folder| folder.folder_id != *label_id) {
+            folders.push(MailOperationalFolderSnapshotV1 {
+                folder_id: label_id.clone(),
+                display_name: display_name.to_owned(),
+                kind,
+            });
+        }
+    }
+    folders
+}
+
+fn gmail_operational_flags(label_ids: &[String]) -> Vec<MailMessageFlagV1> {
+    let contains = |label: &str| label_ids.iter().any(|value| value == label);
+    let mut flags = Vec::with_capacity(6);
+    if !contains("UNREAD") {
+        flags.push(MailMessageFlagV1::Read);
+    }
+    for (label, flag) in [
+        ("STARRED", MailMessageFlagV1::Starred),
+        ("DRAFT", MailMessageFlagV1::Draft),
+        ("SENT", MailMessageFlagV1::Sent),
+        ("TRASH", MailMessageFlagV1::Trashed),
+        ("SPAM", MailMessageFlagV1::Spam),
+    ] {
+        if contains(label) {
+            flags.push(flag);
+        }
+    }
+    flags
+}
+
+fn valid_gmail_operational_label(value: &str) -> bool {
+    !value.trim().is_empty() && value.len() <= 512 && !value.contains(['\0', '\r', '\n'])
 }
 
 pub(crate) fn execute_blocking_provider_credential_request<T>(

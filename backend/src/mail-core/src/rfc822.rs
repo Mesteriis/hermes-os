@@ -1,7 +1,13 @@
 //! Bounded RFC822/MIME extraction shared by Mail adapters.
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use hermes_mail_api::MAX_PLAIN_TEXT_BYTES;
+use hermes_mail_api::{
+    MAX_PLAIN_TEXT_BYTES,
+    operational::{
+        MAX_OPERATIONAL_ADDRESS_BYTES, MAX_OPERATIONAL_RECIPIENTS, MAX_OPERATIONAL_SNIPPET_BYTES,
+        MAX_OPERATIONAL_SUBJECT_BYTES,
+    },
+};
 
 const MAX_RFC822_BYTES: usize = 16 * 1024 * 1024;
 const MAX_MIME_DEPTH: u8 = 8;
@@ -29,6 +35,103 @@ pub enum AttachmentPartExtractionErrorV1 {
     NotFound,
     InvalidEncoding,
     TooLarge,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Rfc822OperationalPreviewV1 {
+    pub subject: Option<String>,
+    pub sender: Option<String>,
+    pub recipients: Vec<String>,
+    pub snippet: Option<String>,
+    pub has_plain_text: bool,
+}
+
+/// Extracts only bounded, display-safe operational fields. Raw MIME and HTML are
+/// intentionally excluded from the returned snapshot.
+#[must_use]
+pub fn operational_preview(raw_message: &[u8]) -> Option<Rfc822OperationalPreviewV1> {
+    if raw_message.is_empty() || raw_message.len() > MAX_RFC822_BYTES {
+        return None;
+    }
+    let (headers, _) = split_headers_and_body(raw_message)?;
+    let headers = unfolded_headers(headers)?;
+    let subject = last_operational_header(&headers, "subject", MAX_OPERATIONAL_SUBJECT_BYTES);
+    let sender = last_operational_header(&headers, "from", MAX_OPERATIONAL_ADDRESS_BYTES);
+    let recipients = headers
+        .iter()
+        .filter(|(name, _)| matches!(name.as_str(), "to" | "cc" | "bcc"))
+        .filter_map(|(_, value)| operational_text(value, MAX_OPERATIONAL_ADDRESS_BYTES))
+        .take(MAX_OPERATIONAL_RECIPIENTS)
+        .collect();
+    let plaintext = direct_plain_text_body(raw_message);
+    let snippet = plaintext
+        .as_deref()
+        .and_then(|body| std::str::from_utf8(body).ok())
+        .and_then(|body| operational_text(body, MAX_OPERATIONAL_SNIPPET_BYTES));
+    Some(Rfc822OperationalPreviewV1 {
+        subject,
+        sender,
+        recipients,
+        snippet,
+        has_plain_text: plaintext.is_some(),
+    })
+}
+
+fn unfolded_headers(headers: &[u8]) -> Option<Vec<(String, String)>> {
+    let text = std::str::from_utf8(headers).ok()?;
+    let mut fields = Vec::<(String, String)>::new();
+    for line in text.lines() {
+        if line.starts_with([' ', '\t']) {
+            let (_, value) = fields.last_mut()?;
+            if value.len().saturating_add(line.len()).saturating_add(1) > MAX_RFC822_BYTES {
+                return None;
+            }
+            value.push(' ');
+            value.push_str(line.trim());
+            continue;
+        }
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        let name = name.trim().to_ascii_lowercase();
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        {
+            continue;
+        }
+        fields.push((name, value.trim().to_owned()));
+    }
+    Some(fields)
+}
+
+fn last_operational_header(
+    headers: &[(String, String)],
+    name: &str,
+    max_bytes: usize,
+) -> Option<String> {
+    headers
+        .iter()
+        .rev()
+        .find(|(header_name, _)| header_name == name)
+        .and_then(|(_, value)| operational_text(value, max_bytes))
+}
+
+fn operational_text(value: &str, max_bytes: usize) -> Option<String> {
+    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() || normalized.contains('\0') {
+        return None;
+    }
+    if normalized.len() <= max_bytes {
+        return Some(normalized);
+    }
+    let mut end = max_bytes;
+    while !normalized.is_char_boundary(end) {
+        end -= 1;
+    }
+    let truncated = normalized[..end].trim_end();
+    (!truncated.is_empty()).then(|| truncated.to_owned())
 }
 
 /// Extracts the first bounded `text/plain` MIME leaf that is not an attachment.
@@ -492,6 +595,30 @@ mod tests {
     fn extracts_bounded_attachment_metadata() {
         let raw = b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nbody\r\n--x\r\nContent-Type: application/pdf; name=a.pdf\r\nContent-Disposition: attachment; filename=a.pdf\r\nContent-Transfer-Encoding: base64\r\n\r\naGVsbG8=\r\n--x--\r\n";
         assert_eq!(attachment_metadata(raw)[0].declared_bytes, 5);
+    }
+
+    #[test]
+    fn extracts_only_bounded_operational_preview_fields() {
+        let raw = b"From: Sender <sender@example.test>\r\n\
+Subject:  A folded\r\n\t subject  \r\n\
+To: Owner <owner@example.test>\r\n\
+Cc: Team <team@example.test>\r\n\
+Content-Type: text/plain\r\n\r\n\
+line one\r\nline two\r\n";
+
+        assert_eq!(
+            operational_preview(raw),
+            Some(Rfc822OperationalPreviewV1 {
+                subject: Some("A folded subject".to_owned()),
+                sender: Some("Sender <sender@example.test>".to_owned()),
+                recipients: vec![
+                    "Owner <owner@example.test>".to_owned(),
+                    "Team <team@example.test>".to_owned(),
+                ],
+                snippet: Some("line one line two".to_owned()),
+                has_plain_text: true,
+            })
+        );
     }
 
     #[test]

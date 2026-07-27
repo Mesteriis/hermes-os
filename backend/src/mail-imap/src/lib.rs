@@ -7,7 +7,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::time::Duration;
 
-use async_imap::Session;
+use async_imap::{Session, types::Flag};
 #[cfg(not(feature = "conformance-test-support"))]
 use async_native_tls::TlsConnector;
 use async_std::future;
@@ -17,7 +17,7 @@ use futures_util::TryStreamExt;
 use futures_util::io::{AsyncRead, AsyncWrite};
 use hermes_mail_api::{MAX_PLAIN_TEXT_BYTES, MAX_WINDOW, MAX_WINDOWS, WINDOW_DEADLINE_SECONDS};
 use hermes_mail_core::rfc822::{
-    AttachmentDispositionV1, attachment_metadata, extract_attachment_part,
+    AttachmentDispositionV1, attachment_metadata, extract_attachment_part, operational_preview,
 };
 
 pub const PACKAGE: &str = "hermes-mail-imap";
@@ -49,10 +49,22 @@ const SNAPSHOT_PREVIEW_BYTES: usize = 160;
 pub struct ImapMessage {
     pub uid: u32,
     pub subject: String,
+    pub sender: Option<String>,
+    pub recipients: Vec<String>,
     pub snippet: String,
+    pub sent_at_unix_seconds: Option<i64>,
+    pub flags: Vec<ImapMessageFlag>,
     pub has_plain_text: bool,
     pub plain_text_body: Option<Vec<u8>>,
     pub attachments: Vec<ImapAttachment>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImapMessageFlag {
+    Read,
+    Starred,
+    Draft,
+    Trashed,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -359,7 +371,10 @@ where
         let fetched_messages =
             future::timeout(Duration::from_secs(IMAP_UID_FETCH_TIMEOUT_SECONDS), async {
                 session
-                    .uid_fetch(uid_set(chunk), "(UID BODY.PEEK[] RFC822.SIZE INTERNALDATE)")
+                    .uid_fetch(
+                        uid_set(chunk),
+                        "(UID BODY.PEEK[] RFC822.SIZE INTERNALDATE FLAGS)",
+                    )
                     .await?
                     .try_collect::<Vec<_>>()
                     .await
@@ -380,12 +395,45 @@ where
             let body = message
                 .body()
                 .ok_or_else(|| ImapError::new("protocol", "missing BODY.PEEK[] payload"))?;
-            let (subject, snippet, has_plain_text) = decode_message_preview(body);
+            let (fallback_subject, fallback_snippet, fallback_has_plain_text) =
+                decode_message_preview(body);
+            let preview = operational_preview(body);
+            let subject = preview
+                .as_ref()
+                .and_then(|preview| preview.subject.clone())
+                .unwrap_or(fallback_subject);
+            let sender = preview.as_ref().and_then(|preview| preview.sender.clone());
+            let recipients = preview
+                .as_ref()
+                .map(|preview| preview.recipients.clone())
+                .unwrap_or_default();
+            let snippet = preview
+                .as_ref()
+                .and_then(|preview| preview.snippet.clone())
+                .unwrap_or(fallback_snippet);
+            let has_plain_text = preview
+                .as_ref()
+                .is_some_and(|preview| preview.has_plain_text)
+                || fallback_has_plain_text;
+            let flags = message
+                .flags()
+                .filter_map(|flag| match flag {
+                    Flag::Seen => Some(ImapMessageFlag::Read),
+                    Flag::Flagged => Some(ImapMessageFlag::Starred),
+                    Flag::Draft => Some(ImapMessageFlag::Draft),
+                    Flag::Deleted => Some(ImapMessageFlag::Trashed),
+                    Flag::Answered | Flag::Recent | Flag::MayCreate | Flag::Custom(_) => None,
+                })
+                .collect();
             let attachments = decode_message_attachments(body);
             messages.push(ImapMessage {
                 uid,
                 subject,
+                sender,
+                recipients,
                 snippet,
+                sent_at_unix_seconds: message.internal_date().map(|date| date.timestamp()),
+                flags,
                 has_plain_text,
                 plain_text_body: hermes_mail_core::rfc822::direct_plain_text_body(body),
                 attachments,

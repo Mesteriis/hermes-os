@@ -7,6 +7,7 @@ mod conformance;
 mod durable;
 mod lifecycle;
 mod oauth;
+mod operational;
 mod schema;
 
 pub use account::{MAIL_SCHEMA_V7, MailCredentialBindingV1};
@@ -31,11 +32,16 @@ pub use oauth::{
     GmailOAuthOperationKindV1, GmailOAuthOperationOutcomeV1, GmailOAuthOperationV1,
     GmailOAuthQueuedOperationV1, GmailOAuthStoredAttemptV1, MAIL_SCHEMA_V4,
 };
+pub use operational::{
+    MAIL_SCHEMA_V9, MailOperationalFolderSnapshotV1, MailOperationalMaterializationV1,
+    MailOperationalMessageSnapshotV1,
+};
 pub use schema::{
     MAIL_STORAGE_BUNDLE_REVISION_V1, MAIL_STORAGE_BUNDLE_REVISION_V2,
     MAIL_STORAGE_BUNDLE_REVISION_V3, MAIL_STORAGE_BUNDLE_REVISION_V4,
     MAIL_STORAGE_BUNDLE_REVISION_V5, MAIL_STORAGE_BUNDLE_REVISION_V6,
-    MAIL_STORAGE_BUNDLE_REVISION_V7, MAIL_STORAGE_BUNDLE_REVISION_V8, mail_storage_bundle_v1,
+    MAIL_STORAGE_BUNDLE_REVISION_V7, MAIL_STORAGE_BUNDLE_REVISION_V8,
+    MAIL_STORAGE_BUNDLE_REVISION_V9, mail_storage_bundle_v1,
 };
 
 pub const PACKAGE: &str = "hermes-mail-persistence";
