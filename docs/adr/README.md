@@ -104,6 +104,9 @@ policy через ссылки из новых документов.
 - [ADR-0293: Scoped Vault credential retirement and deletion](ADR-0293-scoped-vault-credential-retirement-and-deletion.md)
 - [ADR-0294: Mail account credential lifecycle and portability](ADR-0294-mail-account-credential-lifecycle-and-portability.md)
 - [ADR-0295: Owner write-only Vault provisioning through Core Gateway](ADR-0295-owner-write-only-vault-provisioning-through-core-gateway.md)
+- [ADR-0296: Owner module Settings through Core Gateway](ADR-0296-owner-module-settings-through-core-gateway.md)
+- [ADR-0297: Fresh owner-proof effective module Settings export](ADR-0297-fresh-owner-proof-effective-module-settings-export.md)
+- [ADR-0298: Mail operational read projection and client contract](ADR-0298-mail-operational-read-projection-and-client-contract.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -374,3 +377,7 @@ Core Gateway возвращает только typed client-visible values по�
 current revision, admitted schema hash и active device, не импортируя Mail или
 raw runtime descriptor. Mail собирает свой versioned portability artifact и
 resumable multi-receipt import только в first-party integration UI.
+ADR-0298 разделяет Mail provider operational projection и Communications
+canonical content: Mail владеет bounded folders/threads/messages query, Core
+Gateway только маршрутизирует exact contract, а full body app получает через
+отдельный Communications content contract по opaque observation anchor.

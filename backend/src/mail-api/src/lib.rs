@@ -22,6 +22,10 @@ pub mod client_contract;
 pub mod client_wire;
 pub mod oauth;
 pub mod oauth_wire;
+pub mod operational;
+pub mod operational_wire_generated {
+    include!(concat!(env!("OUT_DIR"), "/hermes.mail.operational.v1.rs"));
+}
 pub mod portability;
 pub mod portability_wire_generated {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail.portability.v1.rs"));

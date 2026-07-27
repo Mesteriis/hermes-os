@@ -8,6 +8,7 @@ fn main() {
             .join("hermes.mail.v1.bin");
     let mut config = prost_build::Config::new();
     config.file_descriptor_set_path(descriptor_set);
+    config.boxed(".hermes.mail.operational.v1.MailOperationalQueryResponseV1.response.message");
     config.boxed(".hermes.mail.portability.v1.MailAccountConfigurationV1.inbound.gmail");
     config
         .compile_protos(
@@ -15,6 +16,7 @@ fn main() {
                 "proto/hermes/mail/v1/client.proto",
                 "proto/hermes/mail/account/v1/client.proto",
                 "proto/hermes/mail/account_lifecycle/v1/client.proto",
+                "proto/hermes/mail/operational/v1/client.proto",
                 "proto/hermes/mail/portability/v1/portability.proto",
             ],
             &["proto"],
