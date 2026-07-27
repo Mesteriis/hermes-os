@@ -42,12 +42,18 @@ pub const MAIL_BLOB_CAPABILITY_ID: &str = "mail.blob.v1";
 pub const MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID: &str =
     "mail.communication-observed.publish.v1";
 pub const MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID: &str = "mail.gmail.credentials.v1";
+pub const MAIL_GMAIL_CREDENTIAL_LIFECYCLE_CAPABILITY_ID: &str =
+    "mail.gmail.credential-lifecycle.v1";
+pub const MAIL_GMAIL_REFRESH_CREDENTIAL_LIFECYCLE_CAPABILITY_ID: &str =
+    "mail.gmail.refresh-credential-lifecycle.v1";
 pub const MAIL_GMAIL_OAUTH_REFRESH_CREDENTIALS_CAPABILITY_ID: &str =
     "mail.gmail.oauth-refresh.credentials.v1";
 pub const MAIL_GMAIL_OAUTH_SETUP_CREDENTIALS_CAPABILITY_ID: &str =
     "mail.gmail.oauth-setup.credentials.v1";
 pub const MAIL_IMAP_CREDENTIALS_CAPABILITY_ID: &str = "mail.imap.credentials.v1";
+pub const MAIL_IMAP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID: &str = "mail.imap.credential-lifecycle.v1";
 pub const MAIL_SMTP_CREDENTIALS_CAPABILITY_ID: &str = "mail.smtp.credentials.v1";
+pub const MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID: &str = "mail.smtp.credential-lifecycle.v1";
 pub const MAIL_STORAGE_CAPABILITY_ID: &str = "mail.storage.v1";
 pub const MAIL_ATTACHMENT_BLOB_MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAIL_ATTACHMENT_BLOB_CUSTODY_SCOPE_ID: &str = "mail.attachment.content.v1";
@@ -61,7 +67,11 @@ pub const MAIL_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
 pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
         mail_client_capability_v1(MailClientContractV1::AccountCredentialBind),
+        mail_client_capability_v1(MailClientContractV1::AccountDelete),
+        mail_client_capability_v1(MailClientContractV1::AccountLifecycleQuery),
+        mail_client_capability_v1(MailClientContractV1::AccountLifecycleRetry),
         mail_client_capability_v1(MailClientContractV1::AccountQuery),
+        mail_client_capability_v1(MailClientContractV1::AccountRetire),
         mail_attachment_anchor_consume_capability_v1(),
         mail_attachment_blob_admission_publish_capability_v1(),
         mail_attachment_safety_state_consume_capability_v1(),
@@ -70,12 +80,27 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_communication_observed_publish_capability_v1(),
         mail_client_capability_v1(MailClientContractV1::DeliveryQuery),
         mail_client_capability_v1(MailClientContractV1::Delivery),
+        mail_provider_credential_lifecycle_capability_v1(
+            MAIL_GMAIL_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+            "mail_gmail_access_token",
+            VaultSecretClassV1::ProviderCredential,
+        ),
         mail_provider_credential_capability_v1(
             MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID,
             "mail_gmail_access_token",
         ),
         mail_gmail_oauth_refresh_credential_capability_v1(),
         mail_gmail_oauth_setup_credential_capability_v1(),
+        mail_provider_credential_lifecycle_capability_v1(
+            MAIL_GMAIL_REFRESH_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+            "mail_gmail_refresh_credential",
+            VaultSecretClassV1::OauthRefreshCredential,
+        ),
+        mail_provider_credential_lifecycle_capability_v1(
+            MAIL_IMAP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+            "mail_imap_password",
+            VaultSecretClassV1::ProviderCredential,
+        ),
         mail_provider_credential_capability_v1(
             MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
             "mail_imap_password",
@@ -84,6 +109,11 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_client_capability_v1(MailClientContractV1::GmailOAuthQuery),
         mail_client_capability_v1(MailClientContractV1::GmailOAuthRefresh),
         mail_client_capability_v1(MailClientContractV1::GmailOAuthStart),
+        mail_provider_credential_lifecycle_capability_v1(
+            MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+            "mail_smtp_password",
+            VaultSecretClassV1::ProviderCredential,
+        ),
         mail_provider_credential_capability_v1(
             MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,
             "mail_smtp_password",
@@ -162,6 +192,25 @@ fn mail_provider_credential_capability_v1(
         capability_revision: 1,
         criticality: CapabilityCriticalityV1::Optional as i32,
         requests: vec![provider_credential_request_v1(purpose_id)],
+        ..Default::default()
+    }
+}
+
+#[must_use]
+fn mail_provider_credential_lifecycle_capability_v1(
+    capability_id: &str,
+    purpose_id: &str,
+    secret_class: VaultSecretClassV1,
+) -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: capability_id.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![vault_purpose_request_v1(
+            purpose_id,
+            &[secret_class],
+            &[VaultActionV1::Retire, VaultActionV1::Delete],
+        )],
         ..Default::default()
     }
 }
@@ -375,7 +424,11 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 MailClientContractV1::AccountCredentialBind.capability_id(),
+                MailClientContractV1::AccountDelete.capability_id(),
+                MailClientContractV1::AccountLifecycleQuery.capability_id(),
+                MailClientContractV1::AccountLifecycleRetry.capability_id(),
                 MailClientContractV1::AccountQuery.capability_id(),
+                MailClientContractV1::AccountRetire.capability_id(),
                 MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
                 MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID,
                 MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID,
@@ -384,14 +437,18 @@ mod tests {
                 MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID,
                 MailClientContractV1::DeliveryQuery.capability_id(),
                 MailClientContractV1::Delivery.capability_id(),
+                MAIL_GMAIL_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
                 MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID,
                 MAIL_GMAIL_OAUTH_REFRESH_CREDENTIALS_CAPABILITY_ID,
                 MAIL_GMAIL_OAUTH_SETUP_CREDENTIALS_CAPABILITY_ID,
+                MAIL_GMAIL_REFRESH_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+                MAIL_IMAP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
                 MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
                 MailClientContractV1::GmailOAuthComplete.capability_id(),
                 MailClientContractV1::GmailOAuthQuery.capability_id(),
                 MailClientContractV1::GmailOAuthRefresh.capability_id(),
                 MailClientContractV1::GmailOAuthStart.capability_id(),
+                MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
                 MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,
                 MAIL_STORAGE_CAPABILITY_ID,
                 MailClientContractV1::Sync.capability_id(),
@@ -479,6 +536,38 @@ mod tests {
             assert!(matches!(
                 capability.requests[0].request.as_ref(),
                 Some(Request::VaultPurpose(request)) if request.purpose_id == purpose_id
+            ));
+        }
+
+        for (capability_id, purpose_id) in [
+            (
+                MAIL_GMAIL_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+                "mail_gmail_access_token",
+            ),
+            (
+                MAIL_GMAIL_REFRESH_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+                "mail_gmail_refresh_credential",
+            ),
+            (
+                MAIL_IMAP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+                "mail_imap_password",
+            ),
+            (
+                MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+                "mail_smtp_password",
+            ),
+        ] {
+            let capability = descriptor
+                .capabilities
+                .iter()
+                .find(|capability| capability.capability_id == capability_id)
+                .expect("Mail credential lifecycle capability");
+            assert!(matches!(
+                capability.requests[0].request.as_ref(),
+                Some(Request::VaultPurpose(request))
+                    if request.purpose_id == purpose_id
+                        && request.actions
+                            == [VaultActionV1::Retire as i32, VaultActionV1::Delete as i32]
             ));
         }
 

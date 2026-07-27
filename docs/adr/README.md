@@ -354,5 +354,7 @@ action/grant/runtime fences и не интерпретирует provider logout
 ADR-0294 переносит credential revisions из Mail Settings в Mail-owned CAS
 bindings: Bind и sanitized Query являются отдельными generated contracts,
 текущий runtime quiesce-ит изменённый provider path, а exact Vault revision
-активируется только Settings successor generation. Retire/delete и typed
-portability остаются отдельными незакрытыми gates.
+активируется только Settings successor generation. Retire/Delete, explicit
+Retry и lifecycle Status ведут Mail-owned per-purpose journal, quiesce-ят все
+provider paths до exact Vault mutation и сохраняют account tombstone; typed
+portability остаётся отдельным незакрытым gate.

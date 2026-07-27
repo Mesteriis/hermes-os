@@ -66,6 +66,9 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::MailRuntimeAdmission;
+use crate::account_lifecycle::{
+    MailAccountLifecycleCoordinatorV1, MailAccountLifecycleRuntimeErrorV1,
+};
 use crate::admission::{
     MAIL_BLOB_CAPABILITY_ID, MAIL_CREDENTIAL_LEASE_TTL_SECONDS, MAIL_MODULE_ID,
 };
@@ -93,6 +96,12 @@ use hermes_mail_api::{
         MailAccountReadinessV1, MailAccountStatusV1, MailBindCredentialRequestV1,
         MailConnectorProfileV1, MailCredentialBindingReceiptV1, MailCredentialBindingStateV1,
         MailCredentialBindingStatusV1, MailCredentialPurposeV1, MailProviderPathReadinessV1,
+    },
+    account_lifecycle::{
+        MailAccountLifecycleActionV1, MailAccountLifecycleCommandV1, MailAccountLifecycleReceiptV1,
+        MailAccountLifecycleRetryV1, MailAccountLifecycleStateV1,
+        MailAccountLifecycleStatusRequestV1, MailCredentialLifecycleProgressV1,
+        MailCredentialLifecycleStateV1,
     },
     valid_account_configuration, valid_port,
 };
@@ -126,6 +135,7 @@ pub struct MailAdmittedRuntime {
     pub durable: MailDurablePersistence,
     imap_password: Option<Zeroizing<Vec<u8>>>,
     smtp_password: Option<Zeroizing<Vec<u8>>>,
+    account_lifecycle: MailAccountLifecycleCoordinatorV1,
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
     attachment_anchor_subscribe_permit: Option<RuntimeSubscribePermitV1>,
@@ -305,8 +315,14 @@ pub async fn open_admitted_runtime(
     )
     .await
     .map_err(|_| MailBootstrapError::Persistence)?;
-    let imap_password = match &admission.account.inbound {
-        MailInboundTransportV1::Imap(_) => {
+    let lifecycle_quiesced = durable
+        .latest_account_lifecycle(&admission.account.connection_id)
+        .await
+        .map_err(|_| MailBootstrapError::Persistence)?
+        .is_some();
+    let imap_password = match (&admission.account.inbound, lifecycle_quiesced) {
+        (_, true) => None,
+        (MailInboundTransportV1::Imap(_), false) => {
             activate_bound_account_credential(
                 &mut control_channel,
                 &provider_context,
@@ -316,9 +332,9 @@ pub async fn open_admitted_runtime(
             )
             .await?
         }
-        MailInboundTransportV1::Gmail(_) => None,
+        (MailInboundTransportV1::Gmail(_), false) => None,
     };
-    let smtp_password = if admission.account.smtp_endpoint.is_some() {
+    let smtp_password = if admission.account.smtp_endpoint.is_some() && !lifecycle_quiesced {
         activate_bound_account_credential(
             &mut control_channel,
             &provider_context,
@@ -398,6 +414,7 @@ pub async fn open_admitted_runtime(
         durable,
         imap_password,
         smtp_password,
+        account_lifecycle: MailAccountLifecycleCoordinatorV1::new(lifecycle_quiesced),
         event_connection,
         event_publish_permit,
         attachment_anchor_subscribe_permit: subscribe_permits.anchor,
@@ -416,35 +433,18 @@ pub async fn open_admitted_runtime(
 }
 
 impl MailAdmittedRuntime {
+    #[must_use]
+    pub(crate) fn provider_io_permitted(&self) -> bool {
+        self.account_lifecycle.provider_io_permitted()
+    }
+
     pub(crate) fn with_blocking_provider_credential_request<T>(
         &mut self,
         request: impl FnOnce(
             &mut ManagedControlChannelV2<UnixStream>,
         ) -> Result<T, ManagedProviderCredentialErrorV1>,
     ) -> Result<T, ManagedProviderCredentialErrorV1> {
-        let configure = self
-            .control_channel
-            .inner_mut()
-            .set_nonblocking(false)
-            .and_then(|_| {
-                self.control_channel
-                    .inner_mut()
-                    .set_read_timeout(Some(CONTROL_TIMEOUT))
-            })
-            .and_then(|_| {
-                self.control_channel
-                    .inner_mut()
-                    .set_write_timeout(Some(CONTROL_TIMEOUT))
-            });
-        if configure.is_err() {
-            restore_nonblocking_control_stream(self.control_channel.inner_mut());
-            return Err(ManagedProviderCredentialErrorV1::Unavailable);
-        }
-        let result = request(&mut self.control_channel);
-        if !restore_nonblocking_control_stream(self.control_channel.inner_mut()) {
-            return Err(ManagedProviderCredentialErrorV1::Unavailable);
-        }
-        result
+        execute_blocking_provider_credential_request(&mut self.control_channel, request)
     }
 
     pub async fn bind_account_credential(
@@ -452,7 +452,7 @@ impl MailAdmittedRuntime {
         request: &MailBindCredentialRequestV1,
         requested_at_unix_seconds: i64,
     ) -> Result<MailCredentialBindingReceiptV1, MailBootstrapError> {
-        if request.connection_id != self.account.connection_id {
+        if request.connection_id != self.account.connection_id || !self.provider_io_permitted() {
             return Err(MailBootstrapError::Admission);
         }
         match request.purpose {
@@ -488,6 +488,69 @@ impl MailAdmittedRuntime {
         Ok(receipt)
     }
 
+    pub async fn apply_account_lifecycle(
+        &mut self,
+        command: &MailAccountLifecycleCommandV1,
+        action: MailAccountLifecycleActionV1,
+        requested_at_unix_seconds: i64,
+    ) -> Result<MailAccountLifecycleReceiptV1, MailBootstrapError> {
+        if command.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        self.imap_password = None;
+        self.smtp_password = None;
+        self.gmail_oauth_operation_in_flight = None;
+        self.account_lifecycle
+            .begin(
+                &mut self.control_channel,
+                &self.provider_credential_context,
+                &self.durable,
+                command,
+                action,
+                &self.configuration_instance_id,
+                requested_at_unix_seconds,
+            )
+            .await
+            .map_err(map_account_lifecycle_error)
+    }
+
+    pub async fn retry_account_lifecycle(
+        &mut self,
+        retry: &MailAccountLifecycleRetryV1,
+        requested_at_unix_seconds: i64,
+    ) -> Result<MailAccountLifecycleReceiptV1, MailBootstrapError> {
+        if retry.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        self.imap_password = None;
+        self.smtp_password = None;
+        self.gmail_oauth_operation_in_flight = None;
+        self.account_lifecycle
+            .retry(
+                &mut self.control_channel,
+                &self.provider_credential_context,
+                &self.durable,
+                retry,
+                &self.configuration_instance_id,
+                requested_at_unix_seconds,
+            )
+            .await
+            .map_err(map_account_lifecycle_error)
+    }
+
+    pub async fn account_lifecycle_status(
+        &self,
+        request: &MailAccountLifecycleStatusRequestV1,
+    ) -> Result<MailAccountLifecycleReceiptV1, MailBootstrapError> {
+        if request.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        self.account_lifecycle
+            .status(&self.durable, request)
+            .await
+            .map_err(map_account_lifecycle_error)
+    }
+
     pub async fn account_status(
         &self,
         connection_id: &str,
@@ -495,7 +558,7 @@ impl MailAdmittedRuntime {
         if connection_id != self.account.connection_id {
             return Err(MailBootstrapError::Admission);
         }
-        let (mut bindings, connector_profile, sync_readiness, delivery_readiness) =
+        let (mut bindings, connector_profile, mut sync_readiness, mut delivery_readiness) =
             match &self.account.inbound {
                 MailInboundTransportV1::Imap(_) => {
                     let persisted = self
@@ -581,12 +644,61 @@ impl MailAdmittedRuntime {
                     )
                 }
             };
+        let lifecycle = self
+            .durable
+            .latest_account_lifecycle(connection_id)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?;
+        let readiness = if let Some(lifecycle) = lifecycle {
+            bindings = lifecycle
+                .credentials
+                .iter()
+                .map(|progress| lifecycle_binding_status(progress, lifecycle.action))
+                .collect();
+            match &self.account.inbound {
+                MailInboundTransportV1::Imap(_) => {
+                    sync_readiness = lifecycle_path_readiness(
+                        lifecycle.credentials.iter().filter(|progress| {
+                            progress.purpose == MailCredentialPurposeV1::ImapPassword
+                        }),
+                        lifecycle.action,
+                    );
+                    delivery_readiness = if self.account.smtp_endpoint.is_some() {
+                        lifecycle_path_readiness(
+                            lifecycle.credentials.iter().filter(|progress| {
+                                progress.purpose == MailCredentialPurposeV1::SmtpPassword
+                            }),
+                            lifecycle.action,
+                        )
+                    } else {
+                        MailProviderPathReadinessV1::NotConfigured
+                    };
+                }
+                MailInboundTransportV1::Gmail(_) => {
+                    let path_readiness = lifecycle_path_readiness(
+                        lifecycle.credentials.iter().filter(|progress| {
+                            matches!(
+                                progress.purpose,
+                                MailCredentialPurposeV1::GmailAccessToken
+                                    | MailCredentialPurposeV1::GmailRefreshCredential
+                            )
+                        }),
+                        lifecycle.action,
+                    );
+                    sync_readiness = path_readiness;
+                    delivery_readiness = path_readiness;
+                }
+            }
+            lifecycle_account_readiness(lifecycle.state, lifecycle.action)
+        } else {
+            account_readiness(&bindings, self.runtime_generation)
+        };
         bindings.sort_by_key(|binding| binding.purpose);
         Ok(MailAccountStatusV1 {
             connection_id: connection_id.to_owned(),
             settings_revision: self.settings_revision,
             runtime_generation: self.runtime_generation,
-            readiness: account_readiness(&bindings, self.runtime_generation),
+            readiness,
             connector_profile,
             sync_readiness,
             delivery_readiness,
@@ -703,6 +815,9 @@ impl MailAdmittedRuntime {
         request: &MailSendMailRequestV1,
         requested_at_unix_seconds: i64,
     ) -> Result<String, MailBootstrapError> {
+        if !self.provider_io_permitted() {
+            return Err(MailBootstrapError::Credential);
+        }
         match &self.account.inbound {
             MailInboundTransportV1::Imap(_) if self.smtp_password.is_none() => {
                 return Err(MailBootstrapError::Credential);
@@ -791,6 +906,9 @@ impl MailAdmittedRuntime {
         dispatched_at_unix_seconds: i64,
         completed_at_unix_seconds: i64,
     ) -> Result<bool, MailDeliveryDispatchErrorV1> {
+        if !self.provider_io_permitted() {
+            return Ok(false);
+        }
         let provider_ready = match &self.account.inbound {
             MailInboundTransportV1::Imap(_) => self.smtp_password.is_some(),
             MailInboundTransportV1::Gmail(_) => self
@@ -1160,6 +1278,9 @@ impl MailAdmittedRuntime {
         &mut self,
         operation_id: &str,
     ) -> Result<usize, MailBootstrapError> {
+        if !self.provider_io_permitted() {
+            return Err(MailBootstrapError::Credential);
+        }
         let account = self.account.clone();
         match account.inbound {
             MailInboundTransportV1::Imap(configuration) => {
@@ -1910,6 +2031,36 @@ impl MailAdmittedRuntime {
     }
 }
 
+pub(crate) fn execute_blocking_provider_credential_request<T>(
+    control_channel: &mut ManagedControlChannelV2<UnixStream>,
+    request: impl FnOnce(
+        &mut ManagedControlChannelV2<UnixStream>,
+    ) -> Result<T, ManagedProviderCredentialErrorV1>,
+) -> Result<T, ManagedProviderCredentialErrorV1> {
+    let configure = control_channel
+        .inner_mut()
+        .set_nonblocking(false)
+        .and_then(|_| {
+            control_channel
+                .inner_mut()
+                .set_read_timeout(Some(CONTROL_TIMEOUT))
+        })
+        .and_then(|_| {
+            control_channel
+                .inner_mut()
+                .set_write_timeout(Some(CONTROL_TIMEOUT))
+        });
+    if configure.is_err() {
+        restore_nonblocking_control_stream(control_channel.inner_mut());
+        return Err(ManagedProviderCredentialErrorV1::Unavailable);
+    }
+    let result = request(control_channel);
+    if !restore_nonblocking_control_stream(control_channel.inner_mut()) {
+        return Err(ManagedProviderCredentialErrorV1::Unavailable);
+    }
+    result
+}
+
 fn restore_nonblocking_control_stream(stream: &mut UnixStream) -> bool {
     let read_timeout_cleared = stream.set_read_timeout(None).is_ok();
     let write_timeout_cleared = stream.set_write_timeout(None).is_ok();
@@ -2078,6 +2229,13 @@ fn map_attachment_safety_projection_error(
 ) -> MailBootstrapError {
     let _ = error;
     MailBootstrapError::AttachmentAnchorMapping
+}
+
+fn map_account_lifecycle_error(error: MailAccountLifecycleRuntimeErrorV1) -> MailBootstrapError {
+    match error {
+        MailAccountLifecycleRuntimeErrorV1::Admission => MailBootstrapError::Admission,
+        MailAccountLifecycleRuntimeErrorV1::Persistence(_) => MailBootstrapError::Persistence,
+    }
 }
 
 fn valid_gmail_history_id(value: Option<&str>) -> Option<&str> {
@@ -2449,6 +2607,68 @@ fn account_readiness(
         return MailAccountReadinessV1::ConfigurationOnly;
     }
     MailAccountReadinessV1::Degraded
+}
+
+fn lifecycle_binding_status(
+    progress: &MailCredentialLifecycleProgressV1,
+    action: MailAccountLifecycleActionV1,
+) -> MailCredentialBindingStatusV1 {
+    let state = match progress.state {
+        MailCredentialLifecycleStateV1::Completed => match action {
+            MailAccountLifecycleActionV1::Retire => MailCredentialBindingStateV1::Retired,
+            MailAccountLifecycleActionV1::Delete => MailCredentialBindingStateV1::Deleted,
+        },
+        MailCredentialLifecycleStateV1::Pending
+        | MailCredentialLifecycleStateV1::Rejected
+        | MailCredentialLifecycleStateV1::OutcomeUnknown => {
+            MailCredentialBindingStateV1::PendingRestart
+        }
+    };
+    MailCredentialBindingStatusV1 {
+        purpose: progress.purpose,
+        state,
+        binding_revision: progress.binding_revision,
+        credential_revision: Some(progress.credential_revision),
+        applied_runtime_generation: None,
+    }
+}
+
+fn lifecycle_account_readiness(
+    state: MailAccountLifecycleStateV1,
+    action: MailAccountLifecycleActionV1,
+) -> MailAccountReadinessV1 {
+    match state {
+        MailAccountLifecycleStateV1::Pending => MailAccountReadinessV1::PendingRestart,
+        MailAccountLifecycleStateV1::Completed => match action {
+            MailAccountLifecycleActionV1::Retire => MailAccountReadinessV1::Retired,
+            MailAccountLifecycleActionV1::Delete => MailAccountReadinessV1::Deleted,
+        },
+        MailAccountLifecycleStateV1::Rejected | MailAccountLifecycleStateV1::OutcomeUnknown => {
+            MailAccountReadinessV1::Degraded
+        }
+    }
+}
+
+fn lifecycle_path_readiness<'a>(
+    progress: impl Iterator<Item = &'a MailCredentialLifecycleProgressV1>,
+    action: MailAccountLifecycleActionV1,
+) -> MailProviderPathReadinessV1 {
+    let states = progress.map(|progress| progress.state).collect::<Vec<_>>();
+    if states.is_empty() {
+        return MailProviderPathReadinessV1::NotConfigured;
+    }
+    if states.contains(&MailCredentialLifecycleStateV1::Rejected)
+        || states.contains(&MailCredentialLifecycleStateV1::OutcomeUnknown)
+    {
+        return MailProviderPathReadinessV1::Degraded;
+    }
+    if states.contains(&MailCredentialLifecycleStateV1::Pending) {
+        return MailProviderPathReadinessV1::PendingRestart;
+    }
+    match action {
+        MailAccountLifecycleActionV1::Retire => MailProviderPathReadinessV1::Retired,
+        MailAccountLifecycleActionV1::Delete => MailProviderPathReadinessV1::Deleted,
+    }
 }
 
 fn provider_path_readiness(

@@ -468,10 +468,10 @@ release.
    `zulip_full_operational_v1`.
 5. Vault закрывает provider-neutral `vault_credential_retirement_v1` по
    ADR-0293. Mail независимо проходит implemented
-   `mail_account_credential_binding_v1`, затем
-   `mail_account_retire_delete_v1` и `mail_account_portability_v1` по
-   ADR-0294; umbrella `mail_account_lifecycle_v1` требует все три slices,
-   уже реализованный `mail_gmail_oauth_v1` и generic managed Settings apply.
+   `mail_account_credential_binding_v1`, implemented
+   `mail_account_retire_delete_v1` и planned `mail_account_portability_v1` по
+   ADR-0294; umbrella `mail_account_lifecycle_v1` требует все три slices, уже
+   реализованный `mail_gmail_oauth_v1` и generic managed Settings apply.
    Затем Mail read, composition и command gates проходят независимо, без
    одного всесильного Mail capability.
 6. Communications canonical read/content/saved-search gates.

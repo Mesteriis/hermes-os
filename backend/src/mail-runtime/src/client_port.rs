@@ -3,7 +3,8 @@ use hermes_mail_api::client_contract::{
     MAIL_MODULE_ID, MAIL_OWNER_ID, MailClientContractV1,
 };
 use hermes_mail_api::{
-    MailClientRequestV1, MailClientResponseV1, account_wire, client_wire, oauth_wire,
+    MailClientRequestV1, MailClientResponseV1, account_lifecycle_wire, account_wire, client_wire,
+    oauth_wire,
 };
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
@@ -46,6 +47,14 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
     match request {
         MailClientRequestV1::BindCredential(_) => MailClientContractV1::AccountCredentialBind,
         MailClientRequestV1::AccountStatus(_) => MailClientContractV1::AccountQuery,
+        MailClientRequestV1::RetireAccount(_) => MailClientContractV1::AccountRetire,
+        MailClientRequestV1::DeleteAccount(_) => MailClientContractV1::AccountDelete,
+        MailClientRequestV1::RetryAccountLifecycle(_) => {
+            MailClientContractV1::AccountLifecycleRetry
+        }
+        MailClientRequestV1::AccountLifecycleStatus(_) => {
+            MailClientContractV1::AccountLifecycleQuery
+        }
         MailClientRequestV1::SyncInbox(_) => MailClientContractV1::Sync,
         MailClientRequestV1::SendMail(_) => MailClientContractV1::Delivery,
         MailClientRequestV1::DeliveryStatus(_) => MailClientContractV1::DeliveryQuery,
@@ -63,6 +72,17 @@ fn encode_request_payload(request: &MailClientRequestV1) -> Result<Vec<u8>, Mail
         }
         MailClientRequestV1::AccountStatus(value) => {
             account_wire::encode_status_request(value).map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::RetireAccount(value) | MailClientRequestV1::DeleteAccount(value) => {
+            account_lifecycle_wire::encode_command(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::RetryAccountLifecycle(value) => {
+            account_lifecycle_wire::encode_retry(value).map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::AccountLifecycleStatus(value) => {
+            account_lifecycle_wire::encode_status_request(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
         }
         MailClientRequestV1::SyncInbox(value) => Ok(client_wire::encode_sync_request(value)),
         MailClientRequestV1::SendMail(value) => Ok(client_wire::encode_delivery_request(value)),
@@ -93,6 +113,20 @@ fn decode_request_payload(
         MailClientContractV1::AccountQuery => account_wire::decode_status_request(bytes)
             .map(MailClientRequestV1::AccountStatus)
             .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::AccountRetire => account_lifecycle_wire::decode_command(bytes)
+            .map(MailClientRequestV1::RetireAccount)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::AccountDelete => account_lifecycle_wire::decode_command(bytes)
+            .map(MailClientRequestV1::DeleteAccount)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::AccountLifecycleRetry => account_lifecycle_wire::decode_retry(bytes)
+            .map(MailClientRequestV1::RetryAccountLifecycle)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::AccountLifecycleQuery => {
+            account_lifecycle_wire::decode_status_request(bytes)
+                .map(MailClientRequestV1::AccountLifecycleStatus)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
         MailClientContractV1::Sync => client_wire::decode_sync_request(bytes)
             .map(MailClientRequestV1::SyncInbox)
             .map_err(|_| MailClientPortErrorV1::Protocol),
@@ -179,6 +213,34 @@ pub async fn handle_client_request(
             .await
             .map(MailClientResponseV1::AccountStatus)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::RetireAccount(value) => runtime
+            .apply_account_lifecycle(
+                &value,
+                hermes_mail_api::account_lifecycle::MailAccountLifecycleActionV1::Retire,
+                requested_at_unix_seconds,
+            )
+            .await
+            .map(MailClientResponseV1::AccountLifecycle)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::DeleteAccount(value) => runtime
+            .apply_account_lifecycle(
+                &value,
+                hermes_mail_api::account_lifecycle::MailAccountLifecycleActionV1::Delete,
+                requested_at_unix_seconds,
+            )
+            .await
+            .map(MailClientResponseV1::AccountLifecycle)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::RetryAccountLifecycle(value) => runtime
+            .retry_account_lifecycle(&value, requested_at_unix_seconds)
+            .await
+            .map(MailClientResponseV1::AccountLifecycle)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::AccountLifecycleStatus(value) => runtime
+            .account_lifecycle_status(&value)
+            .await
+            .map(MailClientResponseV1::AccountLifecycle)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
         MailClientRequestV1::SyncInbox(value) => {
             let observed_messages = runtime
                 .sync_configured_inbox(&value.operation_id)
@@ -242,6 +304,14 @@ fn encode_module_response(
             account_wire::encode_account_status(status)
                 .map_err(|_| MailClientPortErrorV1::Protocol)?
         }
+        (
+            MailClientContractV1::AccountRetire
+            | MailClientContractV1::AccountDelete
+            | MailClientContractV1::AccountLifecycleRetry
+            | MailClientContractV1::AccountLifecycleQuery,
+            MailClientResponseV1::AccountLifecycle(receipt),
+        ) => account_lifecycle_wire::encode_receipt(receipt)
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
         (
             MailClientContractV1::Sync,
             MailClientResponseV1::SyncInboxCompleted {
@@ -309,6 +379,13 @@ pub fn decode_module_response(
             account_wire::decode_account_status(&envelope.response_payload)
                 .map(MailClientResponseV1::AccountStatus)
         }
+        MailClientContractV1::AccountRetire
+        | MailClientContractV1::AccountDelete
+        | MailClientContractV1::AccountLifecycleRetry
+        | MailClientContractV1::AccountLifecycleQuery => {
+            account_lifecycle_wire::decode_receipt(&envelope.response_payload)
+                .map(MailClientResponseV1::AccountLifecycle)
+        }
         MailClientContractV1::Sync => client_wire::decode_sync_response(&envelope.response_payload),
         MailClientContractV1::Delivery => {
             client_wire::decode_delivery_response(&envelope.response_payload)
@@ -336,6 +413,10 @@ mod tests {
         MailDeliveryStatusRequestV1, MailSendMailRequestV1, MailSyncInboxRequestV1,
         account::{
             MailAccountStatusRequestV1, MailBindCredentialRequestV1, MailCredentialPurposeV1,
+        },
+        account_lifecycle::{
+            MailAccountLifecycleCommandV1, MailAccountLifecycleRetryV1,
+            MailAccountLifecycleStatusRequestV1,
         },
     };
 
@@ -388,6 +469,49 @@ mod tests {
         assert_eq!(decoded_bind, bind);
         assert_eq!(decoded_query, query);
         assert_ne!(bind_contract, query_contract);
+    }
+
+    #[test]
+    fn account_lifecycle_actions_retry_and_status_are_independent_contracts() {
+        let command = MailAccountLifecycleCommandV1 {
+            operation_id: "account-retire".to_owned(),
+            connection_id: "mail-account".to_owned(),
+            expected_lifecycle_revision: 0,
+        };
+        let requests = [
+            (
+                MailClientRequestV1::RetireAccount(command.clone()),
+                MailClientContractV1::AccountRetire,
+            ),
+            (
+                MailClientRequestV1::DeleteAccount(command),
+                MailClientContractV1::AccountDelete,
+            ),
+            (
+                MailClientRequestV1::RetryAccountLifecycle(MailAccountLifecycleRetryV1 {
+                    operation_id: "account-retire".to_owned(),
+                    connection_id: "mail-account".to_owned(),
+                    expected_lifecycle_revision: 1,
+                }),
+                MailClientContractV1::AccountLifecycleRetry,
+            ),
+            (
+                MailClientRequestV1::AccountLifecycleStatus(MailAccountLifecycleStatusRequestV1 {
+                    operation_id: "account-retire".to_owned(),
+                    connection_id: "mail-account".to_owned(),
+                }),
+                MailClientContractV1::AccountLifecycleQuery,
+            ),
+        ];
+        for (index, (request, expected_contract)) in requests.into_iter().enumerate() {
+            let encoded =
+                encode_module_request(u64::try_from(index + 1).expect("request ID"), &request)
+                    .expect("lifecycle request");
+            let (_, contract, decoded) =
+                decode_module_request(&encoded).expect("decode lifecycle request");
+            assert_eq!(contract, expected_contract);
+            assert_eq!(decoded, request);
+        }
     }
 
     #[test]

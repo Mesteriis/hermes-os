@@ -2,10 +2,10 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: Phase 1 `mail_account_credential_binding_v1`
-реализована. Retire/delete и portability остаются Planned; umbrella
-`mail_account_lifecycle_v1` остаётся закрыт до выполнения всех phase gates
-ниже.
+Состояние реализации: Phase 1 `mail_account_credential_binding_v1` и Phase 2
+`mail_account_retire_delete_v1` реализованы. Portability остаётся Planned;
+umbrella `mail_account_lifecycle_v1` остаётся закрыт до выполнения всех phase
+gates ниже.
 
 Уточняет:
 
@@ -188,8 +188,11 @@ Partial state остаётся видимым и resumable через exact rece
 - applied runtime generation;
 - sync/delivery readiness reason codes.
 
-Phase 2 совместимо добавляет current pending lifecycle operation receipt и
-terminal lifecycle state.
+Phase 2 не встраивает operation receipt в общий Account Query: этот query
+совместимо проецирует lifecycle-derived readiness и per-purpose terminal
+state, а exact pending/terminal receipt возвращает отдельный
+`mail.account.lifecycle.query.v1`. Такое разделение не смешивает status
+настроенного account с журналом конкретной lifecycle operation.
 
 Endpoint host, username/email и CA material не возвращаются обычным status
 query. Typed export требует отдельной fresh-owner-proof operation.
@@ -261,7 +264,7 @@ composition не получает owner storage.
 Umbrella открывается только после всех трёх gates выше и существующего
 `mail_gmail_oauth_v1`.
 
-## Evidence реализованной Phase 1
+## Evidence реализованных Phase 1 и Phase 2
 
 - `hermes-mail-api` поставляет exact generated Bind/Query contracts без
   secret bytes, Vault record IDs и arbitrary purposes;
@@ -275,6 +278,24 @@ Umbrella открывается только после всех трёх gates 
   activation revision 2 и stale-generation fencing;
 - executable architecture gate:
   `tests/architecture/mail-account-credential-binding.test.mjs`.
+- `hermes-mail-api` поставляет четыре независимых exact lifecycle contracts:
+  Retire, Delete, explicit Retry и Status; command payload не переносит secret
+  bytes, Vault record IDs или arbitrary purposes;
+- Mail Storage bundle revision 8 хранит lifecycle operation journal,
+  per-purpose progress и отдельный account tombstone;
+- Mail runtime quiesce-ит IMAP, SMTP и Gmail provider paths до первой Vault
+  mutation, а restart с любым persisted lifecycle state остаётся
+  configuration-only;
+- IMAP password, SMTP password, Gmail access token и Gmail refresh credential
+  получают отдельные exact lifecycle capabilities с правильным secret class;
+- ambiguous Vault response становится `outcome_unknown`, exact command replay
+  не повторяет mutation, а продолжение возможно только отдельным Retry после
+  successor Vault/Storage/runtime generations;
+- live `mail_account_credential_flow` доказывает retire/delete всех четырёх
+  purposes, lifecycle status, Mail tombstone, post-delete mutation rejection,
+  restart fencing и отсутствие дополнительного IMAP/SMTP I/O;
+- executable architecture gate:
+  `tests/architecture/mail-account-retire-delete.test.mjs`.
 
 ## Отклонённые варианты
 

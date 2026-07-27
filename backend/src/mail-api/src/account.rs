@@ -160,9 +160,10 @@ fn valid_binding_status(status: &MailCredentialBindingStatusV1) -> bool {
                 && status.applied_runtime_generation.is_none()
         }
         MailCredentialBindingStateV1::PendingRestart => {
-            status.binding_revision.is_some_and(|value| value > 0)
-                && status.credential_revision.is_some_and(|value| value > 0)
+            status.credential_revision.is_some_and(|value| value > 0)
                 && status.applied_runtime_generation.is_none()
+                && (status.purpose.bindable_by_client()
+                    == status.binding_revision.is_some_and(|value| value > 0))
         }
         MailCredentialBindingStateV1::Active => {
             status.credential_revision.is_some_and(|value| value > 0)
@@ -175,6 +176,8 @@ fn valid_binding_status(status: &MailCredentialBindingStatusV1) -> bool {
         MailCredentialBindingStateV1::Retired | MailCredentialBindingStateV1::Deleted => {
             status.credential_revision.is_some_and(|value| value > 0)
                 && status.applied_runtime_generation.is_none()
+                && (status.purpose.bindable_by_client()
+                    == status.binding_revision.is_some_and(|value| value > 0))
         }
     }
 }

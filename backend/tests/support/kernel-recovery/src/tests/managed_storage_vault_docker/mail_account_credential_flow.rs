@@ -8,6 +8,11 @@ use hermes_mail_api::{
         MailAccountReadinessV1, MailAccountStatusRequestV1, MailAccountStatusV1,
         MailBindCredentialRequestV1, MailCredentialBindingStateV1, MailCredentialPurposeV1,
     },
+    account_lifecycle::{
+        MailAccountLifecycleActionV1, MailAccountLifecycleCommandV1, MailAccountLifecycleReceiptV1,
+        MailAccountLifecycleRetryV1, MailAccountLifecycleStateV1,
+        MailAccountLifecycleStatusRequestV1, MailCredentialLifecycleStateV1,
+    },
     client_contract::MailClientContractV1,
 };
 use hermes_mail_runtime::admission::MAIL_STORAGE_CAPABILITY_ID;
@@ -92,6 +97,15 @@ fn managed_mail_credential_rotation_quiesces_until_settings_successor() {
         smtp_settings(&smtp),
     );
     wait_for_mail_ready(&supervisor, &predecessor);
+    let gmail_binding_runtime =
+        tokio::runtime::Runtime::new().expect("Mail Gmail lifecycle binding runtime");
+    gmail_binding_runtime.block_on(async {
+        super::mail_event_flow::connect_postgres()
+            .await
+            .store_gmail_oauth_credential_binding(MAIL_ACCOUNT_ID, &seeded.binding(), 1)
+            .await
+            .expect("seed Gmail lifecycle credential binding");
+    });
 
     let active = query_account_status(&store, &supervisor, &predecessor, 81);
     assert_eq!(active.readiness, MailAccountReadinessV1::Ready);
@@ -240,13 +254,218 @@ fn managed_mail_credential_rotation_quiesces_until_settings_successor() {
         250,
     );
     assert_eq!(smtp.accepted_messages(), 1);
+
+    supervisor
+        .stop(vault_binding::VAULT_PROCESS_ID)
+        .expect("stop Vault before ambiguous Mail retire");
+    let retire_unknown = lifecycle_command(
+        &store,
+        &supervisor,
+        &successor,
+        MailClientContractV1::AccountRetire,
+        90,
+        MailClientRequestV1::RetireAccount(MailAccountLifecycleCommandV1 {
+            operation_id: "mail-account-retire".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            expected_lifecycle_revision: 0,
+        }),
+    );
+    assert_lifecycle_state(
+        &retire_unknown,
+        MailAccountLifecycleActionV1::Retire,
+        1,
+        4,
+        MailAccountLifecycleStateV1::OutcomeUnknown,
+        MailCredentialLifecycleStateV1::OutcomeUnknown,
+    );
+    let replayed_retire = lifecycle_command(
+        &store,
+        &supervisor,
+        &successor,
+        MailClientContractV1::AccountRetire,
+        91,
+        MailClientRequestV1::RetireAccount(MailAccountLifecycleCommandV1 {
+            operation_id: "mail-account-retire".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            expected_lifecycle_revision: 0,
+        }),
+    );
+    assert_eq!(replayed_retire, retire_unknown);
+    assert_eq!(imap.accepted_connections(), 1);
+    assert_eq!(smtp.accepted_messages(), 1);
+
+    supervisor
+        .stop("storage")
+        .expect("stop Storage before rebinding the successor Vault generation");
+    assert!(
+        start_vault(&supervisor, &store, &data, release.kernel()) > 1,
+        "Vault restart must advance its runtime generation"
+    );
+    assert!(
+        start_storage(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &storage_runtime_directory(),
+        ) > 1,
+        "Storage restart must bind the successor Vault generation"
+    );
+    let revision_three = mail_delivery_settings_snapshot(
+        &successor.registration_id,
+        imap.port(),
+        smtp_settings(&smtp),
+        3,
+    )
+    .encode_to_vec();
+    client
+        .update_operator_settings(
+            &owner_session,
+            &successor.registration_id,
+            2,
+            revision_three,
+        )
+        .expect("commit Mail Settings revision three");
+    client
+        .apply_managed_integration_settings(
+            &owner_session,
+            &successor.registration_id,
+            MAIL_STORAGE_CAPABILITY_ID,
+            MAIL_ACCOUNT_ID,
+            3,
+            false,
+        )
+        .expect("restart Mail for explicit lifecycle retry");
+    let lifecycle_successor = current_mail_runtime(&store, &successor);
+    wait_for_mail_ready(&supervisor, &lifecycle_successor);
+
+    let retire = lifecycle_command(
+        &store,
+        &supervisor,
+        &lifecycle_successor,
+        MailClientContractV1::AccountLifecycleRetry,
+        92,
+        MailClientRequestV1::RetryAccountLifecycle(MailAccountLifecycleRetryV1 {
+            operation_id: "mail-account-retire".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            expected_lifecycle_revision: 1,
+        }),
+    );
+    assert_lifecycle_completed(&retire, MailAccountLifecycleActionV1::Retire, 1, 4);
+    let retire_status = lifecycle_command(
+        &store,
+        &supervisor,
+        &lifecycle_successor,
+        MailClientContractV1::AccountLifecycleQuery,
+        93,
+        MailClientRequestV1::AccountLifecycleStatus(MailAccountLifecycleStatusRequestV1 {
+            operation_id: "mail-account-retire".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        }),
+    );
+    assert_eq!(retire_status, retire);
+    assert_eq!(
+        query_account_status(&store, &supervisor, &lifecycle_successor, 94).readiness,
+        MailAccountReadinessV1::Retired
+    );
+    assert!(
+        route_mail_client_once(
+            &store,
+            &supervisor,
+            &lifecycle_successor,
+            MailClientContractV1::Sync,
+            95,
+            &MailClientRequestV1::SyncInbox(MailSyncInboxRequestV1 {
+                operation_id: "mail-sync-retired".to_owned(),
+            }),
+        )
+        .is_err()
+    );
+    assert_eq!(imap.accepted_connections(), 1);
+    assert_eq!(smtp.accepted_messages(), 1);
+
+    let delete = lifecycle_command(
+        &store,
+        &supervisor,
+        &lifecycle_successor,
+        MailClientContractV1::AccountDelete,
+        96,
+        MailClientRequestV1::DeleteAccount(MailAccountLifecycleCommandV1 {
+            operation_id: "mail-account-delete".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            expected_lifecycle_revision: 1,
+        }),
+    );
+    assert_lifecycle_completed(&delete, MailAccountLifecycleActionV1::Delete, 2, 4);
+    assert_eq!(
+        query_account_status(&store, &supervisor, &lifecycle_successor, 97).readiness,
+        MailAccountReadinessV1::Deleted
+    );
+    let persistence = tokio::runtime::Runtime::new().expect("Mail tombstone query runtime");
+    assert!(persistence.block_on(async {
+        super::mail_event_flow::connect_postgres()
+            .await
+            .account_is_tombstoned(MAIL_ACCOUNT_ID)
+            .await
+            .expect("query Mail account tombstone")
+    }));
+
+    let revision_four = mail_delivery_settings_snapshot(
+        &lifecycle_successor.registration_id,
+        imap.port(),
+        smtp_settings(&smtp),
+        4,
+    )
+    .encode_to_vec();
+    client
+        .update_operator_settings(
+            &owner_session,
+            &lifecycle_successor.registration_id,
+            3,
+            revision_four,
+        )
+        .expect("commit Mail Settings revision four");
+    client
+        .apply_managed_integration_settings(
+            &owner_session,
+            &lifecycle_successor.registration_id,
+            MAIL_STORAGE_CAPABILITY_ID,
+            MAIL_ACCOUNT_ID,
+            4,
+            false,
+        )
+        .expect("restart deleted Mail account");
+    let deleted_successor = current_mail_runtime(&store, &lifecycle_successor);
+    wait_for_mail_ready(&supervisor, &deleted_successor);
+    assert_eq!(
+        query_account_status(&store, &supervisor, &deleted_successor, 98).readiness,
+        MailAccountReadinessV1::Deleted
+    );
+    assert!(
+        route_mail_client_once(
+            &store,
+            &supervisor,
+            &deleted_successor,
+            MailClientContractV1::AccountDelete,
+            99,
+            &MailClientRequestV1::DeleteAccount(MailAccountLifecycleCommandV1 {
+                operation_id: "mail-account-delete-after-tombstone".to_owned(),
+                connection_id: MAIL_ACCOUNT_ID.to_owned(),
+                expected_lifecycle_revision: 2,
+            }),
+        )
+        .is_err(),
+        "a Mail account tombstone must reject a new lifecycle mutation"
+    );
+    assert_eq!(imap.accepted_connections(), 1);
+    assert_eq!(smtp.accepted_messages(), 1);
+
     assert!(
         route_mail_client_once(
             &store,
             &supervisor,
             &predecessor,
             MailClientContractV1::AccountQuery,
-            90,
+            100,
             &MailClientRequestV1::AccountStatus(MailAccountStatusRequestV1 {
                 connection_id: MAIL_ACCOUNT_ID.to_owned(),
             }),
@@ -265,6 +484,60 @@ fn managed_mail_credential_rotation_quiesces_until_settings_successor() {
     }
     std::fs::remove_dir_all(root).expect("remove Mail credential fixture");
     std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
+}
+
+fn lifecycle_command(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    contract: MailClientContractV1,
+    request_id: u64,
+    request: MailClientRequestV1,
+) -> MailAccountLifecycleReceiptV1 {
+    let response = route_mail_client(store, supervisor, mail, contract, request_id, &request);
+    let MailClientResponseV1::AccountLifecycle(receipt) = response else {
+        panic!("Mail lifecycle route returned the wrong response");
+    };
+    receipt
+}
+
+fn assert_lifecycle_completed(
+    receipt: &MailAccountLifecycleReceiptV1,
+    action: MailAccountLifecycleActionV1,
+    lifecycle_revision: u64,
+    credential_count: usize,
+) {
+    assert_lifecycle_state(
+        receipt,
+        action,
+        lifecycle_revision,
+        credential_count,
+        MailAccountLifecycleStateV1::Completed,
+        MailCredentialLifecycleStateV1::Completed,
+    );
+}
+
+fn assert_lifecycle_state(
+    receipt: &MailAccountLifecycleReceiptV1,
+    action: MailAccountLifecycleActionV1,
+    lifecycle_revision: u64,
+    credential_count: usize,
+    lifecycle_state: MailAccountLifecycleStateV1,
+    credential_state: MailCredentialLifecycleStateV1,
+) {
+    assert_eq!(receipt.action, action);
+    assert_eq!(receipt.lifecycle_revision, lifecycle_revision);
+    assert_eq!(receipt.state, lifecycle_state);
+    assert_eq!(receipt.credentials.len(), credential_count);
+    assert!(receipt.credentials.iter().all(|progress| {
+        progress.state == credential_state
+            && progress.credential_revision
+                == if progress.purpose.bindable_by_client() {
+                    2
+                } else {
+                    1
+                }
+    }));
 }
 
 fn query_account_status(

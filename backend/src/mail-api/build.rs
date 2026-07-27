@@ -13,6 +13,7 @@ fn main() {
             &[
                 "proto/hermes/mail/v1/client.proto",
                 "proto/hermes/mail/account/v1/client.proto",
+                "proto/hermes/mail/account_lifecycle/v1/client.proto",
             ],
             &["proto"],
         )

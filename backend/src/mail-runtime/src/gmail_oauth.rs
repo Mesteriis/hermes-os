@@ -59,6 +59,9 @@ impl MailAdmittedRuntime {
         operation_id: &str,
         requested_at_unix_seconds: i64,
     ) -> Result<GmailOAuthStartedV1, MailBootstrapError> {
+        if !self.provider_io_permitted() {
+            return Err(MailBootstrapError::Credential);
+        }
         let configuration = self
             .gmail_oauth
             .as_ref()
@@ -111,6 +114,9 @@ impl MailAdmittedRuntime {
         request: &GmailOAuthCompleteRequestV1,
         requested_at_unix_seconds: i64,
     ) -> Result<String, MailBootstrapError> {
+        if !self.provider_io_permitted() {
+            return Err(MailBootstrapError::Credential);
+        }
         self.gmail_oauth
             .as_ref()
             .ok_or(MailBootstrapError::Admission)?;
@@ -137,6 +143,9 @@ impl MailAdmittedRuntime {
         operation_id: &str,
         requested_at_unix_seconds: i64,
     ) -> Result<String, MailBootstrapError> {
+        if !self.provider_io_permitted() {
+            return Err(MailBootstrapError::Credential);
+        }
         self.gmail_oauth
             .as_ref()
             .ok_or(MailBootstrapError::Admission)?;
@@ -192,7 +201,9 @@ impl MailAdmittedRuntime {
     pub async fn resolve_gmail_access_token(
         &mut self,
     ) -> Result<Zeroizing<Vec<u8>>, MailBootstrapError> {
-        if !matches!(self.account.inbound, MailInboundTransportV1::Gmail(_)) {
+        if !self.provider_io_permitted()
+            || !matches!(self.account.inbound, MailInboundTransportV1::Gmail(_))
+        {
             return Err(MailBootstrapError::Admission);
         }
         let binding = self
@@ -214,6 +225,9 @@ impl MailAdmittedRuntime {
         dispatched_at_unix_seconds: i64,
         completed_at_unix_seconds: i64,
     ) -> Result<bool, MailGmailOAuthDispatchErrorV1> {
+        if !self.provider_io_permitted() {
+            return Ok(false);
+        }
         let Some(prepared) = self
             .prepare_next_gmail_oauth_provider_operation(
                 dispatched_at_unix_seconds,

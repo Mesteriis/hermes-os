@@ -6,6 +6,14 @@ pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail.v1.rs"));
 }
 pub mod account;
+pub mod account_lifecycle;
+pub mod account_lifecycle_wire;
+pub mod account_lifecycle_wire_generated {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.mail.account_lifecycle.v1.rs"
+    ));
+}
 pub mod account_wire;
 pub mod account_wire_generated {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail.account.v1.rs"));
@@ -28,6 +36,10 @@ pub use oauth::{
 pub enum MailClientRequestV1 {
     BindCredential(account::MailBindCredentialRequestV1),
     AccountStatus(account::MailAccountStatusRequestV1),
+    RetireAccount(account_lifecycle::MailAccountLifecycleCommandV1),
+    DeleteAccount(account_lifecycle::MailAccountLifecycleCommandV1),
+    RetryAccountLifecycle(account_lifecycle::MailAccountLifecycleRetryV1),
+    AccountLifecycleStatus(account_lifecycle::MailAccountLifecycleStatusRequestV1),
     SyncInbox(MailSyncInboxRequestV1),
     SendMail(MailSendMailRequestV1),
     DeliveryStatus(MailDeliveryStatusRequestV1),
@@ -57,6 +69,7 @@ pub struct MailDeliveryStatusRequestV1 {
 pub enum MailClientResponseV1 {
     CredentialBinding(account::MailCredentialBindingReceiptV1),
     AccountStatus(account::MailAccountStatusV1),
+    AccountLifecycle(account_lifecycle::MailAccountLifecycleReceiptV1),
     SyncInboxCompleted {
         operation_id: String,
         observed_messages: u32,

@@ -223,7 +223,7 @@
       "gate": "mail_account_retire_delete_v1",
       "role": "integration",
       "owner": "mail",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "mail_account_credential_binding_v1",
         "vault_credential_retirement_v1"

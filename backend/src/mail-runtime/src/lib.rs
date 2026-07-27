@@ -1,5 +1,6 @@
 //! Typed Mail managed-runtime admission contract.
 
+pub mod account_lifecycle;
 pub mod admission;
 pub mod attachment_anchor_mapping;
 pub mod attachment_safety_projection;

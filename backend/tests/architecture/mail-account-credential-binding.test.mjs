@@ -78,7 +78,7 @@ test('Mail credential binding is owner-local, configuration-only and successor-a
   });
   assert.match(
     adr,
-    /Состояние реализации: Phase 1 `mail_account_credential_binding_v1`\s+реализована/,
+    /Состояние реализации: Phase 1 `mail_account_credential_binding_v1` и Phase 2\s+`mail_account_retire_delete_v1` реализованы/,
   );
   assert.match(adr, /Communications не хранит Mail settings, credentials/);
   assert.match(adr, /Runtime не становится assembly, integration не становится domain/);

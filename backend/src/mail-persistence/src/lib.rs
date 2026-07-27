@@ -5,6 +5,7 @@ mod attachments;
 #[cfg(feature = "conformance-test-support")]
 mod conformance;
 mod durable;
+mod lifecycle;
 mod oauth;
 mod schema;
 
@@ -24,6 +25,7 @@ pub use durable::{
     MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailDurablePersistenceError,
     MailQueuedDeliveryV1, MailSmtpDeliveryAttemptStateV1,
 };
+pub use lifecycle::{MAIL_SCHEMA_V8, MailAccountLifecycleBeginV1};
 pub use oauth::{
     GmailOAuthAttemptStartV1, GmailOAuthCredentialBindingV1, GmailOAuthEnqueueOutcomeV1,
     GmailOAuthOperationKindV1, GmailOAuthOperationOutcomeV1, GmailOAuthOperationV1,
@@ -33,7 +35,7 @@ pub use schema::{
     MAIL_STORAGE_BUNDLE_REVISION_V1, MAIL_STORAGE_BUNDLE_REVISION_V2,
     MAIL_STORAGE_BUNDLE_REVISION_V3, MAIL_STORAGE_BUNDLE_REVISION_V4,
     MAIL_STORAGE_BUNDLE_REVISION_V5, MAIL_STORAGE_BUNDLE_REVISION_V6,
-    MAIL_STORAGE_BUNDLE_REVISION_V7, mail_storage_bundle_v1,
+    MAIL_STORAGE_BUNDLE_REVISION_V7, MAIL_STORAGE_BUNDLE_REVISION_V8, mail_storage_bundle_v1,
 };
 
 pub const PACKAGE: &str = "hermes-mail-persistence";
