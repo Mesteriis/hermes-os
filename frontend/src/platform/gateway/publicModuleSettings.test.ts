@@ -10,6 +10,7 @@ import {
 } from '../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import {
 	publicModuleSettingRows,
+	publicModuleStringSetting,
 	publicModuleSettingsReasonCode,
 } from './publicModuleSettings'
 
@@ -53,6 +54,29 @@ describe('public module settings projection', () => {
 		})])
 
 		expect(rows).toEqual([])
+	})
+
+	it('reads only an exact sanitized string setting', () => {
+		const module = create(ClientModuleBootstrapV1Schema, {
+			registrationId: 'mail.local',
+			moduleId: 'hermes-mail-runtime',
+			settings: {
+				values: [
+					{
+						settingId: 'mail.connection_id',
+						value: { value: { case: 'stringValue', value: 'personal-mail' } },
+					},
+					{
+						settingId: 'mail.imap.port',
+						value: { value: { case: 'unsignedIntegerValue', value: 993n } },
+					},
+				],
+			},
+		})
+
+		expect(publicModuleStringSetting(module, 'mail.connection_id')).toBe('personal-mail')
+		expect(publicModuleStringSetting(module, 'mail.imap.port')).toBeNull()
+		expect(publicModuleStringSetting(module, 'mail.missing')).toBeNull()
 	})
 
 	it('distinguishes absent modules, absent schemas, and current schemas', () => {

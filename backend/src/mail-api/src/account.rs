@@ -94,6 +94,8 @@ pub struct MailAccountStatusV1 {
     pub sync_readiness: MailProviderPathReadinessV1,
     pub delivery_readiness: MailProviderPathReadinessV1,
     pub bindings: Vec<MailCredentialBindingStatusV1>,
+    pub lifecycle_revision: u64,
+    pub lifecycle_operation_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -137,6 +139,13 @@ pub fn validate_account_status(
         || status.settings_revision == 0
         || status.runtime_generation == 0
         || status.bindings.len() > 4
+        || status
+            .lifecycle_operation_id
+            .as_ref()
+            .is_some_and(|operation_id| {
+                operation_id.is_empty() || operation_id.len() > MAX_CONNECTION_ID_BYTES
+            })
+        || status.lifecycle_operation_id.is_some() != (status.lifecycle_revision > 0)
     {
         return Err(MailAccountValidationErrorV1::Invalid);
     }

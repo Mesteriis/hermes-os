@@ -6,6 +6,7 @@ import {
 	type ZulipAccountLifecycleReceiptV1,
 	ZulipAccountLifecycleService,
 	ZulipBindCredentialV1Schema,
+	ZulipRetireAccountV1Schema,
 } from '../../../gen/hermes/zulip/account/v1/client_pb'
 import { createBrowserGatewayConnectTransport } from '../../../platform/gateway/browserGatewayConnect'
 
@@ -22,6 +23,24 @@ export async function bindZulipCredential(input: {
 			command: {
 				case: 'bindCredential',
 				value: create(ZulipBindCredentialV1Schema, input),
+			},
+		},
+	))
+}
+
+export async function retireZulipAccount(input: {
+	accountId: string
+	expectedBindingRevision: bigint
+}): Promise<ZulipAccountLifecycleReceiptV1> {
+	if (input.accountId.trim().length === 0 || input.expectedBindingRevision <= 0n) {
+		throw new Error('zulip retirement input is invalid')
+	}
+	return getZulipAccountLifecycleConnectClient().apply(create(
+		ZulipAccountLifecycleCommandV1Schema,
+		{
+			command: {
+				case: 'retireAccount',
+				value: create(ZulipRetireAccountV1Schema, input),
 			},
 		},
 	))

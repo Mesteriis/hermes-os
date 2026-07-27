@@ -314,6 +314,9 @@ Umbrella открыт после всех трёх gates выше и сущес�
 - Mail runtime quiesce-ит IMAP, SMTP и Gmail provider paths до первой Vault
   mutation, а restart с любым persisted lifecycle state остаётся
   configuration-only;
+- sanitized account status включает latest lifecycle revision и operation ID,
+  поэтому first-party client после reload продолжает exact status/retry/CAS
+  transition без скрытого локального состояния;
 - IMAP password, SMTP password, Gmail access token и Gmail refresh credential
   получают отдельные exact lifecycle capabilities с правильным secret class;
 - ambiguous Vault response становится `outcome_unknown`, exact command replay

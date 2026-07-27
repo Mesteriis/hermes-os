@@ -116,6 +116,8 @@ pub fn decode_account_status(bytes: &[u8]) -> Result<MailAccountStatusV1, MailCl
             .into_iter()
             .map(binding_from_wire)
             .collect::<Result<_, _>>()?,
+        lifecycle_revision: status.lifecycle_revision,
+        lifecycle_operation_id: status.lifecycle_operation_id,
     };
     validate_account_status(&status).map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
     Ok(status)
@@ -141,6 +143,8 @@ fn wire_status(status: &MailAccountStatusV1) -> wire::MailAccountStatusV1 {
                 applied_runtime_generation: binding.applied_runtime_generation,
             })
             .collect(),
+        lifecycle_revision: status.lifecycle_revision,
+        lifecycle_operation_id: status.lifecycle_operation_id.clone(),
     }
 }
 
@@ -359,6 +363,8 @@ mod tests {
                     applied_runtime_generation: None,
                 },
             ],
+            lifecycle_revision: 3,
+            lifecycle_operation_id: Some("mail-lifecycle-3".to_owned()),
         };
 
         assert_eq!(

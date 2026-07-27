@@ -672,6 +672,12 @@ impl MailAdmittedRuntime {
             .latest_account_lifecycle(connection_id)
             .await
             .map_err(|_| MailBootstrapError::Persistence)?;
+        let lifecycle_revision = lifecycle
+            .as_ref()
+            .map_or(0, |lifecycle| lifecycle.lifecycle_revision);
+        let lifecycle_operation_id = lifecycle
+            .as_ref()
+            .map(|lifecycle| lifecycle.operation_id.clone());
         let readiness = if let Some(lifecycle) = lifecycle {
             bindings = lifecycle
                 .credentials
@@ -726,6 +732,8 @@ impl MailAdmittedRuntime {
             sync_readiness,
             delivery_readiness,
             bindings,
+            lifecycle_revision,
+            lifecycle_operation_id,
         })
     }
 

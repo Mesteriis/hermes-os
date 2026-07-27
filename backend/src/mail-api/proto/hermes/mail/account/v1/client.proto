@@ -91,4 +91,6 @@ message MailAccountStatusV1 {
   MailProviderPathReadinessV1 sync_readiness = 6;
   MailProviderPathReadinessV1 delivery_readiness = 7;
   repeated MailCredentialBindingStatusV1 binding = 8;
+  uint64 lifecycle_revision = 9;
+  optional string lifecycle_operation_id = 10;
 }

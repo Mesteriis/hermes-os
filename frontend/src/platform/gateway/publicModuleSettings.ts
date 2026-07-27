@@ -38,6 +38,14 @@ export function publicModuleSettingRows(
 	})
 }
 
+export function publicModuleStringSetting(
+	module: ClientModuleBootstrapV1 | null | undefined,
+	settingId: string,
+): string | null {
+	const value = module?.settings?.values.find((entry) => entry.settingId === settingId)?.value
+	return value?.value.case === 'stringValue' ? value.value.value : null
+}
+
 export function settingsApplyStateLabel(state: ClientSettingsApplyStateV1): string {
 	if (state === ClientSettingsApplyStateV1.CURRENT) return 'Current'
 	if (state === ClientSettingsApplyStateV1.PENDING_VALIDATION) return 'Pending validation'
