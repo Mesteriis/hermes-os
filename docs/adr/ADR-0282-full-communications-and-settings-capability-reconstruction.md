@@ -476,6 +476,9 @@ release.
    ADR-0294; umbrella `mail_account_lifecycle_v1` требует все три slices, уже
    реализованный `mail_gmail_oauth_v1`, generic managed Settings apply и
    provider-neutral public `owner_module_settings_gateway_v1` по ADR-0296.
+   Fresh-proof typed export отдельно проходит planned
+   `owner_module_settings_export_v1` по ADR-0297 и является dependency
+   portability, а не implicit read-all правом Gateway.
    Затем Mail read, composition и command gates проходят независимо, без
    одного всесильного Mail capability.
 6. Communications canonical read/content/saved-search gates.

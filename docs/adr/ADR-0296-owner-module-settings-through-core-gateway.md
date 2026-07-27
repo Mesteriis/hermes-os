@@ -13,6 +13,10 @@
 - [ADR-0292: managed integration Settings apply](ADR-0292-managed-integration-settings-apply-and-credential-binding.md);
 - [ADR-0294: Mail account portability](ADR-0294-mail-account-credential-lifecycle-and-portability.md).
 
+Уточняется:
+
+- [ADR-0297: fresh-owner-proof effective Settings export](ADR-0297-fresh-owner-proof-effective-module-settings-export.md).
+
 ## Контекст
 
 Kernel уже владеет typed Settings Registry и provider-neutral managed

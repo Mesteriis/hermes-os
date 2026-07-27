@@ -18,6 +18,10 @@ gates ниже.
 - [ADR-0292: managed settings apply](ADR-0292-managed-integration-settings-apply-and-credential-binding.md);
 - [ADR-0293: scoped Vault retirement](ADR-0293-scoped-vault-credential-retirement-and-deletion.md).
 
+Уточняется:
+
+- [ADR-0297: fresh-owner-proof effective Settings export](ADR-0297-fresh-owner-proof-effective-module-settings-export.md).
+
 ## Контекст
 
 Mail runtime уже имеет exact sync, delivery и Gmail OAuth capabilities, но

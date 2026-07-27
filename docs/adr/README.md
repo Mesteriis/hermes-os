@@ -369,3 +369,8 @@ owner-control protocol: Core Gateway принимает только typed provi
 update/apply intent, Kernel требует fresh active-device proof и сохраняет
 authority у Settings Registry, а managed integration replacement остаётся
 generic successor operation ADR-0292.
+ADR-0297 добавляет отсутствующий fresh-proof export effective Settings:
+Core Gateway возвращает только typed client-visible values после проверки
+current revision, admitted schema hash и active device, не импортируя Mail или
+raw runtime descriptor. Mail собирает свой versioned portability artifact и
+resumable multi-receipt import только в first-party integration UI.
