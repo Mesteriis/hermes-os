@@ -567,6 +567,8 @@ fn delivery_request(operation_id: &str) -> MailClientRequestV1 {
         operation_id: operation_id.to_owned(),
         provider_conversation_id: "mail-credential-conversation".to_owned(),
         recipients: vec!["recipient@example.test".to_owned()],
+        cc_recipients: Vec::new(),
+        bcc_recipients: Vec::new(),
         subject: "credential rotation".to_owned(),
         text_body: "credential rotation body".to_owned(),
         attachment_anchor_ids: Vec::new(),

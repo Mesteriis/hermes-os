@@ -38,7 +38,9 @@ describe('Mail operational Gateway adapter', () => {
 		await expect(sendMailMessage({
 			operationId: 'delivery-1',
 			providerConversationId: '',
-			recipients: [' owner@example.com ', ''],
+			toRecipients: [' owner@example.com ', ''],
+			ccRecipients: [' cc@example.com '],
+			bccRecipients: [' private@example.com '],
 			subject: ' Clean room ',
 			textBody: ' Ready ',
 		})).resolves.toBe('delivery-1')
@@ -46,6 +48,8 @@ describe('Mail operational Gateway adapter', () => {
 			operationId: 'delivery-1',
 			providerConversationId: '',
 			recipient: ['owner@example.com'],
+			ccRecipient: ['cc@example.com'],
+			bccRecipient: ['private@example.com'],
 			subject: 'Clean room',
 			textBody: 'Ready',
 			attachmentAnchorId: [],
@@ -60,7 +64,9 @@ describe('Mail operational Gateway adapter', () => {
 		await expect(sendMailMessage({
 			operationId: 'delivery-2',
 			providerConversationId: '',
-			recipients: [],
+			toRecipients: [],
+			ccRecipients: [],
+			bccRecipients: [],
 			subject: '',
 			textBody: 'body',
 		})).rejects.toThrow('recipient is required')

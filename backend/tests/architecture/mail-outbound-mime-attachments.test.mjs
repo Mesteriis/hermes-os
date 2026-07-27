@@ -117,12 +117,16 @@ test('generated Mail client carries only bounded canonical attachment anchor IDs
 
   assert.ok(request, 'SendMailRequestV1 must remain a generated typed contract');
   assert.match(request, /repeated bytes attachment_anchor_id = 6;/);
+  assert.match(request, /repeated string cc_recipient = 7;/);
+  assert.match(request, /repeated string bcc_recipient = 8;/);
   assert.doesNotMatch(
     request,
     /\b(?:blob|reference|receipt|custody|path|url|content|mime|verdict|safe)\b/i,
   );
   assert.match(api, /pub const MAX_DELIVERY_ATTACHMENTS: usize = 16/);
   assert.match(api, /pub attachment_anchor_ids: Vec<\[u8; 16\]>/);
+  assert.match(api, /pub cc_recipients: Vec<String>/);
+  assert.match(api, /pub bcc_recipients: Vec<String>/);
   assert.match(wire, /attachment_anchor_ids\.len\(\) > MAX_DELIVERY_ATTACHMENTS/);
   assert.match(wire, /anchor_id\.iter\(\)\.all\(\|byte\| \*byte == 0\)/);
   assert.match(

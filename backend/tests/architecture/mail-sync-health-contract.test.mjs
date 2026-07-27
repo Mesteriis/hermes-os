@@ -140,7 +140,7 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(wire, /encode_sync_health_query/);
   assert.match(wire, /decode_sync_health_response/);
   assert.match(wire, /encode_sync_health_response\(&response\)\? != bytes/);
-  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 7/);
+  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 8/);
   assert.match(contract, /mail\.sync\.health\.query\.v1/);
   assert.match(
     contract,
@@ -160,7 +160,7 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(persistence, /complete_sync_run/);
   assert.match(persistence, /interrupt_stale_sync_runs/);
   assert.match(persistence, /decode_cursor\(connection_id, value\)/);
-  assert.match(schema, /MAIL_STORAGE_BUNDLE_REVISION_V10/);
+  assert.match(schema, /MAIL_STORAGE_BUNDLE_REVISION_V11/);
   assert.match(schema, /migration_id: "mail_sync_health"/);
 
   assert.match(runtime, /interrupt_stale_sync_runs/);
@@ -175,7 +175,7 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(clientPort, /sync_health_wire::encode_sync_health_query/);
   assert.match(clientPort, /sync_health_wire::decode_sync_health_response/);
   assert.match(admission, /MailClientContractV1::SyncHealthQuery/);
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V10/);
+  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V11/);
   assert.match(managedSetup, /MailClientContractV1::SyncHealthQuery/);
   assert.match(managedFlow, /assert_mail_sync_replay_and_health/);
   assert.match(

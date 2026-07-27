@@ -56,8 +56,9 @@ pub fn compose_rfc822_with_attachments(
 
     let boundary = mime_boundary(message, attachments);
     let recipients = message.recipients.join(", ");
+    let cc_header = recipient_header("Cc", &message.cc_recipients);
     let mut rendered = format!(
-        "From: {}\r\nTo: {recipients}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n",
+        "From: {}\r\nTo: {recipients}\r\n{cc_header}Subject: {}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n",
         from_address, message.subject,
     );
     push_boundary(&mut rendered, &boundary);
@@ -108,6 +109,8 @@ pub(crate) fn validate_message(
         || message
             .recipients
             .iter()
+            .chain(&message.cc_recipients)
+            .chain(&message.bcc_recipients)
             .any(|recipient| !valid_mailbox(recipient))
         || invalid_header(&message.subject)
         || message.subject.len() > 998
@@ -120,12 +123,21 @@ pub(crate) fn validate_message(
 
 pub(crate) fn plain_text_message(from_address: &str, message: &OutgoingMailV1) -> String {
     let recipients = message.recipients.join(", ");
+    let cc_header = recipient_header("Cc", &message.cc_recipients);
     format!(
-        "From: {}\r\nTo: {recipients}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{}",
+        "From: {}\r\nTo: {recipients}\r\n{cc_header}Subject: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{}",
         from_address,
         message.subject,
         normalize_crlf(&message.text_body),
     )
+}
+
+fn recipient_header(name: &str, recipients: &[String]) -> String {
+    if recipients.is_empty() {
+        String::new()
+    } else {
+        format!("{name}: {}\r\n", recipients.join(", "))
+    }
 }
 
 fn validate_attachment(attachment: &OutboundAttachmentV1) -> Result<(), MailContractError> {
@@ -232,6 +244,8 @@ mod tests {
             connection_id: "connection".to_owned(),
             provider_conversation_id: "thread-1".to_owned(),
             recipients: vec!["recipient@example.test".to_owned()],
+            cc_recipients: Vec::new(),
+            bcc_recipients: Vec::new(),
             subject: "Report".to_owned(),
             text_body: "line one\nline two".to_owned(),
         }

@@ -44,6 +44,8 @@ pub fn encode_delivery_request(request: &MailSendMailRequestV1) -> Vec<u8> {
             .iter()
             .map(|anchor_id| anchor_id.to_vec())
             .collect(),
+        cc_recipient: request.cc_recipients.clone(),
+        bcc_recipient: request.bcc_recipients.clone(),
     }
     .encode_to_vec()
 }
@@ -70,6 +72,8 @@ pub fn decode_delivery_request(
         operation_id: request.operation_id,
         provider_conversation_id: request.provider_conversation_id,
         recipients: request.recipient,
+        cc_recipients: request.cc_recipient,
+        bcc_recipients: request.bcc_recipient,
         subject: request.subject,
         text_body: request.text_body,
         attachment_anchor_ids,
@@ -79,6 +83,11 @@ pub fn decode_delivery_request(
         || request
             .recipients
             .iter()
+            .any(|recipient| recipient.trim().is_empty())
+        || request
+            .cc_recipients
+            .iter()
+            .chain(&request.bcc_recipients)
             .any(|recipient| recipient.trim().is_empty())
         || request.attachment_anchor_ids.len() > MAX_DELIVERY_ATTACHMENTS
         || request
@@ -278,6 +287,8 @@ mod tests {
             operation_id: "delivery-operation".to_owned(),
             provider_conversation_id: "conversation".to_owned(),
             recipients: vec!["recipient@example.com".to_owned()],
+            cc_recipients: Vec::new(),
+            bcc_recipients: Vec::new(),
             subject: "subject".to_owned(),
             text_body: "body".to_owned(),
             attachment_anchor_ids: Vec::new(),
@@ -313,6 +324,8 @@ mod tests {
             operation_id: "delivery-operation".to_owned(),
             provider_conversation_id: "conversation".to_owned(),
             recipients: vec!["recipient@example.com".to_owned()],
+            cc_recipients: Vec::new(),
+            bcc_recipients: Vec::new(),
             subject: "subject".to_owned(),
             text_body: "body".to_owned(),
             attachment_anchor_ids: Vec::new(),
@@ -334,6 +347,8 @@ mod tests {
                 subject: "subject".to_owned(),
                 text_body: "body".to_owned(),
                 attachment_anchor_id,
+                cc_recipient: Vec::new(),
+                bcc_recipient: Vec::new(),
             }
             .encode_to_vec()
         };

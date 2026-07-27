@@ -15,12 +15,16 @@ export async function syncMailInbox(operationId: string): Promise<SyncInboxCompl
 export async function sendMailMessage(input: {
 	operationId: string
 	providerConversationId: string
-	recipients: readonly string[]
+	toRecipients: readonly string[]
+	ccRecipients: readonly string[]
+	bccRecipients: readonly string[]
 	subject: string
 	textBody: string
 }): Promise<string> {
-	const recipients = input.recipients.map((recipient) => recipient.trim()).filter(Boolean)
-	if (recipients.length === 0) {
+	const toRecipients = normalizedRecipients(input.toRecipients)
+	const ccRecipients = normalizedRecipients(input.ccRecipients)
+	const bccRecipients = normalizedRecipients(input.bccRecipients)
+	if (toRecipients.length === 0) {
 		throw new RangeError('Mail recipient is required')
 	}
 	const textBody = input.textBody.trim()
@@ -30,12 +34,18 @@ export async function sendMailMessage(input: {
 	const response = await getMailDeliveryCommandConnectClient().send({
 		operationId: requireIdentifier('operation ID', input.operationId),
 		providerConversationId: input.providerConversationId.trim(),
-		recipient: recipients,
+		recipient: toRecipients,
+		ccRecipient: ccRecipients,
+		bccRecipient: bccRecipients,
 		subject: input.subject.trim(),
 		textBody,
 		attachmentAnchorId: [],
 	})
 	return response.operationId
+}
+
+function normalizedRecipients(values: readonly string[]): string[] {
+	return values.map((recipient) => recipient.trim()).filter(Boolean)
 }
 
 export async function getMailDeliveryStatus(

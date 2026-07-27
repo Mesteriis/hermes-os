@@ -242,6 +242,8 @@ fn assert_gmail_delivery_accepted(
             operation_id: OPERATION_ID.to_owned(),
             provider_conversation_id: PROVIDER_THREAD_ID.to_owned(),
             recipients: vec![PRIVATE_RECIPIENT.to_owned()],
+            cc_recipients: Vec::new(),
+            bcc_recipients: Vec::new(),
             subject: "managed Gmail delivery".to_owned(),
             text_body: PRIVATE_BODY.to_owned(),
             attachment_anchor_ids: Vec::new(),

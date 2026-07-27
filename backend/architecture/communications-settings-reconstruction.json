@@ -314,7 +314,7 @@
       "gate": "mail_composition_v1",
       "role": "integration",
       "owner": "mail",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["client_gateway_v1", "mail.delivery.v1"]
     },
     {

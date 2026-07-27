@@ -82,6 +82,8 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_attachment_scan_candidate_publish_capability_v1(),
         mail_blob_capability_v1(),
         mail_communication_observed_publish_capability_v1(),
+        mail_client_capability_v1(MailClientContractV1::CompositionCommand),
+        mail_client_capability_v1(MailClientContractV1::CompositionQuery),
         mail_client_capability_v1(MailClientContractV1::DeliveryQuery),
         mail_client_capability_v1(MailClientContractV1::Delivery),
         mail_provider_credential_lifecycle_capability_v1(
@@ -470,6 +472,8 @@ mod tests {
                 MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID,
                 MAIL_BLOB_CAPABILITY_ID,
                 MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID,
+                MailClientContractV1::CompositionCommand.capability_id(),
+                MailClientContractV1::CompositionQuery.capability_id(),
                 MailClientContractV1::DeliveryQuery.capability_id(),
                 MailClientContractV1::Delivery.capability_id(),
                 MAIL_GMAIL_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,

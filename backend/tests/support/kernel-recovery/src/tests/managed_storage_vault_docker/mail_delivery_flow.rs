@@ -225,6 +225,8 @@ fn assert_delivery_accepted(
             operation_id: OPERATION_ID.to_owned(),
             provider_conversation_id: "smtp-conversation-1".to_owned(),
             recipients: vec![PRIVATE_RECIPIENT.to_owned()],
+            cc_recipients: Vec::new(),
+            bcc_recipients: Vec::new(),
             subject: "managed SMTP delivery".to_owned(),
             text_body: PRIVATE_BODY.to_owned(),
             attachment_anchor_ids: Vec::new(),

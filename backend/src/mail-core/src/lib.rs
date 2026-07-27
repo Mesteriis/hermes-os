@@ -331,6 +331,8 @@ mod rfc822_composition_tests {
             connection_id: "connection".to_owned(),
             provider_conversation_id: "thread-1".to_owned(),
             recipients: vec!["recipient@example.test".to_owned()],
+            cc_recipients: Vec::new(),
+            bcc_recipients: Vec::new(),
             subject: "Report".to_owned(),
             text_body: "line one\nline two".to_owned(),
         }
@@ -338,10 +340,15 @@ mod rfc822_composition_tests {
 
     #[test]
     fn composes_bounded_plain_text_rfc822_message() {
-        let rendered = compose_rfc822("owner@example.test", &message()).expect("valid message");
+        let mut message = message();
+        message.cc_recipients = vec!["cc@example.test".to_owned()];
+        message.bcc_recipients = vec!["private@example.test".to_owned()];
+        let rendered = compose_rfc822("owner@example.test", &message).expect("valid message");
         assert!(rendered.starts_with(
-            "From: owner@example.test\r\nTo: recipient@example.test\r\nSubject: Report\r\n"
+            "From: owner@example.test\r\nTo: recipient@example.test\r\nCc: cc@example.test\r\nSubject: Report\r\n"
         ));
+        assert!(!rendered.contains("private@example.test"));
+        assert!(!rendered.contains("\r\nBcc:"));
         assert!(rendered.ends_with("\r\n\r\nline one\r\nline two"));
     }
 

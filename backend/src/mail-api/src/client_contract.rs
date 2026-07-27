@@ -1,7 +1,7 @@
 pub const MAIL_CLIENT_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.mail.v1.bin"));
 pub const MAIL_CLIENT_CONTRACT_MAJOR: u32 = 1;
-pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 7;
+pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 8;
 pub const MAIL_MODULE_ID: &str = "hermes-mail-runtime";
 pub const MAIL_OWNER_ID: &str = "mail";
 
@@ -20,12 +20,14 @@ pub enum MailClientContractV1 {
     GmailOAuthComplete,
     GmailOAuthRefresh,
     GmailOAuthQuery,
+    CompositionCommand,
+    CompositionQuery,
     OperationalQuery,
     SyncHealthQuery,
 }
 
 impl MailClientContractV1 {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 17] = [
         Self::AccountCredentialBind,
         Self::AccountDelete,
         Self::AccountLifecycleQuery,
@@ -38,6 +40,8 @@ impl MailClientContractV1 {
         Self::GmailOAuthQuery,
         Self::GmailOAuthRefresh,
         Self::GmailOAuthStart,
+        Self::CompositionCommand,
+        Self::CompositionQuery,
         Self::OperationalQuery,
         Self::Sync,
         Self::SyncHealthQuery,
@@ -59,6 +63,8 @@ impl MailClientContractV1 {
             Self::GmailOAuthComplete => "mail.oauth.complete.v1",
             Self::GmailOAuthRefresh => "mail.oauth.refresh.v1",
             Self::GmailOAuthQuery => "mail.oauth.query.v1",
+            Self::CompositionCommand => "mail.composition.command.v1",
+            Self::CompositionQuery => "mail.composition.query.v1",
             Self::OperationalQuery => "mail.operational.query.v1",
             Self::SyncHealthQuery => "mail.sync.health.query.v1",
         }
@@ -95,6 +101,12 @@ impl MailClientContractV1 {
             Self::GmailOAuthComplete => "/hermes.mail.v1.GmailOAuthCompleteService/Complete",
             Self::GmailOAuthRefresh => "/hermes.mail.v1.GmailOAuthRefreshService/Refresh",
             Self::GmailOAuthQuery => "/hermes.mail.v1.GmailOAuthQueryService/GetOperationStatus",
+            Self::CompositionCommand => {
+                "/hermes.mail.composition.v1.MailCompositionCommandService/Mutate"
+            }
+            Self::CompositionQuery => {
+                "/hermes.mail.composition.v1.MailCompositionQueryService/Query"
+            }
             Self::OperationalQuery => {
                 "/hermes.mail.operational.v1.MailOperationalQueryService/Query"
             }

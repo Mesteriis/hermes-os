@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import { MailDeliveryOutcomeV1 } from '../../../gen/hermes/mail/v1/client_pb'
-import { buildMailDeliveryStatusCard } from './mailOperationalPageModel'
+import { buildMailDeliveryStatusCard } from './mailDeliveryModel'
 
-describe('Mail operational presentation model', () => {
+describe('Mail delivery presentation model', () => {
 	it('maps the generated delivery outcome and timestamps', () => {
 		expect(buildMailDeliveryStatusCard({
 			operationId: 'delivery-1',

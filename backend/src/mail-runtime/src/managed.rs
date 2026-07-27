@@ -103,6 +103,11 @@ use hermes_mail_api::{
         MailAccountLifecycleStatusRequestV1, MailCredentialLifecycleProgressV1,
         MailCredentialLifecycleStateV1,
     },
+    composition::{
+        MailCompositionCommandV1, MailCompositionMutationReceiptV1, MailCompositionQueryResponseV1,
+        MailCompositionQueryV1, composition_command_connection_id, composition_query_connection_id,
+    },
+    composition_wire::encode_composition_command,
     operational::{
         MailFolderKindV1, MailMessageFlagV1, MailOperationalQueryResponseV1,
         MailOperationalQueryV1, operational_query_connection_id,
@@ -750,6 +755,35 @@ impl MailAdmittedRuntime {
             .map_err(|_| MailBootstrapError::Persistence)
     }
 
+    pub async fn composition_command(
+        &self,
+        command: &MailCompositionCommandV1,
+        requested_at_unix_seconds: i64,
+    ) -> Result<MailCompositionMutationReceiptV1, MailBootstrapError> {
+        if composition_command_connection_id(command) != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        let command_bytes =
+            encode_composition_command(command).map_err(|_| MailBootstrapError::Admission)?;
+        self.durable
+            .execute_composition_command(command, &command_bytes, requested_at_unix_seconds)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)
+    }
+
+    pub async fn composition_query(
+        &self,
+        query: &MailCompositionQueryV1,
+    ) -> Result<MailCompositionQueryResponseV1, MailBootstrapError> {
+        if composition_query_connection_id(query) != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        self.durable
+            .execute_composition_query(query)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)
+    }
+
     pub async fn sync_health_query(
         &self,
         query: &MailSyncHealthQueryV1,
@@ -1055,6 +1089,8 @@ impl MailAdmittedRuntime {
             connection_id: self.account.connection_id.clone(),
             provider_conversation_id: request.provider_conversation_id.clone(),
             recipients: request.recipients.clone(),
+            cc_recipients: request.cc_recipients.clone(),
+            bcc_recipients: request.bcc_recipients.clone(),
             subject: request.subject.clone(),
             text_body: request.text_body.clone(),
         }

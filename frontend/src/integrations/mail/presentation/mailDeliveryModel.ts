@@ -3,17 +3,11 @@ import {
 	type MailDeliveryOperationStatusV1,
 } from '../../../gen/hermes/mail/v1/client_pb'
 
-export type MailOperationalPageModel = {
-	recipients: string
-	subject: string
-	textBody: string
-	providerConversationId: string
+export type MailDeliveryModel = {
 	operationId: string
-	busyAction: 'delivery' | 'status' | 'sync' | null
+	busy: boolean
 	canDeliver: boolean
-	canSync: boolean
 	notice: string
-	syncSummary: string
 	status: MailDeliveryStatusCard | null
 }
 

@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     MAIL_SCHEMA_V1, MAIL_SCHEMA_V2, MAIL_SCHEMA_V3, MAIL_SCHEMA_V4, MAIL_SCHEMA_V5, MAIL_SCHEMA_V6,
-    MAIL_SCHEMA_V7, MAIL_SCHEMA_V8, MAIL_SCHEMA_V9, MAIL_SCHEMA_V10,
+    MAIL_SCHEMA_V7, MAIL_SCHEMA_V8, MAIL_SCHEMA_V9, MAIL_SCHEMA_V10, MAIL_SCHEMA_V11,
 };
 
 pub const MAIL_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
@@ -18,6 +18,7 @@ pub const MAIL_STORAGE_BUNDLE_REVISION_V7: u32 = 7;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V8: u32 = 8;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V9: u32 = 9;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V10: u32 = 10;
+pub const MAIL_STORAGE_BUNDLE_REVISION_V11: u32 = 11;
 
 /// Returns the complete Mail schema as one immutable initial Storage bundle.
 ///
@@ -28,7 +29,7 @@ pub const MAIL_STORAGE_BUNDLE_REVISION_V10: u32 = 10;
 pub fn mail_storage_bundle_v1() -> StorageBundleV1 {
     StorageBundleV1 {
         major: 1,
-        revision: MAIL_STORAGE_BUNDLE_REVISION_V10,
+        revision: MAIL_STORAGE_BUNDLE_REVISION_V11,
         bundle_id: "mail_state".to_owned(),
         owner_id: "mail".to_owned(),
         steps: vec![
@@ -92,6 +93,12 @@ pub fn mail_storage_bundle_v1() -> StorageBundleV1 {
                 forward_sql_utf8: MAIL_SCHEMA_V10.as_bytes().to_vec(),
                 sha256: Sha256::digest(MAIL_SCHEMA_V10.as_bytes()).to_vec(),
             },
+            StorageMigrationStepV1 {
+                revision: MAIL_STORAGE_BUNDLE_REVISION_V11,
+                migration_id: "mail_composition".to_owned(),
+                forward_sql_utf8: MAIL_SCHEMA_V11.as_bytes().to_vec(),
+                sha256: Sha256::digest(MAIL_SCHEMA_V11.as_bytes()).to_vec(),
+            },
         ],
     }
 }
@@ -108,9 +115,9 @@ mod tests {
 
         assert_eq!(bundle.owner_id, "mail");
         assert_eq!(bundle.bundle_id, "mail_state");
-        assert_eq!(bundle.revision, MAIL_STORAGE_BUNDLE_REVISION_V10);
+        assert_eq!(bundle.revision, MAIL_STORAGE_BUNDLE_REVISION_V11);
         assert_eq!(validate_storage_bundle(&bundle), Ok(()));
-        assert_eq!(bundle.steps.len(), 10);
+        assert_eq!(bundle.steps.len(), 11);
         let sql = bundle
             .steps
             .iter()
@@ -119,11 +126,11 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 25);
+        assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 29);
         assert_eq!(
             sql.matches("CREATE TABLE IF NOT EXISTS hermes_data.")
                 .count(),
-            25,
+            29,
             "every Mail table belongs to the owner-scoped hermes_data schema"
         );
         assert!(sql.contains("mail_attachment_security_outbox"));

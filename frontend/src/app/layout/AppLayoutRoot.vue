@@ -57,6 +57,12 @@ const whatsAppOperationalRealtimeAvailable = computed(() =>
 const mailDeliveryAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.delivery.v1'),
 )
+const mailCompositionCommandAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.composition.command.v1'),
+)
+const mailCompositionQueryAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.composition.query.v1'),
+)
 const mailSyncAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.sync.v1'),
 )
@@ -127,6 +133,8 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 				/>
 				<MailOperationalRoute
 					v-else-if="selectedRouteId === 'communications-mail'"
+					:can-compose="mailCompositionCommandAvailable"
+					:can-compose-query="mailCompositionQueryAvailable"
 					:can-deliver="mailDeliveryAvailable"
 					:can-query="mailOperationalQueryAvailable"
 					:can-sync="mailSyncAvailable"

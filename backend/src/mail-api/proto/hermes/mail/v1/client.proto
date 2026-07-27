@@ -9,6 +9,8 @@ message SendMailRequestV1 {
   string subject = 4;
   string text_body = 5;
   repeated bytes attachment_anchor_id = 6;
+  repeated string cc_recipient = 7;
+  repeated string bcc_recipient = 8;
 }
 message GetMailDeliveryStatusRequestV1 { string operation_id = 1; }
 message SyncInboxCompletedV1 { string operation_id = 1; uint32 observed_messages = 2; }

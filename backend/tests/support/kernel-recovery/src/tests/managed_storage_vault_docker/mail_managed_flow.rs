@@ -1,5 +1,8 @@
 //! Live managed Mail launch through Kernel-owned admission and platform leases.
 
+use super::mail_composition_flow::{
+    assert_mail_composition, assert_mail_composition_survives_restart,
+};
 use super::*;
 
 use hermes_kernel_control_store::{ModuleRegistrationState, PlatformStorageBindingStateV1};
@@ -80,7 +83,7 @@ fn managed_mail_runtime_uses_kernel_leases_and_route_specific_admission() {
     configure_communications_jetstream(&store);
     start_communications_domain(&supervisor, &store, &root.join("runtime"));
 
-    let mail = start_mail_runtime(
+    let mut mail = start_mail_runtime(
         &supervisor,
         &store,
         &data,
@@ -91,6 +94,7 @@ fn managed_mail_runtime_uses_kernel_leases_and_route_specific_admission() {
     assert_mail_event_only_communications_handoff(&store, &supervisor, &mail);
     assert_mail_attachment_lifecycle(&store, &supervisor, &mail);
     assert_mail_operational_read(&store, &supervisor, &mail);
+    assert_mail_composition(&store, &supervisor, &mail);
     let accepted_connections = imap.accepted_connections();
     assert_mail_sync_replay_and_health(
         &store,
@@ -105,6 +109,15 @@ fn managed_mail_runtime_uses_kernel_leases_and_route_specific_admission() {
         accepted_connections,
         "an exact replayed IMAP sync operation must not reach the provider twice"
     );
+    mail = restart_mail_runtime_without_smtp(
+        &supervisor,
+        &store,
+        &data,
+        &root.join("runtime"),
+        mail,
+        imap.port(),
+    );
+    assert_mail_composition_survives_restart(&store, &supervisor, &mail);
     assert_ungranted_delivery_is_rejected(&store, &supervisor, &mail);
     assert_stale_sync_generation_is_rejected(&store, &supervisor, &mail);
     assert!(
@@ -214,6 +227,8 @@ fn assert_ungranted_delivery_is_rejected(
             operation_id: "ungranted-mail-delivery".to_owned(),
             provider_conversation_id: "conversation-1".to_owned(),
             recipients: vec!["recipient@example.test".to_owned()],
+            cc_recipients: Vec::new(),
+            bcc_recipients: Vec::new(),
             subject: "must not be delivered".to_owned(),
             text_body: "Kernel rejects this route before Mail receives it".to_owned(),
             attachment_anchor_ids: Vec::new(),

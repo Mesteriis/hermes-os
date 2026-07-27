@@ -99,6 +99,8 @@ mod attachment_security_managed_setup;
 mod attachment_security_persistence_fixture;
 #[path = "managed_storage_vault_docker/mail_attachment_flow.rs"]
 mod mail_attachment_flow;
+#[path = "managed_storage_vault_docker/mail_composition_flow.rs"]
+mod mail_composition_flow;
 #[path = "managed_storage_vault_docker/mail_delivery_test_support.rs"]
 mod mail_delivery_test_support;
 #[path = "managed_storage_vault_docker/mail_event_flow.rs"]

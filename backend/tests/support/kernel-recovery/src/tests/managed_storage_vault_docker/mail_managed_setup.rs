@@ -8,7 +8,7 @@ use hermes_mail_api::{
     client_contract::{MAIL_MODULE_ID, MAIL_OWNER_ID, MailClientContractV1},
 };
 use hermes_mail_persistence::{
-    GmailOAuthCredentialBindingV1, MAIL_STORAGE_BUNDLE_REVISION_V10, mail_storage_bundle_v1,
+    GmailOAuthCredentialBindingV1, MAIL_STORAGE_BUNDLE_REVISION_V11, mail_storage_bundle_v1,
 };
 use hermes_mail_runtime::{
     admission::{
@@ -321,6 +321,12 @@ fn admit_mail_runtime_profile(
             MailClientContractV1::SyncHealthQuery
                 .capability_id()
                 .to_owned(),
+            MailClientContractV1::CompositionCommand
+                .capability_id()
+                .to_owned(),
+            MailClientContractV1::CompositionQuery
+                .capability_id()
+                .to_owned(),
             MailClientContractV1::Sync.capability_id().to_owned(),
         ],
         MailAdmissionProfileV1::AccountCredentialLifecycle => vec![
@@ -459,7 +465,7 @@ fn admit_mail_runtime_profile(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 MAIL_OWNER_ID,
-                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V10),
+                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V11),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -482,7 +488,7 @@ pub(super) fn prepare_mail_runtime(
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
     let bundle = store
-        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V10))
+        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V11))
         .expect("read Mail Storage bundle")
         .expect("Mail Storage bundle");
     let binding = issue_managed(
@@ -494,7 +500,7 @@ pub(super) fn prepare_mail_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V10),
+            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V11),
             *bundle.digest(),
         )
         .expect("Mail Storage binding issue"),
@@ -588,6 +594,53 @@ pub(super) fn restart_mail_delivery_runtime(
         MailSettingsProfileV1::Imap {
             port: imap_port,
             smtp: Some(smtp),
+        },
+    );
+    assert_eq!(
+        successor.runtime_generation,
+        predecessor_generation + 1,
+        "Mail restart must use the next managed runtime generation",
+    );
+    successor
+}
+
+pub(super) fn restart_mail_runtime_without_smtp(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    predecessor: StartedMailRuntime,
+    imap_port: u16,
+) -> StartedMailRuntime {
+    let predecessor_generation = predecessor.runtime_generation;
+    let predecessor_binding = store
+        .platform_storage_binding(&predecessor.registration_id, MAIL_STORAGE_CAPABILITY_ID)
+        .expect("read predecessor Mail Storage binding")
+        .expect("predecessor Mail Storage binding");
+    let issue = storage_successor::issue_after(&predecessor_binding)
+        .expect("derive Mail successor storage fences");
+    let (_, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        &predecessor.registration_id,
+        MAIL_STORAGE_CAPABILITY_ID,
+        issue,
+    )
+    .expect("reserve successor Mail launch and Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision successor Mail Storage binding");
+    let successor = start_mail_runtime_with_settings(
+        supervisor,
+        store,
+        kernel_data,
+        runtime_dir,
+        AdmittedMailRuntime {
+            registration_id: predecessor.registration_id,
+            capability_ids: predecessor.capability_ids,
+        },
+        MailSettingsProfileV1::Imap {
+            port: imap_port,
+            smtp: None,
         },
     );
     assert_eq!(
@@ -738,6 +791,9 @@ fn start_mail_runtime_with_settings(
         },
     )
     .expect("start managed Mail integration");
+    supervisor
+        .wait_until_ready(&admitted.registration_id)
+        .expect("wait for managed Mail readiness");
     StartedMailRuntime {
         registration_id: admitted.registration_id,
         runtime_instance_id,

@@ -20,6 +20,11 @@ pub mod account_wire_generated {
 }
 pub mod client_contract;
 pub mod client_wire;
+pub mod composition;
+pub mod composition_wire;
+pub mod composition_wire_generated {
+    include!(concat!(env!("OUT_DIR"), "/hermes.mail.composition.v1.rs"));
+}
 pub mod oauth;
 pub mod oauth_wire;
 pub mod operational;
@@ -65,6 +70,8 @@ pub enum MailClientRequestV1 {
     GmailOAuthComplete(GmailOAuthCompleteRequestV1),
     GmailOAuthRefresh(GmailOAuthRefreshRequestV1),
     GmailOAuthStatus(GmailOAuthStatusRequestV1),
+    CompositionCommand(composition::MailCompositionCommandV1),
+    CompositionQuery(composition::MailCompositionQueryV1),
     OperationalQuery(operational::MailOperationalQueryV1),
     SyncHealthQuery(sync_health::MailSyncHealthQueryV1),
 }
@@ -77,6 +84,8 @@ pub struct MailSendMailRequestV1 {
     pub operation_id: String,
     pub provider_conversation_id: String,
     pub recipients: Vec<String>,
+    pub cc_recipients: Vec<String>,
+    pub bcc_recipients: Vec<String>,
     pub subject: String,
     pub text_body: String,
     pub attachment_anchor_ids: Vec<[u8; 16]>,
@@ -103,6 +112,8 @@ pub enum MailClientResponseV1 {
         operation_id: String,
     },
     GmailOAuthStatus(Option<GmailOAuthOperationStatusV1>),
+    CompositionMutation(composition::MailCompositionMutationReceiptV1),
+    CompositionQuery(composition::MailCompositionQueryResponseV1),
     OperationalQuery(operational::MailOperationalQueryResponseV1),
     SyncHealthQuery(sync_health::MailSyncHealthQueryResponseV1),
 }
@@ -329,6 +340,8 @@ pub struct OutgoingMailV1 {
     pub connection_id: MailConnectionId,
     pub provider_conversation_id: String,
     pub recipients: Vec<String>,
+    pub cc_recipients: Vec<String>,
+    pub bcc_recipients: Vec<String>,
     pub subject: String,
     pub text_body: String,
 }

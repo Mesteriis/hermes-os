@@ -52,7 +52,12 @@ async fn send_implicit_tls_inner(
         || rfc822_message.is_empty()
         || !valid_mailbox(&endpoint.from_address)
         || message.recipients.is_empty()
-        || message.recipients.iter().any(|value| !valid_mailbox(value))
+        || message
+            .recipients
+            .iter()
+            .chain(&message.cc_recipients)
+            .chain(&message.bcc_recipients)
+            .any(|value| !valid_mailbox(value))
     {
         return Err(SmtpAdapterErrorV1::InvalidRequest);
     }
@@ -86,7 +91,12 @@ async fn send_implicit_tls_inner(
     )
     .await?;
     expect_response(&mut stream, 250).await?;
-    for recipient in &message.recipients {
+    for recipient in message
+        .recipients
+        .iter()
+        .chain(&message.cc_recipients)
+        .chain(&message.bcc_recipients)
+    {
         send_line(&mut stream, &format!("RCPT TO:<{recipient}>")).await?;
         expect_response(&mut stream, 250).await?;
     }

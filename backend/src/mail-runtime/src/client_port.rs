@@ -4,7 +4,7 @@ use hermes_mail_api::client_contract::{
 };
 use hermes_mail_api::{
     MailClientRequestV1, MailClientResponseV1, account_lifecycle_wire, account_wire, client_wire,
-    oauth_wire, operational_wire, sync_health_wire,
+    composition_wire, oauth_wire, operational_wire, sync_health_wire,
 };
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
@@ -62,6 +62,8 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
         MailClientRequestV1::GmailOAuthComplete(_) => MailClientContractV1::GmailOAuthComplete,
         MailClientRequestV1::GmailOAuthRefresh(_) => MailClientContractV1::GmailOAuthRefresh,
         MailClientRequestV1::GmailOAuthStatus(_) => MailClientContractV1::GmailOAuthQuery,
+        MailClientRequestV1::CompositionCommand(_) => MailClientContractV1::CompositionCommand,
+        MailClientRequestV1::CompositionQuery(_) => MailClientContractV1::CompositionQuery,
         MailClientRequestV1::OperationalQuery(_) => MailClientContractV1::OperationalQuery,
         MailClientRequestV1::SyncHealthQuery(_) => MailClientContractV1::SyncHealthQuery,
     }
@@ -100,6 +102,14 @@ fn encode_request_payload(request: &MailClientRequestV1) -> Result<Vec<u8>, Mail
         }
         MailClientRequestV1::GmailOAuthStatus(value) => {
             Ok(oauth_wire::encode_status_request(value))
+        }
+        MailClientRequestV1::CompositionCommand(value) => {
+            composition_wire::encode_composition_command(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::CompositionQuery(value) => {
+            composition_wire::encode_composition_query(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
         }
         MailClientRequestV1::OperationalQuery(value) => {
             operational_wire::encode_operational_query(value)
@@ -157,6 +167,14 @@ fn decode_request_payload(
             .map_err(|_| MailClientPortErrorV1::Protocol),
         MailClientContractV1::GmailOAuthQuery => oauth_wire::decode_status_request(bytes)
             .map(MailClientRequestV1::GmailOAuthStatus)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
+        MailClientContractV1::CompositionCommand => {
+            composition_wire::decode_composition_command(bytes)
+                .map(MailClientRequestV1::CompositionCommand)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientContractV1::CompositionQuery => composition_wire::decode_composition_query(bytes)
+            .map(MailClientRequestV1::CompositionQuery)
             .map_err(|_| MailClientPortErrorV1::Protocol),
         MailClientContractV1::OperationalQuery => operational_wire::decode_operational_query(bytes)
             .map(MailClientRequestV1::OperationalQuery)
@@ -298,6 +316,16 @@ pub async fn handle_client_request(
             .await
             .map(MailClientResponseV1::GmailOAuthStatus)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::CompositionCommand(value) => runtime
+            .composition_command(&value, requested_at_unix_seconds)
+            .await
+            .map(MailClientResponseV1::CompositionMutation)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::CompositionQuery(value) => runtime
+            .composition_query(&value)
+            .await
+            .map(MailClientResponseV1::CompositionQuery)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
         MailClientRequestV1::OperationalQuery(value) => runtime
             .operational_query(&value)
             .await
@@ -362,6 +390,16 @@ fn encode_module_response(
         (MailClientContractV1::GmailOAuthQuery, MailClientResponseV1::GmailOAuthStatus(status)) => {
             oauth_wire::encode_status_response(status.as_ref())
         }
+        (
+            MailClientContractV1::CompositionCommand,
+            MailClientResponseV1::CompositionMutation(receipt),
+        ) => composition_wire::encode_composition_receipt(receipt)
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
+        (
+            MailClientContractV1::CompositionQuery,
+            MailClientResponseV1::CompositionQuery(response),
+        ) => composition_wire::encode_composition_query_response(response)
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
         (
             MailClientContractV1::OperationalQuery,
             MailClientResponseV1::OperationalQuery(response),
@@ -438,6 +476,14 @@ pub fn decode_module_response(
         MailClientContractV1::GmailOAuthQuery => {
             oauth_wire::decode_status_response(&envelope.response_payload)
         }
+        MailClientContractV1::CompositionCommand => {
+            composition_wire::decode_composition_receipt(&envelope.response_payload)
+                .map(MailClientResponseV1::CompositionMutation)
+        }
+        MailClientContractV1::CompositionQuery => {
+            composition_wire::decode_composition_query_response(&envelope.response_payload)
+                .map(MailClientResponseV1::CompositionQuery)
+        }
         MailClientContractV1::OperationalQuery => {
             operational_wire::decode_operational_query_response(&envelope.response_payload)
                 .map(MailClientResponseV1::OperationalQuery)
@@ -484,6 +530,8 @@ mod tests {
             operation_id: "delivery-operation".to_owned(),
             provider_conversation_id: "conversation".to_owned(),
             recipients: vec!["recipient@example.com".to_owned()],
+            cc_recipients: Vec::new(),
+            bcc_recipients: Vec::new(),
             subject: "subject".to_owned(),
             text_body: "body".to_owned(),
             attachment_anchor_ids: Vec::new(),
