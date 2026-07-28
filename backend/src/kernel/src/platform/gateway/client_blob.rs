@@ -15,6 +15,7 @@ use hermes_runtime_protocol::v1::{
     ModuleClientBlobAuthorizationV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
 use prost::Message;
+use sha2::{Digest, Sha256};
 
 use crate::identity::browser_gateway::ControlStoreBrowserAuthority;
 use crate::modules::capability::router::{
@@ -223,7 +224,7 @@ impl KernelClientBlobAdapterV1 {
                     request_id: session_request_id.to_vec(),
                     capability_id: route.capability_id().to_owned(),
                     operation: BlobDataOperationV1::BlobDataOperationReadRangeV1 as u32,
-                    channel_binding_sha256: channel_binding.to_vec(),
+                    channel_binding_sha256: Sha256::digest(channel_binding).to_vec(),
                     reference_id: authorization.reference_id,
                     declared_size: authorization.declared_size,
                     backup_class: authorization.backup_class,

@@ -129,6 +129,8 @@ test('Core Gateway client Blob delivery stays descriptor and capability bound', 
   assert.match(adapter, /effective_bundled_managed_launch_binding/);
   assert.match(adapter, /ManagedRuntimeBlobSessionRequestV1/);
   assert.match(adapter, /BlobDataOperationReadRangeV1/);
+  assert.match(adapter, /channel_binding_sha256:\s*Sha256::digest\(channel_binding\)\.to_vec\(\)/);
+  assert.match(adapter, /client\.read_range\(\s*grant,\s*channel_binding\.to_vec\(\)/);
   assert.match(adapter, /expected_plaintext_sha256/);
   assert.doesNotMatch(adapter, /hermes_(communications|mail|telegram|whatsapp|zulip)/);
 });
