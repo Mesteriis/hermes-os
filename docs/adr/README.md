@@ -122,6 +122,8 @@ policy через ссылки из новых документов.
 - [ADR-0311: Storage successor bundle step lineage](ADR-0311-storage-successor-bundle-step-lineage.md)
 - [ADR-0312: Mail permanent delete confirmation and provider authority](ADR-0312-mail-permanent-delete-confirmation-and-provider-authority.md)
 - [ADR-0313: Communications canonical read v2 detail and pagination](ADR-0313-communications-canonical-read-v2-detail-and-pagination.md)
+- [ADR-0314: Core Gateway authenticated client Blob routing](ADR-0314-core-gateway-authenticated-client-blob-routing.md)
+- [ADR-0315: Communications message body content read](ADR-0315-communications-message-body-content-read.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
