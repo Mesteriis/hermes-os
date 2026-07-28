@@ -124,6 +124,9 @@ policy через ссылки из новых документов.
 - [ADR-0313: Communications canonical read v2 detail and pagination](ADR-0313-communications-canonical-read-v2-detail-and-pagination.md)
 - [ADR-0314: Core Gateway authenticated client Blob routing](ADR-0314-core-gateway-authenticated-client-blob-routing.md)
 - [ADR-0315: Communications message body content read](ADR-0315-communications-message-body-content-read.md)
+- [ADR-0316: Communications saved search derived projection](ADR-0316-communications-saved-search-derived-projection.md)
+- [ADR-0317: Communications sender insights derived projection](ADR-0317-communications-sender-insights-derived-projection.md)
+- [ADR-0318: Communications evidence export workflow](ADR-0318-communications-evidence-export-workflow.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
