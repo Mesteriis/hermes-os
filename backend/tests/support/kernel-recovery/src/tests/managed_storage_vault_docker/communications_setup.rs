@@ -254,10 +254,53 @@ pub(super) fn start_communications_export_workflow(
 ) -> u64 {
     let reservation = managed_launch::load(supervisor, store, COMMUNICATIONS_EXPORT_REGISTRATION)
         .expect("load Communications Export reservation");
+    let binding = communications_export_storage_binding(store);
+    start_reserved_communications_export_workflow(
+        supervisor,
+        store,
+        runtime_dir,
+        reservation,
+        binding,
+    )
+}
+
+pub(super) fn restart_communications_export_workflow(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+) -> u64 {
+    let predecessor = communications_export_storage_binding(store);
+    let issue = storage_successor::issue_after(&predecessor)
+        .expect("derive Communications Export successor fences");
+    let (reservation, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        COMMUNICATIONS_EXPORT_REGISTRATION,
+        COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY_ID_V1,
+        issue,
+    )
+    .expect("reserve successor Communications Export launch and Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision successor Communications Export Storage binding");
+    start_reserved_communications_export_workflow(
+        supervisor,
+        store,
+        runtime_dir,
+        reservation,
+        binding,
+    )
+}
+
+fn start_reserved_communications_export_workflow(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    reservation: managed_launch::ManagedLaunchReservation,
+    binding: hermes_kernel_control_store::PlatformStorageBindingV1,
+) -> u64 {
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
     let grant_epoch = reservation.grant_epoch();
-    let binding = communications_export_storage_binding(store);
     let topology =
         crate::platform::storage::topology::current(store).expect("read Storage topology");
     let vault = vault_status::read_current(store, &supervisor.relay_port())

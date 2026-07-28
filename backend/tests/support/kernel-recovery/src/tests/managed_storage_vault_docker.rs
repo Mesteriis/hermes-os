@@ -584,6 +584,45 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         );
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    let stale_runtime_ticket = IssueEvidenceExportReadResponseV1::decode(
+        route(
+            15,
+            communications_export_ticket_contract_reference_v1(),
+            IssueEvidenceExportReadRequestV1 {
+                protocol_major: 1,
+                export_id: edited_export_id.to_vec(),
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("issue edited export ticket before workflow restart");
+    assert_eq!(stale_runtime_ticket.opaque_read_capability.len(), 32);
+    assert_eq!(
+        restart_communications_export_workflow(&supervisor, &store, &root.join("runtime")),
+        2,
+        "Communications Export restart advances its independent runtime generation"
+    );
+    let restarted_status = GetEvidenceExportStatusResponseV1::decode(
+        route(
+            16,
+            communications_export_query_contract_reference_v1(),
+            GetEvidenceExportStatusRequestV1 {
+                protocol_major: 1,
+                export_id: edited_export_id.to_vec(),
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode Communications Export status after successor restart");
+    assert_eq!(
+        restarted_status.status,
+        EvidenceExportStatusV1::EvidenceExportStatusReady as i32
+    );
+    assert_eq!(restarted_status.requested_items, 1);
+    assert_eq!(restarted_status.completed_items, 1);
+    assert!(restarted_status.artifact_bytes > 0);
     publish_and_wait_for_communications_message_deletion(store.as_ref(), &supervisor, &message_id);
     let deleted_export_id = [13; 16];
     let deleted_start = StartEvidenceExportResponseV1::decode(
@@ -723,6 +762,7 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         &edited_body,
         edited_ticket.opaque_read_capability,
         edited_ticket.declared_bytes,
+        stale_runtime_ticket.opaque_read_capability,
         blob_outage_ticket.opaque_read_capability,
     );
     let revoked_ticket = IssueEvidenceExportReadResponseV1::decode(
@@ -771,6 +811,7 @@ fn assert_communications_export_gateway_delivery(
     edited_body: &[u8],
     edited_opaque_read_capability: Vec<u8>,
     edited_declared_bytes: u64,
+    stale_runtime_read_capability: Vec<u8>,
     blob_outage_read_capability: Vec<u8>,
 ) -> String {
     use hermes_communications_export_api::{
@@ -796,6 +837,28 @@ fn assert_communications_export_gateway_delivery(
     .expect("compose owner Gateway routes");
     let runtime = tokio::runtime::Runtime::new().expect("Gateway test runtime");
     let cookie = super::browser_gateway_session::authenticate_gateway_router(&router, &runtime);
+    let stale_runtime_read_request = EvidenceExportArtifactReadRequestV1 {
+        opaque_read_capability: stale_runtime_read_capability,
+    }
+    .encode_to_vec();
+    let stale_runtime_response = runtime.block_on(
+        router.route(
+            hyper::Request::builder()
+                .method("POST")
+                .uri(COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1)
+                .header("content-type", "application/proto")
+                .header("cookie", &cookie)
+                .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                    stale_runtime_read_request,
+                )))
+                .expect("Gateway stale-runtime Communications Export artifact read request"),
+        ),
+    );
+    assert_eq!(
+        stale_runtime_response.status(),
+        hyper::StatusCode::NOT_FOUND,
+        "workflow restart invalidates predecessor runtime-local read tickets"
+    );
     let read_request = EvidenceExportArtifactReadRequestV1 {
         opaque_read_capability,
     }
