@@ -22,6 +22,7 @@ const ALL_GATES = [
   'mail_outbound_mime_attachments_v1',
   'client_blob_v1',
   'communications_content_read_v1',
+  'communications_saved_search_v1',
   'clock_v1',
   'scheduler_v1',
   'browser_client_v1',
@@ -42,6 +43,7 @@ const NOT_AUTHORIZED = ALL_GATES.filter((gate) => ![
   'mail_outbound_mime_attachments_v1',
   'client_blob_v1',
   'communications_content_read_v1',
+  'communications_saved_search_v1',
   'clock_v1',
   'scheduler_v1',
   'browser_client_v1',
@@ -92,6 +94,9 @@ const REQUIRES = {
     'blob_v1',
     'client_gateway_v1',
     'client_blob_v1',
+  ],
+  communications_saved_search_v1: [
+    'communications_content_read_v1',
   ],
   clock_v1: ['module_control_plane_v1', 'managed_launch_trust_v1'],
   scheduler_v1: [
@@ -244,6 +249,17 @@ const REQUIRED_DECISION_FIELDS = {
     'stale_delete_revoke_blob_outage_negative_matrix',
     'generated_frontend_inert_utf8_presentation',
     'provider_fallback_and_blob_metadata_non_disclosure',
+    'architecture_srp_cargo_clippy_managed_browser_gates',
+  ],
+  communications_saved_search_v1: [
+    'exact_saved_search_contract_build_unit',
+    'owner_local_digest_only_projection',
+    'idempotent_create_cas_replace_delete',
+    'tombstone_and_mutation_audit',
+    'account_scope_and_revision_bound_cursor_fencing',
+    'authenticated_gateway_managed_runtime_conformance',
+    'generated_frontend_exact_capability_guard',
+    'query_plaintext_and_provider_truth_non_disclosure',
     'architecture_srp_cargo_clippy_managed_browser_gates',
   ],
   clock_v1: [

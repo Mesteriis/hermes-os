@@ -326,6 +326,16 @@ const COMMUNICATIONS_CONTENT_READ_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATIONS_SAVED_SEARCH_PRODUCTION_PACKAGES = [
+  ...COMMUNICATIONS_CONTENT_READ_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communications-saved-query-api',
+    role: 'domain',
+    owner: 'communications',
+    surface: 'contract',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -681,6 +691,27 @@ const COMMUNICATIONS_CONTENT_READ_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-communications-api', kind: 'normal' },
     { name: 'hermes-communications-domain', kind: 'normal' },
     { name: 'hermes-communications-persistence', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-managed-vault-client', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
+const COMMUNICATIONS_SAVED_SEARCH_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_CONTENT_READ_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-saved-query-api': [],
+  'hermes-communications-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communications-attachment-contract', kind: 'normal' },
+    { name: 'hermes-communications-content-api', kind: 'normal' },
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-communications-api', kind: 'normal' },
+    { name: 'hermes-communications-domain', kind: 'normal' },
+    { name: 'hermes-communications-persistence', kind: 'normal' },
+    { name: 'hermes-communications-saved-query-api', kind: 'normal' },
     { name: 'hermes-events-jetstream', kind: 'normal' },
     { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-managed-vault-client', kind: 'normal' },
@@ -1249,6 +1280,16 @@ const COMMUNICATIONS_CONTENT_READ_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATIONS_SAVED_SEARCH_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_CONTENT_READ_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-saved-query-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -1464,6 +1505,14 @@ const COMMUNICATIONS_CONTENT_READ_INVENTORY = {
   ].sort(),
 };
 
+const COMMUNICATIONS_SAVED_SEARCH_INVENTORY = {
+  ...COMMUNICATIONS_CONTENT_READ_INVENTORY,
+  businessCapabilities: [
+    ...COMMUNICATIONS_CONTENT_READ_INVENTORY.businessCapabilities,
+    'communications.saved-search.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-mail-api': {
     default: [],
@@ -1646,6 +1695,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-attachment-contract',
       'hermes-communications-api',
       'hermes-communications-content-api',
+      'hermes-communications-saved-query-api',
       'hermes-attachment-security-contract',
     ].includes(packageName);
     return hasExactKeys(target, ['primaryKind', 'customBuildAllowed'])
@@ -1815,6 +1865,17 @@ function expectedSlice(currentSlice) {
       packages: COMMUNICATIONS_CONTENT_READ_PRODUCTION_PACKAGES,
       workspaceDependencies: COMMUNICATIONS_CONTENT_READ_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: COMMUNICATIONS_CONTENT_READ_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communications_saved_search_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATIONS_SAVED_SEARCH_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATIONS_SAVED_SEARCH_PRODUCTION_PACKAGES,
+      workspaceDependencies: COMMUNICATIONS_SAVED_SEARCH_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: COMMUNICATIONS_SAVED_SEARCH_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

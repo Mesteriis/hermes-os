@@ -23,6 +23,11 @@ use hermes_communications_ingress::{
     COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID, COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID,
     COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID,
 };
+use hermes_communications_saved_query_api::{
+    COMMUNICATIONS_SAVED_SEARCH_SCHEMA_SHA256, SAVED_SEARCH_CONNECT_PATH_V1,
+    SAVED_SEARCH_CONTRACT_MAJOR_V1, SAVED_SEARCH_CONTRACT_NAME_V1,
+    SAVED_SEARCH_CONTRACT_REVISION_V1,
+};
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
     CapabilityRequestV1, ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
@@ -44,6 +49,7 @@ pub const COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID: &str =
     "communications.attachment.safety-verdict.observe.v1";
 pub const COMMUNICATIONS_QUERY_CAPABILITY_ID: &str = "communications.query.v1";
 pub const COMMUNICATIONS_CONTENT_CAPABILITY_ID: &str = "communications.content.v1";
+pub const COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID: &str = "communications.saved-search.v1";
 pub const COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID: &str = "communications.search.index.v1";
 pub const COMMUNICATIONS_STORAGE_CAPABILITY_ID: &str = "communications.storage.v1";
 pub const COMMUNICATIONS_MODULE_ID: &str = COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID;
@@ -68,6 +74,7 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_events_capability_v1(),
         communications_observe_capability_v1(),
         communications_query_capability_v1(),
+        communications_saved_search_capability_v1(),
         communications_search_index_capability_v1(),
         communications_storage_capability_v1(),
     ]
@@ -291,6 +298,24 @@ pub fn communications_query_capability_v1() -> CapabilityDescriptorV1 {
 }
 
 #[must_use]
+pub fn communications_saved_search_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+            contract: Some(communications_saved_search_contract_reference_v1()),
+            client_rpc_route: Some(hermes_runtime_protocol::v1::ClientRpcRouteV1 {
+                path: SAVED_SEARCH_CONNECT_PATH_V1.to_owned(),
+            }),
+            client_blob_route: None,
+        }],
+        ..Default::default()
+    }
+}
+
+#[must_use]
 pub fn communications_search_index_capability_v1() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID.to_owned(),
@@ -361,6 +386,17 @@ pub fn communications_content_read_contract_reference_v1() -> ContractReferenceV
 }
 
 #[must_use]
+pub fn communications_saved_search_contract_reference_v1() -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: COMMUNICATIONS_OWNER_ID.to_owned(),
+        name: SAVED_SEARCH_CONTRACT_NAME_V1.to_owned(),
+        major: SAVED_SEARCH_CONTRACT_MAJOR_V1,
+        revision: SAVED_SEARCH_CONTRACT_REVISION_V1,
+        schema_sha256: COMMUNICATIONS_SAVED_SEARCH_SCHEMA_SHA256.to_vec(),
+    }
+}
+
+#[must_use]
 pub fn communication_evidence_recorded_contract_reference_v1() -> ContractReferenceV1 {
     ContractReferenceV1 {
         owner: COMMUNICATIONS_OWNER_ID.to_owned(),
@@ -390,7 +426,7 @@ pub fn communications_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1
     let settings_schema = communications_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 3,
+        descriptor_revision: 4,
         module_id: COMMUNICATIONS_MODULE_ID.to_owned(),
         owner_id: COMMUNICATIONS_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Domain as i32,
@@ -453,6 +489,7 @@ mod tests {
                 COMMUNICATIONS_EVENTS_CAPABILITY_ID,
                 COMMUNICATIONS_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_QUERY_CAPABILITY_ID,
+                COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
                 COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
                 COMMUNICATIONS_STORAGE_CAPABILITY_ID,
             ]

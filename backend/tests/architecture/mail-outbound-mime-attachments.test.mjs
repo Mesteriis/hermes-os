@@ -69,7 +69,7 @@ test('Mail outbound attachments admit exactly one integration build-unit family'
   const policy = JSON.parse(await readFile(POLICY_PATH, 'utf8'));
   const inventory = policy.implementation.ownerInventory;
 
-  assert.equal(policy.implementation.currentSlice, 'communications_content_read_v1');
+  assert.equal(policy.implementation.currentSlice, 'communications_saved_search_v1');
   assert.deepEqual(inventory.domains, ['communications']);
   assert.deepEqual(inventory.integrations, ['mail']);
   assert.deepEqual(inventory.workflows, []);

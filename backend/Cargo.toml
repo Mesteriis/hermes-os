@@ -40,6 +40,7 @@ members = [
   "src/api/gateway/runtime",
   "src/communications-api",
   "src/communications-content-api",
+  "src/communications-saved-query-api",
   "src/communications-attachment-contract",
   "src/communications-domain",
   "src/communications-ingress",

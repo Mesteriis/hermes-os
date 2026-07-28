@@ -267,6 +267,16 @@ export function useCanonicalCommunicationsPage() {
 		searchText.value = value
 	}
 
+	function currentSearchDraft(): { query: string; accountId?: Uint8Array } {
+		const account = accounts.value.find(
+			(candidate) => bytesKey(candidate.accountId) === selectedAccountKey.value,
+		)
+		return {
+			query: searchText.value.trim(),
+			accountId: account?.accountId.slice(),
+		}
+	}
+
 	async function appendPage(loadPage: () => Promise<void>): Promise<void> {
 		if (loadingMore.value) return
 		loadingMore.value = true
@@ -301,6 +311,7 @@ export function useCanonicalCommunicationsPage() {
 
 	return {
 		clearSelectedMessage,
+		currentSearchDraft,
 		load,
 		loadMoreAccounts,
 		loadMoreConversations,

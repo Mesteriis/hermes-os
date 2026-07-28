@@ -14,7 +14,13 @@ use hermes_communications_api::{
 };
 use sha2::{Digest, Sha256};
 
+mod saved_search;
 mod search;
+pub use saved_search::{
+    COMMUNICATIONS_SAVED_SEARCH_MAX_DESCRIPTION_BYTES_V1,
+    COMMUNICATIONS_SAVED_SEARCH_MAX_NAME_BYTES_V1, CommunicationsSavedSearchDraftErrorV1,
+    CommunicationsSavedSearchDraftV1, validate_saved_search_draft_v1,
+};
 pub use search::{
     COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1, COMMUNICATIONS_SEARCH_MAX_DOCUMENT_TOKENS_V1,
     COMMUNICATIONS_SEARCH_MAX_QUERY_BYTES_V1, COMMUNICATIONS_SEARCH_MAX_QUERY_TOKENS_V1,

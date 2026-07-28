@@ -30,6 +30,9 @@ const selectedRouteId = navbar.selectedRouteId
 const selectedTopLevelRouteId = navbar.selectedTopLevelRouteId
 const bootstrap = navbar.bootstrap
 const routeDowngradeReason = navbar.routeDowngradeReason
+const communicationsSavedSearchAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'communications.saved-search.v1'),
+)
 const telegramCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'telegram.command.v1'),
 )
@@ -148,6 +151,7 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 
 				<CanonicalCommunicationsRoute
 					v-if="selectedRouteId === 'communications-all'"
+					:can-manage-saved-searches="communicationsSavedSearchAvailable"
 				/>
 				<MailOperationalRoute
 					v-else-if="selectedRouteId === 'communications-mail'"

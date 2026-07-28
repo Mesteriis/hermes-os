@@ -24,8 +24,10 @@ const EVIDENCE_AUDIT_LINEAGE_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0010_communications_evidence_audit_lineage.sql");
 const CANONICAL_READ_V2_INDEXES_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0011_communications_canonical_read_v2_indexes.sql");
+const SAVED_SEARCH_PROJECTION_SCHEMA: &[u8] =
+    include_bytes!("../../migrations/0012_communications_saved_search_projection.sql");
 
-pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 11;
+pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 12;
 
 /// Immutable Communications schema admitted and applied only by Storage Control.
 #[must_use]
@@ -101,6 +103,12 @@ pub fn communications_storage_bundle_v1() -> StorageBundleV1 {
                 migration_id: "communications_canonical_read_v2_indexes".to_owned(),
                 forward_sql_utf8: CANONICAL_READ_V2_INDEXES_SCHEMA.to_vec(),
                 sha256: Sha256::digest(CANONICAL_READ_V2_INDEXES_SCHEMA).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: 12,
+                migration_id: "communications_saved_search_projection".to_owned(),
+                forward_sql_utf8: SAVED_SEARCH_PROJECTION_SCHEMA.to_vec(),
+                sha256: Sha256::digest(SAVED_SEARCH_PROJECTION_SCHEMA).to_vec(),
             },
         ],
     }

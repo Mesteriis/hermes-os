@@ -217,6 +217,99 @@ impl CommunicationsDurablePersistence {
         items.truncate(usize::from(limit));
         Ok(CanonicalReadPageV1 { items, has_more })
     }
+
+    /// Executes a saved digest set with an optional canonical account scope.
+    /// Provider identifiers and provider-local account locators are neither
+    /// accepted nor returned.
+    pub async fn search_by_token_digests_scoped(
+        &self,
+        token_digests: &[[u8; 32]],
+        account_id: Option<[u8; 16]>,
+        after: Option<CanonicalReadAfterV1>,
+        limit: u16,
+    ) -> Result<CanonicalReadPageV1<CommunicationSearchHitV1>, CommunicationsPersistenceError> {
+        if token_digests.is_empty() || token_digests.len() > 16 || limit == 0 || limit > 100 {
+            return Err(CommunicationsPersistenceError::InvalidRow);
+        }
+        let digests = token_digests
+            .iter()
+            .map(|digest| digest.to_vec())
+            .collect::<Vec<_>>();
+        let (after_observed_at, after_message_id) = after
+            .map(|value| {
+                (
+                    Some(value.observed_at_unix_seconds),
+                    Some(value.canonical_id.to_vec()),
+                )
+            })
+            .unwrap_or((None, None));
+        let rows = sqlx::query(
+            "SELECT projection.evidence_id, projection.message_id, \
+             projection.conversation_id, projection.observed_at_unix_seconds, \
+             COUNT(DISTINCT digest.token_digest) AS matched_token_count \
+             FROM hermes_data.communications_derived_index_projections projection \
+             JOIN hermes_data.communications_derived_index_token_digests digest \
+               ON digest.message_id = projection.message_id \
+             JOIN hermes_data.communications_conversations conversation \
+               ON conversation.conversation_id = projection.conversation_id \
+             JOIN hermes_data.communications_accounts account \
+               ON account.account_cursor_sha256 = conversation.account_cursor_sha256 \
+             WHERE digest.token_digest = ANY($1::bytea[]) \
+               AND ($2::bytea IS NULL OR account.account_id = $2) \
+               AND ($3::BIGINT IS NULL \
+                 OR projection.observed_at_unix_seconds < $3 \
+                 OR (projection.observed_at_unix_seconds = $3 \
+                   AND projection.message_id > $4)) \
+             GROUP BY projection.evidence_id, projection.message_id, \
+               projection.conversation_id, projection.observed_at_unix_seconds \
+             HAVING COUNT(DISTINCT digest.token_digest) = $5 \
+             ORDER BY projection.observed_at_unix_seconds DESC, \
+               projection.message_id ASC LIMIT $6",
+        )
+        .bind(digests)
+        .bind(account_id.map(|value| value.to_vec()))
+        .bind(after_observed_at)
+        .bind(after_message_id)
+        .bind(
+            i64::try_from(token_digests.len())
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+        )
+        .bind(i64::from(limit) + 1)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        let mut items = rows
+            .into_iter()
+            .map(|row| {
+                let evidence_id: Vec<u8> = row
+                    .try_get("evidence_id")
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+                let message_id: Vec<u8> = row
+                    .try_get("message_id")
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+                let conversation_id: Vec<u8> = row
+                    .try_get("conversation_id")
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+                let observed_at_unix_seconds: i64 = row
+                    .try_get("observed_at_unix_seconds")
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+                let matched_token_count: i64 = row
+                    .try_get("matched_token_count")
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+                Ok(CommunicationSearchHitV1 {
+                    evidence_id: CommunicationObservationIdV1::new(id16(&evidence_id)?),
+                    message_id: CommunicationMessageIdV1::new(id16(&message_id)?),
+                    conversation_id: CommunicationConversationIdV1::new(id16(&conversation_id)?),
+                    observed_at_unix_seconds,
+                    matched_token_count: u16::try_from(matched_token_count)
+                        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let has_more = items.len() > usize::from(limit);
+        items.truncate(usize::from(limit));
+        Ok(CanonicalReadPageV1 { items, has_more })
+    }
 }
 
 fn validate_projection(

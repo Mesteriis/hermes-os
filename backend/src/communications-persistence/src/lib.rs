@@ -8,6 +8,7 @@ mod canonical_read;
 mod content_read;
 mod custody_transfer;
 mod durable;
+mod saved_search;
 mod schema;
 mod search;
 mod search_job;
@@ -20,6 +21,11 @@ pub use custody_transfer::{
     ClaimedCommunicationsBodyCustodyTransferV1, CommunicationsBodyCustodyTransferErrorV1,
 };
 pub use durable::{CommunicationsDurablePersistence, PersistedCommunicationsObservationV1};
+pub use saved_search::{
+    CommunicationsSavedSearchDefinitionV1, CommunicationsSavedSearchListAfterV1,
+    CommunicationsSavedSearchMutationErrorV1, CommunicationsSavedSearchSummaryV1,
+    CommunicationsSavedSearchWriteV1,
+};
 pub use schema::{
     COMMUNICATIONS_SCHEMA_V1, COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1,
     communications_storage_bundle_v1,

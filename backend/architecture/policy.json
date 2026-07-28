@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communications_content_read_v1",
+    "currentSlice": "communications_saved_search_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -435,6 +435,12 @@
       },
       {
         "name": "hermes-communications-content-api",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communications-saved-query-api",
         "role": "domain",
         "owner": "communications",
         "surface": "contract"
@@ -955,6 +961,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communications-saved-query-api",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-events-jetstream",
           "kind": "normal"
         },
@@ -1240,7 +1250,8 @@
           "kind": "normal"
         }
       ],
-      "hermes-communications-content-api": []
+      "hermes-communications-content-api": [],
+      "hermes-communications-saved-query-api": []
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-events-protocol": [
@@ -3344,6 +3355,40 @@
           "defaultFeatures": false,
           "features": []
         }
+      ],
+      "hermes-communications-saved-query-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -3647,6 +3692,10 @@
       "hermes-communications-content-api": {
         "primaryKind": "lib",
         "customBuildAllowed": true
+      },
+      "hermes-communications-saved-query-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
       }
     },
     "developmentProfile": {
@@ -3705,6 +3754,7 @@
         "communications.events.v1",
         "communications.observe.v1",
         "communications.query.v1",
+        "communications.saved-search.v1",
         "communications.search.index.v1",
         "communications.storage.v1",
         "mail.attachment-anchor.consume.v1",
@@ -3863,6 +3913,9 @@
         "client_gateway_v1",
         "client_blob_v1"
       ],
+      "communications_saved_search_v1": [
+        "communications_content_read_v1"
+      ],
       "clock_v1": [
         "module_control_plane_v1",
         "managed_launch_trust_v1"
@@ -4015,6 +4068,17 @@
         "stale_delete_revoke_blob_outage_negative_matrix",
         "generated_frontend_inert_utf8_presentation",
         "provider_fallback_and_blob_metadata_non_disclosure",
+        "architecture_srp_cargo_clippy_managed_browser_gates"
+      ],
+      "communications_saved_search_v1": [
+        "exact_saved_search_contract_build_unit",
+        "owner_local_digest_only_projection",
+        "idempotent_create_cas_replace_delete",
+        "tombstone_and_mutation_audit",
+        "account_scope_and_revision_bound_cursor_fencing",
+        "authenticated_gateway_managed_runtime_conformance",
+        "generated_frontend_exact_capability_guard",
+        "query_plaintext_and_provider_truth_non_disclosure",
         "architecture_srp_cargo_clippy_managed_browser_gates"
       ],
       "clock_v1": [

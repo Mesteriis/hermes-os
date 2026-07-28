@@ -32,13 +32,18 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_BLOB_QUOTA_BYTES, COMMUNICATIONS_CONTENT_CAPABILITY_ID,
     COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
     COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
-    COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
-    COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION, COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS,
-    COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID, COMMUNICATIONS_STORAGE_CAPABILITY_ID,
-    communication_evidence_recorded_contract_reference_v1, communications_module_descriptor_v1,
-    communications_settings_schema_bytes_v1,
+    COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
+    COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION,
+    COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS, COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
+    COMMUNICATIONS_STORAGE_CAPABILITY_ID, communication_evidence_recorded_contract_reference_v1,
+    communications_module_descriptor_v1, communications_settings_schema_bytes_v1,
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
+use hermes_communications_saved_query_api::{
+    COMMUNICATIONS_SAVED_SEARCH_SCHEMA_SHA256, SAVED_SEARCH_CONNECT_PATH_V1,
+    SAVED_SEARCH_CONTRACT_MAJOR_V1, SAVED_SEARCH_CONTRACT_NAME_V1,
+    SAVED_SEARCH_CONTRACT_REVISION_V1,
+};
 use hermes_kernel_control_store::{
     ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientBlobContractVersionV1,
     ModuleClientBlobRouteV1, ModuleClientBlobTransportV1, ModuleClientRpcContractVersionV1,
@@ -1906,6 +1911,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_EVENTS_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_OBSERVE_CAPABILITY_ID.to_owned(),
         "communications.query.v1".to_owned(),
+        COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_STORAGE_CAPABILITY_ID.to_owned(),
     ];
@@ -2021,6 +2027,18 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             },
             COMMUNICATIONS_CONTENT_TICKET_SCHEMA_SHA256,
             CONTENT_TICKET_CONNECT_PATH_V1,
+        ),
+        ModuleClientRpcRouteV1::new(
+            COMMUNICATIONS_REGISTRATION,
+            COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
+            COMMUNICATIONS_OWNER_ID,
+            SAVED_SEARCH_CONTRACT_NAME_V1,
+            ModuleClientRpcContractVersionV1 {
+                major: SAVED_SEARCH_CONTRACT_MAJOR_V1,
+                revision: SAVED_SEARCH_CONTRACT_REVISION_V1,
+            },
+            COMMUNICATIONS_SAVED_SEARCH_SCHEMA_SHA256,
+            SAVED_SEARCH_CONNECT_PATH_V1,
         ),
     ];
     let client_blob_route = ModuleClientBlobRouteV1::new(

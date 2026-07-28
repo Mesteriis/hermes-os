@@ -19,6 +19,8 @@ pub enum CanonicalReadCursorKindV1 {
     MessageReferences = 6,
     MessageEvidence = 7,
     Search = 8,
+    SavedSearch = 9,
+    SavedSearchExecution = 10,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

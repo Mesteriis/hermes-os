@@ -1806,6 +1806,7 @@ dependencies = [
  "hermes-communications-domain",
  "hermes-communications-ingress",
  "hermes-communications-persistence",
+ "hermes-communications-saved-query-api",
  "hermes-events-jetstream",
  "hermes-events-protocol",
  "hermes-managed-vault-client",
@@ -1818,6 +1819,16 @@ dependencies = [
  "sha2 0.11.0",
  "tokio",
  "zeroize",
+]
+
+[[package]]
+name = "hermes-communications-saved-query-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -2057,6 +2068,7 @@ dependencies = [
  "hermes-communications-ingress",
  "hermes-communications-persistence",
  "hermes-communications-runtime",
+ "hermes-communications-saved-query-api",
  "hermes-events-jetstream",
  "hermes-events-protocol",
  "hermes-gateway-protocol",

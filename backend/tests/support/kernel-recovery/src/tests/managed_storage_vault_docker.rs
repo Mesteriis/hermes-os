@@ -419,6 +419,31 @@ fn assert_communications_gateway_query_delivery(
             )
             .expect("decode Gateway Communications query response")
         };
+    let route_saved_search =
+        |request: hermes_communications_saved_query_api::CommunicationsSavedSearchRequestV1| {
+            let response = runtime.block_on(
+                router.route(
+                    hyper::Request::builder()
+                        .method("POST")
+                        .uri(hermes_communications_saved_query_api::SAVED_SEARCH_CONNECT_PATH_V1)
+                        .header("content-type", "application/connect+proto")
+                        .header("cookie", &cookie)
+                        .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                            request.encode_to_vec(),
+                        )))
+                        .expect("Gateway Communications saved-search request"),
+                ),
+            );
+            assert_eq!(response.status(), hyper::StatusCode::OK);
+            let bytes = runtime
+                .block_on(response.into_body().collect())
+                .expect("Gateway Communications saved-search response")
+                .to_bytes();
+            hermes_communications_saved_query_api::CommunicationsSavedSearchResponseV1::decode(
+                bytes.as_ref(),
+            )
+            .expect("decode Gateway Communications saved-search response")
+        };
     let response = route_query(
         hermes_communications_api::query_wire::CommunicationsQueryRequestV1 {
             protocol_major: 1,
@@ -512,6 +537,109 @@ fn assert_communications_gateway_query_delivery(
             "external Communications search must not reveal private body or Blob locator",
         );
     }
+
+    use hermes_communications_saved_query_api::{
+        CommunicationsSavedSearchRequestV1, CreateSavedSearchRequestV1, DeleteSavedSearchRequestV1,
+        ExecuteSavedSearchRequestV1, ListSavedSearchesRequestV1, ReplaceSavedSearchRequestV1,
+        SavedSearchErrorCodeV1,
+        communications_saved_search_request_v1::Operation as SavedSearchOperation,
+        communications_saved_search_response_v1::Result as SavedSearchResult,
+    };
+    let saved_search_id = vec![0x31; 16];
+    let create = route_saved_search(CommunicationsSavedSearchRequestV1 {
+        protocol_major: 1,
+        operation: Some(SavedSearchOperation::Create(CreateSavedSearchRequestV1 {
+            saved_search_id: saved_search_id.clone(),
+            name: "Fixture evidence".to_owned(),
+            description: Some("Managed conformance definition".to_owned()),
+            account_id: None,
+            query: "fixture".to_owned(),
+        })),
+    });
+    assert_eq!(
+        create.error,
+        SavedSearchErrorCodeV1::SavedSearchErrorCodeUnspecified as i32
+    );
+    assert!(matches!(
+        create.result,
+        Some(SavedSearchResult::Mutation(ref mutation))
+            if matches!(mutation.item, Some(ref item) if item.revision == 1)
+    ));
+
+    let list = route_saved_search(CommunicationsSavedSearchRequestV1 {
+        protocol_major: 1,
+        operation: Some(SavedSearchOperation::List(ListSavedSearchesRequestV1 {
+            limit: 16,
+            cursor: Vec::new(),
+        })),
+    });
+    assert!(matches!(
+        list.result,
+        Some(SavedSearchResult::List(ref page))
+            if page.items.iter().any(|item| item.saved_search_id == saved_search_id)
+    ));
+
+    let execute = route_saved_search(CommunicationsSavedSearchRequestV1 {
+        protocol_major: 1,
+        operation: Some(SavedSearchOperation::Execute(ExecuteSavedSearchRequestV1 {
+            saved_search_id: saved_search_id.clone(),
+            limit: 16,
+            cursor: Vec::new(),
+        })),
+    });
+    assert!(matches!(
+        execute.result,
+        Some(SavedSearchResult::Execute(ref page))
+            if page.definition_revision == 1 && !page.hits.is_empty()
+    ));
+    let saved_search_payload = execute.encode_to_vec();
+    assert!(
+        !saved_search_payload
+            .windows("fixture".len())
+            .any(|window| window == b"fixture"),
+        "saved-search responses must not reveal query plaintext"
+    );
+
+    let stale_replace = route_saved_search(CommunicationsSavedSearchRequestV1 {
+        protocol_major: 1,
+        operation: Some(SavedSearchOperation::Replace(ReplaceSavedSearchRequestV1 {
+            saved_search_id: saved_search_id.clone(),
+            expected_revision: 99,
+            name: "Fixture evidence".to_owned(),
+            description: None,
+            account_id: None,
+            query: "fixture".to_owned(),
+        })),
+    });
+    assert_eq!(
+        stale_replace.error,
+        SavedSearchErrorCodeV1::SavedSearchErrorCodeRevisionConflict as i32
+    );
+
+    let deleted = route_saved_search(CommunicationsSavedSearchRequestV1 {
+        protocol_major: 1,
+        operation: Some(SavedSearchOperation::Delete(DeleteSavedSearchRequestV1 {
+            saved_search_id: saved_search_id.clone(),
+            expected_revision: 1,
+        })),
+    });
+    assert!(matches!(
+        deleted.result,
+        Some(SavedSearchResult::Delete(ref result))
+            if result.saved_search_id == saved_search_id && result.revision == 2
+    ));
+    let missing = route_saved_search(CommunicationsSavedSearchRequestV1 {
+        protocol_major: 1,
+        operation: Some(SavedSearchOperation::Execute(ExecuteSavedSearchRequestV1 {
+            saved_search_id,
+            limit: 16,
+            cursor: Vec::new(),
+        })),
+    });
+    assert_eq!(
+        missing.error,
+        SavedSearchErrorCodeV1::SavedSearchErrorCodeNotFound as i32
+    );
 
     let ticket_response = runtime.block_on(
         router.route(

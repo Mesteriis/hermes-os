@@ -68,7 +68,7 @@ test('Communications canonical read v2 is one exact owner contract and admitted 
   assert.equal((proto.match(/bytes cursor =/g) ?? []).length, 8);
   assert.equal((proto.match(/bytes next_cursor =/g) ?? []).length, 8);
   assert.match(admission, /capability_id: COMMUNICATIONS_QUERY_CAPABILITY_ID[\s\S]*capability_revision: 2/);
-  assert.match(admission, /descriptor_revision: 3/);
+  assert.match(admission, /descriptor_revision: 4/);
   assert.match(
     admission,
     /\/hermes\.communications\.query\.v1\.CommunicationsQueryService\/Query/,
@@ -92,7 +92,7 @@ test('Communications canonical read v2 owns keyset persistence and scoped opaque
   assert.match(persistence, /canonical_message/);
   assert.match(persistence, /canonical_message_evidence_page/);
   assert.equal((migration.match(/CREATE INDEX/g) ?? []).length, 8);
-  assert.match(storageBundle, /COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 11/);
+  assert.match(storageBundle, /COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 12/);
   assert.match(storageBundle, /communications_canonical_read_v2_indexes/);
   assert.match(managed, /assert_communications_canonical_read_v2_pagination/);
   assert.match(managed, /Operation::GetMessage/);

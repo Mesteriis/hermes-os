@@ -1,9 +1,16 @@
 import type {
 	AccountSummaryV1,
-	CommunicationSearchHitV1,
 	ConversationSummaryV1,
 	MessageSummaryV1,
 } from '../../../gen/hermes/communications/query/v1/query_pb'
+
+export type CanonicalSearchHitLike = {
+	evidenceId: Uint8Array
+	messageId: Uint8Array
+	conversationId: Uint8Array
+	observedAtUnixSeconds: bigint
+	matchedTokenCount: number
+}
 
 export type CanonicalCommunicationsPageStatus = 'empty' | 'error' | 'loading' | 'ready'
 export type CanonicalCommunicationsSearchStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -108,7 +115,7 @@ export function buildCanonicalMessageRows(
 }
 
 export function buildCanonicalSearchRows(
-	results: readonly CommunicationSearchHitV1[],
+	results: readonly CanonicalSearchHitLike[],
 	selectedKey: string,
 ): readonly CanonicalSearchResultRow[] {
 	return results.map((result) => ({

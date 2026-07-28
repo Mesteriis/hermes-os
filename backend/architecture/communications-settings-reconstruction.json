@@ -410,7 +410,7 @@
       "gate": "communications_saved_search_v1",
       "role": "domain",
       "owner": "communications",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["communications_canonical_read_v2", "communications.search.index.v1"]
     },
     {
