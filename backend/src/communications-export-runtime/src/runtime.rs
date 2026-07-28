@@ -497,9 +497,7 @@ async fn resolve_storage_runtime_credential(
 ) -> Result<zeroize::Zeroizing<Vec<u8>>, CommunicationsExportRuntimeErrorV1> {
     const MAX_ATTEMPTS: usize = 20;
     for attempt in 0..MAX_ATTEMPTS {
-        if let Ok(lease_id) = leases.issue_runtime_credential(binding).await
-            && let Ok(password) = leases.resolve_runtime_credential(binding, lease_id).await
-        {
+        if let Ok(password) = leases.ensure_runtime_credential(binding).await {
             return Ok(password);
         }
         if attempt + 1 < MAX_ATTEMPTS {
