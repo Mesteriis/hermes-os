@@ -1,9 +1,10 @@
 use prost::Message;
 
 use crate::{
-    GmailOAuthCompleteRequestV1, GmailOAuthOperationKindV1, GmailOAuthOperationStatusV1,
-    GmailOAuthOutcomeV1, GmailOAuthRefreshRequestV1, GmailOAuthStartRequestV1, GmailOAuthStartedV1,
-    GmailOAuthStatusRequestV1, MailClientResponseV1, client_wire::MailClientWireErrorV1, wire,
+    GmailOAuthAuthorityV1, GmailOAuthCompleteRequestV1, GmailOAuthOperationKindV1,
+    GmailOAuthOperationStatusV1, GmailOAuthOutcomeV1, GmailOAuthRefreshRequestV1,
+    GmailOAuthStartRequestV1, GmailOAuthStartedV1, GmailOAuthStatusRequestV1, MailClientResponseV1,
+    client_wire::MailClientWireErrorV1, wire,
 };
 
 const MAX_OPERATION_ID_BYTES: usize = 256;
@@ -16,6 +17,14 @@ const MAX_AUTHORIZATION_URL_BYTES: usize = 16 * 1024;
 pub fn encode_start_request(request: &GmailOAuthStartRequestV1) -> Vec<u8> {
     wire::StartGmailOAuthRequestV1 {
         operation_id: request.operation_id.clone(),
+        authority: match request.authority {
+            GmailOAuthAuthorityV1::Operational => {
+                wire::GmailOAuthAuthorityV1::GmailOauthAuthorityOperational as i32
+            }
+            GmailOAuthAuthorityV1::PermanentDelete => {
+                wire::GmailOAuthAuthorityV1::GmailOauthAuthorityPermanentDelete as i32
+            }
+        },
     }
     .encode_to_vec()
 }
@@ -27,6 +36,19 @@ pub fn decode_start_request(
         .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
     let request = GmailOAuthStartRequestV1 {
         operation_id: request.operation_id,
+        authority: match wire::GmailOAuthAuthorityV1::try_from(request.authority)
+            .map_err(|_| MailClientWireErrorV1::InvalidPayload)?
+        {
+            wire::GmailOAuthAuthorityV1::GmailOauthAuthorityOperational => {
+                GmailOAuthAuthorityV1::Operational
+            }
+            wire::GmailOAuthAuthorityV1::GmailOauthAuthorityPermanentDelete => {
+                GmailOAuthAuthorityV1::PermanentDelete
+            }
+            wire::GmailOAuthAuthorityV1::GmailOauthAuthorityUnspecified => {
+                return Err(MailClientWireErrorV1::InvalidPayload);
+            }
+        },
     };
     if !valid_identifier(&request.operation_id, MAX_OPERATION_ID_BYTES)
         || encode_start_request(&request) != bytes
@@ -296,7 +318,36 @@ fn valid_authorization_url(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use prost::Message as _;
+
     use super::*;
+
+    #[test]
+    fn start_round_trips_exact_authority_and_rejects_unspecified() {
+        for authority in [
+            GmailOAuthAuthorityV1::Operational,
+            GmailOAuthAuthorityV1::PermanentDelete,
+        ] {
+            let request = GmailOAuthStartRequestV1 {
+                operation_id: format!("start-{authority:?}"),
+                authority,
+            };
+            assert_eq!(
+                decode_start_request(&encode_start_request(&request)),
+                Ok(request)
+            );
+        }
+
+        let unspecified = wire::StartGmailOAuthRequestV1 {
+            operation_id: "start-unspecified".to_owned(),
+            authority: wire::GmailOAuthAuthorityV1::GmailOauthAuthorityUnspecified as i32,
+        }
+        .encode_to_vec();
+        assert_eq!(
+            decode_start_request(&unspecified),
+            Err(MailClientWireErrorV1::InvalidPayload)
+        );
+    }
 
     #[test]
     fn oauth_wire_round_trips_without_exposing_secrets_in_results() {

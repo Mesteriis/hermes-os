@@ -11,6 +11,7 @@ import type { ModuleSettingsPanelModel } from '../../../shared/ui/settings/Modul
 import MailAccountManagementPanel from './MailAccountManagementPanel.vue'
 import MailAccountSetupPanel from './MailAccountSetupPanel.vue'
 import MailPortabilityPanel from './MailPortabilityPanel.vue'
+import MailGmailPermanentDeleteAuthorizationPanel from './MailGmailPermanentDeleteAuthorizationPanel.vue'
 
 const MAIL_MODULE_ID = 'hermes-mail-runtime'
 const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
@@ -37,6 +38,7 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 		<ModuleSettingsPanel :model="model" />
 		<MailAccountSetupPanel :module="module" />
 		<MailAccountManagementPanel :module="module" />
+		<MailGmailPermanentDeleteAuthorizationPanel />
 		<MailPortabilityPanel :module="module" />
 	</div>
 </template>

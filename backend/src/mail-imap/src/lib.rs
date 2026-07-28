@@ -405,6 +405,100 @@ pub fn move_message(
     })
 }
 
+pub fn permanently_delete_message(
+    access: ImapMessageLocationAccessV1<'_>,
+    locator: ImapMessageLocatorV1<'_>,
+) -> Result<(), ImapError> {
+    if locator.uid == 0
+        || locator.uid_validity == 0
+        || !valid_mailbox_id(locator.mailbox_id)
+        || access.username.trim().is_empty()
+        || access.password.is_empty()
+    {
+        return Err(ImapError::new(
+            "validation",
+            "imap permanent delete input is invalid",
+        ));
+    }
+    task::block_on(async move {
+        let mut session =
+            open_session(access.host, access.port, access.username, access.password).await?;
+        let capabilities = session.capabilities().await.map_err(|_| {
+            ImapError::new("protocol", "imap CAPABILITY failed before permanent delete")
+        })?;
+        if !capabilities.has_str("UIDPLUS") {
+            return Err(ImapError::new(
+                "unsupported",
+                "imap server does not advertise UIDPLUS",
+            ));
+        }
+        let selected = session.select(locator.mailbox_id).await.map_err(|_| {
+            ImapError::new("protocol", "imap SELECT failed before permanent delete")
+        })?;
+        if selected.uid_validity != Some(locator.uid_validity) {
+            return Err(ImapError::new(
+                "stale_locator",
+                "imap mailbox UIDVALIDITY does not match the stored locator",
+            ));
+        }
+        run_exact_ok_command(
+            &mut session,
+            format!("UID STORE {} +FLAGS.SILENT (\\Deleted)", locator.uid),
+            "UID STORE",
+        )
+        .await?;
+        run_exact_ok_command(
+            &mut session,
+            format!("UID EXPUNGE {}", locator.uid),
+            "UID EXPUNGE",
+        )
+        .await?;
+        session
+            .logout()
+            .await
+            .map_err(|_| ImapError::new("protocol", "imap logout failed after permanent delete"))?;
+        Ok(())
+    })
+}
+
+async fn run_exact_ok_command<T>(
+    session: &mut Session<T>,
+    command: String,
+    operation: &str,
+) -> Result<(), ImapError>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Debug + Send,
+{
+    let request_id = session
+        .run_command(command)
+        .await
+        .map_err(|_| ImapError::new("protocol", format!("imap {operation} write failed")))?;
+    loop {
+        let response = session
+            .read_response()
+            .await
+            .map_err(|_| ImapError::new("protocol", format!("imap {operation} response failed")))?
+            .ok_or_else(|| {
+                ImapError::new(
+                    "protocol",
+                    format!("imap connection closed during {operation}"),
+                )
+            })?;
+        if let Response::Done { tag, status, .. } = response.parsed()
+            && tag == &request_id
+        {
+            return if matches!(status, &Status::Ok) {
+                Ok(())
+            } else {
+                Err(ImapError::new(
+                    "protocol",
+                    format!("imap {operation} did not complete successfully"),
+                ))
+            };
+        }
+    }
+}
+
 fn sync_inbox_with_retry<F>(
     host: &str,
     port: u16,

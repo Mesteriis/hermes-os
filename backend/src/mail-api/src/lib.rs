@@ -38,6 +38,14 @@ pub mod message_location_wire_generated {
         "/hermes.mail.message_location.v1.rs"
     ));
 }
+pub mod message_permanent_delete;
+pub mod message_permanent_delete_wire;
+pub mod message_permanent_delete_wire_generated {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.mail.message_permanent_delete.v1.rs"
+    ));
+}
 pub mod oauth;
 pub mod oauth_wire;
 pub mod operational;
@@ -58,10 +66,11 @@ pub mod portability_wire_generated {
 pub use oauth::{
     GMAIL_OAUTH_ATTEMPT_TTL_SECONDS, GMAIL_OAUTH_AUTHORIZATION_HOST,
     GMAIL_OAUTH_AUTHORIZATION_PATH, GMAIL_OAUTH_HTTPS_PORT, GMAIL_OAUTH_TOKEN_HOST,
-    GMAIL_OAUTH_TOKEN_PATH, GmailOAuthCompleteRequestV1, GmailOAuthConfigurationV1,
-    GmailOAuthEndpointV1, GmailOAuthOperationKindV1, GmailOAuthOperationStatusV1,
-    GmailOAuthOutcomeV1, GmailOAuthRefreshRequestV1, GmailOAuthStartRequestV1, GmailOAuthStartedV1,
-    GmailOAuthStatusRequestV1, valid_gmail_oauth_configuration,
+    GMAIL_OAUTH_TOKEN_PATH, GmailOAuthAuthorityV1, GmailOAuthCompleteRequestV1,
+    GmailOAuthConfigurationV1, GmailOAuthEndpointV1, GmailOAuthOperationKindV1,
+    GmailOAuthOperationStatusV1, GmailOAuthOutcomeV1, GmailOAuthRefreshRequestV1,
+    GmailOAuthStartRequestV1, GmailOAuthStartedV1, GmailOAuthStatusRequestV1,
+    valid_gmail_oauth_configuration,
 };
 pub use portability::{
     MAIL_ACCOUNT_EXPORT_MAJOR_V1, MAIL_SETTINGS_SCHEMA_MAJOR_V2, MAIL_SETTINGS_SCHEMA_REVISION_V2,
@@ -89,6 +98,10 @@ pub enum MailClientRequestV1 {
     MessageFlagStatus(message_flags::MailMessageFlagStatusRequestV1),
     MessageLocationCommand(message_location::MailMessageLocationCommandV1),
     MessageLocationStatus(message_location::MailMessageLocationStatusRequestV1),
+    MessagePermanentDeleteCommand(message_permanent_delete::MailMessagePermanentDeleteCommandV1),
+    MessagePermanentDeleteStatus(
+        message_permanent_delete::MailMessagePermanentDeleteStatusRequestV1,
+    ),
     OperationalQuery(operational::MailOperationalQueryV1),
     SyncHealthQuery(sync_health::MailSyncHealthQueryV1),
 }
@@ -135,6 +148,10 @@ pub enum MailClientResponseV1 {
     MessageFlagStatus(Option<message_flags::MailMessageFlagOperationStatusV1>),
     MessageLocationAccepted(message_location::MailMessageLocationAcceptedV1),
     MessageLocationStatus(Option<message_location::MailMessageLocationOperationStatusV1>),
+    MessagePermanentDeleteAccepted(message_permanent_delete::MailMessagePermanentDeleteAcceptedV1),
+    MessagePermanentDeleteStatus(
+        Option<message_permanent_delete::MailMessagePermanentDeleteOperationStatusV1>,
+    ),
     OperationalQuery(operational::MailOperationalQueryResponseV1),
     SyncHealthQuery(sync_health::MailSyncHealthQueryResponseV1),
 }

@@ -6,6 +6,7 @@ import {
 	GetGmailOAuthStatusRequestV1Schema,
 	type GmailOAuthOperationStatusV1,
 	type GmailOAuthStartedV1,
+	GmailOAuthAuthorityV1,
 	GmailOAuthCompleteService,
 	GmailOAuthQueryService,
 	GmailOAuthStartService,
@@ -30,11 +31,19 @@ export class MailGmailOAuthClientV1 {
 		),
 	) {}
 
-	async start(operationId: string): Promise<GmailOAuthStartedV1> {
+	async start(
+		operationId: string,
+		authority: 'operational' | 'permanent-delete' = 'operational',
+	): Promise<GmailOAuthStartedV1> {
 		validateOperationId(operationId)
 		return this.startClient.start(create(
 			StartGmailOAuthRequestV1Schema,
-			{ operationId },
+			{
+				operationId,
+				authority: authority === 'permanent-delete'
+					? GmailOAuthAuthorityV1.GMAIL_OAUTH_AUTHORITY_PERMANENT_DELETE
+					: GmailOAuthAuthorityV1.GMAIL_OAUTH_AUTHORITY_OPERATIONAL,
+			},
 		))
 	}
 

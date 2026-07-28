@@ -16,6 +16,7 @@ import { useMailDelivery } from '../queries/useMailDelivery'
 import { useMailOperationalRead } from '../queries/useMailOperationalRead'
 import { useMailMessageFlags } from '../queries/useMailMessageFlags'
 import { useMailMessageLocation } from '../queries/useMailMessageLocation'
+import { useMailMessagePermanentDelete } from '../queries/useMailMessagePermanentDelete'
 import { useMailSync } from '../queries/useMailSync'
 import { useMailSyncHealth } from '../queries/useMailSyncHealth'
 
@@ -28,6 +29,8 @@ const props = defineProps<{
 	canQueryFlagStatus: boolean
 	canMutateLocation: boolean
 	canQueryLocationStatus: boolean
+	canPermanentlyDelete: boolean
+	canQueryPermanentDeleteStatus: boolean
 	canSync: boolean
 	canSyncHealth: boolean
 	modules: readonly ClientModuleBootstrapV1[]
@@ -76,6 +79,22 @@ const messageLocation = useMailMessageLocation({
 	},
 	refreshProjection: read.refresh,
 })
+const messagePermanentDelete = useMailMessagePermanentDelete({
+	canDelete: () => props.canPermanentlyDelete,
+	canQueryStatus: () => props.canQueryPermanentDeleteStatus,
+	selection: () => {
+		const detail = read.model.value.detail
+		const connectionId = read.model.value.selectedConnectionId
+		if (!detail || !connectionId) return null
+		return {
+			connectionId,
+			messageId: detail.id,
+			projectionRevision: BigInt(detail.projectionRevision),
+			isTrashed: detail.isTrashed,
+		}
+	},
+	refreshProjection: read.refresh,
+})
 const syncHealth = useMailSyncHealth({
 	canQuery: () => props.canSyncHealth,
 	modules: () => props.modules,
@@ -106,6 +125,7 @@ watch(
 		:delivery-model="delivery.model.value"
 		:flag-model="messageFlags.model.value"
 		:location-model="messageLocation.model.value"
+		:permanent-delete-model="messagePermanentDelete.model.value"
 		:read-model="read.model.value"
 		:sync-health-model="syncHealth.model.value"
 		:sync-model="sync.model.value"
@@ -142,6 +162,9 @@ watch(
 		@location-restore="messageLocation.restore"
 		@location-select-target-folder="messageLocation.selectTargetFolder"
 		@location-trash="messageLocation.trash"
+		@permanent-delete="messagePermanentDelete.permanentlyDelete"
+		@permanent-delete-refresh-status="messagePermanentDelete.refreshStatus"
+		@permanent-delete-set-confirmed="messagePermanentDelete.setConfirmed"
 		@refresh-status="delivery.refreshStatus"
 		@select-connection="read.selectConnection"
 		@select-folder="read.selectFolder"

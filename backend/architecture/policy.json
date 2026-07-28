@@ -3096,6 +3096,14 @@
           "version": "=0.3.32",
           "defaultFeatures": true,
           "features": []
+        },
+        {
+          "name": "imap-proto",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.16.7",
+          "defaultFeatures": true,
+          "features": []
         }
       ],
       "hermes-mail-gmail": [

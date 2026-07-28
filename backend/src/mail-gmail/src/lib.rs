@@ -11,8 +11,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use futures_util::io::{AsyncReadExt, AsyncWriteExt};
 use hermes_mail_api::{
-    GMAIL_API_HOST, GMAIL_API_HTTPS_PORT, GmailOAuthConfigurationV1, GmailOAuthEndpointV1,
-    valid_ca_certificate_pem, valid_gmail_oauth_configuration,
+    GMAIL_API_HOST, GMAIL_API_HTTPS_PORT, GmailOAuthAuthorityV1, GmailOAuthConfigurationV1,
+    GmailOAuthEndpointV1, valid_ca_certificate_pem, valid_gmail_oauth_configuration,
 };
 use serde::Deserialize;
 
@@ -22,12 +22,14 @@ const MAX_LABEL_IDS: usize = 512;
 const MAX_BEARER_TOKEN_BYTES: usize = 16 * 1024;
 const MAX_OAUTH_RESPONSE_BYTES: usize = 1024 * 1024;
 const GMAIL_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
-const GMAIL_OAUTH_SCOPES: [&str; 4] = [
+const GMAIL_OPERATIONAL_OAUTH_SCOPES: [&str; 4] = [
     "openid",
     "email",
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.send",
 ];
+const GMAIL_PERMANENT_DELETE_OAUTH_SCOPES: [&str; 3] =
+    ["openid", "email", "https://mail.google.com/"];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GmailApiClientV1 {
@@ -152,6 +154,7 @@ pub fn gmail_authorization_url(
     configuration: &GmailOAuthConfigurationV1,
     state: &str,
     code_challenge: &str,
+    authority: GmailOAuthAuthorityV1,
 ) -> Result<String, GmailAdapterErrorV1> {
     if !valid_gmail_oauth_configuration(configuration)
         || !valid_oauth_carrier(state)
@@ -160,7 +163,7 @@ pub fn gmail_authorization_url(
         return Err(GmailAdapterErrorV1::InvalidRequest);
     }
     let endpoint = &configuration.authorization_endpoint;
-    let scopes = GMAIL_OAUTH_SCOPES.join(" ");
+    let scopes = gmail_oauth_scopes(authority).join(" ");
     let query = [
         ("client_id", configuration.client_id.as_str()),
         ("redirect_uri", configuration.redirect_uri.as_str()),
@@ -186,6 +189,23 @@ pub fn gmail_authorization_url(
         "https://{}:{}{}?{query}",
         endpoint.host, endpoint.port, endpoint.path
     ))
+}
+
+#[must_use]
+pub fn gmail_scope_authorizes(authority: GmailOAuthAuthorityV1, granted_scope: &str) -> bool {
+    let granted = granted_scope
+        .split_ascii_whitespace()
+        .collect::<BTreeSet<_>>();
+    gmail_oauth_scopes(authority)
+        .iter()
+        .all(|scope| granted.contains(scope))
+}
+
+fn gmail_oauth_scopes(authority: GmailOAuthAuthorityV1) -> &'static [&'static str] {
+    match authority {
+        GmailOAuthAuthorityV1::Operational => &GMAIL_OPERATIONAL_OAUTH_SCOPES,
+        GmailOAuthAuthorityV1::PermanentDelete => &GMAIL_PERMANENT_DELETE_OAUTH_SCOPES,
+    }
 }
 
 impl GmailApiClientV1 {
@@ -463,6 +483,32 @@ impl GmailApiClientV1 {
             .await
     }
 
+    pub async fn permanently_delete_message(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+    ) -> Result<(), GmailAdapterErrorV1> {
+        let provider_message_id = provider_id(provider_message_id)?;
+        let status = async_std::future::timeout(
+            GMAIL_OPERATION_TIMEOUT,
+            self.request_status_inner(
+                access_token,
+                "DELETE",
+                &format!(
+                    "/gmail/v1/users/{}/messages/{provider_message_id}",
+                    self.user_id
+                ),
+                None,
+            ),
+        )
+        .await
+        .map_err(|_| GmailAdapterErrorV1::Transport)??;
+        match status {
+            204 | 404 => Ok(()),
+            status => Err(GmailAdapterErrorV1::ProviderStatus(status)),
+        }
+    }
+
     async fn post_message_action(
         &self,
         access_token: &str,
@@ -549,6 +595,32 @@ impl GmailApiClientV1 {
         path: &str,
         body: Option<&[u8]>,
     ) -> Result<T, GmailAdapterErrorV1> {
+        let response = self
+            .request_raw_inner(access_token, method, path, body)
+            .await?;
+        parse_json_response(&response)
+    }
+
+    async fn request_status_inner(
+        &self,
+        access_token: &str,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+    ) -> Result<u16, GmailAdapterErrorV1> {
+        let response = self
+            .request_raw_inner(access_token, method, path, body)
+            .await?;
+        parse_response_status(&response)
+    }
+
+    async fn request_raw_inner(
+        &self,
+        access_token: &str,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+    ) -> Result<Vec<u8>, GmailAdapterErrorV1> {
         if !valid_bearer_token(access_token)
             || !path.starts_with('/')
             || path.contains('\r')
@@ -598,7 +670,10 @@ impl GmailApiClientV1 {
             .read_to_end(&mut response)
             .await
             .map_err(|_| GmailAdapterErrorV1::Transport)?;
-        parse_json_response(&response)
+        if response.len() > MAX_RESPONSE_BYTES {
+            return Err(GmailAdapterErrorV1::InvalidResponse);
+        }
+        Ok(response)
     }
 }
 
@@ -739,17 +814,28 @@ fn parse_json_response<T: for<'de> Deserialize<'de>>(
         .windows(4)
         .position(|value| value == b"\r\n\r\n")
         .ok_or(GmailAdapterErrorV1::InvalidResponse)?;
-    let headers = std::str::from_utf8(&response[..split])
-        .map_err(|_| GmailAdapterErrorV1::InvalidResponse)?;
-    let status = headers
-        .split_whitespace()
-        .nth(1)
-        .and_then(|value| value.parse::<u16>().ok())
-        .ok_or(GmailAdapterErrorV1::InvalidResponse)?;
+    let status = parse_response_status(response)?;
     if !(200..300).contains(&status) {
         return Err(GmailAdapterErrorV1::ProviderStatus(status));
     }
     serde_json::from_slice(&response[split + 4..]).map_err(|_| GmailAdapterErrorV1::InvalidResponse)
+}
+
+fn parse_response_status(response: &[u8]) -> Result<u16, GmailAdapterErrorV1> {
+    if response.len() > MAX_RESPONSE_BYTES {
+        return Err(GmailAdapterErrorV1::InvalidResponse);
+    }
+    let split = response
+        .windows(4)
+        .position(|value| value == b"\r\n\r\n")
+        .ok_or(GmailAdapterErrorV1::InvalidResponse)?;
+    let headers = std::str::from_utf8(&response[..split])
+        .map_err(|_| GmailAdapterErrorV1::InvalidResponse)?;
+    headers
+        .split_whitespace()
+        .nth(1)
+        .and_then(|value| value.parse::<u16>().ok())
+        .ok_or(GmailAdapterErrorV1::InvalidResponse)
 }
 
 async fn request_oauth_token(
@@ -949,8 +1035,13 @@ mod tests {
     }
     #[test]
     fn authorization_url_uses_fixed_scopes_and_pkce() {
-        let url = gmail_authorization_url(&oauth_configuration(), "state-value", "challenge-value")
-            .expect("authorization URL");
+        let url = gmail_authorization_url(
+            &oauth_configuration(),
+            "state-value",
+            "challenge-value",
+            GmailOAuthAuthorityV1::Operational,
+        )
+        .expect("authorization URL");
         assert!(url.starts_with("https://accounts.google.com:443/o/oauth2/v2/auth?"));
         assert!(url.contains("code_challenge=challenge-value"));
         assert!(url.contains("code_challenge_method=S256"));
@@ -959,6 +1050,41 @@ mod tests {
         assert!(url.contains("gmail.send"));
         assert!(!url.contains("gmail.readonly"));
         assert!(!url.contains("client_secret"));
+    }
+    #[test]
+    fn permanent_delete_requires_the_explicit_full_mail_scope() {
+        let url = gmail_authorization_url(
+            &oauth_configuration(),
+            "state-value",
+            "challenge-value",
+            GmailOAuthAuthorityV1::PermanentDelete,
+        )
+        .expect("authorization URL");
+        assert!(url.contains("mail.google.com"));
+        assert!(!url.contains("gmail.modify"));
+        assert!(gmail_scope_authorizes(
+            GmailOAuthAuthorityV1::PermanentDelete,
+            "openid email https://mail.google.com/"
+        ));
+        assert!(!gmail_scope_authorizes(
+            GmailOAuthAuthorityV1::PermanentDelete,
+            "openid email https://www.googleapis.com/auth/gmail.modify"
+        ));
+    }
+    #[test]
+    fn delete_status_accepts_only_success_or_replay_convergence() {
+        for status in [204, 404] {
+            assert_eq!(
+                parse_response_status(
+                    format!("HTTP/1.1 {status} Result\r\nContent-Length: 0\r\n\r\n").as_bytes()
+                ),
+                Ok(status)
+            );
+        }
+        assert_eq!(
+            parse_response_status(b"HTTP/1.1 403 Forbidden\r\n\r\n"),
+            Ok(403)
+        );
     }
     #[test]
     fn oauth_adapter_debug_redacts_every_credential_carrier() {

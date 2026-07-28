@@ -1,7 +1,7 @@
 //! Mail-owned Gmail OAuth workflow and credential rotation.
 
 use hermes_mail_api::{
-    GMAIL_OAUTH_ATTEMPT_TTL_SECONDS, GmailOAuthCompleteRequestV1,
+    GMAIL_OAUTH_ATTEMPT_TTL_SECONDS, GmailOAuthAuthorityV1, GmailOAuthCompleteRequestV1,
     GmailOAuthOperationKindV1 as ApiOperationKindV1, GmailOAuthOperationStatusV1,
     GmailOAuthOutcomeV1, GmailOAuthStartedV1, MailCredentialPurpose, MailInboundTransportV1,
 };
@@ -12,7 +12,7 @@ use hermes_mail_core::oauth::{
 use hermes_mail_gmail::{
     GmailAdapterErrorV1, GmailAuthorizationCodeExchangeV1, GmailOAuthTokenResponseV1,
     GmailRefreshTokenRequestV1, exchange_authorization_code, gmail_authorization_url,
-    refresh_access_token,
+    gmail_scope_authorizes, refresh_access_token,
 };
 use hermes_mail_persistence::{
     GmailOAuthAttemptStartV1, GmailOAuthCredentialBindingV1, GmailOAuthOperationKindV1,
@@ -57,6 +57,7 @@ impl MailAdmittedRuntime {
     pub async fn start_gmail_oauth(
         &self,
         operation_id: &str,
+        authority: GmailOAuthAuthorityV1,
         requested_at_unix_seconds: i64,
     ) -> Result<GmailOAuthStartedV1, MailBootstrapError> {
         if !self.provider_io_permitted() {
@@ -83,9 +84,13 @@ impl MailAdmittedRuntime {
         let material =
             derive_gmail_oauth_attempt(&setup_id_entropy, &state_entropy, &verifier_entropy)
                 .map_err(|_| MailBootstrapError::Credential)?;
-        let authorization_url =
-            gmail_authorization_url(configuration, &material.state, &material.code_challenge)
-                .map_err(|_| MailBootstrapError::Admission)?;
+        let authorization_url = gmail_authorization_url(
+            configuration,
+            &material.state,
+            &material.code_challenge,
+            authority,
+        )
+        .map_err(|_| MailBootstrapError::Admission)?;
         let stored = self
             .durable
             .start_gmail_oauth_attempt(&GmailOAuthAttemptStartV1 {
@@ -98,6 +103,7 @@ impl MailAdmittedRuntime {
                 settings_revision: self.settings_revision,
                 created_at_unix_seconds: requested_at_unix_seconds,
                 expires_at_unix_seconds,
+                authority,
             })
             .await
             .map_err(map_persistence_error)?;
@@ -376,6 +382,18 @@ impl MailAdmittedRuntime {
                         .persist_oauth_rejection(&queued.operation_id, completed_at_unix_seconds)
                         .await;
                 }
+                let authority = queued
+                    .authority
+                    .ok_or(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation)?;
+                if !token
+                    .scope
+                    .as_deref()
+                    .is_some_and(|scope| gmail_scope_authorizes(authority, scope))
+                {
+                    return self
+                        .persist_oauth_rejection(&queued.operation_id, completed_at_unix_seconds)
+                        .await;
+                }
                 let existing = self
                     .durable
                     .gmail_oauth_credential_binding(&queued.connection_id)
@@ -386,6 +404,7 @@ impl MailAdmittedRuntime {
                         &queued.operation_id,
                         existing.as_ref(),
                         token,
+                        authority == GmailOAuthAuthorityV1::PermanentDelete,
                         completed_at_unix_seconds,
                     )
                     .await;
@@ -429,6 +448,7 @@ impl MailAdmittedRuntime {
         operation_id: &str,
         existing: Option<&GmailOAuthCredentialBindingV1>,
         token: GmailOAuthTokenResponseV1,
+        permanent_delete_authorized: bool,
         completed_at_unix_seconds: i64,
     ) -> Result<GmailOAuthCredentialBindingV1, MailGmailOAuthDispatchErrorV1> {
         let access_token_expires_at_unix_seconds =
@@ -509,6 +529,7 @@ impl MailAdmittedRuntime {
             refresh_revision,
             access_token_expires_at_unix_seconds,
             gmail_oauth_scope_sha256(token.scope.as_deref()),
+            permanent_delete_authorized,
         ))
     }
 
@@ -571,6 +592,11 @@ impl MailAdmittedRuntime {
                 .as_deref()
                 .map(|scope| gmail_oauth_scope_sha256(Some(scope)))
                 .unwrap_or(current.scope_sha256),
+            token
+                .scope
+                .as_deref()
+                .map(|scope| gmail_scope_authorizes(GmailOAuthAuthorityV1::PermanentDelete, scope))
+                .unwrap_or(current.permanent_delete_authorized),
         ))
     }
 
@@ -701,6 +727,7 @@ fn oauth_binding(
     refresh_credential_revision: u64,
     access_token_expires_at_unix_seconds: i64,
     scope_sha256: [u8; 32],
+    permanent_delete_authorized: bool,
 ) -> GmailOAuthCredentialBindingV1 {
     GmailOAuthCredentialBindingV1 {
         access_token_record_id,
@@ -709,6 +736,7 @@ fn oauth_binding(
         refresh_credential_revision,
         access_token_expires_at_unix_seconds,
         scope_sha256,
+        permanent_delete_authorized,
     }
 }
 

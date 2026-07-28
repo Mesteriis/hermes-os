@@ -148,6 +148,8 @@ mod mail_managed_flow;
 mod mail_message_flag_flow;
 #[path = "managed_storage_vault_docker/mail_message_location_flow.rs"]
 mod mail_message_location_flow;
+#[path = "managed_storage_vault_docker/mail_message_permanent_delete_flow.rs"]
+mod mail_message_permanent_delete_flow;
 #[path = "managed_storage_vault_docker/mail_outbound_attachment_flow.rs"]
 mod mail_outbound_attachment_flow;
 #[path = "managed_storage_vault_docker/zulip_https_fixture.rs"]

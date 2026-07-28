@@ -24,6 +24,7 @@ const MAX_HTTP_LINE_BYTES: usize = 8 * 1024;
 const MAX_REQUEST_BODY_BYTES: usize = 64 * 1024;
 const OAUTH_FIXTURE_HOST: &str = "127.0.0.1";
 const GMAIL_OAUTH_SCOPE: &str = "openid email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send";
+const GMAIL_PERMANENT_DELETE_OAUTH_SCOPE: &str = "openid email https://mail.google.com/";
 
 struct GmailOAuthCapturedRequestV1 {
     path: String,
@@ -157,6 +158,24 @@ impl MailGmailOAuthFixture {
         &self,
         authorization_url: &str,
     ) -> GmailOAuthAuthorizationMaterialV1 {
+        self.authorization_material_with_scope(authorization_url, GMAIL_OAUTH_SCOPE)
+    }
+
+    pub(super) fn permanent_delete_authorization_material(
+        &self,
+        authorization_url: &str,
+    ) -> GmailOAuthAuthorizationMaterialV1 {
+        self.authorization_material_with_scope(
+            authorization_url,
+            GMAIL_PERMANENT_DELETE_OAUTH_SCOPE,
+        )
+    }
+
+    fn authorization_material_with_scope(
+        &self,
+        authorization_url: &str,
+        expected_scope: &str,
+    ) -> GmailOAuthAuthorizationMaterialV1 {
         let (base, query) = authorization_url
             .split_once('?')
             .expect("Gmail OAuth authorization URL query");
@@ -175,7 +194,7 @@ impl MailGmailOAuthFixture {
         assert_form_value(&query, "code_challenge_method", "S256");
         assert_form_value(&query, "access_type", "offline");
         assert_form_value(&query, "prompt", "consent");
-        assert_form_value(&query, "scope", GMAIL_OAUTH_SCOPE);
+        assert_form_value(&query, "scope", expected_scope);
         GmailOAuthAuthorizationMaterialV1 {
             state: query.get("state").expect("Gmail OAuth state").clone(),
             code_challenge: query
@@ -283,7 +302,7 @@ fn serve_connection(
             form: parse_form(&body),
         });
     let request_index = accepted_requests.fetch_add(1, Ordering::SeqCst);
-    if request_index == 2 {
+    if request_index == 3 {
         return;
     }
     if request_index == 0 {
@@ -292,10 +311,11 @@ fn serve_connection(
     let response_body = match request_index {
         0 => br#"{"access_token":"managed-mail-gmail-access-v1","refresh_token":"managed-mail-gmail-refresh-v1","expires_in":3600,"token_type":"Bearer","scope":"openid email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send"}"#.as_slice(),
         1 => br#"{"access_token":"managed-mail-gmail-access-v2","refresh_token":"managed-mail-gmail-refresh-v2","expires_in":3600,"token_type":"Bearer","scope":"openid email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send"}"#.as_slice(),
-        3 => br#"{"access_token":"managed-mail-gmail-access-v3","refresh_token":"managed-mail-gmail-refresh-v3","expires_in":3600,"token_type":"Bearer","scope":"openid email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send"}"#.as_slice(),
+        2 => br#"{"access_token":"managed-mail-gmail-access-under-scoped","refresh_token":"managed-mail-gmail-refresh-under-scoped","expires_in":3600,"token_type":"Bearer","scope":"openid email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send"}"#.as_slice(),
+        4 => br#"{"access_token":"managed-mail-gmail-access-v3","refresh_token":"managed-mail-gmail-refresh-v3","expires_in":3600,"token_type":"Bearer","scope":"openid email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send"}"#.as_slice(),
         _ => br#"{"error":"unexpected_request"}"#.as_slice(),
     };
-    let status = if matches!(request_index, 0 | 1 | 3) {
+    let status = if matches!(request_index, 0 | 1 | 2 | 4) {
         "200 OK"
     } else {
         "400 Bad Request"

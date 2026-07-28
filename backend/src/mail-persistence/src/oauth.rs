@@ -1,3 +1,4 @@
+use hermes_mail_api::GmailOAuthAuthorityV1;
 use sqlx::Row;
 use zeroize::Zeroizing;
 
@@ -67,6 +68,14 @@ CREATE INDEX IF NOT EXISTS mail_gmail_oauth_operations_pending_idx
     WHERE state = 1 AND dispatched_at_unix_seconds IS NULL;
 "#;
 
+pub const MAIL_SCHEMA_V16: &str = r#"
+ALTER TABLE hermes_data.mail_gmail_oauth_attempts
+    ADD COLUMN IF NOT EXISTS authority SMALLINT NOT NULL DEFAULT 1
+        CHECK (authority IN (1, 2));
+ALTER TABLE hermes_data.mail_gmail_oauth_credential_bindings
+    ADD COLUMN IF NOT EXISTS permanent_delete_authorized BOOLEAN NOT NULL DEFAULT FALSE;
+"#;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GmailOAuthCredentialBindingV1 {
     pub access_token_record_id: [u8; 16],
@@ -75,6 +84,7 @@ pub struct GmailOAuthCredentialBindingV1 {
     pub refresh_credential_revision: u64,
     pub access_token_expires_at_unix_seconds: i64,
     pub scope_sha256: [u8; 32],
+    pub permanent_delete_authorized: bool,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -88,6 +98,7 @@ pub struct GmailOAuthAttemptStartV1 {
     pub settings_revision: u64,
     pub created_at_unix_seconds: i64,
     pub expires_at_unix_seconds: i64,
+    pub authority: GmailOAuthAuthorityV1,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -116,6 +127,7 @@ pub struct GmailOAuthQueuedOperationV1 {
     pub kind: GmailOAuthOperationKindV1,
     pub authorization_code: Option<Zeroizing<String>>,
     pub code_verifier: Option<Zeroizing<String>>,
+    pub authority: Option<GmailOAuthAuthorityV1>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -144,8 +156,9 @@ impl MailDurablePersistence {
         sqlx::query(
             "INSERT INTO hermes_data.mail_gmail_oauth_attempts \
              (setup_id, operation_id, connection_id, state_sha256, authorization_url, \
-              code_verifier, settings_revision, created_at_unix_seconds, expires_at_unix_seconds) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+              code_verifier, settings_revision, created_at_unix_seconds, expires_at_unix_seconds, \
+              authority) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) \
              ON CONFLICT (operation_id) DO NOTHING",
         )
         .bind(&attempt.setup_id)
@@ -160,6 +173,7 @@ impl MailDurablePersistence {
         )
         .bind(attempt.created_at_unix_seconds)
         .bind(attempt.expires_at_unix_seconds)
+        .bind(encode_authority(attempt.authority))
         .execute(&self.pool)
         .await
         .map_err(|_| MailDurablePersistenceError::Database)?;
@@ -167,6 +181,7 @@ impl MailDurablePersistence {
             &attempt.operation_id,
             &attempt.connection_id,
             attempt.settings_revision,
+            attempt.authority,
         )
         .await?
         .ok_or(MailDurablePersistenceError::InvalidRow)
@@ -353,7 +368,7 @@ impl MailDurablePersistence {
             .map_err(|_| MailDurablePersistenceError::Database)?;
         let row = sqlx::query(
             "SELECT operation.operation_id, operation.connection_id, operation.kind, \
-                    operation.authorization_code, attempt.code_verifier \
+                    operation.authorization_code, attempt.code_verifier, attempt.authority \
              FROM hermes_data.mail_gmail_oauth_operations operation \
              LEFT JOIN hermes_data.mail_gmail_oauth_attempts attempt \
                 ON attempt.setup_id = operation.setup_id \
@@ -383,9 +398,14 @@ impl MailDurablePersistence {
         let code_verifier: Option<String> = row
             .try_get("code_verifier")
             .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+        let authority = row
+            .try_get::<Option<i16>, _>("authority")
+            .map_err(|_| MailDurablePersistenceError::InvalidRow)?
+            .map(decode_authority)
+            .transpose()?;
         let kind = match (kind, authorization_code.as_ref(), code_verifier.as_ref()) {
-            (1, Some(_), Some(_)) => GmailOAuthOperationKindV1::Complete,
-            (2, None, None) => GmailOAuthOperationKindV1::Refresh,
+            (1, Some(_), Some(_)) if authority.is_some() => GmailOAuthOperationKindV1::Complete,
+            (2, None, None) if authority.is_none() => GmailOAuthOperationKindV1::Refresh,
             _ => return Err(MailDurablePersistenceError::InvalidRow),
         };
         let updated = sqlx::query(
@@ -413,6 +433,7 @@ impl MailDurablePersistence {
             kind,
             authorization_code: authorization_code.map(Zeroizing::new),
             code_verifier: code_verifier.map(Zeroizing::new),
+            authority,
         }))
     }
 
@@ -557,6 +578,7 @@ impl MailDurablePersistence {
             "SELECT access_token_record_id, access_token_revision, \
                     refresh_credential_record_id, refresh_credential_revision, \
                     access_token_expires_at_unix_seconds, scope_sha256 \
+                    , permanent_delete_authorized \
              FROM hermes_data.mail_gmail_oauth_credential_bindings WHERE connection_id = $1",
         )
         .bind(connection_id)
@@ -600,17 +622,20 @@ impl MailDurablePersistence {
         operation_id: &str,
         connection_id: &str,
         settings_revision: u64,
+        authority: GmailOAuthAuthorityV1,
     ) -> Result<Option<GmailOAuthStoredAttemptV1>, MailDurablePersistenceError> {
         let settings_revision = i64::try_from(settings_revision)
             .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
         sqlx::query(
-            "SELECT operation_id, setup_id, authorization_url, expires_at_unix_seconds \
+            "SELECT operation_id, setup_id, authorization_url, expires_at_unix_seconds, authority \
              FROM hermes_data.mail_gmail_oauth_attempts \
-             WHERE operation_id = $1 AND connection_id = $2 AND settings_revision = $3",
+             WHERE operation_id = $1 AND connection_id = $2 AND settings_revision = $3 \
+               AND authority = $4",
         )
         .bind(operation_id)
         .bind(connection_id)
         .bind(settings_revision)
+        .bind(encode_authority(authority))
         .fetch_optional(&self.pool)
         .await
         .map_err(|_| MailDurablePersistenceError::Database)?
@@ -746,8 +771,9 @@ async fn upsert_binding(
         "INSERT INTO hermes_data.mail_gmail_oauth_credential_bindings \
          (connection_id, access_token_record_id, access_token_revision, \
           refresh_credential_record_id, refresh_credential_revision, \
-          access_token_expires_at_unix_seconds, scope_sha256, updated_at_unix_seconds) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
+          access_token_expires_at_unix_seconds, scope_sha256, \
+          permanent_delete_authorized, updated_at_unix_seconds) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
          ON CONFLICT (connection_id) DO UPDATE SET \
           access_token_record_id = EXCLUDED.access_token_record_id, \
           access_token_revision = EXCLUDED.access_token_revision, \
@@ -755,6 +781,7 @@ async fn upsert_binding(
           refresh_credential_revision = EXCLUDED.refresh_credential_revision, \
           access_token_expires_at_unix_seconds = EXCLUDED.access_token_expires_at_unix_seconds, \
           scope_sha256 = EXCLUDED.scope_sha256, \
+          permanent_delete_authorized = EXCLUDED.permanent_delete_authorized, \
           updated_at_unix_seconds = EXCLUDED.updated_at_unix_seconds",
     )
     .bind(connection_id)
@@ -770,6 +797,7 @@ async fn upsert_binding(
     )
     .bind(binding.access_token_expires_at_unix_seconds)
     .bind(binding.scope_sha256.as_slice())
+    .bind(binding.permanent_delete_authorized)
     .bind(updated_at_unix_seconds)
     .execute(&mut **transaction)
     .await
@@ -816,9 +844,27 @@ fn decode_binding(
                 .as_slice()
                 .try_into()
                 .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+            permanent_delete_authorized: row
+                .try_get("permanent_delete_authorized")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
         };
     validate_binding(&binding)?;
     Ok(binding)
+}
+
+fn encode_authority(authority: GmailOAuthAuthorityV1) -> i16 {
+    match authority {
+        GmailOAuthAuthorityV1::Operational => 1,
+        GmailOAuthAuthorityV1::PermanentDelete => 2,
+    }
+}
+
+fn decode_authority(authority: i16) -> Result<GmailOAuthAuthorityV1, MailDurablePersistenceError> {
+    match authority {
+        1 => Ok(GmailOAuthAuthorityV1::Operational),
+        2 => Ok(GmailOAuthAuthorityV1::PermanentDelete),
+        _ => Err(MailDurablePersistenceError::InvalidRow),
+    }
 }
 
 fn decode_operation(

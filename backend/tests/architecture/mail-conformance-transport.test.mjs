@@ -190,8 +190,11 @@ test('Gmail OAuth is a Mail-owned durable workflow with exact Vault actions', as
   );
   assert.match(api, /GMAIL_OAUTH_AUTHORIZATION_HOST: &str = "accounts\.google\.com"/);
   assert.match(api, /GMAIL_OAUTH_TOKEN_HOST: &str = "oauth2\.googleapis\.com"/);
+  assert.match(proto, /enum GmailOAuthAuthorityV1[\s\S]*OPERATIONAL[\s\S]*PERMANENT_DELETE/);
   assert.match(adapter, /code_challenge_method", "S256"/);
-  assert.match(adapter, /GMAIL_OAUTH_SCOPES: \[&str; 4\]/);
+  assert.match(adapter, /GMAIL_OPERATIONAL_OAUTH_SCOPES: \[&str; 4\]/);
+  assert.match(adapter, /GMAIL_PERMANENT_DELETE_OAUTH_SCOPES: \[&str; 3\]/);
+  assert.match(adapter, /"https:\/\/mail\.google\.com\/"/);
   assert.doesNotMatch(
     adapter,
     /hermes_communications|hermes_mail_persistence|hermes_managed_vault_client/,

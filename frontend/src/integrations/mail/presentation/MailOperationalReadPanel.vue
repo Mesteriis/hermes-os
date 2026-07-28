@@ -4,11 +4,14 @@ import type { MailMessageFlagModel } from './mailMessageFlagModel'
 import MailMessageFlagActions from './MailMessageFlagActions.vue'
 import type { MailMessageLocationModel } from './mailMessageLocationModel'
 import MailMessageLocationActions from './MailMessageLocationActions.vue'
+import MailMessagePermanentDeleteActions from './MailMessagePermanentDeleteActions.vue'
+import type { MailMessagePermanentDeleteModel } from './mailMessagePermanentDeleteModel'
 import './mailOperationalReadPanel.css'
 
 defineProps<{
 	flagModel: MailMessageFlagModel
 	locationModel: MailMessageLocationModel
+	permanentDeleteModel: MailMessagePermanentDeleteModel
 	model: MailOperationalReadModel
 }>()
 
@@ -30,6 +33,9 @@ const emit = defineEmits<{
 	locationRestore: []
 	locationSelectTargetFolder: [folderId: string]
 	locationTrash: []
+	permanentDelete: []
+	permanentDeleteRefreshStatus: []
+	permanentDeleteSetConfirmed: [confirmed: boolean]
 }>()
 </script>
 
@@ -160,6 +166,12 @@ const emit = defineEmits<{
 				@restore="emit('locationRestore')"
 				@select-target-folder="emit('locationSelectTargetFolder', $event)"
 				@trash="emit('locationTrash')"
+			/>
+			<MailMessagePermanentDeleteActions
+				:model="permanentDeleteModel"
+				@delete="emit('permanentDelete')"
+				@refresh-status="emit('permanentDeleteRefreshStatus')"
+				@set-confirmed="emit('permanentDeleteSetConfirmed', $event)"
 			/>
 		</article>
 	</section>

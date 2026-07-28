@@ -29,6 +29,13 @@ pub struct GmailOAuthConfigurationV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GmailOAuthStartRequestV1 {
     pub operation_id: String,
+    pub authority: GmailOAuthAuthorityV1,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GmailOAuthAuthorityV1 {
+    Operational,
+    PermanentDelete,
 }
 
 #[derive(Clone, Eq, PartialEq)]

@@ -1,7 +1,7 @@
 pub const MAIL_CLIENT_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.mail.v1.bin"));
 pub const MAIL_CLIENT_CONTRACT_MAJOR: u32 = 1;
-pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 11;
+pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 12;
 pub const MAIL_MODULE_ID: &str = "hermes-mail-runtime";
 pub const MAIL_OWNER_ID: &str = "mail";
 
@@ -26,12 +26,14 @@ pub enum MailClientContractV1 {
     MessageFlagQuery,
     MessageLocationCommand,
     MessageLocationQuery,
+    MessagePermanentDeleteCommand,
+    MessagePermanentDeleteQuery,
     OperationalQuery,
     SyncHealthQuery,
 }
 
 impl MailClientContractV1 {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 23] = [
         Self::AccountCredentialBind,
         Self::AccountDelete,
         Self::AccountLifecycleQuery,
@@ -50,6 +52,8 @@ impl MailClientContractV1 {
         Self::MessageFlagQuery,
         Self::MessageLocationCommand,
         Self::MessageLocationQuery,
+        Self::MessagePermanentDeleteCommand,
+        Self::MessagePermanentDeleteQuery,
         Self::OperationalQuery,
         Self::Sync,
         Self::SyncHealthQuery,
@@ -77,6 +81,8 @@ impl MailClientContractV1 {
             Self::MessageFlagQuery => "mail.message-flags.query.v1",
             Self::MessageLocationCommand => "mail.message-location.command.v1",
             Self::MessageLocationQuery => "mail.message-location.query.v1",
+            Self::MessagePermanentDeleteCommand => "mail.message-permanent-delete.command.v1",
+            Self::MessagePermanentDeleteQuery => "mail.message-permanent-delete.query.v1",
             Self::OperationalQuery => "mail.operational.query.v1",
             Self::SyncHealthQuery => "mail.sync.health.query.v1",
         }
@@ -130,6 +136,12 @@ impl MailClientContractV1 {
             }
             Self::MessageLocationQuery => {
                 "/hermes.mail.message_location.v1.MailMessageLocationQueryService/GetOperationStatus"
+            }
+            Self::MessagePermanentDeleteCommand => {
+                "/hermes.mail.message_permanent_delete.v1.MailMessagePermanentDeleteCommandService/Mutate"
+            }
+            Self::MessagePermanentDeleteQuery => {
+                "/hermes.mail.message_permanent_delete.v1.MailMessagePermanentDeleteQueryService/GetOperationStatus"
             }
             Self::OperationalQuery => {
                 "/hermes.mail.operational.v1.MailOperationalQueryService/Query"

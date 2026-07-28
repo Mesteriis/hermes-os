@@ -4,10 +4,11 @@
 - Дата: 2026-07-28
 - Состояние реализации: реализовано полностью для
   `mail_provider_location_identity_v1` и отдельного
-  `mail_message_location_command_v1`. Permanent delete остаётся закрытым
-  отдельным gate.
+  `mail_message_location_command_v1`. Permanent delete остаётся отдельным gate
+  и реализован независимо по ADR-0312.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0212, ADR-0213, ADR-0220,
-  ADR-0222, ADR-0223, ADR-0278, ADR-0282, ADR-0298, ADR-0299, ADR-0307
+  ADR-0222, ADR-0223, ADR-0278, ADR-0282, ADR-0298, ADR-0299, ADR-0307,
+  ADR-0312
 
 ## Контекст
 

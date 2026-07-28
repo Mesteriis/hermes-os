@@ -120,6 +120,8 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_client_capability_v1(MailClientContractV1::MessageFlagQuery),
         mail_client_capability_v1(MailClientContractV1::MessageLocationCommand),
         mail_client_capability_v1(MailClientContractV1::MessageLocationQuery),
+        mail_client_capability_v1(MailClientContractV1::MessagePermanentDeleteCommand),
+        mail_client_capability_v1(MailClientContractV1::MessagePermanentDeleteQuery),
         mail_client_capability_v1(MailClientContractV1::GmailOAuthComplete),
         mail_client_capability_v1(MailClientContractV1::GmailOAuthQuery),
         mail_client_capability_v1(MailClientContractV1::GmailOAuthRefresh),
@@ -417,7 +419,7 @@ pub fn mail_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
     let settings_schema = mail_settings_schema_bytes_v2();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 5,
+        descriptor_revision: 6,
         module_id: MAIL_MODULE_ID.to_owned(),
         owner_id: MAIL_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Integration as i32,
@@ -492,6 +494,8 @@ mod tests {
                 MailClientContractV1::MessageFlagQuery.capability_id(),
                 MailClientContractV1::MessageLocationCommand.capability_id(),
                 MailClientContractV1::MessageLocationQuery.capability_id(),
+                MailClientContractV1::MessagePermanentDeleteCommand.capability_id(),
+                MailClientContractV1::MessagePermanentDeleteQuery.capability_id(),
                 MailClientContractV1::GmailOAuthComplete.capability_id(),
                 MailClientContractV1::GmailOAuthQuery.capability_id(),
                 MailClientContractV1::GmailOAuthRefresh.capability_id(),

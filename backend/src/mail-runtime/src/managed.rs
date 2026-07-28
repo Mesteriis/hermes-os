@@ -120,6 +120,14 @@ use hermes_mail_api::{
         MailMessageLocationStatusRequestV1,
     },
     message_location_wire::{decode_message_location_command, encode_message_location_command},
+    message_permanent_delete::{
+        MailMessagePermanentDeleteAcceptedV1, MailMessagePermanentDeleteCommandV1,
+        MailMessagePermanentDeleteOperationOutcomeV1, MailMessagePermanentDeleteOperationStatusV1,
+        MailMessagePermanentDeleteStatusRequestV1,
+    },
+    message_permanent_delete_wire::{
+        decode_message_permanent_delete_command, encode_message_permanent_delete_command,
+    },
     operational::{
         MailFolderKindV1, MailMessageFlagV1, MailOperationalQueryResponseV1,
         MailOperationalQueryV1, operational_query_connection_id,
@@ -154,10 +162,11 @@ use hermes_mail_persistence::{
     MailAttachmentDispositionV1 as PersistedAttachmentDispositionV1,
     MailAttachmentMaterializationV1, MailCredentialBindingV1, MailDeliveryAttemptOutcomeV1,
     MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailDurablePersistenceError,
-    MailImapMessageLocatorV1, MailMessageLocationReconciliationV1, MailOperationalFolderSnapshotV1,
+    MailImapMessageLocatorV1, MailMessageLocationReconciliationV1,
+    MailMessagePermanentDeletePersistenceErrorV1, MailOperationalFolderSnapshotV1,
     MailOperationalMaterializationV1, MailOperationalMessageSnapshotV1, MailQueuedDeliveryV1,
-    MailQueuedMessageFlagCommandV1, MailQueuedMessageLocationCommandV1, MailSyncRunStartOutcomeV1,
-    initial_imap_message_id,
+    MailQueuedMessageFlagCommandV1, MailQueuedMessageLocationCommandV1,
+    MailQueuedMessagePermanentDeleteCommandV1, MailSyncRunStartOutcomeV1, initial_imap_message_id,
 };
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
@@ -282,6 +291,16 @@ pub enum MailMessageLocationDispatchErrorV1 {
     Persistence,
     ProviderRejected,
     ProviderUnsupported,
+    ProviderOutcomeUnknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailMessagePermanentDeleteDispatchErrorV1 {
+    InvalidStoredCommand,
+    Persistence,
+    ProviderRejected,
+    ProviderUnsupported,
+    ReauthorizationRequired,
     ProviderOutcomeUnknown,
 }
 
@@ -1190,6 +1209,200 @@ impl MailAdmittedRuntime {
             .complete_message_location_success(&queued, &reconciliation, completed_at_unix_seconds)
             .await
             .map_err(|_| MailMessageLocationDispatchErrorV1::Persistence)?;
+        Ok(true)
+    }
+
+    pub async fn submit_message_permanent_delete_command(
+        &self,
+        command: &MailMessagePermanentDeleteCommandV1,
+        requested_at_unix_seconds: i64,
+    ) -> Result<MailMessagePermanentDeleteAcceptedV1, MailBootstrapError> {
+        if !self.provider_io_permitted() || command.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        match &self.account.inbound {
+            MailInboundTransportV1::Imap(_) if self.imap_password.is_none() => {
+                return Err(MailBootstrapError::Credential);
+            }
+            MailInboundTransportV1::Gmail(_)
+                if self
+                    .durable
+                    .gmail_oauth_credential_binding(&self.account.connection_id)
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?
+                    .is_none() =>
+            {
+                return Err(MailBootstrapError::Credential);
+            }
+            MailInboundTransportV1::Imap(_) | MailInboundTransportV1::Gmail(_) => {}
+        }
+        let canonical_command_bytes = encode_message_permanent_delete_command(command)
+            .map_err(|_| MailBootstrapError::Admission)?;
+        self.durable
+            .enqueue_message_permanent_delete_command(
+                command,
+                &canonical_command_bytes,
+                requested_at_unix_seconds,
+            )
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)
+    }
+
+    pub async fn message_permanent_delete_operation_status(
+        &self,
+        request: &MailMessagePermanentDeleteStatusRequestV1,
+    ) -> Result<Option<MailMessagePermanentDeleteOperationStatusV1>, MailBootstrapError> {
+        if request.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        self.durable
+            .message_permanent_delete_operation_status(request)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)
+    }
+
+    pub async fn execute_next_message_permanent_delete_command(
+        &mut self,
+        completed_at_unix_seconds: i64,
+    ) -> Result<bool, MailMessagePermanentDeleteDispatchErrorV1> {
+        if !self.provider_io_permitted() {
+            return Ok(false);
+        }
+        let Some(queued) = self
+            .durable
+            .next_message_permanent_delete_command(&self.account.connection_id)
+            .await
+            .map_err(|_| MailMessagePermanentDeleteDispatchErrorV1::Persistence)?
+        else {
+            return Ok(false);
+        };
+        let command = decode_message_permanent_delete_command(&queued.exact_command_bytes)
+            .map_err(|_| MailMessagePermanentDeleteDispatchErrorV1::InvalidStoredCommand)?;
+        if !queued_permanent_delete_matches_command(&queued, &command) {
+            return Err(MailMessagePermanentDeleteDispatchErrorV1::InvalidStoredCommand);
+        }
+        let target = self
+            .durable
+            .message_permanent_delete_target(&queued)
+            .await
+            .map_err(|error| match error {
+                MailMessagePermanentDeletePersistenceErrorV1::Database => {
+                    MailMessagePermanentDeleteDispatchErrorV1::Persistence
+                }
+                MailMessagePermanentDeletePersistenceErrorV1::InvalidInput
+                | MailMessagePermanentDeletePersistenceErrorV1::ConflictingOperation
+                | MailMessagePermanentDeletePersistenceErrorV1::MissingMessage
+                | MailMessagePermanentDeletePersistenceErrorV1::StaleProjection
+                | MailMessagePermanentDeletePersistenceErrorV1::NotInTrash
+                | MailMessagePermanentDeletePersistenceErrorV1::InvalidRow => {
+                    MailMessagePermanentDeleteDispatchErrorV1::ProviderRejected
+                }
+            })?;
+        let provider_result = match self.account.inbound.clone() {
+            MailInboundTransportV1::Imap(configuration) => {
+                let locator = target
+                    .imap_locator
+                    .ok_or(MailMessagePermanentDeleteDispatchErrorV1::ProviderRejected)?;
+                let password = self
+                    .imap_password
+                    .as_ref()
+                    .ok_or(MailMessagePermanentDeleteDispatchErrorV1::ProviderOutcomeUnknown)?;
+                let password = Zeroizing::new(password.to_vec());
+                let password = std::str::from_utf8(&password)
+                    .map_err(|_| MailMessagePermanentDeleteDispatchErrorV1::InvalidStoredCommand)?;
+                hermes_mail_imap::permanently_delete_message(
+                    ImapMessageLocationAccessV1 {
+                        host: &configuration.host,
+                        port: configuration.port,
+                        username: &configuration.username,
+                        password,
+                    },
+                    ImapMessageLocatorV1 {
+                        mailbox_id: &locator.mailbox_id,
+                        uid_validity: locator.uid_validity,
+                        uid: locator.uid,
+                    },
+                )
+                .map_err(|error| {
+                    if error.is_unsupported() {
+                        MailMessagePermanentDeleteDispatchErrorV1::ProviderUnsupported
+                    } else if error.is_definite_rejection() {
+                        MailMessagePermanentDeleteDispatchErrorV1::ProviderRejected
+                    } else {
+                        MailMessagePermanentDeleteDispatchErrorV1::ProviderOutcomeUnknown
+                    }
+                })
+            }
+            MailInboundTransportV1::Gmail(configuration) => {
+                let binding = self
+                    .durable
+                    .gmail_oauth_credential_binding(&self.account.connection_id)
+                    .await
+                    .map_err(|_| MailMessagePermanentDeleteDispatchErrorV1::Persistence)?
+                    .ok_or(MailMessagePermanentDeleteDispatchErrorV1::ReauthorizationRequired)?;
+                if !binding.permanent_delete_authorized {
+                    Err(MailMessagePermanentDeleteDispatchErrorV1::ReauthorizationRequired)
+                } else {
+                    let token =
+                        self.resolve_gmail_access_token()
+                            .await
+                            .map_err(|error| {
+                                match error {
+                            MailBootstrapError::Persistence => {
+                                MailMessagePermanentDeleteDispatchErrorV1::Persistence
+                            }
+                            MailBootstrapError::Credential => {
+                                MailMessagePermanentDeleteDispatchErrorV1::ProviderOutcomeUnknown
+                            }
+                            _ => {
+                                MailMessagePermanentDeleteDispatchErrorV1::InvalidStoredCommand
+                            }
+                        }
+                            })?;
+                    let token = std::str::from_utf8(&token).map_err(|_| {
+                        MailMessagePermanentDeleteDispatchErrorV1::InvalidStoredCommand
+                    })?;
+                    let client = gmail_api_client(&configuration)
+                        .map_err(|_| MailMessagePermanentDeleteDispatchErrorV1::ProviderRejected)?;
+                    client
+                        .permanently_delete_message(token, &target.provider_message_id)
+                        .await
+                        .map_err(map_gmail_permanent_delete_error)
+                }
+            }
+        };
+        if let Err(error) = provider_result {
+            let outcome = match error {
+                MailMessagePermanentDeleteDispatchErrorV1::ProviderRejected
+                | MailMessagePermanentDeleteDispatchErrorV1::InvalidStoredCommand => {
+                    MailMessagePermanentDeleteOperationOutcomeV1::Rejected
+                }
+                MailMessagePermanentDeleteDispatchErrorV1::ProviderUnsupported => {
+                    MailMessagePermanentDeleteOperationOutcomeV1::Unsupported
+                }
+                MailMessagePermanentDeleteDispatchErrorV1::ReauthorizationRequired => {
+                    MailMessagePermanentDeleteOperationOutcomeV1::ReauthorizationRequired
+                }
+                MailMessagePermanentDeleteDispatchErrorV1::ProviderOutcomeUnknown => {
+                    MailMessagePermanentDeleteOperationOutcomeV1::OutcomeUnknown
+                }
+                MailMessagePermanentDeleteDispatchErrorV1::Persistence => return Err(error),
+            };
+            self.durable
+                .complete_message_permanent_delete_failure(
+                    &queued.operation_id,
+                    &queued.connection_id,
+                    outcome,
+                    completed_at_unix_seconds,
+                )
+                .await
+                .map_err(|_| MailMessagePermanentDeleteDispatchErrorV1::Persistence)?;
+            return Err(error);
+        }
+        self.durable
+            .complete_message_permanent_delete_success(&queued, completed_at_unix_seconds)
+            .await
+            .map_err(|_| MailMessagePermanentDeleteDispatchErrorV1::Persistence)?;
         Ok(true)
     }
 
@@ -2867,6 +3080,16 @@ fn queued_location_matches_command(
         && queued.target_folder_id == command.target_folder_id
 }
 
+fn queued_permanent_delete_matches_command(
+    queued: &MailQueuedMessagePermanentDeleteCommandV1,
+    command: &MailMessagePermanentDeleteCommandV1,
+) -> bool {
+    queued.operation_id == command.operation_id
+        && queued.connection_id == command.connection_id
+        && queued.message_id == command.message_id
+        && queued.expected_projection_revision == command.expected_projection_revision
+}
+
 fn map_gmail_location_error(error: GmailAdapterErrorV1) -> MailMessageLocationDispatchErrorV1 {
     match error {
         GmailAdapterErrorV1::InvalidRequest | GmailAdapterErrorV1::ProviderStatus(400..=499) => {
@@ -2876,6 +3099,21 @@ fn map_gmail_location_error(error: GmailAdapterErrorV1) -> MailMessageLocationDi
         | GmailAdapterErrorV1::ProviderStatus(_)
         | GmailAdapterErrorV1::InvalidResponse => {
             MailMessageLocationDispatchErrorV1::ProviderOutcomeUnknown
+        }
+    }
+}
+
+fn map_gmail_permanent_delete_error(
+    error: GmailAdapterErrorV1,
+) -> MailMessagePermanentDeleteDispatchErrorV1 {
+    match error {
+        GmailAdapterErrorV1::InvalidRequest | GmailAdapterErrorV1::ProviderStatus(400..=499) => {
+            MailMessagePermanentDeleteDispatchErrorV1::ProviderRejected
+        }
+        GmailAdapterErrorV1::Transport
+        | GmailAdapterErrorV1::ProviderStatus(_)
+        | GmailAdapterErrorV1::InvalidResponse => {
+            MailMessagePermanentDeleteDispatchErrorV1::ProviderOutcomeUnknown
         }
     }
 }

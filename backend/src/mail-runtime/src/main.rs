@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_mail_runtime::managed::{
-    MailDeliveryDispatchErrorV1, MailMessageFlagDispatchErrorV1, MailMessageLocationDispatchErrorV1,
+    MailDeliveryDispatchErrorV1, MailMessageFlagDispatchErrorV1,
+    MailMessageLocationDispatchErrorV1, MailMessagePermanentDeleteDispatchErrorV1,
 };
 use hermes_mail_runtime::{
     MailRuntimeAdmission,
@@ -201,6 +202,31 @@ where
             Err(MailMessageLocationDispatchErrorV1::Persistence) => {
                 developer_diagnostic("developer_mail_message_location_persistence_failed");
                 return Err("Mail runtime message location persistence failed".to_owned());
+            }
+        }
+        match runtime.block_on(admitted.execute_next_message_permanent_delete_command(now)) {
+            Ok(_) => {}
+            Err(MailMessagePermanentDeleteDispatchErrorV1::ProviderRejected) => {
+                developer_diagnostic("developer_mail_message_permanent_delete_rejected");
+            }
+            Err(MailMessagePermanentDeleteDispatchErrorV1::ProviderUnsupported) => {
+                developer_diagnostic("developer_mail_message_permanent_delete_unsupported");
+            }
+            Err(MailMessagePermanentDeleteDispatchErrorV1::ReauthorizationRequired) => {
+                developer_diagnostic(
+                    "developer_mail_message_permanent_delete_reauthorization_required",
+                );
+            }
+            Err(MailMessagePermanentDeleteDispatchErrorV1::ProviderOutcomeUnknown) => {
+                developer_diagnostic("developer_mail_message_permanent_delete_outcome_unknown");
+            }
+            Err(MailMessagePermanentDeleteDispatchErrorV1::InvalidStoredCommand) => {
+                developer_diagnostic("developer_mail_message_permanent_delete_command_invalid");
+                return Err("Mail runtime permanent delete command is invalid".to_owned());
+            }
+            Err(MailMessagePermanentDeleteDispatchErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_message_permanent_delete_persistence_failed");
+                return Err("Mail runtime permanent delete persistence failed".to_owned());
             }
         }
         runtime

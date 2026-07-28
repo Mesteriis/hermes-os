@@ -143,7 +143,7 @@ test('Mail provider location identity is stable, private and live-conformant', a
   assert.doesNotMatch(runtime, /split_once\(['"]:/);
   assert.doesNotMatch(runtime, /select\(["']INBOX["']\)/i);
 
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V15/);
+  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V17/);
   assert.match(managedFlow, /assert_opaque_imap_message_id/);
   assert.match(managedFlow, /assert_mail_identity_survives_restart/);
   assert.match(managedFlow, /MailMessageFlagOperationOutcomeV1::Rejected/);

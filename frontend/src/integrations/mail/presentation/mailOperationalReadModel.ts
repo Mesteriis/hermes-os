@@ -70,6 +70,7 @@ export type MailMessageDetailCard = {
 	isRead: boolean
 	isStarred: boolean
 	isTrashed: boolean
+	projectionRevision: string
 }
 
 export function buildMailConnectionOptions(
@@ -145,6 +146,7 @@ export function buildMailMessageDetail(
 		isRead: message.flag.includes(MailMessageFlagV1.MAIL_MESSAGE_FLAG_READ),
 		isStarred: message.flag.includes(MailMessageFlagV1.MAIL_MESSAGE_FLAG_STARRED),
 		isTrashed: message.flag.includes(MailMessageFlagV1.MAIL_MESSAGE_FLAG_TRASHED),
+		projectionRevision: (message.projectionRevision ?? 0n).toString(),
 	}
 }
 

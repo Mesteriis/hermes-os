@@ -377,14 +377,14 @@
       "gate": "mail_message_permanent_delete_command_v1",
       "role": "integration",
       "owner": "mail",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["mail_provider_location_identity_v1"]
     },
     {
       "gate": "mail_operational_command_v1",
       "role": "integration",
       "owner": "mail",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "mail.delivery.v1",
         "mail_message_flags_command_v1",

@@ -7,9 +7,10 @@ use std::{
 
 use hermes_kernel_control_store::ModuleRegistrationState;
 use hermes_mail_api::{
-    GmailOAuthCompleteRequestV1, GmailOAuthOutcomeV1, GmailOAuthRefreshRequestV1,
-    GmailOAuthStartRequestV1, GmailOAuthStartedV1, GmailOAuthStatusRequestV1, MailClientRequestV1,
-    MailClientResponseV1, MailCredentialPurpose, client_contract::MailClientContractV1,
+    GmailOAuthAuthorityV1, GmailOAuthCompleteRequestV1, GmailOAuthOutcomeV1,
+    GmailOAuthRefreshRequestV1, GmailOAuthStartRequestV1, GmailOAuthStartedV1,
+    GmailOAuthStatusRequestV1, MailClientRequestV1, MailClientResponseV1, MailCredentialPurpose,
+    client_contract::MailClientContractV1,
 };
 use hermes_mail_persistence::{GmailOAuthCredentialBindingV1, MailDurablePersistence};
 use hermes_mail_runtime::admission::MAIL_CREDENTIAL_LEASE_TTL_SECONDS;
@@ -31,11 +32,16 @@ use super::*;
 const SETUP_OPERATION_ID: &str = "managed-mail-gmail-oauth-start-1";
 const COMPLETE_OPERATION_ID: &str = "managed-mail-gmail-oauth-complete-1";
 const REFRESH_OPERATION_ID: &str = "managed-mail-gmail-oauth-refresh-1";
+const MISSING_SCOPE_SETUP_OPERATION_ID: &str =
+    "managed-mail-gmail-oauth-start-permanent-delete-missing-scope";
+const MISSING_SCOPE_OPERATION_ID: &str = "managed-mail-gmail-oauth-permanent-delete-missing-scope";
 const HTTP_UNKNOWN_SETUP_OPERATION_ID: &str = "managed-mail-gmail-oauth-start-http-unknown";
 const HTTP_UNKNOWN_OPERATION_ID: &str = "managed-mail-gmail-oauth-http-unknown";
 const VAULT_UNKNOWN_SETUP_OPERATION_ID: &str = "managed-mail-gmail-oauth-start-vault-unknown";
 const VAULT_UNKNOWN_OPERATION_ID: &str = "managed-mail-gmail-oauth-vault-unknown";
 const AUTHORIZATION_CODE_V1: &str = "managed-mail-gmail-authorization-code-v1";
+const AUTHORIZATION_CODE_MISSING_SCOPE: &str =
+    "managed-mail-gmail-authorization-code-permanent-delete-missing-scope";
 const AUTHORIZATION_CODE_HTTP_UNKNOWN: &str = "managed-mail-gmail-authorization-code-http-unknown";
 const AUTHORIZATION_CODE_VAULT_UNKNOWN: &str =
     "managed-mail-gmail-authorization-code-vault-unknown";
@@ -266,6 +272,47 @@ fn managed_mail_gmail_oauth_rotates_credentials_once_and_fails_closed() {
         initial_binding.refresh_credential_record_id
     );
     assert_binding_shape(&rotated_binding, 2);
+
+    let missing_scope_started = start_oauth_with_authority(
+        &store,
+        &supervisor,
+        &mail,
+        700,
+        MISSING_SCOPE_SETUP_OPERATION_ID,
+        GmailOAuthAuthorityV1::PermanentDelete,
+    );
+    let missing_scope_authorization =
+        provider.permanent_delete_authorization_material(&missing_scope_started.authorization_url);
+    complete_oauth(
+        &store,
+        &supervisor,
+        &mail,
+        701,
+        MISSING_SCOPE_OPERATION_ID,
+        &missing_scope_started,
+        &missing_scope_authorization.state,
+        AUTHORIZATION_CODE_MISSING_SCOPE,
+    );
+    provider.wait_for_request_count(3);
+    provider.wait_for_response_count(3);
+    wait_for_oauth_outcome(
+        &store,
+        &supervisor,
+        &mail,
+        702,
+        MISSING_SCOPE_OPERATION_ID,
+        GmailOAuthOutcomeV1::Rejected,
+    );
+    provider.assert_authorization_code_exchange(
+        2,
+        AUTHORIZATION_CODE_MISSING_SCOPE,
+        &missing_scope_authorization.code_challenge,
+    );
+    assert_eq!(
+        current_binding(&runtime, &durable),
+        rotated_binding,
+        "an under-scoped permanent-delete consent must not rotate the credential binding"
+    );
     assert_stale_client_fences(&store, &supervisor, &mail);
     developer_test_stage("refresh_completed");
 
@@ -288,7 +335,7 @@ fn managed_mail_gmail_oauth_rotates_credentials_once_and_fails_closed() {
         &http_unknown_authorization.state,
         AUTHORIZATION_CODE_HTTP_UNKNOWN,
     );
-    provider.wait_for_request_count(3);
+    provider.wait_for_request_count(4);
     std::thread::sleep(Duration::from_secs(1));
     wait_for_oauth_outcome(
         &store,
@@ -299,14 +346,14 @@ fn managed_mail_gmail_oauth_rotates_credentials_once_and_fails_closed() {
         GmailOAuthOutcomeV1::OutcomeUnknown,
     );
     provider.assert_authorization_code_exchange(
-        2,
+        3,
         AUTHORIZATION_CODE_HTTP_UNKNOWN,
         &http_unknown_authorization.code_challenge,
     );
     std::thread::sleep(Duration::from_millis(1_200));
     assert_eq!(
         provider.request_count(),
-        3,
+        4,
         "ambiguous Gmail OAuth HTTP exchange was retried without a new command"
     );
     assert_eq!(current_binding(&runtime, &durable), rotated_binding);
@@ -334,8 +381,8 @@ fn managed_mail_gmail_oauth_rotates_credentials_once_and_fails_closed() {
         &vault_unknown_authorization.state,
         AUTHORIZATION_CODE_VAULT_UNKNOWN,
     );
-    provider.wait_for_request_count(4);
-    provider.wait_for_response_count(3);
+    provider.wait_for_request_count(5);
+    provider.wait_for_response_count(4);
     std::thread::sleep(Duration::from_secs(2));
     wait_for_oauth_outcome(
         &store,
@@ -346,14 +393,14 @@ fn managed_mail_gmail_oauth_rotates_credentials_once_and_fails_closed() {
         GmailOAuthOutcomeV1::OutcomeUnknown,
     );
     provider.assert_authorization_code_exchange(
-        3,
+        4,
         AUTHORIZATION_CODE_VAULT_UNKNOWN,
         &vault_unknown_authorization.code_challenge,
     );
     std::thread::sleep(Duration::from_millis(1_200));
     assert_eq!(
         provider.request_count(),
-        4,
+        5,
         "ambiguous Vault outcome caused a hidden Gmail OAuth retry"
     );
     assert_eq!(current_binding(&runtime, &durable), rotated_binding);
@@ -442,6 +489,24 @@ fn start_oauth(
     request_id: u64,
     operation_id: &str,
 ) -> GmailOAuthStartedV1 {
+    start_oauth_with_authority(
+        store,
+        supervisor,
+        mail,
+        request_id,
+        operation_id,
+        GmailOAuthAuthorityV1::Operational,
+    )
+}
+
+fn start_oauth_with_authority(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    operation_id: &str,
+    authority: GmailOAuthAuthorityV1,
+) -> GmailOAuthStartedV1 {
     let response = route_mail_client(
         store,
         supervisor,
@@ -450,6 +515,7 @@ fn start_oauth(
         request_id,
         &MailClientRequestV1::GmailOAuthStart(GmailOAuthStartRequestV1 {
             operation_id: operation_id.to_owned(),
+            authority,
         }),
     );
     match response {
@@ -555,6 +621,7 @@ fn assert_binding_shape(binding: &GmailOAuthCredentialBindingV1, revision: u64) 
     assert_eq!(binding.refresh_credential_revision, revision);
     assert!(binding.access_token_expires_at_unix_seconds > 0);
     assert!(binding.scope_sha256.iter().any(|byte| *byte != 0));
+    assert!(!binding.permanent_delete_authorized);
 }
 
 fn route_mail_client_once(
@@ -595,6 +662,7 @@ fn assert_stale_client_fences(
         20,
         &MailClientRequestV1::GmailOAuthStart(GmailOAuthStartRequestV1 {
             operation_id: "stale-mail-gmail-oauth".to_owned(),
+            authority: GmailOAuthAuthorityV1::Operational,
         }),
     )
     .expect("encode stale Gmail OAuth request");

@@ -4,8 +4,8 @@ use hermes_mail_api::client_contract::{
 };
 use hermes_mail_api::{
     MailClientRequestV1, MailClientResponseV1, account_lifecycle_wire, account_wire, client_wire,
-    composition_wire, message_flags_wire, message_location_wire, oauth_wire, operational_wire,
-    sync_health_wire,
+    composition_wire, message_flags_wire, message_location_wire, message_permanent_delete_wire,
+    oauth_wire, operational_wire, sync_health_wire,
 };
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
@@ -71,6 +71,12 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
             MailClientContractV1::MessageLocationCommand
         }
         MailClientRequestV1::MessageLocationStatus(_) => MailClientContractV1::MessageLocationQuery,
+        MailClientRequestV1::MessagePermanentDeleteCommand(_) => {
+            MailClientContractV1::MessagePermanentDeleteCommand
+        }
+        MailClientRequestV1::MessagePermanentDeleteStatus(_) => {
+            MailClientContractV1::MessagePermanentDeleteQuery
+        }
         MailClientRequestV1::OperationalQuery(_) => MailClientContractV1::OperationalQuery,
         MailClientRequestV1::SyncHealthQuery(_) => MailClientContractV1::SyncHealthQuery,
     }
@@ -132,6 +138,14 @@ fn encode_request_payload(request: &MailClientRequestV1) -> Result<Vec<u8>, Mail
         }
         MailClientRequestV1::MessageLocationStatus(value) => {
             message_location_wire::encode_message_location_status_request(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::MessagePermanentDeleteCommand(value) => {
+            message_permanent_delete_wire::encode_message_permanent_delete_command(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::MessagePermanentDeleteStatus(value) => {
+            message_permanent_delete_wire::encode_message_permanent_delete_status_request(value)
                 .map_err(|_| MailClientPortErrorV1::Protocol)
         }
         MailClientRequestV1::OperationalQuery(value) => {
@@ -217,6 +231,16 @@ fn decode_request_payload(
         MailClientContractV1::MessageLocationQuery => {
             message_location_wire::decode_message_location_status_request(bytes)
                 .map(MailClientRequestV1::MessageLocationStatus)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientContractV1::MessagePermanentDeleteCommand => {
+            message_permanent_delete_wire::decode_message_permanent_delete_command(bytes)
+                .map(MailClientRequestV1::MessagePermanentDeleteCommand)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientContractV1::MessagePermanentDeleteQuery => {
+            message_permanent_delete_wire::decode_message_permanent_delete_status_request(bytes)
+                .map(MailClientRequestV1::MessagePermanentDeleteStatus)
                 .map_err(|_| MailClientPortErrorV1::Protocol)
         }
         MailClientContractV1::OperationalQuery => operational_wire::decode_operational_query(bytes)
@@ -340,7 +364,11 @@ pub async fn handle_client_request(
             .map(MailClientResponseV1::DeliveryStatus)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
         MailClientRequestV1::GmailOAuthStart(value) => runtime
-            .start_gmail_oauth(&value.operation_id, requested_at_unix_seconds)
+            .start_gmail_oauth(
+                &value.operation_id,
+                value.authority,
+                requested_at_unix_seconds,
+            )
             .await
             .map(MailClientResponseV1::GmailOAuthStarted)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
@@ -388,6 +416,16 @@ pub async fn handle_client_request(
             .message_location_operation_status(&value)
             .await
             .map(MailClientResponseV1::MessageLocationStatus)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::MessagePermanentDeleteCommand(value) => runtime
+            .submit_message_permanent_delete_command(&value, requested_at_unix_seconds)
+            .await
+            .map(MailClientResponseV1::MessagePermanentDeleteAccepted)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::MessagePermanentDeleteStatus(value) => runtime
+            .message_permanent_delete_operation_status(&value)
+            .await
+            .map(MailClientResponseV1::MessagePermanentDeleteStatus)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
         MailClientRequestV1::OperationalQuery(value) => runtime
             .operational_query(&value)
@@ -483,6 +521,18 @@ fn encode_module_response(
             MailClientResponseV1::MessageLocationStatus(status),
         ) => message_location_wire::encode_message_location_status_response(status.as_ref())
             .map_err(|_| MailClientPortErrorV1::Protocol)?,
+        (
+            MailClientContractV1::MessagePermanentDeleteCommand,
+            MailClientResponseV1::MessagePermanentDeleteAccepted(accepted),
+        ) => message_permanent_delete_wire::encode_message_permanent_delete_accepted(accepted)
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
+        (
+            MailClientContractV1::MessagePermanentDeleteQuery,
+            MailClientResponseV1::MessagePermanentDeleteStatus(status),
+        ) => message_permanent_delete_wire::encode_message_permanent_delete_status_response(
+            status.as_ref(),
+        )
+        .map_err(|_| MailClientPortErrorV1::Protocol)?,
         (
             MailClientContractV1::OperationalQuery,
             MailClientResponseV1::OperationalQuery(response),
@@ -585,6 +635,18 @@ pub fn decode_module_response(
             )
             .map(MailClientResponseV1::MessageLocationStatus)
         }
+        MailClientContractV1::MessagePermanentDeleteCommand => {
+            message_permanent_delete_wire::decode_message_permanent_delete_accepted(
+                &envelope.response_payload,
+            )
+            .map(MailClientResponseV1::MessagePermanentDeleteAccepted)
+        }
+        MailClientContractV1::MessagePermanentDeleteQuery => {
+            message_permanent_delete_wire::decode_message_permanent_delete_status_response(
+                &envelope.response_payload,
+            )
+            .map(MailClientResponseV1::MessagePermanentDeleteStatus)
+        }
         MailClientContractV1::OperationalQuery => {
             operational_wire::decode_operational_query_response(&envelope.response_payload)
                 .map(MailClientResponseV1::OperationalQuery)
@@ -618,6 +680,11 @@ mod tests {
             MailMessageLocationAcceptedV1, MailMessageLocationCommandV1, MailMessageLocationKindV1,
             MailMessageLocationOperationOutcomeV1, MailMessageLocationOperationStatusV1,
             MailMessageLocationStatusRequestV1,
+        },
+        message_permanent_delete::{
+            MailMessagePermanentDeleteAcceptedV1, MailMessagePermanentDeleteCommandV1,
+            MailMessagePermanentDeleteConfirmationV1, MailMessagePermanentDeleteOperationOutcomeV1,
+            MailMessagePermanentDeleteOperationStatusV1, MailMessagePermanentDeleteStatusRequestV1,
         },
         operational::{
             MailOperationalPageV1, MailOperationalQueryResponseV1, MailOperationalQueryV1,
@@ -701,6 +768,25 @@ mod tests {
             operation_id: "location-operation".to_owned(),
             connection_id: "mail-account".to_owned(),
         })
+    }
+
+    fn message_permanent_delete_command() -> MailClientRequestV1 {
+        MailClientRequestV1::MessagePermanentDeleteCommand(MailMessagePermanentDeleteCommandV1 {
+            operation_id: "permanent-delete-operation".to_owned(),
+            connection_id: "mail-account".to_owned(),
+            message_id: "stable-message".to_owned(),
+            expected_projection_revision: 3,
+            confirmation: MailMessagePermanentDeleteConfirmationV1::Confirmed,
+        })
+    }
+
+    fn message_permanent_delete_query() -> MailClientRequestV1 {
+        MailClientRequestV1::MessagePermanentDeleteStatus(
+            MailMessagePermanentDeleteStatusRequestV1 {
+                operation_id: "permanent-delete-operation".to_owned(),
+                connection_id: "mail-account".to_owned(),
+            },
+        )
     }
 
     #[test]
@@ -924,6 +1010,60 @@ mod tests {
         assert_eq!(
             decode_module_response(query_contract, &bytes),
             Ok((12, response))
+        );
+        assert_ne!(command_contract, query_contract);
+    }
+
+    #[test]
+    fn message_permanent_delete_command_and_status_use_independent_exact_contracts() {
+        let command = message_permanent_delete_command();
+        let encoded = encode_module_request(13, &command).expect("permanent delete command");
+        let (_, command_contract, decoded) =
+            decode_module_request(&encoded).expect("decode permanent delete command");
+        assert_eq!(
+            command_contract,
+            MailClientContractV1::MessagePermanentDeleteCommand
+        );
+        assert_eq!(decoded, command);
+        let response = MailClientResponseV1::MessagePermanentDeleteAccepted(
+            MailMessagePermanentDeleteAcceptedV1 {
+                operation_id: "permanent-delete-operation".to_owned(),
+            },
+        );
+        let bytes = encode_module_response(13, command_contract, &response)
+            .expect("permanent delete accepted response");
+        assert_eq!(
+            decode_module_response(command_contract, &bytes),
+            Ok((13, response))
+        );
+
+        let query = message_permanent_delete_query();
+        let encoded = encode_module_request(14, &query).expect("permanent delete query");
+        let (_, query_contract, decoded) =
+            decode_module_request(&encoded).expect("decode permanent delete query");
+        assert_eq!(
+            query_contract,
+            MailClientContractV1::MessagePermanentDeleteQuery
+        );
+        assert_eq!(decoded, query);
+        let response = MailClientResponseV1::MessagePermanentDeleteStatus(Some(
+            MailMessagePermanentDeleteOperationStatusV1 {
+                operation_id: "permanent-delete-operation".to_owned(),
+                connection_id: "mail-account".to_owned(),
+                message_id: "stable-message".to_owned(),
+                expected_projection_revision: 3,
+                confirmation: MailMessagePermanentDeleteConfirmationV1::Confirmed,
+                outcome: MailMessagePermanentDeleteOperationOutcomeV1::Succeeded,
+                requested_at_unix_seconds: 100,
+                completed_at_unix_seconds: Some(101),
+                deletion_projection_revision: Some(4),
+            },
+        ));
+        let bytes = encode_module_response(14, query_contract, &response)
+            .expect("permanent delete status response");
+        assert_eq!(
+            decode_module_response(query_contract, &bytes),
+            Ok((14, response))
         );
         assert_ne!(command_contract, query_contract);
     }

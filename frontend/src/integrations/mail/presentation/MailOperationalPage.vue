@@ -11,6 +11,7 @@ import MailDeliveryPanel from './MailDeliveryPanel.vue'
 import MailOperationalReadPanel from './MailOperationalReadPanel.vue'
 import type { MailMessageFlagModel } from './mailMessageFlagModel'
 import type { MailMessageLocationModel } from './mailMessageLocationModel'
+import type { MailMessagePermanentDeleteModel } from './mailMessagePermanentDeleteModel'
 import type { MailOperationalReadModel } from './mailOperationalReadModel'
 import MailSyncHealthPanel from './MailSyncHealthPanel.vue'
 import type { MailSyncHealthModel } from './mailSyncHealthModel'
@@ -23,6 +24,7 @@ defineProps<{
 	deliveryModel: MailDeliveryModel
 	flagModel: MailMessageFlagModel
 	locationModel: MailMessageLocationModel
+	permanentDeleteModel: MailMessagePermanentDeleteModel
 	readModel: MailOperationalReadModel
 	syncHealthModel: MailSyncHealthModel
 	syncModel: MailSyncModel
@@ -58,6 +60,9 @@ const emit = defineEmits<{
 	locationRestore: []
 	locationSelectTargetFolder: [folderId: string]
 	locationTrash: []
+	permanentDelete: []
+	permanentDeleteRefreshStatus: []
+	permanentDeleteSetConfirmed: [confirmed: boolean]
 	loadMoreFolders: []
 	loadMoreMessages: []
 	loadMoreThreads: []
@@ -96,6 +101,7 @@ const emit = defineEmits<{
 		<MailOperationalReadPanel
 			:flag-model="flagModel"
 			:location-model="locationModel"
+			:permanent-delete-model="permanentDeleteModel"
 			:model="readModel"
 			@flag-refresh-status="emit('flagRefreshStatus')"
 			@flag-set-read="emit('flagSetRead', $event)"
@@ -106,6 +112,9 @@ const emit = defineEmits<{
 			@location-restore="emit('locationRestore')"
 			@location-select-target-folder="emit('locationSelectTargetFolder', $event)"
 			@location-trash="emit('locationTrash')"
+			@permanent-delete="emit('permanentDelete')"
+			@permanent-delete-refresh-status="emit('permanentDeleteRefreshStatus')"
+			@permanent-delete-set-confirmed="emit('permanentDeleteSetConfirmed', $event)"
 			@load-more-folders="emit('loadMoreFolders')"
 			@load-more-messages="emit('loadMoreMessages')"
 			@load-more-threads="emit('loadMoreThreads')"

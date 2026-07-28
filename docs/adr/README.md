@@ -120,6 +120,7 @@ policy через ссылки из новых документов.
 - [ADR-0309: Loopback browser Owner Vault provisioning host](ADR-0309-loopback-browser-owner-vault-provisioning-host.md)
 - [ADR-0310: Telegram user-only TDLib QR account identity](ADR-0310-telegram-user-only-tdlib-qr-account-identity.md)
 - [ADR-0311: Storage successor bundle step lineage](ADR-0311-storage-successor-bundle-step-lineage.md)
+- [ADR-0312: Mail permanent delete confirmation and provider authority](ADR-0312-mail-permanent-delete-confirmation-and-provider-authority.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -438,3 +439,8 @@ ADR-0311 устраняет повторный DDL при cumulative Storage bun
 exact predecessor step наследуется только при совпадающем digest и получает
 immutable acceptance row текущей revision, а digest drift и downgrade
 отклоняются до mutation.
+ADR-0312 отделяет необратимое Mail удаление от reversible location: отдельные
+command/query grants требуют current Trash projection, stale-revision fence и
+явное confirmation; IMAP использует только UIDPLUS `UID EXPUNGE`, а Gmail
+требует отдельного broad-scope consent без автоматического повышения OAuth
+authority. Kernel/Core Gateway остаются owner-neutral и переносят opaque bytes.

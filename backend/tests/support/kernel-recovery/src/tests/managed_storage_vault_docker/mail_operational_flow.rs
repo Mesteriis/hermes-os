@@ -13,6 +13,10 @@ use hermes_mail_api::{
         MailMessageLocationCommandV1, MailMessageLocationKindV1,
         MailMessageLocationOperationOutcomeV1, MailMessageLocationStatusRequestV1,
     },
+    message_permanent_delete::{
+        MailMessagePermanentDeleteCommandV1, MailMessagePermanentDeleteConfirmationV1,
+        MailMessagePermanentDeleteOperationOutcomeV1, MailMessagePermanentDeleteStatusRequestV1,
+    },
     operational::{
         MailFolderKindV1, MailMessageFlagV1, MailOperationalQueryResponseV1, MailOperationalQueryV1,
     },
@@ -476,6 +480,103 @@ pub(super) fn assert_mail_message_location_survives_restart_and_fails_closed(
     assert_message_folders(store, supervisor, mail, 417, message_id, &["Trash"]);
 }
 
+pub(super) fn assert_mail_message_permanent_delete_is_fenced_and_replay_safe(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    imap: &MailImapFixture,
+    message_id: &str,
+) {
+    let projection_revision =
+        assert_message_folders(store, supervisor, mail, 418, message_id, &["Trash"]);
+    assert!(
+        projection_revision > 1,
+        "managed stale-revision proof needs an earlier positive projection revision"
+    );
+    let provider_deletions_before = imap.message_permanent_deletions();
+
+    let stale = MailMessagePermanentDeleteCommandV1 {
+        operation_id: "managed-mail-message-permanent-delete-stale-1".to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        message_id: message_id.to_owned(),
+        expected_projection_revision: projection_revision - 1,
+        confirmation: MailMessagePermanentDeleteConfirmationV1::Confirmed,
+    };
+    assert_message_permanent_delete_command_rejected(store, supervisor, mail, 419, stale);
+    assert_eq!(
+        imap.message_permanent_deletions(),
+        provider_deletions_before
+    );
+
+    imap.set_move_supported(false);
+    let unsupported = MailMessagePermanentDeleteCommandV1 {
+        operation_id: "managed-mail-message-permanent-delete-unsupported-1".to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        message_id: message_id.to_owned(),
+        expected_projection_revision: projection_revision,
+        confirmation: MailMessagePermanentDeleteConfirmationV1::Confirmed,
+    };
+    route_message_permanent_delete_command(store, supervisor, mail, 471, unsupported.clone());
+    let unsupported_status = wait_for_message_permanent_delete_status(
+        store,
+        supervisor,
+        mail,
+        472,
+        &unsupported.operation_id,
+    );
+    assert_eq!(
+        unsupported_status.outcome,
+        MailMessagePermanentDeleteOperationOutcomeV1::Unsupported
+    );
+    assert_eq!(
+        imap.message_permanent_deletions(),
+        provider_deletions_before
+    );
+
+    imap.set_move_supported(true);
+    let command = MailMessagePermanentDeleteCommandV1 {
+        operation_id: "managed-mail-message-permanent-delete-1".to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        message_id: message_id.to_owned(),
+        expected_projection_revision: projection_revision,
+        confirmation: MailMessagePermanentDeleteConfirmationV1::Confirmed,
+    };
+    let accepted =
+        route_message_permanent_delete_command(store, supervisor, mail, 523, command.clone());
+    assert_eq!(accepted, command.operation_id);
+    let status = wait_for_message_permanent_delete_status(
+        store,
+        supervisor,
+        mail,
+        524,
+        &command.operation_id,
+    );
+    assert_eq!(
+        status.outcome,
+        MailMessagePermanentDeleteOperationOutcomeV1::Succeeded
+    );
+    assert!(
+        status
+            .deletion_projection_revision
+            .is_some_and(|revision| revision > projection_revision)
+    );
+    assert_eq!(
+        imap.message_permanent_deletions(),
+        provider_deletions_before + 1,
+        "managed permanent delete must reach exact UID EXPUNGE once"
+    );
+    assert_message_absent_from_trash(store, supervisor, mail, 575, message_id);
+
+    let replayed = route_message_permanent_delete_command(store, supervisor, mail, 576, command);
+    assert_eq!(replayed, accepted);
+    std::thread::sleep(Duration::from_millis(250));
+    assert_eq!(
+        imap.message_permanent_deletions(),
+        provider_deletions_before + 1,
+        "an exact replayed permanent delete must not reach IMAP twice"
+    );
+}
+
 fn route_message_location_command(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
@@ -566,6 +667,124 @@ fn query_message_location_status(
     response
 }
 
+fn route_message_permanent_delete_command(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    command: MailMessagePermanentDeleteCommandV1,
+) -> String {
+    let request = encode_module_request(
+        request_id,
+        &MailClientRequestV1::MessagePermanentDeleteCommand(command),
+    )
+    .expect("encode Mail message permanent delete command");
+    let bytes = route(
+        store,
+        supervisor,
+        mail,
+        MailClientContractV1::MessagePermanentDeleteCommand,
+        &request,
+    )
+    .expect("route Mail message permanent delete command");
+    let (actual_request_id, response) =
+        decode_module_response(MailClientContractV1::MessagePermanentDeleteCommand, &bytes)
+            .expect("decode Mail message permanent delete command response");
+    assert_eq!(actual_request_id, request_id);
+    let MailClientResponseV1::MessagePermanentDeleteAccepted(response) = response else {
+        panic!("Mail message permanent delete command returned the wrong response")
+    };
+    response.operation_id
+}
+
+fn assert_message_permanent_delete_command_rejected(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    command: MailMessagePermanentDeleteCommandV1,
+) {
+    let request = encode_module_request(
+        request_id,
+        &MailClientRequestV1::MessagePermanentDeleteCommand(command),
+    )
+    .expect("encode rejected Mail message permanent delete command");
+    let bytes = route(
+        store,
+        supervisor,
+        mail,
+        MailClientContractV1::MessagePermanentDeleteCommand,
+        &request,
+    )
+    .expect("route rejected Mail message permanent delete command");
+    assert!(matches!(
+        decode_module_response(MailClientContractV1::MessagePermanentDeleteCommand, &bytes),
+        Err(MailClientPortErrorV1::Runtime)
+    ));
+}
+
+fn wait_for_message_permanent_delete_status(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    operation_id: &str,
+) -> hermes_mail_api::message_permanent_delete::MailMessagePermanentDeleteOperationStatusV1 {
+    (0..50)
+        .find_map(|attempt| {
+            let status = query_message_permanent_delete_status(
+                store,
+                supervisor,
+                mail,
+                request_id + attempt,
+                operation_id,
+            );
+            match status.outcome {
+                MailMessagePermanentDeleteOperationOutcomeV1::Pending => {
+                    std::thread::sleep(Duration::from_millis(100));
+                    None
+                }
+                _ => Some(status),
+            }
+        })
+        .expect("Mail message permanent delete operation reaches a terminal status")
+}
+
+fn query_message_permanent_delete_status(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    operation_id: &str,
+) -> hermes_mail_api::message_permanent_delete::MailMessagePermanentDeleteOperationStatusV1 {
+    let request = encode_module_request(
+        request_id,
+        &MailClientRequestV1::MessagePermanentDeleteStatus(
+            MailMessagePermanentDeleteStatusRequestV1 {
+                operation_id: operation_id.to_owned(),
+                connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            },
+        ),
+    )
+    .expect("encode Mail message permanent delete status query");
+    let bytes = route(
+        store,
+        supervisor,
+        mail,
+        MailClientContractV1::MessagePermanentDeleteQuery,
+        &request,
+    )
+    .expect("route Mail message permanent delete status query");
+    let (actual_request_id, response) =
+        decode_module_response(MailClientContractV1::MessagePermanentDeleteQuery, &bytes)
+            .expect("decode Mail message permanent delete status response");
+    assert_eq!(actual_request_id, request_id);
+    let MailClientResponseV1::MessagePermanentDeleteStatus(Some(response)) = response else {
+        panic!("Mail message permanent delete status returned the wrong response")
+    };
+    response
+}
+
 fn assert_message_folders(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
@@ -573,7 +792,7 @@ fn assert_message_folders(
     request_id: u64,
     message_id: &str,
     expected: &[&str],
-) {
+) -> u64 {
     let detail = query_operational(
         store,
         supervisor,
@@ -594,6 +813,39 @@ fn assert_message_folders(
             .iter()
             .map(|value| (*value).to_owned())
             .collect::<Vec<_>>()
+    );
+    detail.summary.projection_revision
+}
+
+fn assert_message_absent_from_trash(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    message_id: &str,
+) {
+    let response = query_operational(
+        store,
+        supervisor,
+        mail,
+        request_id,
+        MailOperationalQueryV1::ListMessages {
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            folder_id: Some("Trash".to_owned()),
+            provider_thread_id: None,
+            cursor: None,
+            limit: 20,
+        },
+    );
+    let MailOperationalQueryResponseV1::Messages(messages) = response else {
+        panic!("Mail Trash query returned the wrong response after permanent delete")
+    };
+    assert!(
+        messages
+            .items
+            .iter()
+            .all(|message| message.message_id != message_id),
+        "permanent delete must remove the provider operational projection"
     );
 }
 

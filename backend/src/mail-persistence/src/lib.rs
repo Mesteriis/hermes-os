@@ -9,6 +9,7 @@ mod durable;
 mod lifecycle;
 mod message_flags;
 mod message_location;
+mod message_permanent_delete;
 mod oauth;
 mod operational;
 mod provider_location;
@@ -40,10 +41,14 @@ pub use message_location::{
     MAIL_SCHEMA_V15, MailMessageLocationPersistenceErrorV1, MailMessageLocationReconciliationV1,
     MailQueuedMessageLocationCommandV1,
 };
+pub use message_permanent_delete::{
+    MAIL_SCHEMA_V17, MailMessagePermanentDeletePersistenceErrorV1,
+    MailMessagePermanentDeleteTargetV1, MailQueuedMessagePermanentDeleteCommandV1,
+};
 pub use oauth::{
     GmailOAuthAttemptStartV1, GmailOAuthCredentialBindingV1, GmailOAuthEnqueueOutcomeV1,
     GmailOAuthOperationKindV1, GmailOAuthOperationOutcomeV1, GmailOAuthOperationV1,
-    GmailOAuthQueuedOperationV1, GmailOAuthStoredAttemptV1, MAIL_SCHEMA_V4,
+    GmailOAuthQueuedOperationV1, GmailOAuthStoredAttemptV1, MAIL_SCHEMA_V4, MAIL_SCHEMA_V16,
 };
 pub use operational::{
     MAIL_SCHEMA_V9, MailOperationalFolderSnapshotV1, MailOperationalMaterializationV1,
@@ -60,7 +65,8 @@ pub use schema::{
     MAIL_STORAGE_BUNDLE_REVISION_V9, MAIL_STORAGE_BUNDLE_REVISION_V10,
     MAIL_STORAGE_BUNDLE_REVISION_V11, MAIL_STORAGE_BUNDLE_REVISION_V12,
     MAIL_STORAGE_BUNDLE_REVISION_V13, MAIL_STORAGE_BUNDLE_REVISION_V14,
-    MAIL_STORAGE_BUNDLE_REVISION_V15, mail_storage_bundle_v1,
+    MAIL_STORAGE_BUNDLE_REVISION_V15, MAIL_STORAGE_BUNDLE_REVISION_V16,
+    MAIL_STORAGE_BUNDLE_REVISION_V17, mail_storage_bundle_v1,
 };
 pub use sync_health::{MAIL_SCHEMA_V10, MailSyncRunStartOutcomeV1};
 

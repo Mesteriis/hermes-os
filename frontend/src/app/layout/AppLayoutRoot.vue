@@ -81,6 +81,12 @@ const mailMessageLocationCommandAvailable = computed(() =>
 const mailMessageLocationQueryAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.message-location.query.v1'),
 )
+const mailMessagePermanentDeleteCommandAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.message-permanent-delete.command.v1'),
+)
+const mailMessagePermanentDeleteQueryAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.message-permanent-delete.query.v1'),
+)
 const mailSyncHealthAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.sync.health.query.v1'),
 )
@@ -153,6 +159,8 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					:can-query="mailOperationalQueryAvailable"
 					:can-query-flag-status="mailMessageFlagQueryAvailable"
 					:can-query-location-status="mailMessageLocationQueryAvailable"
+					:can-permanently-delete="mailMessagePermanentDeleteCommandAvailable"
+					:can-query-permanent-delete-status="mailMessagePermanentDeleteQueryAvailable"
 					:can-sync="mailSyncAvailable"
 					:can-sync-health="mailSyncHealthAvailable"
 					:modules="bootstrap.modules"

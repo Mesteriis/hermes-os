@@ -126,7 +126,7 @@ test('Mail message flags stay provider-owned, durable, typed and separately admi
     dependsOn: ['mail_operational_read_v1', 'mail_gmail_oauth_v1'],
   });
   assert.equal(location.state, 'implemented');
-  assert.equal(closure.state, 'planned');
+  assert.equal(closure.state, 'implemented');
   assert.deepEqual(closure.dependsOn, [
     'mail.delivery.v1',
     'mail_message_flags_command_v1',
@@ -154,7 +154,7 @@ test('Mail message flags stay provider-owned, durable, typed and separately admi
   assert.match(wire, /encode_message_flag_command/);
   assert.match(wire, /decode_message_flag_status_response/);
   assert.match(wire, /encode_message_flag_command\(&command\)\? != bytes/);
-  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 11/);
+  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 12/);
   assert.match(contract, /mail\.message-flags\.command\.v1/);
   assert.match(contract, /mail\.message-flags\.query\.v1/);
 
@@ -185,7 +185,7 @@ test('Mail message flags stay provider-owned, durable, typed and separately admi
   assert.match(clientPort, /MailClientRequestV1::MessageFlagStatus/);
   assert.match(admission, /MailClientContractV1::MessageFlagCommand/);
   assert.match(admission, /MailClientContractV1::MessageFlagQuery/);
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V15/);
+  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V17/);
   assert.match(managedSetup, /MailClientContractV1::MessageFlagCommand/);
   assert.match(managedFlow, /managed_mail_message_flags_reconcile_provider_and_projection/);
   assert.match(managedFlow, /assert_mail_message_flags/);

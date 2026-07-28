@@ -110,10 +110,10 @@ test('Mail message location commands are reversible, provider-owned and live-con
     state: 'implemented',
     dependsOn: ['mail_provider_location_identity_v1'],
   });
-  assert.equal(permanentDelete.state, 'planned');
+  assert.equal(permanentDelete.state, 'implemented');
   assert.match(adr, /Gate `mail_message_location_command_v1`/);
   assert.match(adr, /Mail storage bundle V15/);
-  assert.match(adr, /Permanent delete remains closed|Permanent delete остаётся закрытым/);
+  assert.match(adr, /Permanent delete остаётся отдельным gate/);
 
   for (const kind of ['ARCHIVE', 'TRASH', 'RESTORE', 'MOVE']) {
     assert.match(proto, new RegExp(`MAIL_MESSAGE_LOCATION_KIND_${kind}`));
@@ -151,7 +151,7 @@ test('Mail message location commands are reversible, provider-owned and live-con
   assert.match(runtime, /hermes_mail_imap::move_message/);
   assert.match(runtime, /client\.restore_message/);
   assert.doesNotMatch(runtime, /hermes_communications_runtime|communications-runtime/);
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V15/);
+  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V17/);
   assert.match(managedSetup, /MailClientContractV1::MessageLocationCommand/);
   assert.match(managedSetup, /MailClientContractV1::MessageLocationQuery/);
   assert.match(managedFlow, /assert_mail_message_archive/);
