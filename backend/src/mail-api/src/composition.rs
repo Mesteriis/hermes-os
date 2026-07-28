@@ -646,7 +646,7 @@ fn validate_variable_values(
     let mut unique = BTreeSet::new();
     for value in values {
         if !valid_variable_name(&value.name)
-            || value.value.as_bytes().len() > MAX_COMPOSITION_VARIABLE_VALUE_BYTES
+            || value.value.len() > MAX_COMPOSITION_VARIABLE_VALUE_BYTES
             || value.value.chars().any(char::is_control)
             || !unique.insert(&value.name)
         {
@@ -671,7 +671,7 @@ fn validate_optional_id(value: Option<&str>) -> Result<(), MailCompositionContra
 
 fn validate_id(value: &str) -> Result<(), MailCompositionContractErrorV1> {
     if value.is_empty()
-        || value.as_bytes().len() > MAX_COMPOSITION_ID_BYTES
+        || value.len() > MAX_COMPOSITION_ID_BYTES
         || value.chars().any(char::is_control)
     {
         return Err(MailCompositionContractErrorV1::InvalidId);
@@ -682,7 +682,7 @@ fn validate_id(value: &str) -> Result<(), MailCompositionContractErrorV1> {
 fn validate_cursor(value: Option<&str>) -> Result<(), MailCompositionContractErrorV1> {
     if value.is_some_and(|value| {
         value.is_empty()
-            || value.as_bytes().len() > MAX_COMPOSITION_CURSOR_BYTES
+            || value.len() > MAX_COMPOSITION_CURSOR_BYTES
             || value.chars().any(char::is_control)
     }) {
         return Err(MailCompositionContractErrorV1::InvalidCursor);
@@ -696,7 +696,7 @@ fn validate_text(
     allow_empty: bool,
 ) -> Result<(), MailCompositionContractErrorV1> {
     if (!allow_empty && value.trim().is_empty())
-        || value.as_bytes().len() > max_bytes
+        || value.len() > max_bytes
         || value
             .chars()
             .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
@@ -708,7 +708,7 @@ fn validate_text(
 
 fn valid_variable_name(value: &str) -> bool {
     !value.is_empty()
-        && value.as_bytes().len() <= MAX_COMPOSITION_VARIABLE_NAME_BYTES
+        && value.len() <= MAX_COMPOSITION_VARIABLE_NAME_BYTES
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))

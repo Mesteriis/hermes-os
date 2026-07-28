@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
 };
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -12,6 +12,7 @@ use std::time::Duration;
 const FIXTURE_USERNAME: &str = "owner@example.test";
 const FIXTURE_PASSWORD: &str = "managed-mail-imap-password";
 const FIXTURE_UID: u32 = 42;
+const FIXTURE_UID_VALIDITY: u32 = 1;
 const FIXTURE_MESSAGE: &[u8] = concat!(
     "From: source@example.test\r\n",
     "To: owner@example.test\r\n",
@@ -37,6 +38,7 @@ pub(super) struct MailImapFixture {
     shutdown: Arc<AtomicBool>,
     accepted_connections: Arc<AtomicUsize>,
     message_flag_mutations: Arc<AtomicUsize>,
+    uid_validity: Arc<AtomicU32>,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -53,9 +55,11 @@ impl MailImapFixture {
         let shutdown = Arc::new(AtomicBool::new(false));
         let accepted_connections = Arc::new(AtomicUsize::new(0));
         let message_flag_mutations = Arc::new(AtomicUsize::new(0));
+        let uid_validity = Arc::new(AtomicU32::new(FIXTURE_UID_VALIDITY));
         let worker_shutdown = Arc::clone(&shutdown);
         let worker_connections = Arc::clone(&accepted_connections);
         let worker_message_flag_mutations = Arc::clone(&message_flag_mutations);
+        let worker_uid_validity = Arc::clone(&uid_validity);
         let worker = thread::spawn(move || {
             while !worker_shutdown.load(Ordering::Acquire) {
                 match listener.accept() {
@@ -64,7 +68,11 @@ impl MailImapFixture {
                             break;
                         }
                         worker_connections.fetch_add(1, Ordering::AcqRel);
-                        serve_connection(stream, Arc::clone(&worker_message_flag_mutations));
+                        serve_connection(
+                            stream,
+                            Arc::clone(&worker_message_flag_mutations),
+                            Arc::clone(&worker_uid_validity),
+                        );
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(5));
@@ -78,6 +86,7 @@ impl MailImapFixture {
             shutdown,
             accepted_connections,
             message_flag_mutations,
+            uid_validity,
             worker: Some(worker),
         }
     }
@@ -92,6 +101,11 @@ impl MailImapFixture {
 
     pub(super) fn message_flag_mutations(&self) -> usize {
         self.message_flag_mutations.load(Ordering::Acquire)
+    }
+
+    pub(super) fn set_uid_validity(&self, uid_validity: u32) {
+        assert!(uid_validity > 0, "fixture UIDVALIDITY must be positive");
+        self.uid_validity.store(uid_validity, Ordering::Release);
     }
 }
 
@@ -108,7 +122,11 @@ impl Drop for MailImapFixture {
     }
 }
 
-fn serve_connection(mut stream: TcpStream, message_flag_mutations: Arc<AtomicUsize>) {
+fn serve_connection(
+    mut stream: TcpStream,
+    message_flag_mutations: Arc<AtomicUsize>,
+    uid_validity: Arc<AtomicU32>,
+) {
     stream
         .set_nonblocking(false)
         .and_then(|_| stream.set_read_timeout(Some(Duration::from_secs(15))))
@@ -134,17 +152,28 @@ fn serve_connection(mut stream: TcpStream, message_flag_mutations: Arc<AtomicUsi
                 "* CAPABILITY IMAP4rev1\r\n{tag} OK CAPABILITY completed\r\n"
             )
             .expect("write IMAP CAPABILITY response");
-        } else if upper.contains(" EXAMINE ") {
+        } else if upper.contains(" LIST ") {
             write!(
                 stream,
-                "* FLAGS (\\Seen)\r\n* 1 EXISTS\r\n* OK [UIDVALIDITY 1] valid\r\n\
+                "* LIST (\\HasNoChildren \\Inbox) \"/\" \"INBOX\"\r\n\
+                 * LIST (\\HasNoChildren \\Archive) \"/\" \"Archive\"\r\n\
+                 * LIST (\\HasNoChildren \\Trash) \"/\" \"Trash\"\r\n\
+                 {tag} OK LIST completed\r\n"
+            )
+            .expect("write IMAP LIST response");
+        } else if upper.contains(" EXAMINE ") {
+            let current_uid_validity = uid_validity.load(Ordering::Acquire);
+            write!(
+                stream,
+                "* FLAGS (\\Seen)\r\n* 1 EXISTS\r\n* OK [UIDVALIDITY {current_uid_validity}] valid\r\n\
                  {tag} OK [READ-ONLY] EXAMINE completed\r\n"
             )
             .expect("write IMAP EXAMINE response");
         } else if upper.contains(" SELECT ") {
+            let current_uid_validity = uid_validity.load(Ordering::Acquire);
             write!(
                 stream,
-                "* FLAGS (\\Seen \\Flagged)\r\n* 1 EXISTS\r\n* OK [UIDVALIDITY 1] valid\r\n\
+                "* FLAGS (\\Seen \\Flagged)\r\n* 1 EXISTS\r\n* OK [UIDVALIDITY {current_uid_validity}] valid\r\n\
                  {tag} OK [READ-WRITE] SELECT completed\r\n"
             )
             .expect("write IMAP SELECT response");

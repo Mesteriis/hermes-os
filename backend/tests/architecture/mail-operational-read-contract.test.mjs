@@ -149,7 +149,7 @@ test('Mail operational read contract is typed, bounded and admitted with fronten
   assert.match(wire, /encode_operational_query/);
   assert.match(wire, /decode_operational_query_response/);
   assert.match(wire, /encode_operational_query_response\(&response\)\? != bytes/);
-  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 9/);
+  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 10/);
   assert.match(contract, /mail\.operational\.query\.v1/);
   assert.match(
     contract,
@@ -182,7 +182,7 @@ test('Mail operational read contract is typed, bounded and admitted with fronten
   assert.match(clientPort, /operational_wire::encode_operational_query/);
   assert.match(clientPort, /operational_wire::decode_operational_query_response/);
   assert.match(admission, /MailClientContractV1::OperationalQuery/);
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V12/);
+  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V14/);
   assert.match(
     managedSetup,
     /MailClientContractV1::OperationalQuery[\s\S]*MailClientContractV1::Sync/,

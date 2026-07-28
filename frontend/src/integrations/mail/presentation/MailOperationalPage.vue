@@ -57,7 +57,7 @@ const emit = defineEmits<{
 	refreshStatus: []
 	selectConnection: [connectionId: string]
 	selectFolder: [folderId: string]
-	selectMessage: [providerMessageId: string]
+	selectMessage: [messageId: string]
 	selectThread: [providerThreadId: string]
 	sync: []
 	syncHealthLoadMore: []

@@ -50,7 +50,7 @@ const messageFlags = useMailMessageFlags({
 		if (!detail || !connectionId) return null
 		return {
 			connectionId,
-			providerMessageId: detail.id,
+			messageId: detail.id,
 			isRead: detail.isRead,
 			isStarred: detail.isStarred,
 		}

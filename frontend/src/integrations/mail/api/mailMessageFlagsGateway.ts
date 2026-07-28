@@ -15,7 +15,7 @@ const textEncoder = new TextEncoder()
 export type MailMessageFlagMutationInput = {
 	operationId: string
 	connectionId: string
-	providerMessageId: string
+	messageId: string
 	kind: 'read' | 'starred'
 	targetValue: boolean
 }
@@ -27,7 +27,7 @@ export async function mutateMailMessageFlag(
 		create(MailMessageFlagCommandV1Schema, {
 			operationId: identifier('operation ID', input.operationId),
 			connectionId: identifier('connection ID', input.connectionId),
-			providerMessageId: identifier('provider message ID', input.providerMessageId),
+			messageId: identifier('provider message ID', input.messageId),
 			kind: input.kind === 'read'
 				? MailMessageFlagKindV1.MAIL_MESSAGE_FLAG_KIND_READ
 				: MailMessageFlagKindV1.MAIL_MESSAGE_FLAG_KIND_STARRED,

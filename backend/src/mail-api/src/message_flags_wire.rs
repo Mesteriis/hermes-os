@@ -19,7 +19,7 @@ pub fn encode_message_flag_command(
     Ok(wire::MailMessageFlagCommandV1 {
         operation_id: command.operation_id.clone(),
         connection_id: command.connection_id.clone(),
-        provider_message_id: command.provider_message_id.clone(),
+        message_id: command.message_id.clone(),
         kind: flag_kind_to_wire(command.kind),
         target_value: command.target_value,
     }
@@ -34,7 +34,7 @@ pub fn decode_message_flag_command(
     let command = MailMessageFlagCommandV1 {
         operation_id: value.operation_id,
         connection_id: value.connection_id,
-        provider_message_id: value.provider_message_id,
+        message_id: value.message_id,
         kind: flag_kind_from_wire(value.kind)?,
         target_value: value.target_value,
     };
@@ -127,7 +127,7 @@ fn status_to_wire(
     Ok(wire::MailMessageFlagOperationStatusV1 {
         operation_id: status.operation_id.clone(),
         connection_id: status.connection_id.clone(),
-        provider_message_id: status.provider_message_id.clone(),
+        message_id: status.message_id.clone(),
         kind: flag_kind_to_wire(status.kind),
         target_value: status.target_value,
         outcome: outcome_to_wire(status.outcome),
@@ -143,7 +143,7 @@ fn status_from_wire(
     let status = MailMessageFlagOperationStatusV1 {
         operation_id: value.operation_id,
         connection_id: value.connection_id,
-        provider_message_id: value.provider_message_id,
+        message_id: value.message_id,
         kind: flag_kind_from_wire(value.kind)?,
         target_value: value.target_value,
         outcome: outcome_from_wire(value.outcome)?,
@@ -227,7 +227,7 @@ mod tests {
         MailMessageFlagCommandV1 {
             operation_id: "flag-operation-1".to_owned(),
             connection_id: "mail-account-1".to_owned(),
-            provider_message_id: "provider-message-1".to_owned(),
+            message_id: "provider-message-1".to_owned(),
             kind: MailMessageFlagKindV1::Read,
             target_value: true,
         }
@@ -245,7 +245,7 @@ mod tests {
         let status = MailMessageFlagOperationStatusV1 {
             operation_id: command.operation_id,
             connection_id: command.connection_id,
-            provider_message_id: command.provider_message_id,
+            message_id: command.message_id,
             kind: command.kind,
             target_value: command.target_value,
             outcome: MailMessageFlagOperationOutcomeV1::Succeeded,
@@ -266,7 +266,7 @@ mod tests {
         let mut wire = wire::MailMessageFlagCommandV1 {
             operation_id: "flag-operation-1".to_owned(),
             connection_id: "mail-account-1".to_owned(),
-            provider_message_id: "provider-message-1".to_owned(),
+            message_id: "provider-message-1".to_owned(),
             kind: 999,
             target_value: true,
         }

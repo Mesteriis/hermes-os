@@ -54,10 +54,10 @@ pub fn encode_operational_query(
         }),
         MailOperationalQueryV1::GetMessage {
             connection_id,
-            provider_message_id,
+            message_id,
         } => Query::GetMessage(wire::GetMailMessageQueryV1 {
             connection_id: connection_id.clone(),
-            provider_message_id: provider_message_id.clone(),
+            message_id: message_id.clone(),
         }),
     };
     Ok(wire::MailOperationalQueryV1 { query: Some(query) }.encode_to_vec())
@@ -92,7 +92,7 @@ pub fn decode_operational_query(
         },
         Query::GetMessage(value) => MailOperationalQueryV1::GetMessage {
             connection_id: value.connection_id,
-            provider_message_id: value.provider_message_id,
+            message_id: value.message_id,
         },
     };
     validate_operational_query(&query).map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
@@ -239,7 +239,7 @@ fn thread_from_wire(thread: wire::MailThreadV1) -> MailThreadV1 {
 fn message_to_wire(message: &MailMessageSummaryV1) -> wire::MailMessageSummaryV1 {
     wire::MailMessageSummaryV1 {
         connection_id: message.connection_id.clone(),
-        provider_message_id: message.provider_message_id.clone(),
+        message_id: message.message_id.clone(),
         provider_thread_id: message.provider_thread_id.clone(),
         folder_id: message.folder_ids.clone(),
         subject: message.subject.clone(),
@@ -269,7 +269,7 @@ fn message_from_wire(
         .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
     Ok(MailMessageSummaryV1 {
         connection_id: message.connection_id,
-        provider_message_id: message.provider_message_id,
+        message_id: message.message_id,
         provider_thread_id: message.provider_thread_id,
         folder_ids: message.folder_id,
         subject: message.subject,
@@ -352,7 +352,7 @@ mod tests {
     fn message() -> MailMessageSummaryV1 {
         MailMessageSummaryV1 {
             connection_id: "mail-account".to_owned(),
-            provider_message_id: "message-1".to_owned(),
+            message_id: "message-1".to_owned(),
             provider_thread_id: "thread-1".to_owned(),
             folder_ids: vec!["INBOX".to_owned()],
             subject: Some("Subject".to_owned()),
@@ -446,7 +446,7 @@ mod tests {
 
         let mut noncanonical = encode_operational_query(&MailOperationalQueryV1::GetMessage {
             connection_id: "mail-account".to_owned(),
-            provider_message_id: "message-1".to_owned(),
+            message_id: "message-1".to_owned(),
         })
         .expect("query");
         noncanonical.extend_from_slice(&[0x98, 0x06, 0x01]);

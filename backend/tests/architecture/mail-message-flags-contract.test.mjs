@@ -154,7 +154,7 @@ test('Mail message flags stay provider-owned, durable, typed and separately admi
   assert.match(wire, /encode_message_flag_command/);
   assert.match(wire, /decode_message_flag_status_response/);
   assert.match(wire, /encode_message_flag_command\(&command\)\? != bytes/);
-  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 9/);
+  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 10/);
   assert.match(contract, /mail\.message-flags\.command\.v1/);
   assert.match(contract, /mail\.message-flags\.query\.v1/);
 
@@ -172,7 +172,7 @@ test('Mail message flags stay provider-owned, durable, typed and separately admi
   assert.match(gmail, /set_message_flag/);
   assert.match(gmail, /UNREAD/);
   assert.match(gmail, /STARRED/);
-  assert.match(imap, /set_inbox_message_flag/);
+  assert.match(imap, /set_message_flag/);
   assert.match(imap, /UID STORE/);
   assert.match(imap, /\\Seen/);
   assert.match(imap, /\\Flagged/);
@@ -185,7 +185,7 @@ test('Mail message flags stay provider-owned, durable, typed and separately admi
   assert.match(clientPort, /MailClientRequestV1::MessageFlagStatus/);
   assert.match(admission, /MailClientContractV1::MessageFlagCommand/);
   assert.match(admission, /MailClientContractV1::MessageFlagQuery/);
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V12/);
+  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V14/);
   assert.match(managedSetup, /MailClientContractV1::MessageFlagCommand/);
   assert.match(managedFlow, /managed_mail_message_flags_reconcile_provider_and_projection/);
   assert.match(managedFlow, /assert_mail_message_flags/);

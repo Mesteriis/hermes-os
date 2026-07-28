@@ -615,7 +615,7 @@ mod tests {
         MailClientRequestV1::MessageFlagCommand(MailMessageFlagCommandV1 {
             operation_id: "flag-operation".to_owned(),
             connection_id: "mail-account".to_owned(),
-            provider_message_id: "provider-message".to_owned(),
+            message_id: "provider-message".to_owned(),
             kind: MailMessageFlagKindV1::Read,
             target_value: true,
         })
@@ -786,7 +786,7 @@ mod tests {
             MailClientResponseV1::MessageFlagStatus(Some(MailMessageFlagOperationStatusV1 {
                 operation_id: "flag-operation".to_owned(),
                 connection_id: "mail-account".to_owned(),
-                provider_message_id: "provider-message".to_owned(),
+                message_id: "provider-message".to_owned(),
                 kind: MailMessageFlagKindV1::Read,
                 target_value: true,
                 outcome: MailMessageFlagOperationOutcomeV1::Succeeded,

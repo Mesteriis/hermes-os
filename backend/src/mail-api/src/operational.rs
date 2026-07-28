@@ -32,7 +32,7 @@ pub enum MailOperationalQueryV1 {
     },
     GetMessage {
         connection_id: String,
-        provider_message_id: String,
+        message_id: String,
     },
 }
 
@@ -83,7 +83,7 @@ pub enum MailMessageFlagV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailMessageSummaryV1 {
     pub connection_id: String,
-    pub provider_message_id: String,
+    pub message_id: String,
     pub provider_thread_id: String,
     pub folder_ids: Vec<String>,
     pub subject: Option<String>,
@@ -162,10 +162,7 @@ pub fn validate_operational_query(
             validate_optional_id(provider_thread_id.as_deref())?;
             validate_page(cursor.as_deref(), *limit)
         }
-        MailOperationalQueryV1::GetMessage {
-            provider_message_id,
-            ..
-        } => validate_id(provider_message_id),
+        MailOperationalQueryV1::GetMessage { message_id, .. } => validate_id(message_id),
     }
 }
 
@@ -173,7 +170,7 @@ pub fn validate_operational_message(
     message: &MailMessageSummaryV1,
 ) -> Result<(), MailOperationalContractErrorV1> {
     validate_id(&message.connection_id)?;
-    validate_id(&message.provider_message_id)?;
+    validate_id(&message.message_id)?;
     validate_id(&message.provider_thread_id)?;
     if message.folder_ids.is_empty()
         || message.folder_ids.len() > MAX_OPERATIONAL_FOLDERS_PER_MESSAGE
@@ -343,7 +340,7 @@ mod tests {
         assert_eq!(
             validate_operational_query(&MailOperationalQueryV1::GetMessage {
                 connection_id: "mail-account".into(),
-                provider_message_id: "bad\nmessage".into(),
+                message_id: "bad\nmessage".into(),
             }),
             Err(MailOperationalContractErrorV1::InvalidId)
         );
@@ -353,7 +350,7 @@ mod tests {
     fn operational_messages_are_bounded_and_have_one_nonzero_anchor() {
         let message = MailMessageSummaryV1 {
             connection_id: "mail-account".into(),
-            provider_message_id: "message-1".into(),
+            message_id: "message-1".into(),
             provider_thread_id: "thread-1".into(),
             folder_ids: vec!["INBOX".into()],
             subject: Some("Subject".into()),

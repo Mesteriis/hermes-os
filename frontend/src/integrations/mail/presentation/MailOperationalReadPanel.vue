@@ -16,7 +16,7 @@ const emit = defineEmits<{
 	refresh: []
 	selectConnection: [connectionId: string]
 	selectFolder: [folderId: string]
-	selectMessage: [providerMessageId: string]
+	selectMessage: [messageId: string]
 	selectThread: [providerThreadId: string]
 	flagRefreshStatus: []
 	flagSetRead: [targetValue: boolean]

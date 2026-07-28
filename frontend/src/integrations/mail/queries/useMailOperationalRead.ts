@@ -126,12 +126,12 @@ export function useMailOperationalRead(input: {
 		}
 	}
 
-	async function selectMessage(providerMessageId: string): Promise<void> {
-		if (!messages.value.some((message) => message.providerMessageId === providerMessageId)) return
+	async function selectMessage(messageId: string): Promise<void> {
+		if (!messages.value.some((message) => message.messageId === messageId)) return
 		const token = ++generation
 		begin('Loading Mail message detail…')
 		try {
-			await loadMessage(providerMessageId, token)
+			await loadMessage(messageId, token)
 			if (current(token)) completeReady()
 		} catch (error) {
 			fail(error, token, 'Mail message detail is unavailable.')
@@ -188,7 +188,7 @@ export function useMailOperationalRead(input: {
 			messages.value = appendUnique(
 				messages.value,
 				page.item,
-				(message) => message.providerMessageId,
+				(message) => message.messageId,
 			)
 			messageCursor.value = page.nextCursor ?? ''
 		}, 'Mail messages could not be extended.')
@@ -241,15 +241,15 @@ export function useMailOperationalRead(input: {
 			completeEmpty('No operational Mail messages are available in this selection.')
 			return
 		}
-		await loadMessage(initialMessage.providerMessageId, token)
+		await loadMessage(initialMessage.messageId, token)
 		if (current(token)) completeReady()
 	}
 
-	async function loadMessage(providerMessageId: string, token: number): Promise<void> {
-		selectedMessageId.value = providerMessageId
+	async function loadMessage(messageId: string, token: number): Promise<void> {
+		selectedMessageId.value = messageId
 		const response = await getMailOperationalMessage({
 			connectionId: selectedConnectionId.value,
-			providerMessageId,
+			messageId,
 		})
 		if (!current(token)) return
 		detail.value = response.summary

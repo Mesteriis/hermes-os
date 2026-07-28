@@ -10,6 +10,7 @@ mod lifecycle;
 mod message_flags;
 mod oauth;
 mod operational;
+mod provider_location;
 mod schema;
 mod sync_health;
 
@@ -43,13 +44,17 @@ pub use operational::{
     MAIL_SCHEMA_V9, MailOperationalFolderSnapshotV1, MailOperationalMaterializationV1,
     MailOperationalMessageSnapshotV1,
 };
+pub use provider_location::{
+    MAIL_SCHEMA_V13, MAIL_SCHEMA_V14, MailImapMessageLocatorV1, initial_imap_message_id,
+};
 pub use schema::{
     MAIL_STORAGE_BUNDLE_REVISION_V1, MAIL_STORAGE_BUNDLE_REVISION_V2,
     MAIL_STORAGE_BUNDLE_REVISION_V3, MAIL_STORAGE_BUNDLE_REVISION_V4,
     MAIL_STORAGE_BUNDLE_REVISION_V5, MAIL_STORAGE_BUNDLE_REVISION_V6,
     MAIL_STORAGE_BUNDLE_REVISION_V7, MAIL_STORAGE_BUNDLE_REVISION_V8,
     MAIL_STORAGE_BUNDLE_REVISION_V9, MAIL_STORAGE_BUNDLE_REVISION_V10,
-    MAIL_STORAGE_BUNDLE_REVISION_V11, MAIL_STORAGE_BUNDLE_REVISION_V12, mail_storage_bundle_v1,
+    MAIL_STORAGE_BUNDLE_REVISION_V11, MAIL_STORAGE_BUNDLE_REVISION_V12,
+    MAIL_STORAGE_BUNDLE_REVISION_V13, MAIL_STORAGE_BUNDLE_REVISION_V14, mail_storage_bundle_v1,
 };
 pub use sync_health::{MAIL_SCHEMA_V10, MailSyncRunStartOutcomeV1};
 

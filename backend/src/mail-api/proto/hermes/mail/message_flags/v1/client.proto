@@ -11,7 +11,7 @@ enum MailMessageFlagKindV1 {
 message MailMessageFlagCommandV1 {
   string operation_id = 1;
   string connection_id = 2;
-  string provider_message_id = 3;
+  string message_id = 3;
   MailMessageFlagKindV1 kind = 4;
   bool target_value = 5;
 }
@@ -36,7 +36,7 @@ enum MailMessageFlagOperationOutcomeV1 {
 message MailMessageFlagOperationStatusV1 {
   string operation_id = 1;
   string connection_id = 2;
-  string provider_message_id = 3;
+  string message_id = 3;
   MailMessageFlagKindV1 kind = 4;
   bool target_value = 5;
   MailMessageFlagOperationOutcomeV1 outcome = 6;

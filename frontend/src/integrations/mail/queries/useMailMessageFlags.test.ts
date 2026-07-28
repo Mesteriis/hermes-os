@@ -24,14 +24,14 @@ describe('Mail message flag controller', () => {
 			.mockResolvedValueOnce({
 				operationId: 'flag-operation',
 				connectionId: 'mail-account',
-				providerMessageId: 'provider-message',
+				messageId: 'provider-message',
 				outcome: MailMessageFlagOperationOutcomeV1.MAIL_MESSAGE_FLAG_OPERATION_OUTCOME_PENDING,
 				requestedAtUnixSeconds: 100n,
 			} as never)
 			.mockResolvedValueOnce({
 				operationId: 'flag-operation',
 				connectionId: 'mail-account',
-				providerMessageId: 'provider-message',
+				messageId: 'provider-message',
 				outcome: MailMessageFlagOperationOutcomeV1.MAIL_MESSAGE_FLAG_OPERATION_OUTCOME_SUCCEEDED,
 				requestedAtUnixSeconds: 100n,
 				completedAtUnixSeconds: 101n,
@@ -42,7 +42,7 @@ describe('Mail message flag controller', () => {
 			canQueryStatus: () => true,
 			selection: () => ({
 				connectionId: 'mail-account',
-				providerMessageId: 'provider-message',
+				messageId: 'provider-message',
 				isRead: false,
 				isStarred: false,
 			}),
@@ -53,7 +53,7 @@ describe('Mail message flag controller', () => {
 
 		expect(mutateMailMessageFlag).toHaveBeenCalledWith(expect.objectContaining({
 			connectionId: 'mail-account',
-			providerMessageId: 'provider-message',
+			messageId: 'provider-message',
 			kind: 'read',
 			targetValue: true,
 		}))
@@ -73,7 +73,7 @@ describe('Mail message flag controller', () => {
 			canQueryStatus: () => false,
 			selection: () => ({
 				connectionId: 'mail-account',
-				providerMessageId: 'provider-message',
+				messageId: 'provider-message',
 				isRead: false,
 				isStarred: false,
 			}),

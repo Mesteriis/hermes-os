@@ -16,7 +16,7 @@ import type {
 
 export type MailMessageFlagSelection = {
 	connectionId: string
-	providerMessageId: string
+	messageId: string
 	isRead: boolean
 	isStarred: boolean
 }
@@ -74,7 +74,7 @@ export function useMailMessageFlags(input: {
 			const acceptedOperationId = await mutateMailMessageFlag({
 				operationId: nextOperationId,
 				connectionId: selection.connectionId,
-				providerMessageId: selection.providerMessageId,
+				messageId: selection.messageId,
 				kind,
 				targetValue,
 			})

@@ -45,7 +45,7 @@ describe('Mail operational read controller', () => {
 		} as never)
 		vi.mocked(listMailOperationalMessages).mockResolvedValue({
 			item: [{
-				providerMessageId: 'message-1',
+				messageId: 'message-1',
 				providerThreadId: 'thread-1',
 				folderId: ['inbox'],
 				subject: 'Clean room',
@@ -55,7 +55,7 @@ describe('Mail operational read controller', () => {
 		} as never)
 		vi.mocked(getMailOperationalMessage).mockResolvedValue({
 			summary: {
-				providerMessageId: 'message-1',
+				messageId: 'message-1',
 				providerThreadId: 'thread-1',
 				folderId: ['inbox'],
 				subject: 'Clean room',
@@ -88,7 +88,7 @@ describe('Mail operational read controller', () => {
 		})
 		expect(getMailOperationalMessage).toHaveBeenCalledWith({
 			connectionId: 'primary',
-			providerMessageId: 'message-1',
+			messageId: 'message-1',
 		})
 		expect(controller.model.value).toMatchObject({
 			status: 'ready',

@@ -111,12 +111,12 @@ export function buildMailMessageRows(
 	selectedMessageId: string,
 ): readonly MailMessageRow[] {
 	return messages.map((message) => ({
-		id: message.providerMessageId,
+		id: message.messageId,
 		subject: message.subject || '(No subject)',
 		sender: message.sender || 'Unknown sender',
 		snippet: message.snippet || 'No operational snippet.',
 		meta: formatUnixSeconds(message.sentAtUnixSeconds),
-		selected: message.providerMessageId === selectedMessageId,
+		selected: message.messageId === selectedMessageId,
 		unread: !message.flag.includes(MailMessageFlagV1.MAIL_MESSAGE_FLAG_READ),
 		hasAttachments: message.hasAttachments,
 	}))
@@ -127,7 +127,7 @@ export function buildMailMessageDetail(
 ): MailMessageDetailCard | null {
 	if (!message) return null
 	return {
-		id: message.providerMessageId,
+		id: message.messageId,
 		subject: message.subject || '(No subject)',
 		sender: message.sender || 'Unknown sender',
 		recipients: message.recipient.join(', ') || 'No recipient projection.',

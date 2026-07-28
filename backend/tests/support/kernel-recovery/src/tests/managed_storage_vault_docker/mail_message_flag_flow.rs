@@ -68,7 +68,7 @@ fn managed_mail_message_flags_reconcile_provider_and_projection() {
     let admitted_mail = prepare_mail_runtime(&supervisor, &store, admitted_mail);
     configure_communications_jetstream(&store);
 
-    let mail = start_mail_runtime(
+    let mut mail = start_mail_runtime(
         &supervisor,
         &store,
         &data,
@@ -83,7 +83,22 @@ fn managed_mail_message_flags_reconcile_provider_and_projection() {
         1,
         "managed-mail-message-flags-sync",
     );
-    assert_mail_message_flags(&store, &supervisor, &mail, &imap);
+    let message_id = assert_mail_message_flags(&store, &supervisor, &mail, &imap);
+    mail = restart_mail_runtime_without_smtp(
+        &supervisor,
+        &store,
+        &data,
+        &root.join("runtime"),
+        mail,
+        imap.port(),
+    );
+    assert_mail_identity_survives_restart_and_stale_locator_is_rejected(
+        &store,
+        &supervisor,
+        &mail,
+        &imap,
+        &message_id,
+    );
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {

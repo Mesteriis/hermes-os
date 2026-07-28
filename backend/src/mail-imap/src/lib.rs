@@ -1,14 +1,18 @@
-//! IMAP provider adapter boundary for ADR-0239 and ADR-0307.
+//! IMAP provider adapter boundary for ADR-0239, ADR-0307 and ADR-0308.
 //!
-//! Supports IMAPS (`993`) against `INBOX`; sync uses read-only `EXAMINE` and
-//! convergent flag mutations use read-write `SELECT` plus `UID STORE`.
+//! Sync discovers bounded selectable mailboxes and captures the selected
+//! mailbox UIDVALIDITY. Convergent flag mutations are fenced by the private
+//! mailbox/UIDVALIDITY/UID locator before `UID STORE`.
 
 #![allow(clippy::items_after_test_module)]
 
 use std::fmt::{Debug, Display, Formatter};
 use std::time::Duration;
 
-use async_imap::{Session, types::Flag};
+use async_imap::{
+    Session,
+    types::{Flag, NameAttribute},
+};
 #[cfg(not(feature = "conformance-test-support"))]
 use async_native_tls::TlsConnector;
 use async_std::future;
@@ -45,6 +49,7 @@ pub const MAX_ATTEMPTS: u8 = retry::IMAP_SYNC_RETRY_POLICY.max_attempts;
 const IMAP_UID_FETCH_CHUNK_SIZE: usize = MAX_WINDOW as usize;
 const IMAP_UID_FETCH_TIMEOUT_SECONDS: u64 = WINDOW_DEADLINE_SECONDS;
 const SNAPSHOT_PREVIEW_BYTES: usize = 160;
+const MAX_DISCOVERED_MAILBOXES: usize = 256;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ImapMessage {
@@ -72,6 +77,44 @@ pub enum ImapMessageFlag {
 pub enum ImapMutableMessageFlagV1 {
     Read,
     Starred,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImapMailboxKindV1 {
+    Inbox,
+    Archive,
+    Trash,
+    Sent,
+    Drafts,
+    Spam,
+    All,
+    ProviderFolder,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImapMailboxV1 {
+    pub mailbox_id: String,
+    pub display_name: String,
+    pub kind: ImapMailboxKindV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImapSelectedMailboxV1 {
+    pub mailbox_id: String,
+    pub uid_validity: u32,
+}
+
+pub struct ImapMessageFlagAccessV1<'a> {
+    pub host: &'a str,
+    pub port: u16,
+    pub username: &'a str,
+    pub password: &'a str,
+}
+
+pub struct ImapMessageLocatorV1<'a> {
+    pub mailbox_id: &'a str,
+    pub uid_validity: u32,
+    pub uid: u32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -114,6 +157,8 @@ impl Debug for ImapAttachment {
 #[derive(Clone, Debug)]
 pub struct ImapSyncResult {
     pub messages: Vec<ImapMessage>,
+    pub mailboxes: Vec<ImapMailboxV1>,
+    pub selected_mailbox: ImapSelectedMailboxV1,
     pub attempts: u8,
     pub window: u32,
     pub has_more: bool,
@@ -140,6 +185,11 @@ impl ImapError {
             message: message.into(),
         }
     }
+
+    #[must_use]
+    pub fn is_definite_rejection(&self) -> bool {
+        matches!(self.kind, "validation" | "stale_locator")
+    }
 }
 
 pub fn sync_inbox(
@@ -158,26 +208,35 @@ pub fn sync_inbox(
     sync_inbox_with_retry(host, port, username, password, limit, run_imap_sync)
 }
 
-pub fn set_inbox_message_flag(
-    host: &str,
-    port: u16,
-    username: &str,
-    password: &str,
-    uid: u32,
+pub fn set_message_flag(
+    access: ImapMessageFlagAccessV1<'_>,
+    locator: ImapMessageLocatorV1<'_>,
     flag: ImapMutableMessageFlagV1,
     target_value: bool,
 ) -> Result<(), ImapError> {
-    if uid == 0 || username.trim().is_empty() || password.is_empty() {
+    if locator.uid == 0
+        || locator.uid_validity == 0
+        || !valid_mailbox_id(locator.mailbox_id)
+        || access.username.trim().is_empty()
+        || access.password.is_empty()
+    {
         return Err(ImapError::new(
             "validation",
             "imap message flag mutation input is invalid",
         ));
     }
     task::block_on(async move {
-        let mut session = open_session(host, port, username, password).await?;
-        session.select("INBOX").await.map_err(|error| {
-            ImapError::new("protocol", format!("imap SELECT INBOX failed: {error}"))
+        let mut session =
+            open_session(access.host, access.port, access.username, access.password).await?;
+        let selected = session.select(locator.mailbox_id).await.map_err(|error| {
+            ImapError::new("protocol", format!("imap SELECT mailbox failed: {error}"))
         })?;
+        if selected.uid_validity != Some(locator.uid_validity) {
+            return Err(ImapError::new(
+                "stale_locator",
+                "imap mailbox UIDVALIDITY does not match the stored locator",
+            ));
+        }
         let flag_name = match flag {
             ImapMutableMessageFlagV1::Read => "\\Seen",
             ImapMutableMessageFlagV1::Starred => "\\Flagged",
@@ -188,7 +247,7 @@ pub fn set_inbox_message_flag(
             format!("-FLAGS.SILENT ({flag_name})")
         };
         let updates = session
-            .uid_store(uid.to_string(), operation)
+            .uid_store(locator.uid.to_string(), operation)
             .await
             .map_err(|error| {
                 ImapError::new("protocol", format!("imap UID STORE failed: {error}"))
@@ -252,6 +311,8 @@ where
                     attempts,
                     window: result.window,
                     messages: result.messages,
+                    mailboxes: result.mailboxes,
+                    selected_mailbox: result.selected_mailbox,
                     has_more: result.has_more,
                 });
             }
@@ -306,9 +367,19 @@ async fn imap_sync_once(
     requested: usize,
 ) -> Result<ImapSyncResult, ImapError> {
     let mut session = open_session(host, port, username, password).await?;
-    session.examine("INBOX").await.map_err(|error| {
-        ImapError::new("protocol", format!("imap EXAMINE INBOX failed: {error}"))
+    let mailboxes = discover_mailboxes(&mut session).await?;
+    let inbox = mailboxes
+        .iter()
+        .find(|mailbox| mailbox.kind == ImapMailboxKindV1::Inbox)
+        .ok_or_else(|| ImapError::new("protocol", "imap LIST did not return selectable INBOX"))?;
+    let selected = session.examine(&inbox.mailbox_id).await.map_err(|error| {
+        ImapError::new("protocol", format!("imap EXAMINE mailbox failed: {error}"))
     })?;
+    let uid_validity = selected
+        .uid_validity
+        .filter(|value| *value > 0)
+        .ok_or_else(|| ImapError::new("protocol", "imap mailbox omitted UIDVALIDITY"))?;
+    let selected_mailbox_id = inbox.mailbox_id.clone();
 
     let all_uids = if requested == 0 {
         Vec::new()
@@ -336,10 +407,109 @@ async fn imap_sync_once(
 
     Ok(ImapSyncResult {
         messages,
+        mailboxes,
+        selected_mailbox: ImapSelectedMailboxV1 {
+            mailbox_id: selected_mailbox_id,
+            uid_validity,
+        },
         attempts: 1,
         window: uids_window(fetch_uids.len()),
         has_more,
     })
+}
+
+async fn discover_mailboxes<T>(session: &mut Session<T>) -> Result<Vec<ImapMailboxV1>, ImapError>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Debug + Send,
+{
+    let mut names = session
+        .list(None, Some("*"))
+        .await
+        .map_err(|error| ImapError::new("protocol", format!("imap LIST failed: {error}")))?;
+    let mut mailboxes = Vec::new();
+    while let Some(name) = names.try_next().await.map_err(|error| {
+        ImapError::new("protocol", format!("imap LIST response failed: {error}"))
+    })? {
+        if name
+            .attributes()
+            .iter()
+            .any(|attribute| matches!(attribute, NameAttribute::NoSelect))
+        {
+            continue;
+        }
+        if mailboxes.len() == MAX_DISCOVERED_MAILBOXES {
+            return Err(ImapError::new(
+                "bounds",
+                "imap mailbox discovery exceeded the admitted limit",
+            ));
+        }
+        let mailbox_id = name.name().trim();
+        if !valid_mailbox_id(mailbox_id)
+            || mailboxes
+                .iter()
+                .any(|mailbox: &ImapMailboxV1| mailbox.mailbox_id == mailbox_id)
+        {
+            continue;
+        }
+        mailboxes.push(ImapMailboxV1 {
+            mailbox_id: mailbox_id.to_owned(),
+            display_name: mailbox_id.to_owned(),
+            kind: imap_mailbox_kind(mailbox_id, name.attributes()),
+        });
+    }
+    if mailboxes.is_empty() {
+        return Err(ImapError::new(
+            "protocol",
+            "imap LIST returned no selectable mailbox",
+        ));
+    }
+    Ok(mailboxes)
+}
+
+fn imap_mailbox_kind(mailbox_id: &str, attributes: &[NameAttribute<'_>]) -> ImapMailboxKindV1 {
+    if mailbox_id.eq_ignore_ascii_case("INBOX") {
+        return ImapMailboxKindV1::Inbox;
+    }
+    if attributes
+        .iter()
+        .any(|attribute| matches!(attribute, NameAttribute::Archive))
+    {
+        ImapMailboxKindV1::Archive
+    } else if attributes
+        .iter()
+        .any(|attribute| matches!(attribute, NameAttribute::Trash))
+    {
+        ImapMailboxKindV1::Trash
+    } else if attributes
+        .iter()
+        .any(|attribute| matches!(attribute, NameAttribute::Sent))
+    {
+        ImapMailboxKindV1::Sent
+    } else if attributes
+        .iter()
+        .any(|attribute| matches!(attribute, NameAttribute::Drafts))
+    {
+        ImapMailboxKindV1::Drafts
+    } else if attributes
+        .iter()
+        .any(|attribute| matches!(attribute, NameAttribute::Junk))
+    {
+        ImapMailboxKindV1::Spam
+    } else if attributes
+        .iter()
+        .any(|attribute| matches!(attribute, NameAttribute::All))
+    {
+        ImapMailboxKindV1::All
+    } else {
+        ImapMailboxKindV1::ProviderFolder
+    }
+}
+
+fn valid_mailbox_id(mailbox_id: &str) -> bool {
+    !mailbox_id.trim().is_empty()
+        && mailbox_id.len() <= 512
+        && mailbox_id.trim() == mailbox_id
+        && !mailbox_id.contains(['\0', '\r', '\n'])
 }
 
 #[cfg(not(feature = "conformance-test-support"))]
@@ -576,6 +746,15 @@ mod tests {
                     attempts: 1,
                     window: 1,
                     messages: Vec::new(),
+                    mailboxes: vec![ImapMailboxV1 {
+                        mailbox_id: "INBOX".to_owned(),
+                        display_name: "INBOX".to_owned(),
+                        kind: ImapMailboxKindV1::Inbox,
+                    }],
+                    selected_mailbox: ImapSelectedMailboxV1 {
+                        mailbox_id: "INBOX".to_owned(),
+                        uid_validity: 1,
+                    },
                     has_more: false,
                 })
             },
@@ -603,6 +782,15 @@ mod tests {
                         attempts: 1,
                         window: 1,
                         messages: Vec::new(),
+                        mailboxes: vec![ImapMailboxV1 {
+                            mailbox_id: "INBOX".to_owned(),
+                            display_name: "INBOX".to_owned(),
+                            kind: ImapMailboxKindV1::Inbox,
+                        }],
+                        selected_mailbox: ImapSelectedMailboxV1 {
+                            mailbox_id: "INBOX".to_owned(),
+                            uid_validity: 1,
+                        },
                         has_more: false,
                     });
                 }
@@ -656,16 +844,39 @@ mod tests {
     #[test]
     fn message_flag_mutation_rejects_an_invalid_uid_before_network_io() {
         assert!(
-            set_inbox_message_flag(
-                "mail.example.com",
-                993,
-                "alice",
-                "secret",
-                0,
+            set_message_flag(
+                ImapMessageFlagAccessV1 {
+                    host: "mail.example.com",
+                    port: 993,
+                    username: "alice",
+                    password: "secret",
+                },
+                ImapMessageLocatorV1 {
+                    mailbox_id: "INBOX",
+                    uid_validity: 1,
+                    uid: 0,
+                },
                 ImapMutableMessageFlagV1::Read,
                 true,
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn mailbox_roles_come_only_from_canonical_name_and_special_use_attributes() {
+        assert_eq!(imap_mailbox_kind("inbox", &[]), ImapMailboxKindV1::Inbox);
+        assert_eq!(
+            imap_mailbox_kind("Owner Archive", &[NameAttribute::Archive]),
+            ImapMailboxKindV1::Archive
+        );
+        assert_eq!(
+            imap_mailbox_kind("Bin", &[NameAttribute::Trash]),
+            ImapMailboxKindV1::Trash
+        );
+        assert_eq!(
+            imap_mailbox_kind("Projects", &[]),
+            ImapMailboxKindV1::ProviderFolder
         );
     }
 

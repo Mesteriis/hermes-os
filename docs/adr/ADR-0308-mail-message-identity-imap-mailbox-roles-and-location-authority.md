@@ -2,9 +2,9 @@
 
 - Статус: принято
 - Дата: 2026-07-28
-- Состояние реализации: planned. Этот ADR является обязательным prerequisite
-  для `mail_message_location_command_v1`; наличие решения само по себе gate не
-  открывает.
+- Состояние реализации: реализовано полностью для prerequisite
+  `mail_provider_location_identity_v1`. `mail_message_location_command_v1`
+  остаётся отдельным planned gate и не открывается наличием identity foundation.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0212, ADR-0213, ADR-0220,
   ADR-0222, ADR-0223, ADR-0278, ADR-0282, ADR-0298, ADR-0299, ADR-0307
 
@@ -62,9 +62,10 @@ private Mail state.
 Storage migration остаётся additive по platform policy. Поэтому существующее
 физическое поле `provider_message_id` не переименовывается destructive DDL:
 V13 добавляет generated `message_id` как owner-private compatibility column,
-а persistence пишет исходное физическое поле и читает stable alias. Этот
-storage seam не экспортируется в API и может быть схлопнут только отдельной
-offline owner-data migration.
+private locator table и constraints, а V14 отдельно создаёт stable indexes
+после materialization generated columns. Persistence пишет исходное физическое
+поле и читает stable alias. Этот storage seam не экспортируется в API и может
+быть схлопнут только отдельной offline owner-data migration.
 
 ### Private provider locator
 
@@ -212,6 +213,12 @@ Prerequisite gate становится `implemented` только атомарн
 7. restart-safe locator restore and duplicate-locator rejection;
 8. live managed positive and stale-UIDVALIDITY negative conformance;
 9. architecture/SRP/Cargo guards preserving owner and build-unit boundaries.
+
+Gate реализован атомарно: public Rust/Protobuf/frontend используют
+`message_id`; Mail storage bundle V13/V14 хранит private locator и stable
+indexes; managed Docker conformance подтверждает mailbox roles, opaque identity,
+provider mutation exactly once, restart-safe locator restore и отказ при
+изменившемся UIDVALIDITY до `UID STORE`.
 
 ## Последствия
 

@@ -12,7 +12,9 @@ use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Row, Transaction, postgres::PgRow};
 
 use crate::{
-    MailDurablePersistence, MailDurablePersistenceError, durable::insert_communications_outbox,
+    MailDurablePersistence, MailDurablePersistenceError, MailImapMessageLocatorV1,
+    durable::insert_communications_outbox,
+    provider_location::{upsert_imap_message_locator, validate_imap_locator},
 };
 
 pub const MAIL_SCHEMA_V9: &str = r#"
@@ -118,7 +120,8 @@ pub struct MailOperationalFolderSnapshotV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailOperationalMessageSnapshotV1 {
     pub connection_id: String,
-    pub provider_message_id: String,
+    pub message_id: String,
+    pub imap_locator: Option<MailImapMessageLocatorV1>,
     pub provider_thread_id: String,
     pub folders: Vec<MailOperationalFolderSnapshotV1>,
     pub subject: Option<String>,
@@ -156,6 +159,43 @@ impl MailDurablePersistence {
             observed_at_unix_seconds,
         )
         .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)
+    }
+
+    pub async fn record_operational_folders(
+        &self,
+        connection_id: &str,
+        folders: &[MailOperationalFolderSnapshotV1],
+        observed_at_unix_seconds: i64,
+    ) -> Result<(), MailDurablePersistenceError> {
+        if connection_id.trim().is_empty()
+            || connection_id.len() > 512
+            || connection_id.contains(['\0', '\r', '\n'])
+            || connection_id.trim() != connection_id
+            || folders.is_empty()
+            || folders.len() > 256
+            || folders.iter().any(|folder| !valid_folder_snapshot(folder))
+            || observed_at_unix_seconds <= 0
+        {
+            return Err(MailDurablePersistenceError::InvalidRow);
+        }
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        for folder in folders {
+            upsert_operational_folder(
+                &mut transaction,
+                connection_id,
+                folder,
+                observed_at_unix_seconds,
+            )
+            .await?;
+        }
         transaction
             .commit()
             .await
@@ -208,11 +248,9 @@ impl MailDurablePersistence {
             }
             MailOperationalQueryV1::GetMessage {
                 connection_id,
-                provider_message_id,
+                message_id,
             } => {
-                let summary = self
-                    .operational_message(connection_id, provider_message_id)
-                    .await?;
+                let summary = self.operational_message(connection_id, message_id).await?;
                 Ok(MailOperationalQueryResponseV1::Message(Box::new(
                     MailMessageDetailV1 { summary },
                 )))
@@ -284,7 +322,7 @@ impl MailDurablePersistence {
                          SELECT 1 FROM hermes_data.mail_operational_messages AS message \
                          JOIN hermes_data.mail_operational_message_folders AS membership \
                            ON membership.connection_id = message.connection_id \
-                          AND membership.provider_message_id = message.provider_message_id \
+                          AND membership.message_id = message.message_id \
                          WHERE message.connection_id = thread.connection_id \
                            AND message.provider_thread_id = thread.provider_thread_id \
                            AND membership.folder_id = $4))) AS present",
@@ -306,7 +344,7 @@ impl MailDurablePersistence {
                SELECT 1 FROM hermes_data.mail_operational_messages AS message \
                JOIN hermes_data.mail_operational_message_folders AS membership \
                  ON membership.connection_id = message.connection_id \
-                AND membership.provider_message_id = message.provider_message_id \
+                AND membership.message_id = message.message_id \
                WHERE message.connection_id = thread.connection_id \
                  AND message.provider_thread_id = thread.provider_thread_id \
                  AND membership.folder_id = $2)) \
@@ -356,7 +394,7 @@ impl MailDurablePersistence {
                        AND ($5::TEXT IS NULL OR EXISTS( \
                          SELECT 1 FROM hermes_data.mail_operational_message_folders AS membership \
                          WHERE membership.connection_id = message.connection_id \
-                           AND membership.provider_message_id = message.provider_message_id \
+                           AND membership.message_id = message.message_id \
                            AND membership.folder_id = $5))) AS present",
                 )
                 .bind(connection_id)
@@ -369,7 +407,7 @@ impl MailDurablePersistence {
             )?;
         }
         let rows = sqlx::query(
-            "SELECT message.connection_id, message.provider_message_id, \
+            "SELECT message.connection_id, message.message_id, \
              message.provider_thread_id, message.subject, message.sender, message.recipients, \
              message.snippet, message.sent_at_unix_seconds, message.flags, \
              message.has_plain_text, message.has_attachments, message.observation_anchor_id, \
@@ -380,7 +418,7 @@ impl MailDurablePersistence {
                AND ($3::TEXT IS NULL OR EXISTS( \
                  SELECT 1 FROM hermes_data.mail_operational_message_folders AS membership \
                  WHERE membership.connection_id = message.connection_id \
-                   AND membership.provider_message_id = message.provider_message_id \
+                   AND membership.message_id = message.message_id \
                    AND membership.folder_id = $3)) \
                AND (message.updated_at_unix_seconds, message.cursor_sequence) < ($4, $5) \
              ORDER BY message.updated_at_unix_seconds DESC, message.cursor_sequence DESC LIMIT $6",
@@ -395,7 +433,7 @@ impl MailDurablePersistence {
         .await
         .map_err(|_| MailDurablePersistenceError::Database)?;
         let folder_ids = self
-            .operational_folder_ids(connection_id, provider_message_ids(&rows)?)
+            .operational_folder_ids(connection_id, message_ids(&rows)?)
             .await?;
         let items = rows
             .iter()
@@ -410,23 +448,23 @@ impl MailDurablePersistence {
     async fn operational_message(
         &self,
         connection_id: &str,
-        provider_message_id: &str,
+        message_id: &str,
     ) -> Result<MailMessageSummaryV1, MailDurablePersistenceError> {
         let row = sqlx::query(
-            "SELECT connection_id, provider_message_id, provider_thread_id, subject, sender, \
+            "SELECT connection_id, message_id, provider_thread_id, subject, sender, \
              recipients, snippet, sent_at_unix_seconds, flags, has_plain_text, has_attachments, \
              observation_anchor_id, projection_revision FROM \
              hermes_data.mail_operational_messages \
-             WHERE connection_id = $1 AND provider_message_id = $2",
+             WHERE connection_id = $1 AND message_id = $2",
         )
         .bind(connection_id)
-        .bind(provider_message_id)
+        .bind(message_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|_| MailDurablePersistenceError::Database)?
         .ok_or(MailDurablePersistenceError::MissingOperationalMessage)?;
         let folder_ids = self
-            .operational_folder_ids(connection_id, vec![provider_message_id.to_owned()])
+            .operational_folder_ids(connection_id, vec![message_id.to_owned()])
             .await?;
         message_from_row(&row, &folder_ids)
     }
@@ -434,26 +472,26 @@ impl MailDurablePersistence {
     async fn operational_folder_ids(
         &self,
         connection_id: &str,
-        provider_message_ids: Vec<String>,
+        message_ids: Vec<String>,
     ) -> Result<BTreeMap<String, Vec<String>>, MailDurablePersistenceError> {
-        if provider_message_ids.is_empty() {
+        if message_ids.is_empty() {
             return Ok(BTreeMap::new());
         }
         let rows = sqlx::query(
-            "SELECT provider_message_id, folder_id FROM \
+            "SELECT message_id, folder_id FROM \
              hermes_data.mail_operational_message_folders \
-             WHERE connection_id = $1 AND provider_message_id = ANY($2) \
-             ORDER BY provider_message_id, folder_id",
+             WHERE connection_id = $1 AND message_id = ANY($2) \
+             ORDER BY message_id, folder_id",
         )
         .bind(connection_id)
-        .bind(provider_message_ids)
+        .bind(message_ids)
         .fetch_all(&self.pool)
         .await
         .map_err(|_| MailDurablePersistenceError::Database)?;
         let mut folder_ids = BTreeMap::<String, Vec<String>>::new();
         for row in &rows {
             folder_ids
-                .entry(row_string(row, "provider_message_id")?)
+                .entry(row_string(row, "message_id")?)
                 .or_default()
                 .push(row_string(row, "folder_id")?);
         }
@@ -548,9 +586,9 @@ fn require_cursor_anchor(
     }
 }
 
-fn provider_message_ids(rows: &[PgRow]) -> Result<Vec<String>, MailDurablePersistenceError> {
+fn message_ids(rows: &[PgRow]) -> Result<Vec<String>, MailDurablePersistenceError> {
     rows.iter()
-        .map(|row| row_string(row, "provider_message_id"))
+        .map(|row| row_string(row, "message_id"))
         .collect()
 }
 
@@ -601,7 +639,7 @@ fn message_from_row(
     row: &PgRow,
     folder_ids: &BTreeMap<String, Vec<String>>,
 ) -> Result<MailMessageSummaryV1, MailDurablePersistenceError> {
-    let provider_message_id = row_string(row, "provider_message_id")?;
+    let message_id = row_string(row, "message_id")?;
     let observation_anchor = row_bytes(row, "observation_anchor_id")?;
     let observation_anchor_id = <[u8; 16]>::try_from(observation_anchor.as_slice())
         .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
@@ -613,10 +651,10 @@ fn message_from_row(
         .collect::<Result<Vec<_>, _>>()?;
     let message = MailMessageSummaryV1 {
         connection_id: row_string(row, "connection_id")?,
-        provider_message_id: provider_message_id.clone(),
+        message_id: message_id.clone(),
         provider_thread_id: row_string(row, "provider_thread_id")?,
         folder_ids: folder_ids
-            .get(&provider_message_id)
+            .get(&message_id)
             .cloned()
             .ok_or(MailDurablePersistenceError::InvalidRow)?,
         subject: row_optional_string(row, "subject")?,
@@ -733,11 +771,14 @@ fn validate_materializations(
             let message = &materialization.message;
             let public = public_message(message);
             validate_operational_message(&public).is_err()
-                || message.folders.iter().any(|folder| {
-                    folder.display_name.is_empty()
-                        || folder.display_name.len() > 512
-                        || folder.display_name.contains(['\0', '\r', '\n'])
-                })
+                || message
+                    .imap_locator
+                    .as_ref()
+                    .is_some_and(|locator| validate_imap_locator(locator).is_err())
+                || message
+                    .folders
+                    .iter()
+                    .any(|folder| !valid_folder_snapshot(folder))
                 || materialization.communications_outbox.is_empty()
                 || materialization
                     .communications_outbox
@@ -759,10 +800,10 @@ async fn upsert_operational_message(
 ) -> Result<(), MailDurablePersistenceError> {
     let old = sqlx::query(
         "SELECT provider_thread_id FROM hermes_data.mail_operational_messages \
-         WHERE connection_id = $1 AND provider_message_id = $2",
+         WHERE connection_id = $1 AND message_id = $2",
     )
     .bind(&message.connection_id)
-    .bind(&message.provider_message_id)
+    .bind(&message.message_id)
     .fetch_optional(&mut **transaction)
     .await
     .map_err(|_| MailDurablePersistenceError::Database)?;
@@ -773,10 +814,10 @@ async fn upsert_operational_message(
         .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
     let old_folder_rows = sqlx::query(
         "SELECT folder_id FROM hermes_data.mail_operational_message_folders \
-         WHERE connection_id = $1 AND provider_message_id = $2",
+         WHERE connection_id = $1 AND message_id = $2",
     )
     .bind(&message.connection_id)
-    .bind(&message.provider_message_id)
+    .bind(&message.message_id)
     .fetch_all(&mut **transaction)
     .await
     .map_err(|_| MailDurablePersistenceError::Database)?;
@@ -788,28 +829,13 @@ async fn upsert_operational_message(
 
     for folder in &message.folders {
         affected_folders.insert(folder.folder_id.clone());
-        sqlx::query(
-            "INSERT INTO hermes_data.mail_operational_folders \
-             (connection_id, folder_id, display_name, kind, updated_at_unix_seconds) \
-             VALUES ($1, $2, $3, $4, $5) \
-             ON CONFLICT (connection_id, folder_id) DO UPDATE SET \
-               display_name = EXCLUDED.display_name, kind = EXCLUDED.kind, \
-               projection_revision = CASE \
-                 WHEN (hermes_data.mail_operational_folders.display_name, \
-                       hermes_data.mail_operational_folders.kind) \
-                      IS DISTINCT FROM (EXCLUDED.display_name, EXCLUDED.kind) \
-                 THEN hermes_data.mail_operational_folders.projection_revision + 1 \
-                 ELSE hermes_data.mail_operational_folders.projection_revision END, \
-               updated_at_unix_seconds = EXCLUDED.updated_at_unix_seconds",
+        upsert_operational_folder(
+            transaction,
+            &message.connection_id,
+            folder,
+            observed_at_unix_seconds,
         )
-        .bind(&message.connection_id)
-        .bind(&folder.folder_id)
-        .bind(&folder.display_name)
-        .bind(folder_kind_id(folder.kind))
-        .bind(observed_at_unix_seconds)
-        .execute(&mut **transaction)
-        .await
-        .map_err(|_| MailDurablePersistenceError::Database)?;
+        .await?;
     }
 
     let recipients = message.recipients.clone();
@@ -824,7 +850,7 @@ async fn upsert_operational_message(
           snippet, sent_at_unix_seconds, flags, has_plain_text, has_attachments, \
           observation_anchor_id, updated_at_unix_seconds) \
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) \
-         ON CONFLICT (connection_id, provider_message_id) DO UPDATE SET \
+         ON CONFLICT (connection_id, message_id) DO UPDATE SET \
            provider_thread_id = EXCLUDED.provider_thread_id, subject = EXCLUDED.subject, \
            sender = EXCLUDED.sender, recipients = EXCLUDED.recipients, snippet = EXCLUDED.snippet, \
            sent_at_unix_seconds = EXCLUDED.sent_at_unix_seconds, flags = EXCLUDED.flags, \
@@ -851,7 +877,7 @@ async fn upsert_operational_message(
            updated_at_unix_seconds = EXCLUDED.updated_at_unix_seconds",
     )
     .bind(&message.connection_id)
-    .bind(&message.provider_message_id)
+    .bind(&message.message_id)
     .bind(&message.provider_thread_id)
     .bind(&message.subject)
     .bind(&message.sender)
@@ -867,12 +893,23 @@ async fn upsert_operational_message(
     .await
     .map_err(|_| MailDurablePersistenceError::Database)?;
 
+    if let Some(locator) = &message.imap_locator {
+        upsert_imap_message_locator(
+            transaction,
+            &message.connection_id,
+            &message.message_id,
+            locator,
+            observed_at_unix_seconds,
+        )
+        .await?;
+    }
+
     sqlx::query(
         "DELETE FROM hermes_data.mail_operational_message_folders \
-         WHERE connection_id = $1 AND provider_message_id = $2",
+         WHERE connection_id = $1 AND message_id = $2",
     )
     .bind(&message.connection_id)
-    .bind(&message.provider_message_id)
+    .bind(&message.message_id)
     .execute(&mut **transaction)
     .await
     .map_err(|_| MailDurablePersistenceError::Database)?;
@@ -882,7 +919,7 @@ async fn upsert_operational_message(
              (connection_id, provider_message_id, folder_id) VALUES ($1, $2, $3)",
         )
         .bind(&message.connection_id)
-        .bind(&message.provider_message_id)
+        .bind(&message.message_id)
         .bind(&folder.folder_id)
         .execute(&mut **transaction)
         .await
@@ -936,7 +973,7 @@ pub(crate) async fn refresh_thread(
            FROM hermes_data.mail_operational_messages \
            WHERE connection_id = $1 AND provider_thread_id = $2 \
            ORDER BY sent_at_unix_seconds DESC NULLS LAST, \
-             updated_at_unix_seconds DESC, provider_message_id DESC LIMIT 1 \
+             updated_at_unix_seconds DESC, message_id DESC LIMIT 1 \
          ) \
          INSERT INTO hermes_data.mail_operational_threads \
            (connection_id, provider_thread_id, subject, latest_snippet, latest_at_unix_seconds, \
@@ -1000,7 +1037,7 @@ pub(crate) async fn refresh_folder(
            FROM hermes_data.mail_operational_message_folders AS membership \
            JOIN hermes_data.mail_operational_messages AS message \
              ON message.connection_id = membership.connection_id \
-            AND message.provider_message_id = membership.provider_message_id \
+            AND message.message_id = membership.message_id \
            WHERE membership.connection_id = $1 AND membership.folder_id = $2 \
          ) AS counts \
          WHERE folder.connection_id = $1 AND folder.folder_id = $2",
@@ -1014,10 +1051,54 @@ pub(crate) async fn refresh_folder(
     .map_err(|_| MailDurablePersistenceError::Database)
 }
 
+async fn upsert_operational_folder(
+    transaction: &mut Transaction<'_, Postgres>,
+    connection_id: &str,
+    folder: &MailOperationalFolderSnapshotV1,
+    observed_at_unix_seconds: i64,
+) -> Result<(), MailDurablePersistenceError> {
+    if !valid_folder_snapshot(folder) {
+        return Err(MailDurablePersistenceError::InvalidRow);
+    }
+    sqlx::query(
+        "INSERT INTO hermes_data.mail_operational_folders \
+         (connection_id, folder_id, display_name, kind, updated_at_unix_seconds) \
+         VALUES ($1, $2, $3, $4, $5) \
+         ON CONFLICT (connection_id, folder_id) DO UPDATE SET \
+           display_name = EXCLUDED.display_name, kind = EXCLUDED.kind, \
+           projection_revision = CASE \
+             WHEN (hermes_data.mail_operational_folders.display_name, \
+                   hermes_data.mail_operational_folders.kind) \
+                  IS DISTINCT FROM (EXCLUDED.display_name, EXCLUDED.kind) \
+             THEN hermes_data.mail_operational_folders.projection_revision + 1 \
+             ELSE hermes_data.mail_operational_folders.projection_revision END, \
+           updated_at_unix_seconds = EXCLUDED.updated_at_unix_seconds",
+    )
+    .bind(connection_id)
+    .bind(&folder.folder_id)
+    .bind(&folder.display_name)
+    .bind(folder_kind_id(folder.kind))
+    .bind(observed_at_unix_seconds)
+    .execute(&mut **transaction)
+    .await
+    .map(|_| ())
+    .map_err(|_| MailDurablePersistenceError::Database)
+}
+
+fn valid_folder_snapshot(folder: &MailOperationalFolderSnapshotV1) -> bool {
+    !folder.folder_id.trim().is_empty()
+        && folder.folder_id.len() <= 512
+        && folder.folder_id.trim() == folder.folder_id
+        && !folder.folder_id.contains(['\0', '\r', '\n'])
+        && !folder.display_name.trim().is_empty()
+        && folder.display_name.len() <= 512
+        && !folder.display_name.contains(['\0', '\r', '\n'])
+}
+
 fn public_message(message: &MailOperationalMessageSnapshotV1) -> MailMessageSummaryV1 {
     MailMessageSummaryV1 {
         connection_id: message.connection_id.clone(),
-        provider_message_id: message.provider_message_id.clone(),
+        message_id: message.message_id.clone(),
         provider_thread_id: message.provider_thread_id.clone(),
         folder_ids: message
             .folders

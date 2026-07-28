@@ -139,15 +139,17 @@ use hermes_mail_gmail::{
     GmailAdapterErrorV1, GmailApiClientV1, GmailListMessagesRequestV1, GmailMutableMessageFlagV1,
     decode_raw_rfc822, history_message_ids,
 };
-use hermes_mail_imap::ImapMutableMessageFlagV1;
+use hermes_mail_imap::{
+    ImapMailboxKindV1, ImapMessageFlagAccessV1, ImapMessageLocatorV1, ImapMutableMessageFlagV1,
+};
 use hermes_mail_persistence::{
     MailAttachmentBlobAdmissionCompletionV1,
     MailAttachmentDispositionV1 as PersistedAttachmentDispositionV1,
     MailAttachmentMaterializationV1, MailCredentialBindingV1, MailDeliveryAttemptOutcomeV1,
     MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailDurablePersistenceError,
-    MailOperationalFolderSnapshotV1, MailOperationalMaterializationV1,
+    MailImapMessageLocatorV1, MailOperationalFolderSnapshotV1, MailOperationalMaterializationV1,
     MailOperationalMessageSnapshotV1, MailQueuedDeliveryV1, MailQueuedMessageFlagCommandV1,
-    MailSyncRunStartOutcomeV1,
+    MailSyncRunStartOutcomeV1, initial_imap_message_id,
 };
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
@@ -841,31 +843,46 @@ impl MailAdmittedRuntime {
             return Err(MailMessageFlagDispatchErrorV1::InvalidStoredCommand);
         }
         let provider_result = match self.account.inbound.clone() {
-            MailInboundTransportV1::Imap(configuration) => (|| {
-                let password = self
-                    .imap_password
-                    .as_ref()
-                    .ok_or(MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown)?;
-                let password = Zeroizing::new(password.to_vec());
-                let password = std::str::from_utf8(&password)
-                    .map_err(|_| MailMessageFlagDispatchErrorV1::InvalidStoredCommand)?;
-                let uid = command
-                    .provider_message_id
-                    .parse::<u32>()
-                    .ok()
-                    .filter(|uid| *uid > 0)
-                    .ok_or(MailMessageFlagDispatchErrorV1::InvalidStoredCommand)?;
-                hermes_mail_imap::set_inbox_message_flag(
-                    &configuration.host,
-                    configuration.port,
-                    &configuration.username,
-                    password,
-                    uid,
-                    imap_message_flag(command.kind),
-                    command.target_value,
-                )
-                .map_err(|_| MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown)
-            })(),
+            MailInboundTransportV1::Imap(configuration) => {
+                async {
+                    let locator = self
+                        .durable
+                        .imap_message_locator(&command.connection_id, &command.message_id)
+                        .await
+                        .map_err(|_| MailMessageFlagDispatchErrorV1::Persistence)?
+                        .ok_or(MailMessageFlagDispatchErrorV1::ProviderRejected)?;
+                    let password = self
+                        .imap_password
+                        .as_ref()
+                        .ok_or(MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown)?;
+                    let password = Zeroizing::new(password.to_vec());
+                    let password = std::str::from_utf8(&password)
+                        .map_err(|_| MailMessageFlagDispatchErrorV1::InvalidStoredCommand)?;
+                    hermes_mail_imap::set_message_flag(
+                        ImapMessageFlagAccessV1 {
+                            host: &configuration.host,
+                            port: configuration.port,
+                            username: &configuration.username,
+                            password,
+                        },
+                        ImapMessageLocatorV1 {
+                            mailbox_id: &locator.mailbox_id,
+                            uid_validity: locator.uid_validity,
+                            uid: locator.uid,
+                        },
+                        imap_message_flag(command.kind),
+                        command.target_value,
+                    )
+                    .map_err(|error| {
+                        if error.is_definite_rejection() {
+                            MailMessageFlagDispatchErrorV1::ProviderRejected
+                        } else {
+                            MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown
+                        }
+                    })
+                }
+                .await
+            }
             MailInboundTransportV1::Gmail(configuration) => {
                 async {
                     let token =
@@ -887,7 +904,7 @@ impl MailAdmittedRuntime {
                     client
                         .set_message_flag(
                             token,
-                            &command.provider_message_id,
+                            &command.message_id,
                             gmail_message_flag(command.kind),
                             command.target_value,
                         )
@@ -1677,7 +1694,7 @@ impl MailAdmittedRuntime {
         let password = Zeroizing::new(password.to_vec());
         let password =
             std::str::from_utf8(&password).map_err(|_| MailBootstrapError::Credential)?;
-        let messages = hermes_mail_imap::sync_inbox(
+        let sync = hermes_mail_imap::sync_inbox(
             host,
             port,
             username,
@@ -1685,8 +1702,7 @@ impl MailAdmittedRuntime {
             plan.window,
             plan.windows,
         )
-        .map_err(|_| MailBootstrapError::Provider)?
-        .messages;
+        .map_err(|_| MailBootstrapError::Provider)?;
         let observed_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| MailBootstrapError::Provider)?;
@@ -1694,17 +1710,45 @@ impl MailAdmittedRuntime {
             i64::try_from(observed_at.as_secs()).map_err(|_| MailBootstrapError::Provider)?;
         let observed_at_nanos =
             i32::try_from(observed_at.subsec_nanos()).map_err(|_| MailBootstrapError::Provider)?;
-        for message in &messages {
+        let folders = sync
+            .mailboxes
+            .iter()
+            .map(imap_operational_folder)
+            .collect::<Vec<_>>();
+        self.durable
+            .record_operational_folders(connection_id, &folders, observed_at_unix_seconds)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?;
+        let selected_folder = sync
+            .mailboxes
+            .iter()
+            .find(|mailbox| mailbox.mailbox_id == sync.selected_mailbox.mailbox_id)
+            .map(imap_operational_folder)
+            .ok_or(MailBootstrapError::Provider)?;
+        for message in &sync.messages {
+            let locator = MailImapMessageLocatorV1 {
+                mailbox_id: sync.selected_mailbox.mailbox_id.clone(),
+                uid_validity: sync.selected_mailbox.uid_validity,
+                uid: message.uid,
+            };
+            let legacy_message_id = message.uid.to_string();
+            let message_id = self
+                .durable
+                .resolve_imap_message_id(connection_id, &locator, &legacy_message_id)
+                .await
+                .map_err(|_| MailBootstrapError::Persistence)?
+                .map_or_else(|| initial_imap_message_id(connection_id, &locator), Ok)
+                .map_err(|_| MailBootstrapError::Persistence)?;
             let observation = self.draft_inbound_body_observation(
                 &inbound_observation_id(
                     ProviderProvenanceV1::MailImap,
                     connection_id,
-                    &message.uid.to_string(),
+                    &message_id,
                     None,
                 ),
                 ProviderProvenanceV1::MailImap,
                 connection_id,
-                format!("{connection_id}:{}", message.uid),
+                message_id.clone(),
                 message.plain_text_body.clone(),
             )?;
             let record = build_observation_outbox_record_v1(
@@ -1721,8 +1765,8 @@ impl MailAdmittedRuntime {
             let mut records = vec![record];
             let mut attachment_observation_ids = Vec::with_capacity(message.attachments.len());
             for attachment in &message.attachments {
-                let source_id = format!("{connection_id}:{}", message.uid);
-                let media_id = format!("{}:{}", message.uid, attachment.part_id);
+                let source_id = message_id.clone();
+                let media_id = format!("{message_id}:{}", attachment.part_id);
                 let disposition = match attachment.disposition {
                     hermes_mail_imap::ImapAttachmentDisposition::Attachment => {
                         AttachmentDispositionV1::Attachment
@@ -1735,7 +1779,7 @@ impl MailAdmittedRuntime {
                     &inbound_observation_id(
                         ProviderProvenanceV1::MailImap,
                         connection_id,
-                        &message.uid.to_string(),
+                        &message_id,
                         Some(attachment.part_id),
                     ),
                     hermes_mail_core::MailAttachmentIngressRequestV1 {
@@ -1768,13 +1812,10 @@ impl MailAdmittedRuntime {
                     &[MailOperationalMaterializationV1 {
                         message: MailOperationalMessageSnapshotV1 {
                             connection_id: connection_id.to_owned(),
-                            provider_message_id: message.uid.to_string(),
-                            provider_thread_id: format!("imap-message:{}", message.uid),
-                            folders: vec![MailOperationalFolderSnapshotV1 {
-                                folder_id: "INBOX".to_owned(),
-                                display_name: "Inbox".to_owned(),
-                                kind: MailFolderKindV1::Inbox,
-                            }],
+                            message_id: message_id.clone(),
+                            imap_locator: Some(locator),
+                            provider_thread_id: format!("imap-message:{message_id}"),
+                            folders: vec![selected_folder.clone()],
                             subject: Some(message.subject.clone()),
                             sender: message.sender.clone(),
                             recipients: message.recipients.clone(),
@@ -1830,7 +1871,7 @@ impl MailAdmittedRuntime {
                 .await?;
             }
         }
-        Ok(messages.len())
+        Ok(sync.messages.len())
     }
 
     async fn sync_gmail_inbox(
@@ -2149,7 +2190,8 @@ impl MailAdmittedRuntime {
             materializations.push(MailOperationalMaterializationV1 {
                 message: MailOperationalMessageSnapshotV1 {
                     connection_id: connection_id.to_owned(),
-                    provider_message_id: provider_record_id,
+                    message_id: provider_record_id,
+                    imap_locator: None,
                     provider_thread_id,
                     folders: gmail_operational_folders(&label_ids),
                     subject: preview.as_ref().and_then(|preview| preview.subject.clone()),
@@ -2492,6 +2534,27 @@ fn gmail_internal_date_unix_seconds(value: &str) -> Option<i64> {
         .filter(|seconds| *seconds > 0)
 }
 
+fn imap_operational_folder(
+    mailbox: &hermes_mail_imap::ImapMailboxV1,
+) -> MailOperationalFolderSnapshotV1 {
+    let kind = match mailbox.kind {
+        ImapMailboxKindV1::Inbox => MailFolderKindV1::Inbox,
+        ImapMailboxKindV1::Archive => MailFolderKindV1::Archive,
+        ImapMailboxKindV1::Trash => MailFolderKindV1::Trash,
+        ImapMailboxKindV1::Sent => MailFolderKindV1::Sent,
+        ImapMailboxKindV1::Drafts => MailFolderKindV1::Drafts,
+        ImapMailboxKindV1::Spam => MailFolderKindV1::Spam,
+        ImapMailboxKindV1::All | ImapMailboxKindV1::ProviderFolder => {
+            MailFolderKindV1::ProviderLabel
+        }
+    };
+    MailOperationalFolderSnapshotV1 {
+        folder_id: mailbox.mailbox_id.clone(),
+        display_name: mailbox.display_name.clone(),
+        kind,
+    }
+}
+
 fn gmail_operational_folders(label_ids: &[String]) -> Vec<MailOperationalFolderSnapshotV1> {
     let mut folders = vec![MailOperationalFolderSnapshotV1 {
         folder_id: "ALL_MAIL".to_owned(),
@@ -2548,7 +2611,7 @@ fn queued_matches_command(
 ) -> bool {
     queued.operation_id == command.operation_id
         && queued.connection_id == command.connection_id
-        && queued.provider_message_id == command.provider_message_id
+        && queued.message_id == command.message_id
         && queued.kind == command.kind
         && queued.target_value == command.target_value
 }

@@ -34,7 +34,7 @@ message ListMailMessagesQueryV1 {
 
 message GetMailMessageQueryV1 {
   string connection_id = 1;
-  string provider_message_id = 2;
+  string message_id = 2;
 }
 
 message MailOperationalQueryResponseV1 {
@@ -105,7 +105,7 @@ enum MailMessageFlagV1 {
 
 message MailMessageSummaryV1 {
   string connection_id = 1;
-  string provider_message_id = 2;
+  string message_id = 2;
   string provider_thread_id = 3;
   repeated string folder_id = 4;
   optional string subject = 5;

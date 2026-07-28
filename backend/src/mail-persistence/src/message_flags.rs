@@ -52,7 +52,7 @@ pub enum MailMessageFlagPersistenceErrorV1 {
 pub struct MailQueuedMessageFlagCommandV1 {
     pub operation_id: String,
     pub connection_id: String,
-    pub provider_message_id: String,
+    pub message_id: String,
     pub kind: MailMessageFlagKindV1,
     pub target_value: bool,
     pub request_sha256: [u8; 32],
@@ -107,10 +107,10 @@ impl MailDurablePersistence {
         }
         let message_exists = sqlx::query(
             "SELECT 1 FROM hermes_data.mail_operational_messages \
-             WHERE connection_id = $1 AND provider_message_id = $2",
+             WHERE connection_id = $1 AND message_id = $2",
         )
         .bind(&command.connection_id)
-        .bind(&command.provider_message_id)
+        .bind(&command.message_id)
         .fetch_optional(&mut *transaction)
         .await
         .map_err(|_| MailMessageFlagPersistenceErrorV1::Database)?
@@ -127,7 +127,7 @@ impl MailDurablePersistence {
         )
         .bind(&command.operation_id)
         .bind(&command.connection_id)
-        .bind(&command.provider_message_id)
+        .bind(&command.message_id)
         .bind(flag_kind_id(command.kind))
         .bind(command.target_value)
         .bind(request_sha256.as_slice())
@@ -169,7 +169,7 @@ impl MailDurablePersistence {
         validate_message_flag_status_request(request)
             .map_err(|_| MailMessageFlagPersistenceErrorV1::InvalidInput)?;
         let row = sqlx::query(
-            "SELECT operation_id, connection_id, provider_message_id, flag_kind, target_value, \
+            "SELECT operation_id, connection_id, message_id, flag_kind, target_value, \
              outcome, requested_at_unix_seconds, completed_at_unix_seconds, projection_revision \
              FROM hermes_data.mail_message_flag_operations \
              WHERE operation_id = $1 AND connection_id = $2",
@@ -190,7 +190,7 @@ impl MailDurablePersistence {
             return Err(MailMessageFlagPersistenceErrorV1::InvalidInput);
         }
         let row = sqlx::query(
-            "SELECT operation_id, connection_id, provider_message_id, flag_kind, target_value, \
+            "SELECT operation_id, connection_id, message_id, flag_kind, target_value, \
              request_sha256, exact_command_bytes \
              FROM hermes_data.mail_message_flag_operations \
              WHERE connection_id = $1 AND outcome = 1 \
@@ -220,10 +220,10 @@ impl MailDurablePersistence {
         let row = sqlx::query(
             "SELECT provider_thread_id, flags, projection_revision \
              FROM hermes_data.mail_operational_messages \
-             WHERE connection_id = $1 AND provider_message_id = $2 FOR UPDATE",
+             WHERE connection_id = $1 AND message_id = $2 FOR UPDATE",
         )
         .bind(&queued.connection_id)
-        .bind(&queued.provider_message_id)
+        .bind(&queued.message_id)
         .fetch_optional(&mut *transaction)
         .await
         .map_err(|_| MailMessageFlagPersistenceErrorV1::Database)?
@@ -260,10 +260,10 @@ impl MailDurablePersistence {
             sqlx::query(
                 "UPDATE hermes_data.mail_operational_messages \
                  SET flags = $3, projection_revision = $4, updated_at_unix_seconds = $5 \
-                 WHERE connection_id = $1 AND provider_message_id = $2",
+                 WHERE connection_id = $1 AND message_id = $2",
             )
             .bind(&queued.connection_id)
-            .bind(&queued.provider_message_id)
+            .bind(&queued.message_id)
             .bind(flags)
             .bind(revision)
             .bind(completed_at_unix_seconds)
@@ -272,10 +272,10 @@ impl MailDurablePersistence {
             .map_err(|_| MailMessageFlagPersistenceErrorV1::Database)?;
             let folder_rows = sqlx::query(
                 "SELECT folder_id FROM hermes_data.mail_operational_message_folders \
-                 WHERE connection_id = $1 AND provider_message_id = $2",
+                 WHERE connection_id = $1 AND message_id = $2",
             )
             .bind(&queued.connection_id)
-            .bind(&queued.provider_message_id)
+            .bind(&queued.message_id)
             .fetch_all(&mut *transaction)
             .await
             .map_err(|_| MailMessageFlagPersistenceErrorV1::Database)?;
@@ -371,7 +371,7 @@ fn validate_queued(
     if request_sha256 != queued.request_sha256
         || command.operation_id != queued.operation_id
         || command.connection_id != queued.connection_id
-        || command.provider_message_id != queued.provider_message_id
+        || command.message_id != queued.message_id
         || command.kind != queued.kind
         || command.target_value != queued.target_value
     {
@@ -391,7 +391,7 @@ fn queued_from_row(
     let queued = MailQueuedMessageFlagCommandV1 {
         operation_id: row_string(row, "operation_id")?,
         connection_id: row_string(row, "connection_id")?,
-        provider_message_id: row_string(row, "provider_message_id")?,
+        message_id: row_string(row, "message_id")?,
         kind: flag_kind_from_id(row_i16(row, "flag_kind")?)?,
         target_value: row
             .try_get::<bool, _>("target_value")
@@ -412,7 +412,7 @@ fn status_from_row(
     let status = MailMessageFlagOperationStatusV1 {
         operation_id: row_string(row, "operation_id")?,
         connection_id: row_string(row, "connection_id")?,
-        provider_message_id: row_string(row, "provider_message_id")?,
+        message_id: row_string(row, "message_id")?,
         kind: flag_kind_from_id(row_i16(row, "flag_kind")?)?,
         target_value: row
             .try_get::<bool, _>("target_value")

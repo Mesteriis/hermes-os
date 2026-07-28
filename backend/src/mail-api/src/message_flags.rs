@@ -10,7 +10,7 @@ pub enum MailMessageFlagKindV1 {
 pub struct MailMessageFlagCommandV1 {
     pub operation_id: String,
     pub connection_id: String,
-    pub provider_message_id: String,
+    pub message_id: String,
     pub kind: MailMessageFlagKindV1,
     pub target_value: bool,
 }
@@ -38,7 +38,7 @@ pub enum MailMessageFlagOperationOutcomeV1 {
 pub struct MailMessageFlagOperationStatusV1 {
     pub operation_id: String,
     pub connection_id: String,
-    pub provider_message_id: String,
+    pub message_id: String,
     pub kind: MailMessageFlagKindV1,
     pub target_value: bool,
     pub outcome: MailMessageFlagOperationOutcomeV1,
@@ -59,7 +59,7 @@ pub fn validate_message_flag_command(
 ) -> Result<(), MailMessageFlagContractErrorV1> {
     validate_id(&command.operation_id)?;
     validate_id(&command.connection_id)?;
-    validate_id(&command.provider_message_id)
+    validate_id(&command.message_id)
 }
 
 pub fn validate_message_flag_accepted(
@@ -80,7 +80,7 @@ pub fn validate_message_flag_status(
 ) -> Result<(), MailMessageFlagContractErrorV1> {
     validate_id(&status.operation_id)?;
     validate_id(&status.connection_id)?;
-    validate_id(&status.provider_message_id)?;
+    validate_id(&status.message_id)?;
     if status.requested_at_unix_seconds <= 0 {
         return Err(MailMessageFlagContractErrorV1::InvalidTimestamp);
     }
@@ -135,14 +135,14 @@ mod tests {
         let command = MailMessageFlagCommandV1 {
             operation_id: "flag-operation-1".to_owned(),
             connection_id: "mail-account-1".to_owned(),
-            provider_message_id: "provider-message-1".to_owned(),
+            message_id: "provider-message-1".to_owned(),
             kind: MailMessageFlagKindV1::Read,
             target_value: true,
         };
         assert_eq!(validate_message_flag_command(&command), Ok(()));
         assert_eq!(
             validate_message_flag_command(&MailMessageFlagCommandV1 {
-                provider_message_id: " provider-message-1".to_owned(),
+                message_id: " provider-message-1".to_owned(),
                 ..command
             }),
             Err(MailMessageFlagContractErrorV1::InvalidId)
@@ -154,7 +154,7 @@ mod tests {
         let status = MailMessageFlagOperationStatusV1 {
             operation_id: "flag-operation-1".to_owned(),
             connection_id: "mail-account-1".to_owned(),
-            provider_message_id: "provider-message-1".to_owned(),
+            message_id: "provider-message-1".to_owned(),
             kind: MailMessageFlagKindV1::Starred,
             target_value: true,
             outcome: MailMessageFlagOperationOutcomeV1::Succeeded,

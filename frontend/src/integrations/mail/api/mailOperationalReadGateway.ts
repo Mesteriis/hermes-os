@@ -84,13 +84,13 @@ export async function listMailOperationalMessages(
 
 export async function getMailOperationalMessage(input: {
 	connectionId: string
-	providerMessageId: string
+	messageId: string
 }): Promise<MailMessageDetailV1> {
 	const response = await query({
 		case: 'getMessage',
 		value: create(GetMailMessageQueryV1Schema, {
 			connectionId: identifier('connection ID', input.connectionId),
-			providerMessageId: identifier('provider message ID', input.providerMessageId),
+			messageId: identifier('provider message ID', input.messageId),
 		}),
 	})
 	if (response.response.case !== 'message' || !response.response.value.summary) {

@@ -26,7 +26,7 @@ describe('Mail operational read Gateway adapter', () => {
 			.mockResolvedValueOnce({ response: { case: 'threads', value: { item: [] } } })
 			.mockResolvedValueOnce({ response: { case: 'messages', value: { item: [] } } })
 			.mockResolvedValueOnce({
-				response: { case: 'message', value: { summary: { providerMessageId: 'message-1' } } },
+				response: { case: 'message', value: { summary: { messageId: 'message-1' } } },
 			})
 
 		await listMailOperationalFolders({ connectionId: ' primary ', limit: 25 })
@@ -42,7 +42,7 @@ describe('Mail operational read Gateway adapter', () => {
 		})
 		await getMailOperationalMessage({
 			connectionId: 'primary',
-			providerMessageId: ' message-1 ',
+			messageId: ' message-1 ',
 		})
 
 		expect(query.mock.calls.map(([request]) => request.query.case)).toEqual([
@@ -61,7 +61,7 @@ describe('Mail operational read Gateway adapter', () => {
 			limit: 50,
 		})
 		expect(query.mock.calls[2]![0].query.value.providerThreadId).toBe('thread-1')
-		expect(query.mock.calls[3]![0].query.value.providerMessageId).toBe('message-1')
+		expect(query.mock.calls[3]![0].query.value.messageId).toBe('message-1')
 	})
 
 	it('fails closed before transport for invalid input and mismatched responses', async () => {
@@ -71,7 +71,7 @@ describe('Mail operational read Gateway adapter', () => {
 		})).rejects.toThrow('page limit')
 		await expect(getMailOperationalMessage({
 			connectionId: 'primary',
-			providerMessageId: 'bad\nidentifier',
+			messageId: 'bad\nidentifier',
 		})).rejects.toThrow('provider message ID is invalid')
 		expect(query).not.toHaveBeenCalled()
 
@@ -87,7 +87,7 @@ describe('Mail operational read Gateway adapter', () => {
 		})
 		await expect(getMailOperationalMessage({
 			connectionId: 'primary',
-			providerMessageId: 'message-1',
+			messageId: 'message-1',
 		})).rejects.toThrow('message response is unavailable')
 	})
 })

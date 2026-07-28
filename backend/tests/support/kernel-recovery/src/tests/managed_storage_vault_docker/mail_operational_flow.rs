@@ -9,7 +9,9 @@ use hermes_mail_api::{
         MailMessageFlagCommandV1, MailMessageFlagKindV1, MailMessageFlagOperationOutcomeV1,
         MailMessageFlagStatusRequestV1,
     },
-    operational::{MailMessageFlagV1, MailOperationalQueryResponseV1, MailOperationalQueryV1},
+    operational::{
+        MailFolderKindV1, MailMessageFlagV1, MailOperationalQueryResponseV1, MailOperationalQueryV1,
+    },
 };
 use hermes_mail_runtime::client_port::{
     MailClientPortErrorV1, decode_module_response, encode_module_request,
@@ -39,12 +41,24 @@ pub(super) fn assert_mail_operational_read(
     let MailOperationalQueryResponseV1::Folders(folders) = folders else {
         panic!("Mail folders query returned the wrong response")
     };
-    assert_eq!(folders.items.len(), 1);
-    let inbox = &folders.items[0];
+    assert_eq!(folders.items.len(), 3);
+    let inbox = folders
+        .items
+        .iter()
+        .find(|folder| folder.kind == MailFolderKindV1::Inbox)
+        .expect("Mail folder discovery preserves the Inbox role");
     assert_eq!(inbox.connection_id, MAIL_ACCOUNT_ID);
     assert_eq!(inbox.folder_id, "INBOX");
     assert_eq!(inbox.total_messages, 1);
     assert_eq!(inbox.unread_messages, 1);
+    assert!(folders.items.iter().any(|folder| {
+        folder.folder_id == "Archive" && folder.kind == MailFolderKindV1::Archive
+    }));
+    assert!(
+        folders.items.iter().any(|folder| {
+            folder.folder_id == "Trash" && folder.kind == MailFolderKindV1::Trash
+        })
+    );
 
     let messages = query_operational(
         store,
@@ -79,7 +93,7 @@ pub(super) fn assert_mail_operational_read(
         .next_cursor
         .clone()
         .expect("bounded Mail message page cursor");
-    let provider_message_id = summary.provider_message_id.clone();
+    let message_id = summary.message_id.clone();
 
     let detail = query_operational(
         store,
@@ -88,7 +102,7 @@ pub(super) fn assert_mail_operational_read(
         73,
         MailOperationalQueryV1::GetMessage {
             connection_id: MAIL_ACCOUNT_ID.to_owned(),
-            provider_message_id,
+            message_id,
         },
     );
     let MailOperationalQueryResponseV1::Message(detail) = detail else {
@@ -117,7 +131,7 @@ pub(super) fn assert_mail_message_flags(
     supervisor: &ManagedRuntimeSupervisor,
     mail: &StartedMailRuntime,
     imap: &MailImapFixture,
-) {
+) -> String {
     let messages = query_operational(
         store,
         supervisor,
@@ -134,11 +148,12 @@ pub(super) fn assert_mail_message_flags(
     let MailOperationalQueryResponseV1::Messages(messages) = messages else {
         panic!("Mail message flag setup returned the wrong response")
     };
-    let provider_message_id = messages.items[0].provider_message_id.clone();
+    let message_id = messages.items[0].message_id.clone();
+    assert_opaque_imap_message_id(&message_id);
     let command = MailMessageFlagCommandV1 {
         operation_id: "managed-mail-message-read-1".to_owned(),
         connection_id: MAIL_ACCOUNT_ID.to_owned(),
-        provider_message_id: provider_message_id.clone(),
+        message_id: message_id.clone(),
         kind: MailMessageFlagKindV1::Read,
         target_value: true,
     };
@@ -184,7 +199,7 @@ pub(super) fn assert_mail_message_flags(
         131,
         MailOperationalQueryV1::GetMessage {
             connection_id: MAIL_ACCOUNT_ID.to_owned(),
-            provider_message_id,
+            message_id: message_id.clone(),
         },
     );
     let MailOperationalQueryResponseV1::Message(detail) = detail else {
@@ -205,7 +220,20 @@ pub(super) fn assert_mail_message_flags(
     let MailOperationalQueryResponseV1::Folders(folders) = folders else {
         panic!("Mail message flag folder reconciliation returned the wrong response")
     };
-    assert_eq!(folders.items[0].unread_messages, 0);
+    let inbox = folders
+        .items
+        .iter()
+        .find(|folder| folder.kind == MailFolderKindV1::Inbox)
+        .expect("Mail flag reconciliation preserves the Inbox role");
+    assert_eq!(inbox.unread_messages, 0);
+    assert!(folders.items.iter().any(|folder| {
+        folder.folder_id == "Archive" && folder.kind == MailFolderKindV1::Archive
+    }));
+    assert!(
+        folders.items.iter().any(|folder| {
+            folder.folder_id == "Trash" && folder.kind == MailFolderKindV1::Trash
+        })
+    );
 
     let replayed = route_message_flag_command(store, supervisor, mail, 133, command);
     assert_eq!(replayed, accepted);
@@ -215,6 +243,103 @@ pub(super) fn assert_mail_message_flags(
         provider_mutations_before + 1,
         "an exact replayed message flag command must not reach the provider twice"
     );
+    message_id
+}
+
+pub(super) fn assert_mail_identity_survives_restart_and_stale_locator_is_rejected(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    imap: &MailImapFixture,
+    expected_message_id: &str,
+) {
+    let messages = query_operational(
+        store,
+        supervisor,
+        mail,
+        140,
+        MailOperationalQueryV1::ListMessages {
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            folder_id: Some("INBOX".to_owned()),
+            provider_thread_id: None,
+            cursor: None,
+            limit: 1,
+        },
+    );
+    let MailOperationalQueryResponseV1::Messages(messages) = messages else {
+        panic!("Mail restart identity query returned the wrong response")
+    };
+    assert_eq!(messages.items.len(), 1);
+    assert_eq!(messages.items[0].message_id, expected_message_id);
+    assert_opaque_imap_message_id(&messages.items[0].message_id);
+
+    imap.set_uid_validity(2);
+    let command = MailMessageFlagCommandV1 {
+        operation_id: "managed-mail-message-stale-locator-1".to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        message_id: expected_message_id.to_owned(),
+        kind: MailMessageFlagKindV1::Starred,
+        target_value: true,
+    };
+    let provider_connections_before = imap.accepted_connections();
+    let provider_mutations_before = imap.message_flag_mutations();
+    route_message_flag_command(store, supervisor, mail, 141, command.clone());
+    let status = (0..50)
+        .find_map(|attempt| {
+            let status = query_message_flag_status(
+                store,
+                supervisor,
+                mail,
+                142 + attempt,
+                &command.operation_id,
+            );
+            match status.outcome {
+                MailMessageFlagOperationOutcomeV1::Pending => {
+                    std::thread::sleep(Duration::from_millis(100));
+                    None
+                }
+                _ => Some(status),
+            }
+        })
+        .expect("stale IMAP locator reaches a terminal status");
+    assert_eq!(
+        status.outcome,
+        MailMessageFlagOperationOutcomeV1::Rejected,
+        "a changed provider UIDVALIDITY must reject the stored locator"
+    );
+    assert!(
+        imap.accepted_connections() > provider_connections_before,
+        "Mail must load the persisted locator and check it against the provider after restart"
+    );
+    assert_eq!(
+        imap.message_flag_mutations(),
+        provider_mutations_before,
+        "stale UIDVALIDITY must be rejected before UID STORE"
+    );
+
+    let detail = query_operational(
+        store,
+        supervisor,
+        mail,
+        193,
+        MailOperationalQueryV1::GetMessage {
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            message_id: expected_message_id.to_owned(),
+        },
+    );
+    let MailOperationalQueryResponseV1::Message(detail) = detail else {
+        panic!("stale IMAP locator projection query returned the wrong response")
+    };
+    assert!(!detail.summary.flags.contains(&MailMessageFlagV1::Starred));
+}
+
+fn assert_opaque_imap_message_id(message_id: &str) {
+    let digest = message_id
+        .strip_prefix("imap:v1:")
+        .expect("IMAP message identity uses the versioned Mail-owned namespace");
+    assert_eq!(digest.len(), 64);
+    assert!(digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert!(!message_id.contains("INBOX"));
 }
 
 fn route_message_flag_command(

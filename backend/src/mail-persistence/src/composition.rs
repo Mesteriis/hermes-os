@@ -1207,7 +1207,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 fn hex_decode(value: &str) -> Result<Vec<u8>, MailCompositionPersistenceErrorV1> {
-    if value.len() % 2 != 0 {
+    if !value.len().is_multiple_of(2) {
         return Err(MailCompositionPersistenceErrorV1::InvalidCursor);
     }
     value

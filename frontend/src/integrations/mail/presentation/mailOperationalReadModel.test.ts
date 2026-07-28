@@ -32,7 +32,7 @@ describe('Mail operational read presentation model', () => {
 			unreadCount: 1n,
 		})], 'thread-1')
 		const message = create(MailMessageSummaryV1Schema, {
-			providerMessageId: 'message-1',
+			messageId: 'message-1',
 			providerThreadId: 'thread-1',
 			folderId: ['inbox'],
 			subject: 'Clean room',
