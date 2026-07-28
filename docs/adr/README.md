@@ -459,3 +459,7 @@ continuation для всех repeated list/search operations. Frontend соби�
 participants, attachment anchors, references и evidence history только через
 Communications owner contract; provider fallback, content и Blob locators
 запрещены.
+ADR-0322 закрывает обнаруженный live разрыв loopback owner mutations:
+отдельный native app signer подписывает только exact Kernel challenge initial
+development device, Gateway/Kernel сохраняют fresh P-256 proof, а private key
+не попадает в browser, Vite, integration или domain.

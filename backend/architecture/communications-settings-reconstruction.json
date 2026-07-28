@@ -272,6 +272,15 @@
       ]
     },
     {
+      "gate": "loopback_native_owner_device_proof_host_v1",
+      "role": "app",
+      "owner": "first_party_development",
+      "state": "planned",
+      "dependsOn": [
+        "client_gateway_v1"
+      ]
+    },
+    {
       "gate": "provider_qr_account_linking_frontend_v1",
       "role": "app",
       "owner": "first_party_client",
@@ -299,6 +308,7 @@
         "legacy_provider_recovery_bundle_v1",
         "owner_vault_provisioning_desktop_v1",
         "loopback_browser_owner_vault_host_v1",
+        "loopback_native_owner_device_proof_host_v1",
         "mail_account_lifecycle_v1",
         "telegram_tdlib_user_qr_identity_v1"
       ]

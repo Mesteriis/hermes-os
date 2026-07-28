@@ -413,6 +413,7 @@ runtime не является domain, а app composition не становитс
 | Zulip lifecycle/history/search/client | Zulip | `zulip_full_operational_v1` |
 | Provider-owned Telegram/WhatsApp QR frontend | first-party client composition | `provider_qr_account_linking_frontend_v1` |
 | Browser development credential sealing | first-party development host | `loopback_browser_owner_vault_host_v1` |
+| Browser development owner-device proof | first-party development host | `loopback_native_owner_device_proof_host_v1` |
 | Immutable legacy provider recovery source | first-party client maintenance adapter | `legacy_provider_recovery_bundle_v1` |
 | Native legacy secret custody and provider-specific apply | first-party client composition | `legacy_provider_native_secret_custody_v1` |
 | Provider-neutral delivery intent | `communication_delivery_intent` workflow | `communication_delivery_intent_v1` |
@@ -481,7 +482,8 @@ release.
    First-party desktop отдельно закрывает implemented
    `owner_vault_provisioning_desktop_v1`, включая generated client, native host
    adapter и integration-owned UI. First-party development assembly отдельно
-   закрывает `loopback_browser_owner_vault_host_v1`, а provider frontend
+   закрывает `loopback_browser_owner_vault_host_v1` и
+   `loopback_native_owner_device_proof_host_v1`, а provider frontend
    закрывает `provider_qr_account_linking_frontend_v1`; эти gates не
    превращают host adapter в integration или QR authority. Multi-client
    `owner_vault_provisioning_v1`
@@ -499,7 +501,8 @@ release.
    Owner-authorized legacy source отдельно проходит implemented
    `legacy_provider_recovery_bundle_v1` по ADR-0321. Его подключение к current
    Vault и provider-specific Mail/Telegram flows остаётся planned
-   `legacy_provider_native_secret_custody_v1`; source adapter не становится
+   `legacy_provider_native_secret_custody_v1` и требует working loopback owner
+   proof по ADR-0322; source adapter не становится
    integration, domain или generic account service.
    Затем Mail read, composition и command gates проходят независимо, без
    одного всесильного Mail capability.
