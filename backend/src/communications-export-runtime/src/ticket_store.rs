@@ -130,7 +130,7 @@ impl CommunicationsExportTicketStoreV1 {
         else {
             return Ok(None);
         };
-        let ticket = tickets.remove(position);
+        let ticket = &tickets[position];
         if ticket.logical_owner_id != logical_owner_id
             || ticket.runtime_generation != runtime_generation
             || ticket.grant_epoch != grant_epoch
@@ -138,6 +138,7 @@ impl CommunicationsExportTicketStoreV1 {
         {
             return Ok(None);
         }
+        let ticket = tickets.remove(position);
         Ok(Some(ConsumedCommunicationsExportTicketV1 {
             export_id: ticket.export_id,
             artifact: ticket.artifact,
@@ -195,16 +196,26 @@ mod tests {
                 .expect("consume"),
             None
         );
-        let issued = store
-            .issue("owner-1", [1; 16], artifact(), 200)
-            .expect("issue");
         assert_eq!(
             store
-                .consume(issued.opaque_read_capability, "owner-1", 7, 9, 201)
+                .consume(issued.opaque_read_capability, "owner-1", 7, 9, 102)
                 .expect("consume")
                 .expect("ticket")
                 .artifact,
             artifact()
+        );
+        let issued = store
+            .issue("owner-1", [1; 16], artifact(), 200)
+            .expect("issue");
+        assert_eq!(
+            store.consume(issued.opaque_read_capability, "owner-1", 8, 9, 201),
+            Err(CommunicationsExportTicketStoreErrorV1::InvalidRequest)
+        );
+        assert!(
+            store
+                .consume(issued.opaque_read_capability, "owner-1", 7, 9, 201)
+                .expect("consume after rejected generation")
+                .is_some()
         );
         assert_eq!(
             store
