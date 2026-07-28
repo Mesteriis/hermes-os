@@ -27,8 +27,14 @@ use hermes_communications_evidence_export_source_api::{
     evidence_export_rejected_contract_reference_v1,
 };
 use hermes_communications_export_api::{
-    COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1, COMMUNICATIONS_EXPORT_MODULE_ID_V1,
-    COMMUNICATIONS_EXPORT_OWNER_V1,
+    COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1, COMMUNICATIONS_EXPORT_COMMAND_CONNECT_PATH_V1,
+    COMMUNICATIONS_EXPORT_COMMAND_CONTRACT_NAME_V1, COMMUNICATIONS_EXPORT_CONTRACT_MAJOR_V1,
+    COMMUNICATIONS_EXPORT_CONTRACT_REVISION_V1, COMMUNICATIONS_EXPORT_MAX_ARTIFACT_BYTES_V1,
+    COMMUNICATIONS_EXPORT_MODULE_ID_V1, COMMUNICATIONS_EXPORT_OWNER_V1,
+    COMMUNICATIONS_EXPORT_QUERY_CONNECT_PATH_V1, COMMUNICATIONS_EXPORT_QUERY_CONTRACT_NAME_V1,
+    COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1, COMMUNICATIONS_EXPORT_READ_CONTRACT_NAME_V1,
+    COMMUNICATIONS_EXPORT_SCHEMA_SHA256, COMMUNICATIONS_EXPORT_TICKET_CONNECT_PATH_V1,
+    COMMUNICATIONS_EXPORT_TICKET_CONTRACT_NAME_V1,
 };
 use hermes_communications_export_persistence::schema::{
     COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V1, communications_export_storage_bundle_v1,
@@ -2406,6 +2412,8 @@ fn record_communications_export_runtime_fixture(store: &SqliteControlStore) {
             ModuleEventRouteDirectionV1::Consume,
         ),
     ];
+    let client_rpc_routes = communications_export_client_rpc_routes();
+    let client_blob_route = communications_export_client_blob_route();
     store
         .create_pending_registration_with_all_descriptor_requests(
             &registration,
@@ -2416,8 +2424,8 @@ fn record_communications_export_runtime_fixture(store: &SqliteControlStore) {
                 blobs: &[client_blob, artifact_blob],
                 scheduler: &[],
                 vault_purposes: &[],
-                client_rpc_routes: &[],
-                client_blob_routes: &[],
+                client_rpc_routes: &client_rpc_routes,
+                client_blob_routes: std::slice::from_ref(&client_blob_route),
             },
         )
         .expect("record Communications Export registration");
@@ -2492,6 +2500,59 @@ fn communications_export_event_route(
                     30_000,
                 )
             }),
+        },
+    )
+}
+
+fn communications_export_client_rpc_routes() -> [ModuleClientRpcRouteV1; 3] {
+    [
+        communications_export_client_rpc_route(
+            COMMUNICATIONS_EXPORT_COMMAND_CONTRACT_NAME_V1,
+            COMMUNICATIONS_EXPORT_COMMAND_CONNECT_PATH_V1,
+        ),
+        communications_export_client_rpc_route(
+            COMMUNICATIONS_EXPORT_QUERY_CONTRACT_NAME_V1,
+            COMMUNICATIONS_EXPORT_QUERY_CONNECT_PATH_V1,
+        ),
+        communications_export_client_rpc_route(
+            COMMUNICATIONS_EXPORT_TICKET_CONTRACT_NAME_V1,
+            COMMUNICATIONS_EXPORT_TICKET_CONNECT_PATH_V1,
+        ),
+    ]
+}
+
+fn communications_export_client_rpc_route(
+    contract_name: &str,
+    path: &str,
+) -> ModuleClientRpcRouteV1 {
+    ModuleClientRpcRouteV1::new(
+        COMMUNICATIONS_EXPORT_REGISTRATION,
+        COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1,
+        COMMUNICATIONS_EXPORT_OWNER_V1,
+        contract_name,
+        ModuleClientRpcContractVersionV1 {
+            major: COMMUNICATIONS_EXPORT_CONTRACT_MAJOR_V1,
+            revision: COMMUNICATIONS_EXPORT_CONTRACT_REVISION_V1,
+        },
+        COMMUNICATIONS_EXPORT_SCHEMA_SHA256,
+        path,
+    )
+}
+
+fn communications_export_client_blob_route() -> ModuleClientBlobRouteV1 {
+    ModuleClientBlobRouteV1::new(
+        COMMUNICATIONS_EXPORT_REGISTRATION,
+        COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1,
+        COMMUNICATIONS_EXPORT_OWNER_V1,
+        COMMUNICATIONS_EXPORT_READ_CONTRACT_NAME_V1,
+        ModuleClientBlobContractVersionV1 {
+            major: COMMUNICATIONS_EXPORT_CONTRACT_MAJOR_V1,
+            revision: COMMUNICATIONS_EXPORT_CONTRACT_REVISION_V1,
+        },
+        COMMUNICATIONS_EXPORT_SCHEMA_SHA256,
+        ModuleClientBlobTransportV1 {
+            path: COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1.to_owned(),
+            max_response_bytes: COMMUNICATIONS_EXPORT_MAX_ARTIFACT_BYTES_V1,
         },
     )
 }
