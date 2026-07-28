@@ -538,6 +538,48 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         );
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    let rejected_export_id = [12; 16];
+    let rejected_start = StartEvidenceExportResponseV1::decode(
+        route(
+            4,
+            communications_export_command_contract_reference_v1(),
+            StartEvidenceExportRequestV1 {
+                protocol_major: 1,
+                operation_id: rejected_export_id.to_vec(),
+                message_ids: vec![vec![99; 16]],
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode accepted unknown-message export command");
+    assert_eq!(rejected_start.export_id, rejected_export_id);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let status = GetEvidenceExportStatusResponseV1::decode(
+            route(
+                5,
+                communications_export_query_contract_reference_v1(),
+                GetEvidenceExportStatusRequestV1 {
+                    protocol_major: 1,
+                    export_id: rejected_export_id.to_vec(),
+                }
+                .encode_to_vec(),
+            )
+            .as_slice(),
+        )
+        .expect("decode rejected Communications Export status");
+        if status.status == EvidenceExportStatusV1::EvidenceExportStatusRejected as i32 {
+            assert_eq!(status.completed_items, 0);
+            assert_eq!(status.artifact_bytes, 0);
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "unknown or deleted canonical message must reach terminal rejected export status; status={status:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     let ticket = IssueEvidenceExportReadResponseV1::decode(
         route(
             3,
