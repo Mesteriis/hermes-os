@@ -4,8 +4,14 @@ import Icon from '../../../shared/ui/Icon.vue'
 import { useTelegramQrPairing } from '../linking/useTelegramQrPairing'
 import './telegramQrPairingPanel.css'
 
-const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
-const pairing = useTelegramQrPairing(() => props.module)
+const props = defineProps<{
+	module: ClientModuleBootstrapV1 | null
+	startRequest?: number
+}>()
+const pairing = useTelegramQrPairing(
+	() => props.module,
+	() => props.startRequest ?? 0,
+)
 </script>
 
 <template>
@@ -13,7 +19,7 @@ const pairing = useTelegramQrPairing(() => props.module)
 		<header>
 			<div>
 				<small>Provider authorization</small>
-				<h3>Telegram QR login</h3>
+				<h3>Telegram user QR login</h3>
 				<p>The QR is generated locally from the short-lived TDLib login link.</p>
 			</div>
 			<strong>{{ pairing.state.value }}</strong>
@@ -62,7 +68,7 @@ const pairing = useTelegramQrPairing(() => props.module)
 				@click="pairing.refresh"
 			>
 				<Icon :icon="pairing.busy.value ? 'tabler:loader-2' : 'tabler:qrcode'" />
-				{{ pairing.busy.value ? 'Refreshing…' : 'Show Telegram QR' }}
+				{{ pairing.busy.value ? 'Refreshing…' : 'Refresh Telegram QR' }}
 			</button>
 		</footer>
 	</section>

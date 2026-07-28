@@ -24,13 +24,13 @@ export function useTelegramAccountSetup(
 		&& apiHash.value,
 	))
 
-	async function submit(): Promise<void> {
+	async function submit(): Promise<boolean> {
 		const current = module()
-		if (!current?.settings || !canSubmit.value) return
+		if (!current?.settings || !canSubmit.value) return false
 		if (!secureHostAvailable) {
 			message.value = 'Use the desktop shell or root make dev to seal the Telegram API hash and session key.'
 			messageTone.value = 'neutral'
-			return
+			return false
 		}
 		busy.value = true
 		message.value = ''
@@ -44,12 +44,14 @@ export function useTelegramAccountSetup(
 				apiHash: new TextEncoder().encode(apiHash.value),
 			})
 			apiHash.value = ''
-			message.value = 'Telegram account provisioned. Continue with the QR authorization panel below.'
+			message.value = 'Telegram user account saved. Preparing the provider-issued QR code.'
 			messageTone.value = 'success'
+			return true
 		} catch {
 			apiHash.value = ''
 			message.value = 'Telegram setup failed before provider authorization. No secret was written to Settings.'
 			messageTone.value = 'error'
+			return false
 		} finally {
 			busy.value = false
 		}

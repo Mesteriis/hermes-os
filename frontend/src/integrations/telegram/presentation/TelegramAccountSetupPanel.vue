@@ -5,23 +5,28 @@ import { useTelegramAccountSetup } from '../setup/useTelegramAccountSetup'
 
 const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
 const setup = useTelegramAccountSetup(() => props.module)
+const emit = defineEmits<{ provisioned: [] }>()
+
+async function submit(): Promise<void> {
+	if (await setup.submit()) emit('provisioned')
+}
 </script>
 
 <template>
 	<IntegrationAccountSetupCard
 		eyebrow="Provider account"
-		title="Connect Telegram"
-		description="The integration owns API credentials, TDLib session state and the later authorization lifecycle."
+		title="Connect Telegram user"
+		description="User account only. The integration owns Telegram API credentials and TDLib session state; bot tokens are not accepted."
 		tone="telegram"
 		icon="tabler:brand-telegram"
 		:account-state="setup.configured.value ? 'Configured' : 'No account'"
-		submit-label="Create Telegram account"
+		submit-label="Save and show QR"
 		:busy="setup.busy.value"
 		:disabled="!setup.canSubmit.value"
 		:message="setup.message.value || (!setup.secureHostAvailable ? 'Secure credential commit requires the desktop shell or root make dev.' : '')"
 		:message-tone="setup.messageTone.value"
 		:expanded="!setup.configured.value"
-		@submit="setup.submit"
+		@submit="submit"
 	>
 		<label>
 			<span>Local account ID</span>

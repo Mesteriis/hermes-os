@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import {
 	publicModuleSettingRows,
@@ -14,6 +14,7 @@ import TelegramQrPairingPanel from './TelegramQrPairingPanel.vue'
 
 const TELEGRAM_MODULE_ID = 'hermes-telegram-runtime'
 const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
+const qrStartRequest = ref(0)
 const model = computed<ModuleSettingsPanelModel>(() => {
 	const owned = props.module?.moduleId === TELEGRAM_MODULE_ID ? props.module : null
 	const settings = owned?.settings
@@ -30,13 +31,17 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 		settings: publicModuleSettingRows(owned ? [owned] : []),
 	}
 })
+
+function startQrAuthorization(): void {
+	qrStartRequest.value += 1
+}
 </script>
 
 <template>
 	<div class="provider-settings-stack">
 		<ModuleSettingsPanel :model="model" />
-		<TelegramAccountSetupPanel :module="module" />
+		<TelegramAccountSetupPanel :module="module" @provisioned="startQrAuthorization" />
 		<TelegramAccountManagementPanel :module="module" />
-		<TelegramQrPairingPanel :module="module" />
+		<TelegramQrPairingPanel :module="module" :start-request="qrStartRequest" />
 	</div>
 </template>

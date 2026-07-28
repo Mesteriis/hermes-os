@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import {
 	getTelegramAuthorizationStatus,
@@ -10,7 +10,10 @@ const TELEGRAM_AUTHORIZATION_CAPABILITY_ID = 'telegram.authorization.v1'
 const AUTHORIZATION_POLL_INTERVAL_MS = 2_000
 const TERMINAL_AUTHORIZATION_STATES = new Set(['ready', 'closed', 'error'])
 
-export function useTelegramQrPairing(module: () => ClientModuleBootstrapV1 | null) {
+export function useTelegramQrPairing(
+	module: () => ClientModuleBootstrapV1 | null,
+	startRequest: () => number = () => 0,
+) {
 	const state = ref('unknown')
 	const qrDataUrl = ref('')
 	const passwordHint = ref('')
@@ -24,6 +27,8 @@ export function useTelegramQrPairing(module: () => ClientModuleBootstrapV1 | nul
 	)
 	const configured = computed(() => (module()?.settings?.effectiveRevision ?? 0n) > 0n)
 	const canRefresh = computed(() => admitted.value && configured.value)
+	let pendingStartRequest = 0
+	let handledStartRequest = 0
 
 	async function refresh(): Promise<void> {
 		if (!canRefresh.value || busy.value) return
@@ -78,6 +83,23 @@ export function useTelegramQrPairing(module: () => ClientModuleBootstrapV1 | nul
 	function clearQr(): void {
 		qrDataUrl.value = ''
 	}
+
+	watch(
+		[() => startRequest(), canRefresh],
+		([requested, ready]) => {
+			if (requested > handledStartRequest) pendingStartRequest = requested
+			if (!pendingStartRequest) return
+			if (!ready) {
+				message.value = 'Telegram account saved. Waiting for managed Settings before requesting the provider QR.'
+				messageTone.value = 'neutral'
+				return
+			}
+			handledStartRequest = pendingStartRequest
+			pendingStartRequest = 0
+			void refresh()
+		},
+		{ immediate: true },
+	)
 
 	onBeforeUnmount(() => {
 		stopPolling()
