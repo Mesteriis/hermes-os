@@ -2,8 +2,8 @@
 
 - Статус: принято
 - Дата: 2026-07-28
-- Состояние реализации: planned. Решение должно быть реализовано целиком до
-  перевода `communications_export_v1` в `implemented`.
+- Состояние реализации: implementing. Production units и managed backend
+  contour реализованы, но gate остаётся закрыт до полного evidence ниже.
 - Связанные решения: ADR-0200, ADR-0201, ADR-0204, ADR-0205, ADR-0212,
   ADR-0213, ADR-0215, ADR-0220, ADR-0230, ADR-0231, ADR-0240, ADR-0253,
   ADR-0257, ADR-0275, ADR-0279, ADR-0282, ADR-0313, ADR-0314, ADR-0315
@@ -221,6 +221,39 @@ Gate становится `implemented` только атомарно при н�
 
 Наличие ADR, encoder unit test или frontend download button отдельно gate не
 открывает.
+
+### Текущее evidence и остаток gate
+
+На 2026-07-29 реализованы и проверены:
+
+- все шесть build units, exact descriptor/release assembly и independently
+  restartable workflow runtime;
+- durable source command/result, workflow job inbox/outbox, replay и terminal
+  state;
+- target-bound source copies, cross-owner Blob custody, deterministic bounded
+  JSONL, artifact receipt и one-use authenticated `client_blob`;
+- generated frontend workflow controller/presentation без domain-to-workflow
+  implementation import;
+- managed wrong-owner status/ticket, edit snapshot, delete, unknown ID,
+  replay, aggregate size, invalid UTF-8, restart, revoke, NATS outage и Blob
+  outage checks;
+- atomic current-revision fence непосредственно перед Communications
+  inbox/outbox commit: изменённая или удалённая canonical revision даёт typed
+  `STALE_REVISION`, а не prepared result;
+- architecture/SRP/Cargo/Clippy, workspace/integration tests, dependency policy,
+  SBOM и managed Storage/Vault/NATS/Blob/Gateway contour.
+
+Gate всё ещё не `implemented`, потому что отсутствуют:
+
+1. детерминированный managed race test, который изменяет canonical revision
+   между source snapshot и result commit и наблюдает terminal
+   `STALE_REVISION`;
+2. live browser evidence через root `make dev` для полного
+   start → status → one-use download flow, включая сохранение artifact
+   first-party download adapter.
+
+Static architecture test, Storybook visual test и прямой managed Gateway route
+не заменяют эти два доказательства.
 
 ## Rollback
 
