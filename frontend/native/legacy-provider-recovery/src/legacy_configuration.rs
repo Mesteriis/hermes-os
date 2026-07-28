@@ -10,6 +10,7 @@ const PROVIDER_KEYS: [&str; 3] = [
     "HERMES_TELEGRAM_API_HASH",
     "HERMES_TELEGRAM_API_ID",
 ];
+#[cfg(feature = "prepare")]
 const DATABASE_KEYS: [&str; 3] = [
     "HERMES_POSTGRES_DB",
     "HERMES_POSTGRES_PASSWORD",
@@ -164,6 +165,10 @@ mod tests {
             "#,
         )
         .expect("parse exact provider configuration");
+        assert_eq!(
+            parsed.google_oauth_client_path,
+            PathBuf::from("/private/oauth.json"),
+        );
         assert_eq!(parsed.telegram_api_id, 12345);
         assert_eq!(parsed.telegram_api_hash.as_str(), "private-hash");
     }

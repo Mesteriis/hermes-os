@@ -849,7 +849,7 @@ impl MailAdmittedRuntime {
                         )
                     }
                 }
-                MailInboundTransportV1::Gmail(_) => {
+                MailInboundTransportV1::Gmail(configuration) => {
                     let bindings = match self
                         .durable
                         .gmail_oauth_credential_binding(connection_id)
@@ -876,11 +876,16 @@ impl MailAdmittedRuntime {
                         ],
                     };
                     let readiness = provider_path_readiness(&bindings, self.runtime_generation);
+                    let delivery_readiness = if configuration.from_address.is_some() {
+                        readiness
+                    } else {
+                        MailProviderPathReadinessV1::NotConfigured
+                    };
                     (
                         bindings,
                         MailConnectorProfileV1::Gmail,
                         readiness,
-                        readiness,
+                        delivery_readiness,
                     )
                 }
             };
@@ -920,7 +925,7 @@ impl MailAdmittedRuntime {
                         MailProviderPathReadinessV1::NotConfigured
                     };
                 }
-                MailInboundTransportV1::Gmail(_) => {
+                MailInboundTransportV1::Gmail(configuration) => {
                     let path_readiness = lifecycle_path_readiness(
                         lifecycle.credentials.iter().filter(|progress| {
                             matches!(
@@ -932,7 +937,11 @@ impl MailAdmittedRuntime {
                         lifecycle.action,
                     );
                     sync_readiness = path_readiness;
-                    delivery_readiness = path_readiness;
+                    delivery_readiness = if configuration.from_address.is_some() {
+                        path_readiness
+                    } else {
+                        MailProviderPathReadinessV1::NotConfigured
+                    };
                 }
             }
             lifecycle_account_readiness(lifecycle.state, lifecycle.action)
@@ -1750,7 +1759,10 @@ impl MailAdmittedRuntime {
                 .as_ref()
                 .map(|endpoint| endpoint.from_address.as_str())
                 .ok_or(MailBootstrapError::Admission)?,
-            MailInboundTransportV1::Gmail(configuration) => configuration.from_address.as_str(),
+            MailInboundTransportV1::Gmail(configuration) => configuration
+                .from_address
+                .as_deref()
+                .ok_or(MailBootstrapError::Admission)?,
         };
         let rfc822_message =
             compose_rfc822(from_address, &message).map_err(|_| MailBootstrapError::Admission)?;
@@ -2039,7 +2051,10 @@ impl MailAdmittedRuntime {
             MailProviderDeliveryRequestV1 {
                 message,
                 attachments,
-                from_address: &configuration.from_address,
+                from_address: configuration
+                    .from_address
+                    .as_deref()
+                    .ok_or(MailDeliveryDispatchErrorV1::InvalidStoredCommand)?,
                 provider: ProviderProvenanceV1::MailGmail,
                 queued,
                 completed_at_unix_seconds,

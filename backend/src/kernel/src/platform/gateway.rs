@@ -661,11 +661,7 @@ fn encode_owner_client_rpc_module_request(
     request_id: u64,
     request_payload: &[u8],
 ) -> Result<Vec<u8>, ()> {
-    if module_id.is_empty()
-        || logical_owner_id.is_empty()
-        || request_id == 0
-        || request_payload.is_empty()
-    {
+    if module_id.is_empty() || logical_owner_id.is_empty() || request_id == 0 {
         return Err(());
     }
     Ok(ModuleClientRequestV1 {
@@ -693,5 +689,34 @@ fn map_managed_client_rpc_route_error(error: String) -> ClientRpcRouteErrorV1 {
         "module registration is not approved" => ClientRpcRouteErrorV1::NotFound,
         "capability is not granted to this registration" => ClientRpcRouteErrorV1::NotFound,
         _ => ClientRpcRouteErrorV1::Internal,
+    }
+}
+
+#[cfg(test)]
+mod client_rpc_request_tests {
+    use super::*;
+    use hermes_gateway_runtime::ClientRpcContractVersionV1;
+
+    #[test]
+    fn owner_client_rpc_envelope_preserves_an_empty_protobuf_request() {
+        let route = ClientRpcRouteV1::new(
+            "registration",
+            "owner.catalog.query.v1",
+            "owner",
+            "owner.catalog.v1",
+            ClientRpcContractVersionV1 {
+                major: 1,
+                revision: 1,
+            },
+            [7; 32],
+            "/owner.catalog.v1.CatalogService/List",
+        );
+
+        let bytes = encode_owner_client_rpc_module_request("module", &route, "owner", 1, &[])
+            .expect("empty protobuf request envelope");
+        let request =
+            ModuleClientRequestV1::decode(bytes.as_slice()).expect("module client request");
+
+        assert!(request.request_payload.is_empty());
     }
 }

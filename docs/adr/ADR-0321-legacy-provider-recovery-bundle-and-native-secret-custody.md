@@ -2,11 +2,12 @@
 
 Статус: Принято
 Дата: 2026-07-28
-Состояние реализации: partial. `legacy_provider_recovery_bundle_v1`
-реализован отдельной first-party app build unit и подтверждён unit,
-architecture и read-only live-source evidence.
-`legacy_provider_native_secret_custody_v1` остаётся planned до подключения
-source session к current Owner Vault host и provider-specific apply flows.
+Состояние реализации: partial. `legacy_provider_recovery_bundle_v1`, bounded
+native source sessions, direct HPKE sealing в current Owner Vault host и
+provider-specific Mail/Telegram apply flows реализованы. Live evidence
+подтверждает два Mail targets, fresh Gmail OAuth boundary и real Telegram QR.
+`legacy_provider_native_secret_custody_v1` остаётся открыт только по
+owner-private resumable receipt ledger и ambiguous-outcome negative.
 
 Уточняет:
 

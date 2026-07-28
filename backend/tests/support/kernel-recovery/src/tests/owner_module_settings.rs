@@ -21,6 +21,7 @@ use crate::modules::settings::owner_gateway::KernelOwnerModuleSettingsHandlerV1;
 
 const HUMAN_OWNER: &str = "owner-1";
 const DEVICE: &str = "browser-1";
+const INITIAL_DEVICE: &str = "owner-device";
 const REGISTRATION: &str = "mail-registration";
 const CAPABILITY: &str = "mail.settings";
 const SESSION: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -202,6 +203,25 @@ fn owner_settings_creates_idempotent_isolated_configuration_targets() {
             .desired_revision(),
         2
     );
+    let repeated_after_update = commit_direct(
+        &handler,
+        &principal,
+        &signing_key,
+        create_target_request([9; 16]),
+    )
+    .expect("repeat target creation after settings update");
+    assert_eq!(
+        created_configuration_instance_id(&repeated_after_update),
+        first_id
+    );
+    assert_eq!(
+        match repeated_after_update.result.as_ref() {
+            Some(commit_owner_module_settings_response_v1::Result::Created(created)) =>
+                created.desired_revision,
+            _ => panic!("configuration target creation receipt"),
+        },
+        2
+    );
     assert_eq!(
         fixture
             .store
@@ -281,6 +301,73 @@ fn owner_settings_gateway_requires_authenticated_same_origin_and_denies_lan_mode
     let committed = decode_body::<CommitOwnerModuleSettingsResponseV1, _>(&runtime, committed);
     assert_eq!(committed.operation_id, [7; 16]);
 
+    let proof = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let loopback_configuration =
+        crate::platform::gateway::BrowserGatewayConfigurationV1::new_loopback_development_proxy(
+            "127.0.0.1:9444".parse().expect("loopback Gateway address"),
+            "http://127.0.0.1:5173".to_owned(),
+            "127.0.0.1".to_owned(),
+            proof.to_owned(),
+        )
+        .expect("loopback development Gateway configuration");
+    let loopback_router = crate::platform::gateway::gateway_service(
+        Arc::clone(&fixture.store),
+        &fixture.data,
+        fixture.supervisor.clone(),
+        &loopback_configuration,
+        None,
+    )
+    .expect("compose loopback development Gateway");
+    let mut loopback_prepare = settings_http_request(
+        OWNER_MODULE_SETTINGS_PREPARE_PATH,
+        update_request([8; 16], 1, unsigned_value(2)).encode_to_vec(),
+        None,
+        "http://127.0.0.1:5173",
+    );
+    loopback_prepare
+        .headers_mut()
+        .insert("host", "127.0.0.1:5173".parse().expect("host header"));
+    loopback_prepare.headers_mut().insert(
+        "x-hermes-development-proxy-proof",
+        proof.parse().expect("proxy proof header"),
+    );
+    let prepared = runtime.block_on(loopback_router.route(loopback_prepare));
+    assert_eq!(prepared.status(), StatusCode::OK);
+    let prepared = decode_body::<PrepareOwnerModuleSettingsResponseV1, _>(&runtime, prepared);
+    let signature: Signature = owner_signing_key().sign(&prepared.challenge_bytes);
+    let mut loopback_commit = settings_http_request(
+        OWNER_MODULE_SETTINGS_COMMIT_PATH,
+        CommitOwnerModuleSettingsRequestV1 {
+            challenge_id: prepared.challenge_id,
+            device_signature_raw: signature.to_bytes().to_vec(),
+        }
+        .encode_to_vec(),
+        None,
+        "http://127.0.0.1:5173",
+    );
+    loopback_commit
+        .headers_mut()
+        .insert("host", "127.0.0.1:5173".parse().expect("host header"));
+    loopback_commit.headers_mut().insert(
+        "x-hermes-development-proxy-proof",
+        proof.parse().expect("proxy proof header"),
+    );
+    let committed = runtime.block_on(loopback_router.route(loopback_commit));
+    assert_eq!(committed.status(), StatusCode::OK);
+    let committed = decode_body::<CommitOwnerModuleSettingsResponseV1, _>(&runtime, committed);
+    assert_eq!(committed.operation_id, [8; 16]);
+
+    assert_eq!(
+        fixture
+            .handler()
+            .prepare(
+                &principal("loopback-development"),
+                update_request([9; 16], 2, unsigned_value(3)),
+            )
+            .expect_err("mismatched loopback device must fail"),
+        OwnerModuleSettingsRouteErrorV1::PermissionDenied,
+    );
+
     let lan_configuration =
         crate::platform::gateway::BrowserGatewayConfigurationV1::new_lan_development(
             "192.168.1.10:9443"
@@ -300,7 +387,7 @@ fn owner_settings_gateway_requires_authenticated_same_origin_and_denies_lan_mode
     .expect("compose LAN development Gateway");
     let denied = runtime.block_on(lan_router.route(settings_http_request(
         OWNER_MODULE_SETTINGS_PREPARE_PATH,
-        update_request([8; 16], 1, unsigned_value(2)).encode_to_vec(),
+        update_request([10; 16], 2, unsigned_value(3)).encode_to_vec(),
         None,
         "http://192.168.1.10:9443",
     )));
@@ -422,11 +509,18 @@ fn admit_owner_browser_registration_and_schema(
     store: &Arc<SqliteControlStore>,
     catalog_granted: bool,
 ) {
+    let owner_key = owner_signing_key();
+    let owner_public_key: [u8; 65] = owner_key
+        .verifying_key()
+        .to_sec1_point(false)
+        .as_bytes()
+        .try_into()
+        .expect("owner public key");
     store
         .claim_initial_owner(&InitialOwnerIdentity::new(
             HUMAN_OWNER,
-            "owner-device",
-            [4; 65],
+            INITIAL_DEVICE,
+            owner_public_key,
         ))
         .expect("claim owner");
     super::browser_gateway_session::admit_browser_test_device(store, HUMAN_OWNER);
@@ -569,6 +663,10 @@ fn make_export_snapshot_current(store: &SqliteControlStore) {
 
 fn principal(session: &str) -> OwnerBrowserPrincipalV1 {
     OwnerBrowserPrincipalV1::new(HUMAN_OWNER, DEVICE, session).expect("browser principal")
+}
+
+fn owner_signing_key() -> SigningKey {
+    SigningKey::from_bytes((&[11_u8; 32]).into()).expect("owner signing key")
 }
 
 fn update_request(

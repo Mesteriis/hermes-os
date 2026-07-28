@@ -264,10 +264,16 @@ pub fn close_session_request() -> Value {
     json!({"@type": "close", "@extra": "hermes-close-tdlib-session"})
 }
 
+fn disable_tdlib_logging_request() -> Value {
+    json!({
+        "@type": "setLogVerbosityLevel",
+        "new_verbosity_level": 0,
+    })
+}
+
 pub fn parse_authorization_update(payload: &Value) -> Result<TdlibAuthorizationUpdate, TdlibError> {
-    let state = payload
-        .get("authorization_state")
-        .unwrap_or(payload)
+    let authorization_state = authorization_state(payload);
+    let state = authorization_state
         .get("@type")
         .and_then(Value::as_str)
         .ok_or_else(|| TdlibError::Protocol("TDLib authorization state is missing".to_owned()))?;
@@ -276,7 +282,7 @@ pub fn parse_authorization_update(payload: &Value) -> Result<TdlibAuthorizationU
         "authorizationStateWaitEncryptionKey" => TdlibAuthorizationUpdate::WaitingEncryptionKey,
         "authorizationStateWaitOtherDeviceConfirmation" => TdlibAuthorizationUpdate::WaitingQrScan,
         "authorizationStateWaitPassword" => TdlibAuthorizationUpdate::WaitingPassword {
-            hint: payload
+            hint: authorization_state
                 .get("password_hint")
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned),
@@ -287,11 +293,27 @@ pub fn parse_authorization_update(payload: &Value) -> Result<TdlibAuthorizationU
         }
         "authorizationStateClosed" => TdlibAuthorizationUpdate::Closed,
         "error" => TdlibAuthorizationUpdate::Error {
-            code: payload.get("code").and_then(Value::as_i64),
+            code: authorization_state.get("code").and_then(Value::as_i64),
             message: "TDLib authorization error".to_owned(),
         },
         other => TdlibAuthorizationUpdate::Other(other.to_owned()),
     })
+}
+
+pub(crate) fn parse_qr_authorization_link(payload: &Value) -> Result<String, TdlibError> {
+    authorization_state(payload)
+        .get("link")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| {
+            TdlibError::Protocol("TDLib QR authorization state did not include a link".to_owned())
+        })
+}
+
+fn authorization_state(payload: &Value) -> &Value {
+    payload.get("authorization_state").unwrap_or(payload)
 }
 
 #[derive(Debug)]
@@ -2278,6 +2300,43 @@ mod tests {
     }
 
     #[test]
+    fn nested_authorization_state_preserves_password_hint_and_qr_link() {
+        let password = parse_authorization_update(&json!({
+            "@type": "updateAuthorizationState",
+            "authorization_state": {
+                "@type": "authorizationStateWaitPassword",
+                "password_hint": "private-password-hint"
+            }
+        }))
+        .expect("nested password authorization update");
+        let qr_link = parse_qr_authorization_link(&json!({
+            "@type": "updateAuthorizationState",
+            "authorization_state": {
+                "@type": "authorizationStateWaitOtherDeviceConfirmation",
+                "link": "tg://private-qr-token"
+            }
+        }))
+        .expect("nested QR authorization link");
+
+        assert!(matches!(
+            password,
+            TdlibAuthorizationUpdate::WaitingPassword { hint: Some(_) }
+        ));
+        assert_eq!(qr_link, "tg://private-qr-token");
+    }
+
+    #[test]
+    fn tdlib_logging_is_disabled_before_provider_configuration() {
+        assert_eq!(
+            disable_tdlib_logging_request(),
+            json!({
+                "@type": "setLogVerbosityLevel",
+                "new_verbosity_level": 0,
+            }),
+        );
+    }
+
+    #[test]
     fn edit_command_encodes_tdlib_message_operation_without_domain_fields() {
         let command = TelegramProviderCommand::Edit {
             operation_id: "op-edit".to_owned(),
@@ -2837,10 +2896,12 @@ impl TdJsonLibrary {
                 "td_json_client_create returned null".to_owned(),
             ));
         }
-        Ok(TdJsonClient {
+        let client = TdJsonClient {
             client,
             library: self.clone(),
-        })
+        };
+        client.execute_json(&disable_tdlib_logging_request())?;
+        Ok(client)
     }
 }
 

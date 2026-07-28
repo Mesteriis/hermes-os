@@ -20,10 +20,8 @@ import {
 	UpdateOwnerModuleSettingsV1Schema,
 } from '../../gen/hermes/gateway/v1/owner_module_settings_pb'
 import { createBrowserGatewayConnectTransport } from '../gateway/browserGatewayConnect'
-import {
-	BrowserOwnerDeviceProofV1,
-	type OwnerDeviceProofV1,
-} from '../gateway/ownerDeviceProof'
+import type { OwnerDeviceProofV1 } from '../gateway/ownerDeviceProof'
+import { createOwnerDeviceProofV1 } from '../gateway/ownerDeviceProofFactory'
 import {
 	resolveOwnerOperationIdV1,
 	sameOwnerOperationIdV1,
@@ -75,7 +73,7 @@ export class OwnerModuleSettingsClientV1 {
 			createBrowserGatewayConnectTransport(),
 		),
 		private readonly deviceProof: OwnerDeviceProofV1 =
-			new BrowserOwnerDeviceProofV1(),
+			createOwnerDeviceProofV1(),
 	) {}
 
 	async createConfigurationTarget(

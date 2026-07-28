@@ -15,6 +15,8 @@ export type ManagedIntegrationSetupInputV1 = {
 	configurationInstanceId: string
 	requestHostBridge: boolean
 	values: readonly OwnerSettingInputV1[]
+	updateOperationId?: Uint8Array
+	applyOperationId?: Uint8Array
 }
 
 export type ManagedIntegrationSetupReceiptV1 = {
@@ -35,20 +37,23 @@ export class ManagedIntegrationSetupV1 {
 
 	async createTarget(
 		registrationId: string,
+		operationId?: Uint8Array,
 	): Promise<CreateOwnerModuleSettingsTargetReceiptV1> {
-		return this.settings.createConfigurationTarget({ registrationId })
+		return this.settings.createConfigurationTarget({ registrationId, operationId })
 	}
 
 	async apply(
 		input: ManagedIntegrationSetupInputV1,
 	): Promise<ManagedIntegrationSetupReceiptV1> {
 		const settings = await this.settings.updateDesired({
+			operationId: input.updateOperationId,
 			registrationId: input.registrationId,
 			configurationInstanceId: input.configurationInstanceId,
 			expectedDesiredRevision: input.expectedDesiredRevision,
 			values: [...input.values],
 		})
 		const application = await this.settings.applyManagedIntegration({
+			operationId: input.applyOperationId,
 			registrationId: input.registrationId,
 			storageCapabilityId: input.storageCapabilityId,
 			configurationInstanceId: input.configurationInstanceId,

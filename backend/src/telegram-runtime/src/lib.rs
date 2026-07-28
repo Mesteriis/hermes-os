@@ -11,6 +11,7 @@ mod calls_execution;
 pub mod client_port;
 pub mod client_transport;
 pub mod communications_outbox;
+mod configuration_client_port;
 mod durable_restore;
 pub mod managed_control;
 pub mod process;
@@ -909,7 +910,7 @@ pub struct TelegramRuntime<T> {
 
 pub struct TelegramRuntimeComposition {
     account_id: String,
-    account_setup: TelegramAccountSetup,
+    account_setup: Option<TelegramAccountSetup>,
     library: TdJsonLibrary,
     authorization: Option<TdlibAuthorizationDriver>,
     runtime: Option<TelegramRuntime<TdJsonTransport>>,
@@ -933,6 +934,28 @@ pub struct TelegramRuntimeAdmission {
 }
 
 impl TelegramRuntimeComposition {
+    pub fn new_configuration_only(
+        library: TdJsonLibrary,
+        account_id: impl Into<String>,
+    ) -> Result<Self, TdlibError> {
+        let account_id = account_id.into();
+        if account_id.trim().is_empty() {
+            return Err(TdlibError::Protocol(
+                "Telegram account id is empty".to_owned(),
+            ));
+        }
+        Ok(Self {
+            account_id,
+            account_setup: None,
+            library,
+            authorization: None,
+            runtime: None,
+            call_media: None,
+            admission: None,
+            pending_reconfiguration: None,
+        })
+    }
+
     pub fn new(
         library: TdJsonLibrary,
         account_id: impl Into<String>,
@@ -957,23 +980,35 @@ impl TelegramRuntimeComposition {
         account_setup: TelegramAccountSetup,
         parameters: TdlibAuthorizationParameters,
     ) -> Result<Self, TdlibError> {
-        let account_id: String = account_setup.account_id.clone();
-        if account_id.trim().is_empty() {
-            return Err(TdlibError::Protocol(
-                "Telegram account id is empty".to_owned(),
-            ));
+        let mut composition =
+            Self::new_configuration_only(library, account_setup.account_id.clone())?;
+        composition.begin_account_authorization(account_setup, parameters)?;
+        Ok(composition)
+    }
+
+    pub fn begin_account_authorization(
+        &mut self,
+        account_setup: TelegramAccountSetup,
+        parameters: TdlibAuthorizationParameters,
+    ) -> Result<(), TdlibError> {
+        if self.authorization.is_some() && self.account_setup.as_ref() == Some(&account_setup) {
+            return Ok(());
         }
-        let client = library.create_client()?;
-        Ok(Self {
-            account_id,
-            account_setup,
-            library,
-            authorization: Some(TdlibAuthorizationDriver::new(client, parameters)),
-            runtime: None,
-            call_media: None,
-            admission: None,
-            pending_reconfiguration: None,
-        })
+        if account_setup.account_id != self.account_id
+            || self.runtime.is_some()
+            || self.authorization.is_some()
+        {
+            return Err(TdlibError::RuntimeUnavailable);
+        }
+        let client = self.library.create_client()?;
+        self.account_setup = Some(account_setup);
+        self.authorization = Some(TdlibAuthorizationDriver::new(client, parameters));
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn configured_account_id(&self) -> &str {
+        &self.account_id
     }
 
     pub fn poll_authorization(
@@ -1003,7 +1038,9 @@ impl TelegramRuntimeComposition {
                 runtime.install_call_media_port(call_media);
             }
             runtime
-                .provision_account(self.account_setup.clone())
+                .provision_account(self.account_setup.clone().ok_or_else(|| {
+                    TdlibError::Protocol("Telegram account setup is unavailable".to_owned())
+                })?)
                 .map_err(|_| {
                     TdlibError::Protocol("Telegram account provisioning failed".to_owned())
                 })?;

@@ -10,6 +10,7 @@ use crate::model::{
     LegacyProviderRecoveryStateV1, RECOVERY_SCHEMA_REVISION,
 };
 use crate::private_files::sha256_hex;
+use zeroize::Zeroizing;
 
 const MAX_SESSIONS: usize = 4;
 const SESSION_TTL: Duration = Duration::from_secs(15 * 60);
@@ -17,6 +18,7 @@ const SESSION_TTL: Duration = Duration::from_secs(15 * 60);
 pub struct LegacyProviderRecoverySessionsV1 {
     bundle: Arc<LegacyProviderRecoveryBundleV1>,
     sessions: Mutex<BTreeMap<String, Instant>>,
+    generated_session_store_keys: Mutex<BTreeMap<String, Zeroizing<Vec<u8>>>>,
 }
 
 impl LegacyProviderRecoverySessionsV1 {
@@ -24,6 +26,7 @@ impl LegacyProviderRecoverySessionsV1 {
         Self {
             bundle: Arc::new(bundle),
             sessions: Mutex::new(BTreeMap::new()),
+            generated_session_store_keys: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -76,6 +79,26 @@ impl LegacyProviderRecoverySessionsV1 {
         purpose: LegacyProviderRecoverySecretPurposeV1,
     ) -> LegacyProviderRecoveryResultV1<zeroize::Zeroizing<Vec<u8>>> {
         self.require_session(session_id)?;
+        if purpose == LegacyProviderRecoverySecretPurposeV1::GeneratedTelegramSessionStoreKey {
+            if !matches!(
+                self.bundle.source(handle)?,
+                LegacyProviderRecoverySourceV1::TelegramUser { .. }
+            ) {
+                return Err(LegacyProviderRecoveryErrorV1::InvalidSecret);
+            }
+            let mut keys = self
+                .generated_session_store_keys
+                .lock()
+                .map_err(|_| LegacyProviderRecoveryErrorV1::SessionUnavailable)?;
+            if let Some(key) = keys.get(handle) {
+                return Ok(Zeroizing::new(key.to_vec()));
+            }
+            let mut key = Zeroizing::new(vec![0_u8; 32]);
+            getrandom::getrandom(&mut key)
+                .map_err(|_| LegacyProviderRecoveryErrorV1::CryptographyUnavailable)?;
+            keys.insert(handle.to_owned(), Zeroizing::new(key.to_vec()));
+            return Ok(key);
+        }
         self.bundle.resolve_secret(handle, purpose)
     }
 

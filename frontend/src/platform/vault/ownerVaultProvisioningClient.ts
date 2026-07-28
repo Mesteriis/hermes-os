@@ -10,10 +10,8 @@ import {
 	PrepareOwnerVaultProvisioningRequestV1Schema,
 } from '../../gen/hermes/gateway/v1/owner_vault_provisioning_pb'
 import { createBrowserGatewayConnectTransport } from '../gateway/browserGatewayConnect'
-import {
-	BrowserOwnerDeviceProofV1,
-	type OwnerDeviceProofV1,
-} from '../gateway/ownerDeviceProof'
+import type { OwnerDeviceProofV1 } from '../gateway/ownerDeviceProof'
+import { createOwnerDeviceProofV1 } from '../gateway/ownerDeviceProofFactory'
 import {
 	isOwnerOperationIdV1,
 	resolveOwnerOperationIdV1,
@@ -21,10 +19,12 @@ import {
 import {
 	type OwnerVaultProvisioningHostV1,
 	type SanitizedProvisioningHostReceiptV1,
+	type SealedProvisioningHostCommandV1,
+	type SealProvisioningHostInputV1,
 } from './ownerVaultProvisioningHost'
 import { createOwnerVaultProvisioningHostV1 } from './ownerVaultProvisioningHostFactory'
 
-export type OwnerVaultProvisioningInputV1 = {
+export type OwnerVaultProvisioningCeremonyInputV1 = {
 	operationId?: Uint8Array
 	targetRegistrationId: string
 	capabilityId: string
@@ -33,8 +33,15 @@ export type OwnerVaultProvisioningInputV1 = {
 	secretClass: OwnerVaultSecretClassV1
 	action: OwnerVaultActionV1
 	secretRevision: bigint
+}
+
+export type OwnerVaultProvisioningInputV1 = OwnerVaultProvisioningCeremonyInputV1 & {
 	secretPayload: Uint8Array
 }
+
+export type OwnerVaultCustodiedSealerV1 = (
+	input: Omit<SealProvisioningHostInputV1, 'secretPayload'>,
+) => Promise<SealedProvisioningHostCommandV1>
 
 export class OwnerVaultProvisioningClientV1 {
 	constructor(
@@ -45,11 +52,36 @@ export class OwnerVaultProvisioningClientV1 {
 		private readonly host: OwnerVaultProvisioningHostV1 =
 			createOwnerVaultProvisioningHostV1(),
 		private readonly deviceProof: OwnerDeviceProofV1 =
-			new BrowserOwnerDeviceProofV1(),
+			createOwnerDeviceProofV1(),
 	) {}
 
 	async provision(input: OwnerVaultProvisioningInputV1): Promise<SanitizedProvisioningHostReceiptV1> {
-		validateInput(input)
+		validateCeremonyInput(input)
+		if (input.secretPayload.byteLength === 0 || input.secretPayload.byteLength > 65_536) {
+			throw new Error('owner Vault provisioning input is invalid')
+		}
+		try {
+			return await this.runCeremony(input, (authorized) => this.host.seal({
+				...authorized,
+				secretPayload: input.secretPayload,
+			}))
+		} finally {
+			input.secretPayload.fill(0)
+		}
+	}
+
+	async provisionCustodied(
+		input: OwnerVaultProvisioningCeremonyInputV1,
+		seal: OwnerVaultCustodiedSealerV1,
+	): Promise<SanitizedProvisioningHostReceiptV1> {
+		validateCeremonyInput(input)
+		return this.runCeremony(input, seal)
+	}
+
+	private async runCeremony(
+		input: OwnerVaultProvisioningCeremonyInputV1,
+		seal: OwnerVaultCustodiedSealerV1,
+	): Promise<SanitizedProvisioningHostReceiptV1> {
 		const operationId = resolveOwnerOperationIdV1(input.operationId)
 		const started = await this.host.start()
 		let completed = false
@@ -78,12 +110,11 @@ export class OwnerVaultProvisioningClientV1 {
 					deviceSignatureRaw: signature,
 				},
 			))
-			const sealed = await this.host.seal({
+			const sealed = await seal({
 				hostSessionId: started.hostSessionId,
 				operationId,
 				action: input.action,
 				secretClass: input.secretClass,
-				secretPayload: input.secretPayload,
 				authorized: {
 					vaultRuntimeGeneration: authorized.vaultRuntimeGeneration,
 					vaultHpkePublicKeyX25519: authorized.vaultHpkePublicKeyX25519,
@@ -121,13 +152,12 @@ export class OwnerVaultProvisioningClientV1 {
 			completed = true
 			return receipt
 		} finally {
-			input.secretPayload.fill(0)
 			if (!completed) await this.host.cancel(started.hostSessionId).catch(() => undefined)
 		}
 	}
 }
 
-function validateInput(input: OwnerVaultProvisioningInputV1): void {
+function validateCeremonyInput(input: OwnerVaultProvisioningCeremonyInputV1): void {
 	const identifiers = [
 		input.targetRegistrationId,
 		input.capabilityId,
@@ -136,8 +166,6 @@ function validateInput(input: OwnerVaultProvisioningInputV1): void {
 	]
 	if (identifiers.some((value) => value.trim().length === 0 || value.length > 128)
 		|| input.secretRevision <= 0n
-		|| input.secretPayload.byteLength === 0
-		|| input.secretPayload.byteLength > 65_536
 		|| !isSecretClass(input.secretClass)
 		|| !isAction(input.action)
 		|| (input.operationId !== undefined && !isOwnerOperationIdV1(input.operationId))) {

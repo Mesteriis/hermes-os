@@ -151,8 +151,8 @@ impl OwnerVaultProvisioningHostV1 {
         if operation_id == [0; 16] || secret_payload.is_empty() {
             return Err(OwnerVaultProvisioningHostErrorV1::InvalidInput);
         }
-        let action = action_from_code(action)?;
-        let secret_class = secret_class_from_code(secret_class)?;
+        let action = owner_vault_action_from_wire_code_v1(action)?;
+        let secret_class = owner_vault_secret_class_from_wire_code_v1(secret_class)?;
         let mut state = self.lock_state()?;
         let session = current_session(&mut state, host_session_id)?;
         if session.sealed.is_some() {
@@ -320,7 +320,9 @@ fn current_session<'a>(
         .ok_or(OwnerVaultProvisioningHostErrorV1::SessionUnavailable)
 }
 
-fn action_from_code(value: i32) -> Result<VaultActionV1, OwnerVaultProvisioningHostErrorV1> {
+pub fn owner_vault_action_from_wire_code_v1(
+    value: i32,
+) -> Result<VaultActionV1, OwnerVaultProvisioningHostErrorV1> {
     match value {
         1 => Ok(VaultActionV1::Create),
         2 => Ok(VaultActionV1::ReplaceCas),
@@ -330,7 +332,9 @@ fn action_from_code(value: i32) -> Result<VaultActionV1, OwnerVaultProvisioningH
     }
 }
 
-fn secret_class_from_code(value: i32) -> Result<SecretClassV1, OwnerVaultProvisioningHostErrorV1> {
+pub fn owner_vault_secret_class_from_wire_code_v1(
+    value: i32,
+) -> Result<SecretClassV1, OwnerVaultProvisioningHostErrorV1> {
     match value {
         1 => Ok(SecretClassV1::ProviderCredential),
         2 => Ok(SecretClassV1::OAuthRefreshCredential),
@@ -382,11 +386,12 @@ mod tests {
     #[test]
     fn maps_session_store_key_without_accepting_unknown_classes() {
         assert_eq!(
-            secret_class_from_code(5).expect("session store key"),
+            owner_vault_secret_class_from_wire_code_v1(5).expect("session store key"),
             SecretClassV1::SessionStoreKey
         );
         assert_eq!(
-            secret_class_from_code(4).expect_err("unknown class must be rejected"),
+            owner_vault_secret_class_from_wire_code_v1(4)
+                .expect_err("unknown class must be rejected"),
             OwnerVaultProvisioningHostErrorV1::InvalidInput
         );
     }

@@ -237,6 +237,7 @@ printf '%s\n' 'Starting the loopback Owner Vault provisioning host...'
 owner_vault_host_args=(
 	--listen-address "$owner_vault_host_address"
 	--proof-file "$proof_file"
+	--owner-device-key-file "$data_dir/device-es256.key"
 )
 if test "$legacy_recovery_frontend_flag" = 1; then
 	owner_vault_host_args+=(
@@ -342,6 +343,7 @@ printf '%s\n' 'Starting the Vue/Vite browser client...'
 		HERMES_DEV_GATEWAY_PROOF_FILE="$proof_file" \
 		HERMES_DEV_OWNER_VAULT_HOST_TARGET="$owner_vault_host_target" \
 		VITE_HERMES_DEV_OWNER_VAULT_HOST=1 \
+		VITE_HERMES_DEV_OWNER_DEVICE_PROOF_HOST=1 \
 		VITE_HERMES_LEGACY_PROVIDER_RECOVERY="$legacy_recovery_frontend_flag" \
 		pnpm exec vite --host 127.0.0.1 --strictPort
 ) &

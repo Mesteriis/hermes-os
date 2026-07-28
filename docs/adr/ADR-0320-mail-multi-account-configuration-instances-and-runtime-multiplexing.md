@@ -2,13 +2,12 @@
 
 Статус: Принято
 Дата: 2026-07-28
-Состояние реализации: Частично реализовано. `kernel_configuration_targets_v1`
-и platform launch half `managed_configuration_catalog_v1` реализованы:
-Control Store schema v44, target-scoped public Settings receipts/CAS,
-`settings.configuration-catalog.v1` grant gate, atomic all-target schema
-upgrade и bounded deterministic runtime catalog. Mail runtime ещё не потребляет
-catalog, Mail account List/frontend/recovery не реализованы, поэтому
-`mail_multi_account_v1` остаётся закрыт.
+Состояние реализации: Реализовано. `kernel_configuration_targets_v1`,
+`managed_configuration_catalog_v1`, `mail_multi_account_runtime_v1` и
+`mail_multi_account_frontend_v1` используют target-scoped Settings,
+deterministic runtime catalog и Mail-owned account catalog. Live browser proof
+подтверждает два независимо выбираемых Mail targets с честной readiness;
+recovery и add-account composition используют те же public owner contracts.
 
 Уточняет:
 

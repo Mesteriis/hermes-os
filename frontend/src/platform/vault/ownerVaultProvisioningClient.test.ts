@@ -108,7 +108,76 @@ describe('OwnerVaultProvisioningClientV1', () => {
 		expect(secret).toEqual(new Uint8Array(2))
 		expect(host.cancel).toHaveBeenCalledWith('host-session')
 	})
+
+	it('uses a native-custodied sealer without a browser secret payload', async () => {
+		const host = provisioningHost()
+		const gateway = gatewayClient()
+		const seal = vi.fn().mockResolvedValue({
+			operationDigestSha256: new Uint8Array(32).fill(10),
+			hpkeEncappedKey: new Uint8Array(32).fill(11),
+			ciphertext: new Uint8Array([12]),
+			hpkeAuthenticationTag: new Uint8Array(16).fill(13),
+		})
+		const client = new OwnerVaultProvisioningClientV1(gateway.client, host, {
+			sign: vi.fn().mockResolvedValue(new Uint8Array(64).fill(8)),
+		})
+
+		await client.provisionCustodied({
+			operationId: new Uint8Array(16).fill(2),
+			targetRegistrationId: 'mail-registration',
+			capabilityId: 'mail.imap.credential-provisioning.v1',
+			configurationInstanceId: 'mail-account',
+			purposeId: 'mail_imap_password',
+			secretClass: OwnerVaultSecretClassV1.PROVIDER_CREDENTIAL,
+			action: OwnerVaultActionV1.CREATE,
+			secretRevision: 1n,
+		}, seal)
+
+		expect(seal).toHaveBeenCalledOnce()
+		expect(seal.mock.calls[0]?.[0]).not.toHaveProperty('secretPayload')
+		expect(host.seal).not.toHaveBeenCalled()
+		expect(host.cancel).not.toHaveBeenCalled()
+	})
+
+	it('cancels the Vault host if native custody sealing is rejected', async () => {
+		const host = provisioningHost()
+		const gateway = gatewayClient()
+		const client = new OwnerVaultProvisioningClientV1(gateway.client, host, {
+			sign: vi.fn().mockResolvedValue(new Uint8Array(64).fill(8)),
+		})
+
+		await expect(client.provisionCustodied({
+			targetRegistrationId: 'telegram-registration',
+			capabilityId: 'telegram.api-hash.credential-provisioning.v1',
+			configurationInstanceId: 'telegram-account',
+			purposeId: 'telegram_api_hash',
+			secretClass: OwnerVaultSecretClassV1.PROVIDER_CREDENTIAL,
+			action: OwnerVaultActionV1.CREATE,
+			secretRevision: 1n,
+		}, vi.fn().mockRejectedValue(new Error('source unavailable')))).rejects.toThrow(
+			'source unavailable',
+		)
+
+		expect(host.cancel).toHaveBeenCalledWith('host-session')
+	})
 })
+
+function provisioningHost(): OwnerVaultProvisioningHostV1 {
+	return {
+		start: vi.fn().mockResolvedValue({
+			hostSessionId: 'host-session',
+			responseRecipientHpkePublicKeyX25519: new Uint8Array(32).fill(9),
+		}),
+		seal: vi.fn(),
+		openReceipt: vi.fn().mockResolvedValue({
+			operationId: new Uint8Array(16).fill(1),
+			action: OwnerVaultActionV1.CREATE,
+			secretRevision: 1n,
+			state: 1,
+		}),
+		cancel: vi.fn().mockResolvedValue(undefined),
+	}
+}
 
 function gatewayClient() {
 	const prepare = vi.fn().mockResolvedValue(create(

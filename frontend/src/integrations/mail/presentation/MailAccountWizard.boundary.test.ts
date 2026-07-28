@@ -19,6 +19,7 @@ describe('Mail account wizard composition', () => {
 		expect(setup).toContain('createTarget')
 		expect(setup).toContain('configurationInstanceId')
 		expect(catalog).toContain('MailAccountCatalogService')
+		expect(catalog).toContain('{ major: 1 }')
 		for (const source of [wizard, management, setup, catalog]) {
 			expect(source).not.toMatch(/domains\/communications/)
 			expect(source).not.toMatch(/password.*settingId|settingId.*password/i)

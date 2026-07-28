@@ -9,6 +9,26 @@ use hermes_runtime_protocol::v1::ManagedRuntimeReadyRequestV1;
 
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
 
+pub(crate) fn with_blocking_control_channel<T>(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    request: impl FnOnce(&mut ManagedControlChannelV2<UnixStream>) -> T,
+) -> Result<T, ()> {
+    channel
+        .inner_mut()
+        .set_nonblocking(false)
+        .and_then(|_| channel.inner_mut().set_read_timeout(Some(CONTROL_TIMEOUT)))
+        .and_then(|_| channel.inner_mut().set_write_timeout(Some(CONTROL_TIMEOUT)))
+        .map_err(|_| ())?;
+    let result = request(channel);
+    let read_timeout_cleared = channel.inner_mut().set_read_timeout(None).is_ok();
+    let write_timeout_cleared = channel.inner_mut().set_write_timeout(None).is_ok();
+    let nonblocking_restored = channel.inner_mut().set_nonblocking(true).is_ok();
+    if !read_timeout_cleared || !write_timeout_cleared || !nonblocking_restored {
+        return Err(());
+    }
+    Ok(result)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TelegramManagedRuntimeIdentity {
     registration_id: String,
@@ -114,6 +134,7 @@ impl TelegramManagedRuntimeIdentity {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{ErrorKind, Read, Write};
     use std::os::unix::net::UnixStream;
     use std::thread;
 
@@ -124,7 +145,7 @@ mod tests {
         managed_runtime_control_response_v1::Result as ControlResult,
     };
 
-    use super::TelegramManagedRuntimeIdentity;
+    use super::{TelegramManagedRuntimeIdentity, with_blocking_control_channel};
 
     #[test]
     fn authenticates_with_the_exact_correlated_control_transport() {
@@ -177,6 +198,45 @@ mod tests {
         identity
             .signal_ready(&mut channel)
             .expect("managed runtime ready");
+        release_server.send(()).expect("release server");
+        server.join().expect("server join");
+    }
+
+    #[test]
+    fn restores_nonblocking_mode_after_a_nested_control_request() {
+        let (client, mut server) = UnixStream::pair().expect("control pair");
+        client.set_nonblocking(true).expect("nonblocking client");
+        let (release_server, wait_for_client) = std::sync::mpsc::sync_channel(0);
+        let server = thread::spawn(move || {
+            let mut request = [0_u8; 1];
+            server.read_exact(&mut request).expect("request");
+            assert_eq!(request, [7]);
+            server.write_all(&[9]).expect("response");
+            wait_for_client.recv().expect("client completed");
+        });
+        let mut channel = ManagedControlChannelV2::new(client);
+
+        let response = with_blocking_control_channel(&mut channel, |channel| {
+            channel.inner_mut().write_all(&[7]).expect("request");
+            let mut response = [0_u8; 1];
+            channel
+                .inner_mut()
+                .read_exact(&mut response)
+                .expect("response");
+            response
+        })
+        .expect("blocking request");
+
+        assert_eq!(response, [9]);
+        let mut pending = [0_u8; 1];
+        assert_eq!(
+            channel
+                .inner_mut()
+                .read(&mut pending)
+                .expect_err("nonblocking stream")
+                .kind(),
+            ErrorKind::WouldBlock,
+        );
         release_server.send(()).expect("release server");
         server.join().expect("server join");
     }

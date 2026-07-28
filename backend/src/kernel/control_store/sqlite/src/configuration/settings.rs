@@ -367,6 +367,11 @@ impl SqliteControlStore {
             }) {
                 return Err(StoreError::SettingsRevisionConflict);
             }
+            if let Some(target) = existing_by_operation {
+                let desired_revision = target.desired_revision();
+                transaction.commit()?;
+                return Ok(desired_revision);
+            }
             let new_configuration_target = update.created_operation_id.is_some();
             let expected_effective = u64::from(update.complete && !new_configuration_target);
             let expected_state = if !update.complete {

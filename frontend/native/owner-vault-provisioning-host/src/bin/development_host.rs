@@ -11,8 +11,10 @@ use hermes_legacy_provider_recovery::{
     LegacyProviderRecoverySessionsV1, LegacyProviderRecoverySourceV1,
     LegacyProviderRecoveryStateV1,
 };
+use hermes_owner_device_proof_host::OwnerDeviceProofHostV1;
 use hermes_owner_vault_provisioning_host::{
     AuthorizedProvisioningV1, CommittedProvisioningReceiptV1, OwnerVaultProvisioningHostV1,
+    owner_vault_action_from_wire_code_v1, owner_vault_secret_class_from_wire_code_v1,
 };
 use hermes_vault_protocol::{SecretClassV1, VaultActionV1};
 use serde::{Deserialize, Serialize};
@@ -32,6 +34,7 @@ const RECOVERY_START_PATH: &str = "/__hermes/legacy-provider-recovery/v1/start";
 const RECOVERY_SOURCE_PATH: &str = "/__hermes/legacy-provider-recovery/v1/source";
 const RECOVERY_SEAL_SOURCE_PATH: &str = "/__hermes/legacy-provider-recovery/v1/seal-source";
 const RECOVERY_CANCEL_PATH: &str = "/__hermes/legacy-provider-recovery/v1/cancel";
+const OWNER_DEVICE_PROOF_SIGN_PATH: &str = "/__hermes/owner-device-proof/v1/sign";
 
 fn main() -> Result<(), String> {
     let configuration = DevelopmentHostConfigurationV1::from_args(std::env::args().skip(1))?;
@@ -39,6 +42,10 @@ fn main() -> Result<(), String> {
     let server = Server::http(configuration.listen_address)
         .map_err(|_| "development host listen failed".to_owned())?;
     let host = Arc::new(OwnerVaultProvisioningHostV1::default());
+    let owner_device_proof = Arc::new(
+        OwnerDeviceProofHostV1::open(&configuration.owner_device_key_file)
+            .map_err(|_| "owner device proof signer is unavailable".to_owned())?,
+    );
     let recovery = configuration
         .legacy_recovery_bundle_root
         .as_deref()
@@ -48,11 +55,17 @@ fn main() -> Result<(), String> {
         .map(LegacyProviderRecoverySessionsV1::new)
         .map(Arc::new);
     println!(
-        "Hermes owner Vault development host is ready at {}",
+        "Hermes development host is ready at {}",
         configuration.listen_address
     );
     for request in server.incoming_requests() {
-        serve_request(request, &host, recovery.as_deref(), &proof);
+        serve_request(
+            request,
+            &host,
+            &owner_device_proof,
+            recovery.as_deref(),
+            &proof,
+        );
     }
     Ok(())
 }
@@ -61,6 +74,7 @@ fn main() -> Result<(), String> {
 struct DevelopmentHostConfigurationV1 {
     listen_address: SocketAddr,
     proof_file: PathBuf,
+    owner_device_key_file: PathBuf,
     legacy_recovery_bundle_root: Option<PathBuf>,
 }
 
@@ -69,6 +83,7 @@ impl DevelopmentHostConfigurationV1 {
         let mut listen_address = SocketAddr::from_str(DEFAULT_LISTEN_ADDRESS)
             .map_err(|_| "development host listen address is invalid".to_owned())?;
         let mut proof_file = None;
+        let mut owner_device_key_file = None;
         let mut legacy_recovery_bundle_root = None;
         let mut args = args.peekable();
         while let Some(argument) = args.next() {
@@ -85,6 +100,12 @@ impl DevelopmentHostConfigurationV1 {
                         .next()
                         .ok_or_else(|| "development host proof file is missing".to_owned())?;
                     proof_file = Some(PathBuf::from(value));
+                }
+                "--owner-device-key-file" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "development owner device key file is missing".to_owned())?;
+                    owner_device_key_file = Some(PathBuf::from(value));
                 }
                 "--legacy-recovery-bundle-root" => {
                     let value = args.next().ok_or_else(|| {
@@ -103,6 +124,11 @@ impl DevelopmentHostConfigurationV1 {
         if !proof_file.is_absolute() {
             return Err("development host proof file must be absolute".to_owned());
         }
+        let owner_device_key_file = owner_device_key_file
+            .ok_or_else(|| "development owner device key file is required".to_owned())?;
+        if !owner_device_key_file.is_absolute() {
+            return Err("development owner device key file must be absolute".to_owned());
+        }
         if legacy_recovery_bundle_root
             .as_ref()
             .is_some_and(|root| !root.is_absolute())
@@ -112,6 +138,7 @@ impl DevelopmentHostConfigurationV1 {
         Ok(Self {
             listen_address,
             proof_file,
+            owner_device_key_file,
             legacy_recovery_bundle_root,
         })
     }
@@ -143,17 +170,24 @@ fn load_private_proof(path: &Path) -> Result<Zeroizing<String>, String> {
 fn serve_request(
     mut request: Request,
     host: &OwnerVaultProvisioningHostV1,
+    owner_device_proof: &OwnerDeviceProofHostV1,
     recovery: Option<&LegacyProviderRecoverySessionsV1>,
     proof: &str,
 ) {
-    let response =
-        dispatch(&mut request, host, recovery, proof).unwrap_or_else(|error| error.response());
+    let route = request.url().to_owned();
+    let response = dispatch(&mut request, host, owner_device_proof, recovery, proof)
+        .unwrap_or_else(|error| error.response());
+    eprintln!(
+        "developer_native_host_exchange route={route} status={}",
+        response.status_code().0
+    );
     let _ = request.respond(response);
 }
 
 fn dispatch(
     request: &mut Request,
     host: &OwnerVaultProvisioningHostV1,
+    owner_device_proof: &OwnerDeviceProofHostV1,
     recovery: Option<&LegacyProviderRecoverySessionsV1>,
     proof: &str,
 ) -> Result<Response<std::io::Cursor<Vec<u8>>>, DevelopmentHostErrorV1> {
@@ -272,6 +306,17 @@ fn dispatch(
                 .map_err(|_| DevelopmentHostErrorV1::Rejected)?;
             json_response(StatusCode(200), &EmptyResponseV1 {})
         }
+        OWNER_DEVICE_PROOF_SIGN_PATH => {
+            let request: SignOwnerDeviceChallengeRequestV1 = json_request(request)?;
+            let signature =
+                owner_device_proof.sign_challenge(&exact_array(request.challenge_bytes)?);
+            json_response(
+                StatusCode(200),
+                &SignOwnerDeviceChallengeResponseV1 {
+                    signature_raw: signature.to_vec(),
+                },
+            )
+        }
         _ => Err(DevelopmentHostErrorV1::NotFound),
     }
 }
@@ -287,10 +332,10 @@ fn exact_recovery_secret_purpose(
     action: i32,
     secret_class: i32,
 ) -> Result<LegacyProviderRecoverySecretPurposeV1, DevelopmentHostErrorV1> {
-    let action = VaultActionV1::from_code(i64::from(action))
-        .ok_or(DevelopmentHostErrorV1::InvalidRequest)?;
-    let secret_class = SecretClassV1::from_code(i64::from(secret_class))
-        .ok_or(DevelopmentHostErrorV1::InvalidRequest)?;
+    let action = owner_vault_action_from_wire_code_v1(action)
+        .map_err(|_| DevelopmentHostErrorV1::InvalidRequest)?;
+    let secret_class = owner_vault_secret_class_from_wire_code_v1(secret_class)
+        .map_err(|_| DevelopmentHostErrorV1::InvalidRequest)?;
     match (purpose, action, secret_class) {
         (
             "icloud_imap_password",
@@ -754,6 +799,18 @@ struct CancelRecoverySessionRequestV1 {
 #[derive(Serialize)]
 struct EmptyResponseV1 {}
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SignOwnerDeviceChallengeRequestV1 {
+    challenge_bytes: Vec<u8>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SignOwnerDeviceChallengeResponseV1 {
+    signature_raw: Vec<u8>,
+}
+
 fn unsigned(value: &str) -> Result<u64, DevelopmentHostErrorV1> {
     value
         .parse::<u64>()
@@ -768,9 +825,14 @@ mod tests {
     fn configuration_rejects_non_loopback_and_relative_proof_paths() {
         assert_eq!(
             DevelopmentHostConfigurationV1::from_args(
-                ["--proof-file", "/tmp/proof"]
-                    .into_iter()
-                    .map(str::to_owned)
+                [
+                    "--proof-file",
+                    "/tmp/proof",
+                    "--owner-device-key-file",
+                    "/tmp/device-es256.key",
+                ]
+                .into_iter()
+                .map(str::to_owned)
             )
             .expect("valid configuration")
             .listen_address,
@@ -782,7 +844,9 @@ mod tests {
                     "--listen-address",
                     "0.0.0.0:9445",
                     "--proof-file",
-                    "/tmp/proof"
+                    "/tmp/proof",
+                    "--owner-device-key-file",
+                    "/tmp/device-es256.key",
                 ]
                 .into_iter()
                 .map(str::to_owned)
@@ -794,6 +858,8 @@ mod tests {
                 [
                     "--proof-file",
                     "/tmp/proof",
+                    "--owner-device-key-file",
+                    "/tmp/device-es256.key",
                     "--legacy-recovery-bundle-root",
                     "relative-bundle",
                 ]
@@ -804,7 +870,27 @@ mod tests {
         );
         assert!(
             DevelopmentHostConfigurationV1::from_args(
-                ["--proof-file", "proof"].into_iter().map(str::to_owned)
+                [
+                    "--proof-file",
+                    "proof",
+                    "--owner-device-key-file",
+                    "/tmp/device-es256.key",
+                ]
+                .into_iter()
+                .map(str::to_owned)
+            )
+            .is_err()
+        );
+        assert!(
+            DevelopmentHostConfigurationV1::from_args(
+                [
+                    "--proof-file",
+                    "/tmp/proof",
+                    "--owner-device-key-file",
+                    "device-es256.key",
+                ]
+                .into_iter()
+                .map(str::to_owned)
             )
             .is_err()
         );
@@ -896,7 +982,7 @@ mod tests {
         assert!(matches!(
             exact_recovery_secret_purpose(
                 "icloud_imap_password",
-                VaultActionV1::Create.code() as i32,
+                1,
                 SecretClassV1::ProviderCredential.code() as i32,
             ),
             Ok(LegacyProviderRecoverySecretPurposeV1::IcloudImapPassword)
@@ -904,7 +990,7 @@ mod tests {
         assert!(matches!(
             exact_recovery_secret_purpose(
                 "generated_telegram_session_store_key",
-                VaultActionV1::Create.code() as i32,
+                1,
                 SecretClassV1::ProviderCredential.code() as i32,
             ),
             Err(DevelopmentHostErrorV1::InvalidRequest)
@@ -912,7 +998,7 @@ mod tests {
         assert!(matches!(
             exact_recovery_secret_purpose(
                 "legacy_telegram_session_key",
-                VaultActionV1::Create.code() as i32,
+                1,
                 SecretClassV1::SessionStoreKey.code() as i32,
             ),
             Err(DevelopmentHostErrorV1::InvalidRequest)

@@ -447,7 +447,7 @@ pub fn serve_admitted_provider_loop(
         durable,
         automation,
         calls,
-        reconfiguration_context,
+        mut reconfiguration_context,
         event_connection,
         event_publish_permit,
     } = admitted;
@@ -460,7 +460,7 @@ pub fn serve_admitted_provider_loop(
             &durable,
             &automation,
             &calls,
-            &reconfiguration_context,
+            &mut reconfiguration_context,
             executor,
         )?;
         let poll = {
@@ -763,7 +763,7 @@ fn handle_client_delivery(
     durable: &TelegramDurablePersistence,
     automation: &TelegramAutomationPersistence,
     calls: &TelegramCallsPersistence,
-    reconfiguration_context: &TelegramProviderReconfigurationContextV1,
+    reconfiguration_context: &mut TelegramProviderReconfigurationContextV1,
     executor: &tokio::runtime::Runtime,
 ) -> Result<(), String> {
     let Some((correlation_id, control_request)) = channel
@@ -806,31 +806,61 @@ fn handle_client_delivery(
         )?;
         return Ok(());
     }
-    let response = if let Some(runtime) = process.composition_mut().runtime_mut() {
-        authorize_media_for_request(channel, runtime, &request)?;
-        match executor.block_on(client_transport::handle_durable_request(
-            runtime,
-            durable,
-            automation,
-            calls,
+    let runtime_available = process.composition().has_runtime();
+    let authorization_status = process.authorization_status().cloned();
+    let configuration_response = {
+        let mut dispatcher = TelegramBusyControlDispatcher;
+        executor.block_on(crate::configuration_client_port::try_handle(
             &request.encode_to_vec(),
-        )) {
-            Ok(payload) => ModuleClientResponseV1::decode(payload.as_slice())
-                .map_err(|_| "Telegram runtime client response is invalid".to_owned())?,
-            Err(error) => ModuleClientResponseV1 {
-                protocol_major: 1,
-                request_id: request.request_id,
-                response_payload: Vec::new(),
-                error_code: client_transport::module_error_code(&error).to_owned(),
+            crate::configuration_client_port::TelegramConfigurationClientContextV1 {
+                runtime_available,
+                composition: process.composition_mut(),
+                authorization_status: authorization_status.as_ref(),
+                durable,
+                control_channel: channel,
+                dispatcher: &mut dispatcher,
+                reconfiguration_context,
             },
+        ))
+    };
+    let response = match configuration_response {
+        Ok(Some(payload)) => ModuleClientResponseV1::decode(payload.as_slice())
+            .map_err(|_| "Telegram runtime client response is invalid".to_owned())?,
+        Err(error) => ModuleClientResponseV1 {
+            protocol_major: 1,
+            request_id: request.request_id,
+            response_payload: Vec::new(),
+            error_code: client_transport::module_error_code(&error).to_owned(),
+        },
+        Ok(None) if runtime_available => {
+            let runtime = process
+                .composition_mut()
+                .runtime_mut()
+                .ok_or_else(|| "Telegram runtime disappeared during delivery".to_owned())?;
+            authorize_media_for_request(channel, runtime, &request)?;
+            match executor.block_on(client_transport::handle_durable_request(
+                runtime,
+                durable,
+                automation,
+                calls,
+                &request.encode_to_vec(),
+            )) {
+                Ok(payload) => ModuleClientResponseV1::decode(payload.as_slice())
+                    .map_err(|_| "Telegram runtime client response is invalid".to_owned())?,
+                Err(error) => ModuleClientResponseV1 {
+                    protocol_major: 1,
+                    request_id: request.request_id,
+                    response_payload: Vec::new(),
+                    error_code: client_transport::module_error_code(&error).to_owned(),
+                },
+            }
         }
-    } else {
-        ModuleClientResponseV1 {
+        Ok(None) => ModuleClientResponseV1 {
             protocol_major: 1,
             request_id: request.request_id,
             response_payload: Vec::new(),
             error_code: "RUNTIME_UNAVAILABLE".to_owned(),
-        }
+        },
     };
     validate_module_client_response_v1(&response)
         .map_err(|_| "Telegram runtime client response is invalid".to_owned())?;

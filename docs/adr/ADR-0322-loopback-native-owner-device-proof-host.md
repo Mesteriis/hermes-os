@@ -2,10 +2,10 @@
 
 Статус: Принято
 Дата: 2026-07-28
-Состояние реализации: planned. Решение принято после live `make dev`
-evidence: owner Settings `Prepare` получил `403`, хотя target registration
-имел exact effective grant; Control Store при этом имел initial owner/device,
-но не имел browser-device identities.
+Состояние реализации: implemented. Separate native signer, exact loopback
+route, shared frontend proof factory и `make dev` orchestration реализованы;
+live owner Settings и Owner Vault mutations проходят с fresh device proof без
+выдачи private key браузеру.
 
 Уточняет:
 

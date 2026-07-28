@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { MailAccountSetupWorkflowV1 } from './mailAccountSetupWorkflow'
+import {
+	MailAccountSetupWorkflowV1,
+	mailGmailPreauthorizationSettings,
+} from './mailAccountSetupWorkflow'
 
 describe('MailAccountSetupWorkflowV1', () => {
-	it('applies non-secret IMAP settings before Vault binding and activation', async () => {
+	it('applies non-secret IMAP settings before Vault binding without a stale reapply', async () => {
 		const order: string[] = []
 		const createTarget = vi.fn().mockImplementation(async () => {
 			order.push('target')
@@ -25,13 +28,8 @@ describe('MailAccountSetupWorkflowV1', () => {
 			order.push('binding')
 			return {}
 		})
-		const activate = vi.fn().mockImplementation(async () => {
-			order.push('activation')
-			return {}
-		})
 		const workflow = new MailAccountSetupWorkflowV1({
 			configuration: { createTarget, apply },
-			activation: { applyManagedIntegration: activate },
 			vault: { provision },
 			mail: { status, bind },
 			oauth: {} as never,
@@ -47,15 +45,26 @@ describe('MailAccountSetupWorkflowV1', () => {
 			imapPassword: new TextEncoder().encode('secret'),
 		})
 
-		expect(order).toEqual(['target', 'settings', 'status', 'vault', 'binding', 'activation'])
+		expect(order).toEqual(['target', 'settings', 'status', 'vault', 'binding'])
 		expect(provision).toHaveBeenCalledWith(expect.objectContaining({
 			capabilityId: 'mail.imap.credential-provisioning.v1',
 			configurationInstanceId: 'mail-target',
 			purposeId: 'mail_imap_password',
 		}))
-		expect(activate).toHaveBeenCalledWith(expect.objectContaining({
-			configurationInstanceId: 'mail-target',
-			expectedDesiredRevision: 2n,
-		}))
+	})
+
+	it('creates Gmail pre-authorization settings without a synthetic mailbox', () => {
+		const values = mailGmailPreauthorizationSettings({
+			connectionId: 'gmail-account',
+			clientId: 'public-client',
+			redirectUri: 'http://127.0.0.1/callback',
+		})
+		const byId = new Map(values.map((entry) => [entry.settingId, entry.value]))
+
+		expect(byId.get('mail.gmail.user_id')).toEqual({
+			case: 'stringValue',
+			value: 'me',
+		})
+		expect(byId.has('mail.gmail.from_address')).toBe(false)
 	})
 })

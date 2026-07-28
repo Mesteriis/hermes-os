@@ -204,7 +204,7 @@ pub struct MailImapConfigurationV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailGmailConfigurationV1 {
     pub user_id: String,
-    pub from_address: String,
+    pub from_address: Option<String>,
     pub api_endpoint: GmailApiEndpointV1,
 }
 
@@ -242,7 +242,10 @@ pub fn valid_inbound_transport(transport: &MailInboundTransportV1) -> bool {
         }
         MailInboundTransportV1::Gmail(configuration) => {
             valid_gmail_user_id(&configuration.user_id)
-                && valid_mailbox(&configuration.from_address)
+                && configuration
+                    .from_address
+                    .as_deref()
+                    .map_or(configuration.user_id == "me", valid_mailbox)
                 && valid_gmail_api_endpoint(&configuration.api_endpoint)
         }
     }
@@ -489,6 +492,49 @@ pub fn valid_ca_certificate_pem(value: &str) -> bool {
 #[cfg(test)]
 mod conformance_port_tests {
     use super::*;
+
+    #[test]
+    fn gmail_pre_authorization_requires_exact_provider_alias_without_mailbox() {
+        let api_endpoint = if cfg!(feature = "conformance-test-support") {
+            GmailApiEndpointV1 {
+                host: "127.0.0.1".to_owned(),
+                port: GMAIL_API_HTTPS_PORT,
+                ca_certificate_pem: None,
+            }
+        } else {
+            GmailApiEndpointV1 {
+                host: GMAIL_API_HOST.to_owned(),
+                port: GMAIL_API_HTTPS_PORT,
+                ca_certificate_pem: None,
+            }
+        };
+        let mut configuration = MailAccountConfigurationV1 {
+            connection_id: "gmail-account".to_owned(),
+            inbound: MailInboundTransportV1::Gmail(MailGmailConfigurationV1 {
+                user_id: "me".to_owned(),
+                from_address: None,
+                api_endpoint,
+            }),
+            sync_window: 100,
+            sync_windows: 10,
+            smtp_endpoint: None,
+        };
+        assert!(valid_account_configuration(&configuration));
+
+        if let MailInboundTransportV1::Gmail(gmail) = &mut configuration.inbound {
+            gmail.user_id = "opaque-legacy-account".to_owned();
+        }
+        assert!(!valid_account_configuration(&configuration));
+
+        if let MailInboundTransportV1::Gmail(gmail) = &mut configuration.inbound {
+            gmail.from_address = Some("owner@example.test".to_owned());
+        }
+        assert!(valid_account_configuration(&configuration));
+        if let MailInboundTransportV1::Gmail(gmail) = &mut configuration.inbound {
+            gmail.from_address = Some("not-a-mailbox".to_owned());
+        }
+        assert!(!valid_account_configuration(&configuration));
+    }
 
     #[cfg(not(feature = "conformance-test-support"))]
     #[test]

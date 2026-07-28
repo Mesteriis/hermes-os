@@ -8,6 +8,7 @@ import MailSettingsPanel from '../../integrations/mail/presentation/MailSettings
 import TelegramSettingsPanel from '../../integrations/telegram/presentation/TelegramSettingsPanel.vue'
 import WhatsAppSettingsPanel from '../../integrations/whatsapp/presentation/WhatsAppSettingsPanel.vue'
 import ZulipSettingsPanel from '../../integrations/zulip/presentation/ZulipSettingsPanel.vue'
+import LegacyProviderRecoveryPanel from './recovery/LegacyProviderRecoveryPanel.vue'
 import {
 	clientSettingsModule,
 	type SettingsOwnerId,
@@ -60,6 +61,17 @@ const providerNavigation = [
 							<small>Kernel recovery and admission</small>
 						</span>
 					</button>
+					<button
+						type="button"
+						:class="{ active: selectedOwner === 'recovery' }"
+						@click="selectedOwner = 'recovery'"
+					>
+						<Icon class="tree-icon" icon="tabler:database-import" />
+						<span class="app-settings-navigation__copy">
+							<strong>Account recovery</strong>
+							<small>Owner-authorized legacy migration</small>
+						</span>
+					</button>
 				</section>
 				<section class="app-settings-navigation__group">
 					<h2>Integrations</h2>
@@ -89,6 +101,11 @@ const providerNavigation = [
 					:language-options="languageOptions"
 					:compiled-adapter-ids="compiledAdapterIds"
 					@language-change="emit('languageChange', $event)"
+				/>
+				<LegacyProviderRecoveryPanel
+					v-else-if="selectedOwner === 'recovery'"
+					:mail-module="mailModule"
+					:telegram-module="telegramModule"
 				/>
 				<MailSettingsPanel v-else-if="selectedOwner === 'mail'" :module="mailModule" />
 				<TelegramSettingsPanel v-else-if="selectedOwner === 'telegram'" :module="telegramModule" />

@@ -1,6 +1,7 @@
 import type { ClientModuleBootstrapV1 } from '../../gen/hermes/gateway/v1/client_bootstrap_pb'
 
-export type SettingsOwnerId = 'system' | 'mail' | 'telegram' | 'whatsapp' | 'zulip'
+export type ProviderSettingsOwnerId = 'mail' | 'telegram' | 'whatsapp' | 'zulip'
+export type SettingsOwnerId = 'system' | 'recovery' | ProviderSettingsOwnerId
 
 export const providerModuleIds = {
 	mail: 'hermes-mail-runtime',
@@ -11,7 +12,7 @@ export const providerModuleIds = {
 
 export function clientSettingsModule(
 	modules: readonly ClientModuleBootstrapV1[],
-	owner: Exclude<SettingsOwnerId, 'system'>,
+	owner: ProviderSettingsOwnerId,
 ): ClientModuleBootstrapV1 | null {
 	const moduleId = providerModuleIds[owner]
 	return modules.find((module) => module.moduleId === moduleId) ?? null

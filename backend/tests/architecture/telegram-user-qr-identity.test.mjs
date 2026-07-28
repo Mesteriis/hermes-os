@@ -91,7 +91,8 @@ test('Telegram account identity is user-only and QR authority stays with TDLib',
   assert.doesNotMatch(frontendGateway, /providerKind/);
   assert.match(frontendGateway, /qrAuthorized: false/);
   assert.match(frontendWorkflow, /purposeId: 'telegram_api_hash'/);
-  assert.match(frontendWorkflow, /purposeId: 'telegram_session_encryption_key'/);
+  assert.match(frontendWorkflow, /purposeId: 'telegram_session_store_key'/);
+  assert.match(frontendWorkflow, /purpose: 'telegram_session_encryption_key'/);
   assert.doesNotMatch(frontendWorkflow, /telegram_bot_token/);
 
   assert.match(tdlib, /requestQrCodeAuthentication/);

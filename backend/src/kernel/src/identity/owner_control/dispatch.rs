@@ -25,9 +25,7 @@ use hermes_gateway_protocol::v1::{
     UpdateOperatorSettingsRequestV1, UpdateOperatorSettingsResponseV1,
     UpgradeBundledManagedRegistrationRequestV1, UpgradeBundledManagedRegistrationResponseV1,
 };
-use hermes_kernel_control_store::{
-    ModuleRegistrationState, PlatformStorageBindingStateV1, SettingsApplyState,
-};
+use hermes_kernel_control_store::{ModuleRegistrationState, PlatformStorageBindingStateV1};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
     v1::{
@@ -230,13 +228,13 @@ fn start_reserved_integration_runtime(
     request: StartReservedIntegrationRuntimeRequestV1,
 ) -> Result<OwnerResult, String> {
     sessions.authorize(store, &request.owner_session_id)?;
-    let settings = store
-        .settings_schema_binding(&request.registration_id)
-        .map_err(|_| "managed integration settings are unavailable".to_owned())?
-        .ok_or_else(|| "managed integration settings are unavailable".to_owned())?;
-    if settings.apply_state() == SettingsApplyState::BlockedConfig
-        && settings.effective_revision() == 0
-    {
+    let Some(configuration_instance_id) =
+        managed_integration_launch::startup_configuration_instance(
+            store,
+            &request.registration_id,
+            &request.configuration_instance_id,
+        )?
+    else {
         return Ok(OwnerResult::StartReservedIntegrationRuntime(
             StartReservedIntegrationRuntimeResponseV1 {
                 registration_id: request.registration_id,
@@ -245,7 +243,7 @@ fn start_reserved_integration_runtime(
                 host_bridge_socket_path: None,
             },
         ));
-    }
+    };
     managed_integration_launch::launch_reserved(
         store,
         data_dir,
@@ -253,7 +251,7 @@ fn start_reserved_integration_runtime(
         supervisor,
         &request.registration_id,
         &request.storage_capability_id,
-        &request.configuration_instance_id,
+        &configuration_instance_id,
         request.request_host_bridge,
         None,
     )

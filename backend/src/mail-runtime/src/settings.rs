@@ -223,7 +223,7 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, St
         }
         "gmail" => MailInboundTransportV1::Gmail(MailGmailConfigurationV1 {
             user_id: required_string(snapshot, GMAIL_USER_ID)?,
-            from_address: required_string(snapshot, GMAIL_FROM_ADDRESS)?,
+            from_address: optional_string(snapshot, GMAIL_FROM_ADDRESS)?,
             api_endpoint: GmailApiEndpointV1 {
                 host: required_string(snapshot, GMAIL_API_HOST)?,
                 port: u16::try_from(required_unsigned(snapshot, GMAIL_API_PORT)?)
@@ -396,6 +396,9 @@ fn invalid_settings() -> String {
 
 #[cfg(test)]
 mod tests {
+    use hermes_runtime_protocol::v1::{
+        SettingValueV1, SettingsValueEntryV1, setting_value_v1::Value,
+    };
     use hermes_runtime_protocol::validation::descriptor::validate_settings_schema_v1;
 
     use super::*;
@@ -418,5 +421,64 @@ mod tests {
     fn production_gmail_endpoint_defaults_are_canonical() {
         assert_eq!(hermes_mail_api::GMAIL_API_HOST, "gmail.googleapis.com");
         assert_eq!(hermes_mail_api::GMAIL_API_HTTPS_PORT, 443);
+    }
+
+    #[test]
+    fn gmail_pre_authorization_decodes_only_for_exact_provider_alias() {
+        let snapshot = gmail_pre_authorization_snapshot("me");
+        let decoded = decode(&snapshot).expect("decode Gmail pre-authorization settings");
+        let MailInboundTransportV1::Gmail(gmail) = decoded.account.inbound else {
+            panic!("expected Gmail settings");
+        };
+        assert_eq!(gmail.user_id, "me");
+        assert_eq!(gmail.from_address, None);
+
+        let invalid = gmail_pre_authorization_snapshot("opaque-legacy-account");
+        assert!(matches!(decode(&invalid), Err(error) if error == invalid_settings()));
+    }
+
+    fn gmail_pre_authorization_snapshot(user_id: &str) -> SettingsSnapshotV1 {
+        fn entry(setting_id: &str, value: Value) -> SettingsValueEntryV1 {
+            SettingsValueEntryV1 {
+                setting_id: setting_id.to_owned(),
+                value: Some(SettingValueV1 { value: Some(value) }),
+            }
+        }
+
+        let production_endpoint = GmailApiEndpointV1 {
+            host: hermes_mail_api::GMAIL_API_HOST.to_owned(),
+            port: hermes_mail_api::GMAIL_API_HTTPS_PORT,
+            ca_certificate_pem: None,
+        };
+        let gmail_api_host = if hermes_mail_api::valid_gmail_api_endpoint(&production_endpoint) {
+            hermes_mail_api::GMAIL_API_HOST
+        } else {
+            "127.0.0.1"
+        };
+        let mut values = vec![
+            entry(
+                CONNECTION_ID,
+                Value::StringValue("gmail-account".to_owned()),
+            ),
+            entry(
+                GMAIL_API_HOST,
+                Value::StringValue(gmail_api_host.to_owned()),
+            ),
+            entry(
+                GMAIL_API_PORT,
+                Value::UnsignedIntegerValue(u64::from(hermes_mail_api::GMAIL_API_HTTPS_PORT)),
+            ),
+            entry(GMAIL_USER_ID, Value::StringValue(user_id.to_owned())),
+            entry(INBOUND_KIND, Value::StringValue("gmail".to_owned())),
+            entry(SMTP_ENABLED, Value::BooleanValue(false)),
+            entry(SYNC_WINDOW, Value::UnsignedIntegerValue(100)),
+            entry(SYNC_WINDOWS, Value::UnsignedIntegerValue(10)),
+        ];
+        values.sort_by(|left, right| left.setting_id.cmp(&right.setting_id));
+        SettingsSnapshotV1 {
+            target_id: "gmail-target".to_owned(),
+            revision: 1,
+            values,
+        }
     }
 }

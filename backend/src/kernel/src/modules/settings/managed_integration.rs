@@ -204,11 +204,16 @@ fn validate_current_target(
     {
         return Err("managed integration Storage binding is unavailable".to_owned());
     }
-    match (settings.effective_revision(), active) {
-        (0, false) => Ok(ManagedIntegrationApplyKindV1::InitialLaunch),
-        (0, true) => Ok(ManagedIntegrationApplyKindV1::Replacement),
-        (_, true) => Ok(ManagedIntegrationApplyKindV1::Replacement),
-        (_, false) => Err("managed integration settings target is unavailable".to_owned()),
+    Ok(classify_apply_kind(settings.effective_revision(), active))
+}
+
+fn classify_apply_kind(
+    effective_revision: u64,
+    runtime_active: bool,
+) -> ManagedIntegrationApplyKindV1 {
+    match (effective_revision, runtime_active) {
+        (_, false) => ManagedIntegrationApplyKindV1::InitialLaunch,
+        (_, true) => ManagedIntegrationApplyKindV1::Replacement,
     }
 }
 
@@ -295,4 +300,25 @@ fn block(
 
 fn store_error(error: StoreError) -> String {
     format!("{error:?}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ManagedIntegrationApplyKindV1, classify_apply_kind};
+
+    #[test]
+    fn inactive_runtime_relaunches_for_pending_successor_settings() {
+        assert_eq!(
+            classify_apply_kind(0, false),
+            ManagedIntegrationApplyKindV1::InitialLaunch
+        );
+        assert_eq!(
+            classify_apply_kind(3, false),
+            ManagedIntegrationApplyKindV1::InitialLaunch
+        );
+        assert_eq!(
+            classify_apply_kind(3, true),
+            ManagedIntegrationApplyKindV1::Replacement
+        );
+    }
 }

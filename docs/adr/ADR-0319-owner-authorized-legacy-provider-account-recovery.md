@@ -2,9 +2,12 @@
 
 - Статус: принято
 - Дата: 2026-07-28
-- Состояние реализации: planned. Решение должно быть реализовано и доказано
-  live recovery evidence до перевода `legacy_provider_account_recovery_v1` в
-  `implemented`.
+- Состояние реализации: partial. Immutable source admission, native secret
+  custody, provider-specific Mail/Telegram apply flows и live recovery
+  `2 Mail + 1 Telegram user` реализованы; deleted Gmail и Telegram bots
+  исключены, Gmail требует current OAuth, Telegram показывает real TDLib QR.
+  Gate остаётся открытым только по owner-private resumable receipt ledger и
+  ambiguous-outcome negative.
 - Связанные решения: ADR-0200, ADR-0201, ADR-0204, ADR-0205, ADR-0213,
   ADR-0215, ADR-0222, ADR-0223, ADR-0240, ADR-0267, ADR-0278, ADR-0292,
   ADR-0293, ADR-0294, ADR-0295, ADR-0300, ADR-0303, ADR-0309, ADR-0310

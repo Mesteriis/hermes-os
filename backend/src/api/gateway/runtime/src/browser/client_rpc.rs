@@ -162,9 +162,6 @@ where
             Ok(Err(_)) => return invalid_argument(),
             Err(_) => return deadline_exceeded(),
         };
-        if body.is_empty() {
-            return invalid_argument();
-        }
         let owner_id = session.owner_id().to_owned();
         let route = self.route.clone();
         let handler = Arc::clone(&self.handler);
@@ -262,9 +259,97 @@ fn connect_error(status: StatusCode, code: &'static str) -> GatewayHttpResponse 
 
 #[cfg(test)]
 mod tests {
-    use http_body_util::BodyExt;
+    use hermes_gateway_session::BrowserGatewaySessionService;
+    use hermes_gateway_session_contract::{
+        BrowserAssertionAuthority, BrowserAuthenticationAuthority, BrowserDeviceAuthority,
+        BrowserDeviceCredentialV1, BrowserDevicePrincipalV1, GatewayIdentityFenceV1,
+    };
+    use http_body_util::{BodyExt, Full};
 
     use super::*;
+
+    struct TestBrowserAuthority;
+
+    impl BrowserDeviceAuthority for TestBrowserAuthority {
+        fn current_identity_fence(&self) -> Result<GatewayIdentityFenceV1, String> {
+            Err("unused test authority".to_owned())
+        }
+
+        fn active_browser_device(
+            &self,
+            _device_id: &str,
+        ) -> Result<BrowserDevicePrincipalV1, String> {
+            Err("unused test authority".to_owned())
+        }
+
+        fn active_browser_device_by_credential(
+            &self,
+            _credential_id: &[u8],
+        ) -> Result<BrowserDevicePrincipalV1, String> {
+            Err("unused test authority".to_owned())
+        }
+    }
+
+    impl BrowserAssertionAuthority for TestBrowserAuthority {
+        fn accept_verified_browser_assertion(
+            &self,
+            _credential_id: &[u8],
+            _sign_count: u32,
+            _backup_eligible: bool,
+            _backup_state: bool,
+        ) -> Result<BrowserDevicePrincipalV1, String> {
+            Err("unused test authority".to_owned())
+        }
+    }
+
+    impl BrowserAuthenticationAuthority for TestBrowserAuthority {
+        fn active_browser_credential(
+            &self,
+            _credential_id: &[u8],
+        ) -> Result<BrowserDeviceCredentialV1, String> {
+            Err("unused test authority".to_owned())
+        }
+    }
+
+    #[tokio::test]
+    async fn forwards_a_valid_empty_protobuf_request_to_the_owner_handler() {
+        let service = Arc::new(
+            BrowserGatewaySessionService::new_loopback_development(
+                TestBrowserAuthority,
+                "http://127.0.0.1:5173",
+                "owner",
+                "device",
+            )
+            .expect("loopback session"),
+        );
+        let route = ClientRpcRouteV1::new(
+            "registration",
+            "owner.catalog.query.v1",
+            "owner",
+            "owner.catalog.v1",
+            ClientRpcContractVersionV1 {
+                major: 1,
+                revision: 1,
+            },
+            [7; 32],
+            "/owner.catalog.v1.CatalogService/List",
+        );
+        let handler: ClientRpcRouteHandler = Arc::new(|_, owner_id, payload| {
+            assert_eq!(owner_id, "owner");
+            assert!(payload.is_empty());
+            Ok(vec![1])
+        });
+        let router = ClientRpcRouter::new(service, route, handler);
+        let request = Request::post("/owner.catalog.v1.CatalogService/List")
+            .header(CONTENT_TYPE, "application/proto")
+            .header(CONNECT_PROTOCOL_VERSION, "1")
+            .body(Full::new(Bytes::new()))
+            .expect("empty protobuf request");
+
+        let response = router.route(request).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 
     #[tokio::test]
     async fn preserves_a_valid_empty_protobuf_response() {

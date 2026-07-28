@@ -288,7 +288,6 @@ pub fn decode_module_request(
         || envelope.module_id != MAIL_MODULE_ID
         || envelope.owner_id != MAIL_OWNER_ID
         || envelope.request_id == 0
-        || envelope.request_payload.is_empty()
     {
         return Err(MailClientPortErrorV1::Protocol);
     }
@@ -317,11 +316,13 @@ pub async fn handle_client_request(
             .map_err(|_| MailClientPortErrorV1::Runtime)?;
     }
     let response = match request {
-        MailClientRequestV1::AccountCatalog(_) => runtime
-            .account_catalog()
-            .await
-            .map(MailClientResponseV1::AccountCatalog)
-            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::AccountCatalog(_) => {
+            let catalog = runtime
+                .account_catalog()
+                .await
+                .map_err(|_| MailClientPortErrorV1::Runtime)?;
+            MailClientResponseV1::AccountCatalog(catalog)
+        }
         MailClientRequestV1::BindCredential(value) => runtime
             .bind_account_credential(&value, requested_at_unix_seconds)
             .await

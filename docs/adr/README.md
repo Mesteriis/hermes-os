@@ -463,3 +463,12 @@ ADR-0322 закрывает обнаруженный live разрыв loopback 
 отдельный native app signer подписывает только exact Kernel challenge initial
 development device, Gateway/Kernel сохраняют fresh P-256 proof, а private key
 не попадает в browser, Vite, integration или domain.
+ADR-0323 допускает честный Gmail pre-authorization target, когда legacy
+external identity не является mailbox: Mail runtime использует provider alias
+`me`, разрешает current OAuth и sync, но оставляет delivery `not_configured`
+без valid `from_address`; fake address, token import и provider semantics в
+Kernel/Communications запрещены.
+ADR-0324 фиксирует transport semantics пустого Protobuf request: Core Gateway
+передаёт exact zero-length payload descriptor-declared owner runtime, а
+owner-specific decoder сохраняет authority над schema validation. Искусственные
+поля и Mail-specific Gateway special case запрещены.

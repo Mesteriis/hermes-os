@@ -42,6 +42,10 @@ const paths = {
     'frontend/src/platform/gateway/ownerDeviceProof.ts',
     PROJECT_ROOT,
   ),
+  deviceProofFactory: new URL(
+    'frontend/src/platform/gateway/ownerDeviceProofFactory.ts',
+    PROJECT_ROOT,
+  ),
 };
 
 test('effective Settings export is fresh-proof, current, typed and provider-neutral', async () => {
@@ -55,6 +59,7 @@ test('effective Settings export is fresh-proof, current, typed and provider-neut
     generatedClient,
     desktopAdapter,
     deviceProof,
+    deviceProofFactory,
   ] = await Promise.all(Object.values(paths).map((path) => readFile(path, 'utf8')));
   const inventory = JSON.parse(inventorySource);
   const slice = inventory.slices.find(
@@ -97,11 +102,13 @@ test('effective Settings export is fresh-proof, current, typed and provider-neut
   assert.match(generatedClient, /export const OwnerModuleSettingsService/);
   assert.match(generatedClient, /case: "exportEffective"/);
   assert.match(desktopAdapter, /createClient\([\s\S]*OwnerModuleSettingsService/);
-  assert.match(desktopAdapter, /BrowserOwnerDeviceProofV1/);
+  assert.match(desktopAdapter, /createOwnerDeviceProofV1/);
+  assert.match(deviceProofFactory, /DevelopmentOwnerDeviceProofV1/);
+  assert.match(deviceProofFactory, /BrowserOwnerDeviceProofV1/);
   assert.match(desktopAdapter, /async exportEffective/);
   assert.match(deviceProof, /signBrowserLocalDeviceChallenge/);
   assert.doesNotMatch(
-    `${contract}\n${exportAuthority}\n${values}\n${desktopAdapter}\n${deviceProof}`,
+    `${contract}\n${exportAuthority}\n${values}\n${desktopAdapter}\n${deviceProof}\n${deviceProofFactory}`,
     /hermes_(?:mail|telegram|whatsapp|zulip|communications)|Mail|Telegram|WhatsApp|Zulip/,
   );
 });

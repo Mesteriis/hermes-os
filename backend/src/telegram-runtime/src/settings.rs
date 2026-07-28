@@ -11,7 +11,7 @@ const ACCOUNT_ID: &str = "telegram.account_id";
 const API_ID: &str = "telegram.api_id";
 
 pub const TELEGRAM_SETTINGS_SCHEMA_MAJOR_V1: u32 = 1;
-pub const TELEGRAM_SETTINGS_SCHEMA_REVISION_V1: u32 = 1;
+pub const TELEGRAM_SETTINGS_SCHEMA_REVISION_V1: u32 = 2;
 
 #[must_use]
 pub fn telegram_settings_schema_v1() -> SettingsSchemaV1 {
@@ -42,7 +42,7 @@ fn definition(
         mutation_authority: SettingMutationAuthorityV1::OperatorManaged as i32,
         target_scope: SettingTargetScopeV1::ConfigurationInstance as i32,
         apply_mode: SettingApplyModeV1::RestartModule as i32,
-        client_visibility: SettingClientVisibilityV1::Hidden as i32,
+        client_visibility: SettingClientVisibilityV1::Editable as i32,
         fresh_owner_proof_required: true,
         kernel_controller_id: String::new(),
         display_name: display_name.to_owned(),
@@ -98,7 +98,10 @@ fn invalid_settings() -> String {
 #[cfg(test)]
 mod tests {
     use hermes_runtime_protocol::{
-        v1::{SettingValueV1, SettingsSnapshotV1, SettingsValueEntryV1, setting_value_v1::Value},
+        v1::{
+            SettingClientVisibilityV1, SettingValueV1, SettingsSnapshotV1, SettingsValueEntryV1,
+            setting_value_v1::Value,
+        },
         validation::descriptor::validate_settings_schema_v1,
     };
 
@@ -109,6 +112,7 @@ mod tests {
         let schema = telegram_settings_schema_v1();
 
         assert_eq!(validate_settings_schema_v1(&schema), Ok(()));
+        assert_eq!(schema.revision, 2);
         assert_eq!(
             schema
                 .definitions
@@ -117,6 +121,9 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["telegram.account_id", "telegram.api_id"]
         );
+        assert!(schema.definitions.iter().all(|definition| {
+            definition.client_visibility == SettingClientVisibilityV1::Editable as i32
+        }));
     }
 
     #[test]

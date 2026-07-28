@@ -5,10 +5,6 @@ import { TelegramAccountSetupWorkflowV1 } from './telegramAccountSetupWorkflow'
 describe('TelegramAccountSetupWorkflowV1', () => {
 	it('provisions both credential purposes before the first runtime apply', async () => {
 		const order: string[] = []
-		const createTarget = vi.fn().mockImplementation(async () => {
-			order.push('target')
-			return { configurationInstanceId: 'telegram-target', desiredRevision: 1n }
-		})
 		const provision = vi.fn().mockImplementation(async (input) => {
 			order.push(input.purposeId)
 			return { secretRevision: 1n }
@@ -22,7 +18,7 @@ describe('TelegramAccountSetupWorkflowV1', () => {
 			return { accountId: 'personal' }
 		})
 		const workflow = new TelegramAccountSetupWorkflowV1({
-			configuration: { createTarget, apply },
+			configuration: { apply },
 			vault: { provision },
 			lifecycle: { provision: lifecycle },
 		} as never)
@@ -37,9 +33,8 @@ describe('TelegramAccountSetupWorkflowV1', () => {
 		})
 
 		expect(order).toEqual([
-			'target',
 			'telegram_api_hash',
-			'telegram_session_encryption_key',
+			'telegram_session_store_key',
 			'settings_apply',
 			'lifecycle',
 		])
@@ -50,7 +45,11 @@ describe('TelegramAccountSetupWorkflowV1', () => {
 			],
 		}))
 		expect(provision).toHaveBeenCalledWith(expect.objectContaining({
-			configurationInstanceId: 'telegram-target',
+			configurationInstanceId: 'telegram-registration',
+		}))
+		expect(apply).toHaveBeenCalledWith(expect.objectContaining({
+			configurationInstanceId: 'telegram-registration',
+			expectedDesiredRevision: 1n,
 		}))
 	})
 })

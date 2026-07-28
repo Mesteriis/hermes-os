@@ -74,7 +74,6 @@ struct ModulePlanV1 {
     storage_artifact_id: &'static str,
     storage_capability_id: &'static str,
     runtime_kind: ModuleRuntimeKindV1,
-    configuration_instance_id: Option<&'static str>,
     request_host_bridge: bool,
 }
 
@@ -84,7 +83,6 @@ const MODULE_PLAN: [ModulePlanV1; 7] = [
         storage_artifact_id: COMMUNICATIONS_STORAGE_ARTIFACT,
         storage_capability_id: COMMUNICATIONS_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Domain,
-        configuration_instance_id: None,
         request_host_bridge: false,
     },
     ModulePlanV1 {
@@ -92,7 +90,6 @@ const MODULE_PLAN: [ModulePlanV1; 7] = [
         storage_artifact_id: COMMUNICATIONS_EXPORT_STORAGE_ARTIFACT,
         storage_capability_id: COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Workflow,
-        configuration_instance_id: None,
         request_host_bridge: false,
     },
     ModulePlanV1 {
@@ -100,7 +97,6 @@ const MODULE_PLAN: [ModulePlanV1; 7] = [
         storage_artifact_id: ATTACHMENT_SECURITY_STORAGE_ARTIFACT,
         storage_capability_id: ATTACHMENT_SECURITY_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Engine,
-        configuration_instance_id: None,
         request_host_bridge: false,
     },
     ModulePlanV1 {
@@ -108,7 +104,6 @@ const MODULE_PLAN: [ModulePlanV1; 7] = [
         storage_artifact_id: MAIL_STORAGE_ARTIFACT,
         storage_capability_id: MAIL_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Integration,
-        configuration_instance_id: Some("mail-development"),
         request_host_bridge: false,
     },
     ModulePlanV1 {
@@ -116,7 +111,6 @@ const MODULE_PLAN: [ModulePlanV1; 7] = [
         storage_artifact_id: TELEGRAM_STORAGE_ARTIFACT,
         storage_capability_id: TELEGRAM_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Integration,
-        configuration_instance_id: Some("telegram-development"),
         request_host_bridge: false,
     },
     ModulePlanV1 {
@@ -124,7 +118,6 @@ const MODULE_PLAN: [ModulePlanV1; 7] = [
         storage_artifact_id: WHATSAPP_STORAGE_ARTIFACT,
         storage_capability_id: WHATSAPP_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Integration,
-        configuration_instance_id: Some("whatsapp-development"),
         request_host_bridge: true,
     },
     ModulePlanV1 {
@@ -132,7 +125,6 @@ const MODULE_PLAN: [ModulePlanV1; 7] = [
         storage_artifact_id: ZULIP_STORAGE_ARTIFACT,
         storage_capability_id: ZULIP_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Integration,
-        configuration_instance_id: Some("zulip-development"),
         request_host_bridge: false,
     },
 ];
@@ -300,9 +292,7 @@ fn start_ensemble(
                     owner_session_id,
                     &module.registration_id,
                     &module.storage_capability_id,
-                    plan.configuration_instance_id.ok_or_else(|| {
-                        "development integration configuration is absent".to_owned()
-                    })?,
+                    "",
                     plan.request_host_bridge,
                 )?;
                 println!(

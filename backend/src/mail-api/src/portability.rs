@@ -59,6 +59,9 @@ fn runtime_configuration(
             })
         }
         Some(wire::mail_account_configuration_v1::Inbound::Gmail(gmail)) => {
+            if gmail.from_address.is_empty() {
+                return Err(MailAccountExportValidationErrorV1::Invalid);
+            }
             let api_endpoint = gmail
                 .api_endpoint
                 .as_ref()
@@ -69,7 +72,7 @@ fn runtime_configuration(
             }
             MailInboundTransportV1::Gmail(MailGmailConfigurationV1 {
                 user_id: gmail.user_id.clone(),
-                from_address: gmail.from_address.clone(),
+                from_address: Some(gmail.from_address.clone()),
                 api_endpoint: GmailApiEndpointV1 {
                     host: api_endpoint.host.clone(),
                     port: u16::try_from(api_endpoint.port)

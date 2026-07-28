@@ -2,7 +2,9 @@
 
 use std::path::Path;
 
-use hermes_kernel_control_store::{PlatformStorageBindingStateV1, SettingsApplyState};
+use hermes_kernel_control_store::{
+    PlatformStorageBindingStateV1, SettingsApplyState, SettingsConfigurationTarget,
+};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
     SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID,
@@ -24,6 +26,53 @@ use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 pub(crate) struct AdmittedSettingsSnapshotV1 {
     pub(crate) revision: u64,
     pub(crate) bytes: Vec<u8>,
+}
+
+pub(crate) fn startup_configuration_instance(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    requested_configuration_instance_id: &str,
+) -> Result<Option<String>, String> {
+    let targets = store
+        .settings_configuration_targets(registration_id)
+        .map_err(|_| "managed integration settings are unavailable".to_owned())?;
+    select_startup_configuration_instance(&targets, requested_configuration_instance_id)
+        .map(|selected| selected.map(str::to_owned))
+}
+
+fn select_startup_configuration_instance<'a>(
+    targets: &'a [SettingsConfigurationTarget],
+    requested_configuration_instance_id: &str,
+) -> Result<Option<&'a str>, String> {
+    let selected = if requested_configuration_instance_id.is_empty() {
+        targets.iter().find(|target| current_target(target))
+    } else {
+        targets.iter().find(|target| {
+            target.configuration_instance_id() == requested_configuration_instance_id
+        })
+    };
+    let Some(selected) = selected else {
+        return if requested_configuration_instance_id.is_empty() {
+            Ok(None)
+        } else {
+            Err("managed integration settings target is unavailable".to_owned())
+        };
+    };
+    if current_target(selected) {
+        Ok(Some(selected.configuration_instance_id()))
+    } else if selected.effective_revision() == 0
+        && selected.apply_state() == SettingsApplyState::BlockedConfig
+    {
+        Ok(None)
+    } else {
+        Err("managed integration settings are not current".to_owned())
+    }
+}
+
+fn current_target(target: &SettingsConfigurationTarget) -> bool {
+    target.effective_revision() > 0
+        && target.desired_revision() == target.effective_revision()
+        && target.apply_state() == SettingsApplyState::Current
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -70,14 +119,22 @@ pub(crate) fn launch_reserved(
         .platform_event_hub_topology()
         .map_err(|_| "Event Hub topology is unavailable".to_owned())?
         .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
+    let has_configuration_catalog = granted_capability_ids
+        .iter()
+        .any(|capability_id| capability_id == SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID);
     let settings_snapshot_bytes = match settings_snapshot_bytes {
         Some(bytes) => bytes,
+        None if has_configuration_catalog => {
+            admitted_settings_snapshot_for_target(
+                store,
+                registration_id,
+                configuration_instance_id,
+            )?
+            .bytes
+        }
         None => admitted_settings_snapshot(store, registration_id)?.bytes,
     };
-    let configuration_instances = if granted_capability_ids
-        .iter()
-        .any(|capability_id| capability_id == SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID)
-    {
+    let configuration_instances = if has_configuration_catalog {
         admitted_configuration_instances(
             store,
             registration_id,
@@ -277,27 +334,96 @@ pub(crate) fn admitted_settings_snapshot(
     store: &SqliteControlStore,
     registration_id: &str,
 ) -> Result<AdmittedSettingsSnapshotV1, String> {
-    let binding = store
-        .settings_schema_binding(registration_id)
+    admitted_settings_snapshot_for_target(store, registration_id, registration_id)
+}
+
+fn admitted_settings_snapshot_for_target(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    configuration_instance_id: &str,
+) -> Result<AdmittedSettingsSnapshotV1, String> {
+    let target = store
+        .settings_configuration_target(registration_id, configuration_instance_id)
         .map_err(|_| "managed module settings are unavailable".to_owned())?
         .ok_or_else(|| "managed module settings are unavailable".to_owned())?;
-    if binding.desired_revision() == 0
-        || binding.desired_revision() != binding.effective_revision()
-        || binding.apply_state() != SettingsApplyState::Current
-    {
+    if !current_target(&target) {
         return Err("managed module settings are not current".to_owned());
     }
     let (revision, bytes) = store
-        .desired_settings_snapshot(registration_id)
+        .desired_settings_snapshot_for_target(registration_id, configuration_instance_id)
         .map_err(|_| "managed module settings are unavailable".to_owned())?
         .ok_or_else(|| "managed module settings are unavailable".to_owned())?;
     let snapshot = decode_settings_snapshot_v1(&bytes)
         .map_err(|_| "managed module settings are unavailable".to_owned())?;
-    if revision != binding.desired_revision()
-        || snapshot.target_id != registration_id
-        || snapshot.revision != binding.desired_revision()
+    if revision != target.desired_revision()
+        || snapshot.target_id != configuration_instance_id
+        || snapshot.revision != target.desired_revision()
     {
         return Err("managed module settings are stale".to_owned());
     }
     Ok(AdmittedSettingsSnapshotV1 { revision, bytes })
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_kernel_control_store::{
+        SettingsApplyState, SettingsConfigurationTarget, SettingsConfigurationTargetInputV1,
+    };
+
+    use super::select_startup_configuration_instance;
+
+    #[test]
+    fn startup_selection_uses_the_first_current_effective_target() {
+        let targets = vec![
+            target("registration", 2, 0, SettingsApplyState::BlockedConfig),
+            target("cfg-a", 4, 4, SettingsApplyState::Current),
+            target("cfg-b", 7, 7, SettingsApplyState::Current),
+        ];
+
+        assert_eq!(
+            select_startup_configuration_instance(&targets, ""),
+            Ok(Some("cfg-a"))
+        );
+        assert_eq!(
+            select_startup_configuration_instance(&targets, "cfg-b"),
+            Ok(Some("cfg-b"))
+        );
+    }
+
+    #[test]
+    fn startup_selection_keeps_unconfigured_and_exact_target_fail_closed() {
+        let targets = vec![target(
+            "registration",
+            2,
+            0,
+            SettingsApplyState::BlockedConfig,
+        )];
+
+        assert_eq!(
+            select_startup_configuration_instance(&targets, ""),
+            Ok(None)
+        );
+        assert_eq!(
+            select_startup_configuration_instance(&targets, "missing"),
+            Err("managed integration settings target is unavailable".to_owned())
+        );
+    }
+
+    fn target(
+        configuration_instance_id: &str,
+        desired_revision: u64,
+        effective_revision: u64,
+        apply_state: SettingsApplyState,
+    ) -> SettingsConfigurationTarget {
+        SettingsConfigurationTarget::new(SettingsConfigurationTargetInputV1 {
+            registration_id: "registration".to_owned(),
+            configuration_instance_id: configuration_instance_id.to_owned(),
+            desired_revision,
+            effective_revision,
+            apply_state,
+            sanitized_reason_code: (apply_state == SettingsApplyState::BlockedConfig)
+                .then(|| "required_settings_missing".to_owned()),
+            created_operation_id: None,
+        })
+    }
 }

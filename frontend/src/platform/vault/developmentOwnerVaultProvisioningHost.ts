@@ -12,7 +12,10 @@ const DEVELOPMENT_HOST_BASE_PATH = '/__hermes/owner-vault-host/v1'
 type HostFetch = typeof fetch
 
 export class DevelopmentOwnerVaultProvisioningHostV1 implements OwnerVaultProvisioningHostV1 {
-	constructor(private readonly fetchImpl: HostFetch = fetch) {}
+	constructor(
+		private readonly fetchImpl: HostFetch =
+			(input, init) => fetch(input, init),
+	) {}
 
 	async start(): Promise<StartedProvisioningHostSessionV1> {
 		const response = await this.post('/start', {})

@@ -1,0 +1,17 @@
+[package]
+name = "hermes-owner-device-proof-host"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "app"
+owner = "first_party_development"
+surface = "host_adapter"
+
+[dependencies]
+p256 = { version = "=0.14.0", default-features = false, features = ["ecdsa"] }
+zeroize = "=1.9.0"

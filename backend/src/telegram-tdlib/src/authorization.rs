@@ -7,7 +7,8 @@ use serde_json::Value;
 use crate::{
     TdJsonClient, TdlibAuthorizationParameters, TdlibAuthorizationUpdate, TdlibError,
     check_authentication_password, check_database_encryption_key_request, close_session_request,
-    parse_authorization_update, request_qr_code_authentication, set_tdlib_parameters_request,
+    parse_authorization_update, parse_qr_authorization_link, request_qr_code_authentication,
+    set_tdlib_parameters_request,
 };
 
 #[derive(Clone, Eq, PartialEq)]
@@ -94,17 +95,9 @@ impl TdlibAuthorizationDriver {
                 self.qr_requested = true;
             }
             TdlibAuthorizationUpdate::WaitingQrScan => {
-                let link = payload
-                    .get("link")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| {
-                        TdlibError::Protocol(
-                            "TDLib QR authorization state did not include a link".to_owned(),
-                        )
-                    })?;
-                return Ok(TdlibAuthorizationEvent::QrLink(link.to_owned()));
+                return Ok(TdlibAuthorizationEvent::QrLink(
+                    parse_qr_authorization_link(&payload)?,
+                ));
             }
             _ => {}
         }

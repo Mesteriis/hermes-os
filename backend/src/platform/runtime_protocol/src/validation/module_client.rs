@@ -21,7 +21,6 @@ pub fn validate_module_client_request_v1(
         || !valid_identifier(&request.owner_id)
         || (!request.logical_owner_id.is_empty() && !valid_identifier(&request.logical_owner_id))
         || request.request_id == 0
-        || request.request_payload.is_empty()
         || request.request_payload.len() > MAX_PAYLOAD_BYTES
         || !request.contract.as_ref().is_some_and(valid_contract)
     {
@@ -93,6 +92,20 @@ mod tests {
             request_id: 1,
             request_payload: vec![1],
             logical_owner_id: String::new(),
+        };
+        assert_eq!(validate_module_client_request_v1(&request), Ok(()));
+    }
+
+    #[test]
+    fn accepts_an_empty_protobuf_request_payload() {
+        let request = ModuleClientRequestV1 {
+            protocol_major: 1,
+            module_id: "hermes-mail-runtime".to_owned(),
+            owner_id: "integration.mail".to_owned(),
+            logical_owner_id: "owner-1".to_owned(),
+            request_id: 1,
+            contract: Some(contract()),
+            request_payload: Vec::new(),
         };
         assert_eq!(validate_module_client_request_v1(&request), Ok(()));
     }

@@ -17,7 +17,7 @@ let catalogClient: Client<typeof MailAccountCatalogService> | null = null
 export async function listMailAccounts(): Promise<MailAccountCatalogV1> {
 	return getMailAccountCatalogConnectClient().list(create(
 		MailAccountCatalogRequestV1Schema,
-		{},
+		{ major: 1 },
 	))
 }
 

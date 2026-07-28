@@ -9,7 +9,6 @@ import type {
 } from '../../../gen/hermes/mail/v1/client_pb'
 import {
 	ManagedIntegrationSetupV1,
-	OwnerModuleSettingsClientV1,
 	type ManagedIntegrationSetupReceiptV1,
 	type OwnerSettingInputV1,
 } from '../../../platform/settings'
@@ -26,7 +25,6 @@ const MAIL_STORAGE_CAPABILITY_ID = 'mail.storage.v1'
 
 type MailAccountSetupPortsV1 = {
 	configuration: Pick<ManagedIntegrationSetupV1, 'createTarget' | 'apply'>
-	activation: Pick<OwnerModuleSettingsClientV1, 'applyManagedIntegration'>
 	vault: Pick<OwnerVaultProvisioningClientV1, 'provision'>
 	mail: {
 		status(connectionId: string): Promise<MailAccountStatusV1>
@@ -41,13 +39,16 @@ type MailAccountSetupPortsV1 = {
 }
 
 export type MailImapAccountSetupInputV1 = {
+	imapPassword: Uint8Array
+} & MailImapSettingsInputV1
+
+export type MailImapSettingsInputV1 = {
 	registrationId: string
 	expectedDesiredRevision: bigint
 	connectionId: string
 	imapHost: string
 	imapPort: bigint
 	username: string
-	imapPassword: Uint8Array
 	smtp?: {
 		host: string
 		port: bigint
@@ -55,6 +56,13 @@ export type MailImapAccountSetupInputV1 = {
 		fromAddress: string
 		password: Uint8Array
 	}
+}
+
+export type MailGmailSettingsInputV1 = {
+	connectionId: string
+	email: string
+	clientId: string
+	redirectUri: string
 }
 
 export type MailGmailSetupStateV1 = {
@@ -70,13 +78,13 @@ export class MailAccountSetupWorkflowV1 {
 	async setupImap(input: MailImapAccountSetupInputV1): Promise<void> {
 		const connectionId = required(input.connectionId, 'mail_connection_id_invalid')
 		const target = await this.ports.configuration.createTarget(input.registrationId)
-		const configuration = await this.ports.configuration.apply({
+		await this.ports.configuration.apply({
 			registrationId: input.registrationId,
 			expectedDesiredRevision: target.desiredRevision,
 			storageCapabilityId: MAIL_STORAGE_CAPABILITY_ID,
 			configurationInstanceId: target.configurationInstanceId,
 			requestHostBridge: false,
-			values: imapSettings(input),
+			values: mailImapSettings(input),
 		})
 		let status = await this.ports.mail.status(connectionId)
 		await this.provisionAndBind({
@@ -98,13 +106,6 @@ export class MailAccountSetupWorkflowV1 {
 				status,
 			})
 		}
-		await this.ports.activation.applyManagedIntegration({
-			registrationId: input.registrationId,
-			storageCapabilityId: MAIL_STORAGE_CAPABILITY_ID,
-			configurationInstanceId: target.configurationInstanceId,
-			expectedDesiredRevision: configuration.settings.desiredRevision,
-			requestHostBridge: false,
-		})
 	}
 
 	async startGmail(input: {
@@ -123,7 +124,7 @@ export class MailAccountSetupWorkflowV1 {
 			storageCapabilityId: MAIL_STORAGE_CAPABILITY_ID,
 			configurationInstanceId: target.configurationInstanceId,
 			requestHostBridge: false,
-			values: gmailSettings(input),
+			values: mailGmailSettings(input),
 		})
 		const operationId = crypto.randomUUID()
 		const started = await this.ports.oauth.start(operationId, connectionId)
@@ -183,14 +184,13 @@ export class MailAccountSetupWorkflowV1 {
 function defaultPorts(): MailAccountSetupPortsV1 {
 	return {
 		configuration: new ManagedIntegrationSetupV1(),
-		activation: new OwnerModuleSettingsClientV1(),
 		vault: new OwnerVaultProvisioningClientV1(),
 		mail: { status: getMailAccountStatus, bind: bindMailCredential },
 		oauth: new MailGmailOAuthClientV1(),
 	}
 }
 
-function imapSettings(input: MailImapAccountSetupInputV1): OwnerSettingInputV1[] {
+export function mailImapSettings(input: MailImapSettingsInputV1): OwnerSettingInputV1[] {
 	const values = [
 		stringInput('mail.connection_id', input.connectionId),
 		stringInput('mail.imap.host', required(input.imapHost, 'mail_imap_host_invalid')),
@@ -212,18 +212,25 @@ function imapSettings(input: MailImapAccountSetupInputV1): OwnerSettingInputV1[]
 	return values.sort(bySettingId)
 }
 
-function gmailSettings(input: {
-	connectionId: string
-	email: string
-	clientId: string
-	redirectUri: string
-}): OwnerSettingInputV1[] {
+export function mailGmailSettings(input: MailGmailSettingsInputV1): OwnerSettingInputV1[] {
 	const email = required(input.email, 'mail_gmail_email_invalid')
-	return [
+	return gmailSettings(input, email, email)
+}
+
+export function mailGmailPreauthorizationSettings(input: Omit<MailGmailSettingsInputV1, 'email'>):
+	OwnerSettingInputV1[] {
+	return gmailSettings(input, 'me')
+}
+
+function gmailSettings(
+	input: Omit<MailGmailSettingsInputV1, 'email'>,
+	userId: string,
+	fromAddress?: string,
+): OwnerSettingInputV1[] {
+	const values = [
 		stringInput('mail.connection_id', input.connectionId),
 		stringInput('mail.gmail.api_host', 'gmail.googleapis.com'),
 		unsignedInput('mail.gmail.api_port', 443n),
-		stringInput('mail.gmail.from_address', email),
 		stringInput('mail.gmail.oauth.authorization_host', 'accounts.google.com'),
 		stringInput('mail.gmail.oauth.authorization_path', '/o/oauth2/v2/auth'),
 		unsignedInput('mail.gmail.oauth.authorization_port', 443n),
@@ -232,12 +239,14 @@ function gmailSettings(input: {
 		stringInput('mail.gmail.oauth.token_host', 'oauth2.googleapis.com'),
 		stringInput('mail.gmail.oauth.token_path', '/token'),
 		unsignedInput('mail.gmail.oauth.token_port', 443n),
-		stringInput('mail.gmail.user_id', email),
+		stringInput('mail.gmail.user_id', userId),
 		stringInput('mail.inbound.kind', 'gmail'),
 		booleanInput('mail.smtp.enabled', false),
 		unsignedInput('mail.sync.window', 100n),
 		unsignedInput('mail.sync.windows', 10n),
-	].sort(bySettingId)
+	]
+	if (fromAddress) values.push(stringInput('mail.gmail.from_address', fromAddress))
+	return values.sort(bySettingId)
 }
 
 function stringInput(settingId: string, value: string): OwnerSettingInputV1 {
