@@ -413,6 +413,8 @@ runtime не является domain, а app composition не становитс
 | Zulip lifecycle/history/search/client | Zulip | `zulip_full_operational_v1` |
 | Provider-owned Telegram/WhatsApp QR frontend | first-party client composition | `provider_qr_account_linking_frontend_v1` |
 | Browser development credential sealing | first-party development host | `loopback_browser_owner_vault_host_v1` |
+| Immutable legacy provider recovery source | first-party client maintenance adapter | `legacy_provider_recovery_bundle_v1` |
+| Native legacy secret custody and provider-specific apply | first-party client composition | `legacy_provider_native_secret_custody_v1` |
 | Provider-neutral delivery intent | `communication_delivery_intent` workflow | `communication_delivery_intent_v1` |
 | Delayed delivery | `communication_delayed_delivery` workflow | `communication_delayed_delivery_v1` |
 | Bulk action | `communication_bulk_action` workflow | `communication_bulk_action_v1` |
@@ -494,6 +496,11 @@ release.
    Fresh-proof typed export отдельно проходит implemented
    `owner_module_settings_export_v1` по ADR-0297 и является dependency
    portability, а не implicit read-all правом Gateway.
+   Owner-authorized legacy source отдельно проходит implemented
+   `legacy_provider_recovery_bundle_v1` по ADR-0321. Его подключение к current
+   Vault и provider-specific Mail/Telegram flows остаётся planned
+   `legacy_provider_native_secret_custody_v1`; source adapter не становится
+   integration, domain или generic account service.
    Затем Mail read, composition и command gates проходят независимо, без
    одного всесильного Mail capability.
 6. Communications canonical read/content/saved-search gates.

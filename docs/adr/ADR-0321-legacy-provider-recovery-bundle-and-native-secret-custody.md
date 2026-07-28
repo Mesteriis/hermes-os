@@ -2,9 +2,11 @@
 
 Статус: Принято
 Дата: 2026-07-28
-Состояние реализации: planned. `legacy_provider_recovery_bundle_v1` и
-`legacy_provider_native_secret_custody_v1` должны пройти unit, architecture и
-live recovery evidence до перевода в `implemented`.
+Состояние реализации: partial. `legacy_provider_recovery_bundle_v1`
+реализован отдельной first-party app build unit и подтверждён unit,
+architecture и read-only live-source evidence.
+`legacy_provider_native_secret_custody_v1` остаётся planned до подключения
+source session к current Owner Vault host и provider-specific apply flows.
 
 Уточняет:
 
@@ -27,6 +29,9 @@ gmail deleted = 2
 Legacy credential carriers при этом неоднородны:
 
 - iCloud `imap_password` имеет account-scoped Host Vault reference;
+- проверенный legacy Vault был создан в dev mode: его отдельный owner-private
+  `master.key` доступен, а production Keychain entry для этого Vault
+  отсутствует;
 - Gmail имеет legacy OAuth reference, но ADR-0319 запрещает считать старый
   token совместимым current credential binding;
 - Telegram user имеет legacy session-store key, который ADR-0319 запрещает
@@ -61,6 +66,7 @@ Owner-authorized preparation создаёт private recovery bundle вне ре�
 manifest.v1.json
 catalog.v1.json
 vault.db
+legacy-vault-master-key.v1
 legacy-provider-config.v1
 google-oauth-client.v1.json
 ```
@@ -96,6 +102,9 @@ Preparation:
 - выполняет PostgreSQL export только в read-only transaction из остановленного
   legacy runtime или owner-approved isolated source clone;
 - копирует consistent SQLite Host Vault snapshot без изменения source;
+- принимает exact explicit legacy dev master-key file только для проверенного
+  dev-mode source, валидирует 32-byte key и доказывает им decrypt exact iCloud
+  Vault binding до commit bundle;
 - извлекает только exact legacy configuration keys;
 - записывает private files atomically с mode `0600`, directory с mode `0700`;
 - не печатает private field values или source paths;
@@ -103,6 +112,13 @@ Preparation:
 
 После подготовки apply использует только bundle. Source PostgreSQL и legacy
 configuration больше не находятся на target mutation path.
+
+ADR-0319 по умолчанию требует Keychain-backed legacy decrypt. Для этого exact
+owner-approved dev-mode source данное решение заменяет только carrier
+master-key: native custody и decrypt invariants остаются теми же, но key bytes
+берутся из digest-bound private bundle file. Автоматический поиск key files,
+fallback между несколькими keys и запись legacy key в current Keychain
+запрещены.
 
 ### Exact catalog schema
 
@@ -194,6 +210,10 @@ challenge and authorization. Затем native host принимает opaque se
 повторно проверяет bundle fingerprint, расшифровывает exact legacy record в
 `Zeroizing` buffer и передаёт bytes напрямую в existing
 `OwnerVaultProvisioningHostV1::seal`.
+
+`legacy-vault-master-key.v1` читается только native reader, zeroize-ится после
+use и никогда не используется как current Vault key, wrapping key или
+provider credential.
 
 Разрешены только:
 
@@ -288,9 +308,11 @@ receipt fail closed без target mutation.
 2. Read-only PostgreSQL export с точным inventory `1 Gmail + 1 iCloud +
    1 Telegram user`, две deleted Gmail только counted.
 3. Exact no-eval legacy configuration parser и public-only Gmail client export.
-4. Changed/missing/extra/symlink/permission/duplicate/unknown-provider
+4. Exact explicit dev master-key carrier, decrypt proof и wrong-key negative;
+   Keychain mutation/fallback запрещены.
+5. Changed/missing/extra/symlink/permission/duplicate/unknown-provider
    negatives.
-5. Source preparation и dry-run не меняют legacy stores.
+6. Source preparation и dry-run не меняют legacy stores.
 
 ### `legacy_provider_native_secret_custody_v1`
 

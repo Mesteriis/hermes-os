@@ -1,0 +1,45 @@
+[package]
+name = "hermes-legacy-provider-recovery"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-legacy-provider-recovery-prepare"
+path = "src/bin/prepare.rs"
+required-features = ["prepare"]
+
+[[bin]]
+name = "hermes-legacy-provider-recovery-plan"
+path = "src/bin/plan.rs"
+
+[[bin]]
+name = "hermes-legacy-provider-recovery-verify"
+path = "src/bin/verify.rs"
+
+[package.metadata.hermes]
+role = "app"
+owner = "first_party_client"
+surface = "maintenance_source_adapter"
+
+[features]
+default = []
+prepare = ["dep:postgres"]
+
+[dependencies]
+base64 = "=0.22.1"
+chacha20poly1305 = "=0.10.1"
+getrandom = "=0.2.17"
+hkdf = "=0.12.4"
+postgres = { version = "=0.19.12", features = ["with-serde_json-1"], optional = true }
+rusqlite = { version = "=0.32.0", features = ["backup", "bundled"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+sha2 = "=0.10.9"
+zeroize = { version = "=1.9.0", features = ["derive", "serde"] }
+
+[dev-dependencies]
+tempfile = "=3.23.0"
