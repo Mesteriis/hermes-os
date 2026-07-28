@@ -174,6 +174,46 @@ test('produces an identical unsigned content manifest from independent build inp
   }
 });
 
+test('accepts exact ASCII artifact order when Vite hashes introduce punctuation', async () => {
+  const root = canonicalTemporaryDirectory('hermes-release-ascii-artifact-order-');
+  try {
+    const css = join(root, 'index--style.css');
+    const javascript = join(root, 'index-_runtime.js');
+    writeFileSync(css, 'compiled styles');
+    writeFileSync(javascript, 'compiled runtime');
+    await assert.doesNotReject(compileUnsignedReleaseContent({
+      verification_key_id: 'release-2026',
+      trust_root_revision: 1,
+      revision: 1,
+      distribution_id: 'hermes-desktop',
+      release_version: '1.0.0',
+      build_id: 'build-browser-assets',
+      target_triple: 'aarch64-apple-darwin',
+      generation: 1,
+      ...releaseProvenance,
+      additional_verification_keys: [],
+      artifacts: [
+        {
+          artifact_kind: 'browser_client_asset',
+          artifact_id: 'browser.asset.index--style.css',
+          relative_path: 'browser/assets/index--style.css',
+          source_path: css,
+          required: true,
+        },
+        {
+          artifact_kind: 'browser_client_asset',
+          artifact_id: 'browser.asset.index-_runtime.js',
+          relative_path: 'browser/assets/index-_runtime.js',
+          source_path: javascript,
+          required: true,
+        },
+      ],
+    }));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('release reproducibility CLI refuses divergent unsigned content before signing', () => {
   const root = canonicalTemporaryDirectory('hermes-release-reproducibility-cli-');
   try {

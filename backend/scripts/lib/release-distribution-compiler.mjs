@@ -68,6 +68,10 @@ function validSourceCommit(value) {
   return typeof value === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
 }
 
+function compareAscii(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function validRelativePath(value) {
   return typeof value === 'string'
     && value.length > 0
@@ -300,7 +304,10 @@ function validateArtifactInput(artifact, previousArtifactId) {
     || !validRelativePath(artifact.relative_path)
     || !isAbsolute(artifact.source_path)
     || typeof artifact.required !== 'boolean') {
-    throw new Error('release compiler artifact is invalid');
+    const artifactId = validIdentifier(artifact?.artifact_id)
+      ? artifact.artifact_id
+      : '<invalid-artifact-id>';
+    throw new Error(`release compiler artifact is invalid: ${artifactId}`);
   }
   if (kind === 1) {
     validateContractInput(artifact.descriptor, 'descriptor');
@@ -391,7 +398,7 @@ export async function compileReleaseDistribution(input, privateKey) {
       keyId: key.key_id,
       publicKeySec1: loadAdditionalVerificationKey(key.public_key_path),
     })),
-  ].sort((left, right) => left.keyId.localeCompare(right.keyId));
+  ].sort((left, right) => compareAscii(left.keyId, right.keyId));
   return {
     ...content,
     signedManifest: encodeSignedManifest(input.verification_key_id, content.rawManifest, signature),
@@ -482,7 +489,7 @@ export function composeReleaseCompilerInput(input, fragments) {
     fragmentArtifacts.push(...fragment.artifacts);
   }
   const artifacts = [...input.artifacts, ...fragmentArtifacts]
-    .sort((left, right) => left.artifact_id.localeCompare(right.artifact_id));
+    .sort((left, right) => compareAscii(left.artifact_id, right.artifact_id));
   const composed = { ...input, artifacts };
   validateInput(composed);
   validateArtifactSet(artifacts);

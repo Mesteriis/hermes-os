@@ -177,6 +177,33 @@ test('includes exact compiled browser assets in the signed distribution input', 
   }
 });
 
+test('orders Vite asset identifiers by exact ASCII bytes across punctuation', () => {
+  const root = temporaryDirectory('hermes-local-platform-browser-asset-order-');
+  try {
+    createFixture(root);
+    const browserAssetsDirectory = join(root, 'browser-assets');
+    mkdirSync(browserAssetsDirectory, { recursive: true, mode: 0o700 });
+    writeFileSync(
+      join(root, 'bootstrap.html'),
+      '<link href="/assets/index--style.css"><script src="/assets/index-_runtime.js"></script>',
+    );
+    writeFileSync(join(browserAssetsDirectory, 'index--style.css'), 'compiled styles');
+    writeFileSync(join(browserAssetsDirectory, 'index-_runtime.js'), 'compiled runtime');
+
+    const { output, result } = runBuilder(root, browserAssetsDirectory);
+    assert.equal(result.status, 0, result.stderr);
+    const input = JSON.parse(readFileSync(output, 'utf8'));
+    assert.deepEqual(
+      input.artifacts
+        .filter((artifact) => artifact.artifact_kind === 'browser_client_asset')
+        .map((artifact) => artifact.artifact_id),
+      ['browser.asset.index--style.css', 'browser.asset.index-_runtime.js'],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('rejects a referenced browser asset outside the signed Gateway allowlist', () => {
   const root = temporaryDirectory('hermes-local-platform-browser-invalid-asset-');
   try {

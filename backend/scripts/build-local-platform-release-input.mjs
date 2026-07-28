@@ -41,6 +41,10 @@ const BROWSER_ASSET_REFERENCE = /\/assets\/[A-Za-z0-9][A-Za-z0-9._/-]*/g;
 const BROWSER_ASSET_EXTENSIONS = new Set(['.css', '.js', '.png', '.svg', '.webp']);
 const TEXT_BROWSER_ASSET_EXTENSIONS = new Set(['.css', '.js']);
 
+function compareAscii(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function browserAssetReferences(bytes) {
   return [...bytes.toString('utf8').matchAll(BROWSER_ASSET_REFERENCE)]
     .map((match) => match[0]);
@@ -96,7 +100,7 @@ function browserAssetArtifacts(directory, browserBootstrap) {
     }
   }
 
-  return [...discovered.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([name, path]) => {
+  return [...discovered.entries()].sort(([left], [right]) => compareAscii(left, right)).map(([name, path]) => {
     return {
       artifact_kind: 'browser_client_asset', artifact_id: `browser.asset.${name}`,
       relative_path: `browser/assets/${name}`, source_path: path, required: true,
@@ -202,7 +206,7 @@ function buildInput(options) {
     relative_path: 'browser/bootstrap.html', source_path: browserBootstrap, required: true,
   });
   artifacts.push(...browserAssetArtifacts(options.get('--browser-assets-dir'), browserBootstrap));
-  artifacts.sort((left, right) => left.artifact_id.localeCompare(right.artifact_id));
+  artifacts.sort((left, right) => compareAscii(left.artifact_id, right.artifact_id));
   return {
     verification_key_id: 'local-release-2026', trust_root_revision: 1, revision: 1,
     distribution_id: options.get('--distribution-id'), release_version: options.get('--release-version'),
