@@ -202,6 +202,7 @@ async function run_conformance(secrets) {
     ], {
     env: {
       ...process.env,
+      HERMES_STORAGE_TEST_DATABASE_URL: await postgres_test_database_url(secrets),
       HERMES_STORAGE_AUTHENTICATED_TEST: '1',
       HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PASSWORD_FILE: secrets.pgbouncerPath,
       HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE: secrets.postgresPath,
@@ -230,11 +231,6 @@ async function run_conformance(secrets) {
 async function run_telegram_calls_conformance(secrets, test) {
   await start_contour(secrets);
   try {
-    const password = (await readFile(secrets.postgresPath, 'utf8')).trim();
-    const databaseUrl = new URL('postgres://hermes_postgres_admin@127.0.0.1/hermes_storage_authenticated');
-    databaseUrl.password = password;
-    databaseUrl.port = String(secrets.postgresPort);
-    databaseUrl.searchParams.set('sslmode', 'disable');
     await run('cargo', [
       `+${toolchain}`,
       '--config',
@@ -252,12 +248,23 @@ async function run_telegram_calls_conformance(secrets, test) {
     ], {
       env: {
         ...process.env,
-        HERMES_TELEGRAM_CALLS_POSTGRES_URL: databaseUrl.toString(),
+        HERMES_TELEGRAM_CALLS_POSTGRES_URL: await postgres_test_database_url(secrets),
       },
     });
   } finally {
     await stop_contour(secrets);
   }
+}
+
+async function postgres_test_database_url(secrets) {
+  const password = (await readFile(secrets.postgresPath, 'utf8')).trim();
+  const databaseUrl = new URL(
+    'postgres://hermes_postgres_admin@127.0.0.1/hermes_storage_authenticated',
+  );
+  databaseUrl.password = password;
+  databaseUrl.port = String(secrets.postgresPort);
+  databaseUrl.searchParams.set('sslmode', 'disable');
+  return databaseUrl.toString();
 }
 
 async function run_managed_process_conformance(secrets) {

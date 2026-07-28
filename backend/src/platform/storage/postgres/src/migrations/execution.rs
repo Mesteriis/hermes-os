@@ -2,7 +2,7 @@
 
 use hermes_storage_migrations::admit_storage_bundle;
 use hermes_storage_protocol::v1::StorageBundleV1;
-use sqlx::{AssertSqlSafe, query, query_scalar, raw_sql};
+use sqlx::{AssertSqlSafe, query, query_as, raw_sql};
 
 use crate::{
     PostgresAdapterErrorV1, PostgresAdminConnectorV1, StorageRoleSpecV1,
@@ -37,18 +37,28 @@ async fn apply_step(
         .begin()
         .await
         .map_err(|_| PostgresAdapterErrorV1::Migration)?;
-    let recorded_digest = read_recorded_digest(&mut transaction, bundle, step)
+    let recorded_steps = read_recorded_steps(&mut transaction, bundle, step)
         .await
         .map_err(|_| PostgresAdapterErrorV1::MigrationLedgerRead)?;
-    if let Some(digest) = recorded_digest {
-        if digest != step.sha256 {
-            return Err(PostgresAdapterErrorV1::Migration);
+    match classify_recorded_step_lineage(bundle.revision, &step.sha256, &recorded_steps)? {
+        RecordedStepLineageV1::Exact => {
+            transaction
+                .commit()
+                .await
+                .map_err(|_| PostgresAdapterErrorV1::MigrationCommit)?;
+            return Ok(());
         }
-        transaction
-            .commit()
-            .await
-            .map_err(|_| PostgresAdapterErrorV1::MigrationCommit)?;
-        return Ok(());
+        RecordedStepLineageV1::Predecessor => {
+            record_step(&mut transaction, bundle, step)
+                .await
+                .map_err(|_| PostgresAdapterErrorV1::MigrationLedgerWrite)?;
+            transaction
+                .commit()
+                .await
+                .map_err(|_| PostgresAdapterErrorV1::MigrationCommit)?;
+            return Ok(());
+        }
+        RecordedStepLineageV1::Missing => {}
     }
     execute_step_as_owner(&mut transaction, roles, step).await?;
     record_step(&mut transaction, bundle, step)
@@ -60,18 +70,55 @@ async fn apply_step(
         .map_err(|_| PostgresAdapterErrorV1::MigrationCommit)
 }
 
-async fn read_recorded_digest(
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RecordedStepLineageV1 {
+    Missing,
+    Exact,
+    Predecessor,
+}
+
+fn classify_recorded_step_lineage(
+    current_bundle_revision: u32,
+    expected_digest: &[u8],
+    recorded_steps: &[(i32, Vec<u8>)],
+) -> Result<RecordedStepLineageV1, PostgresAdapterErrorV1> {
+    let mut has_exact = false;
+    let mut has_predecessor = false;
+    for (recorded_revision, recorded_digest) in recorded_steps {
+        let recorded_revision =
+            u32::try_from(*recorded_revision).map_err(|_| PostgresAdapterErrorV1::Migration)?;
+        if recorded_revision == 0
+            || recorded_revision > current_bundle_revision
+            || recorded_digest.as_slice() != expected_digest
+        {
+            return Err(PostgresAdapterErrorV1::Migration);
+        }
+        if recorded_revision == current_bundle_revision {
+            has_exact = true;
+        } else {
+            has_predecessor = true;
+        }
+    }
+    if has_exact {
+        Ok(RecordedStepLineageV1::Exact)
+    } else if has_predecessor {
+        Ok(RecordedStepLineageV1::Predecessor)
+    } else {
+        Ok(RecordedStepLineageV1::Missing)
+    }
+}
+
+async fn read_recorded_steps(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     bundle: &StorageBundleV1,
     step: &hermes_storage_protocol::v1::StorageMigrationStepV1,
-) -> Result<Option<Vec<u8>>, PostgresAdapterErrorV1> {
-    query_scalar::<_, Vec<u8>>(
-        "SELECT step_digest FROM hermes_platform.storage_migration_ledger WHERE owner_id = $1 AND bundle_revision = $2 AND step_revision = $3",
+) -> Result<Vec<(i32, Vec<u8>)>, PostgresAdapterErrorV1> {
+    query_as::<_, (i32, Vec<u8>)>(
+        "SELECT bundle_revision, step_digest FROM hermes_platform.storage_migration_ledger WHERE owner_id = $1 AND step_revision = $2 ORDER BY bundle_revision",
     )
     .bind(&bundle.owner_id)
-    .bind(bundle.revision as i32)
-    .bind(step.revision as i32)
-    .fetch_optional(&mut **transaction)
+    .bind(postgres_revision(step.revision)?)
+    .fetch_all(&mut **transaction)
     .await
     .map_err(|_| PostgresAdapterErrorV1::Migration)
 }
@@ -106,11 +153,67 @@ async fn record_step(
 ) -> Result<(), PostgresAdapterErrorV1> {
     query("INSERT INTO hermes_platform.storage_migration_ledger (owner_id, bundle_revision, step_revision, step_digest) VALUES ($1, $2, $3, $4)")
         .bind(&bundle.owner_id)
-        .bind(bundle.revision as i32)
-        .bind(step.revision as i32)
+        .bind(postgres_revision(bundle.revision)?)
+        .bind(postgres_revision(step.revision)?)
         .bind(&step.sha256)
         .execute(&mut **transaction)
         .await
         .map_err(|_| PostgresAdapterErrorV1::Migration)?;
     Ok(())
+}
+
+fn postgres_revision(revision: u32) -> Result<i32, PostgresAdapterErrorV1> {
+    i32::try_from(revision).map_err(|_| PostgresAdapterErrorV1::Migration)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RecordedStepLineageV1, classify_recorded_step_lineage};
+    use crate::PostgresAdapterErrorV1;
+
+    const EXPECTED_DIGEST: [u8; 32] = [7; 32];
+
+    #[test]
+    fn missing_step_requires_execution() {
+        assert_eq!(
+            classify_recorded_step_lineage(2, &EXPECTED_DIGEST, &[]),
+            Ok(RecordedStepLineageV1::Missing)
+        );
+    }
+
+    #[test]
+    fn exact_step_is_a_no_op() {
+        assert_eq!(
+            classify_recorded_step_lineage(
+                2,
+                &EXPECTED_DIGEST,
+                &[(1, EXPECTED_DIGEST.to_vec()), (2, EXPECTED_DIGEST.to_vec())],
+            ),
+            Ok(RecordedStepLineageV1::Exact)
+        );
+    }
+
+    #[test]
+    fn exact_predecessor_records_successor_acceptance_without_execution() {
+        assert_eq!(
+            classify_recorded_step_lineage(2, &EXPECTED_DIGEST, &[(1, EXPECTED_DIGEST.to_vec())],),
+            Ok(RecordedStepLineageV1::Predecessor)
+        );
+    }
+
+    #[test]
+    fn digest_drift_is_rejected() {
+        assert_eq!(
+            classify_recorded_step_lineage(2, &EXPECTED_DIGEST, &[(1, vec![8; 32])]),
+            Err(PostgresAdapterErrorV1::Migration)
+        );
+    }
+
+    #[test]
+    fn future_bundle_revision_is_rejected() {
+        assert_eq!(
+            classify_recorded_step_lineage(2, &EXPECTED_DIGEST, &[(3, EXPECTED_DIGEST.to_vec())],),
+            Err(PostgresAdapterErrorV1::Migration)
+        );
+    }
 }

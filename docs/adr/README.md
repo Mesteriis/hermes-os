@@ -119,6 +119,7 @@ policy через ссылки из новых документов.
 - [ADR-0308: Mail message identity, IMAP mailbox roles and location authority](ADR-0308-mail-message-identity-imap-mailbox-roles-and-location-authority.md)
 - [ADR-0309: Loopback browser Owner Vault provisioning host](ADR-0309-loopback-browser-owner-vault-provisioning-host.md)
 - [ADR-0310: Telegram user-only TDLib QR account identity](ADR-0310-telegram-user-only-tdlib-qr-account-identity.md)
+- [ADR-0311: Storage successor bundle step lineage](ADR-0311-storage-successor-bundle-step-lineage.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -433,3 +434,7 @@ ADR-0310 удаляет ложный Telegram bot path из active clean-room co
 Telegram integration поддерживает только TDLib user account, client больше не
 выбирает `provider_kind`, а QR создаётся только из transient provider
 `tg://login` после защищённого account setup.
+ADR-0311 устраняет повторный DDL при cumulative Storage bundle successor:
+exact predecessor step наследуется только при совпадающем digest и получает
+immutable acceptance row текущей revision, а digest drift и downgrade
+отклоняются до mutation.

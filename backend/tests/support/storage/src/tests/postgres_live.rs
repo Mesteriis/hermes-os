@@ -55,8 +55,26 @@ fn reconciles_bootstrap_and_runtime_role_against_postgres() {
         assert!(audit.search_path_isolated);
 
         assert_ledger_reconciliation(&connector, &spec).await;
+        assert_successor_bundle_inherits_exact_steps(&connector).await;
         assert_role_ledger_accepts_fenced_successor(&connector, &spec).await;
         assert_owner_data_privileges(&connector, &spec).await;
+    });
+}
+
+#[test]
+#[ignore = "requires the disposable authenticated PostgreSQL contour"]
+fn successor_bundle_inherits_exact_steps_without_ddl_replay() {
+    let database_url = std::env::var(DATABASE_URL_ENV)
+        .expect("storage integration test requires HERMES_STORAGE_TEST_DATABASE_URL");
+    let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
+    runtime.block_on(async move {
+        let connector = PostgresAdminConnectorV1::connect(&database_url)
+            .await
+            .expect("connect disposable PostgreSQL");
+        ensure_platform_schemas(&connector)
+            .await
+            .expect("reconcile platform schemas");
+        assert_successor_bundle_inherits_exact_steps(&connector).await;
     });
 }
 
@@ -161,6 +179,80 @@ async fn assert_ledger_reconciliation(
             .await
             .is_err()
     );
+}
+
+async fn assert_successor_bundle_inherits_exact_steps(connector: &PostgresAdminConnectorV1) {
+    let suffix = std::process::id();
+    let owner = format!("storage_lineage_{suffix}");
+    let runtime_principal = format!("storage_runtime_lineage_{suffix}");
+    let spec = StorageRoleSpecV1::from_binding(
+        format!("storage_ddl_lineage_{suffix}"),
+        storage_role_binding(&owner, &runtime_principal),
+    )
+    .expect("valid successor lineage role specification");
+    ensure_storage_roles(connector, &spec)
+        .await
+        .expect("reconcile successor lineage roles");
+
+    let predecessor = lineage_bundle(&owner, 1, false);
+    apply_storage_bundle(connector, &spec, &predecessor)
+        .await
+        .expect("apply predecessor bundle");
+
+    let successor = lineage_bundle(&owner, 2, true);
+    apply_storage_bundle(connector, &spec, &successor)
+        .await
+        .expect("inherit predecessor step and apply successor step");
+    apply_storage_bundle(connector, &spec, &successor)
+        .await
+        .expect("reapply exact successor bundle");
+
+    assert_eq!(
+        apply_storage_bundle(connector, &spec, &predecessor).await,
+        Err(PostgresAdapterErrorV1::Migration)
+    );
+
+    let mut drifted = successor;
+    drifted.revision = 3;
+    drifted.steps[0].forward_sql_utf8 =
+        format!("CREATE TABLE hermes_data.{owner}_drifted (probe_id uuid);").into_bytes();
+    drifted.steps[0].sha256 = Sha256::digest(&drifted.steps[0].forward_sql_utf8).to_vec();
+    assert_eq!(
+        apply_storage_bundle(connector, &spec, &drifted).await,
+        Err(PostgresAdapterErrorV1::Migration)
+    );
+}
+
+fn lineage_bundle(
+    owner: &str,
+    bundle_revision: u32,
+    include_successor_step: bool,
+) -> StorageBundleV1 {
+    let initial_sql =
+        format!("CREATE TABLE hermes_data.{owner}_initial (probe_id uuid);").into_bytes();
+    let mut steps = vec![StorageMigrationStepV1 {
+        revision: 1,
+        migration_id: "create_initial".into(),
+        sha256: Sha256::digest(&initial_sql).to_vec(),
+        forward_sql_utf8: initial_sql,
+    }];
+    if include_successor_step {
+        let successor_sql =
+            format!("CREATE TABLE hermes_data.{owner}_successor (probe_id uuid);").into_bytes();
+        steps.push(StorageMigrationStepV1 {
+            revision: 2,
+            migration_id: "create_successor".into(),
+            sha256: Sha256::digest(&successor_sql).to_vec(),
+            forward_sql_utf8: successor_sql,
+        });
+    }
+    StorageBundleV1 {
+        major: 1,
+        revision: bundle_revision,
+        bundle_id: format!("{owner}_bundle"),
+        owner_id: owner.to_owned(),
+        steps,
+    }
 }
 
 async fn assert_role_ledger_accepts_fenced_successor(

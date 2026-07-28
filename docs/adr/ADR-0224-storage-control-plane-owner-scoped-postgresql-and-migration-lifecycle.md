@@ -2,6 +2,8 @@
 
 Статус: Принято
 Дата: 2026-07-16
+Уточнено:
+[ADR-0311: Storage successor bundle step lineage](ADR-0311-storage-successor-bundle-step-lineage.md).
 Состояние реализации: `storage_control_v1` открыт. Реализован foundation-контур
 из шести production packages,
 `StorageBundleV1` Protobuf и fail-closed AST admission для узкого additive DDL.
