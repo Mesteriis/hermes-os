@@ -99,6 +99,11 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   assert.match(developmentAssembly, /managed_storage_binding_status/);
   assert.match(developmentAssembly, /upgrade_bundled_managed_registration/);
   assert.match(developmentAssembly, /successor_fences/);
+  assert.match(developmentAssembly, /ReservationReleaseV1::Predecessor/);
+  assert.match(
+    developmentAssembly,
+    /ReservationReleaseV1::Predecessor[\s\S]*write_state\(state_path, &state\)[\s\S]*remove_reservation\(reservation_path\)[\s\S]*refresh_plan/,
+  );
   assert.match(developmentAssembly, /version=3/);
 
   assert.match(probe, /host: '127\.0\.0\.1'/);

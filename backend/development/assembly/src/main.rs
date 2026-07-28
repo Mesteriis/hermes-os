@@ -171,6 +171,7 @@ fn run(cli: Cli) -> Result<(), String> {
                 &cli.distribution_id,
                 cli.distribution_generation,
                 existing_state.as_ref(),
+                &state_path,
                 &reservation_path,
             )?;
             if reconciliation.outcome != ReconciliationOutcomeV1::Current {
@@ -438,11 +439,34 @@ fn reconcile_plan(
     distribution_id: &str,
     distribution_generation: u64,
     existing_state: Option<&DevelopmentAssemblyStateV1>,
+    state_path: &Path,
     reservation_path: &Path,
 ) -> Result<ReconciliationResultV1, String> {
     if let Some(reservation) = read_reservation_if_present(reservation_path)? {
-        validate_reservation_release(&reservation, distribution_id, distribution_generation)?;
+        let reservation_release =
+            validate_reservation_release(&reservation, distribution_id, distribution_generation)?;
+        if existing_state.is_some_and(|state| {
+            state.distribution_id != reservation.distribution_id
+                || state.distribution_generation > reservation.distribution_generation
+        }) {
+            return Err("development ensemble reservation is stale".to_owned());
+        }
         let state = finish_ensemble_bindings(client, owner_session_id, reservation)?;
+        if reservation_release == ReservationReleaseV1::Predecessor {
+            write_state(state_path, &state)?;
+            remove_reservation(reservation_path)?;
+            return Ok(ReconciliationResultV1 {
+                state: refresh_plan(
+                    client,
+                    owner_session_id,
+                    distribution_id,
+                    distribution_generation,
+                    &state,
+                    reservation_path,
+                )?,
+                outcome: ReconciliationOutcomeV1::Updated,
+            });
+        }
         return Ok(ReconciliationResultV1 {
             state,
             outcome: if existing_state.is_some() {
@@ -951,15 +975,27 @@ fn decode_hex_32(value: &str) -> Result<[u8; 32], String> {
     Ok(output)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReservationReleaseV1 {
+    Exact,
+    Predecessor,
+}
+
 fn validate_reservation_release(
     reservation: &EnsembleReservationV2,
     distribution_id: &str,
     distribution_generation: u64,
-) -> Result<(), String> {
-    (reservation.distribution_id == distribution_id
-        && reservation.distribution_generation == distribution_generation)
-        .then_some(())
-        .ok_or_else(|| "development ensemble reservation does not match the release".to_owned())
+) -> Result<ReservationReleaseV1, String> {
+    if reservation.distribution_id != distribution_id
+        || reservation.distribution_generation > distribution_generation
+    {
+        return Err("development ensemble reservation does not match the release".to_owned());
+    }
+    if reservation.distribution_generation == distribution_generation {
+        Ok(ReservationReleaseV1::Exact)
+    } else {
+        Ok(ReservationReleaseV1::Predecessor)
+    }
 }
 
 fn remove_reservation(path: &Path) -> Result<(), String> {
@@ -1336,5 +1372,26 @@ mod tests {
         assert_eq!(successor_fences(2, 3), Ok((3, 4)));
         assert!(successor_fences(u64::MAX, 1).is_err());
         assert!(successor_fences(1, u64::MAX).is_err());
+    }
+
+    #[test]
+    fn predecessor_reservation_must_finish_before_the_requested_successor() {
+        let reservation = EnsembleReservationV2 {
+            distribution_id: "hermes-local-development".to_owned(),
+            distribution_generation: 18,
+            modules: Vec::new(),
+        };
+        assert_eq!(
+            validate_reservation_release(&reservation, "hermes-local-development", 18,),
+            Ok(ReservationReleaseV1::Exact)
+        );
+        assert_eq!(
+            validate_reservation_release(&reservation, "hermes-local-development", 19,),
+            Ok(ReservationReleaseV1::Predecessor)
+        );
+        assert!(
+            validate_reservation_release(&reservation, "hermes-local-development", 17,).is_err()
+        );
+        assert!(validate_reservation_release(&reservation, "another-distribution", 19).is_err());
     }
 }

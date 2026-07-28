@@ -6,6 +6,10 @@
 `loopback_full_stack_dev_assembly_v1`. Gate закрыт двумя последовательными
 live `make dev` на одном default data directory с signed generations `7` и
 `8`, неизменным набором registration IDs и без удаления owner/provider state.
+Crash recovery также завершает durable reservation предыдущей generation,
+атомарно сохраняет её state и только затем начинает requested successor; это
+подтверждено восстановлением незавершённой generation `18` перед successful
+generation `20` без удаления Control Store, PostgreSQL или provider state.
 
 Уточняет:
 
@@ -123,6 +127,9 @@ reservation с:
 - принимает exact already-`revoking` binding;
 - повторяет exact successor binding idempotently;
 - не начинает другую generation, пока reservation не завершена;
+- если `make dev` уже materialize-ил следующую signed generation, сначала
+  завершает predecessor reservation, атомарно сохраняет её assembly state и
+  удаляет только завершённую reservation, затем начинает requested successor;
 - пишет assembly state atomic rename и только после этого удаляет reservation.
 
 Legacy state format version `2` мигрируется без reset: его единственная
