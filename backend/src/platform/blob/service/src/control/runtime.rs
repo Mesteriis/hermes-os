@@ -88,10 +88,12 @@ fn data_service(
         audience,
     )
     .map_err(|_| "Blob Vault context is invalid".to_owned())?;
+    let nested_status = status_response(identity, configuration);
     let route = InheritedBlobVaultRouteV1::new(
         channel
             .try_clone()
             .map_err(|_| "Blob inherited control channel is unavailable".to_owned())?,
+        Box::new(move |request| response_for(request, &nested_status)),
     )
     .map_err(|_| "Blob inherited control channel is unavailable".to_owned())?;
     let verifier = BlobDataSessionVerifierV1::new(
@@ -114,6 +116,7 @@ fn serve_status_and_data(
     listener: PrivateBlobDataListener,
     mut data: BlobDataService<InheritedBlobVaultRouteV1>,
 ) -> Result<(), String> {
+    let status = status_response(&identity, &configuration);
     channel
         .set_write_timeout(Some(std::time::Duration::from_secs(2)))
         .map_err(|_| "Blob inherited control channel is unavailable".to_owned())?;
@@ -136,7 +139,7 @@ fn serve_status_and_data(
                 BlobRuntimeControlRequestV1::decode(bytes.as_slice())
                     .map_err(|_| "Blob inherited control frame is invalid".to_owned())
             })
-            .map(|request| response_for(request, &identity, &configuration))
+            .map(|request| response_for(request, &status))
             .unwrap_or_else(|error| {
                 if error == "Blob inherited control channel is unavailable" {
                     return error_response("idle");
@@ -152,16 +155,13 @@ fn serve_status_and_data(
 
 fn response_for(
     request: BlobRuntimeControlRequestV1,
-    identity: &BlobRuntimeIdentity,
-    configuration: &BlobRuntimeConfigurationV1,
+    status: &BlobRuntimeControlResponseV1,
 ) -> BlobRuntimeControlResponseV1 {
     if validate_blob_runtime_control_request(&request).is_err() {
         return error_response("operation_not_available");
     }
     match request.operation {
-        Some(Operation::GetStatus(GetBlobRuntimeStatusRequestV1 {})) => {
-            status_response(identity, configuration)
-        }
+        Some(Operation::GetStatus(GetBlobRuntimeStatusRequestV1 {})) => status.clone(),
         None => error_response("operation_not_available"),
     }
 }

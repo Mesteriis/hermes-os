@@ -540,6 +540,50 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     }
     let edited_body =
         publish_and_wait_for_communications_message_edit(&store, &supervisor, &data, &message_id);
+    let edited_export_id = [15; 16];
+    let edited_start = StartEvidenceExportResponseV1::decode(
+        route(
+            12,
+            communications_export_command_contract_reference_v1(),
+            StartEvidenceExportRequestV1 {
+                protocol_major: 1,
+                operation_id: edited_export_id.to_vec(),
+                message_ids: vec![message_id.clone()],
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode accepted edited-message export command");
+    assert_eq!(edited_start.export_id, edited_export_id);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let status = GetEvidenceExportStatusResponseV1::decode(
+            route(
+                13,
+                communications_export_query_contract_reference_v1(),
+                GetEvidenceExportStatusRequestV1 {
+                    protocol_major: 1,
+                    export_id: edited_export_id.to_vec(),
+                }
+                .encode_to_vec(),
+            )
+            .as_slice(),
+        )
+        .expect("decode edited-message Communications Export status");
+        if status.status == EvidenceExportStatusV1::EvidenceExportStatusReady as i32 {
+            assert_eq!(status.requested_items, 1);
+            assert_eq!(status.completed_items, 1);
+            assert!(status.artifact_bytes > 0);
+            break;
+        }
+        assert!(
+            status.status != EvidenceExportStatusV1::EvidenceExportStatusRejected as i32
+                && std::time::Instant::now() < deadline,
+            "edited canonical snapshot must reach ready export status; status={status:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     publish_and_wait_for_communications_message_deletion(store.as_ref(), &supervisor, &message_id);
     let deleted_export_id = [13; 16];
     let deleted_start = StartEvidenceExportResponseV1::decode(
@@ -640,6 +684,21 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     .expect("decode one-use Communications Export read ticket");
     assert_eq!(ticket.opaque_read_capability.len(), 32);
     assert!(ticket.declared_bytes > 0);
+    let edited_ticket = IssueEvidenceExportReadResponseV1::decode(
+        route(
+            14,
+            communications_export_ticket_contract_reference_v1(),
+            IssueEvidenceExportReadRequestV1 {
+                protocol_major: 1,
+                export_id: edited_export_id.to_vec(),
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode edited-message Communications Export read ticket");
+    assert_eq!(edited_ticket.opaque_read_capability.len(), 32);
+    assert!(edited_ticket.declared_bytes > 0);
     let blob_outage_ticket = IssueEvidenceExportReadResponseV1::decode(
         route(
             6,
@@ -662,6 +721,8 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         ticket.opaque_read_capability,
         ticket.declared_bytes,
         &edited_body,
+        edited_ticket.opaque_read_capability,
+        edited_ticket.declared_bytes,
         blob_outage_ticket.opaque_read_capability,
     );
     let revoked_ticket = IssueEvidenceExportReadResponseV1::decode(
@@ -708,6 +769,8 @@ fn assert_communications_export_gateway_delivery(
     opaque_read_capability: Vec<u8>,
     declared_bytes: u64,
     edited_body: &[u8],
+    edited_opaque_read_capability: Vec<u8>,
+    edited_declared_bytes: u64,
     blob_outage_read_capability: Vec<u8>,
 ) -> String {
     use hermes_communications_export_api::{
@@ -783,6 +846,42 @@ fn assert_communications_export_gateway_delivery(
         "pre-edit export artifact remains bound to its original canonical snapshot"
     );
     assert_eq!(read().status(), hyper::StatusCode::NOT_FOUND);
+    let edited_read_request = EvidenceExportArtifactReadRequestV1 {
+        opaque_read_capability: edited_opaque_read_capability,
+    }
+    .encode_to_vec();
+    let read_edited = || {
+        runtime.block_on(
+            router.route(
+                hyper::Request::builder()
+                    .method("POST")
+                    .uri(COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1)
+                    .header("content-type", "application/proto")
+                    .header("cookie", &cookie)
+                    .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                        edited_read_request.clone(),
+                    )))
+                    .expect("Gateway edited Communications Export artifact read request"),
+            ),
+        )
+    };
+    let edited_response = read_edited();
+    assert_eq!(edited_response.status(), hyper::StatusCode::OK);
+    let edited_artifact = runtime
+        .block_on(edited_response.into_body().collect())
+        .expect("Gateway edited Communications Export artifact response")
+        .to_bytes();
+    assert_eq!(
+        u64::try_from(edited_artifact.len()).ok(),
+        Some(edited_declared_bytes)
+    );
+    assert!(
+        edited_artifact
+            .windows(edited_body.len())
+            .any(|window| window == edited_body),
+        "post-edit export artifact contains the edited canonical snapshot"
+    );
+    assert_eq!(read_edited().status(), hyper::StatusCode::NOT_FOUND);
     let blob_outage_read_request = EvidenceExportArtifactReadRequestV1 {
         opaque_read_capability: blob_outage_read_capability,
     }
