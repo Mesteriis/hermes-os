@@ -8,6 +8,7 @@ mod canonical_read;
 mod content_read;
 mod custody_transfer;
 mod durable;
+mod export_source;
 mod saved_search;
 mod schema;
 mod search;
@@ -22,6 +23,10 @@ pub use custody_transfer::{
     ClaimedCommunicationsBodyCustodyTransferV1, CommunicationsBodyCustodyTransferErrorV1,
 };
 pub use durable::{CommunicationsDurablePersistence, PersistedCommunicationsObservationV1};
+pub use export_source::{
+    CommunicationsEvidenceExportBodyReceiptV1, CommunicationsEvidenceExportSourceErrorV1,
+    CommunicationsEvidenceExportSourceItemV1,
+};
 pub use saved_search::{
     CommunicationsSavedSearchDefinitionV1, CommunicationsSavedSearchListAfterV1,
     CommunicationsSavedSearchMutationErrorV1, CommunicationsSavedSearchSummaryV1,

@@ -11,6 +11,7 @@ use hermes_communications_attachment_contract::admission::{
     communication_attachment_safety_verdict_observed_contract_reference_v1,
 };
 use hermes_communications_domain::COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1;
+use hermes_communications_evidence_export_source_api::evidence_export_prepare_contract_reference_v1;
 use hermes_communications_ingress::admission::communication_observed_contract_reference_v1;
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 use hermes_events_jetstream::{
@@ -48,10 +49,16 @@ use crate::{
     },
     canonical_outbox::CanonicalEventContextV1,
     client_port::dispatch_module_client_request_v1,
-    consumer::{CommunicationsDeliveryErrorV1, consume_next_observation_v1},
+    consumer::{
+        CommunicationsDeliveryErrorV1, CommunicationsEventConsumeErrorV1,
+        consume_next_observation_v1,
+    },
     content_ticket_store::CommunicationsContentTicketStoreV1,
     custody_worker::{CommunicationsCustodyWorkerErrorV1, process_next_body_custody_transfer_v1},
     domain_outbox::{CommunicationsDomainOutboxRelayErrorV1, relay_domain_outbox_once},
+    evidence_export_source::{
+        CommunicationsEvidenceExportDeliveryErrorV1, consume_next_evidence_export_prepare_v1,
+    },
     search_access::CommunicationsSearchAccessV1,
     search_worker::process_next_derived_index_job_v1,
 };
@@ -87,6 +94,7 @@ struct CommunicationsSubscribePermitsV1 {
     observation: RuntimeSubscribePermitV1,
     attachment_blob_admission: RuntimeSubscribePermitV1,
     attachment_safety_verdict: RuntimeSubscribePermitV1,
+    evidence_export_prepare: RuntimeSubscribePermitV1,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -94,6 +102,7 @@ enum CommunicationsConsumerV1 {
     Observation,
     AttachmentBlobAdmission,
     AttachmentSafetyVerdict,
+    EvidenceExportPrepare,
 }
 
 impl CommunicationsConsumerV1 {
@@ -101,7 +110,8 @@ impl CommunicationsConsumerV1 {
         match self {
             Self::Observation => Self::AttachmentBlobAdmission,
             Self::AttachmentBlobAdmission => Self::AttachmentSafetyVerdict,
-            Self::AttachmentSafetyVerdict => Self::Observation,
+            Self::AttachmentSafetyVerdict => Self::EvidenceExportPrepare,
+            Self::EvidenceExportPrepare => Self::Observation,
         }
     }
 }
@@ -115,9 +125,11 @@ impl CommunicationsSubscribePermitsV1 {
             communication_attachment_blob_admission_observed_contract_reference_v1();
         let attachment_safety_verdict =
             communication_attachment_safety_verdict_observed_contract_reference_v1();
+        let evidence_export_prepare = evidence_export_prepare_contract_reference_v1();
         let mut observation_permit = None;
         let mut attachment_blob_admission_permit = None;
         let mut attachment_safety_verdict_permit = None;
+        let mut evidence_export_prepare_permit = None;
         for permit in permits {
             let Some(contract) = permit.contract() else {
                 return Err(CommunicationsEventRuntimeErrorV1::Admission);
@@ -128,6 +140,8 @@ impl CommunicationsSubscribePermitsV1 {
                 replace_once(&mut attachment_blob_admission_permit, permit)?;
             } else if exact_contract(contract, &attachment_safety_verdict) {
                 replace_once(&mut attachment_safety_verdict_permit, permit)?;
+            } else if exact_contract(contract, &evidence_export_prepare) {
+                replace_once(&mut evidence_export_prepare_permit, permit)?;
             } else {
                 return Err(CommunicationsEventRuntimeErrorV1::Admission);
             }
@@ -137,6 +151,8 @@ impl CommunicationsSubscribePermitsV1 {
             attachment_blob_admission: attachment_blob_admission_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
             attachment_safety_verdict: attachment_safety_verdict_permit
+                .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
+            evidence_export_prepare: evidence_export_prepare_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
         })
     }
@@ -499,6 +515,34 @@ impl CommunicationsEventRuntimeV1 {
                 .await
                 .map(|_| ())
             }
+            CommunicationsConsumerV1::EvidenceExportPrepare => {
+                let mut nested_search_access = self.search_access.clone();
+                let mut dispatcher = CommunicationsNestedRequestDispatcher {
+                    persistence: &self.persistence,
+                    search_access: &mut nested_search_access,
+                    content_tickets: &self.content_tickets,
+                };
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(false)
+                    .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
+                let result = consume_next_evidence_export_prepare_v1(
+                    &self.persistence,
+                    &self.connection,
+                    &self.permits.evidence_export_prepare,
+                    &mut self.control_channel,
+                    &mut dispatcher,
+                    &canonical_event_context,
+                )
+                .await
+                .map(|_| ())
+                .map_err(evidence_export_delivery_error);
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(true)
+                    .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
+                result
+            }
         }
     }
 
@@ -605,6 +649,29 @@ impl CommunicationsEventRuntimeV1 {
             published_at_unix_seconds,
         )
         .await
+    }
+}
+
+fn evidence_export_delivery_error(
+    error: CommunicationsEvidenceExportDeliveryErrorV1,
+) -> CommunicationsDeliveryErrorV1 {
+    match error {
+        CommunicationsEvidenceExportDeliveryErrorV1::Unavailable => {
+            CommunicationsDeliveryErrorV1::Unavailable
+        }
+        CommunicationsEvidenceExportDeliveryErrorV1::InvalidEnvelope => {
+            CommunicationsDeliveryErrorV1::InvalidEnvelope
+        }
+        CommunicationsEvidenceExportDeliveryErrorV1::InvalidPayload => {
+            CommunicationsDeliveryErrorV1::Consume(
+                CommunicationsEventConsumeErrorV1::InvalidPayload,
+            )
+        }
+        CommunicationsEvidenceExportDeliveryErrorV1::Persistence => {
+            CommunicationsDeliveryErrorV1::Consume(
+                CommunicationsEventConsumeErrorV1::PersistenceRejected,
+            )
+        }
     }
 }
 
@@ -749,13 +816,15 @@ mod tests {
         let first = CommunicationsConsumerV1::Observation;
         let second = first.successor();
         let third = second.successor();
+        let fourth = third.successor();
 
         assert_eq!(
-            [first, second, third, third.successor(),],
+            [first, second, third, fourth, fourth.successor()],
             [
                 CommunicationsConsumerV1::Observation,
                 CommunicationsConsumerV1::AttachmentBlobAdmission,
                 CommunicationsConsumerV1::AttachmentSafetyVerdict,
+                CommunicationsConsumerV1::EvidenceExportPrepare,
                 CommunicationsConsumerV1::Observation,
             ]
         );

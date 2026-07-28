@@ -1771,6 +1771,85 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communications-evidence-export-source-api"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "prost-types 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-communications-export-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-communications-export-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-export-persistence",
+ "hermes-communications-export-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hermes-communications-export-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-communications-export-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-export-core",
+ "hermes-events-protocol",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
+name = "hermes-communications-export-runtime"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "hermes-blob-client",
+ "hermes-communications-evidence-export-source-api",
+ "hermes-communications-export-api",
+ "hermes-communications-export-core",
+ "hermes-communications-export-persistence",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-managed-vault-client",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-communications-ingress"
 version = "0.1.0"
 dependencies = [
@@ -1804,6 +1883,7 @@ dependencies = [
  "hermes-communications-attachment-contract",
  "hermes-communications-content-api",
  "hermes-communications-domain",
+ "hermes-communications-evidence-export-source-api",
  "hermes-communications-ingress",
  "hermes-communications-persistence",
  "hermes-communications-saved-query-api",

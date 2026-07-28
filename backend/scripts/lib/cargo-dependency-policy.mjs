@@ -34,7 +34,7 @@ function isEventHubTransportRuntimeConsumer(policy, source, target, targetPackag
     && target.role === policy.events.role
     && target.owner === policy.events.owner
     && target.surface === 'implementation'
-    && ['domain', 'engine', 'integration'].includes(source.role)
+    && ['domain', 'engine', 'integration', 'workflow'].includes(source.role)
     && source.surface === 'runtime';
 }
 

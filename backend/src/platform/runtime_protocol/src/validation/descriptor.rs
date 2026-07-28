@@ -184,7 +184,7 @@ fn valid_provided_surface(surface: &crate::v1::ProvidedSurfaceV1) -> bool {
     }
 }
 
-const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 24 * 1024 * 1024;
 
 fn valid_client_blob_path(path: &str) -> bool {
     path.starts_with("/api/blobs/")
@@ -565,7 +565,9 @@ fn value_matches_setting_type(value: &setting_value_v1::Value, value_type: i32) 
 
 #[cfg(test)]
 mod tests {
-    use super::{valid_vault_purpose_request, validate_descriptor_v1};
+    use super::{
+        MAX_CLIENT_BLOB_RESPONSE_BYTES, valid_vault_purpose_request, validate_descriptor_v1,
+    };
     use crate::v1::{
         CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1, ClientBlobRouteV1,
         ClientRpcRouteV1, ContractReferenceV1, IntegrationStateRequestV1, ModuleDescriptorV1,
@@ -632,6 +634,24 @@ mod tests {
         });
         assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
 
+        descriptor.capabilities[0].provides[0]
+            .client_blob_route
+            .as_mut()
+            .expect("route")
+            .max_response_bytes = MAX_CLIENT_BLOB_RESPONSE_BYTES;
+        assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
+        descriptor.capabilities[0].provides[0]
+            .client_blob_route
+            .as_mut()
+            .expect("route")
+            .max_response_bytes = MAX_CLIENT_BLOB_RESPONSE_BYTES + 1;
+        assert!(validate_descriptor_v1(&descriptor).is_err());
+
+        descriptor.capabilities[0].provides[0]
+            .client_blob_route
+            .as_mut()
+            .expect("route")
+            .max_response_bytes = 256 * 1024;
         descriptor.capabilities[0].provides[0]
             .client_blob_route
             .as_mut()

@@ -16,6 +16,9 @@ const props = defineProps<{
 	canManageSavedSearches: boolean
 	canReadSenderInsights: boolean
 }>()
+const emit = defineEmits<{
+	canonicalMessageSelected: [messageId: Uint8Array]
+}>()
 const surface = useCanonicalCommunicationsPage()
 const detail = useCanonicalCommunicationDetail()
 const content = useCanonicalCommunicationContent()
@@ -37,6 +40,7 @@ onMounted(() => {
 function openMessage(messageKey: string): void {
 	const messageId = surface.selectMessage(messageKey)
 	if (messageId) {
+		emit('canonicalMessageSelected', new Uint8Array(messageId))
 		void detail.open(messageId)
 		void content.open(messageId)
 	}
@@ -45,6 +49,7 @@ function openMessage(messageKey: string): void {
 function openSavedSearchMessage(messageKey: string): void {
 	const messageId = savedSearches.selectMessage(messageKey)
 	if (messageId) {
+		emit('canonicalMessageSelected', new Uint8Array(messageId))
 		void detail.open(messageId)
 		void content.open(messageId)
 	}

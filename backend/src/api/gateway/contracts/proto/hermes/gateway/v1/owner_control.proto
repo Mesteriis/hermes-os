@@ -257,6 +257,20 @@ message StartReservedEngineRuntimeResponseV1 {
   string launch_state = 3;
 }
 
+// Workflows coordinate public owner contracts without becoming a business
+// domain or provider integration. Their bootstrap deliberately excludes
+// provider configuration, integration settings and host bridges.
+message StartReservedWorkflowRuntimeRequestV1 {
+  string registration_id = 1;
+  string storage_capability_id = 2;
+  string owner_session_id = 3;
+}
+message StartReservedWorkflowRuntimeResponseV1 {
+  string registration_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+}
+
 // Crash recovery composes a new durable Scheduler identity, its matching
 // Storage binding and one exact managed-child launch. It never reuses the
 // predecessor's runtime identity, credential lease or Storage binding.
@@ -642,6 +656,7 @@ message OwnerControlRequestV1 {
     AdmitBundledStorageArtifactRequestV1 admit_bundled_storage_artifact = 41;
     GetManagedStorageBindingStatusRequestV1 get_managed_storage_binding_status = 42;
     UpgradeBundledManagedRegistrationRequestV1 upgrade_bundled_managed_registration = 43;
+    StartReservedWorkflowRuntimeRequestV1 start_reserved_workflow_runtime = 44;
   }
 }
 
@@ -690,6 +705,7 @@ message OwnerControlResponseV1 {
     AdmitBundledStorageArtifactResponseV1 admit_bundled_storage_artifact = 42;
     GetManagedStorageBindingStatusResponseV1 get_managed_storage_binding_status = 43;
     UpgradeBundledManagedRegistrationResponseV1 upgrade_bundled_managed_registration = 44;
+    StartReservedWorkflowRuntimeResponseV1 start_reserved_workflow_runtime = 45;
   }
 
   // Sanitized stable code; details and private data remain local to Kernel.

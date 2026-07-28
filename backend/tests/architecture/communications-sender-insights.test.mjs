@@ -60,7 +60,7 @@ test('sender insights is one exact Communications build-unit capability', async 
   const gate = inventory.slices.find(({ gate: name }) => name === 'communications_sender_insights_v1');
 
   assert.equal(gate.state, 'implemented');
-  assert.equal(policy.implementation.currentSlice, 'communications_sender_insights_v1');
+  assert.equal(policy.implementation.currentSlice, 'communications_export_v1');
   assert.ok(policy.implementation.ownerInventory.businessCapabilities.includes(
     'communications.sender-insights.v1',
   ));

@@ -138,6 +138,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-vault-runtime \
 	--package hermes-communications-runtime \
 	--package hermes-communications-assembly \
+	--package hermes-communications-export-runtime \
+	--package hermes-communications-export-assembly \
 	--package hermes-attachment-security-runtime \
 	--package hermes-attachment-security-assembly \
 	--package hermes-mail-runtime \
@@ -185,6 +187,7 @@ sbom_sha256="$(sha256_file "$sbom_path")"
 toolchain_sha256="$(sha256_file "$toolchain_path")"
 
 communications_assembly="$assembly_root/communications"
+communications_export_assembly="$assembly_root/communications-export"
 attachment_security_assembly="$assembly_root/attachment-security"
 mail_assembly="$assembly_root/mail"
 telegram_assembly="$assembly_root/telegram"
@@ -195,6 +198,10 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$communications_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-communications-runtime"
+"$cargo_target_dir/debug/hermes-communications-export-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$communications_export_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-communications-export-runtime"
 "$cargo_target_dir/debug/hermes-attachment-security-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$attachment_security_assembly" \
@@ -247,6 +254,7 @@ fi
 node "$backend_root/scripts/build-distribution-release.mjs" \
 	--input "$base_input" \
 	--artifact-fragment "$communications_assembly/communications.release-artifacts.json" \
+	--artifact-fragment "$communications_export_assembly/communications_export.release-artifacts.json" \
 	--artifact-fragment "$attachment_security_assembly/attachment-security.release-artifacts.json" \
 	--artifact-fragment "$mail_assembly/mail.release-artifacts.json" \
 	--artifact-fragment "$telegram_assembly/telegram.release-artifacts.json" \

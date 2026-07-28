@@ -54,14 +54,21 @@ hermes-communications-export-persistence
 hermes-communications-export-runtime
   client/event/Blob orchestration and runtime fencing
 
-hermes-communications-export-service
-  independently supervised process entrypoint
+hermes-communications-export-assembly
+  unsigned release inputs for the independently supervised workflow runtime
 ```
 
 Source API является public contract unit Communications, а не workflow
 implementation. Communications runtime реализует этот port, но не импортирует
 export core/runtime/persistence. Workflow импортирует только public source API,
 Communications query/content contracts и platform Blob contracts.
+
+Как и domain, integration и engine runtimes, independently supervised workflow
+runtime может зависеть только от общей platform implementation
+`hermes-events-jetstream` для transport adapter Event Hub. Это узкое исключение
+не разрешает workflow импортировать Event Hub authority, storage или
+owner-specific implementation; business payload остаётся в typed public
+contracts.
 
 Package, runtime, workflow, domain и integration остаются разными единицами
 сборки. Количество строк не используется как критерий SRP.
@@ -172,6 +179,8 @@ workflow controller и не импортирует workflow implementation.
 
 Kernel согласует только typed technical authority:
 
+- platform descriptor ceiling для одного `client_blob` ответа равен `24 MiB`;
+  каждый route обязан объявить собственный меньший либо равный hard bound;
 - exact workflow descriptor, signed executable and settings schema digests;
 - independent registration, grants, runtime generation and revoke;
 - exact event publish/consume routes and schemas;

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communications_sender_insights_v1",
+    "currentSlice": "communications_export_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -450,6 +450,42 @@
         "role": "domain",
         "owner": "communications",
         "surface": "contract"
+      },
+      {
+        "name": "hermes-communications-evidence-export-source-api",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communications-export-api",
+        "role": "workflow",
+        "owner": "communications_export",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communications-export-core",
+        "role": "workflow",
+        "owner": "communications_export",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-communications-export-persistence",
+        "role": "workflow",
+        "owner": "communications_export",
+        "surface": "persistence"
+      },
+      {
+        "name": "hermes-communications-export-runtime",
+        "role": "workflow",
+        "owner": "communications_export",
+        "surface": "runtime"
+      },
+      {
+        "name": "hermes-communications-export-assembly",
+        "role": "workflow",
+        "owner": "communications_export",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -951,6 +987,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communications-evidence-export-source-api",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-communications-ingress",
           "kind": "normal"
         },
@@ -1262,7 +1302,97 @@
       ],
       "hermes-communications-content-api": [],
       "hermes-communications-saved-query-api": [],
-      "hermes-communications-sender-insights-api": []
+      "hermes-communications-sender-insights-api": [],
+      "hermes-communications-evidence-export-source-api": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communications-export-api": [],
+      "hermes-communications-export-core": [],
+      "hermes-communications-export-persistence": [
+        {
+          "name": "hermes-communications-export-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communications-export-runtime": [
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-evidence-export-source-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-export-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-export-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-export-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-managed-vault-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communications-export-assembly": [
+        {
+          "name": "hermes-communications-export-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-export-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ]
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-events-protocol": [
@@ -3434,6 +3564,224 @@
           "defaultFeatures": false,
           "features": []
         }
+      ],
+      "hermes-communications-evidence-export-source-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communications-export-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communications-export-core": [
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communications-export-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
+      "hermes-communications-export-runtime": [
+        {
+          "name": "getrandom",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.4.3",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt",
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-communications-export-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -3745,6 +4093,30 @@
       "hermes-communications-sender-insights-api": {
         "primaryKind": "lib",
         "customBuildAllowed": true
+      },
+      "hermes-communications-evidence-export-source-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communications-export-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communications-export-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communications-export-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communications-export-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-communications-export-assembly": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -3786,7 +4158,9 @@
       "integrations": [
         "mail"
       ],
-      "workflows": [],
+      "workflows": [
+        "communications_export"
+      ],
       "engines": [
         "attachment_security"
       ],
@@ -3801,12 +4175,18 @@
         "communications.blob.v1",
         "communications.content.v1",
         "communications.events.v1",
+        "communications.export-source.blob.v1",
+        "communications.export-source.v1",
+        "communications.export.v1",
         "communications.observe.v1",
         "communications.query.v1",
         "communications.saved-search.v1",
         "communications.search.index.v1",
         "communications.sender-insights.v1",
         "communications.storage.v1",
+        "communications_export.events.v1",
+        "communications_export.source.blob.v1",
+        "communications_export.storage.v1",
         "mail.attachment-anchor.consume.v1",
         "mail.attachment-blob-admission.publish.v1",
         "mail.attachment-safety-state.consume.v1",

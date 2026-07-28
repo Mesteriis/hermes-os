@@ -1,0 +1,51 @@
+.communications-evidence-export {
+	display: grid;
+	gap: var(--h-space-4);
+	margin-top: var(--h-space-5);
+	padding: var(--h-space-5);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+}
+
+.communications-evidence-export > header {
+	display: flex;
+	align-items: start;
+	justify-content: space-between;
+	gap: var(--h-space-3);
+}
+
+.communications-evidence-export h2,
+.communications-evidence-export p {
+	margin: 0;
+}
+
+.communications-evidence-export header span,
+.communications-evidence-export__status {
+	color: var(--h-color-text-muted);
+}
+
+.communications-evidence-export__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--h-space-2);
+}
+
+.communications-evidence-export button {
+	min-height: 2.5rem;
+	padding: 0 var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-surface-muted);
+	cursor: pointer;
+}
+
+.communications-evidence-export button:disabled {
+	cursor: not-allowed;
+	opacity: .55;
+}
+
+.communications-evidence-export__download {
+	border-color: var(--h-color-accent) !important;
+}

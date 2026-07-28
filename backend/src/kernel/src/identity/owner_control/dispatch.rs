@@ -20,6 +20,7 @@ use hermes_gateway_protocol::v1::{
     StartReservedDomainRuntimeRequestV1, StartReservedDomainRuntimeResponseV1,
     StartReservedEngineRuntimeRequestV1, StartReservedEngineRuntimeResponseV1,
     StartReservedIntegrationRuntimeRequestV1, StartReservedIntegrationRuntimeResponseV1,
+    StartReservedWorkflowRuntimeRequestV1, StartReservedWorkflowRuntimeResponseV1,
     TransitionModuleRegistrationRequestV1, TransitionModuleRegistrationResponseV1,
     UpdateOperatorSettingsRequestV1, UpdateOperatorSettingsResponseV1,
     UpgradeBundledManagedRegistrationRequestV1, UpgradeBundledManagedRegistrationResponseV1,
@@ -29,10 +30,14 @@ use hermes_kernel_control_store::{
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
-    v1::{ManagedDomainRuntimeConfigurationV1, ManagedEngineRuntimeConfigurationV1},
+    v1::{
+        ManagedDomainRuntimeConfigurationV1, ManagedEngineRuntimeConfigurationV1,
+        ManagedWorkflowRuntimeConfigurationV1,
+    },
     validation::{
         managed_domain_runtime::validate_managed_domain_runtime_configuration,
         managed_engine_runtime::validate_managed_engine_runtime_configuration,
+        managed_workflow_runtime::validate_managed_workflow_runtime_configuration,
     },
 };
 
@@ -154,6 +159,9 @@ fn route_operation(
         }
         Operation::StartReservedEngineRuntime(request) => {
             start_reserved_engine_runtime(store, runtime_dir, supervisor, sessions, request)
+        }
+        Operation::StartReservedWorkflowRuntime(request) => {
+            start_reserved_workflow_runtime(store, runtime_dir, supervisor, sessions, request)
         }
         Operation::StartReservedSchedulerRuntime(request) => {
             scheduler::start_reserved(store, runtime_dir, supervisor, sessions, request)
@@ -437,6 +445,68 @@ fn start_reserved_engine_runtime(
     })()
     .map(|runtime_generation| {
         OwnerResult::StartReservedEngineRuntime(StartReservedEngineRuntimeResponseV1 {
+            registration_id: request.registration_id,
+            runtime_generation,
+            launch_state: "accepted".to_owned(),
+        })
+    })
+}
+
+fn start_reserved_workflow_runtime(
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    supervisor: &ManagedRuntimeSupervisor,
+    sessions: &mut OwnerControlSessions,
+    request: StartReservedWorkflowRuntimeRequestV1,
+) -> Result<OwnerResult, String> {
+    (|| {
+        sessions.authorize(store, &request.owner_session_id)?;
+        let reservation =
+            macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
+        let registration = store
+            .module_registration(&request.registration_id)
+            .map_err(|_| "managed workflow registration is unavailable".to_owned())?
+            .ok_or_else(|| "managed workflow registration is unavailable".to_owned())?;
+        let binding = store
+            .platform_storage_binding(&request.registration_id, &request.storage_capability_id)
+            .map_err(|_| "managed workflow Storage binding is unavailable".to_owned())?
+            .filter(|value| value.state() == PlatformStorageBindingStateV1::Active)
+            .ok_or_else(|| "managed workflow Storage binding is unavailable".to_owned())?;
+        let storage_topology = crate::platform::storage::topology::current(store)?;
+        let vault = crate::platform::vault::status::read_current(store, &supervisor.relay_port())?;
+        let storage = crate::platform::storage::topology::to_managed_runtime_configuration(
+            &storage_topology,
+            &binding,
+            store.snapshot().instance_id(),
+            vault.runtime_generation(),
+            vault.hpke_public_key_x25519(),
+        )?;
+        let event_topology = store
+            .platform_event_hub_topology()
+            .map_err(|_| "Event Hub topology is unavailable".to_owned())?
+            .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
+        let configuration = ManagedWorkflowRuntimeConfigurationV1 {
+            major: 1,
+            logical_owner_id: registration.owner_id().to_owned(),
+            registration_id: request.registration_id.clone(),
+            runtime_instance_id: reservation.runtime_instance_id().to_owned(),
+            runtime_generation: reservation.runtime_generation(),
+            grant_epoch: reservation.grant_epoch(),
+            storage: Some(storage),
+            event_hub_endpoint: event_topology.nats_endpoint().to_owned(),
+            event_credential_revision: event_topology.credential_revision(),
+        };
+        validate_managed_workflow_runtime_configuration(&configuration)
+            .map_err(|_| "managed workflow runtime configuration is invalid".to_owned())?;
+        macos_managed_runtime_launch::start_reserved_workflow(
+            supervisor,
+            runtime_dir,
+            reservation,
+            configuration,
+        )
+    })()
+    .map(|runtime_generation| {
+        OwnerResult::StartReservedWorkflowRuntime(StartReservedWorkflowRuntimeResponseV1 {
             registration_id: request.registration_id,
             runtime_generation,
             launch_state: "accepted".to_owned(),

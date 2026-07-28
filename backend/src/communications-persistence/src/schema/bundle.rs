@@ -28,8 +28,10 @@ const SAVED_SEARCH_PROJECTION_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0012_communications_saved_search_projection.sql");
 const SENDER_INSIGHTS_PROJECTION_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0013_communications_sender_insights_projection.sql");
+const EVIDENCE_EXPORT_SOURCE_SCHEMA: &[u8] =
+    include_bytes!("../../migrations/0014_communications_evidence_export_source.sql");
 
-pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 13;
+pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 14;
 
 /// Immutable Communications schema admitted and applied only by Storage Control.
 #[must_use]
@@ -117,6 +119,12 @@ pub fn communications_storage_bundle_v1() -> StorageBundleV1 {
                 migration_id: "communications_sender_insights_projection".to_owned(),
                 forward_sql_utf8: SENDER_INSIGHTS_PROJECTION_SCHEMA.to_vec(),
                 sha256: Sha256::digest(SENDER_INSIGHTS_PROJECTION_SCHEMA).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: 14,
+                migration_id: "communications_evidence_export_source".to_owned(),
+                forward_sql_utf8: EVIDENCE_EXPORT_SOURCE_SCHEMA.to_vec(),
+                sha256: Sha256::digest(EVIDENCE_EXPORT_SOURCE_SCHEMA).to_vec(),
             },
         ],
     }

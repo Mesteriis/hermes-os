@@ -16,6 +16,11 @@ use hermes_communications_content_api::{
     CONTENT_READ_CONTRACT_NAME_V1, CONTENT_TICKET_CONNECT_PATH_V1, CONTENT_TICKET_CONTRACT_NAME_V1,
     MAX_MESSAGE_BODY_BYTES_V1,
 };
+use hermes_communications_evidence_export_source_api::{
+    evidence_export_prepare_consume_request_v1, evidence_export_prepared_contract_reference_v1,
+    evidence_export_prepared_publish_request_v1, evidence_export_rejected_contract_reference_v1,
+    evidence_export_rejected_publish_request_v1,
+};
 use hermes_communications_ingress::admission::{
     COMMUNICATION_OBSERVED_MAX_IN_FLIGHT, communication_observed_contract_reference_v1,
 };
@@ -56,6 +61,9 @@ pub const COMMUNICATIONS_QUERY_CAPABILITY_ID: &str = "communications.query.v1";
 pub const COMMUNICATIONS_CONTENT_CAPABILITY_ID: &str = "communications.content.v1";
 pub const COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID: &str = "communications.saved-search.v1";
 pub const COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID: &str = "communications.sender-insights.v1";
+pub const COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID: &str = "communications.export-source.v1";
+pub const COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID: &str =
+    "communications.export-source.blob.v1";
 pub const COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID: &str = "communications.search.index.v1";
 pub const COMMUNICATIONS_STORAGE_CAPABILITY_ID: &str = "communications.storage.v1";
 pub const COMMUNICATIONS_MODULE_ID: &str = COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID;
@@ -78,6 +86,8 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_blob_capability_v1(),
         communications_content_capability_v1(),
         communications_events_capability_v1(),
+        communications_export_source_blob_capability_v1(),
+        communications_export_source_capability_v1(),
         communications_observe_capability_v1(),
         communications_query_capability_v1(),
         communications_saved_search_capability_v1(),
@@ -85,6 +95,52 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_sender_insights_capability_v1(),
         communications_storage_capability_v1(),
     ]
+}
+
+#[must_use]
+pub fn communications_export_source_blob_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+                max_bytes: 16 * 1024 * 1024,
+                custody_scope_id: COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID.to_owned(),
+                allowed_operations: vec![BlobQuotaOperationV1::Write as i32],
+            })),
+        }],
+        ..Default::default()
+    }
+}
+
+#[must_use]
+pub fn communications_export_source_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(evidence_export_prepared_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(evidence_export_rejected_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+        ],
+        requests: vec![
+            evidence_export_prepare_consume_request_v1(),
+            evidence_export_prepared_publish_request_v1(),
+            evidence_export_rejected_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
 }
 
 #[must_use]
@@ -462,7 +518,7 @@ pub fn communications_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1
     let settings_schema = communications_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 4,
+        descriptor_revision: 5,
         module_id: COMMUNICATIONS_MODULE_ID.to_owned(),
         owner_id: COMMUNICATIONS_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Domain as i32,
@@ -523,6 +579,8 @@ mod tests {
                 COMMUNICATIONS_BLOB_CAPABILITY_ID,
                 COMMUNICATIONS_CONTENT_CAPABILITY_ID,
                 COMMUNICATIONS_EVENTS_CAPABILITY_ID,
+                COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID,
+                COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID,
                 COMMUNICATIONS_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_QUERY_CAPABILITY_ID,
                 COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,

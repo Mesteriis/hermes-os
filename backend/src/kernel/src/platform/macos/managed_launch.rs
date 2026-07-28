@@ -10,7 +10,7 @@ use hermes_runtime_protocol::{
     v1::{
         ManagedDomainRuntimeConfigurationV1, ManagedEngineRuntimeConfigurationV1,
         ManagedIntegrationHostBridgeConfigurationV1, ManagedIntegrationRuntimeConfigurationV1,
-        ManagedStorageRuntimeConfigurationV1, ModuleKindV1,
+        ManagedStorageRuntimeConfigurationV1, ManagedWorkflowRuntimeConfigurationV1, ModuleKindV1,
     },
     validation::{
         descriptor::decode_descriptor_v1,
@@ -18,6 +18,7 @@ use hermes_runtime_protocol::{
         managed_domain_runtime::validate_managed_domain_runtime_configuration,
         managed_engine_runtime::validate_managed_engine_runtime_configuration,
         managed_integration_runtime::validate_managed_integration_runtime_configuration,
+        managed_workflow_runtime::validate_managed_workflow_runtime_configuration,
     },
 };
 use prost::Message;
@@ -284,6 +285,38 @@ pub(crate) fn start_reserved_engine(
             host_bridge_configuration: None,
             cleanup: None,
             expected_module_kind: ModuleKindV1::Engine,
+        },
+    )
+}
+
+/// Starts one already-reserved workflow from its own provider-neutral
+/// configuration. Workflow launch is not an alias for domain or integration
+/// launch and cannot carry settings snapshots or host-bridge routes.
+pub(crate) fn start_reserved_workflow(
+    supervisor: &ManagedRuntimeSupervisor,
+    runtime_dir: &Path,
+    reservation: ManagedLaunchReservation,
+    configuration: ManagedWorkflowRuntimeConfigurationV1,
+) -> Result<u64, String> {
+    validate_managed_workflow_runtime_configuration(&configuration)
+        .map_err(|_| "managed workflow runtime configuration is invalid".to_owned())?;
+    if configuration.registration_id != reservation.registration_id()
+        || configuration.runtime_instance_id != reservation.runtime_instance_id()
+        || configuration.runtime_generation != reservation.runtime_generation()
+        || configuration.grant_epoch != reservation.grant_epoch()
+    {
+        return Err("managed workflow runtime configuration is stale".to_owned());
+    }
+    start_staged_with_configuration_bytes(
+        supervisor,
+        runtime_dir,
+        reservation,
+        PreparedRuntimeContractInput {
+            runtime_configuration_bytes: configuration.encode_to_vec(),
+            settings_snapshot_bytes: None,
+            host_bridge_configuration: None,
+            cleanup: None,
+            expected_module_kind: ModuleKindV1::Workflow,
         },
     )
 }

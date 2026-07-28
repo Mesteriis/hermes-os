@@ -305,7 +305,7 @@ impl CommunicationsDurablePersistence {
                         CanonicalMessageMutationV1::Create => unreachable!(),
                     };
                     let updated = sqlx::query(
-                        "UPDATE hermes_data.communications_messages SET body_state = LEAST($3, 3), canonical_body_state = $3, lifecycle_state = CASE WHEN lifecycle_state = 2 THEN 2 ELSE $4 END, last_observed_at_unix_seconds = GREATEST(last_observed_at_unix_seconds, $5), last_evidence_id = CASE WHEN $5 >= last_observed_at_unix_seconds THEN $6 ELSE last_evidence_id END WHERE message_id = $1 AND conversation_id = $2 AND direction = $7",
+                        "UPDATE hermes_data.communications_messages SET body_state = LEAST($3, 3), canonical_body_state = $3, canonical_revision = canonical_revision + 1, lifecycle_state = CASE WHEN lifecycle_state = 2 THEN 2 ELSE $4 END, last_observed_at_unix_seconds = GREATEST(last_observed_at_unix_seconds, $5), last_evidence_id = CASE WHEN $5 >= last_observed_at_unix_seconds THEN $6 ELSE last_evidence_id END WHERE message_id = $1 AND conversation_id = $2 AND direction = $7",
                     )
                     .bind(message.message_id.bytes().as_slice())
                     .bind(message.conversation_id.bytes().as_slice())

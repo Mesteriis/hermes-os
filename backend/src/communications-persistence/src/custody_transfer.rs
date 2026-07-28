@@ -152,7 +152,7 @@ impl CommunicationsDurablePersistence {
             return Err(CommunicationsBodyCustodyTransferErrorV1::ClaimLost);
         }
         let message = sqlx::query(
-            "UPDATE hermes_data.communications_messages SET body_state = 3, canonical_body_state = 4 WHERE message_id = $1 AND last_evidence_id = $2",
+            "UPDATE hermes_data.communications_messages SET body_state = 3, canonical_body_state = 4, canonical_revision = canonical_revision + 1 WHERE message_id = $1 AND last_evidence_id = $2",
         )
         .bind(message_id.as_slice())
         .bind(claimed.evidence_id.bytes().as_slice())
@@ -219,7 +219,7 @@ impl CommunicationsDurablePersistence {
             return Err(CommunicationsBodyCustodyTransferErrorV1::ClaimLost);
         }
         let message = sqlx::query(
-            "UPDATE hermes_data.communications_messages SET body_state = 3, canonical_body_state = 3 WHERE last_evidence_id = $1 AND canonical_body_state = 2",
+            "UPDATE hermes_data.communications_messages SET body_state = 3, canonical_body_state = 3, canonical_revision = canonical_revision + 1 WHERE last_evidence_id = $1 AND canonical_body_state = 2",
         )
         .bind(claimed.evidence_id.bytes().as_slice())
         .execute(&mut *transaction)

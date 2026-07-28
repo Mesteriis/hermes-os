@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import Toast from '../../shared/ui/Toast.vue'
 import AppSettingsPage from '../settings/AppSettingsPage.vue'
 import { useClientNavigationSurface } from '../queries/useClientNavigationSurface'
@@ -13,6 +13,7 @@ import { hasClientModuleCapability } from '../client-surfaces/clientModuleCapabi
 import WhatsAppOperationalRoute from '../../integrations/whatsapp/views/WhatsAppOperationalRoute.vue'
 import MailOperationalRoute from '../../integrations/mail/views/MailOperationalRoute.vue'
 import ZulipOperationalRoute from '../../integrations/zulip/views/ZulipOperationalRoute.vue'
+import CommunicationsEvidenceExportWorkflow from '../../workflows/communications-export/CommunicationsEvidenceExportWorkflow.vue'
 
 const props = defineProps<{ gatewayAccessMode: BrowserGatewayAccessModeV1 }>()
 
@@ -36,6 +37,10 @@ const communicationsSavedSearchAvailable = computed(() =>
 const communicationsSenderInsightsAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'communications.sender-insights.v1'),
 )
+const communicationsExportAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'communications.export.v1'),
+)
+const currentCanonicalMessageId = ref<Uint8Array>()
 const telegramCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'telegram.command.v1'),
 )
@@ -152,11 +157,17 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					/>
 				</template>
 
-				<CanonicalCommunicationsRoute
-					v-if="selectedRouteId === 'communications-all'"
-					:can-manage-saved-searches="communicationsSavedSearchAvailable"
-					:can-read-sender-insights="communicationsSenderInsightsAvailable"
-				/>
+				<template v-if="selectedRouteId === 'communications-all'">
+					<CanonicalCommunicationsRoute
+						:can-manage-saved-searches="communicationsSavedSearchAvailable"
+						:can-read-sender-insights="communicationsSenderInsightsAvailable"
+						@canonical-message-selected="currentCanonicalMessageId = $event"
+					/>
+					<CommunicationsEvidenceExportWorkflow
+						:can-export="communicationsExportAvailable"
+						:candidate-message-id="currentCanonicalMessageId"
+					/>
+				</template>
 				<MailOperationalRoute
 					v-else-if="selectedRouteId === 'communications-mail'"
 					:can-compose="mailCompositionCommandAvailable"

@@ -1,0 +1,36 @@
+[package]
+name = "hermes-communications-export-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-communications-export-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "communications_export"
+surface = "runtime"
+
+[dependencies]
+hermes-blob-client = { path = "../platform/blob/client" }
+hermes-communications-evidence-export-source-api = { path = "../communications-evidence-export-source-api" }
+hermes-communications-export-api = { path = "../communications-export-api" }
+hermes-communications-export-core = { path = "../communications-export-core" }
+hermes-communications-export-persistence = { path = "../communications-export-persistence" }
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-events-protocol = { path = "../platform/events" }
+hermes-managed-vault-client = { path = "../platform/vault/managed_client" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-storage-vault = { path = "../platform/storage/vault" }
+getrandom = "=0.4.3"
+libc = "=0.2.186"
+prost = "=0.14.4"
+sha2 = { version = "=0.11.0", default-features = false }
+tokio = { version = "=1.52.4", default-features = false, features = ["rt", "rt-multi-thread", "time"] }
+zeroize = "=1.9.0"

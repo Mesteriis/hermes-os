@@ -19,6 +19,9 @@ const DEVICE_KEY_FILE: &str = "device-es256.key";
 const COMMUNICATIONS_RUNTIME_ARTIFACT: &str = "communications.runtime.v1";
 const COMMUNICATIONS_STORAGE_ARTIFACT: &str = "communications.storage.v1";
 const COMMUNICATIONS_STORAGE_CAPABILITY: &str = "communications.storage.v1";
+const COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT: &str = "communications_export.runtime.v1";
+const COMMUNICATIONS_EXPORT_STORAGE_ARTIFACT: &str = "communications_export.storage.v1";
+const COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY: &str = "communications_export.storage.v1";
 const ATTACHMENT_SECURITY_RUNTIME_ARTIFACT: &str = "attachment_security.runtime.v1";
 const ATTACHMENT_SECURITY_STORAGE_ARTIFACT: &str = "attachment_security.storage.v1";
 const ATTACHMENT_SECURITY_STORAGE_CAPABILITY: &str = "attachment_security.storage.v1";
@@ -62,6 +65,7 @@ enum ModuleRuntimeKindV1 {
     Domain,
     Engine,
     Integration,
+    Workflow,
 }
 
 #[derive(Clone, Copy)]
@@ -74,12 +78,20 @@ struct ModulePlanV1 {
     request_host_bridge: bool,
 }
 
-const MODULE_PLAN: [ModulePlanV1; 6] = [
+const MODULE_PLAN: [ModulePlanV1; 7] = [
     ModulePlanV1 {
         runtime_artifact_id: COMMUNICATIONS_RUNTIME_ARTIFACT,
         storage_artifact_id: COMMUNICATIONS_STORAGE_ARTIFACT,
         storage_capability_id: COMMUNICATIONS_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Domain,
+        configuration_instance_id: None,
+        request_host_bridge: false,
+    },
+    ModulePlanV1 {
+        runtime_artifact_id: COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT,
+        storage_artifact_id: COMMUNICATIONS_EXPORT_STORAGE_ARTIFACT,
+        storage_capability_id: COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY,
+        runtime_kind: ModuleRuntimeKindV1::Workflow,
         configuration_instance_id: None,
         request_host_bridge: false,
     },
@@ -263,6 +275,13 @@ fn start_ensemble(
             }
             ModuleRuntimeKindV1::Engine => {
                 client.start_reserved_engine_runtime(
+                    owner_session_id,
+                    &module.registration_id,
+                    &module.storage_capability_id,
+                )?;
+            }
+            ModuleRuntimeKindV1::Workflow => {
+                client.start_reserved_workflow_runtime(
                     owner_session_id,
                     &module.registration_id,
                     &module.storage_capability_id,
@@ -1245,8 +1264,8 @@ mod tests {
     }
 
     #[test]
-    fn development_plan_keeps_domains_engines_and_integrations_as_distinct_artifacts() {
-        assert_eq!(MODULE_PLAN.len(), 6);
+    fn development_plan_keeps_domains_workflows_engines_and_integrations_as_distinct_artifacts() {
+        assert_eq!(MODULE_PLAN.len(), 7);
         assert_eq!(
             MODULE_PLAN
                 .iter()
@@ -1254,6 +1273,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![
                 COMMUNICATIONS_RUNTIME_ARTIFACT,
+                COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT,
                 ATTACHMENT_SECURITY_RUNTIME_ARTIFACT,
                 MAIL_RUNTIME_ARTIFACT,
                 TELEGRAM_RUNTIME_ARTIFACT,
@@ -1261,12 +1281,16 @@ mod tests {
                 ZULIP_RUNTIME_ARTIFACT,
             ],
         );
+        assert!(matches!(
+            MODULE_PLAN[1].runtime_kind,
+            ModuleRuntimeKindV1::Workflow
+        ));
         assert_eq!(
-            MODULE_PLAN[1].runtime_artifact_id,
+            MODULE_PLAN[2].runtime_artifact_id,
             "attachment_security.runtime.v1",
         );
         assert_eq!(
-            MODULE_PLAN[1].storage_artifact_id,
+            MODULE_PLAN[2].storage_artifact_id,
             "attachment_security.storage.v1",
         );
     }
@@ -1335,13 +1359,15 @@ mod tests {
     #[test]
     fn legacy_state_v2_migrates_the_only_implemented_initial_fences() {
         let path = temporary_state_path("v2");
-        let mut bytes = concat!(
-            "version=2\n",
-            "distribution_id=hermes-local-development\n",
-            "distribution_generation=1\n",
-            "module_count=6\n",
-        )
-        .to_owned();
+        let mut bytes = format!(
+            concat!(
+                "version=2\n",
+                "distribution_id=hermes-local-development\n",
+                "distribution_generation=1\n",
+                "module_count={}\n",
+            ),
+            MODULE_PLAN.len(),
+        );
         for (index, plan) in MODULE_PLAN.iter().enumerate() {
             bytes.push_str(&format!(
                 "module.{index}.runtime_artifact_id={}\nmodule.{index}.registration_id=registration-{index}\nmodule.{index}.storage_capability_id={}\n",

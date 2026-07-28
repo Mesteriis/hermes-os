@@ -346,6 +346,46 @@ const COMMUNICATIONS_SENDER_INSIGHTS_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATIONS_EXPORT_PRODUCTION_PACKAGES = [
+  ...COMMUNICATIONS_SENDER_INSIGHTS_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communications-evidence-export-source-api',
+    role: 'domain',
+    owner: 'communications',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-communications-export-api',
+    role: 'workflow',
+    owner: 'communications_export',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-communications-export-core',
+    role: 'workflow',
+    owner: 'communications_export',
+    surface: 'implementation',
+  },
+  {
+    name: 'hermes-communications-export-persistence',
+    role: 'workflow',
+    owner: 'communications_export',
+    surface: 'persistence',
+  },
+  {
+    name: 'hermes-communications-export-runtime',
+    role: 'workflow',
+    owner: 'communications_export',
+    surface: 'runtime',
+  },
+  {
+    name: 'hermes-communications-export-assembly',
+    role: 'workflow',
+    owner: 'communications_export',
+    surface: 'assembly',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -738,6 +778,58 @@ const COMMUNICATIONS_SENDER_INSIGHTS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-blob-client', kind: 'normal' },
     { name: 'hermes-communications-attachment-contract', kind: 'normal' },
     { name: 'hermes-communications-content-api', kind: 'normal' },
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-communications-api', kind: 'normal' },
+    { name: 'hermes-communications-domain', kind: 'normal' },
+    { name: 'hermes-communications-persistence', kind: 'normal' },
+    { name: 'hermes-communications-saved-query-api', kind: 'normal' },
+    { name: 'hermes-communications-sender-insights-api', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-managed-vault-client', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
+const COMMUNICATIONS_EXPORT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_SENDER_INSIGHTS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-evidence-export-source-api': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-communications-export-api': [],
+  'hermes-communications-export-core': [],
+  'hermes-communications-export-persistence': [
+    { name: 'hermes-communications-export-core', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+  'hermes-communications-export-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communications-evidence-export-source-api', kind: 'normal' },
+    { name: 'hermes-communications-export-api', kind: 'normal' },
+    { name: 'hermes-communications-export-core', kind: 'normal' },
+    { name: 'hermes-communications-export-persistence', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-managed-vault-client', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+  'hermes-communications-export-assembly': [
+    { name: 'hermes-communications-export-persistence', kind: 'normal' },
+    { name: 'hermes-communications-export-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+  'hermes-communications-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communications-attachment-contract', kind: 'normal' },
+    { name: 'hermes-communications-content-api', kind: 'normal' },
+    { name: 'hermes-communications-evidence-export-source-api', kind: 'normal' },
     { name: 'hermes-communications-ingress', kind: 'normal' },
     { name: 'hermes-communications-api', kind: 'normal' },
     { name: 'hermes-communications-domain', kind: 'normal' },
@@ -1332,6 +1424,46 @@ const COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-evidence-export-source-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communications-export-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communications-export-core': [
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communications-export-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+  'hermes-communications-export-runtime': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: true, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt', 'rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-communications-export-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -1563,6 +1695,20 @@ const COMMUNICATIONS_SENDER_INSIGHTS_INVENTORY = {
   ].sort(),
 };
 
+const COMMUNICATIONS_EXPORT_INVENTORY = {
+  ...COMMUNICATIONS_SENDER_INSIGHTS_INVENTORY,
+  workflows: ['communications_export'],
+  businessCapabilities: [
+    ...COMMUNICATIONS_SENDER_INSIGHTS_INVENTORY.businessCapabilities,
+    'communications.export-source.blob.v1',
+    'communications.export-source.v1',
+    'communications.export.v1',
+    'communications_export.events.v1',
+    'communications_export.source.blob.v1',
+    'communications_export.storage.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-mail-api': {
     default: [],
@@ -1747,6 +1893,8 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-content-api',
       'hermes-communications-saved-query-api',
       'hermes-communications-sender-insights-api',
+      'hermes-communications-evidence-export-source-api',
+      'hermes-communications-export-api',
       'hermes-attachment-security-contract',
     ].includes(packageName);
     return hasExactKeys(target, ['primaryKind', 'customBuildAllowed'])
@@ -1938,6 +2086,17 @@ function expectedSlice(currentSlice) {
       packages: COMMUNICATIONS_SENDER_INSIGHTS_PRODUCTION_PACKAGES,
       workspaceDependencies: COMMUNICATIONS_SENDER_INSIGHTS_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communications_export_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATIONS_EXPORT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATIONS_EXPORT_PRODUCTION_PACKAGES,
+      workspaceDependencies: COMMUNICATIONS_EXPORT_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
