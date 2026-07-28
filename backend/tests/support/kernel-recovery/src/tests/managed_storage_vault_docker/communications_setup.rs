@@ -22,6 +22,10 @@ use hermes_communications_content_api::{
     CONTENT_READ_CONTRACT_NAME_V1, CONTENT_TICKET_CONNECT_PATH_V1, CONTENT_TICKET_CONTRACT_NAME_V1,
     MAX_MESSAGE_BODY_BYTES_V1,
 };
+use hermes_communications_evidence_export_source_api::{
+    evidence_export_prepare_contract_reference_v1, evidence_export_prepared_contract_reference_v1,
+    evidence_export_rejected_contract_reference_v1,
+};
 use hermes_communications_persistence::{
     COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1, communications_storage_bundle_v1,
 };
@@ -30,7 +34,8 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_BLOB_CAPABILITY_ID, COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
     COMMUNICATIONS_BLOB_QUOTA_BYTES, COMMUNICATIONS_CONTENT_CAPABILITY_ID,
-    COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
+    COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID,
+    COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
     COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
     COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
     COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION,
@@ -1916,6 +1921,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         "communications.blob.v1".to_owned(),
         COMMUNICATIONS_CONTENT_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_EVENTS_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_OBSERVE_CAPABILITY_ID.to_owned(),
         "communications.query.v1".to_owned(),
         COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID.to_owned(),
@@ -1949,6 +1956,14 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
         vec![ModuleBlobOperationV1::ReadRange],
     );
+    let export_source_blob = ModuleBlobQuotaRequestV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        COMMUNICATIONS_BLOB_QUOTA_BYTES,
+        COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
+        vec![ModuleBlobOperationV1::Write],
+    );
     let vault_purpose = ModuleVaultPurposeRequestV1::new_with_key_schema_revision(
         COMMUNICATIONS_REGISTRATION,
         COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
@@ -1973,6 +1988,9 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         communication_attachment_blob_admission_observed_contract_reference_v1();
     let attachment_safety_verdict =
         communication_attachment_safety_verdict_observed_contract_reference_v1();
+    let evidence_export_prepare = evidence_export_prepare_contract_reference_v1();
+    let evidence_export_prepared = evidence_export_prepared_contract_reference_v1();
+    let evidence_export_rejected = evidence_export_rejected_contract_reference_v1();
     let routes = [
         communications_event_route(
             COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
@@ -1990,6 +2008,24 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             COMMUNICATIONS_EVENTS_CAPABILITY_ID,
             ModuleEventEnvelopeKindV1::Event,
             &recorded,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Command,
+            &evidence_export_prepare,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &evidence_export_prepared,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &evidence_export_rejected,
             ModuleEventRouteDirectionV1::Publish,
         ),
         communications_event_route(
@@ -2083,7 +2119,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             ModuleDescriptorRegistrationRequestsV1 {
                 storage: std::slice::from_ref(&storage),
                 events: &routes,
-                blobs: &[blob, content_blob],
+                blobs: &[blob, content_blob, export_source_blob],
                 scheduler: &[],
                 vault_purposes: std::slice::from_ref(&vault_purpose),
                 client_rpc_routes: &client_rpc_routes,

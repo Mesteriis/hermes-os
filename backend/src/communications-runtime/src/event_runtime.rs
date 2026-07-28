@@ -269,7 +269,8 @@ impl CommunicationsEventRuntimeV1 {
             descriptor_bytes,
             settings_schema_bytes,
             admission,
-        )?;
+        )
+        .map_err(|_| admission_at("runtime_authentication"))?;
         let access = request_managed_runtime_event_access_v2(
             &mut control_channel,
             &admission.logical_owner_id,
@@ -287,8 +288,9 @@ impl CommunicationsEventRuntimeV1 {
                 admission.runtime_generation,
                 admission.grant_epoch,
             )
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
-        let permits = CommunicationsSubscribePermitsV1::bind(permits)?;
+            .map_err(|_| admission_at("event_subscribe_permits"))?;
+        let permits = CommunicationsSubscribePermitsV1::bind(permits)
+            .map_err(|_| admission_at("event_subscribe_permit_binding"))?;
         let domain_publish_permit = access
             .publish_permit(
                 &admission.registration_id,
@@ -296,13 +298,13 @@ impl CommunicationsEventRuntimeV1 {
                 admission.runtime_generation,
                 admission.grant_epoch,
             )
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
+            .map_err(|_| admission_at("event_publish_permit"))?;
         let identity = RuntimeNatsIdentity::new(
             admission.runtime_instance_id.clone(),
             admission.runtime_generation,
             admission.grant_epoch,
         )
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
+        .map_err(|_| admission_at("event_identity"))?;
         let connection = JetStreamClient::connect_runtime_with_jwt(
             event_hub_endpoint,
             identity,
@@ -310,18 +312,19 @@ impl CommunicationsEventRuntimeV1 {
         )
         .await
         .map_err(|_| unavailable_at("event_connection"))?;
-        let binding = storage_binding(&storage_configuration, admission)?;
+        let binding = storage_binding(&storage_configuration, admission)
+            .map_err(|_| admission_at("storage_binding"))?;
         let vault_public_key = storage_configuration
             .vault_hpke_public_key_x25519
             .as_slice()
             .try_into()
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
+            .map_err(|_| admission_at("vault_public_key"))?;
         let vault_context = StorageVaultRouteContextV1::new(
             storage_configuration.vault_instance_id.clone(),
             storage_configuration.vault_runtime_generation,
             vault_public_key,
         )
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
+        .map_err(|_| admission_at("vault_context"))?;
         let mut leases = StorageVaultLeaseAdapterV1::new(
             InheritedKernelVaultRouteV2::new(control_channel),
             vault_context,
@@ -330,7 +333,7 @@ impl CommunicationsEventRuntimeV1 {
             .await
             .map_err(|_| unavailable_at("storage_credential"))?;
         let password = std::str::from_utf8(&password)
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
+            .map_err(|_| admission_at("storage_credential_encoding"))?;
         let persistence = CommunicationsDurablePersistence::connect_runtime(
             &binding,
             &storage_configuration.database_id,
@@ -357,8 +360,13 @@ impl CommunicationsEventRuntimeV1 {
             .await
             .map_err(|_| unavailable_at("search_projection"))?;
         let search_access = CommunicationsSearchAccessV1::open(admission, &storage_configuration)
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
-        signal_managed_runtime_ready(&mut control_channel, admission)?;
+            .map_err(|_| admission_at("search_access"))?;
+        signal_managed_runtime_ready(&mut control_channel, admission).map_err(
+            |error| match error {
+                CommunicationsEventRuntimeErrorV1::Admission => admission_at("ready_signal"),
+                CommunicationsEventRuntimeErrorV1::Unavailable => unavailable_at("ready_signal"),
+            },
+        )?;
         control_channel
             .inner_mut()
             .set_nonblocking(true)
@@ -695,9 +703,7 @@ async fn resolve_storage_runtime_credential(
 ) -> Result<zeroize::Zeroizing<Vec<u8>>, CommunicationsEventRuntimeErrorV1> {
     const MAX_ATTEMPTS: usize = 20;
     for attempt in 0..MAX_ATTEMPTS {
-        if let Ok(lease_id) = leases.issue_runtime_credential(binding).await
-            && let Ok(password) = leases.resolve_runtime_credential(binding, lease_id).await
-        {
+        if let Ok(password) = leases.ensure_runtime_credential(binding).await {
             return Ok(password);
         }
         if attempt + 1 < MAX_ATTEMPTS {

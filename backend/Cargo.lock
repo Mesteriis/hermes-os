@@ -2156,6 +2156,7 @@ dependencies = [
  "hermes-communications-api",
  "hermes-communications-attachment-contract",
  "hermes-communications-content-api",
+ "hermes-communications-evidence-export-source-api",
  "hermes-communications-ingress",
  "hermes-communications-persistence",
  "hermes-communications-runtime",
