@@ -538,6 +538,8 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         );
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    let edited_body =
+        publish_and_wait_for_communications_message_edit(&store, &supervisor, &data, &message_id);
     publish_and_wait_for_communications_message_deletion(store.as_ref(), &supervisor, &message_id);
     let deleted_export_id = [13; 16];
     let deleted_start = StartEvidenceExportResponseV1::decode(
@@ -659,6 +661,7 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         release.kernel(),
         ticket.opaque_read_capability,
         ticket.declared_bytes,
+        &edited_body,
         blob_outage_ticket.opaque_read_capability,
     );
     let revoked_ticket = IssueEvidenceExportReadResponseV1::decode(
@@ -704,6 +707,7 @@ fn assert_communications_export_gateway_delivery(
     kernel_executable: &std::path::Path,
     opaque_read_capability: Vec<u8>,
     declared_bytes: u64,
+    edited_body: &[u8],
     blob_outage_read_capability: Vec<u8>,
 ) -> String {
     use hermes_communications_export_api::{
@@ -771,6 +775,12 @@ fn assert_communications_export_gateway_delivery(
         artifact
             .windows(b"fixture source body for custody transfer".len())
             .any(|window| window == b"fixture source body for custody transfer")
+    );
+    assert!(
+        !artifact
+            .windows(edited_body.len())
+            .any(|window| window == edited_body),
+        "pre-edit export artifact remains bound to its original canonical snapshot"
     );
     assert_eq!(read().status(), hyper::StatusCode::NOT_FOUND);
     let blob_outage_read_request = EvidenceExportArtifactReadRequestV1 {

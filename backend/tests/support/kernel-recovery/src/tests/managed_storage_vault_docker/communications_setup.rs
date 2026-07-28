@@ -1497,6 +1497,168 @@ pub(super) fn publish_and_wait_for_communications_message_deletion(
     }
 }
 
+pub(super) fn publish_and_wait_for_communications_message_edit(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    kernel_data: &Path,
+    message_id: &[u8],
+) -> Vec<u8> {
+    const OBSERVED_AT_UNIX_SECONDS: i64 = 1_783_024_009;
+
+    let plaintext = b"fixture edited source body for custody transfer".to_vec();
+    let plaintext_sha256: [u8; 32] = Sha256::digest(&plaintext).into();
+    let reference_id = [10; 16];
+    let channel_binding = vec![10; 32];
+    let launch = store
+        .effective_managed_launch_record(FIXTURE_SOURCE_REGISTRATION)
+        .expect("read fixture source integration launch")
+        .expect("fixture source integration launch is active");
+    let delivery = BlobSessionHandlerV1::new(
+        Arc::clone(store),
+        supervisor.relay_port(),
+        kernel_data.to_path_buf(),
+    )
+    .issue_blob_session(
+        &ManagedRuntimeExpectation::new(
+            FIXTURE_SOURCE_REGISTRATION,
+            FIXTURE_SOURCE_RUNTIME_INSTANCE_ID,
+            "integration.fixture-source",
+            launch.runtime_generation(),
+            launch.grant_epoch(),
+            [3; 32],
+            None,
+        ),
+        ManagedRuntimeBlobSessionRequestV1 {
+            request_id: vec![10; 16],
+            capability_id: FIXTURE_SOURCE_CAPABILITY_ID.to_owned(),
+            operation: BlobDataOperationV1::BlobDataOperationWriteV1 as u32,
+            channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
+            reference_id: reference_id.to_vec(),
+            declared_size: u64::try_from(plaintext.len()).expect("edited fixture body size"),
+            backup_class: 1,
+            ttl_seconds: 30,
+            receipt_sha256: plaintext_sha256.to_vec(),
+            custody_source_proof: Vec::new(),
+            evidence_id: Vec::new(),
+            evidence_envelope_sha256: Vec::new(),
+            custody_target_owner_id: String::new(),
+            custody_target_module_id: String::new(),
+            custody_target_capability_id: String::new(),
+        },
+    )
+    .expect("issue edited source integration Blob write session");
+    let source_proof = delivery.custody_transfer_source_proof;
+    BlobDataClient::new(delivery.data_socket_path)
+        .expect("open edited source Blob data client")
+        .write(
+            delivery.grant.expect("edited source Blob write grant"),
+            channel_binding,
+            plaintext.clone(),
+        )
+        .expect("write edited source integration Blob content");
+
+    let draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
+        "managed-edited-body-observation-1",
+        hermes_communications_ingress::SourceEnvelope {
+            provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
+            external_record_id: "integration-private-body-record-1".to_owned(),
+            scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                external_account_id: "integration-private-body-account-1".to_owned(),
+                external_conversation_id: Some(
+                    "integration-private-body-conversation-1".to_owned(),
+                ),
+                external_participant_id: None,
+                external_media_id: None,
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        hermes_communications_ingress::CommunicationEvidenceKindV1::MessageEdited,
+        hermes_communications_ingress::BodyAvailabilityV1::AdmittedBlob,
+        hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+        Some(OBSERVED_AT_UNIX_SECONDS),
+    )
+    .expect("build edited-message ingress draft");
+    let draft = hermes_communications_ingress::with_admitted_body_blob(
+        draft,
+        hermes_communications_ingress::BodyBlobReceiptV1 {
+            blob_ref: "blob://fixture-source/admitted-body-edited-1".to_owned(),
+            reference_id,
+            declared_bytes: u64::try_from(plaintext.len()).expect("edited fixture body size"),
+            sha256: plaintext_sha256,
+            custody_transfer_source_proof: source_proof,
+        },
+    )
+    .expect("attach edited-message admitted-body Blob receipt");
+    let record = hermes_communications_ingress::build_observation_outbox_record_v1(
+        &draft,
+        &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+            runtime_instance_id: "integration-test-runtime-1".to_owned(),
+            runtime_generation: 1,
+            module_id: "integration-test-runtime".to_owned(),
+            recorded_at_unix_seconds: OBSERVED_AT_UNIX_SECONDS,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build edited-message typed ingress envelope");
+    let endpoint = store
+        .platform_event_hub_topology()
+        .expect("read Event Hub topology")
+        .expect("Event Hub topology")
+        .nats_endpoint()
+        .to_owned();
+    tokio::runtime::Runtime::new()
+        .expect("Tokio runtime")
+        .block_on(async move {
+            async_nats::jetstream::new(
+                async_nats::connect(endpoint)
+                    .await
+                    .expect("connect disposable JetStream"),
+            )
+            .publish(
+                "hermes.observation.v1.communications.communication_observed.v1",
+                record.exact_bytes().to_vec().into(),
+            )
+            .await
+            .expect("publish edited-message typed ingress envelope")
+            .await
+            .expect("acknowledge edited-message typed ingress envelope");
+        });
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let detail = route_communications_query(
+            store,
+            supervisor,
+            71,
+            &CommunicationsQueryRequestV1 {
+                protocol_major: 1,
+                operation: Some(Operation::GetMessage(GetMessageRequestV1 {
+                    message_id: message_id.to_vec(),
+                })),
+            }
+            .encode_to_vec(),
+        );
+        let Some(QueryResult::GetMessage(detail)) = detail.result else {
+            panic!("Communications edited-message detail result");
+        };
+        let message = detail
+            .message
+            .expect("edited canonical message remains projected");
+        if message.lifecycle_state == 1
+            && message.body_state == 4
+            && message.last_observed_at_unix_seconds == OBSERVED_AT_UNIX_SECONDS
+        {
+            return plaintext;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Communications edit observation did not advance canonical revision; message={message:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
 fn wait_for_transferred_body_message(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
