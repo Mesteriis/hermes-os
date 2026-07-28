@@ -99,7 +99,7 @@ Client command создаёт owner-local export job и exact outbox record в �
 транзакции. Workflow публикует typed durable command:
 
 ```text
-communications.evidence-export.prepare.v1
+communications / evidence_export_prepare / v1
 ```
 
 Communications consumer:

@@ -71,6 +71,13 @@ pub fn communications_export_client_capability_v1() -> CapabilityDescriptorV1 {
         capability_id: COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1.to_owned(),
         capability_revision: 1,
         criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+                max_bytes: COMMUNICATIONS_EXPORT_BLOB_QUOTA_BYTES_V1,
+                custody_scope_id: COMMUNICATIONS_EXPORT_BLOB_CUSTODY_SCOPE_ID_V1.to_owned(),
+                allowed_operations: vec![BlobQuotaOperationV1::ReadRange as i32],
+            })),
+        }],
         provides: vec![
             client_rpc_surface(
                 communications_export_command_contract_reference_v1(),
@@ -239,5 +246,29 @@ mod tests {
         validate_settings_schema_v1(&communications_export_settings_schema_v1()).expect("settings");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Workflow as i32);
         assert_eq!(descriptor.capabilities.len(), 4);
+        let client = descriptor
+            .capabilities
+            .iter()
+            .find(|capability| capability.capability_id == COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1)
+            .expect("client capability");
+        let Some(Request::BlobQuota(client_blob_quota)) = client
+            .requests
+            .first()
+            .and_then(|request| request.request.as_ref())
+        else {
+            panic!("client Blob route must carry its own read-range quota");
+        };
+        assert_eq!(
+            client_blob_quota.max_bytes,
+            COMMUNICATIONS_EXPORT_BLOB_QUOTA_BYTES_V1
+        );
+        assert_eq!(
+            client_blob_quota.custody_scope_id,
+            COMMUNICATIONS_EXPORT_BLOB_CUSTODY_SCOPE_ID_V1
+        );
+        assert_eq!(
+            client_blob_quota.allowed_operations,
+            vec![BlobQuotaOperationV1::ReadRange as i32]
+        );
     }
 }

@@ -9,7 +9,7 @@ use rusqlite::{Connection, params};
 
 use crate::{SqliteControlStore, StoreError, valid_capability_ids, valid_identity_token};
 
-const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 24 * 1024 * 1024;
 
 impl SqliteControlStore {
     pub fn approved_module_client_blob_routes(
@@ -156,7 +156,7 @@ mod tests {
         ModuleClientBlobRouteV1, ModuleRegistration, ModuleRegistrationState,
     };
 
-    use super::validate_client_blob_routes;
+    use super::{MAX_CLIENT_BLOB_RESPONSE_BYTES, validate_client_blob_routes};
 
     fn registration() -> ModuleRegistration {
         ModuleRegistration::new(
@@ -232,6 +232,33 @@ mod tests {
                 &capabilities,
                 &[read],
                 &[route(256 * 1024 + 1)],
+            )
+            .is_err()
+        );
+
+        let ceiling_read = ModuleBlobQuotaRequestV1::new(
+            "registration-1",
+            "notes.content.v1",
+            "notes",
+            MAX_CLIENT_BLOB_RESPONSE_BYTES + 1,
+            "notes.content.v1",
+            vec![ModuleBlobOperationV1::ReadRange],
+        );
+        assert!(
+            validate_client_blob_routes(
+                &registration,
+                &capabilities,
+                std::slice::from_ref(&ceiling_read),
+                &[route(MAX_CLIENT_BLOB_RESPONSE_BYTES)],
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_client_blob_routes(
+                &registration,
+                &capabilities,
+                &[ceiling_read],
+                &[route(MAX_CLIENT_BLOB_RESPONSE_BYTES + 1)],
             )
             .is_err()
         );

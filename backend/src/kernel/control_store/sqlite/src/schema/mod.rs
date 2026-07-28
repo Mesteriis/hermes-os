@@ -43,8 +43,9 @@ mod v38_to_v39;
 mod v39_to_v40;
 mod v40_to_v41;
 mod v41_to_v42;
+mod v42_to_v43;
 
-pub const SCHEMA_VERSION: i64 = 42;
+pub const SCHEMA_VERSION: i64 = 43;
 
 pub fn migrate_schema(connection: &Connection) -> Result<(), StoreError> {
     loop {
@@ -149,6 +150,11 @@ fn version_feature_exists(connection: &Connection, version: i64) -> Result<bool,
         )?),
         41 => table_exists(connection, "hermes_kernel_bundled_artifact_proposal"),
         42 => table_exists(connection, "hermes_kernel_module_client_blob_route_request"),
+        43 => table_definition_contains(
+            connection,
+            "hermes_kernel_module_client_blob_route_request",
+            "max_response_bytes BETWEEN 1 AND 25165824",
+        ),
         _ => Ok(false),
     }
 }
@@ -251,6 +257,24 @@ fn table_exists(connection: &Connection, table: &str) -> Result<bool, StoreError
         .map_err(StoreError::from)
 }
 
+fn table_definition_contains(
+    connection: &Connection,
+    table: &str,
+    fragment: &str,
+) -> Result<bool, StoreError> {
+    connection
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1
+                FROM sqlite_schema
+                WHERE type = 'table' AND name = ?1 AND instr(sql, ?2) > 0
+             )",
+            [table, fragment],
+            |row| row.get(0),
+        )
+        .map_err(StoreError::from)
+}
+
 fn column_exists(connection: &Connection, table: &str, column: &str) -> Result<bool, StoreError> {
     connection
         .query_row(
@@ -315,6 +339,7 @@ fn apply_step(version: i64, transaction: &Transaction<'_>) -> Result<(), StoreEr
         39 => v39_to_v40::apply(transaction),
         40 => v40_to_v41::apply(transaction),
         41 => v41_to_v42::apply(transaction),
+        42 => v42_to_v43::apply(transaction),
         unsupported => Err(StoreError::UnsupportedSchema(unsupported)),
     }
 }

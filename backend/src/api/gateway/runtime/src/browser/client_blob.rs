@@ -16,7 +16,7 @@ use crate::{GatewayHttpResponse, SharedBrowserGatewaySessionService, full_gatewa
 
 const MAX_REQUEST_BYTES: usize = 4_096;
 const MAX_REQUEST_DEADLINE: Duration = Duration::from_secs(10);
-const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 24 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClientBlobRouteV1 {
@@ -299,6 +299,42 @@ mod tests {
         )
         .expect("route");
         assert_eq!(route.max_response_bytes(), 256 * 1024);
+        assert!(
+            ClientBlobRouteV1::new(
+                "registration",
+                "owner.content.v1",
+                "owner",
+                "owner.content-read",
+                ClientBlobContractVersionV1 {
+                    major: 1,
+                    revision: 1,
+                },
+                [7; 32],
+                ClientBlobTransportV1 {
+                    path: "/api/blobs/owner/v1/content".to_owned(),
+                    max_response_bytes: MAX_CLIENT_BLOB_RESPONSE_BYTES,
+                },
+            )
+            .is_ok()
+        );
+        assert!(
+            ClientBlobRouteV1::new(
+                "registration",
+                "owner.content.v1",
+                "owner",
+                "owner.content-read",
+                ClientBlobContractVersionV1 {
+                    major: 1,
+                    revision: 1,
+                },
+                [7; 32],
+                ClientBlobTransportV1 {
+                    path: "/api/blobs/owner/v1/content".to_owned(),
+                    max_response_bytes: MAX_CLIENT_BLOB_RESPONSE_BYTES + 1,
+                },
+            )
+            .is_err()
+        );
         assert!(
             ClientBlobRouteV1::new(
                 "registration",

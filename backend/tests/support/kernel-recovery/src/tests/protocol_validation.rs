@@ -323,6 +323,27 @@ fn descriptor_rejects_an_incomplete_event_route_request() {
 }
 
 #[test]
+fn descriptor_rejects_event_routes_that_cannot_form_durable_subjects() {
+    let mut contract = contract_reference();
+    contract.name = "communications.evidence-export.prepare".into();
+    let route = EventRouteRequestV1 {
+        envelope_kind: DurableEnvelopeKindV1::Event as i32,
+        contract: Some(contract),
+        direction: EventRouteDirectionV1::Publish as i32,
+        max_in_flight: 32,
+        subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
+        max_deliver: 0,
+        ack_wait_millis: 0,
+    };
+    assert_eq!(
+        validate_descriptor_v1(&descriptor(CapabilityRequestV1 {
+            request: Some(Request::EventRoute(route)),
+        })),
+        Err(DescriptorValidationError::InvalidCapability),
+    );
+}
+
+#[test]
 fn descriptor_rejects_consumer_without_explicit_delivery_policy() {
     let route = EventRouteRequestV1 {
         envelope_kind: DurableEnvelopeKindV1::Event as i32,

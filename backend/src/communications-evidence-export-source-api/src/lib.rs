@@ -15,11 +15,9 @@ use hermes_runtime_protocol::v1::{
 
 pub const PACKAGE: &str = "hermes-communications-evidence-export-source-api";
 pub const EVIDENCE_EXPORT_SOURCE_OWNER_V1: &str = "communications";
-pub const EVIDENCE_EXPORT_PREPARE_CONTRACT_NAME_V1: &str = "communications.evidence-export.prepare";
-pub const EVIDENCE_EXPORT_PREPARED_CONTRACT_NAME_V1: &str =
-    "communications.evidence-export.prepared";
-pub const EVIDENCE_EXPORT_REJECTED_CONTRACT_NAME_V1: &str =
-    "communications.evidence-export.rejected";
+pub const EVIDENCE_EXPORT_PREPARE_CONTRACT_NAME_V1: &str = "evidence_export_prepare";
+pub const EVIDENCE_EXPORT_PREPARED_CONTRACT_NAME_V1: &str = "evidence_export_prepared";
+pub const EVIDENCE_EXPORT_REJECTED_CONTRACT_NAME_V1: &str = "evidence_export_rejected";
 pub const EVIDENCE_EXPORT_SOURCE_CONTRACT_MAJOR_V1: u32 = 1;
 pub const EVIDENCE_EXPORT_SOURCE_CONTRACT_REVISION_V1: u32 = 1;
 pub const EVIDENCE_EXPORT_MAX_MESSAGES_V1: usize = 64;
@@ -184,6 +182,18 @@ mod tests {
         assert_eq!(
             consume.subscription_requirement,
             EventSubscriptionRequirementV1::Required as i32
+        );
+        assert_eq!(
+            [
+                EVIDENCE_EXPORT_PREPARE_CONTRACT_NAME_V1,
+                EVIDENCE_EXPORT_PREPARED_CONTRACT_NAME_V1,
+                EVIDENCE_EXPORT_REJECTED_CONTRACT_NAME_V1,
+            ],
+            [
+                "evidence_export_prepare",
+                "evidence_export_prepared",
+                "evidence_export_rejected",
+            ]
         );
     }
 

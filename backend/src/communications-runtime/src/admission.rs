@@ -105,7 +105,7 @@ pub fn communications_export_source_blob_capability_v1() -> CapabilityDescriptor
         criticality: CapabilityCriticalityV1::Required as i32,
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
-                max_bytes: 16 * 1024 * 1024,
+                max_bytes: COMMUNICATIONS_BLOB_QUOTA_BYTES,
                 custody_scope_id: COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID.to_owned(),
                 allowed_operations: vec![BlobQuotaOperationV1::Write as i32],
             })),
@@ -588,6 +588,22 @@ mod tests {
                 COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID,
                 COMMUNICATIONS_STORAGE_CAPABILITY_ID,
             ]
+        );
+        assert!(
+            descriptor
+                .capabilities
+                .iter()
+                .flat_map(|capability| capability.requests.iter())
+                .filter_map(|request| match request.request.as_ref() {
+                    Some(Request::BlobQuota(quota))
+                        if quota.custody_scope_id == COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID =>
+                    {
+                        Some(quota.max_bytes)
+                    }
+                    _ => None,
+                })
+                .all(|max_bytes| max_bytes == COMMUNICATIONS_BLOB_QUOTA_BYTES),
+            "every capability sharing Communications Blob custody must request the same quota"
         );
         assert_eq!(
             validate_settings_schema_v1(&communications_settings_schema_v1()),

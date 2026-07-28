@@ -34,6 +34,22 @@ const paths = {
     BACKEND_ROOT,
   ),
   kernelLaunch: new URL('src/kernel/src/platform/macos/managed_launch.rs', BACKEND_ROOT),
+  runtimeDescriptorValidation: new URL(
+    'src/platform/runtime_protocol/src/validation/descriptor.rs',
+    BACKEND_ROOT,
+  ),
+  controlStoreClientBlob: new URL(
+    'src/kernel/control_store/sqlite/src/module_state/client_blob_route.rs',
+    BACKEND_ROOT,
+  ),
+  controlStoreClientBlobSchema: new URL(
+    'src/kernel/control_store/sqlite/src/schema/v42_to_v43.rs',
+    BACKEND_ROOT,
+  ),
+  gatewayClientBlob: new URL(
+    'src/api/gateway/runtime/src/browser/client_blob.rs',
+    BACKEND_ROOT,
+  ),
   ownerControl: new URL(
     'src/api/gateway/contracts/proto/hermes/gateway/v1/owner_control.proto',
     BACKEND_ROOT,
@@ -135,6 +151,34 @@ test('Kernel launches workflow through a distinct provider-neutral configuration
   assert.match(devAssembly, /start_reserved_workflow_runtime/);
   assert.match(release, /hermes-communications-export-assembly/);
   assert.match(release, /communications_export\.release-artifacts\.json/);
+});
+
+test('export artifact stays within one exact platform client Blob ceiling', async () => {
+  const [
+    runtimeDescriptorValidation,
+    controlStoreClientBlob,
+    controlStoreClientBlobSchema,
+    gatewayClientBlob,
+    workflowAdmission,
+  ] = await Promise.all([
+      readFile(paths.runtimeDescriptorValidation, 'utf8'),
+      readFile(paths.controlStoreClientBlob, 'utf8'),
+      readFile(paths.controlStoreClientBlobSchema, 'utf8'),
+      readFile(paths.gatewayClientBlob, 'utf8'),
+      readFile(paths.workflowAdmission, 'utf8'),
+    ]);
+  const exactCeiling = /const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 24 \* 1024 \* 1024;/;
+  assert.match(runtimeDescriptorValidation, exactCeiling);
+  assert.match(controlStoreClientBlob, exactCeiling);
+  assert.match(
+    controlStoreClientBlobSchema,
+    /max_response_bytes BETWEEN 1 AND 25165824/,
+  );
+  assert.match(gatewayClientBlob, exactCeiling);
+  assert.match(
+    workflowAdmission,
+    /max_response_bytes: COMMUNICATIONS_EXPORT_MAX_ARTIFACT_BYTES_V1/,
+  );
 });
 
 test('Frontend composition passes canonical IDs into a generated workflow without domain imports', async () => {

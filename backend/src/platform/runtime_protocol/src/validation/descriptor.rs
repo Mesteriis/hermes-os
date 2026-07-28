@@ -19,6 +19,7 @@ pub const MAX_REQUEST_TIMEOUT_MILLIS: u32 = 60_000;
 pub const MAX_REQUEST_CONNECTION_BUDGET: u32 = 1_024;
 pub const MAX_TELEMETRY_SIGNALS_PER_MINUTE: u32 = 1_000_000;
 pub const MAX_EVENT_ROUTE_IN_FLIGHT: u32 = 4_096;
+const MAX_DURABLE_SUBJECT_TOKEN_BYTES: usize = 64;
 pub const MAX_BLOB_QUOTA_BYTES: u64 = 1 << 40;
 pub const MAX_IDENTIFIER_BYTES: usize = 128;
 pub const MAX_DISPLAY_BYTES: usize = 4096;
@@ -289,15 +290,24 @@ fn valid_event_route_request(route: &crate::v1::EventRouteRequestV1) -> bool {
     DurableEnvelopeKindV1::try_from(route.envelope_kind)
         .ok()
         .is_some_and(|kind| kind != DurableEnvelopeKindV1::Unspecified)
-        && route
-            .contract
-            .as_ref()
-            .is_some_and(valid_contract_reference)
+        && route.contract.as_ref().is_some_and(|contract| {
+            valid_contract_reference(contract)
+                && valid_durable_subject_token(&contract.owner)
+                && valid_durable_subject_token(&contract.name)
+        })
         && EventRouteDirectionV1::try_from(route.direction)
             .ok()
             .is_some_and(|direction| direction != EventRouteDirectionV1::Unspecified)
         && (1..=MAX_EVENT_ROUTE_IN_FLIGHT).contains(&route.max_in_flight)
         && valid_event_delivery_policy(route)
+}
+
+fn valid_durable_subject_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_DURABLE_SUBJECT_TOKEN_BYTES
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        })
 }
 
 fn valid_event_delivery_policy(route: &crate::v1::EventRouteRequestV1) -> bool {
