@@ -69,13 +69,13 @@ fn route_once(
     .map_err(|_| BlobVaultRouteFailureV1::Unavailable)?;
     loop {
         let frame = read_frame(channel).map_err(|_| BlobVaultRouteFailureV1::Unavailable)?;
-        if let Ok(response) = ManagedRuntimeControlResponseV1::decode(frame.as_slice()) {
-            if let Some(ControlResult::VaultRoute(response)) = response.result {
-                if !response.error_code.is_empty() {
-                    return Err(BlobVaultRouteFailureV1::Rejected);
-                }
-                return response.response.ok_or(BlobVaultRouteFailureV1::Rejected);
+        if let Ok(response) = ManagedRuntimeControlResponseV1::decode(frame.as_slice())
+            && let Some(ControlResult::VaultRoute(response)) = response.result
+        {
+            if !response.error_code.is_empty() {
+                return Err(BlobVaultRouteFailureV1::Rejected);
             }
+            return response.response.ok_or(BlobVaultRouteFailureV1::Rejected);
         }
         let request = BlobRuntimeControlRequestV1::decode(frame.as_slice())
             .map_err(|_| BlobVaultRouteFailureV1::Rejected)?;

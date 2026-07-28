@@ -878,13 +878,15 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         &root,
         &data,
         release.kernel(),
-        ticket.opaque_read_capability,
-        ticket.declared_bytes,
-        &edited_body,
-        edited_ticket.opaque_read_capability,
-        edited_ticket.declared_bytes,
-        stale_runtime_ticket.opaque_read_capability,
-        blob_outage_ticket.opaque_read_capability,
+        CommunicationsExportGatewayDeliveryInputsV1 {
+            opaque_read_capability: ticket.opaque_read_capability,
+            declared_bytes: ticket.declared_bytes,
+            edited_body: &edited_body,
+            edited_opaque_read_capability: edited_ticket.opaque_read_capability,
+            edited_declared_bytes: edited_ticket.declared_bytes,
+            stale_runtime_read_capability: stale_runtime_ticket.opaque_read_capability,
+            blob_outage_read_capability: blob_outage_ticket.opaque_read_capability,
+        },
     );
     let revoked_ticket = IssueEvidenceExportReadResponseV1::decode(
         route(
@@ -921,19 +923,23 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
 }
 
+struct CommunicationsExportGatewayDeliveryInputsV1<'a> {
+    opaque_read_capability: Vec<u8>,
+    declared_bytes: u64,
+    edited_body: &'a [u8],
+    edited_opaque_read_capability: Vec<u8>,
+    edited_declared_bytes: u64,
+    stale_runtime_read_capability: Vec<u8>,
+    blob_outage_read_capability: Vec<u8>,
+}
+
 fn assert_communications_export_gateway_delivery(
     store: &Arc<SqliteControlStore>,
     supervisor: &ManagedRuntimeSupervisor,
     root: &std::path::Path,
     kernel_data: &std::path::Path,
     kernel_executable: &std::path::Path,
-    opaque_read_capability: Vec<u8>,
-    declared_bytes: u64,
-    edited_body: &[u8],
-    edited_opaque_read_capability: Vec<u8>,
-    edited_declared_bytes: u64,
-    stale_runtime_read_capability: Vec<u8>,
-    blob_outage_read_capability: Vec<u8>,
+    inputs: CommunicationsExportGatewayDeliveryInputsV1<'_>,
 ) -> String {
     use hermes_communications_export_api::{
         COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1, wire::EvidenceExportArtifactReadRequestV1,
@@ -959,7 +965,7 @@ fn assert_communications_export_gateway_delivery(
     let runtime = tokio::runtime::Runtime::new().expect("Gateway test runtime");
     let cookie = super::browser_gateway_session::authenticate_gateway_router(&router, &runtime);
     let stale_runtime_read_request = EvidenceExportArtifactReadRequestV1 {
-        opaque_read_capability: stale_runtime_read_capability,
+        opaque_read_capability: inputs.stale_runtime_read_capability,
     }
     .encode_to_vec();
     let stale_runtime_response = runtime.block_on(
@@ -981,7 +987,7 @@ fn assert_communications_export_gateway_delivery(
         "workflow restart invalidates predecessor runtime-local read tickets"
     );
     let read_request = EvidenceExportArtifactReadRequestV1 {
-        opaque_read_capability,
+        opaque_read_capability: inputs.opaque_read_capability,
     }
     .encode_to_vec();
     let read = || {
@@ -1014,7 +1020,10 @@ fn assert_communications_export_gateway_delivery(
         .block_on(response.into_body().collect())
         .expect("Gateway Communications Export artifact response")
         .to_bytes();
-    assert_eq!(u64::try_from(artifact.len()).ok(), Some(declared_bytes));
+    assert_eq!(
+        u64::try_from(artifact.len()).ok(),
+        Some(inputs.declared_bytes)
+    );
     assert!(artifact.starts_with(
         br#"{"record_type":"manifest","schema":"hermes.communications.evidence-export.v1"#
     ));
@@ -1031,13 +1040,13 @@ fn assert_communications_export_gateway_delivery(
     );
     assert!(
         !artifact
-            .windows(edited_body.len())
-            .any(|window| window == edited_body),
+            .windows(inputs.edited_body.len())
+            .any(|window| window == inputs.edited_body),
         "pre-edit export artifact remains bound to its original canonical snapshot"
     );
     assert_eq!(read().status(), hyper::StatusCode::NOT_FOUND);
     let edited_read_request = EvidenceExportArtifactReadRequestV1 {
-        opaque_read_capability: edited_opaque_read_capability,
+        opaque_read_capability: inputs.edited_opaque_read_capability,
     }
     .encode_to_vec();
     let read_edited = || {
@@ -1063,17 +1072,17 @@ fn assert_communications_export_gateway_delivery(
         .to_bytes();
     assert_eq!(
         u64::try_from(edited_artifact.len()).ok(),
-        Some(edited_declared_bytes)
+        Some(inputs.edited_declared_bytes)
     );
     assert!(
         edited_artifact
-            .windows(edited_body.len())
-            .any(|window| window == edited_body),
+            .windows(inputs.edited_body.len())
+            .any(|window| window == inputs.edited_body),
         "post-edit export artifact contains the edited canonical snapshot"
     );
     assert_eq!(read_edited().status(), hyper::StatusCode::NOT_FOUND);
     let blob_outage_read_request = EvidenceExportArtifactReadRequestV1 {
-        opaque_read_capability: blob_outage_read_capability,
+        opaque_read_capability: inputs.blob_outage_read_capability,
     }
     .encode_to_vec();
     let read_during_blob_outage = || {
