@@ -363,12 +363,9 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     use hermes_communications_export_runtime::admission::{
         communications_export_command_contract_reference_v1,
         communications_export_query_contract_reference_v1,
-        communications_export_read_contract_reference_v1,
         communications_export_ticket_contract_reference_v1,
     };
-    use hermes_runtime_protocol::v1::{
-        ModuleClientBlobAuthorizationV1, ModuleClientRequestV1, ModuleClientResponseV1,
-    };
+    use hermes_runtime_protocol::v1::{ModuleClientRequestV1, ModuleClientResponseV1};
     assert_eq!(
         std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
         Ok("1")
@@ -384,6 +381,14 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         std::env::set_var("HERMES_TEST_KERNEL_EXECUTABLE", release.kernel());
     }
     let store = Arc::new(configured_communications_store(&root, release.kernel()));
+    store
+        .claim_initial_owner(&hermes_kernel_control_store::InitialOwnerIdentity::new(
+            "owner-1",
+            "desktop-1",
+            [4; 65],
+        ))
+        .expect("claim logical browser owner");
+    super::browser_gateway_session::admit_browser_test_device(&store, "owner-1");
     let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
@@ -548,27 +553,97 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     .expect("decode one-use Communications Export read ticket");
     assert_eq!(ticket.opaque_read_capability.len(), 32);
     assert!(ticket.declared_bytes > 0);
-    let authorization = ModuleClientBlobAuthorizationV1::decode(
-        route(
-            4,
-            communications_export_read_contract_reference_v1(),
-            EvidenceExportArtifactReadRequestV1 {
-                opaque_read_capability: ticket.opaque_read_capability,
-            }
-            .encode_to_vec(),
-        )
-        .as_slice(),
-    )
-    .expect("authorize the exact descriptor-declared export client_blob route");
-    assert_eq!(authorization.reference_id.len(), 16);
-    assert_eq!(authorization.declared_size, ticket.declared_bytes);
-    assert_eq!(authorization.expected_plaintext_sha256.len(), 32);
+    assert_communications_export_gateway_delivery(
+        &store,
+        &supervisor,
+        &root,
+        &data,
+        ticket.opaque_read_capability,
+        ticket.declared_bytes,
+    );
     supervisor.shutdown().expect("stop managed processes");
     unsafe {
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
     }
     std::fs::remove_dir_all(root).expect("remove fixture");
     std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
+}
+
+fn assert_communications_export_gateway_delivery(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    root: &std::path::Path,
+    kernel_data: &std::path::Path,
+    opaque_read_capability: Vec<u8>,
+    declared_bytes: u64,
+) {
+    use hermes_communications_export_api::{
+        COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1, wire::EvidenceExportArtifactReadRequestV1,
+    };
+    use http_body_util::BodyExt as _;
+
+    let configuration = crate::platform::gateway::BrowserGatewayConfigurationV1::new(
+        "127.0.0.1:9443".parse().expect("loopback Gateway address"),
+        "https://hub.local".to_owned(),
+        "hub.local".to_owned(),
+        root.join("gateway-cert.der"),
+        root.join("gateway-key.der"),
+    )
+    .expect("Gateway configuration");
+    let router = crate::platform::gateway::gateway_service(
+        Arc::clone(store),
+        kernel_data,
+        supervisor.clone(),
+        &configuration,
+        None,
+    )
+    .expect("compose owner Gateway routes");
+    let runtime = tokio::runtime::Runtime::new().expect("Gateway test runtime");
+    let cookie = super::browser_gateway_session::authenticate_gateway_router(&router, &runtime);
+    let read_request = EvidenceExportArtifactReadRequestV1 {
+        opaque_read_capability,
+    }
+    .encode_to_vec();
+    let read = || {
+        runtime.block_on(
+            router.route(
+                hyper::Request::builder()
+                    .method("POST")
+                    .uri(COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1)
+                    .header("content-type", "application/proto")
+                    .header("cookie", &cookie)
+                    .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                        read_request.clone(),
+                    )))
+                    .expect("Gateway Communications Export artifact read request"),
+            ),
+        )
+    };
+    let response = read();
+    assert_eq!(response.status(), hyper::StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
+    assert!(response.headers().get("x-blob-reference").is_none());
+    assert!(response.headers().get("digest").is_none());
+    let artifact = runtime
+        .block_on(response.into_body().collect())
+        .expect("Gateway Communications Export artifact response")
+        .to_bytes();
+    assert_eq!(u64::try_from(artifact.len()).ok(), Some(declared_bytes));
+    assert!(artifact.starts_with(
+        br#"{"record_type":"manifest","schema":"hermes.communications.evidence-export.v1"#
+    ));
+    assert!(
+        artifact
+            .windows(b"fixture source body for custody transfer".len())
+            .any(|window| window == b"fixture source body for custody transfer")
+    );
+    assert_eq!(read().status(), hyper::StatusCode::NOT_FOUND);
 }
 
 fn short_communications_kernel_data_directory() -> PathBuf {
