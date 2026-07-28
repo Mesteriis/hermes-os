@@ -25,8 +25,7 @@ use prost::Message;
 use sha2::{Digest, Sha256};
 
 pub const COMMUNICATIONS_EXPORT_EVENTS_CAPABILITY_ID_V1: &str = "communications_export.events.v1";
-pub const COMMUNICATIONS_EXPORT_BLOB_CAPABILITY_ID_V1: &str =
-    "communications_export.source.blob.v1";
+pub const COMMUNICATIONS_EXPORT_BLOB_CAPABILITY_ID_V1: &str = "communications_export.blob.v1";
 pub const COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY_ID_V1: &str = "communications_export.storage.v1";
 pub const COMMUNICATIONS_EXPORT_BLOB_CUSTODY_SCOPE_ID_V1: &str =
     "communications_export.artifact.v1";
@@ -38,8 +37,8 @@ pub const COMMUNICATIONS_EXPORT_STORAGE_TIMEOUT_MILLIS_V1: u32 = 5_000;
 pub fn communications_export_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
         communications_export_client_capability_v1(),
-        communications_export_events_capability_v1(),
         communications_export_blob_capability_v1(),
+        communications_export_events_capability_v1(),
         communications_export_storage_capability_v1(),
     ]
 }

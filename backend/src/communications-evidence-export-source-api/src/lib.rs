@@ -28,7 +28,7 @@ pub const COMMUNICATIONS_EXPORT_SOURCE_BLOB_TARGET_OWNER_ID_V1: &str = "communic
 pub const COMMUNICATIONS_EXPORT_SOURCE_BLOB_TARGET_MODULE_ID_V1: &str =
     "hermes-communications-export-runtime";
 pub const COMMUNICATIONS_EXPORT_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1: &str =
-    "communications_export.source.blob.v1";
+    "communications_export.blob.v1";
 
 pub mod wire {
     include!(concat!(
@@ -209,7 +209,7 @@ mod tests {
         );
         assert_eq!(
             COMMUNICATIONS_EXPORT_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1,
-            "communications_export.source.blob.v1"
+            "communications_export.blob.v1"
         );
     }
 }

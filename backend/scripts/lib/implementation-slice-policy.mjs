@@ -1703,8 +1703,8 @@ const COMMUNICATIONS_EXPORT_INVENTORY = {
     'communications.export-source.blob.v1',
     'communications.export-source.v1',
     'communications.export.v1',
+    'communications_export.blob.v1',
     'communications_export.events.v1',
-    'communications_export.source.blob.v1',
     'communications_export.storage.v1',
   ].sort(),
 };
