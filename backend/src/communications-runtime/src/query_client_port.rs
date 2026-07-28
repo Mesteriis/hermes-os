@@ -43,6 +43,7 @@ pub fn encode_module_query_request_v1(
         contract: Some(query_contract()),
         request_id,
         request_payload: query_payload.to_vec(),
+        logical_owner_id: String::new(),
     }
     .encode_to_vec())
 }

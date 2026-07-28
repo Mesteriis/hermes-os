@@ -298,6 +298,7 @@ mod tests {
                     scheduler: &[],
                     vault_purposes: std::slice::from_ref(&purpose),
                     client_rpc_routes: &[],
+                    client_blob_routes: &[],
                 },
             )
             .expect("record registration");

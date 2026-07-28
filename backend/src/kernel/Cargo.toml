@@ -19,6 +19,7 @@ chacha20poly1305 = { version = "=0.11.0", default-features = false, features = [
 clap = { version = "=4.6.2", default-features = false, features = ["derive", "error-context", "help", "std", "usage"] }
 directories = "=6.0.0"
 getrandom = { version = "=0.4.3", default-features = false }
+hermes-blob-client = { path = "../platform/blob/client" }
 hermes-gateway-protocol = { path = "../api/gateway/contracts" }
 hermes-gateway-runtime = { path = "../api/gateway/runtime" }
 hermes-gateway-session = { path = "../api/gateway/session" }

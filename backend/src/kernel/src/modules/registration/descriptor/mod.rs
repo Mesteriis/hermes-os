@@ -1,9 +1,9 @@
 //! Translation of a validated module descriptor into Control Store request records.
 
 use hermes_kernel_control_store::{
-    ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1,
-    ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
-    ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
+    ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientBlobRouteV1,
+    ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
+    ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
     ModuleEventSubscriptionRequirementV1, ModuleRegistration, ModuleSchedulerJobRequestV1,
     ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
@@ -28,6 +28,7 @@ pub(super) struct DescriptorRegistrationRequests {
     scheduler: Vec<DescriptorSchedulerJobRequest>,
     vault_purposes: Vec<DescriptorVaultPurposeRequest>,
     client_rpc_routes: Vec<DescriptorClientRpcRoute>,
+    client_blob_routes: Vec<DescriptorClientBlobRoute>,
 }
 
 pub(super) struct BoundRegistrationRequests {
@@ -37,6 +38,7 @@ pub(super) struct BoundRegistrationRequests {
     pub(super) scheduler: Vec<ModuleSchedulerJobRequestV1>,
     pub(super) vault_purposes: Vec<ModuleVaultPurposeRequestV1>,
     pub(super) client_rpc_routes: Vec<ModuleClientRpcRouteV1>,
+    pub(super) client_blob_routes: Vec<ModuleClientBlobRouteV1>,
 }
 
 impl DescriptorRegistrationRequests {
@@ -58,6 +60,7 @@ impl DescriptorRegistrationRequests {
             scheduler: scheduler_job_requests(&descriptor)?,
             vault_purposes: vault_purpose_requests(&descriptor)?,
             client_rpc_routes: client_rpc_routes(&descriptor)?,
+            client_blob_routes: client_blob_routes(&descriptor)?,
         })
     }
 
@@ -85,6 +88,7 @@ impl DescriptorRegistrationRequests {
             scheduler: bind_scheduler_job_requests(&self.scheduler, registration),
             vault_purposes: bind_vault_purpose_requests(&self.vault_purposes, registration),
             client_rpc_routes: bind_client_rpc_routes(&self.client_rpc_routes, registration),
+            client_blob_routes: bind_client_blob_routes(&self.client_blob_routes, registration),
         }
     }
 }
@@ -216,6 +220,32 @@ fn bind_client_rpc_routes(
         .collect()
 }
 
+fn bind_client_blob_routes(
+    requests: &[DescriptorClientBlobRoute],
+    registration: &ModuleRegistration,
+) -> Vec<ModuleClientBlobRouteV1> {
+    requests
+        .iter()
+        .map(|request| {
+            ModuleClientBlobRouteV1::new(
+                registration.registration_id(),
+                &request.capability_id,
+                registration.owner_id(),
+                &request.contract_name,
+                hermes_kernel_control_store::ModuleClientBlobContractVersionV1 {
+                    major: request.contract_major,
+                    revision: request.contract_revision,
+                },
+                request.contract_schema_sha256,
+                hermes_kernel_control_store::ModuleClientBlobTransportV1 {
+                    path: request.path.clone(),
+                    max_response_bytes: request.max_response_bytes,
+                },
+            )
+        })
+        .collect()
+}
+
 struct DescriptorStorageRequest {
     capability_id: String,
     owner_id: String,
@@ -271,6 +301,16 @@ struct DescriptorClientRpcRoute {
     path: String,
 }
 
+struct DescriptorClientBlobRoute {
+    capability_id: String,
+    contract_name: String,
+    contract_major: u32,
+    contract_revision: u32,
+    contract_schema_sha256: [u8; 32],
+    path: String,
+    max_response_bytes: u64,
+}
+
 fn client_rpc_routes(
     descriptor: &hermes_runtime_protocol::v1::ModuleDescriptorV1,
 ) -> Result<Vec<DescriptorClientRpcRoute>, String> {
@@ -306,6 +346,48 @@ fn client_rpc_routes(
                 contract_revision: contract.revision,
                 contract_schema_sha256: schema_sha256,
                 path: route.path.clone(),
+            });
+        }
+    }
+    Ok(routes)
+}
+
+fn client_blob_routes(
+    descriptor: &hermes_runtime_protocol::v1::ModuleDescriptorV1,
+) -> Result<Vec<DescriptorClientBlobRoute>, String> {
+    let mut seen_paths = std::collections::BTreeSet::new();
+    let mut routes = Vec::new();
+    for capability in &descriptor.capabilities {
+        for surface in &capability.provides {
+            if ProvidedSurfaceKindV1::try_from(surface.kind).ok()
+                != Some(ProvidedSurfaceKindV1::ClientBlob)
+            {
+                continue;
+            }
+            let contract = surface
+                .contract
+                .as_ref()
+                .ok_or_else(|| "module client Blob contract is invalid".to_owned())?;
+            let route = surface
+                .client_blob_route
+                .as_ref()
+                .ok_or_else(|| "module client Blob route is invalid".to_owned())?;
+            let schema_sha256 = contract
+                .schema_sha256
+                .as_slice()
+                .try_into()
+                .map_err(|_| "module client Blob contract is invalid".to_owned())?;
+            if contract.owner != descriptor.owner_id || !seen_paths.insert(route.path.clone()) {
+                return Err("module client Blob route owner or path is invalid".to_owned());
+            }
+            routes.push(DescriptorClientBlobRoute {
+                capability_id: capability.capability_id.clone(),
+                contract_name: contract.name.clone(),
+                contract_major: contract.major,
+                contract_revision: contract.revision,
+                contract_schema_sha256: schema_sha256,
+                path: route.path.clone(),
+                max_response_bytes: route.max_response_bytes,
             });
         }
     }

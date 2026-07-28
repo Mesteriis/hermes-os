@@ -42,8 +42,9 @@ mod v37_to_v38;
 mod v38_to_v39;
 mod v39_to_v40;
 mod v40_to_v41;
+mod v41_to_v42;
 
-pub const SCHEMA_VERSION: i64 = 41;
+pub const SCHEMA_VERSION: i64 = 42;
 
 pub fn migrate_schema(connection: &Connection) -> Result<(), StoreError> {
     loop {
@@ -147,6 +148,7 @@ fn version_feature_exists(connection: &Connection, version: i64) -> Result<bool,
             &["custody_scope_id", "allowed_operations"],
         )?),
         41 => table_exists(connection, "hermes_kernel_bundled_artifact_proposal"),
+        42 => table_exists(connection, "hermes_kernel_module_client_blob_route_request"),
         _ => Ok(false),
     }
 }
@@ -312,6 +314,7 @@ fn apply_step(version: i64, transaction: &Transaction<'_>) -> Result<(), StoreEr
         38 => v38_to_v39::apply(transaction),
         39 => v39_to_v40::apply(transaction),
         40 => v40_to_v41::apply(transaction),
+        41 => v41_to_v42::apply(transaction),
         unsupported => Err(StoreError::UnsupportedSchema(unsupported)),
     }
 }

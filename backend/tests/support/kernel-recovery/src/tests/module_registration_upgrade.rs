@@ -144,6 +144,7 @@ fn empty_descriptor_requests() -> ModuleDescriptorRegistrationRequestsV1<'static
         scheduler: &[],
         vault_purposes: &[],
         client_rpc_routes: &[],
+        client_blob_routes: &[],
     }
 }
 

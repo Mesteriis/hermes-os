@@ -452,6 +452,10 @@
       ],
       "hermes-kernel": [
         {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-gateway-protocol",
           "kind": "normal"
         },

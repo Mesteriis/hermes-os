@@ -131,6 +131,7 @@ where
                 scheduler: &bound.scheduler,
                 vault_purposes: &bound.vault_purposes,
                 client_rpc_routes: &bound.client_rpc_routes,
+                client_blob_routes: &bound.client_blob_routes,
             },
         ) {
             Ok(receipt) => {
@@ -194,6 +195,7 @@ where
                 scheduler: &bound.scheduler,
                 vault_purposes: &bound.vault_purposes,
                 client_rpc_routes: &bound.client_rpc_routes,
+                client_blob_routes: &bound.client_blob_routes,
             },
         )
         .map_err(|error| format!("{error:?}"))?;
@@ -230,6 +232,7 @@ where
                 scheduler: &bound.scheduler,
                 vault_purposes: &bound.vault_purposes,
                 client_rpc_routes: &bound.client_rpc_routes,
+                client_blob_routes: &bound.client_blob_routes,
             },
         ) {
             Ok(()) => return Ok(registration),

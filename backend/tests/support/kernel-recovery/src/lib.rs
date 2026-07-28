@@ -158,6 +158,7 @@ mod tests {
     mod browser_gateway_session;
     mod bundled_artifact_proposal;
     mod capture_coordinator;
+    mod client_blob_routes;
     mod client_rpc_routes;
     mod common;
     mod control_plane_worker;

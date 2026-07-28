@@ -255,6 +255,7 @@ pub fn encode_module_request(
         contract: Some(telegram_client_contract(contract)),
         request_id,
         request_payload,
+        logical_owner_id: String::new(),
     };
     Ok(envelope.encode_to_vec())
 }

@@ -169,6 +169,7 @@ fn mail_client_capability_v1(contract: MailClientContractV1) -> CapabilityDescri
             client_rpc_route: Some(ClientRpcRouteV1 {
                 path: contract.connect_path().to_owned(),
             }),
+            client_blob_route: None,
         }],
         ..Default::default()
     }

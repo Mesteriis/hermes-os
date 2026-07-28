@@ -89,6 +89,7 @@ impl WhatsAppHostBridgeTestClient {
             contract: Some(host_bridge_contract()),
             request_id,
             request_payload,
+            logical_owner_id: String::new(),
         };
         write_frame(&mut self.stream, &request.encode_to_vec());
         let response = ModuleClientResponseV1::decode(read_frame(&mut self.stream).as_slice())

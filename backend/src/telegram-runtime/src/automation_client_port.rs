@@ -535,6 +535,7 @@ mod tests {
             }),
             request_id: 42,
             request_payload: payload,
+            logical_owner_id: String::new(),
         }
     }
 

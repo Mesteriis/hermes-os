@@ -101,16 +101,19 @@ pub fn communications_events_capability_v1() -> CapabilityDescriptorV1 {
                 kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
                 contract: Some(recorded.clone()),
                 client_rpc_route: None,
+                client_blob_route: None,
             },
             ProvidedSurfaceV1 {
                 kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
                 contract: Some(attachment_state_changed.clone()),
                 client_rpc_route: None,
+                client_blob_route: None,
             },
             ProvidedSurfaceV1 {
                 kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
                 contract: Some(attachment_anchor_recorded.clone()),
                 client_rpc_route: None,
+                client_blob_route: None,
             },
         ],
         requests: vec![
@@ -163,6 +166,7 @@ pub fn communications_observe_capability_v1() -> CapabilityDescriptorV1 {
             kind: ProvidedSurfaceKindV1::DurableConsumer as i32,
             contract: Some(observed.clone()),
             client_rpc_route: None,
+            client_blob_route: None,
         }],
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::EventRoute(EventRouteRequestV1 {
@@ -207,6 +211,7 @@ fn attachment_observation_consumer_capability_v1(
             kind: ProvidedSurfaceKindV1::DurableConsumer as i32,
             contract: Some(observation.clone()),
             client_rpc_route: None,
+            client_blob_route: None,
         }],
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::EventRoute(EventRouteRequestV1 {
@@ -235,6 +240,7 @@ pub fn communications_query_capability_v1() -> CapabilityDescriptorV1 {
             client_rpc_route: Some(hermes_runtime_protocol::v1::ClientRpcRouteV1 {
                 path: "/hermes.communications.query.v1.CommunicationsQueryService/Query".to_owned(),
             }),
+            client_blob_route: None,
         }],
         ..Default::default()
     }

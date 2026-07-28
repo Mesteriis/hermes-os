@@ -2003,6 +2003,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
                 scheduler: &[],
                 vault_purposes: std::slice::from_ref(&vault_purpose),
                 client_rpc_routes: std::slice::from_ref(&client_rpc_route),
+                client_blob_routes: &[],
             },
         )
         .expect("record Communications registration");

@@ -1,7 +1,7 @@
 use crate::{
-    GrantSet, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1, ModuleEventRouteRequestV1,
-    ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
+    GrantSet, ModuleBlobQuotaRequestV1, ModuleClientBlobRouteV1, ModuleClientRpcRouteV1,
+    ModuleEventRouteRequestV1, ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState,
+    ModuleSchedulerJobRequestV1, ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
 
 pub struct ModuleDescriptorRegistrationRequestsV1<'a> {
@@ -11,6 +11,7 @@ pub struct ModuleDescriptorRegistrationRequestsV1<'a> {
     pub scheduler: &'a [ModuleSchedulerJobRequestV1],
     pub vault_purposes: &'a [ModuleVaultPurposeRequestV1],
     pub client_rpc_routes: &'a [ModuleClientRpcRouteV1],
+    pub client_blob_routes: &'a [ModuleClientBlobRouteV1],
 }
 
 pub trait ModuleRegistryStore {
@@ -78,6 +79,9 @@ pub trait ModuleRegistryStore {
     ) -> Result<Vec<ModuleEventRouteRequestV1>, Self::Error>;
     fn approved_module_client_rpc_routes(&self)
     -> Result<Vec<ModuleClientRpcRouteV1>, Self::Error>;
+    fn approved_module_client_blob_routes(
+        &self,
+    ) -> Result<Vec<ModuleClientBlobRouteV1>, Self::Error>;
     fn module_blob_quota_request(
         &self,
         registration_id: &str,

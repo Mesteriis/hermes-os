@@ -85,6 +85,7 @@ fn control_store_rejects_foreign_or_duplicate_client_rpc_routes_atomically() {
                         scheduler: &[],
                         vault_purposes: &[],
                         client_rpc_routes: &routes,
+                        client_blob_routes: &[],
                     },
                 )
                 .is_err()
@@ -210,6 +211,7 @@ fn managed_route_fixture(
         }),
         request_id: 1,
         request_payload: vec![1],
+        logical_owner_id: "owner-local".to_owned(),
     }
     .encode_to_vec();
     (
@@ -280,6 +282,7 @@ fn descriptor() -> ModuleDescriptorV1 {
                 client_rpc_route: Some(ClientRpcRouteV1 {
                     path: "/hermes.notes.v1.NotesQueryService/Query".to_owned(),
                 }),
+                client_blob_route: None,
             }],
             ..Default::default()
         }],

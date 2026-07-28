@@ -2,6 +2,7 @@
 
 mod blob_request;
 mod bundled_artifact_proposal;
+mod client_blob_route;
 mod client_rpc_route;
 mod event_hub_topology;
 mod event_request;

@@ -13,6 +13,7 @@ use crate::{
 
 use super::{
     blob_request::{insert_blob_quota_requests, validate_blob_quota_requests},
+    client_blob_route::{insert_client_blob_routes, validate_client_blob_routes},
     client_rpc_route::{insert_client_rpc_routes, validate_client_rpc_routes},
     event_request::{insert_event_route_requests, validate_event_route_requests},
     scheduler_request::{insert_scheduler_job_requests, validate_scheduler_job_requests},
@@ -53,6 +54,7 @@ impl SqliteControlStore {
                 scheduler: &[],
                 vault_purposes: &[],
                 client_rpc_routes: &[],
+                client_blob_routes: &[],
             },
         )
     }
@@ -95,6 +97,12 @@ impl SqliteControlStore {
             requested_capability_ids,
             requests.client_rpc_routes,
         )?;
+        validate_client_blob_routes(
+            registration,
+            requested_capability_ids,
+            requests.blobs,
+            requests.client_blob_routes,
+        )?;
         let registration = registration.clone();
         let capabilities = requested_capability_ids.to_vec();
         let storage_requests = requests.storage.to_vec();
@@ -103,6 +111,7 @@ impl SqliteControlStore {
         let scheduler_requests = requests.scheduler.to_vec();
         let vault_purpose_requests = requests.vault_purposes.to_vec();
         let client_rpc_routes = requests.client_rpc_routes.to_vec();
+        let client_blob_routes = requests.client_blob_routes.to_vec();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
             insert_pending_registration(&transaction, &registration, &capabilities)?;
@@ -112,6 +121,7 @@ impl SqliteControlStore {
             insert_scheduler_job_requests(&transaction, &scheduler_requests)?;
             insert_vault_purpose_requests(&transaction, &vault_purpose_requests)?;
             insert_client_rpc_routes(&transaction, &client_rpc_routes)?;
+            insert_client_blob_routes(&transaction, &client_blob_routes)?;
             transaction.commit()?;
             Ok(())
         })
@@ -149,6 +159,12 @@ impl SqliteControlStore {
             requested_capability_ids,
             requests.client_rpc_routes,
         )?;
+        validate_client_blob_routes(
+            registration,
+            requested_capability_ids,
+            requests.blobs,
+            requests.client_blob_routes,
+        )?;
         let registration = registration.clone();
         let capabilities = requested_capability_ids.to_vec();
         let storage_requests = requests.storage.to_vec();
@@ -157,6 +173,7 @@ impl SqliteControlStore {
         let scheduler_requests = requests.scheduler.to_vec();
         let vault_purpose_requests = requests.vault_purposes.to_vec();
         let client_rpc_routes = requests.client_rpc_routes.to_vec();
+        let client_blob_routes = requests.client_blob_routes.to_vec();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
             let current =
@@ -194,6 +211,10 @@ impl SqliteControlStore {
                 [registration.registration_id()],
             )?;
             transaction.execute(
+                "DELETE FROM hermes_kernel_module_client_blob_route_request WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            transaction.execute(
                 "DELETE FROM hermes_kernel_module_registration_capability WHERE registration_id = ?1",
                 [registration.registration_id()],
             )?;
@@ -226,6 +247,7 @@ impl SqliteControlStore {
             insert_scheduler_job_requests(&transaction, &scheduler_requests)?;
             insert_vault_purpose_requests(&transaction, &vault_purpose_requests)?;
             insert_client_rpc_routes(&transaction, &client_rpc_routes)?;
+            insert_client_blob_routes(&transaction, &client_blob_routes)?;
             transaction.commit()?;
             Ok(())
         })

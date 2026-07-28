@@ -5,11 +5,11 @@ use hermes_kernel_control_store::{
     BundledManagedArtifactProposalInputV1, BundledManagedArtifactProposalReceiptV1,
     BundledManagedLaunchBinding, ControlStore, EventHubTopologyStore, EventsAuthorityStore,
     ExternalRuntimeAttestation, ExternalRuntimeIdentity, GrantSet, HealthRecoveryStore,
-    InitialOwnerIdentity, ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1,
-    ModuleEventRouteRequestV1, ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState,
-    ModuleRegistryStore, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
-    ModuleVaultPurposeRequestV1, OwnerIdentityStore, OwnerPinnedArtifactBinding,
-    PlatformEventHubTopologyV1, PlatformEventsAuthorityConfigurationV1,
+    InitialOwnerIdentity, ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleClientBlobRouteV1,
+    ModuleClientRpcRouteV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot, ModuleRegistration,
+    ModuleRegistrationState, ModuleRegistryStore, ModuleSchedulerJobRequestV1,
+    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1, OwnerIdentityStore,
+    OwnerPinnedArtifactBinding, PlatformEventHubTopologyV1, PlatformEventsAuthorityConfigurationV1,
     PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageTopology,
     RuntimeTrustStore, ServerBootstrapPairing, SettingsApplyState, SettingsDesiredSnapshot,
     SettingsRegistryStore, SettingsSchemaBinding, StorageBindingStore, StorageBundleStore,
@@ -228,6 +228,11 @@ impl ModuleRegistryStore for SqliteControlStore {
         &self,
     ) -> Result<Vec<ModuleClientRpcRouteV1>, Self::Error> {
         SqliteControlStore::approved_module_client_rpc_routes(self)
+    }
+    fn approved_module_client_blob_routes(
+        &self,
+    ) -> Result<Vec<ModuleClientBlobRouteV1>, Self::Error> {
+        SqliteControlStore::approved_module_client_blob_routes(self)
     }
     fn module_blob_quota_request(
         &self,

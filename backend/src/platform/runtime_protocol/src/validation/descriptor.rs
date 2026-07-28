@@ -166,12 +166,34 @@ fn valid_provided_surface(surface: &crate::v1::ProvidedSurfaceV1) -> bool {
         return false;
     }
     match kind {
-        ProvidedSurfaceKindV1::ClientRpc => surface
-            .client_rpc_route
-            .as_ref()
-            .is_some_and(|route| valid_client_rpc_path(&route.path)),
-        _ => surface.client_rpc_route.is_none(),
+        ProvidedSurfaceKindV1::ClientRpc => {
+            surface.client_blob_route.is_none()
+                && surface
+                    .client_rpc_route
+                    .as_ref()
+                    .is_some_and(|route| valid_client_rpc_path(&route.path))
+        }
+        ProvidedSurfaceKindV1::ClientBlob => {
+            surface.client_rpc_route.is_none()
+                && surface.client_blob_route.as_ref().is_some_and(|route| {
+                    valid_client_blob_path(&route.path)
+                        && (1..=MAX_CLIENT_BLOB_RESPONSE_BYTES).contains(&route.max_response_bytes)
+                })
+        }
+        _ => surface.client_rpc_route.is_none() && surface.client_blob_route.is_none(),
     }
+}
+
+const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
+
+fn valid_client_blob_path(path: &str) -> bool {
+    path.starts_with("/api/blobs/")
+        && path.len() <= 512
+        && path
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'_' | b'-'))
+        && !path.contains("//")
+        && !path.ends_with('/')
 }
 
 fn valid_client_rpc_path(path: &str) -> bool {
@@ -545,11 +567,11 @@ fn value_matches_setting_type(value: &setting_value_v1::Value, value_type: i32) 
 mod tests {
     use super::{valid_vault_purpose_request, validate_descriptor_v1};
     use crate::v1::{
-        CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1, ClientRpcRouteV1,
-        ContractReferenceV1, IntegrationStateRequestV1, ModuleDescriptorV1, ModuleKindV1,
-        ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeArtifactRequestV1, RuntimeArtifactUseV1,
-        VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1,
-        capability_request_v1,
+        CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1, ClientBlobRouteV1,
+        ClientRpcRouteV1, ContractReferenceV1, IntegrationStateRequestV1, ModuleDescriptorV1,
+        ModuleKindV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeArtifactRequestV1,
+        RuntimeArtifactUseV1, VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1,
+        VaultTargetScopeV1, capability_request_v1,
     };
 
     fn owner_derived_key_purpose() -> VaultPurposeRequestV1 {
@@ -595,6 +617,36 @@ mod tests {
 
         let mut descriptor = client_rpc_descriptor();
         descriptor.capabilities[0].provides[0].kind = ProvidedSurfaceKindV1::QueryRpc as i32;
+        assert!(validate_descriptor_v1(&descriptor).is_err());
+    }
+
+    #[test]
+    fn client_blob_surface_requires_a_bounded_blob_path_and_no_rpc_route() {
+        let mut descriptor = client_rpc_descriptor();
+        let surface = &mut descriptor.capabilities[0].provides[0];
+        surface.kind = ProvidedSurfaceKindV1::ClientBlob as i32;
+        surface.client_rpc_route = None;
+        surface.client_blob_route = Some(ClientBlobRouteV1 {
+            path: "/api/blobs/notes/v1/content".to_owned(),
+            max_response_bytes: 256 * 1024,
+        });
+        assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
+
+        descriptor.capabilities[0].provides[0]
+            .client_blob_route
+            .as_mut()
+            .expect("route")
+            .max_response_bytes = 0;
+        assert!(validate_descriptor_v1(&descriptor).is_err());
+
+        let surface = &mut descriptor.capabilities[0].provides[0];
+        surface.client_blob_route = Some(ClientBlobRouteV1 {
+            path: "/api/blobs/notes/v1/content".to_owned(),
+            max_response_bytes: 1,
+        });
+        surface.client_rpc_route = Some(ClientRpcRouteV1 {
+            path: "/hermes.notes.v1.NotesQueryService/Query".to_owned(),
+        });
         assert!(validate_descriptor_v1(&descriptor).is_err());
     }
 
@@ -664,6 +716,7 @@ mod tests {
                     client_rpc_route: Some(ClientRpcRouteV1 {
                         path: "/hermes.notes.v1.NotesQueryService/Query".to_owned(),
                     }),
+                    client_blob_route: None,
                 }],
                 ..Default::default()
             }],

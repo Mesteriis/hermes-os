@@ -267,6 +267,7 @@ pub fn encode_module_request(
         contract: Some(mail_client_contract(contract)),
         request_id,
         request_payload: encode_request_payload(request)?,
+        logical_owner_id: String::new(),
     }
     .encode_to_vec())
 }

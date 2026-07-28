@@ -10,6 +10,10 @@ const GATEWAY_SESSION_CONTRACT = new URL('src/api/gateway/session_contract/src/b
 const GATEWAY_CONTRACT_MANIFEST = new URL('src/api/gateway/contracts/Cargo.toml', BACKEND_ROOT);
 const KERNEL_MANIFEST = new URL('src/kernel/Cargo.toml', BACKEND_ROOT);
 const KERNEL_GATEWAY = new URL('src/kernel/src/platform/gateway.rs', BACKEND_ROOT);
+const KERNEL_CLIENT_BLOB_GATEWAY = new URL(
+  'src/kernel/src/platform/gateway/client_blob.rs',
+  BACKEND_ROOT,
+);
 const KERNEL_BROWSER_GATEWAY = new URL('src/kernel/src/identity/browser_gateway.rs', BACKEND_ROOT);
 const GATEWAY_CONTRACT_BUILD = new URL('src/api/gateway/contracts/build.rs', BACKEND_ROOT);
 const COMMUNICATIONS_QUERY_CONTRACT = new URL(
@@ -99,17 +103,34 @@ test('Communications query remains an owner contract, not a Gateway wrapper serv
 });
 
 test('Gateway route composition is owner-neutral and has no owner schema build edge', async () => {
-  const [kernelGateway, gatewayBuild] = await Promise.all([
+  const [kernelGateway, kernelClientBlobGateway, gatewayBuild] = await Promise.all([
     readFile(KERNEL_GATEWAY, 'utf8'),
+    readFile(KERNEL_CLIENT_BLOB_GATEWAY, 'utf8'),
     readFile(GATEWAY_CONTRACT_BUILD, 'utf8'),
   ]);
 
   for (const marker of ['COMMUNICATIONS_', 'CommunicationsQuery', 'communications.query']) {
-    assert.ok(!kernelGateway.includes(marker), `Kernel Gateway hardcodes owner route marker ${marker}`);
+    for (const source of [kernelGateway, kernelClientBlobGateway]) {
+      assert.ok(!source.includes(marker), `Kernel Gateway hardcodes owner route marker ${marker}`);
+    }
   }
   for (const marker of ['communications-api', 'communications_query_schema', 'communications-query-v1.bin']) {
     assert.ok(!gatewayBuild.includes(marker), `Gateway contracts retain owner schema build edge ${marker}`);
   }
+});
+
+test('Core Gateway client Blob delivery stays descriptor and capability bound', async () => {
+  const adapter = await readFile(KERNEL_CLIENT_BLOB_GATEWAY, 'utf8');
+
+  assert.match(adapter, /approved_module_client_blob_routes/);
+  assert.match(adapter, /module_grant_snapshot/);
+  assert.match(adapter, /capability_ids\(\)/);
+  assert.match(adapter, /effective_managed_launch_record/);
+  assert.match(adapter, /effective_bundled_managed_launch_binding/);
+  assert.match(adapter, /ManagedRuntimeBlobSessionRequestV1/);
+  assert.match(adapter, /BlobDataOperationReadRangeV1/);
+  assert.match(adapter, /expected_plaintext_sha256/);
+  assert.doesNotMatch(adapter, /hermes_(communications|mail|telegram|whatsapp|zulip)/);
 });
 
 test('Core client bootstrap admits Communications and provider surfaces independently', async () => {

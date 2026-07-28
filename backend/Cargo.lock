@@ -1982,6 +1982,7 @@ dependencies = [
  "clap",
  "directories",
  "getrandom 0.4.3",
+ "hermes-blob-client",
  "hermes-gateway-protocol",
  "hermes-gateway-runtime",
  "hermes-gateway-session",

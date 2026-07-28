@@ -103,6 +103,7 @@ fn telegram_calls_client_capability_v1(
             client_rpc_route: Some(ClientRpcRouteV1 {
                 path: contract.connect_path().to_owned(),
             }),
+            client_blob_route: None,
         }],
         ..Default::default()
     }
@@ -127,6 +128,7 @@ fn telegram_automation_client_capability_v1(
             client_rpc_route: Some(ClientRpcRouteV1 {
                 path: contract.connect_path().to_owned(),
             }),
+            client_blob_route: None,
         }],
         ..Default::default()
     }
@@ -143,6 +145,7 @@ fn telegram_client_capability_v1(contract: TelegramClientContractV1) -> Capabili
             client_rpc_route: Some(ClientRpcRouteV1 {
                 path: contract.connect_path().to_owned(),
             }),
+            client_blob_route: None,
         }],
         ..Default::default()
     }

@@ -10,6 +10,7 @@ use crate::{SqliteControlStore, StoreError, valid_identity_token};
 
 use super::{
     blob_request::{insert_blob_quota_requests, validate_blob_quota_requests},
+    client_blob_route::{insert_client_blob_routes, validate_client_blob_routes},
     client_rpc_route::{insert_client_rpc_routes, validate_client_rpc_routes},
     event_request::{insert_event_route_requests, validate_event_route_requests},
     registry::{
@@ -38,6 +39,7 @@ impl SqliteControlStore {
         let scheduler_requests = requests.scheduler.to_vec();
         let vault_purpose_requests = requests.vault_purposes.to_vec();
         let client_rpc_routes = requests.client_rpc_routes.to_vec();
+        let client_blob_routes = requests.client_blob_routes.to_vec();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
             if let Some((request_digest, registration_id)) = transaction
@@ -71,6 +73,7 @@ impl SqliteControlStore {
             insert_scheduler_job_requests(&transaction, &scheduler_requests)?;
             insert_vault_purpose_requests(&transaction, &vault_purpose_requests)?;
             insert_client_rpc_routes(&transaction, &client_rpc_routes)?;
+            insert_client_blob_routes(&transaction, &client_blob_routes)?;
             transaction.execute(
                 "INSERT INTO hermes_kernel_bundled_artifact_proposal
                  (operation_id, request_digest, registration_id, distribution_id,
@@ -118,7 +121,13 @@ fn validate_proposal(
     validate_blob_quota_requests(registration, capabilities, requests.blobs)?;
     validate_scheduler_job_requests(registration, capabilities, requests.scheduler)?;
     validate_vault_purpose_requests(registration, capabilities, requests.vault_purposes)?;
-    validate_client_rpc_routes(registration, capabilities, requests.client_rpc_routes)
+    validate_client_rpc_routes(registration, capabilities, requests.client_rpc_routes)?;
+    validate_client_blob_routes(
+        registration,
+        capabilities,
+        requests.blobs,
+        requests.client_blob_routes,
+    )
 }
 
 fn as_sql(value: u64) -> Result<i64, StoreError> {

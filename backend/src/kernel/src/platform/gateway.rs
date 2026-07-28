@@ -1,5 +1,7 @@
 //! Kernel-owned admission for the narrow browser Gateway foundation.
 
+#[path = "gateway/client_blob.rs"]
+mod client_blob;
 #[path = "gateway/owner_device_proof.rs"]
 pub(crate) mod owner_device_proof;
 
@@ -372,7 +374,7 @@ pub(crate) fn gateway_service(
         let relay = supervisor.relay_port();
         let request_id_sequence = Arc::clone(&request_id_sequence);
         Arc::new(
-            move |route: &ClientRpcRouteV1, _logical_owner_id: &str, request_payload: &[u8]| {
+            move |route: &ClientRpcRouteV1, logical_owner_id: &str, request_payload: &[u8]| {
                 // A browser session is authorized for the logical human owner. A
                 // route owner is the admitted module/domain namespace, such as
                 // `communications`; these identifiers intentionally never match.
@@ -398,10 +400,16 @@ pub(crate) fn gateway_service(
                     .effective_managed_launch_record(route.registration_id())
                     .map_err(|_| ClientRpcRouteErrorV1::Internal)?
                     .ok_or(ClientRpcRouteErrorV1::Unavailable)?;
-                let request_id = request_id_sequence.fetch_add(1, Ordering::Relaxed).max(1);
+                let request_id = request_id_sequence
+                    .fetch_add(1, Ordering::Relaxed)
+                    .wrapping_add(1);
+                if request_id == 0 {
+                    return Err(ClientRpcRouteErrorV1::Unavailable);
+                }
                 let request = encode_owner_client_rpc_module_request(
                     snapshot.registration().module_id(),
                     route,
+                    logical_owner_id,
                     request_id,
                     request_payload,
                 )
@@ -446,8 +454,17 @@ pub(crate) fn gateway_service(
             )
         })
         .collect();
+    let client_blob_routes = client_blob::compose_client_blob_routers(
+        Arc::clone(&store),
+        data_dir,
+        supervisor.clone(),
+        Arc::clone(&session),
+        Arc::clone(&request_id_sequence),
+    )?;
     let mut service = GatewayApplicationRouter::new(true, Arc::clone(&session), realtime)
         .with_client_rpc_routes(client_rpc_routes)
+        .map_err(str::to_owned)?
+        .with_client_blob_routes(client_blob_routes)
         .map_err(str::to_owned)?;
     if configuration.is_lan_development() {
         service = service
@@ -640,10 +657,15 @@ pub(crate) fn required_browser_bootstrap_manifest(
 fn encode_owner_client_rpc_module_request(
     module_id: &str,
     route: &ClientRpcRouteV1,
+    logical_owner_id: &str,
     request_id: u64,
     request_payload: &[u8],
 ) -> Result<Vec<u8>, ()> {
-    if module_id.is_empty() || request_id == 0 || request_payload.is_empty() {
+    if module_id.is_empty()
+        || logical_owner_id.is_empty()
+        || request_id == 0
+        || request_payload.is_empty()
+    {
         return Err(());
     }
     Ok(ModuleClientRequestV1 {
@@ -659,6 +681,7 @@ fn encode_owner_client_rpc_module_request(
         }),
         request_id,
         request_payload: request_payload.to_vec(),
+        logical_owner_id: logical_owner_id.to_owned(),
     }
     .encode_to_vec())
 }

@@ -500,6 +500,7 @@ fn admit_owner_browser_and_mail(store: &Arc<SqliteControlStore>) -> SigningKey {
                 scheduler: &[],
                 vault_purposes: std::slice::from_ref(&purpose),
                 client_rpc_routes: &[],
+                client_blob_routes: &[],
             },
         )
         .expect("record Mail registration");

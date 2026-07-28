@@ -112,6 +112,7 @@ fn durable_consumer(
             kind: ProvidedSurfaceKindV1::DurableConsumer as i32,
             contract: Some(contract.clone()),
             client_rpc_route: None,
+            client_blob_route: None,
         }],
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::EventRoute(EventRouteRequestV1 {
@@ -138,6 +139,7 @@ fn verdict_publisher() -> CapabilityDescriptorV1 {
             kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
             contract: Some(contract),
             client_rpc_route: None,
+            client_blob_route: None,
         }],
         requests: vec![communication_attachment_safety_verdict_observed_publish_request_v1()],
         ..Default::default()

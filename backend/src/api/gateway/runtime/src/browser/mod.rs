@@ -1,5 +1,6 @@
 mod auth;
 mod bootstrap;
+mod client_blob;
 mod client_bootstrap;
 mod client_rpc;
 mod owner_principal;
@@ -10,6 +11,10 @@ mod session;
 
 pub use auth::{BrowserAuthenticationRouter, SharedBrowserGatewaySessionService};
 pub use bootstrap::BrowserBootstrapRouter;
+pub use client_blob::{
+    ClientBlobContractVersionV1, ClientBlobRouteErrorV1, ClientBlobRouteHandler, ClientBlobRouteV1,
+    ClientBlobRouter, ClientBlobTransportV1,
+};
 pub use client_bootstrap::ClientBootstrapRouter;
 pub use client_rpc::{
     ClientRpcContractVersionV1, ClientRpcRouteErrorV1, ClientRpcRouteHandler, ClientRpcRouteV1,

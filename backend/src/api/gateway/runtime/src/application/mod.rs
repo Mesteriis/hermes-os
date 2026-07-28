@@ -18,8 +18,9 @@ use hyper::{Response, StatusCode};
 use crate::{
     BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter,
     BrowserRealtimeRouter, BrowserRealtimeSubscriptionSource, BrowserSessionStatusRouter,
-    ClientBootstrapRouter, ClientRpcRouter, GatewayHttpResponse, GatewayTechnicalRouter,
-    OwnerModuleSettingsRouter, OwnerVaultProvisioningRouter, SharedBrowserGatewaySessionService,
+    ClientBlobRouter, ClientBootstrapRouter, ClientRpcRouter, GatewayHttpResponse,
+    GatewayTechnicalRouter, OwnerModuleSettingsRouter, OwnerVaultProvisioningRouter,
+    SharedBrowserGatewaySessionService,
 };
 
 const AUTHENTICATION_PREFIX: &str = "/browser/v1/authentication/";
@@ -38,6 +39,7 @@ pub struct GatewayApplicationRouter<A, S> {
     browser_bootstrap: Option<BrowserBootstrapRouter>,
     browser_session_status: BrowserSessionStatusRouter<A>,
     client_bootstrap: ClientBootstrapRouter<A>,
+    client_blob_routes: Vec<ClientBlobRouter<A>>,
     client_rpc_routes: Vec<ClientRpcRouter<A>>,
     owner_module_settings: Option<OwnerModuleSettingsRouter<A>>,
     owner_vault_provisioning: Option<OwnerVaultProvisioningRouter<A>>,
@@ -61,6 +63,7 @@ impl<A, S> Clone for GatewayApplicationRouter<A, S> {
             browser_bootstrap: self.browser_bootstrap.clone(),
             browser_session_status: self.browser_session_status.clone(),
             client_bootstrap: self.client_bootstrap.clone(),
+            client_blob_routes: self.client_blob_routes.clone(),
             client_rpc_routes: self.client_rpc_routes.clone(),
             owner_module_settings: self.owner_module_settings.clone(),
             owner_vault_provisioning: self.owner_vault_provisioning.clone(),
@@ -84,6 +87,7 @@ where
             browser_bootstrap: None,
             browser_session_status: BrowserSessionStatusRouter::from_shared(service.clone()),
             client_bootstrap: ClientBootstrapRouter::from_shared(service.clone()),
+            client_blob_routes: Vec::new(),
             client_rpc_routes: Vec::new(),
             owner_module_settings: None,
             owner_vault_provisioning: None,
@@ -112,7 +116,33 @@ where
         if !routes.iter().all(|route| paths.insert(route.path())) {
             return Err("duplicate owner ClientRpc route");
         }
+        if routes.iter().any(|route| {
+            self.client_blob_routes
+                .iter()
+                .any(|blob| blob.path() == route.path())
+        }) {
+            return Err("owner client route path conflict");
+        }
         self.client_rpc_routes = routes;
+        Ok(self)
+    }
+
+    pub fn with_client_blob_routes(
+        mut self,
+        routes: Vec<ClientBlobRouter<A>>,
+    ) -> Result<Self, &'static str> {
+        let mut paths = std::collections::BTreeSet::new();
+        if !routes.iter().all(|route| paths.insert(route.path())) {
+            return Err("duplicate owner client Blob route");
+        }
+        if routes.iter().any(|route| {
+            self.client_rpc_routes
+                .iter()
+                .any(|rpc| rpc.path() == route.path())
+        }) {
+            return Err("owner client route path conflict");
+        }
+        self.client_blob_routes = routes;
         Ok(self)
     }
 
@@ -170,7 +200,7 @@ where
         B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     {
         let path = request.uri().path();
-        let route = route_class(path, &self.client_rpc_routes);
+        let route = route_class(path, &self.client_blob_routes, &self.client_rpc_routes);
         let method = request.method().clone();
         if let Some(policy) = &self.development_policy
             && !policy.admits(&request)
@@ -233,6 +263,13 @@ where
                 Some(router) => router.route(request).await,
                 None => self.technical.route(request.method(), path),
             };
+        }
+        if let Some(router) = self
+            .client_blob_routes
+            .iter()
+            .find(|router| router.path() == path)
+        {
+            return router.route(request).await;
         }
         if let Some(router) = self
             .client_rpc_routes
@@ -311,7 +348,11 @@ impl DevelopmentRequestPolicyV1 {
     }
 }
 
-fn route_class<A>(path: &str, client_rpc_routes: &[ClientRpcRouter<A>]) -> &'static str
+fn route_class<A>(
+    path: &str,
+    client_blob_routes: &[ClientBlobRouter<A>],
+    client_rpc_routes: &[ClientRpcRouter<A>],
+) -> &'static str
 where
     A: BrowserAuthenticationAuthority,
 {
@@ -326,6 +367,7 @@ where
         path if path.starts_with(PAIRING_PREFIX) => "browser_pairing",
         path if OwnerVaultProvisioningRouter::<A>::admits_path(path) => "owner_vault_provisioning",
         path if OwnerModuleSettingsRouter::<A>::admits_path(path) => "owner_module_settings",
+        path if client_blob_routes.iter().any(|route| route.path() == path) => "client_blob",
         path if client_rpc_routes.iter().any(|route| route.path() == path) => "client_rpc",
         _ => "unknown",
     }

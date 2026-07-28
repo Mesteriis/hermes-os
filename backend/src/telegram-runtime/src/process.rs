@@ -1032,6 +1032,7 @@ mod control_dispatch_tests {
                                     }),
                                     request_id: 41,
                                     request_payload: vec![1],
+                                    logical_owner_id: String::new(),
                                 }),
                             },
                         )),

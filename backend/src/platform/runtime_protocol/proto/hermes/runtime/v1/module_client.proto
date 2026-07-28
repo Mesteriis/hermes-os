@@ -14,6 +14,9 @@ message ModuleClientRequestV1 {
   ContractReferenceV1 contract = 4;
   uint64 request_id = 5;
   bytes request_payload = 6;
+  // Logical human owner authenticated by Core Gateway. Empty only for
+  // non-client test/internal callers that cannot authorize client_blob.
+  string logical_owner_id = 7;
 }
 
 message ModuleClientResponseV1 {
@@ -21,4 +24,15 @@ message ModuleClientResponseV1 {
   uint64 request_id = 2;
   bytes response_payload = 3;
   string error_code = 4;
+}
+
+// Technical metadata returned only to the Core Gateway client_blob adapter
+// after an owner runtime consumes its opaque read capability. Content bytes
+// and Blob platform grants never cross the module control channel.
+message ModuleClientBlobAuthorizationV1 {
+  uint32 protocol_major = 1;
+  bytes reference_id = 2;
+  uint64 declared_size = 3;
+  bytes expected_plaintext_sha256 = 4;
+  uint32 backup_class = 5;
 }

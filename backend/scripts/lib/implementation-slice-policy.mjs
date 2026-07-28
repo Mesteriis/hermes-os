@@ -412,6 +412,7 @@ const SCHEDULER_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
 const GATEWAY_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...SCHEDULER_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-kernel': [
+    { name: 'hermes-blob-client', kind: 'normal' },
     ...SCHEDULER_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST['hermes-kernel'],
     { name: 'hermes-gateway-runtime', kind: 'normal' },
     { name: 'hermes-gateway-session', kind: 'normal' },

@@ -122,6 +122,7 @@ mod tests {
             contract: Some(client_contract()),
             request_id: 7,
             request_payload: payload,
+            logical_owner_id: String::new(),
         };
 
         let (request_id, request) =
@@ -146,6 +147,7 @@ mod tests {
             contract: Some(client_contract()),
             request_id: 8,
             request_payload: claim,
+            logical_owner_id: String::new(),
         };
 
         let (_, request) =

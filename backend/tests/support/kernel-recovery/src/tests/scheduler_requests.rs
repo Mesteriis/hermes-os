@@ -33,6 +33,7 @@ fn control_store_retains_owner_bound_scheduler_job_contracts_atomically() {
                 scheduler: std::slice::from_ref(&request),
                 vault_purposes: &[],
                 client_rpc_routes: &[],
+                client_blob_routes: &[],
             },
         )
         .expect("persist pending registration and Scheduler request together");
@@ -91,6 +92,7 @@ fn control_store_rejects_foreign_or_duplicate_scheduler_job_contracts_atomically
                         scheduler: &requests,
                         vault_purposes: &[],
                         client_rpc_routes: &[],
+                        client_blob_routes: &[],
                     },
                 )
                 .is_err()
@@ -156,6 +158,7 @@ fn scheduler_schedule_admission_requires_the_current_exact_approved_job_contract
                 scheduler: std::slice::from_ref(&request),
                 vault_purposes: &[],
                 client_rpc_routes: &[],
+                client_blob_routes: &[],
             },
         )
         .expect("persist Scheduler job request");

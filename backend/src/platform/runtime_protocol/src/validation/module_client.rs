@@ -19,6 +19,7 @@ pub fn validate_module_client_request_v1(
     if request.protocol_major != PROTOCOL_MAJOR
         || !valid_identifier(&request.module_id)
         || !valid_identifier(&request.owner_id)
+        || (!request.logical_owner_id.is_empty() && !valid_identifier(&request.logical_owner_id))
         || request.request_id == 0
         || request.request_payload.is_empty()
         || request.request_payload.len() > MAX_PAYLOAD_BYTES
@@ -91,6 +92,7 @@ mod tests {
             contract: Some(contract()),
             request_id: 1,
             request_payload: vec![1],
+            logical_owner_id: String::new(),
         };
         assert_eq!(validate_module_client_request_v1(&request), Ok(()));
     }
