@@ -34,6 +34,7 @@ pub struct CommunicationsEvidenceExportSourceItemV1 {
 pub enum CommunicationsEvidenceExportSourceErrorV1 {
     InvalidRequest,
     NotFound,
+    StaleRevision,
     ContentLimit,
     InvalidRow,
     StorageUnavailable,
@@ -173,6 +174,7 @@ impl CommunicationsDurablePersistence {
         &self,
         command_message_id: [u8; 16],
         command_envelope_sha256: [u8; 32],
+        expected_current_snapshot: Option<&[CommunicationsEvidenceExportSourceItemV1]>,
         result_outbox: &OutboxRecordV1,
         created_at_unix_seconds: i64,
     ) -> Result<CommunicationsConsumeOutcomeV1, CommunicationsEvidenceExportSourceErrorV1> {
@@ -188,6 +190,41 @@ impl CommunicationsDurablePersistence {
             .begin()
             .await
             .map_err(|_| CommunicationsEvidenceExportSourceErrorV1::StorageUnavailable)?;
+        if let Some(snapshot) = expected_current_snapshot {
+            validate_current_snapshot(snapshot)?;
+            let message_ids = snapshot
+                .iter()
+                .map(|item| item.message_id.to_vec())
+                .collect::<Vec<_>>();
+            let revisions = snapshot
+                .iter()
+                .map(|item| {
+                    i64::try_from(item.evidence_revision)
+                        .map_err(|_| CommunicationsEvidenceExportSourceErrorV1::InvalidRequest)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let current_count: i64 = sqlx::query_scalar(
+                "WITH expected(message_id, canonical_revision) AS (
+                   SELECT message_id, canonical_revision
+                   FROM unnest($1::BYTEA[], $2::BIGINT[])
+                     AS input(message_id, canonical_revision)
+                 )
+                 SELECT COUNT(*)
+                 FROM expected
+                 JOIN hermes_data.communications_messages message
+                   ON message.message_id = expected.message_id
+                  AND message.canonical_revision = expected.canonical_revision
+                  AND message.lifecycle_state = 1",
+            )
+            .bind(message_ids)
+            .bind(revisions)
+            .fetch_one(&mut *transaction)
+            .await
+            .map_err(|_| CommunicationsEvidenceExportSourceErrorV1::StorageUnavailable)?;
+            if usize::try_from(current_count).ok() != Some(snapshot.len()) {
+                return Err(CommunicationsEvidenceExportSourceErrorV1::StaleRevision);
+            }
+        }
         let inserted = sqlx::query(
             "INSERT INTO hermes_data.communications_event_inbox
                (message_id, envelope_sha256)
@@ -238,6 +275,20 @@ impl CommunicationsDurablePersistence {
             .map_err(|_| CommunicationsEvidenceExportSourceErrorV1::StorageUnavailable)?;
         Ok(CommunicationsConsumeOutcomeV1::Applied)
     }
+}
+
+fn validate_current_snapshot(
+    snapshot: &[CommunicationsEvidenceExportSourceItemV1],
+) -> Result<(), CommunicationsEvidenceExportSourceErrorV1> {
+    let message_ids = snapshot
+        .iter()
+        .map(|item| item.message_id)
+        .collect::<Vec<_>>();
+    validate_message_ids(&message_ids)?;
+    if snapshot.iter().any(|item| item.evidence_revision == 0) {
+        return Err(CommunicationsEvidenceExportSourceErrorV1::InvalidRequest);
+    }
+    Ok(())
 }
 
 fn validate_message_ids(
@@ -340,6 +391,35 @@ mod tests {
         assert_eq!(
             checked_export_source_bytes(u64::MAX, 1),
             Err(CommunicationsEvidenceExportSourceErrorV1::ContentLimit)
+        );
+    }
+
+    #[test]
+    fn prepared_result_requires_a_nonempty_unique_revision_snapshot() {
+        let mut item = CommunicationsEvidenceExportSourceItemV1 {
+            message_id: [1; 16],
+            conversation_id: [2; 16],
+            evidence_id: [3; 16],
+            evidence_revision: 1,
+            direction: CommunicationDirectionV1::Incoming,
+            occurred_at_unix_seconds: 1,
+            observed_at_unix_seconds: 1,
+            participant_display_label: None,
+            body: None,
+        };
+        assert_eq!(validate_current_snapshot(&[item.clone()]), Ok(()));
+        assert_eq!(
+            validate_current_snapshot(&[]),
+            Err(CommunicationsEvidenceExportSourceErrorV1::InvalidRequest)
+        );
+        assert_eq!(
+            validate_current_snapshot(&[item.clone(), item.clone()]),
+            Err(CommunicationsEvidenceExportSourceErrorV1::InvalidRequest)
+        );
+        item.evidence_revision = 0;
+        assert_eq!(
+            validate_current_snapshot(&[item]),
+            Err(CommunicationsEvidenceExportSourceErrorV1::InvalidRequest)
         );
     }
 }

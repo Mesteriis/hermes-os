@@ -89,6 +89,7 @@ pub async fn consume_next_evidence_export_prepare_v1(
                 .persist_evidence_export_source_result(
                     *record.message_id(),
                     *record.envelope_sha256(),
+                    None,
                     &outbox,
                     context.recorded_at_unix_seconds,
                 )
@@ -112,6 +113,7 @@ pub async fn consume_next_evidence_export_prepare_v1(
                 .persist_evidence_export_source_result(
                     *record.message_id(),
                     *record.envelope_sha256(),
+                    None,
                     &outbox,
                     context.recorded_at_unix_seconds,
                 )
@@ -148,6 +150,7 @@ pub async fn consume_next_evidence_export_prepare_v1(
                 .persist_evidence_export_source_result(
                     *record.message_id(),
                     *record.envelope_sha256(),
+                    None,
                     &outbox,
                     context.recorded_at_unix_seconds,
                 )
@@ -167,15 +170,38 @@ pub async fn consume_next_evidence_export_prepare_v1(
         &envelope_context,
     )
     .map_err(|_| CommunicationsEvidenceExportDeliveryErrorV1::InvalidPayload)?;
-    let outcome = persistence
+    let outcome = match persistence
         .persist_evidence_export_source_result(
             *record.message_id(),
             *record.envelope_sha256(),
+            Some(&snapshot),
             &outbox,
             context.recorded_at_unix_seconds,
         )
         .await
-        .map_err(persistence_error)?;
+    {
+        Ok(outcome) => outcome,
+        Err(CommunicationsEvidenceExportSourceErrorV1::StaleRevision) => {
+            let outbox = rejected_outbox(
+                record.message_id(),
+                decoded.export_id,
+                &decoded.logical_owner_id,
+                EvidenceExportRejectCodeV1::EvidenceExportRejectCodeStaleRevision,
+                context,
+            )?;
+            persistence
+                .persist_evidence_export_source_result(
+                    *record.message_id(),
+                    *record.envelope_sha256(),
+                    None,
+                    &outbox,
+                    context.recorded_at_unix_seconds,
+                )
+                .await
+                .map_err(persistence_error)?
+        }
+        Err(error) => return Err(persistence_error(error)),
+    };
     delivery.acknowledge().await.map_err(delivery_error)?;
     Ok(outcome)
 }
@@ -439,6 +465,9 @@ fn snapshot_rejection_code(
         }
         CommunicationsEvidenceExportSourceErrorV1::NotFound => {
             Ok(EvidenceExportRejectCodeV1::EvidenceExportRejectCodeNotFound)
+        }
+        CommunicationsEvidenceExportSourceErrorV1::StaleRevision => {
+            Ok(EvidenceExportRejectCodeV1::EvidenceExportRejectCodeStaleRevision)
         }
         CommunicationsEvidenceExportSourceErrorV1::ContentLimit => {
             Ok(EvidenceExportRejectCodeV1::EvidenceExportRejectCodeContentLimit)
