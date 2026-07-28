@@ -595,17 +595,32 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     .expect("decode one-use Communications Export read ticket");
     assert_eq!(ticket.opaque_read_capability.len(), 32);
     assert!(ticket.declared_bytes > 0);
+    let blob_outage_ticket = IssueEvidenceExportReadResponseV1::decode(
+        route(
+            6,
+            communications_export_ticket_contract_reference_v1(),
+            IssueEvidenceExportReadRequestV1 {
+                protocol_major: 1,
+                export_id: export_id.to_vec(),
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("issue read ticket before Blob outage");
     let browser_cookie = assert_communications_export_gateway_delivery(
         &store,
         &supervisor,
         &root,
         &data,
+        release.kernel(),
         ticket.opaque_read_capability,
         ticket.declared_bytes,
+        blob_outage_ticket.opaque_read_capability,
     );
     let revoked_ticket = IssueEvidenceExportReadResponseV1::decode(
         route(
-            6,
+            7,
             communications_export_ticket_contract_reference_v1(),
             IssueEvidenceExportReadRequestV1 {
                 protocol_major: 1,
@@ -643,8 +658,10 @@ fn assert_communications_export_gateway_delivery(
     supervisor: &ManagedRuntimeSupervisor,
     root: &std::path::Path,
     kernel_data: &std::path::Path,
+    kernel_executable: &std::path::Path,
     opaque_read_capability: Vec<u8>,
     declared_bytes: u64,
+    blob_outage_read_capability: Vec<u8>,
 ) -> String {
     use hermes_communications_export_api::{
         COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1, wire::EvidenceExportArtifactReadRequestV1,
@@ -713,6 +730,50 @@ fn assert_communications_export_gateway_delivery(
             .any(|window| window == b"fixture source body for custody transfer")
     );
     assert_eq!(read().status(), hyper::StatusCode::NOT_FOUND);
+    let blob_outage_read_request = EvidenceExportArtifactReadRequestV1 {
+        opaque_read_capability: blob_outage_read_capability,
+    }
+    .encode_to_vec();
+    let read_during_blob_outage = || {
+        runtime.block_on(
+            router.route(
+                hyper::Request::builder()
+                    .method("POST")
+                    .uri(COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1)
+                    .header("content-type", "application/proto")
+                    .header("cookie", &cookie)
+                    .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                        blob_outage_read_request.clone(),
+                    )))
+                    .expect("Gateway Communications Export Blob-outage read request"),
+            ),
+        )
+    };
+
+    supervisor
+        .stop("blob")
+        .expect("stop Blob for Communications Export artifact outage");
+    assert_eq!(
+        read_during_blob_outage().status(),
+        hyper::StatusCode::SERVICE_UNAVAILABLE,
+        "Blob outage fails closed without disclosing Communications Export artifact bytes"
+    );
+    assert_eq!(
+        blob_launch::start_from_kernel(
+            supervisor,
+            store,
+            kernel_executable,
+            kernel_data,
+            &root.join("runtime"),
+        )
+        .expect("restart signed Blob runtime after Communications Export artifact outage"),
+        2
+    );
+    assert_eq!(
+        read_during_blob_outage().status(),
+        hyper::StatusCode::NOT_FOUND,
+        "artifact ticket is consumed atomically before the failed Blob read and cannot be replayed"
+    );
     cookie
 }
 
