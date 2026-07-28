@@ -2,8 +2,9 @@
 
 - Статус: принято
 - Дата: 2026-07-28
-- Состояние реализации: planned. Gate открывается только после реализации
-  ADR-0314 и полного managed/browser evidence этого решения.
+- Состояние реализации: implemented. Gate закрыт отдельным content API,
+  owner-local receipt authorization, one-use runtime tickets, authenticated
+  client Blob delivery, generated frontend adapter и inert UTF-8 presentation.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0212, ADR-0213, ADR-0230,
   ADR-0231, ADR-0240, ADR-0254, ADR-0257, ADR-0279, ADR-0281, ADR-0313,
   ADR-0314
@@ -126,4 +127,3 @@ Gate становится `implemented` только атомарно при н�
 - invalidate all runtime-local tickets;
 - keep canonical evidence and Blob custody unchanged;
 - never fall back to provider operational content or legacy REST.
-

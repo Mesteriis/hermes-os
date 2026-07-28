@@ -403,7 +403,7 @@
       "gate": "communications_content_read_v1",
       "role": "domain",
       "owner": "communications",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["communications_canonical_read_v2", "communications.blob.v1"]
     },
     {

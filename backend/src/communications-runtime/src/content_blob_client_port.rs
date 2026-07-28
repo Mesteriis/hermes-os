@@ -48,16 +48,13 @@ pub async fn handle_module_content_blob_request_v1(
     else {
         return Ok(module_error(request.request_id, "NOT_FOUND"));
     };
-    let Some(current) = persistence
+    let current = persistence
         .current_message_body_content_receipt(consumed.message_id)
         .await
-        .map_err(|_| CommunicationsContentBlobClientPortErrorV1::Unavailable)?
-    else {
+        .map_err(|_| CommunicationsContentBlobClientPortErrorV1::Unavailable)?;
+    let Some(current) = current_receipt_if_unchanged(current, &consumed.receipt) else {
         return Ok(module_error(request.request_id, "NOT_FOUND"));
     };
-    if current != consumed.receipt {
-        return Ok(module_error(request.request_id, "NOT_FOUND"));
-    }
     Ok(module_response(
         request.request_id,
         ModuleClientBlobAuthorizationV1 {
@@ -69,6 +66,13 @@ pub async fn handle_module_content_blob_request_v1(
         }
         .encode_to_vec(),
     ))
+}
+
+fn current_receipt_if_unchanged(
+    current: Option<hermes_communications_persistence::CommunicationsBodyContentReceiptV1>,
+    ticket_receipt: &hermes_communications_persistence::CommunicationsBodyContentReceiptV1,
+) -> Option<hermes_communications_persistence::CommunicationsBodyContentReceiptV1> {
+    current.filter(|receipt| receipt == ticket_receipt)
 }
 
 fn decode_module_request(
@@ -118,4 +122,35 @@ fn now_unix_seconds() -> Result<i64, CommunicationsContentBlobClientPortErrorV1>
             .as_secs(),
     )
     .map_err(|_| CommunicationsContentBlobClientPortErrorV1::Unavailable)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hermes_communications_persistence::CommunicationsBodyContentReceiptV1;
+
+    #[test]
+    fn edit_delete_or_replaced_receipt_invalidates_the_ticket() {
+        let receipt = CommunicationsBodyContentReceiptV1 {
+            reference_id: [1; 16],
+            declared_bytes: 32,
+            plaintext_sha256: [2; 32],
+            backup_class: 1,
+        };
+        assert_eq!(
+            current_receipt_if_unchanged(Some(receipt.clone()), &receipt),
+            Some(receipt.clone())
+        );
+        assert_eq!(current_receipt_if_unchanged(None, &receipt), None);
+        assert_eq!(
+            current_receipt_if_unchanged(
+                Some(CommunicationsBodyContentReceiptV1 {
+                    reference_id: [3; 16],
+                    ..receipt.clone()
+                }),
+                &receipt,
+            ),
+            None
+        );
+    }
 }
