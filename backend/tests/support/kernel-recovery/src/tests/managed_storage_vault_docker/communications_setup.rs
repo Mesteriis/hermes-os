@@ -1545,13 +1545,13 @@ pub(super) fn publish_and_wait_for_communications_message_edit(
     supervisor: &ManagedRuntimeSupervisor,
     kernel_data: &Path,
     message_id: &[u8],
+    plaintext: Vec<u8>,
+    observed_at_unix_seconds: i64,
+    fixture_marker: u8,
 ) -> Vec<u8> {
-    const OBSERVED_AT_UNIX_SECONDS: i64 = 1_783_024_009;
-
-    let plaintext = b"fixture edited source body for custody transfer".to_vec();
     let plaintext_sha256: [u8; 32] = Sha256::digest(&plaintext).into();
-    let reference_id = [10; 16];
-    let channel_binding = vec![10; 32];
+    let reference_id = [fixture_marker; 16];
+    let channel_binding = vec![fixture_marker; 32];
     let launch = store
         .effective_managed_launch_record(FIXTURE_SOURCE_REGISTRATION)
         .expect("read fixture source integration launch")
@@ -1572,7 +1572,7 @@ pub(super) fn publish_and_wait_for_communications_message_edit(
             None,
         ),
         ManagedRuntimeBlobSessionRequestV1 {
-            request_id: vec![10; 16],
+            request_id: vec![fixture_marker; 16],
             capability_id: FIXTURE_SOURCE_CAPABILITY_ID.to_owned(),
             operation: BlobDataOperationV1::BlobDataOperationWriteV1 as u32,
             channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
@@ -1601,7 +1601,7 @@ pub(super) fn publish_and_wait_for_communications_message_edit(
         .expect("write edited source integration Blob content");
 
     let draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
-        "managed-edited-body-observation-1",
+        format!("managed-edited-body-observation-{fixture_marker}"),
         hermes_communications_ingress::SourceEnvelope {
             provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
             external_record_id: "integration-private-body-record-1".to_owned(),
@@ -1619,13 +1619,13 @@ pub(super) fn publish_and_wait_for_communications_message_edit(
         hermes_communications_ingress::CommunicationEvidenceKindV1::MessageEdited,
         hermes_communications_ingress::BodyAvailabilityV1::AdmittedBlob,
         hermes_communications_ingress::CommunicationDirectionV1::Incoming,
-        Some(OBSERVED_AT_UNIX_SECONDS),
+        Some(observed_at_unix_seconds),
     )
     .expect("build edited-message ingress draft");
     let draft = hermes_communications_ingress::with_admitted_body_blob(
         draft,
         hermes_communications_ingress::BodyBlobReceiptV1 {
-            blob_ref: "blob://fixture-source/admitted-body-edited-1".to_owned(),
+            blob_ref: format!("blob://fixture-source/admitted-body-edited-{fixture_marker}"),
             reference_id,
             declared_bytes: u64::try_from(plaintext.len()).expect("edited fixture body size"),
             sha256: plaintext_sha256,
@@ -1639,7 +1639,7 @@ pub(super) fn publish_and_wait_for_communications_message_edit(
             runtime_instance_id: "integration-test-runtime-1".to_owned(),
             runtime_generation: 1,
             module_id: "integration-test-runtime".to_owned(),
-            recorded_at_unix_seconds: OBSERVED_AT_UNIX_SECONDS,
+            recorded_at_unix_seconds: observed_at_unix_seconds,
             recorded_at_nanos: 0,
         },
     )
@@ -1690,7 +1690,7 @@ pub(super) fn publish_and_wait_for_communications_message_edit(
             .expect("edited canonical message remains projected");
         if message.lifecycle_state == 1
             && message.body_state == 4
-            && message.last_observed_at_unix_seconds == OBSERVED_AT_UNIX_SECONDS
+            && message.last_observed_at_unix_seconds == observed_at_unix_seconds
         {
             return plaintext;
         }

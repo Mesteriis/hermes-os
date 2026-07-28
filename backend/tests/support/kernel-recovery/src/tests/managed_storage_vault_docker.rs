@@ -587,8 +587,15 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         wrong_owner_ticket.error,
         CommunicationsExportErrorCodeV1::CommunicationsExportErrorCodeNotFound as i32
     );
-    let edited_body =
-        publish_and_wait_for_communications_message_edit(&store, &supervisor, &data, &message_id);
+    let edited_body = publish_and_wait_for_communications_message_edit(
+        &store,
+        &supervisor,
+        &data,
+        &message_id,
+        b"fixture edited source body for custody transfer".to_vec(),
+        1_783_024_009,
+        10,
+    );
     let edited_export_id = [15; 16];
     let edited_start = StartEvidenceExportResponseV1::decode(
         route(
@@ -741,6 +748,61 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
             status.status != EvidenceExportStatusV1::EvidenceExportStatusRejected as i32
                 && std::time::Instant::now() < deadline,
             "persisted export request must resume after NATS recovery; status={status:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let invalid_utf8_body = vec![0xf0, 0x28, 0x8c, 0x28];
+    assert_eq!(
+        publish_and_wait_for_communications_message_edit(
+            &store,
+            &supervisor,
+            &data,
+            &message_id,
+            invalid_utf8_body.clone(),
+            1_783_024_010,
+            11,
+        ),
+        invalid_utf8_body,
+    );
+    let invalid_utf8_export_id = [17; 16];
+    let invalid_utf8_start = StartEvidenceExportResponseV1::decode(
+        route(
+            22,
+            communications_export_command_contract_reference_v1(),
+            StartEvidenceExportRequestV1 {
+                protocol_major: 1,
+                operation_id: invalid_utf8_export_id.to_vec(),
+                message_ids: vec![message_id.clone()],
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode accepted invalid-UTF8 export command");
+    assert_eq!(invalid_utf8_start.export_id, invalid_utf8_export_id);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let status = GetEvidenceExportStatusResponseV1::decode(
+            route(
+                23,
+                communications_export_query_contract_reference_v1(),
+                GetEvidenceExportStatusRequestV1 {
+                    protocol_major: 1,
+                    export_id: invalid_utf8_export_id.to_vec(),
+                }
+                .encode_to_vec(),
+            )
+            .as_slice(),
+        )
+        .expect("decode invalid-UTF8 Communications Export status");
+        if status.status == EvidenceExportStatusV1::EvidenceExportStatusRejected as i32 {
+            assert_eq!(status.completed_items, 0);
+            assert_eq!(status.artifact_bytes, 0);
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "invalid UTF-8 canonical body must reach terminal rejected export status; status={status:?}"
         );
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
