@@ -25,4 +25,4 @@ pre-commit:
 
 pre-push:
 	@$(MAKE) -C backend ci
-	@cd frontend && pnpm validate
+	@cd frontend && HERMES_STORYBOOK_PORT=6007 pnpm validate
