@@ -78,7 +78,13 @@ pub async fn consume_next_evidence_export_prepare_v1(
         Ok(snapshot) => snapshot,
         Err(error) => {
             let code = snapshot_rejection_code(error)?;
-            let outbox = rejected_outbox(record.message_id(), decoded.export_id, code, context)?;
+            let outbox = rejected_outbox(
+                record.message_id(),
+                decoded.export_id,
+                &decoded.logical_owner_id,
+                code,
+                context,
+            )?;
             let outcome = persistence
                 .persist_evidence_export_source_result(
                     *record.message_id(),
@@ -98,6 +104,7 @@ pub async fn consume_next_evidence_export_prepare_v1(
             let outbox = rejected_outbox(
                 record.message_id(),
                 decoded.export_id,
+                &decoded.logical_owner_id,
                 EvidenceExportRejectCodeV1::EvidenceExportRejectCodePolicy,
                 context,
             )?;
@@ -127,11 +134,13 @@ pub async fn consume_next_evidence_export_prepare_v1(
         Ok(items) => EvidenceExportPreparedV1 {
             export_id: decoded.export_id.to_vec(),
             items,
+            logical_owner_id: decoded.logical_owner_id.clone(),
         },
         Err(BodyMaterializationErrorV1::Policy) => {
             let outbox = rejected_outbox(
                 record.message_id(),
                 decoded.export_id,
+                &decoded.logical_owner_id,
                 EvidenceExportRejectCodeV1::EvidenceExportRejectCodePolicy,
                 context,
             )?;
@@ -173,6 +182,7 @@ pub async fn consume_next_evidence_export_prepare_v1(
 
 struct DecodedPrepareCommandV1 {
     export_id: [u8; 16],
+    logical_owner_id: String,
     message_ids: Vec<[u8; 16]>,
 }
 
@@ -196,6 +206,9 @@ fn decode_prepare_command(
     let payload = PrepareEvidenceExportCommandV1::decode(envelope.payload.as_slice())
         .map_err(|_| CommunicationsEvidenceExportDeliveryErrorV1::InvalidPayload)?;
     let export_id = id16(&payload.export_id)?;
+    if !valid_logical_owner_id(&payload.logical_owner_id) {
+        return Err(CommunicationsEvidenceExportDeliveryErrorV1::InvalidPayload);
+    }
     if envelope.message_id.as_slice() != export_id {
         return Err(CommunicationsEvidenceExportDeliveryErrorV1::InvalidPayload);
     }
@@ -216,6 +229,7 @@ fn decode_prepare_command(
     }
     Ok(DecodedPrepareCommandV1 {
         export_id,
+        logical_owner_id: payload.logical_owner_id,
         message_ids,
     })
 }
@@ -384,6 +398,7 @@ fn source_reference_id(
 fn rejected_outbox(
     command_message_id: &[u8; 16],
     export_id: [u8; 16],
+    logical_owner_id: &str,
     code: EvidenceExportRejectCodeV1,
     context: &CanonicalEventContextV1,
 ) -> Result<OutboxRecordV1, CommunicationsEvidenceExportDeliveryErrorV1> {
@@ -392,10 +407,15 @@ fn rejected_outbox(
         EvidenceExportRejectedV1 {
             export_id: export_id.to_vec(),
             code: code as i32,
+            logical_owner_id: logical_owner_id.to_owned(),
         },
         &evidence_export_envelope_context(context),
     )
     .map_err(|_| CommunicationsEvidenceExportDeliveryErrorV1::InvalidPayload)
+}
+
+fn valid_logical_owner_id(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 128 && value.is_ascii()
 }
 
 fn evidence_export_envelope_context(

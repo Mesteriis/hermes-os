@@ -17,6 +17,10 @@ CREATE TABLE hermes_data.communications_export_outbox (
 
 CREATE TABLE hermes_data.communications_export_jobs (
   export_id BYTEA PRIMARY KEY CHECK (octet_length(export_id) = 16),
+  logical_owner_id TEXT NOT NULL CHECK (
+    char_length(logical_owner_id) BETWEEN 1 AND 128
+    AND octet_length(logical_owner_id) = char_length(logical_owner_id)
+  ),
   state SMALLINT NOT NULL CHECK (state IN (1, 2, 3, 4)),
   requested_items INTEGER NOT NULL CHECK (requested_items BETWEEN 1 AND 64),
   completed_items INTEGER NOT NULL DEFAULT 0 CHECK (

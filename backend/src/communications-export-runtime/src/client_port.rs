@@ -118,6 +118,7 @@ async fn start_export(
     let now = now_unix_seconds()?;
     let outbox = build_evidence_export_prepare_outbox_record_v1(
         export_id,
+        &request.logical_owner_id,
         &message_ids,
         now.checked_add(30)
             .ok_or(CommunicationsExportClientPortErrorV1::Unavailable)?,
@@ -131,7 +132,13 @@ async fn start_export(
     )
     .map_err(|_| CommunicationsExportClientPortErrorV1::Protocol)?;
     let response = match persistence
-        .create_export_with_outbox(export_id, &message_ids, &outbox, now)
+        .create_export_with_outbox(
+            export_id,
+            &request.logical_owner_id,
+            &message_ids,
+            &outbox,
+            now,
+        )
         .await
     {
         Ok(()) => StartEvidenceExportResponseV1 {
@@ -163,7 +170,7 @@ async fn get_status(
         return Err(CommunicationsExportClientPortErrorV1::Protocol);
     }
     let response = match persistence
-        .job_status(export_id)
+        .job_status(&request.logical_owner_id, export_id)
         .await
         .map_err(|_| CommunicationsExportClientPortErrorV1::Unavailable)?
     {
@@ -206,7 +213,7 @@ async fn issue_read_ticket(
         return Err(CommunicationsExportClientPortErrorV1::Protocol);
     }
     let Some(status) = persistence
-        .job_status(export_id)
+        .job_status(&request.logical_owner_id, export_id)
         .await
         .map_err(|_| CommunicationsExportClientPortErrorV1::Unavailable)?
     else {
@@ -265,7 +272,7 @@ async fn authorize_blob_read(
         return Err(CommunicationsExportClientPortErrorV1::NotFound);
     };
     let current = persistence
-        .job_status(consumed.export_id)
+        .job_status(&request.logical_owner_id, consumed.export_id)
         .await
         .map_err(|_| CommunicationsExportClientPortErrorV1::Unavailable)?
         .and_then(|status| status.artifact);

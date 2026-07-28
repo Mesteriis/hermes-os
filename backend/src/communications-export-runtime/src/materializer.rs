@@ -141,6 +141,7 @@ fn materialize(
     let bytes = encode_evidence_export_jsonl_v1(
         EvidenceExportManifestV1 {
             export_id: claim.export_id,
+            logical_owner_id: claim.logical_owner_id.clone(),
             created_at_unix_seconds: claim.created_at_unix_seconds,
         },
         &items,

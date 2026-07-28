@@ -354,10 +354,11 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1, COMMUNICATIONS_EXPORT_MODULE_ID_V1,
         COMMUNICATIONS_EXPORT_OWNER_V1,
         wire::{
-            EvidenceExportArtifactReadRequestV1, EvidenceExportStatusV1,
-            GetEvidenceExportStatusRequestV1, GetEvidenceExportStatusResponseV1,
-            IssueEvidenceExportReadRequestV1, IssueEvidenceExportReadResponseV1,
-            StartEvidenceExportRequestV1, StartEvidenceExportResponseV1,
+            CommunicationsExportErrorCodeV1, EvidenceExportArtifactReadRequestV1,
+            EvidenceExportStatusV1, GetEvidenceExportStatusRequestV1,
+            GetEvidenceExportStatusResponseV1, IssueEvidenceExportReadRequestV1,
+            IssueEvidenceExportReadResponseV1, StartEvidenceExportRequestV1,
+            StartEvidenceExportResponseV1,
         },
     };
     use hermes_communications_export_runtime::admission::{
@@ -451,9 +452,10 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
             .is_active(COMMUNICATIONS_EXPORT_REGISTRATION)
             .expect("read Communications Export process state")
     );
-    let route = |request_id: u64,
-                 contract: hermes_runtime_protocol::v1::ContractReferenceV1,
-                 request_payload: Vec<u8>| {
+    let route_as = |request_id: u64,
+                    logical_owner_id: &str,
+                    contract: hermes_runtime_protocol::v1::ContractReferenceV1,
+                    request_payload: Vec<u8>| {
         let request = ModuleClientRequestV1 {
             protocol_major: 1,
             module_id: COMMUNICATIONS_EXPORT_MODULE_ID_V1.to_owned(),
@@ -461,7 +463,7 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
             contract: Some(contract),
             request_id,
             request_payload,
-            logical_owner_id: "owner-1".to_owned(),
+            logical_owner_id: logical_owner_id.to_owned(),
         }
         .encode_to_vec();
         let launch = store
@@ -491,6 +493,11 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
             response.error_code,
         );
         response.response_payload
+    };
+    let route = |request_id: u64,
+                 contract: hermes_runtime_protocol::v1::ContractReferenceV1,
+                 request_payload: Vec<u8>| {
+        route_as(request_id, "owner-1", contract, request_payload)
     };
     let export_id = [11; 16];
     let start = StartEvidenceExportResponseV1::decode(
@@ -538,6 +545,48 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         );
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    let wrong_owner_status = GetEvidenceExportStatusResponseV1::decode(
+        route_as(
+            20,
+            "owner-2",
+            communications_export_query_contract_reference_v1(),
+            GetEvidenceExportStatusRequestV1 {
+                protocol_major: 1,
+                export_id: export_id.to_vec(),
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode wrong-owner Communications Export status");
+    assert_eq!(
+        wrong_owner_status.status,
+        EvidenceExportStatusV1::EvidenceExportStatusUnspecified as i32
+    );
+    assert_eq!(wrong_owner_status.artifact_bytes, 0);
+    assert_eq!(
+        wrong_owner_status.error,
+        CommunicationsExportErrorCodeV1::CommunicationsExportErrorCodeNotFound as i32
+    );
+    let wrong_owner_ticket = IssueEvidenceExportReadResponseV1::decode(
+        route_as(
+            21,
+            "owner-2",
+            communications_export_ticket_contract_reference_v1(),
+            IssueEvidenceExportReadRequestV1 {
+                protocol_major: 1,
+                export_id: export_id.to_vec(),
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode wrong-owner Communications Export ticket response");
+    assert!(wrong_owner_ticket.opaque_read_capability.is_empty());
+    assert_eq!(
+        wrong_owner_ticket.error,
+        CommunicationsExportErrorCodeV1::CommunicationsExportErrorCodeNotFound as i32
+    );
     let edited_body =
         publish_and_wait_for_communications_message_edit(&store, &supervisor, &data, &message_id);
     let edited_export_id = [15; 16];
@@ -969,6 +1018,12 @@ fn assert_communications_export_gateway_delivery(
     assert!(artifact.starts_with(
         br#"{"record_type":"manifest","schema":"hermes.communications.evidence-export.v1"#
     ));
+    assert!(
+        artifact
+            .windows(br#""logical_owner_id":"owner-1""#.len())
+            .any(|window| window == br#""logical_owner_id":"owner-1""#),
+        "artifact manifest carries the exact logical owner provenance"
+    );
     assert!(
         artifact
             .windows(b"fixture source body for custody transfer".len())

@@ -36,9 +36,10 @@ pub struct EvidenceExportItemV1 {
     pub body: EvidenceExportBodyV1,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EvidenceExportManifestV1 {
     pub export_id: [u8; 16],
+    pub logical_owner_id: String,
     pub created_at_unix_seconds: i64,
 }
 
@@ -57,7 +58,10 @@ pub fn encode_evidence_export_jsonl_v1(
     manifest: EvidenceExportManifestV1,
     items: &[EvidenceExportItemV1],
 ) -> Result<Vec<u8>, EvidenceExportEncodeErrorV1> {
-    if !valid_id(&manifest.export_id) || manifest.created_at_unix_seconds <= 0 {
+    if !valid_id(&manifest.export_id)
+        || !valid_logical_owner_id(&manifest.logical_owner_id)
+        || manifest.created_at_unix_seconds <= 0
+    {
         return Err(EvidenceExportEncodeErrorV1::InvalidManifest);
     }
     if items.is_empty() || items.len() > MAX_EXPORT_ITEMS_V1 {
@@ -90,6 +94,7 @@ pub fn encode_evidence_export_jsonl_v1(
             record_type: "manifest",
             schema: "hermes.communications.evidence-export.v1",
             export_id: hex(&manifest.export_id),
+            logical_owner_id: &manifest.logical_owner_id,
             created_at_unix_seconds: manifest.created_at_unix_seconds,
             item_count: items.len(),
         },
@@ -175,6 +180,10 @@ fn valid_id(id: &[u8; 16]) -> bool {
     id.iter().any(|byte| *byte != 0)
 }
 
+fn valid_logical_owner_id(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 128 && value.is_ascii()
+}
+
 fn hex(bytes: &[u8]) -> String {
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(bytes.len() * 2);
@@ -190,6 +199,7 @@ struct ManifestRecordV1<'a> {
     record_type: &'a str,
     schema: &'a str,
     export_id: String,
+    logical_owner_id: &'a str,
     created_at_unix_seconds: i64,
     item_count: usize,
 }
@@ -238,10 +248,11 @@ mod tests {
     fn encoder_is_deterministic_and_contains_no_blob_or_provider_fields() {
         let manifest = EvidenceExportManifestV1 {
             export_id: [1; 16],
+            logical_owner_id: "owner-1".to_owned(),
             created_at_unix_seconds: 1_800_000_000,
         };
         let first = encode_evidence_export_jsonl_v1(
-            manifest,
+            manifest.clone(),
             &[item(EvidenceExportBodyV1::AdmittedUtf8(
                 "hello".as_bytes().to_vec(),
             ))],
@@ -268,6 +279,7 @@ mod tests {
             encode_evidence_export_jsonl_v1(
                 EvidenceExportManifestV1 {
                     export_id: [1; 16],
+                    logical_owner_id: "owner-1".to_owned(),
                     created_at_unix_seconds: 1_800_000_000,
                 },
                 &[item(EvidenceExportBodyV1::AdmittedUtf8(vec![0xff]))],
@@ -279,6 +291,7 @@ mod tests {
             encode_evidence_export_jsonl_v1(
                 EvidenceExportManifestV1 {
                     export_id: [1; 16],
+                    logical_owner_id: "owner-1".to_owned(),
                     created_at_unix_seconds: 1_800_000_000,
                 },
                 &[value.clone(), value],

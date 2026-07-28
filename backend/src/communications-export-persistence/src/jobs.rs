@@ -47,6 +47,7 @@ pub struct CommunicationsExportArtifactReceiptV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommunicationsExportClaimV1 {
     pub export_id: [u8; 16],
+    pub logical_owner_id: String,
     pub source_result_message_id: [u8; 16],
     pub source_result_envelope_sha256: [u8; 32],
     pub created_at_unix_seconds: i64,
@@ -68,11 +69,13 @@ impl CommunicationsExportPersistenceV1 {
     pub async fn create_export_with_outbox(
         &self,
         export_id: [u8; 16],
+        logical_owner_id: &str,
         message_ids: &[[u8; 16]],
         outbox: &OutboxRecordV1,
         created_at_unix_seconds: i64,
     ) -> Result<(), CommunicationsExportPersistenceErrorV1> {
         if !valid_id16(&export_id)
+            || !valid_logical_owner_id(logical_owner_id)
             || message_ids.is_empty()
             || message_ids.len() > 64
             || message_ids.iter().any(|id| !valid_id16(id))
@@ -92,12 +95,13 @@ impl CommunicationsExportPersistenceV1 {
             .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
         let inserted_job = sqlx::query(
             "INSERT INTO hermes_data.communications_export_jobs (
-                export_id, state, requested_items, completed_items,
+                export_id, logical_owner_id, state, requested_items, completed_items,
                 created_at_unix_seconds, updated_at_unix_seconds
-             ) VALUES ($1, $2, $3, 0, $4, $4)
+             ) VALUES ($1, $2, $3, $4, 0, $5, $5)
              ON CONFLICT (export_id) DO NOTHING",
         )
         .bind(export_id.as_slice())
+        .bind(logical_owner_id)
         .bind(STATE_PENDING_SOURCE)
         .bind(
             i32::try_from(message_ids.len())
@@ -107,8 +111,8 @@ impl CommunicationsExportPersistenceV1 {
         .execute(&mut *transaction)
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
-        let existing_job: Option<i32> = sqlx::query_scalar(
-            "SELECT requested_items
+        let existing_job: Option<(String, i32)> = sqlx::query_as(
+            "SELECT logical_owner_id, requested_items
              FROM hermes_data.communications_export_jobs
              WHERE export_id = $1",
         )
@@ -117,10 +121,11 @@ impl CommunicationsExportPersistenceV1 {
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
         if existing_job
-            != Some(
+            != Some((
+                logical_owner_id.to_owned(),
                 i32::try_from(message_ids.len())
                     .map_err(|_| CommunicationsExportPersistenceErrorV1::InvalidInput)?,
-            )
+            ))
         {
             return Err(CommunicationsExportPersistenceErrorV1::Conflict);
         }
@@ -178,12 +183,14 @@ impl CommunicationsExportPersistenceV1 {
         result_message_id: [u8; 16],
         envelope_sha256: [u8; 32],
         export_id: [u8; 16],
+        logical_owner_id: &str,
         items: &[CommunicationsExportPreparedItemV1],
         consumed_at_unix_seconds: i64,
     ) -> Result<(), CommunicationsExportPersistenceErrorV1> {
         if !valid_id16(&result_message_id)
             || !valid_sha256(&envelope_sha256)
             || !valid_id16(&export_id)
+            || !valid_logical_owner_id(logical_owner_id)
             || items.is_empty()
             || items.len() > 64
             || !valid_timestamp(consumed_at_unix_seconds)
@@ -225,12 +232,15 @@ impl CommunicationsExportPersistenceV1 {
             };
         }
         let expected_ids: Vec<Vec<u8>> = sqlx::query_scalar(
-            "SELECT message_id
-             FROM hermes_data.communications_export_items
-             WHERE export_id = $1
-             ORDER BY ordinal",
+            "SELECT item.message_id
+             FROM hermes_data.communications_export_items item
+             JOIN hermes_data.communications_export_jobs job
+               ON job.export_id = item.export_id
+             WHERE item.export_id = $1 AND job.logical_owner_id = $2
+             ORDER BY item.ordinal",
         )
         .bind(export_id.as_slice())
+        .bind(logical_owner_id)
         .fetch_all(&mut *transaction)
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
@@ -273,7 +283,11 @@ impl CommunicationsExportPersistenceV1 {
                      source_declared_bytes = $12,
                      source_sha256 = $13,
                      source_custody_proof = $14
-                 WHERE export_id = $1 AND ordinal = $2",
+                 WHERE export_id = $1 AND ordinal = $2
+                   AND EXISTS (
+                     SELECT 1 FROM hermes_data.communications_export_jobs job
+                     WHERE job.export_id = $1 AND job.logical_owner_id = $15
+                   )",
             )
             .bind(export_id.as_slice())
             .bind(
@@ -295,6 +309,7 @@ impl CommunicationsExportPersistenceV1 {
             .bind(declared_bytes)
             .bind(sha256)
             .bind(proof)
+            .bind(logical_owner_id)
             .execute(&mut *transaction)
             .await
             .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
@@ -304,13 +319,14 @@ impl CommunicationsExportPersistenceV1 {
              SET state = $2,
                  source_result_message_id = $3,
                  updated_at_unix_seconds = $4
-             WHERE export_id = $1 AND state = $5",
+             WHERE export_id = $1 AND state = $5 AND logical_owner_id = $6",
         )
         .bind(export_id.as_slice())
         .bind(STATE_MATERIALIZING)
         .bind(result_message_id.as_slice())
         .bind(consumed_at_unix_seconds)
         .bind(STATE_PENDING_SOURCE)
+        .bind(logical_owner_id)
         .execute(&mut *transaction)
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
@@ -328,12 +344,14 @@ impl CommunicationsExportPersistenceV1 {
         result_message_id: [u8; 16],
         envelope_sha256: [u8; 32],
         export_id: [u8; 16],
+        logical_owner_id: &str,
         rejection_code: u16,
         consumed_at_unix_seconds: i64,
     ) -> Result<(), CommunicationsExportPersistenceErrorV1> {
         if !valid_id16(&result_message_id)
             || !valid_sha256(&envelope_sha256)
             || !valid_id16(&export_id)
+            || !valid_logical_owner_id(logical_owner_id)
             || !(1..=16).contains(&rejection_code)
             || !valid_timestamp(consumed_at_unix_seconds)
         {
@@ -380,7 +398,8 @@ impl CommunicationsExportPersistenceV1 {
                  updated_at_unix_seconds = $5,
                  claimed_by = NULL,
                  lease_expires_at_unix_seconds = NULL
-             WHERE export_id = $1 AND state IN ($6, $7)",
+             WHERE export_id = $1 AND state IN ($6, $7)
+               AND logical_owner_id = $8",
         )
         .bind(export_id.as_slice())
         .bind(STATE_REJECTED)
@@ -392,6 +411,7 @@ impl CommunicationsExportPersistenceV1 {
         .bind(consumed_at_unix_seconds)
         .bind(STATE_PENDING_SOURCE)
         .bind(STATE_MATERIALIZING)
+        .bind(logical_owner_id)
         .execute(&mut *transaction)
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
@@ -457,7 +477,8 @@ impl CommunicationsExportPersistenceV1 {
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
         let job = sqlx::query(
-            "SELECT job.created_at_unix_seconds, job.source_result_message_id,
+            "SELECT job.logical_owner_id, job.created_at_unix_seconds,
+                    job.source_result_message_id,
                     inbox.envelope_sha256
              FROM hermes_data.communications_export_jobs job
              JOIN hermes_data.communications_export_event_inbox inbox
@@ -470,6 +491,9 @@ impl CommunicationsExportPersistenceV1 {
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
         let created_at_unix_seconds: i64 = job
             .try_get("created_at_unix_seconds")
+            .map_err(|_| CommunicationsExportPersistenceErrorV1::InvalidRow)?;
+        let logical_owner_id: String = job
+            .try_get("logical_owner_id")
             .map_err(|_| CommunicationsExportPersistenceErrorV1::InvalidRow)?;
         let source_result_message_id = id16(
             &job.try_get::<Vec<u8>, _>("source_result_message_id")
@@ -502,6 +526,7 @@ impl CommunicationsExportPersistenceV1 {
             .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
         Ok(Some(CommunicationsExportClaimV1 {
             export_id: id16(&export_id)?,
+            logical_owner_id,
             source_result_message_id,
             source_result_envelope_sha256,
             created_at_unix_seconds,
@@ -532,7 +557,8 @@ impl CommunicationsExportPersistenceV1 {
                  updated_at_unix_seconds = $6,
                  claimed_by = NULL,
                  lease_expires_at_unix_seconds = NULL
-             WHERE export_id = $1 AND state = $7 AND claimed_by = $8",
+             WHERE export_id = $1 AND state = $7 AND claimed_by = $8
+               AND logical_owner_id = $9",
         )
         .bind(claim.export_id.as_slice())
         .bind(STATE_READY)
@@ -545,6 +571,7 @@ impl CommunicationsExportPersistenceV1 {
         .bind(completed_at_unix_seconds)
         .bind(STATE_MATERIALIZING)
         .bind(&claim.worker_id)
+        .bind(&claim.logical_owner_id)
         .execute(&self.pool)
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
@@ -568,12 +595,14 @@ impl CommunicationsExportPersistenceV1 {
              SET claimed_by = NULL,
                  lease_expires_at_unix_seconds = NULL,
                  updated_at_unix_seconds = $3
-             WHERE export_id = $1 AND state = $4 AND claimed_by = $2",
+             WHERE export_id = $1 AND state = $4 AND claimed_by = $2
+               AND logical_owner_id = $5",
         )
         .bind(claim.export_id.as_slice())
         .bind(&claim.worker_id)
         .bind(now_unix_seconds)
         .bind(STATE_MATERIALIZING)
+        .bind(&claim.logical_owner_id)
         .execute(&self.pool)
         .await
         .map(|_| ())
@@ -599,7 +628,8 @@ impl CommunicationsExportPersistenceV1 {
                  updated_at_unix_seconds = $4,
                  claimed_by = NULL,
                  lease_expires_at_unix_seconds = NULL
-             WHERE export_id = $1 AND state = $5 AND claimed_by = $6",
+             WHERE export_id = $1 AND state = $5 AND claimed_by = $6
+               AND logical_owner_id = $7",
         )
         .bind(claim.export_id.as_slice())
         .bind(STATE_REJECTED)
@@ -610,6 +640,7 @@ impl CommunicationsExportPersistenceV1 {
         .bind(completed_at_unix_seconds)
         .bind(STATE_MATERIALIZING)
         .bind(&claim.worker_id)
+        .bind(&claim.logical_owner_id)
         .execute(&self.pool)
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
@@ -622,10 +653,11 @@ impl CommunicationsExportPersistenceV1 {
 
     pub async fn job_status(
         &self,
+        logical_owner_id: &str,
         export_id: [u8; 16],
     ) -> Result<Option<CommunicationsExportJobStatusV1>, CommunicationsExportPersistenceErrorV1>
     {
-        if !valid_id16(&export_id) {
+        if !valid_id16(&export_id) || !valid_logical_owner_id(logical_owner_id) {
             return Err(CommunicationsExportPersistenceErrorV1::InvalidInput);
         }
         let row = sqlx::query(
@@ -633,9 +665,10 @@ impl CommunicationsExportPersistenceV1 {
                     artifact_reference_id, artifact_declared_bytes,
                     artifact_sha256, rejection_code
              FROM hermes_data.communications_export_jobs
-             WHERE export_id = $1",
+             WHERE export_id = $1 AND logical_owner_id = $2",
         )
         .bind(export_id.as_slice())
+        .bind(logical_owner_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
@@ -877,6 +910,7 @@ fn valid_artifact(receipt: &CommunicationsExportArtifactReceiptV1) -> bool {
 
 fn valid_claim(claim: &CommunicationsExportClaimV1) -> bool {
     valid_id16(&claim.export_id)
+        && valid_logical_owner_id(&claim.logical_owner_id)
         && valid_id16(&claim.source_result_message_id)
         && valid_sha256(&claim.source_result_envelope_sha256)
         && valid_timestamp(claim.created_at_unix_seconds)
@@ -884,6 +918,10 @@ fn valid_claim(claim: &CommunicationsExportClaimV1) -> bool {
         && claim.items.len() <= 64
         && valid_worker_id(&claim.worker_id)
         && claim.items.iter().all(valid_prepared_item)
+}
+
+fn valid_logical_owner_id(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 128 && value.is_ascii()
 }
 
 fn valid_worker_id(value: &str) -> bool {

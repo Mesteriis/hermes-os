@@ -38,12 +38,14 @@ pub enum EvidenceExportEnvelopeBuildErrorV1 {
 
 pub fn build_evidence_export_prepare_outbox_record_v1(
     command_id: [u8; 16],
+    logical_owner_id: &str,
     message_ids: &[[u8; 16]],
     deadline_unix_seconds: i64,
     context: &EvidenceExportEnvelopeContextV1,
 ) -> Result<OutboxRecordV1, EvidenceExportEnvelopeBuildErrorV1> {
     validate_context(context)?;
     if !valid_id(&command_id)
+        || !valid_logical_owner_id(logical_owner_id)
         || message_ids.is_empty()
         || message_ids.len() > EVIDENCE_EXPORT_MAX_MESSAGES_V1
         || message_ids.iter().any(|id| !valid_id(id))
@@ -55,6 +57,7 @@ pub fn build_evidence_export_prepare_outbox_record_v1(
     let payload = PrepareEvidenceExportCommandV1 {
         export_id: command_id.to_vec(),
         message_ids: message_ids.iter().map(|id| id.to_vec()).collect(),
+        logical_owner_id: logical_owner_id.to_owned(),
     }
     .encode_to_vec();
     build_envelope(
@@ -85,7 +88,11 @@ pub fn build_evidence_export_prepared_outbox_record_v1(
     payload: EvidenceExportPreparedV1,
     context: &EvidenceExportEnvelopeContextV1,
 ) -> Result<OutboxRecordV1, EvidenceExportEnvelopeBuildErrorV1> {
-    validate_result_payload(&payload.export_id, payload.items.len())?;
+    validate_result_payload(
+        &payload.export_id,
+        &payload.logical_owner_id,
+        payload.items.len(),
+    )?;
     let export_id = id16(&payload.export_id)?;
     build_envelope(
         result_message_id(b"prepared", &export_id),
@@ -108,7 +115,7 @@ pub fn build_evidence_export_rejected_outbox_record_v1(
     payload: EvidenceExportRejectedV1,
     context: &EvidenceExportEnvelopeContextV1,
 ) -> Result<OutboxRecordV1, EvidenceExportEnvelopeBuildErrorV1> {
-    validate_result_payload(&payload.export_id, 1)?;
+    validate_result_payload(&payload.export_id, &payload.logical_owner_id, 1)?;
     if payload.code == 0 {
         return Err(EvidenceExportEnvelopeBuildErrorV1::InvalidPayload);
     }
@@ -218,9 +225,14 @@ fn validate_context(
 
 fn validate_result_payload(
     export_id: &[u8],
+    logical_owner_id: &str,
     item_count: usize,
 ) -> Result<(), EvidenceExportEnvelopeBuildErrorV1> {
-    if export_id.len() != 16 || export_id.iter().all(|byte| *byte == 0) || item_count == 0 {
+    if export_id.len() != 16
+        || export_id.iter().all(|byte| *byte == 0)
+        || !valid_logical_owner_id(logical_owner_id)
+        || item_count == 0
+    {
         return Err(EvidenceExportEnvelopeBuildErrorV1::InvalidPayload);
     }
     Ok(())
@@ -234,6 +246,10 @@ fn has_duplicates(ids: &[[u8; 16]]) -> bool {
 
 fn valid_id(id: &[u8; 16]) -> bool {
     id.iter().any(|byte| *byte != 0)
+}
+
+fn valid_logical_owner_id(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 128 && value.is_ascii()
 }
 
 fn id16(bytes: &[u8]) -> Result<[u8; 16], EvidenceExportEnvelopeBuildErrorV1> {
@@ -281,6 +297,7 @@ mod tests {
     fn command_contains_only_canonical_ids_and_exact_target_capability() {
         let record = build_evidence_export_prepare_outbox_record_v1(
             [1; 16],
+            "owner-1",
             &[[2; 16], [3; 16]],
             1_800_000_030,
             &context(),
@@ -294,6 +311,7 @@ mod tests {
         let payload =
             PrepareEvidenceExportCommandV1::decode(envelope.payload.as_slice()).expect("payload");
         assert_eq!(payload.message_ids, vec![vec![2; 16], vec![3; 16]]);
+        assert_eq!(payload.logical_owner_id, "owner-1");
     }
 
     #[test]
@@ -301,6 +319,7 @@ mod tests {
         assert_eq!(
             build_evidence_export_prepare_outbox_record_v1(
                 [1; 16],
+                "owner-1",
                 &[[2; 16], [2; 16]],
                 1_800_000_030,
                 &context(),
@@ -310,6 +329,7 @@ mod tests {
         assert_eq!(
             build_evidence_export_prepare_outbox_record_v1(
                 [1; 16],
+                "owner-1",
                 &vec![[2; 16]; EVIDENCE_EXPORT_MAX_MESSAGES_V1 + 1],
                 1_800_000_030,
                 &context(),

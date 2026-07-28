@@ -47,6 +47,9 @@ pub async fn consume_next_prepared_result_v1(
         exact_result_envelope(&record, &evidence_export_prepared_contract_reference_v1())?;
     let payload = EvidenceExportPreparedV1::decode(envelope.payload.as_slice())
         .map_err(|_| CommunicationsExportEventConsumerErrorV1::InvalidPayload)?;
+    if !valid_logical_owner_id(&payload.logical_owner_id) {
+        return Err(CommunicationsExportEventConsumerErrorV1::InvalidPayload);
+    }
     let export_id = result_export_id(&envelope, &payload.export_id)?;
     let items = payload
         .items
@@ -58,6 +61,7 @@ pub async fn consume_next_prepared_result_v1(
             *record.message_id(),
             *record.envelope_sha256(),
             export_id,
+            &payload.logical_owner_id,
             &items,
             consumed_at_unix_seconds,
         )
@@ -81,6 +85,9 @@ pub async fn consume_next_rejected_result_v1(
         exact_result_envelope(&record, &evidence_export_rejected_contract_reference_v1())?;
     let payload = EvidenceExportRejectedV1::decode(envelope.payload.as_slice())
         .map_err(|_| CommunicationsExportEventConsumerErrorV1::InvalidPayload)?;
+    if !valid_logical_owner_id(&payload.logical_owner_id) {
+        return Err(CommunicationsExportEventConsumerErrorV1::InvalidPayload);
+    }
     let export_id = result_export_id(&envelope, &payload.export_id)?;
     let rejection_code = u16::try_from(payload.code)
         .ok()
@@ -91,6 +98,7 @@ pub async fn consume_next_rejected_result_v1(
             *record.message_id(),
             *record.envelope_sha256(),
             export_id,
+            &payload.logical_owner_id,
             rejection_code,
             consumed_at_unix_seconds,
         )
@@ -199,6 +207,10 @@ fn id32(value: &[u8]) -> Result<[u8; 32], CommunicationsExportEventConsumerError
         .ok()
         .filter(|digest: &[u8; 32]| digest.iter().any(|byte| *byte != 0))
         .ok_or(CommunicationsExportEventConsumerErrorV1::InvalidPayload)
+}
+
+fn valid_logical_owner_id(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 128 && value.is_ascii()
 }
 
 fn persistence_error(
