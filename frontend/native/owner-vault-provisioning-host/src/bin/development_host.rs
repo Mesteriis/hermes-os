@@ -5,9 +5,16 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use hermes_legacy_provider_recovery::{
+    LegacyProviderCandidateKindV1, LegacyProviderRecoveryBundleV1, LegacyProviderRecoveryCountsV1,
+    LegacyProviderRecoveryPlanV1, LegacyProviderRecoverySecretPurposeV1,
+    LegacyProviderRecoverySessionsV1, LegacyProviderRecoverySourceV1,
+    LegacyProviderRecoveryStateV1,
+};
 use hermes_owner_vault_provisioning_host::{
     AuthorizedProvisioningV1, CommittedProvisioningReceiptV1, OwnerVaultProvisioningHostV1,
 };
+use hermes_vault_protocol::{SecretClassV1, VaultActionV1};
 use serde::{Deserialize, Serialize};
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 use zeroize::Zeroizing;
@@ -21,6 +28,10 @@ const START_PATH: &str = "/__hermes/owner-vault-host/v1/start";
 const SEAL_PATH: &str = "/__hermes/owner-vault-host/v1/seal";
 const OPEN_RECEIPT_PATH: &str = "/__hermes/owner-vault-host/v1/open-receipt";
 const CANCEL_PATH: &str = "/__hermes/owner-vault-host/v1/cancel";
+const RECOVERY_START_PATH: &str = "/__hermes/legacy-provider-recovery/v1/start";
+const RECOVERY_SOURCE_PATH: &str = "/__hermes/legacy-provider-recovery/v1/source";
+const RECOVERY_SEAL_SOURCE_PATH: &str = "/__hermes/legacy-provider-recovery/v1/seal-source";
+const RECOVERY_CANCEL_PATH: &str = "/__hermes/legacy-provider-recovery/v1/cancel";
 
 fn main() -> Result<(), String> {
     let configuration = DevelopmentHostConfigurationV1::from_args(std::env::args().skip(1))?;
@@ -28,12 +39,20 @@ fn main() -> Result<(), String> {
     let server = Server::http(configuration.listen_address)
         .map_err(|_| "development host listen failed".to_owned())?;
     let host = Arc::new(OwnerVaultProvisioningHostV1::default());
+    let recovery = configuration
+        .legacy_recovery_bundle_root
+        .as_deref()
+        .map(LegacyProviderRecoveryBundleV1::open)
+        .transpose()
+        .map_err(|_| "legacy provider recovery bundle is unavailable".to_owned())?
+        .map(LegacyProviderRecoverySessionsV1::new)
+        .map(Arc::new);
     println!(
         "Hermes owner Vault development host is ready at {}",
         configuration.listen_address
     );
     for request in server.incoming_requests() {
-        serve_request(request, &host, &proof);
+        serve_request(request, &host, recovery.as_deref(), &proof);
     }
     Ok(())
 }
@@ -42,6 +61,7 @@ fn main() -> Result<(), String> {
 struct DevelopmentHostConfigurationV1 {
     listen_address: SocketAddr,
     proof_file: PathBuf,
+    legacy_recovery_bundle_root: Option<PathBuf>,
 }
 
 impl DevelopmentHostConfigurationV1 {
@@ -49,6 +69,7 @@ impl DevelopmentHostConfigurationV1 {
         let mut listen_address = SocketAddr::from_str(DEFAULT_LISTEN_ADDRESS)
             .map_err(|_| "development host listen address is invalid".to_owned())?;
         let mut proof_file = None;
+        let mut legacy_recovery_bundle_root = None;
         let mut args = args.peekable();
         while let Some(argument) = args.next() {
             match argument.as_str() {
@@ -65,6 +86,12 @@ impl DevelopmentHostConfigurationV1 {
                         .ok_or_else(|| "development host proof file is missing".to_owned())?;
                     proof_file = Some(PathBuf::from(value));
                 }
+                "--legacy-recovery-bundle-root" => {
+                    let value = args.next().ok_or_else(|| {
+                        "legacy provider recovery bundle root is missing".to_owned()
+                    })?;
+                    legacy_recovery_bundle_root = Some(PathBuf::from(value));
+                }
                 _ => return Err("development host argument is unsupported".to_owned()),
             }
         }
@@ -76,9 +103,16 @@ impl DevelopmentHostConfigurationV1 {
         if !proof_file.is_absolute() {
             return Err("development host proof file must be absolute".to_owned());
         }
+        if legacy_recovery_bundle_root
+            .as_ref()
+            .is_some_and(|root| !root.is_absolute())
+        {
+            return Err("legacy provider recovery bundle root must be absolute".to_owned());
+        }
         Ok(Self {
             listen_address,
             proof_file,
+            legacy_recovery_bundle_root,
         })
     }
 }
@@ -106,14 +140,21 @@ fn load_private_proof(path: &Path) -> Result<Zeroizing<String>, String> {
     Ok(proof)
 }
 
-fn serve_request(mut request: Request, host: &OwnerVaultProvisioningHostV1, proof: &str) {
-    let response = dispatch(&mut request, host, proof).unwrap_or_else(|error| error.response());
+fn serve_request(
+    mut request: Request,
+    host: &OwnerVaultProvisioningHostV1,
+    recovery: Option<&LegacyProviderRecoverySessionsV1>,
+    proof: &str,
+) {
+    let response =
+        dispatch(&mut request, host, recovery, proof).unwrap_or_else(|error| error.response());
     let _ = request.respond(response);
 }
 
 fn dispatch(
     request: &mut Request,
     host: &OwnerVaultProvisioningHostV1,
+    recovery: Option<&LegacyProviderRecoverySessionsV1>,
     proof: &str,
 ) -> Result<Response<std::io::Cursor<Vec<u8>>>, DevelopmentHostErrorV1> {
     authorize_request(request, proof)?;
@@ -176,7 +217,97 @@ fn dispatch(
                 .map_err(|_| DevelopmentHostErrorV1::Rejected)?;
             json_response(StatusCode(200), &EmptyResponseV1 {})
         }
+        RECOVERY_START_PATH => {
+            require_empty_body(request)?;
+            let plan = require_recovery(recovery)?
+                .start()
+                .map_err(|_| DevelopmentHostErrorV1::Rejected)?;
+            json_response(StatusCode(200), &RecoveryPlanResponseV1::from(plan))
+        }
+        RECOVERY_SOURCE_PATH => {
+            let request: RecoverySourceRequestV1 = json_request(request)?;
+            let source = require_recovery(recovery)?
+                .source(&request.recovery_session_id, &request.source_handle)
+                .map_err(|_| DevelopmentHostErrorV1::Rejected)?;
+            json_response(StatusCode(200), &RecoverySourceResponseV1::from(source))
+        }
+        RECOVERY_SEAL_SOURCE_PATH => {
+            let request: SealRecoverySourceRequestV1 = json_request(request)?;
+            let purpose = exact_recovery_secret_purpose(
+                &request.secret_purpose,
+                request.action,
+                request.secret_class,
+            )?;
+            let secret = require_recovery(recovery)?
+                .resolve_secret(
+                    &request.recovery_session_id,
+                    &request.source_handle,
+                    purpose,
+                )
+                .map_err(|_| DevelopmentHostErrorV1::Rejected)?;
+            let sealed = host
+                .seal_custodied(
+                    &request.host_session_id,
+                    request.authorized.try_into()?,
+                    exact_array(request.operation_id)?,
+                    request.action,
+                    request.secret_class,
+                    secret,
+                )
+                .map_err(|_| DevelopmentHostErrorV1::Rejected)?;
+            json_response(
+                StatusCode(200),
+                &SealedProvisioningCommandResponseV1 {
+                    operation_digest_sha256: sealed.operation_digest_sha256.to_vec(),
+                    hpke_encapped_key: sealed.hpke_encapped_key,
+                    ciphertext: sealed.ciphertext,
+                    hpke_authentication_tag: sealed.hpke_authentication_tag,
+                },
+            )
+        }
+        RECOVERY_CANCEL_PATH => {
+            let request: CancelRecoverySessionRequestV1 = json_request(request)?;
+            require_recovery(recovery)?
+                .cancel(&request.recovery_session_id)
+                .map_err(|_| DevelopmentHostErrorV1::Rejected)?;
+            json_response(StatusCode(200), &EmptyResponseV1 {})
+        }
         _ => Err(DevelopmentHostErrorV1::NotFound),
+    }
+}
+
+fn require_recovery(
+    recovery: Option<&LegacyProviderRecoverySessionsV1>,
+) -> Result<&LegacyProviderRecoverySessionsV1, DevelopmentHostErrorV1> {
+    recovery.ok_or(DevelopmentHostErrorV1::Unavailable)
+}
+
+fn exact_recovery_secret_purpose(
+    purpose: &str,
+    action: i32,
+    secret_class: i32,
+) -> Result<LegacyProviderRecoverySecretPurposeV1, DevelopmentHostErrorV1> {
+    let action = VaultActionV1::from_code(i64::from(action))
+        .ok_or(DevelopmentHostErrorV1::InvalidRequest)?;
+    let secret_class = SecretClassV1::from_code(i64::from(secret_class))
+        .ok_or(DevelopmentHostErrorV1::InvalidRequest)?;
+    match (purpose, action, secret_class) {
+        (
+            "icloud_imap_password",
+            VaultActionV1::Create | VaultActionV1::ReplaceCas,
+            SecretClassV1::ProviderCredential,
+        ) => Ok(LegacyProviderRecoverySecretPurposeV1::IcloudImapPassword),
+        (
+            "telegram_api_hash",
+            VaultActionV1::Create | VaultActionV1::ReplaceCas,
+            SecretClassV1::ProviderCredential,
+        ) => Ok(LegacyProviderRecoverySecretPurposeV1::TelegramApiHash),
+        (
+            "generated_telegram_session_store_key",
+            VaultActionV1::Create,
+            SecretClassV1::SessionStoreKey,
+        ) => Ok(LegacyProviderRecoverySecretPurposeV1::GeneratedTelegramSessionStoreKey),
+        _ => Err(DevelopmentHostErrorV1::InvalidRequest),
     }
 }
 
@@ -436,6 +567,191 @@ struct CancelProvisioningHostSessionRequestV1 {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryPlanResponseV1 {
+    schema_revision: u16,
+    recovery_session_id: String,
+    bundle_fingerprint_sha256: String,
+    counts: RecoveryCountsResponseV1,
+    candidates: Vec<RecoveryCandidateResponseV1>,
+}
+
+impl From<LegacyProviderRecoveryPlanV1> for RecoveryPlanResponseV1 {
+    fn from(value: LegacyProviderRecoveryPlanV1) -> Self {
+        Self {
+            schema_revision: value.schema_revision,
+            recovery_session_id: value.session_id,
+            bundle_fingerprint_sha256: value.bundle_fingerprint_sha256,
+            counts: value.counts.into(),
+            candidates: value
+                .candidates
+                .into_iter()
+                .map(|candidate| RecoveryCandidateResponseV1 {
+                    source_handle: candidate.handle,
+                    kind: recovery_kind(candidate.kind),
+                    state: recovery_state(candidate.state),
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryCountsResponseV1 {
+    gmail_active: u16,
+    icloud_active: u16,
+    telegram_user_active: u16,
+    gmail_deleted: u16,
+}
+
+impl From<LegacyProviderRecoveryCountsV1> for RecoveryCountsResponseV1 {
+    fn from(value: LegacyProviderRecoveryCountsV1) -> Self {
+        Self {
+            gmail_active: value.gmail_active,
+            icloud_active: value.icloud_active,
+            telegram_user_active: value.telegram_user_active,
+            gmail_deleted: value.gmail_deleted,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryCandidateResponseV1 {
+    source_handle: String,
+    kind: &'static str,
+    state: &'static str,
+}
+
+fn recovery_kind(kind: LegacyProviderCandidateKindV1) -> &'static str {
+    match kind {
+        LegacyProviderCandidateKindV1::Gmail => "gmail",
+        LegacyProviderCandidateKindV1::Icloud => "icloud",
+        LegacyProviderCandidateKindV1::TelegramUser => "telegram_user",
+    }
+}
+
+fn recovery_state(state: LegacyProviderRecoveryStateV1) -> &'static str {
+    match state {
+        LegacyProviderRecoveryStateV1::ReadyToApply => "ready_to_apply",
+        LegacyProviderRecoveryStateV1::ReauthorizationRequired => "reauthorization_required",
+        LegacyProviderRecoveryStateV1::QrAuthorizationRequired => "qr_authorization_required",
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RecoverySourceRequestV1 {
+    recovery_session_id: String,
+    source_handle: String,
+}
+
+#[derive(Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+enum RecoverySourceResponseV1 {
+    Gmail {
+        source_handle: String,
+        account_id: String,
+        display_name: String,
+        email: String,
+        oauth_client_id: String,
+        oauth_redirect_uri: String,
+    },
+    Icloud {
+        source_handle: String,
+        account_id: String,
+        display_name: String,
+        email: String,
+        imap_host: String,
+        imap_port: u16,
+        username: String,
+    },
+    TelegramUser {
+        source_handle: String,
+        account_id: String,
+        display_name: String,
+        external_account_id: String,
+        api_id: i64,
+    },
+}
+
+impl From<LegacyProviderRecoverySourceV1> for RecoverySourceResponseV1 {
+    fn from(value: LegacyProviderRecoverySourceV1) -> Self {
+        match value {
+            LegacyProviderRecoverySourceV1::Gmail {
+                handle,
+                account_id,
+                display_name,
+                email,
+                oauth_client_id,
+                oauth_redirect_uri,
+            } => Self::Gmail {
+                source_handle: handle,
+                account_id,
+                display_name,
+                email,
+                oauth_client_id,
+                oauth_redirect_uri,
+            },
+            LegacyProviderRecoverySourceV1::Icloud {
+                handle,
+                account_id,
+                display_name,
+                email,
+                imap_host,
+                imap_port,
+                username,
+            } => Self::Icloud {
+                source_handle: handle,
+                account_id,
+                display_name,
+                email,
+                imap_host,
+                imap_port,
+                username,
+            },
+            LegacyProviderRecoverySourceV1::TelegramUser {
+                handle,
+                account_id,
+                display_name,
+                external_account_id,
+                api_id,
+            } => Self::TelegramUser {
+                source_handle: handle,
+                account_id,
+                display_name,
+                external_account_id,
+                api_id,
+            },
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SealRecoverySourceRequestV1 {
+    recovery_session_id: String,
+    source_handle: String,
+    secret_purpose: String,
+    host_session_id: String,
+    operation_id: Vec<u8>,
+    action: i32,
+    secret_class: i32,
+    authorized: AuthorizedProvisioningRequestV1,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CancelRecoverySessionRequestV1 {
+    recovery_session_id: String,
+}
+
+#[derive(Serialize)]
 struct EmptyResponseV1 {}
 
 fn unsigned(value: &str) -> Result<u64, DevelopmentHostErrorV1> {
@@ -467,6 +783,19 @@ mod tests {
                     "0.0.0.0:9445",
                     "--proof-file",
                     "/tmp/proof"
+                ]
+                .into_iter()
+                .map(str::to_owned)
+            )
+            .is_err()
+        );
+        assert!(
+            DevelopmentHostConfigurationV1::from_args(
+                [
+                    "--proof-file",
+                    "/tmp/proof",
+                    "--legacy-recovery-bundle-root",
+                    "relative-bundle",
                 ]
                 .into_iter()
                 .map(str::to_owned)
@@ -559,6 +888,34 @@ mod tests {
                 &proof,
             ),
             Err(DevelopmentHostErrorV1::InvalidRequest),
+        ));
+    }
+
+    #[test]
+    fn recovery_secret_purpose_is_exactly_bound_to_action_and_class() {
+        assert!(matches!(
+            exact_recovery_secret_purpose(
+                "icloud_imap_password",
+                VaultActionV1::Create.code() as i32,
+                SecretClassV1::ProviderCredential.code() as i32,
+            ),
+            Ok(LegacyProviderRecoverySecretPurposeV1::IcloudImapPassword)
+        ));
+        assert!(matches!(
+            exact_recovery_secret_purpose(
+                "generated_telegram_session_store_key",
+                VaultActionV1::Create.code() as i32,
+                SecretClassV1::ProviderCredential.code() as i32,
+            ),
+            Err(DevelopmentHostErrorV1::InvalidRequest)
+        ));
+        assert!(matches!(
+            exact_recovery_secret_purpose(
+                "legacy_telegram_session_key",
+                VaultActionV1::Create.code() as i32,
+                SecretClassV1::SessionStoreKey.code() as i32,
+            ),
+            Err(DevelopmentHostErrorV1::InvalidRequest)
         ));
     }
 }

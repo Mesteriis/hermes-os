@@ -118,6 +118,8 @@ const developmentProxies = developmentGateway === undefined
 			: {
 				'/__hermes/owner-vault-host/v1':
 					developmentOwnerVaultHostProxy(developmentOwnerVaultHost),
+				'/__hermes/legacy-provider-recovery/v1':
+					developmentOwnerVaultHostProxy(developmentOwnerVaultHost),
 			}),
 	}
 

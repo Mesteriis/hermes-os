@@ -20,6 +20,8 @@ distribution_id="hermes-local-development"
 generation_metadata_name="development-distribution-generation"
 startup_timeout_seconds="${HERMES_DEV_STARTUP_TIMEOUT_SECONDS:-120}"
 rust_toolchain="${RUST_TOOLCHAIN:-1.97.0}"
+legacy_recovery_bundle_root="${HERMES_LEGACY_PROVIDER_RECOVERY_BUNDLE_ROOT:-}"
+legacy_recovery_frontend_flag=0
 kernel_pid=""
 owner_vault_host_pid=""
 frontend_pid=""
@@ -48,6 +50,15 @@ require_available_port() {
 		fail "loopback port $1 is already in use"
 	fi
 }
+
+if test -n "$legacy_recovery_bundle_root"; then
+	require_absolute_directory_path \
+		"legacy provider recovery bundle root" \
+		"$legacy_recovery_bundle_root"
+	test -d "$legacy_recovery_bundle_root" && test ! -L "$legacy_recovery_bundle_root" \
+		|| fail "legacy provider recovery bundle root is unavailable"
+	legacy_recovery_frontend_flag=1
+fi
 
 run_compose() {
 	env \
@@ -223,9 +234,16 @@ node -e \
 	"$proof_file"
 
 printf '%s\n' 'Starting the loopback Owner Vault provisioning host...'
-"$owner_vault_host_bin" \
-	--listen-address "$owner_vault_host_address" \
-	--proof-file "$proof_file" &
+owner_vault_host_args=(
+	--listen-address "$owner_vault_host_address"
+	--proof-file "$proof_file"
+)
+if test "$legacy_recovery_frontend_flag" = 1; then
+	owner_vault_host_args+=(
+		--legacy-recovery-bundle-root "$legacy_recovery_bundle_root"
+	)
+fi
+"$owner_vault_host_bin" "${owner_vault_host_args[@]}" &
 owner_vault_host_pid=$!
 
 deadline=$(( $(date +%s) + startup_timeout_seconds ))
@@ -239,6 +257,10 @@ while :; do
 		|| fail "development Owner Vault host readiness deadline expired"
 	sleep 1
 done
+if test "$legacy_recovery_frontend_flag" = 1; then
+	node "$backend_root/scripts/probe-dev-legacy-provider-recovery.mjs" "$proof_file" \
+		|| fail "legacy provider recovery host readiness probe failed"
+fi
 
 printf '%s\n' 'Starting Hermes Kernel and loopback Core Gateway...'
 start_kernel() {
@@ -320,6 +342,7 @@ printf '%s\n' 'Starting the Vue/Vite browser client...'
 		HERMES_DEV_GATEWAY_PROOF_FILE="$proof_file" \
 		HERMES_DEV_OWNER_VAULT_HOST_TARGET="$owner_vault_host_target" \
 		VITE_HERMES_DEV_OWNER_VAULT_HOST=1 \
+		VITE_HERMES_LEGACY_PROVIDER_RECOVERY="$legacy_recovery_frontend_flag" \
 		pnpm exec vite --host 127.0.0.1 --strictPort
 ) &
 frontend_pid=$!

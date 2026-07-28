@@ -19,9 +19,15 @@ surface = "host_adapter"
 
 [features]
 default = []
-development-server = ["dep:serde", "dep:serde_json", "dep:tiny_http"]
+development-server = [
+    "dep:hermes-legacy-provider-recovery",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:tiny_http",
+]
 
 [dependencies]
+hermes-legacy-provider-recovery = { path = "../legacy-provider-recovery", optional = true }
 hermes-vault-protocol = { path = "../../../backend/src/platform/vault/protocol" }
 serde = { version = "=1.0.228", features = ["derive"], optional = true }
 serde_json = { version = "=1.0.150", optional = true }

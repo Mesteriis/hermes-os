@@ -129,7 +129,25 @@ impl OwnerVaultProvisioningHostV1 {
         secret_class: i32,
         secret_payload: Vec<u8>,
     ) -> Result<SealedProvisioningCommandV1, OwnerVaultProvisioningHostErrorV1> {
-        let mut secret_payload = Zeroizing::new(secret_payload);
+        self.seal_custodied(
+            host_session_id,
+            authorized,
+            operation_id,
+            action,
+            secret_class,
+            Zeroizing::new(secret_payload),
+        )
+    }
+
+    pub fn seal_custodied(
+        &self,
+        host_session_id: &str,
+        authorized: AuthorizedProvisioningV1,
+        operation_id: [u8; 16],
+        action: i32,
+        secret_class: i32,
+        mut secret_payload: Zeroizing<Vec<u8>>,
+    ) -> Result<SealedProvisioningCommandV1, OwnerVaultProvisioningHostErrorV1> {
         if operation_id == [0; 16] || secret_payload.is_empty() {
             return Err(OwnerVaultProvisioningHostErrorV1::InvalidInput);
         }

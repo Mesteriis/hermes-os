@@ -17,5 +17,6 @@ pub use model::{
     LegacyProviderCandidateKindV1, LegacyProviderRecoveryCandidateV1,
     LegacyProviderRecoveryCountsV1, LegacyProviderRecoveryPlanV1,
     LegacyProviderRecoverySecretPurposeV1, LegacyProviderRecoverySourceV1,
+    LegacyProviderRecoveryStateV1,
 };
 pub use recovery_session::LegacyProviderRecoverySessionsV1;
