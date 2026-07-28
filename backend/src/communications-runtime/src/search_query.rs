@@ -9,6 +9,10 @@ use hermes_runtime_protocol::managed_control::{
 use std::os::unix::net::UnixStream;
 
 use crate::{
+    canonical_read_cursor::{
+        CanonicalReadCursorKindV1, decode_descending_cursor_v1, encode_descending_cursor_v1,
+    },
+    query::CanonicalQueryPageV1,
     search_access::{CommunicationsSearchAccessErrorV1, CommunicationsSearchAccessV1},
     search_digest::keyed_search_token_digest_v1,
 };
@@ -16,6 +20,7 @@ use crate::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationsSearchQueryErrorV1 {
     InvalidQuery,
+    InvalidCursor,
     Unavailable,
 }
 
@@ -25,8 +30,9 @@ pub async fn search_communications_v1(
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     query: &str,
+    cursor: &[u8],
     limit: u16,
-) -> Result<Vec<CommunicationSearchHitV1>, CommunicationsSearchQueryErrorV1> {
+) -> Result<CanonicalQueryPageV1<CommunicationSearchHitV1>, CommunicationsSearchQueryErrorV1> {
     if !(1..=100).contains(&limit) {
         return Err(CommunicationsSearchQueryErrorV1::InvalidQuery);
     }
@@ -34,10 +40,35 @@ pub async fn search_communications_v1(
         .ensure_index_key(control_channel, dispatcher)
         .map_err(access_error)?;
     let digests = query_token_digests_v1(query, &key)?;
-    persistence
-        .search_by_token_digests(&digests, limit)
+    let scope = digests
+        .iter()
+        .map(|digest| digest.as_slice())
+        .collect::<Vec<_>>();
+    let after = decode_descending_cursor_v1(cursor, CanonicalReadCursorKindV1::Search, &scope)
+        .map_err(|_| CommunicationsSearchQueryErrorV1::InvalidCursor)?;
+    let page = persistence
+        .search_by_token_digests(&digests, after, limit)
         .await
-        .map_err(|_| CommunicationsSearchQueryErrorV1::Unavailable)
+        .map_err(|_| CommunicationsSearchQueryErrorV1::Unavailable)?;
+    let next_cursor = if page.has_more {
+        page.items
+            .last()
+            .map(|item| {
+                encode_descending_cursor_v1(
+                    CanonicalReadCursorKindV1::Search,
+                    &scope,
+                    item.observed_at_unix_seconds,
+                    item.message_id.bytes(),
+                )
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    Ok(CanonicalQueryPageV1 {
+        items: page.items,
+        next_cursor,
+    })
 }
 
 fn query_token_digests_v1(

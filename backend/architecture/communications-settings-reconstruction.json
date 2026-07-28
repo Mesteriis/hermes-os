@@ -396,7 +396,7 @@
       "gate": "communications_canonical_read_v2",
       "role": "domain",
       "owner": "communications",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["client_gateway_v1", "communications.query.v1"]
     },
     {

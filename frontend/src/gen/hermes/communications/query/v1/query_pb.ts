@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file hermes/communications/query/v1/query.proto.
  */
 export const file_hermes_communications_query_v1_query: GenFile = /*@__PURE__*/
-  fileDesc("CipoZXJtZXMvY29tbXVuaWNhdGlvbnMvcXVlcnkvdjEvcXVlcnkucHJvdG8SHmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MSL/BwocQ29tbXVuaWNhdGlvbnNRdWVyeVJlcXVlc3RWMRIWCg5wcm90b2NvbF9tYWpvchgBIAEoDRJOCg1saXN0X2FjY291bnRzGAIgASgLMjUuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RBY2NvdW50c1JlcXVlc3RWMUgAElgKEmxpc3RfY29udmVyc2F0aW9ucxgDIAEoCzI6Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5MaXN0Q29udmVyc2F0aW9uc1JlcXVlc3RWMUgAElQKEGdldF9jb252ZXJzYXRpb24YBCABKAsyOC5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuR2V0Q29udmVyc2F0aW9uUmVxdWVzdFYxSAASZwoabGlzdF9jb252ZXJzYXRpb25fbWVzc2FnZXMYBSABKAsyQS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuTGlzdENvbnZlcnNhdGlvbk1lc3NhZ2VzUmVxdWVzdFYxSAASbwoebGlzdF9jb252ZXJzYXRpb25fcGFydGljaXBhbnRzGAYgASgLMkUuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RDb252ZXJzYXRpb25QYXJ0aWNpcGFudHNSZXF1ZXN0VjFIABJwCh9saXN0X21lc3NhZ2VfYXR0YWNobWVudF9hbmNob3JzGAcgASgLMkUuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RNZXNzYWdlQXR0YWNobWVudEFuY2hvcnNSZXF1ZXN0VjFIABJhChdsaXN0X21lc3NhZ2VfcmVmZXJlbmNlcxgIIAEoCzI+Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5MaXN0TWVzc2FnZVJlZmVyZW5jZXNSZXF1ZXN0VjFIABJeChVzZWFyY2hfY29tbXVuaWNhdGlvbnMYCSABKAsyPS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuU2VhcmNoQ29tbXVuaWNhdGlvbnNSZXF1ZXN0VjFIABJMCgxnZXRfZXZpZGVuY2UYCiABKAsyNC5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuR2V0RXZpZGVuY2VSZXF1ZXN0VjFIABJdChVsaXN0X21lc3NhZ2VfZXZpZGVuY2UYCyABKAsyPC5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuTGlzdE1lc3NhZ2VFdmlkZW5jZVJlcXVlc3RWMUgAQgsKCW9wZXJhdGlvbiKDCAodQ29tbXVuaWNhdGlvbnNRdWVyeVJlc3BvbnNlVjESTwoNbGlzdF9hY2NvdW50cxgBIAEoCzI2Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5MaXN0QWNjb3VudHNSZXNwb25zZVYxSAASWQoSbGlzdF9jb252ZXJzYXRpb25zGAIgASgLMjsuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RDb252ZXJzYXRpb25zUmVzcG9uc2VWMUgAElUKEGdldF9jb252ZXJzYXRpb24YAyABKAsyOS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuR2V0Q29udmVyc2F0aW9uUmVzcG9uc2VWMUgAEmgKGmxpc3RfY29udmVyc2F0aW9uX21lc3NhZ2VzGAQgASgLMkIuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RDb252ZXJzYXRpb25NZXNzYWdlc1Jlc3BvbnNlVjFIABJwCh5saXN0X2NvbnZlcnNhdGlvbl9wYXJ0aWNpcGFudHMYBSABKAsyRi5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuTGlzdENvbnZlcnNhdGlvblBhcnRpY2lwYW50c1Jlc3BvbnNlVjFIABJxCh9saXN0X21lc3NhZ2VfYXR0YWNobWVudF9hbmNob3JzGAYgASgLMkYuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RNZXNzYWdlQXR0YWNobWVudEFuY2hvcnNSZXNwb25zZVYxSAASYgoXbGlzdF9tZXNzYWdlX3JlZmVyZW5jZXMYByABKAsyPy5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuTGlzdE1lc3NhZ2VSZWZlcmVuY2VzUmVzcG9uc2VWMUgAEl8KFXNlYXJjaF9jb21tdW5pY2F0aW9ucxgIIAEoCzI+Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5TZWFyY2hDb21tdW5pY2F0aW9uc1Jlc3BvbnNlVjFIABJNCgxnZXRfZXZpZGVuY2UYCSABKAsyNS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuR2V0RXZpZGVuY2VSZXNwb25zZVYxSAASXgoVbGlzdF9tZXNzYWdlX2V2aWRlbmNlGAogASgLMj0uaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RNZXNzYWdlRXZpZGVuY2VSZXNwb25zZVYxSAASEgoKZXJyb3JfY29kZRgPIAEoCUIICgZyZXN1bHQiJgoVTGlzdEFjY291bnRzUmVxdWVzdFYxEg0KBWxpbWl0GAEgASgNIlwKFkxpc3RBY2NvdW50c1Jlc3BvbnNlVjESQgoIYWNjb3VudHMYASADKAsyMC5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuQWNjb3VudFN1bW1hcnlWMSJKChpMaXN0Q29udmVyc2F0aW9uc1JlcXVlc3RWMRIdChVhY2NvdW50X2N1cnNvcl9zaGEyNTYYASABKAwSDQoFbGltaXQYAiABKA0iawobTGlzdENvbnZlcnNhdGlvbnNSZXNwb25zZVYxEkwKDWNvbnZlcnNhdGlvbnMYASADKAsyNS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuQ29udmVyc2F0aW9uU3VtbWFyeVYxIjMKGEdldENvbnZlcnNhdGlvblJlcXVlc3RWMRIXCg9jb252ZXJzYXRpb25faWQYASABKAwiaAoZR2V0Q29udmVyc2F0aW9uUmVzcG9uc2VWMRJLCgxjb252ZXJzYXRpb24YASABKAsyNS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuQ29udmVyc2F0aW9uU3VtbWFyeVYxIksKIUxpc3RDb252ZXJzYXRpb25NZXNzYWdlc1JlcXVlc3RWMRIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDQoFbGltaXQYAiABKA0iaAoiTGlzdENvbnZlcnNhdGlvbk1lc3NhZ2VzUmVzcG9uc2VWMRJCCghtZXNzYWdlcxgBIAMoCzIwLmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5NZXNzYWdlU3VtbWFyeVYxIk8KJUxpc3RDb252ZXJzYXRpb25QYXJ0aWNpcGFudHNSZXF1ZXN0VjESFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEg0KBWxpbWl0GAIgASgNInwKJkxpc3RDb252ZXJzYXRpb25QYXJ0aWNpcGFudHNSZXNwb25zZVYxElIKDHBhcnRpY2lwYW50cxgBIAMoCzI8Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5PYnNlcnZlZFBhcnRpY2lwYW50U3VtbWFyeVYxIkoKJUxpc3RNZXNzYWdlQXR0YWNobWVudEFuY2hvcnNSZXF1ZXN0VjESEgoKbWVzc2FnZV9pZBgBIAEoDBINCgVsaW1pdBgCIAEoDSJ0CiZMaXN0TWVzc2FnZUF0dGFjaG1lbnRBbmNob3JzUmVzcG9uc2VWMRJKCgdhbmNob3JzGAEgAygLMjkuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkF0dGFjaG1lbnRBbmNob3JTdW1tYXJ5VjEiQwoeTGlzdE1lc3NhZ2VSZWZlcmVuY2VzUmVxdWVzdFYxEhIKCm1lc3NhZ2VfaWQYASABKAwSDQoFbGltaXQYAiABKA0icAofTGlzdE1lc3NhZ2VSZWZlcmVuY2VzUmVzcG9uc2VWMRJNCgpyZWZlcmVuY2VzGAEgAygLMjkuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLk1lc3NhZ2VSZWZlcmVuY2VTdW1tYXJ5VjEiKwoUR2V0RXZpZGVuY2VSZXF1ZXN0VjESEwoLZXZpZGVuY2VfaWQYASABKAwiXAoVR2V0RXZpZGVuY2VSZXNwb25zZVYxEkMKCGV2aWRlbmNlGAEgASgLMjEuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkV2aWRlbmNlU3VtbWFyeVYxIkEKHExpc3RNZXNzYWdlRXZpZGVuY2VSZXF1ZXN0VjESEgoKbWVzc2FnZV9pZBgBIAEoDBINCgVsaW1pdBgCIAEoDSJkCh1MaXN0TWVzc2FnZUV2aWRlbmNlUmVzcG9uc2VWMRJDCghldmlkZW5jZRgBIAMoCzIxLmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5FdmlkZW5jZVN1bW1hcnlWMSI9Ch1TZWFyY2hDb21tdW5pY2F0aW9uc1JlcXVlc3RWMRINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDSJoCh5TZWFyY2hDb21tdW5pY2F0aW9uc1Jlc3BvbnNlVjESRgoEaGl0cxgBIAMoCzI4Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5Db21tdW5pY2F0aW9uU2VhcmNoSGl0VjEimwEKGENvbW11bmljYXRpb25TZWFyY2hIaXRWMRITCgtldmlkZW5jZV9pZBgBIAEoDBISCgptZXNzYWdlX2lkGAIgASgMEhcKD2NvbnZlcnNhdGlvbl9pZBgDIAEoDBIgChhvYnNlcnZlZF9hdF91bml4X3NlY29uZHMYBCABKAMSGwoTbWF0Y2hlZF90b2tlbl9jb3VudBgFIAEoDSKkAgoRRXZpZGVuY2VTdW1tYXJ5VjESEwoLZXZpZGVuY2VfaWQYASABKAwSEAoIcHJvdmlkZXIYAiABKA0SEQoJZGlyZWN0aW9uGAMgASgNEgwKBGtpbmQYBCABKA0SEgoKYm9keV9zdGF0ZRgFIAEoDRIeChZib2R5X2FkbWlzc2lvbl9mYWlsdXJlGAYgASgNEiAKGG9ic2VydmVkX2F0X3VuaXhfc2Vjb25kcxgHIAEoAxIcChRjYXVzYXRpb25fbWVzc2FnZV9pZBgIIAEoDBIWCg5jb3JyZWxhdGlvbl9pZBgJIAEoDBIgChhyZWNvcmRlZF9hdF91bml4X3NlY29uZHMYCiABKAMSGQoRcmVjb3JkZWRfYXRfbmFub3MYCyABKAUiwAEKEEFjY291bnRTdW1tYXJ5VjESEgoKYWNjb3VudF9pZBgBIAEoDBIdChVhY2NvdW50X2N1cnNvcl9zaGEyNTYYAiABKAwSEAoIcHJvdmlkZXIYAyABKA0SJgoeZmlyc3Rfb2JzZXJ2ZWRfYXRfdW5peF9zZWNvbmRzGAQgASgDEiUKHWxhc3Rfb2JzZXJ2ZWRfYXRfdW5peF9zZWNvbmRzGAUgASgDEhgKEGxhc3RfZXZpZGVuY2VfaWQYBiABKAwi7gEKFUNvbnZlcnNhdGlvblN1bW1hcnlWMRIXCg9jb252ZXJzYXRpb25faWQYASABKAwSHQoVYWNjb3VudF9jdXJzb3Jfc2hhMjU2GAIgASgMEiIKGmNvbnZlcnNhdGlvbl9jdXJzb3Jfc2hhMjU2GAMgASgMEhAKCHByb3ZpZGVyGAQgASgNEiYKHmZpcnN0X29ic2VydmVkX2F0X3VuaXhfc2Vjb25kcxgFIAEoAxIlCh1sYXN0X29ic2VydmVkX2F0X3VuaXhfc2Vjb25kcxgGIAEoAxIYChBsYXN0X2V2aWRlbmNlX2lkGAcgASgMIoYCChBNZXNzYWdlU3VtbWFyeVYxEhIKCm1lc3NhZ2VfaWQYASABKAwSFwoPY29udmVyc2F0aW9uX2lkGAIgASgMEhwKFHNvdXJjZV9jdXJzb3Jfc2hhMjU2GAMgASgMEhIKCmJvZHlfc3RhdGUYBCABKA0SFwoPbGlmZWN5Y2xlX3N0YXRlGAUgASgNEiYKHmZpcnN0X29ic2VydmVkX2F0X3VuaXhfc2Vjb25kcxgGIAEoAxIlCh1sYXN0X29ic2VydmVkX2F0X3VuaXhfc2Vjb25kcxgHIAEoAxIYChBsYXN0X2V2aWRlbmNlX2lkGAggASgMEhEKCWRpcmVjdGlvbhgJIAEoDSLbAQocT2JzZXJ2ZWRQYXJ0aWNpcGFudFN1bW1hcnlWMRIWCg5wYXJ0aWNpcGFudF9pZBgBIAEoDBIXCg9jb252ZXJzYXRpb25faWQYAiABKAwSIQoZcGFydGljaXBhbnRfY3Vyc29yX3NoYTI1NhgDIAEoDBImCh5maXJzdF9vYnNlcnZlZF9hdF91bml4X3NlY29uZHMYBCABKAMSJQodbGFzdF9vYnNlcnZlZF9hdF91bml4X3NlY29uZHMYBSABKAMSGAoQbGFzdF9ldmlkZW5jZV9pZBgGIAEoDCLzAgoZQXR0YWNobWVudEFuY2hvclN1bW1hcnlWMRIcChRhdHRhY2htZW50X2FuY2hvcl9pZBgBIAEoDBISCgptZXNzYWdlX2lkGAIgASgMEhsKE21lZGlhX2N1cnNvcl9zaGEyNTYYAyABKAwSDQoFc3RhdGUYBCABKA0SJgoeZmlyc3Rfb2JzZXJ2ZWRfYXRfdW5peF9zZWNvbmRzGAUgASgDEiUKHWxhc3Rfb2JzZXJ2ZWRfYXRfdW5peF9zZWNvbmRzGAYgASgDEhgKEGxhc3RfZXZpZGVuY2VfaWQYByABKAwSFgoOaGFzX2Rlc2NyaXB0b3IYCCABKAgSEAoIZmlsZW5hbWUYCSABKAkSFAoMaGFzX2ZpbGVuYW1lGAogASgIEhIKCm1lZGlhX3R5cGUYCyABKAkSFgoOZGVjbGFyZWRfYnl0ZXMYDCABKAQSDgoGc2hhMjU2GA0gASgMEhMKC2Rpc3Bvc2l0aW9uGA4gASgNIrsBChlNZXNzYWdlUmVmZXJlbmNlU3VtbWFyeVYxEhkKEXNvdXJjZV9tZXNzYWdlX2lkGAEgASgMEgwKBGtpbmQYAiABKA0SIwobdGFyZ2V0X3NvdXJjZV9jdXJzb3Jfc2hhMjU2GAMgASgMEhkKEXRhcmdldF9tZXNzYWdlX2lkGAQgASgMEiAKGG9ic2VydmVkX2F0X3VuaXhfc2Vjb25kcxgFIAEoAxITCgtldmlkZW5jZV9pZBgGIAEoDDKjAQoaQ29tbXVuaWNhdGlvbnNRdWVyeVNlcnZpY2UShAEKBVF1ZXJ5EjwuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkNvbW11bmljYXRpb25zUXVlcnlSZXF1ZXN0VjEaPS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuQ29tbXVuaWNhdGlvbnNRdWVyeVJlc3BvbnNlVjFiBnByb3RvMw");
+  fileDesc("CipoZXJtZXMvY29tbXVuaWNhdGlvbnMvcXVlcnkvdjEvcXVlcnkucHJvdG8SHmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MSLLCAocQ29tbXVuaWNhdGlvbnNRdWVyeVJlcXVlc3RWMRIWCg5wcm90b2NvbF9tYWpvchgBIAEoDRJOCg1saXN0X2FjY291bnRzGAIgASgLMjUuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RBY2NvdW50c1JlcXVlc3RWMUgAElgKEmxpc3RfY29udmVyc2F0aW9ucxgDIAEoCzI6Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5MaXN0Q29udmVyc2F0aW9uc1JlcXVlc3RWMUgAElQKEGdldF9jb252ZXJzYXRpb24YBCABKAsyOC5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuR2V0Q29udmVyc2F0aW9uUmVxdWVzdFYxSAASZwoabGlzdF9jb252ZXJzYXRpb25fbWVzc2FnZXMYBSABKAsyQS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuTGlzdENvbnZlcnNhdGlvbk1lc3NhZ2VzUmVxdWVzdFYxSAASbwoebGlzdF9jb252ZXJzYXRpb25fcGFydGljaXBhbnRzGAYgASgLMkUuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RDb252ZXJzYXRpb25QYXJ0aWNpcGFudHNSZXF1ZXN0VjFIABJwCh9saXN0X21lc3NhZ2VfYXR0YWNobWVudF9hbmNob3JzGAcgASgLMkUuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RNZXNzYWdlQXR0YWNobWVudEFuY2hvcnNSZXF1ZXN0VjFIABJhChdsaXN0X21lc3NhZ2VfcmVmZXJlbmNlcxgIIAEoCzI+Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5MaXN0TWVzc2FnZVJlZmVyZW5jZXNSZXF1ZXN0VjFIABJeChVzZWFyY2hfY29tbXVuaWNhdGlvbnMYCSABKAsyPS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuU2VhcmNoQ29tbXVuaWNhdGlvbnNSZXF1ZXN0VjFIABJMCgxnZXRfZXZpZGVuY2UYCiABKAsyNC5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuR2V0RXZpZGVuY2VSZXF1ZXN0VjFIABJdChVsaXN0X21lc3NhZ2VfZXZpZGVuY2UYCyABKAsyPC5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuTGlzdE1lc3NhZ2VFdmlkZW5jZVJlcXVlc3RWMUgAEkoKC2dldF9tZXNzYWdlGAwgASgLMjMuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkdldE1lc3NhZ2VSZXF1ZXN0VjFIAEILCglvcGVyYXRpb24i0AgKHUNvbW11bmljYXRpb25zUXVlcnlSZXNwb25zZVYxEk8KDWxpc3RfYWNjb3VudHMYASABKAsyNi5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuTGlzdEFjY291bnRzUmVzcG9uc2VWMUgAElkKEmxpc3RfY29udmVyc2F0aW9ucxgCIAEoCzI7Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5MaXN0Q29udmVyc2F0aW9uc1Jlc3BvbnNlVjFIABJVChBnZXRfY29udmVyc2F0aW9uGAMgASgLMjkuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkdldENvbnZlcnNhdGlvblJlc3BvbnNlVjFIABJoChpsaXN0X2NvbnZlcnNhdGlvbl9tZXNzYWdlcxgEIAEoCzJCLmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5MaXN0Q29udmVyc2F0aW9uTWVzc2FnZXNSZXNwb25zZVYxSAAScAoebGlzdF9jb252ZXJzYXRpb25fcGFydGljaXBhbnRzGAUgASgLMkYuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RDb252ZXJzYXRpb25QYXJ0aWNpcGFudHNSZXNwb25zZVYxSAAScQofbGlzdF9tZXNzYWdlX2F0dGFjaG1lbnRfYW5jaG9ycxgGIAEoCzJGLmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5MaXN0TWVzc2FnZUF0dGFjaG1lbnRBbmNob3JzUmVzcG9uc2VWMUgAEmIKF2xpc3RfbWVzc2FnZV9yZWZlcmVuY2VzGAcgASgLMj8uaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkxpc3RNZXNzYWdlUmVmZXJlbmNlc1Jlc3BvbnNlVjFIABJfChVzZWFyY2hfY29tbXVuaWNhdGlvbnMYCCABKAsyPi5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuU2VhcmNoQ29tbXVuaWNhdGlvbnNSZXNwb25zZVYxSAASTQoMZ2V0X2V2aWRlbmNlGAkgASgLMjUuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkdldEV2aWRlbmNlUmVzcG9uc2VWMUgAEl4KFWxpc3RfbWVzc2FnZV9ldmlkZW5jZRgKIAEoCzI9Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5MaXN0TWVzc2FnZUV2aWRlbmNlUmVzcG9uc2VWMUgAEksKC2dldF9tZXNzYWdlGAsgASgLMjQuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkdldE1lc3NhZ2VSZXNwb25zZVYxSAASEgoKZXJyb3JfY29kZRgPIAEoCUIICgZyZXN1bHQiNgoVTGlzdEFjY291bnRzUmVxdWVzdFYxEg0KBWxpbWl0GAEgASgNEg4KBmN1cnNvchgCIAEoDCJxChZMaXN0QWNjb3VudHNSZXNwb25zZVYxEkIKCGFjY291bnRzGAEgAygLMjAuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkFjY291bnRTdW1tYXJ5VjESEwoLbmV4dF9jdXJzb3IYAiABKAwiWgoaTGlzdENvbnZlcnNhdGlvbnNSZXF1ZXN0VjESHQoVYWNjb3VudF9jdXJzb3Jfc2hhMjU2GAEgASgMEg0KBWxpbWl0GAIgASgNEg4KBmN1cnNvchgDIAEoDCKAAQobTGlzdENvbnZlcnNhdGlvbnNSZXNwb25zZVYxEkwKDWNvbnZlcnNhdGlvbnMYASADKAsyNS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuQ29udmVyc2F0aW9uU3VtbWFyeVYxEhMKC25leHRfY3Vyc29yGAIgASgMIjMKGEdldENvbnZlcnNhdGlvblJlcXVlc3RWMRIXCg9jb252ZXJzYXRpb25faWQYASABKAwiaAoZR2V0Q29udmVyc2F0aW9uUmVzcG9uc2VWMRJLCgxjb252ZXJzYXRpb24YASABKAsyNS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuQ29udmVyc2F0aW9uU3VtbWFyeVYxIikKE0dldE1lc3NhZ2VSZXF1ZXN0VjESEgoKbWVzc2FnZV9pZBgBIAEoDCJZChRHZXRNZXNzYWdlUmVzcG9uc2VWMRJBCgdtZXNzYWdlGAEgASgLMjAuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLk1lc3NhZ2VTdW1tYXJ5VjEiWwohTGlzdENvbnZlcnNhdGlvbk1lc3NhZ2VzUmVxdWVzdFYxEhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBINCgVsaW1pdBgCIAEoDRIOCgZjdXJzb3IYAyABKAwifQoiTGlzdENvbnZlcnNhdGlvbk1lc3NhZ2VzUmVzcG9uc2VWMRJCCghtZXNzYWdlcxgBIAMoCzIwLmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5NZXNzYWdlU3VtbWFyeVYxEhMKC25leHRfY3Vyc29yGAIgASgMIl8KJUxpc3RDb252ZXJzYXRpb25QYXJ0aWNpcGFudHNSZXF1ZXN0VjESFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEg0KBWxpbWl0GAIgASgNEg4KBmN1cnNvchgDIAEoDCKRAQomTGlzdENvbnZlcnNhdGlvblBhcnRpY2lwYW50c1Jlc3BvbnNlVjESUgoMcGFydGljaXBhbnRzGAEgAygLMjwuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLk9ic2VydmVkUGFydGljaXBhbnRTdW1tYXJ5VjESEwoLbmV4dF9jdXJzb3IYAiABKAwiWgolTGlzdE1lc3NhZ2VBdHRhY2htZW50QW5jaG9yc1JlcXVlc3RWMRISCgptZXNzYWdlX2lkGAEgASgMEg0KBWxpbWl0GAIgASgNEg4KBmN1cnNvchgDIAEoDCKJAQomTGlzdE1lc3NhZ2VBdHRhY2htZW50QW5jaG9yc1Jlc3BvbnNlVjESSgoHYW5jaG9ycxgBIAMoCzI5Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5BdHRhY2htZW50QW5jaG9yU3VtbWFyeVYxEhMKC25leHRfY3Vyc29yGAIgASgMIlMKHkxpc3RNZXNzYWdlUmVmZXJlbmNlc1JlcXVlc3RWMRISCgptZXNzYWdlX2lkGAEgASgMEg0KBWxpbWl0GAIgASgNEg4KBmN1cnNvchgDIAEoDCKFAQofTGlzdE1lc3NhZ2VSZWZlcmVuY2VzUmVzcG9uc2VWMRJNCgpyZWZlcmVuY2VzGAEgAygLMjkuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLk1lc3NhZ2VSZWZlcmVuY2VTdW1tYXJ5VjESEwoLbmV4dF9jdXJzb3IYAiABKAwiKwoUR2V0RXZpZGVuY2VSZXF1ZXN0VjESEwoLZXZpZGVuY2VfaWQYASABKAwiXAoVR2V0RXZpZGVuY2VSZXNwb25zZVYxEkMKCGV2aWRlbmNlGAEgASgLMjEuaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkV2aWRlbmNlU3VtbWFyeVYxIlEKHExpc3RNZXNzYWdlRXZpZGVuY2VSZXF1ZXN0VjESEgoKbWVzc2FnZV9pZBgBIAEoDBINCgVsaW1pdBgCIAEoDRIOCgZjdXJzb3IYAyABKAwieQodTGlzdE1lc3NhZ2VFdmlkZW5jZVJlc3BvbnNlVjESQwoIZXZpZGVuY2UYASADKAsyMS5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuRXZpZGVuY2VTdW1tYXJ5VjESEwoLbmV4dF9jdXJzb3IYAiABKAwiTQodU2VhcmNoQ29tbXVuaWNhdGlvbnNSZXF1ZXN0VjESDQoFcXVlcnkYASABKAkSDQoFbGltaXQYAiABKA0SDgoGY3Vyc29yGAMgASgMIn0KHlNlYXJjaENvbW11bmljYXRpb25zUmVzcG9uc2VWMRJGCgRoaXRzGAEgAygLMjguaGVybWVzLmNvbW11bmljYXRpb25zLnF1ZXJ5LnYxLkNvbW11bmljYXRpb25TZWFyY2hIaXRWMRITCgtuZXh0X2N1cnNvchgCIAEoDCKbAQoYQ29tbXVuaWNhdGlvblNlYXJjaEhpdFYxEhMKC2V2aWRlbmNlX2lkGAEgASgMEhIKCm1lc3NhZ2VfaWQYAiABKAwSFwoPY29udmVyc2F0aW9uX2lkGAMgASgMEiAKGG9ic2VydmVkX2F0X3VuaXhfc2Vjb25kcxgEIAEoAxIbChNtYXRjaGVkX3Rva2VuX2NvdW50GAUgASgNIqQCChFFdmlkZW5jZVN1bW1hcnlWMRITCgtldmlkZW5jZV9pZBgBIAEoDBIQCghwcm92aWRlchgCIAEoDRIRCglkaXJlY3Rpb24YAyABKA0SDAoEa2luZBgEIAEoDRISCgpib2R5X3N0YXRlGAUgASgNEh4KFmJvZHlfYWRtaXNzaW9uX2ZhaWx1cmUYBiABKA0SIAoYb2JzZXJ2ZWRfYXRfdW5peF9zZWNvbmRzGAcgASgDEhwKFGNhdXNhdGlvbl9tZXNzYWdlX2lkGAggASgMEhYKDmNvcnJlbGF0aW9uX2lkGAkgASgMEiAKGHJlY29yZGVkX2F0X3VuaXhfc2Vjb25kcxgKIAEoAxIZChFyZWNvcmRlZF9hdF9uYW5vcxgLIAEoBSLAAQoQQWNjb3VudFN1bW1hcnlWMRISCgphY2NvdW50X2lkGAEgASgMEh0KFWFjY291bnRfY3Vyc29yX3NoYTI1NhgCIAEoDBIQCghwcm92aWRlchgDIAEoDRImCh5maXJzdF9vYnNlcnZlZF9hdF91bml4X3NlY29uZHMYBCABKAMSJQodbGFzdF9vYnNlcnZlZF9hdF91bml4X3NlY29uZHMYBSABKAMSGAoQbGFzdF9ldmlkZW5jZV9pZBgGIAEoDCLuAQoVQ29udmVyc2F0aW9uU3VtbWFyeVYxEhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIdChVhY2NvdW50X2N1cnNvcl9zaGEyNTYYAiABKAwSIgoaY29udmVyc2F0aW9uX2N1cnNvcl9zaGEyNTYYAyABKAwSEAoIcHJvdmlkZXIYBCABKA0SJgoeZmlyc3Rfb2JzZXJ2ZWRfYXRfdW5peF9zZWNvbmRzGAUgASgDEiUKHWxhc3Rfb2JzZXJ2ZWRfYXRfdW5peF9zZWNvbmRzGAYgASgDEhgKEGxhc3RfZXZpZGVuY2VfaWQYByABKAwihgIKEE1lc3NhZ2VTdW1tYXJ5VjESEgoKbWVzc2FnZV9pZBgBIAEoDBIXCg9jb252ZXJzYXRpb25faWQYAiABKAwSHAoUc291cmNlX2N1cnNvcl9zaGEyNTYYAyABKAwSEgoKYm9keV9zdGF0ZRgEIAEoDRIXCg9saWZlY3ljbGVfc3RhdGUYBSABKA0SJgoeZmlyc3Rfb2JzZXJ2ZWRfYXRfdW5peF9zZWNvbmRzGAYgASgDEiUKHWxhc3Rfb2JzZXJ2ZWRfYXRfdW5peF9zZWNvbmRzGAcgASgDEhgKEGxhc3RfZXZpZGVuY2VfaWQYCCABKAwSEQoJZGlyZWN0aW9uGAkgASgNItsBChxPYnNlcnZlZFBhcnRpY2lwYW50U3VtbWFyeVYxEhYKDnBhcnRpY2lwYW50X2lkGAEgASgMEhcKD2NvbnZlcnNhdGlvbl9pZBgCIAEoDBIhChlwYXJ0aWNpcGFudF9jdXJzb3Jfc2hhMjU2GAMgASgMEiYKHmZpcnN0X29ic2VydmVkX2F0X3VuaXhfc2Vjb25kcxgEIAEoAxIlCh1sYXN0X29ic2VydmVkX2F0X3VuaXhfc2Vjb25kcxgFIAEoAxIYChBsYXN0X2V2aWRlbmNlX2lkGAYgASgMIvMCChlBdHRhY2htZW50QW5jaG9yU3VtbWFyeVYxEhwKFGF0dGFjaG1lbnRfYW5jaG9yX2lkGAEgASgMEhIKCm1lc3NhZ2VfaWQYAiABKAwSGwoTbWVkaWFfY3Vyc29yX3NoYTI1NhgDIAEoDBINCgVzdGF0ZRgEIAEoDRImCh5maXJzdF9vYnNlcnZlZF9hdF91bml4X3NlY29uZHMYBSABKAMSJQodbGFzdF9vYnNlcnZlZF9hdF91bml4X3NlY29uZHMYBiABKAMSGAoQbGFzdF9ldmlkZW5jZV9pZBgHIAEoDBIWCg5oYXNfZGVzY3JpcHRvchgIIAEoCBIQCghmaWxlbmFtZRgJIAEoCRIUCgxoYXNfZmlsZW5hbWUYCiABKAgSEgoKbWVkaWFfdHlwZRgLIAEoCRIWCg5kZWNsYXJlZF9ieXRlcxgMIAEoBBIOCgZzaGEyNTYYDSABKAwSEwoLZGlzcG9zaXRpb24YDiABKA0iuwEKGU1lc3NhZ2VSZWZlcmVuY2VTdW1tYXJ5VjESGQoRc291cmNlX21lc3NhZ2VfaWQYASABKAwSDAoEa2luZBgCIAEoDRIjCht0YXJnZXRfc291cmNlX2N1cnNvcl9zaGEyNTYYAyABKAwSGQoRdGFyZ2V0X21lc3NhZ2VfaWQYBCABKAwSIAoYb2JzZXJ2ZWRfYXRfdW5peF9zZWNvbmRzGAUgASgDEhMKC2V2aWRlbmNlX2lkGAYgASgMMqMBChpDb21tdW5pY2F0aW9uc1F1ZXJ5U2VydmljZRKEAQoFUXVlcnkSPC5oZXJtZXMuY29tbXVuaWNhdGlvbnMucXVlcnkudjEuQ29tbXVuaWNhdGlvbnNRdWVyeVJlcXVlc3RWMRo9Lmhlcm1lcy5jb21tdW5pY2F0aW9ucy5xdWVyeS52MS5Db21tdW5pY2F0aW9uc1F1ZXJ5UmVzcG9uc2VWMWIGcHJvdG8z");
 
 /**
  * Public metadata-only owner query contract. No provider locator, message
@@ -87,6 +87,12 @@ export type CommunicationsQueryRequestV1 = Message<"hermes.communications.query.
      */
     value: ListMessageEvidenceRequestV1;
     case: "listMessageEvidence";
+  } | {
+    /**
+     * @generated from field: hermes.communications.query.v1.GetMessageRequestV1 get_message = 12;
+     */
+    value: GetMessageRequestV1;
+    case: "getMessage";
   } | { case: undefined; value?: undefined };
 };
 
@@ -164,6 +170,12 @@ export type CommunicationsQueryResponseV1 = Message<"hermes.communications.query
      */
     value: ListMessageEvidenceResponseV1;
     case: "listMessageEvidence";
+  } | {
+    /**
+     * @generated from field: hermes.communications.query.v1.GetMessageResponseV1 get_message = 11;
+     */
+    value: GetMessageResponseV1;
+    case: "getMessage";
   } | { case: undefined; value?: undefined };
 
   /**
@@ -187,6 +199,11 @@ export type ListAccountsRequestV1 = Message<"hermes.communications.query.v1.List
    * @generated from field: uint32 limit = 1;
    */
   limit: number;
+
+  /**
+   * @generated from field: bytes cursor = 2;
+   */
+  cursor: Uint8Array;
 };
 
 /**
@@ -204,6 +221,11 @@ export type ListAccountsResponseV1 = Message<"hermes.communications.query.v1.Lis
    * @generated from field: repeated hermes.communications.query.v1.AccountSummaryV1 accounts = 1;
    */
   accounts: AccountSummaryV1[];
+
+  /**
+   * @generated from field: bytes next_cursor = 2;
+   */
+  nextCursor: Uint8Array;
 };
 
 /**
@@ -226,6 +248,11 @@ export type ListConversationsRequestV1 = Message<"hermes.communications.query.v1
    * @generated from field: uint32 limit = 2;
    */
   limit: number;
+
+  /**
+   * @generated from field: bytes cursor = 3;
+   */
+  cursor: Uint8Array;
 };
 
 /**
@@ -243,6 +270,11 @@ export type ListConversationsResponseV1 = Message<"hermes.communications.query.v
    * @generated from field: repeated hermes.communications.query.v1.ConversationSummaryV1 conversations = 1;
    */
   conversations: ConversationSummaryV1[];
+
+  /**
+   * @generated from field: bytes next_cursor = 2;
+   */
+  nextCursor: Uint8Array;
 };
 
 /**
@@ -287,6 +319,40 @@ export const GetConversationResponseV1Schema: GenMessage<GetConversationResponse
   messageDesc(file_hermes_communications_query_v1_query, 7);
 
 /**
+ * @generated from message hermes.communications.query.v1.GetMessageRequestV1
+ */
+export type GetMessageRequestV1 = Message<"hermes.communications.query.v1.GetMessageRequestV1"> & {
+  /**
+   * @generated from field: bytes message_id = 1;
+   */
+  messageId: Uint8Array;
+};
+
+/**
+ * Describes the message hermes.communications.query.v1.GetMessageRequestV1.
+ * Use `create(GetMessageRequestV1Schema)` to create a new message.
+ */
+export const GetMessageRequestV1Schema: GenMessage<GetMessageRequestV1> = /*@__PURE__*/
+  messageDesc(file_hermes_communications_query_v1_query, 8);
+
+/**
+ * @generated from message hermes.communications.query.v1.GetMessageResponseV1
+ */
+export type GetMessageResponseV1 = Message<"hermes.communications.query.v1.GetMessageResponseV1"> & {
+  /**
+   * @generated from field: hermes.communications.query.v1.MessageSummaryV1 message = 1;
+   */
+  message?: MessageSummaryV1 | undefined;
+};
+
+/**
+ * Describes the message hermes.communications.query.v1.GetMessageResponseV1.
+ * Use `create(GetMessageResponseV1Schema)` to create a new message.
+ */
+export const GetMessageResponseV1Schema: GenMessage<GetMessageResponseV1> = /*@__PURE__*/
+  messageDesc(file_hermes_communications_query_v1_query, 9);
+
+/**
  * @generated from message hermes.communications.query.v1.ListConversationMessagesRequestV1
  */
 export type ListConversationMessagesRequestV1 = Message<"hermes.communications.query.v1.ListConversationMessagesRequestV1"> & {
@@ -299,6 +365,11 @@ export type ListConversationMessagesRequestV1 = Message<"hermes.communications.q
    * @generated from field: uint32 limit = 2;
    */
   limit: number;
+
+  /**
+   * @generated from field: bytes cursor = 3;
+   */
+  cursor: Uint8Array;
 };
 
 /**
@@ -306,7 +377,7 @@ export type ListConversationMessagesRequestV1 = Message<"hermes.communications.q
  * Use `create(ListConversationMessagesRequestV1Schema)` to create a new message.
  */
 export const ListConversationMessagesRequestV1Schema: GenMessage<ListConversationMessagesRequestV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 8);
+  messageDesc(file_hermes_communications_query_v1_query, 10);
 
 /**
  * @generated from message hermes.communications.query.v1.ListConversationMessagesResponseV1
@@ -316,6 +387,11 @@ export type ListConversationMessagesResponseV1 = Message<"hermes.communications.
    * @generated from field: repeated hermes.communications.query.v1.MessageSummaryV1 messages = 1;
    */
   messages: MessageSummaryV1[];
+
+  /**
+   * @generated from field: bytes next_cursor = 2;
+   */
+  nextCursor: Uint8Array;
 };
 
 /**
@@ -323,7 +399,7 @@ export type ListConversationMessagesResponseV1 = Message<"hermes.communications.
  * Use `create(ListConversationMessagesResponseV1Schema)` to create a new message.
  */
 export const ListConversationMessagesResponseV1Schema: GenMessage<ListConversationMessagesResponseV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 9);
+  messageDesc(file_hermes_communications_query_v1_query, 11);
 
 /**
  * @generated from message hermes.communications.query.v1.ListConversationParticipantsRequestV1
@@ -338,6 +414,11 @@ export type ListConversationParticipantsRequestV1 = Message<"hermes.communicatio
    * @generated from field: uint32 limit = 2;
    */
   limit: number;
+
+  /**
+   * @generated from field: bytes cursor = 3;
+   */
+  cursor: Uint8Array;
 };
 
 /**
@@ -345,7 +426,7 @@ export type ListConversationParticipantsRequestV1 = Message<"hermes.communicatio
  * Use `create(ListConversationParticipantsRequestV1Schema)` to create a new message.
  */
 export const ListConversationParticipantsRequestV1Schema: GenMessage<ListConversationParticipantsRequestV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 10);
+  messageDesc(file_hermes_communications_query_v1_query, 12);
 
 /**
  * @generated from message hermes.communications.query.v1.ListConversationParticipantsResponseV1
@@ -355,6 +436,11 @@ export type ListConversationParticipantsResponseV1 = Message<"hermes.communicati
    * @generated from field: repeated hermes.communications.query.v1.ObservedParticipantSummaryV1 participants = 1;
    */
   participants: ObservedParticipantSummaryV1[];
+
+  /**
+   * @generated from field: bytes next_cursor = 2;
+   */
+  nextCursor: Uint8Array;
 };
 
 /**
@@ -362,7 +448,7 @@ export type ListConversationParticipantsResponseV1 = Message<"hermes.communicati
  * Use `create(ListConversationParticipantsResponseV1Schema)` to create a new message.
  */
 export const ListConversationParticipantsResponseV1Schema: GenMessage<ListConversationParticipantsResponseV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 11);
+  messageDesc(file_hermes_communications_query_v1_query, 13);
 
 /**
  * @generated from message hermes.communications.query.v1.ListMessageAttachmentAnchorsRequestV1
@@ -377,6 +463,11 @@ export type ListMessageAttachmentAnchorsRequestV1 = Message<"hermes.communicatio
    * @generated from field: uint32 limit = 2;
    */
   limit: number;
+
+  /**
+   * @generated from field: bytes cursor = 3;
+   */
+  cursor: Uint8Array;
 };
 
 /**
@@ -384,7 +475,7 @@ export type ListMessageAttachmentAnchorsRequestV1 = Message<"hermes.communicatio
  * Use `create(ListMessageAttachmentAnchorsRequestV1Schema)` to create a new message.
  */
 export const ListMessageAttachmentAnchorsRequestV1Schema: GenMessage<ListMessageAttachmentAnchorsRequestV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 12);
+  messageDesc(file_hermes_communications_query_v1_query, 14);
 
 /**
  * @generated from message hermes.communications.query.v1.ListMessageAttachmentAnchorsResponseV1
@@ -394,6 +485,11 @@ export type ListMessageAttachmentAnchorsResponseV1 = Message<"hermes.communicati
    * @generated from field: repeated hermes.communications.query.v1.AttachmentAnchorSummaryV1 anchors = 1;
    */
   anchors: AttachmentAnchorSummaryV1[];
+
+  /**
+   * @generated from field: bytes next_cursor = 2;
+   */
+  nextCursor: Uint8Array;
 };
 
 /**
@@ -401,7 +497,7 @@ export type ListMessageAttachmentAnchorsResponseV1 = Message<"hermes.communicati
  * Use `create(ListMessageAttachmentAnchorsResponseV1Schema)` to create a new message.
  */
 export const ListMessageAttachmentAnchorsResponseV1Schema: GenMessage<ListMessageAttachmentAnchorsResponseV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 13);
+  messageDesc(file_hermes_communications_query_v1_query, 15);
 
 /**
  * @generated from message hermes.communications.query.v1.ListMessageReferencesRequestV1
@@ -416,6 +512,11 @@ export type ListMessageReferencesRequestV1 = Message<"hermes.communications.quer
    * @generated from field: uint32 limit = 2;
    */
   limit: number;
+
+  /**
+   * @generated from field: bytes cursor = 3;
+   */
+  cursor: Uint8Array;
 };
 
 /**
@@ -423,7 +524,7 @@ export type ListMessageReferencesRequestV1 = Message<"hermes.communications.quer
  * Use `create(ListMessageReferencesRequestV1Schema)` to create a new message.
  */
 export const ListMessageReferencesRequestV1Schema: GenMessage<ListMessageReferencesRequestV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 14);
+  messageDesc(file_hermes_communications_query_v1_query, 16);
 
 /**
  * @generated from message hermes.communications.query.v1.ListMessageReferencesResponseV1
@@ -433,6 +534,11 @@ export type ListMessageReferencesResponseV1 = Message<"hermes.communications.que
    * @generated from field: repeated hermes.communications.query.v1.MessageReferenceSummaryV1 references = 1;
    */
   references: MessageReferenceSummaryV1[];
+
+  /**
+   * @generated from field: bytes next_cursor = 2;
+   */
+  nextCursor: Uint8Array;
 };
 
 /**
@@ -440,7 +546,7 @@ export type ListMessageReferencesResponseV1 = Message<"hermes.communications.que
  * Use `create(ListMessageReferencesResponseV1Schema)` to create a new message.
  */
 export const ListMessageReferencesResponseV1Schema: GenMessage<ListMessageReferencesResponseV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 15);
+  messageDesc(file_hermes_communications_query_v1_query, 17);
 
 /**
  * Canonical evidence metadata only. Provider-local source cursors, message
@@ -460,7 +566,7 @@ export type GetEvidenceRequestV1 = Message<"hermes.communications.query.v1.GetEv
  * Use `create(GetEvidenceRequestV1Schema)` to create a new message.
  */
 export const GetEvidenceRequestV1Schema: GenMessage<GetEvidenceRequestV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 16);
+  messageDesc(file_hermes_communications_query_v1_query, 18);
 
 /**
  * @generated from message hermes.communications.query.v1.GetEvidenceResponseV1
@@ -477,7 +583,7 @@ export type GetEvidenceResponseV1 = Message<"hermes.communications.query.v1.GetE
  * Use `create(GetEvidenceResponseV1Schema)` to create a new message.
  */
 export const GetEvidenceResponseV1Schema: GenMessage<GetEvidenceResponseV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 17);
+  messageDesc(file_hermes_communications_query_v1_query, 19);
 
 /**
  * @generated from message hermes.communications.query.v1.ListMessageEvidenceRequestV1
@@ -492,6 +598,11 @@ export type ListMessageEvidenceRequestV1 = Message<"hermes.communications.query.
    * @generated from field: uint32 limit = 2;
    */
   limit: number;
+
+  /**
+   * @generated from field: bytes cursor = 3;
+   */
+  cursor: Uint8Array;
 };
 
 /**
@@ -499,7 +610,7 @@ export type ListMessageEvidenceRequestV1 = Message<"hermes.communications.query.
  * Use `create(ListMessageEvidenceRequestV1Schema)` to create a new message.
  */
 export const ListMessageEvidenceRequestV1Schema: GenMessage<ListMessageEvidenceRequestV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 18);
+  messageDesc(file_hermes_communications_query_v1_query, 20);
 
 /**
  * @generated from message hermes.communications.query.v1.ListMessageEvidenceResponseV1
@@ -509,6 +620,11 @@ export type ListMessageEvidenceResponseV1 = Message<"hermes.communications.query
    * @generated from field: repeated hermes.communications.query.v1.EvidenceSummaryV1 evidence = 1;
    */
   evidence: EvidenceSummaryV1[];
+
+  /**
+   * @generated from field: bytes next_cursor = 2;
+   */
+  nextCursor: Uint8Array;
 };
 
 /**
@@ -516,7 +632,7 @@ export type ListMessageEvidenceResponseV1 = Message<"hermes.communications.query
  * Use `create(ListMessageEvidenceResponseV1Schema)` to create a new message.
  */
 export const ListMessageEvidenceResponseV1Schema: GenMessage<ListMessageEvidenceResponseV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 19);
+  messageDesc(file_hermes_communications_query_v1_query, 21);
 
 /**
  * Exact-token owner-local derived search. Query text is transient at the
@@ -534,6 +650,11 @@ export type SearchCommunicationsRequestV1 = Message<"hermes.communications.query
    * @generated from field: uint32 limit = 2;
    */
   limit: number;
+
+  /**
+   * @generated from field: bytes cursor = 3;
+   */
+  cursor: Uint8Array;
 };
 
 /**
@@ -541,7 +662,7 @@ export type SearchCommunicationsRequestV1 = Message<"hermes.communications.query
  * Use `create(SearchCommunicationsRequestV1Schema)` to create a new message.
  */
 export const SearchCommunicationsRequestV1Schema: GenMessage<SearchCommunicationsRequestV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 20);
+  messageDesc(file_hermes_communications_query_v1_query, 22);
 
 /**
  * @generated from message hermes.communications.query.v1.SearchCommunicationsResponseV1
@@ -551,6 +672,11 @@ export type SearchCommunicationsResponseV1 = Message<"hermes.communications.quer
    * @generated from field: repeated hermes.communications.query.v1.CommunicationSearchHitV1 hits = 1;
    */
   hits: CommunicationSearchHitV1[];
+
+  /**
+   * @generated from field: bytes next_cursor = 2;
+   */
+  nextCursor: Uint8Array;
 };
 
 /**
@@ -558,7 +684,7 @@ export type SearchCommunicationsResponseV1 = Message<"hermes.communications.quer
  * Use `create(SearchCommunicationsResponseV1Schema)` to create a new message.
  */
 export const SearchCommunicationsResponseV1Schema: GenMessage<SearchCommunicationsResponseV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 21);
+  messageDesc(file_hermes_communications_query_v1_query, 23);
 
 /**
  * @generated from message hermes.communications.query.v1.CommunicationSearchHitV1
@@ -595,7 +721,7 @@ export type CommunicationSearchHitV1 = Message<"hermes.communications.query.v1.C
  * Use `create(CommunicationSearchHitV1Schema)` to create a new message.
  */
 export const CommunicationSearchHitV1Schema: GenMessage<CommunicationSearchHitV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 22);
+  messageDesc(file_hermes_communications_query_v1_query, 24);
 
 /**
  * @generated from message hermes.communications.query.v1.EvidenceSummaryV1
@@ -662,7 +788,7 @@ export type EvidenceSummaryV1 = Message<"hermes.communications.query.v1.Evidence
  * Use `create(EvidenceSummaryV1Schema)` to create a new message.
  */
 export const EvidenceSummaryV1Schema: GenMessage<EvidenceSummaryV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 23);
+  messageDesc(file_hermes_communications_query_v1_query, 25);
 
 /**
  * @generated from message hermes.communications.query.v1.AccountSummaryV1
@@ -704,7 +830,7 @@ export type AccountSummaryV1 = Message<"hermes.communications.query.v1.AccountSu
  * Use `create(AccountSummaryV1Schema)` to create a new message.
  */
 export const AccountSummaryV1Schema: GenMessage<AccountSummaryV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 24);
+  messageDesc(file_hermes_communications_query_v1_query, 26);
 
 /**
  * @generated from message hermes.communications.query.v1.ConversationSummaryV1
@@ -751,7 +877,7 @@ export type ConversationSummaryV1 = Message<"hermes.communications.query.v1.Conv
  * Use `create(ConversationSummaryV1Schema)` to create a new message.
  */
 export const ConversationSummaryV1Schema: GenMessage<ConversationSummaryV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 25);
+  messageDesc(file_hermes_communications_query_v1_query, 27);
 
 /**
  * @generated from message hermes.communications.query.v1.MessageSummaryV1
@@ -808,7 +934,7 @@ export type MessageSummaryV1 = Message<"hermes.communications.query.v1.MessageSu
  * Use `create(MessageSummaryV1Schema)` to create a new message.
  */
 export const MessageSummaryV1Schema: GenMessage<MessageSummaryV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 26);
+  messageDesc(file_hermes_communications_query_v1_query, 28);
 
 /**
  * @generated from message hermes.communications.query.v1.ObservedParticipantSummaryV1
@@ -850,7 +976,7 @@ export type ObservedParticipantSummaryV1 = Message<"hermes.communications.query.
  * Use `create(ObservedParticipantSummaryV1Schema)` to create a new message.
  */
 export const ObservedParticipantSummaryV1Schema: GenMessage<ObservedParticipantSummaryV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 27);
+  messageDesc(file_hermes_communications_query_v1_query, 29);
 
 /**
  * @generated from message hermes.communications.query.v1.AttachmentAnchorSummaryV1
@@ -932,7 +1058,7 @@ export type AttachmentAnchorSummaryV1 = Message<"hermes.communications.query.v1.
  * Use `create(AttachmentAnchorSummaryV1Schema)` to create a new message.
  */
 export const AttachmentAnchorSummaryV1Schema: GenMessage<AttachmentAnchorSummaryV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 28);
+  messageDesc(file_hermes_communications_query_v1_query, 30);
 
 /**
  * @generated from message hermes.communications.query.v1.MessageReferenceSummaryV1
@@ -974,7 +1100,7 @@ export type MessageReferenceSummaryV1 = Message<"hermes.communications.query.v1.
  * Use `create(MessageReferenceSummaryV1Schema)` to create a new message.
  */
 export const MessageReferenceSummaryV1Schema: GenMessage<MessageReferenceSummaryV1> = /*@__PURE__*/
-  messageDesc(file_hermes_communications_query_v1_query, 29);
+  messageDesc(file_hermes_communications_query_v1_query, 31);
 
 /**
  * @generated from service hermes.communications.query.v1.CommunicationsQueryService

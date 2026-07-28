@@ -121,6 +121,7 @@ policy через ссылки из новых документов.
 - [ADR-0310: Telegram user-only TDLib QR account identity](ADR-0310-telegram-user-only-tdlib-qr-account-identity.md)
 - [ADR-0311: Storage successor bundle step lineage](ADR-0311-storage-successor-bundle-step-lineage.md)
 - [ADR-0312: Mail permanent delete confirmation and provider authority](ADR-0312-mail-permanent-delete-confirmation-and-provider-authority.md)
+- [ADR-0313: Communications canonical read v2 detail and pagination](ADR-0313-communications-canonical-read-v2-detail-and-pagination.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -444,3 +445,9 @@ command/query grants требуют current Trash projection, stale-revision fen
 явное confirmation; IMAP использует только UIDPLUS `UID EXPUNGE`, а Gmail
 требует отдельного broad-scope consent без автоматического повышения OAuth
 authority. Kernel/Core Gateway остаются owner-neutral и переносят opaque bytes.
+ADR-0313 закрывает следующий Communications reconstruction gate: existing
+metadata-only owner query получает exact message detail и scoped opaque keyset
+continuation для всех repeated list/search operations. Frontend собирает
+participants, attachment anchors, references и evidence history только через
+Communications owner contract; provider fallback, content и Blob locators
+запрещены.

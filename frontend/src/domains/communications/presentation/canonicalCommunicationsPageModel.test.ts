@@ -28,7 +28,7 @@ describe('canonical Communications presentation model', () => {
 			selected: true,
 		})
 		expect(buildCanonicalConversationRows([], '')).toEqual([])
-		expect(buildCanonicalMessageRows([])).toEqual([])
-		expect(buildCanonicalSearchRows([])).toEqual([])
+		expect(buildCanonicalMessageRows([], '')).toEqual([])
+		expect(buildCanonicalSearchRows([], '')).toEqual([])
 	})
 })

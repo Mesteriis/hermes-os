@@ -798,7 +798,7 @@ impl CommunicationsDurablePersistence {
     }
 }
 
-fn reference_from_row(
+pub(crate) fn reference_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationMessageReferenceSummaryV1, CommunicationsPersistenceError> {
     let source_message_id: Vec<u8> = row
@@ -831,7 +831,7 @@ fn reference_from_row(
     })
 }
 
-fn account_from_row(
+pub(crate) fn account_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationAccountSummaryV1, CommunicationsPersistenceError> {
     let account_id: Vec<u8> = row
@@ -862,7 +862,7 @@ fn account_from_row(
     })
 }
 
-fn anchor_from_row(
+pub(crate) fn anchor_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationAttachmentAnchorSummaryV1, CommunicationsPersistenceError> {
     let attachment_anchor_id: Vec<u8> = row
@@ -971,7 +971,7 @@ fn attachment_disposition_from_value(
     }
 }
 
-fn participant_from_row(
+pub(crate) fn participant_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationObservedParticipantSummaryV1, CommunicationsPersistenceError> {
     let participant_id: Vec<u8> = row
@@ -1002,7 +1002,7 @@ fn participant_from_row(
     })
 }
 
-fn conversation_from_row(
+pub(crate) fn conversation_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationConversationSummaryV1, CommunicationsPersistenceError> {
     let conversation_id: Vec<u8> = row
@@ -1037,7 +1037,7 @@ fn conversation_from_row(
     })
 }
 
-fn message_from_row(
+pub(crate) fn message_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationMessageSummaryV1, CommunicationsPersistenceError> {
     let message_id: Vec<u8> = row
@@ -1080,7 +1080,7 @@ fn message_from_row(
     })
 }
 
-fn id16(value: &[u8]) -> Result<[u8; 16], CommunicationsPersistenceError> {
+pub(crate) fn id16(value: &[u8]) -> Result<[u8; 16], CommunicationsPersistenceError> {
     value
         .try_into()
         .map_err(|_| CommunicationsPersistenceError::InvalidRow)

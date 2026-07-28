@@ -30,15 +30,18 @@ export type CanonicalMessageRow = {
 	stateLabel: string
 	directionLabel: string
 	observedRangeLabel: string
+	selected: boolean
 }
 
 export type CanonicalSearchResultRow = {
 	key: string
+	messageKey: string
 	evidenceLabel: string
 	messageLabel: string
 	conversationLabel: string
 	observedAtLabel: string
 	matchLabel: string
+	selected: boolean
 }
 
 export type CanonicalCommunicationsPageModel = {
@@ -51,6 +54,11 @@ export type CanonicalCommunicationsPageModel = {
 	searchStatus: CanonicalCommunicationsSearchStatus
 	searchMessage: string
 	searchResults: readonly CanonicalSearchResultRow[]
+	hasMoreAccounts: boolean
+	hasMoreConversations: boolean
+	hasMoreMessages: boolean
+	hasMoreSearchResults: boolean
+	loadingMore: boolean
 }
 
 export function buildCanonicalAccountRows(
@@ -84,6 +92,7 @@ export function buildCanonicalConversationRows(
 
 export function buildCanonicalMessageRows(
 	messages: readonly MessageSummaryV1[],
+	selectedKey: string,
 ): readonly CanonicalMessageRow[] {
 	return messages.map((message) => ({
 		key: bytesKey(message.messageId),
@@ -94,19 +103,23 @@ export function buildCanonicalMessageRows(
 			message.firstObservedAtUnixSeconds,
 			message.lastObservedAtUnixSeconds,
 		),
+		selected: bytesKey(message.messageId) === selectedKey,
 	}))
 }
 
 export function buildCanonicalSearchRows(
 	results: readonly CommunicationSearchHitV1[],
+	selectedKey: string,
 ): readonly CanonicalSearchResultRow[] {
 	return results.map((result) => ({
 		key: bytesKey(result.evidenceId),
+		messageKey: bytesKey(result.messageId),
 		evidenceLabel: identifierLabel('Evidence', result.evidenceId),
 		messageLabel: identifierLabel('Message', result.messageId),
 		conversationLabel: identifierLabel('Conversation', result.conversationId),
 		observedAtLabel: formatUnixSeconds(result.observedAtUnixSeconds),
 		matchLabel: `${result.matchedTokenCount} exact token${result.matchedTokenCount === 1 ? '' : 's'}`,
+		selected: bytesKey(result.messageId) === selectedKey,
 	}))
 }
 

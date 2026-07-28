@@ -6,8 +6,8 @@ use crate::runtime::lifecycle::control::{
 use hermes_blob_client::BlobDataClient;
 use hermes_communications_api::query_wire::{
     CommunicationsQueryRequestV1, CommunicationsQueryResponseV1, GetEvidenceRequestV1,
-    ListAccountsRequestV1, SearchCommunicationsRequestV1,
-    communications_query_request_v1::Operation,
+    GetMessageRequestV1, ListAccountsRequestV1, ListMessageEvidenceRequestV1,
+    SearchCommunicationsRequestV1, communications_query_request_v1::Operation,
     communications_query_response_v1::Result as QueryResult,
 };
 use hermes_communications_attachment_contract::admission::{
@@ -239,7 +239,10 @@ pub(super) fn assert_communications_query_delivery(
 ) -> Vec<u8> {
     let payload = CommunicationsQueryRequestV1 {
         protocol_major: 1,
-        operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
+        operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+            limit: 16,
+            cursor: Vec::new(),
+        })),
     }
     .encode_to_vec();
     let query = route_communications_query(store, supervisor, 1, &payload);
@@ -270,6 +273,55 @@ pub(super) fn assert_communications_query_delivery(
     evidence.evidence_id
 }
 
+pub(super) fn assert_communications_canonical_read_v2_pagination(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+) {
+    let first_page = route_communications_query(
+        store,
+        supervisor,
+        20,
+        &CommunicationsQueryRequestV1 {
+            protocol_major: 1,
+            operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+                limit: 1,
+                cursor: Vec::new(),
+            })),
+        }
+        .encode_to_vec(),
+    );
+    let Some(QueryResult::ListAccounts(first_page)) = first_page.result else {
+        panic!("Communications first canonical account page");
+    };
+    assert_eq!(first_page.accounts.len(), 1);
+    assert!(
+        !first_page.next_cursor.is_empty(),
+        "multiple canonical accounts must expose an opaque continuation",
+    );
+
+    let second_page = route_communications_query(
+        store,
+        supervisor,
+        21,
+        &CommunicationsQueryRequestV1 {
+            protocol_major: 1,
+            operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+                limit: 1,
+                cursor: first_page.next_cursor,
+            })),
+        }
+        .encode_to_vec(),
+    );
+    let Some(QueryResult::ListAccounts(second_page)) = second_page.result else {
+        panic!("Communications second canonical account page");
+    };
+    assert_eq!(second_page.accounts.len(), 1);
+    assert_ne!(
+        first_page.accounts[0].account_id, second_page.accounts[0].account_id,
+        "keyset continuation must not repeat the boundary row",
+    );
+}
+
 pub(super) fn assert_communications_search_query_delivery(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
@@ -280,6 +332,7 @@ pub(super) fn assert_communications_search_query_delivery(
             SearchCommunicationsRequestV1 {
                 query: "known-missing-token".to_owned(),
                 limit: 16,
+                cursor: Vec::new(),
             },
         )),
     }
@@ -297,6 +350,7 @@ pub(super) fn assert_communications_search_query_delivery(
                 SearchCommunicationsRequestV1 {
                     query: "fixture".to_owned(),
                     limit: 16,
+                    cursor: Vec::new(),
                 },
             )),
         }
@@ -312,6 +366,47 @@ pub(super) fn assert_communications_search_query_delivery(
                     && hit.conversation_id.len() == 16
                     && hit.matched_token_count > 0
             }));
+            let hit = hits.hits.first().expect("canonical search hit").clone();
+            let detail = route_communications_query(
+                store,
+                supervisor,
+                22,
+                &CommunicationsQueryRequestV1 {
+                    protocol_major: 1,
+                    operation: Some(Operation::GetMessage(GetMessageRequestV1 {
+                        message_id: hit.message_id.clone(),
+                    })),
+                }
+                .encode_to_vec(),
+            );
+            let Some(QueryResult::GetMessage(detail)) = detail.result else {
+                panic!("Communications exact message detail result");
+            };
+            let message = detail.message.expect("canonical search message detail");
+            assert_eq!(message.message_id, hit.message_id);
+            assert_eq!(message.conversation_id, hit.conversation_id);
+
+            let history = route_communications_query(
+                store,
+                supervisor,
+                23,
+                &CommunicationsQueryRequestV1 {
+                    protocol_major: 1,
+                    operation: Some(Operation::ListMessageEvidence(
+                        ListMessageEvidenceRequestV1 {
+                            message_id: message.message_id,
+                            limit: 1,
+                            cursor: Vec::new(),
+                        },
+                    )),
+                }
+                .encode_to_vec(),
+            );
+            let Some(QueryResult::ListMessageEvidence(history)) = history.result else {
+                panic!("Communications exact message evidence history result");
+            };
+            assert_eq!(history.evidence.len(), 1);
+            assert_eq!(history.evidence[0].evidence_id.len(), 16);
             let public_payload = CommunicationsQueryResponseV1 {
                 result: Some(QueryResult::SearchCommunications(hits)),
                 error_code: String::new(),
@@ -572,7 +667,10 @@ pub(super) fn assert_communications_ingress_delivery(
     loop {
         let payload = CommunicationsQueryRequestV1 {
             protocol_major: 1,
-            operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
+            operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+                limit: 16,
+                cursor: Vec::new(),
+            })),
         }
         .encode_to_vec();
         let query = route_communications_query(store, supervisor, 3, &payload);
@@ -837,7 +935,10 @@ pub(super) fn assert_communications_transferred_body_projection(
             4,
             &CommunicationsQueryRequestV1 {
                 protocol_major: 1,
-                operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
+                operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+                    limit: 16,
+                    cursor: Vec::new(),
+                })),
             }
             .encode_to_vec(),
         );
@@ -866,6 +967,7 @@ pub(super) fn assert_communications_transferred_body_projection(
                     hermes_communications_api::query_wire::ListConversationsRequestV1 {
                         account_cursor_sha256: account.account_cursor_sha256.clone(),
                         limit: 16,
+                        cursor: Vec::new(),
                     },
                 )),
             }
@@ -892,6 +994,7 @@ pub(super) fn assert_communications_transferred_body_projection(
                     hermes_communications_api::query_wire::ListConversationMessagesRequestV1 {
                         conversation_id: conversation.conversation_id.clone(),
                         limit: 16,
+                        cursor: Vec::new(),
                     },
                 )),
             }
@@ -1376,7 +1479,10 @@ pub(super) fn assert_communications_attachment_anchor_projection(
             7,
             &CommunicationsQueryRequestV1 {
                 protocol_major: 1,
-                operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
+                operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+                    limit: 16,
+                    cursor: Vec::new(),
+                })),
             }
             .encode_to_vec(),
         );
@@ -1405,6 +1511,7 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                     hermes_communications_api::query_wire::ListConversationsRequestV1 {
                         account_cursor_sha256: account.account_cursor_sha256.clone(),
                         limit: 16,
+                        cursor: Vec::new(),
                     },
                 )),
             }
@@ -1431,6 +1538,7 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                     hermes_communications_api::query_wire::ListConversationMessagesRequestV1 {
                         conversation_id: conversation.conversation_id.clone(),
                         limit: 16,
+                        cursor: Vec::new(),
                     },
                 )),
             }
@@ -1450,6 +1558,7 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                         hermes_communications_api::query_wire::ListMessageAttachmentAnchorsRequestV1 {
                             message_id: message.message_id,
                             limit: 16,
+                            cursor: Vec::new(),
                         },
                     )),
                 }
@@ -1471,6 +1580,7 @@ pub(super) fn assert_communications_attachment_anchor_projection(
                     result: Some(QueryResult::ListMessageAttachmentAnchors(
                         hermes_communications_api::query_wire::ListMessageAttachmentAnchorsResponseV1 {
                             anchors: vec![anchor.clone()],
+                            next_cursor: Vec::new(),
                         },
                     )),
                     error_code: String::new(),
@@ -1573,7 +1683,10 @@ pub(super) fn assert_communications_relationship_projection(
             11,
             &CommunicationsQueryRequestV1 {
                 protocol_major: 1,
-                operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
+                operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+                    limit: 16,
+                    cursor: Vec::new(),
+                })),
             }
             .encode_to_vec(),
         );
@@ -1602,6 +1715,7 @@ pub(super) fn assert_communications_relationship_projection(
                     hermes_communications_api::query_wire::ListConversationsRequestV1 {
                         account_cursor_sha256: account.account_cursor_sha256.clone(),
                         limit: 16,
+                        cursor: Vec::new(),
                     },
                 )),
             }
@@ -1628,6 +1742,7 @@ pub(super) fn assert_communications_relationship_projection(
                     hermes_communications_api::query_wire::ListConversationParticipantsRequestV1 {
                         conversation_id: conversation.conversation_id.clone(),
                         limit: 16,
+                        cursor: Vec::new(),
                     },
                 )),
             }
@@ -1647,6 +1762,7 @@ pub(super) fn assert_communications_relationship_projection(
                     hermes_communications_api::query_wire::ListConversationMessagesRequestV1 {
                         conversation_id: conversation.conversation_id.clone(),
                         limit: 16,
+                        cursor: Vec::new(),
                     },
                 )),
             }
@@ -1673,6 +1789,7 @@ pub(super) fn assert_communications_relationship_projection(
                     hermes_communications_api::query_wire::ListMessageReferencesRequestV1 {
                         message_id: message.message_id.clone(),
                         limit: 16,
+                        cursor: Vec::new(),
                     },
                 )),
             }

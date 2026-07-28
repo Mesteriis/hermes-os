@@ -227,7 +227,7 @@ fn attachment_observation_consumer_capability_v1(
 pub fn communications_query_capability_v1() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: COMMUNICATIONS_QUERY_CAPABILITY_ID.to_owned(),
-        capability_revision: 1,
+        capability_revision: 2,
         criticality: CapabilityCriticalityV1::Required as i32,
         provides: vec![ProvidedSurfaceV1 {
             kind: ProvidedSurfaceKindV1::ClientRpc as i32,
@@ -318,7 +318,7 @@ pub fn communications_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1
     let settings_schema = communications_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 1,
+        descriptor_revision: 2,
         module_id: COMMUNICATIONS_MODULE_ID.to_owned(),
         owner_id: COMMUNICATIONS_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Domain as i32,

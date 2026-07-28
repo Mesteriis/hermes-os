@@ -172,19 +172,30 @@
 .canonical-communications-row small,
 .canonical-communications-message span,
 .canonical-communications-message small,
-.canonical-communications-results article span,
-.canonical-communications-results article small {
+.canonical-communications-results__grid > button span,
+.canonical-communications-results__grid > button small {
 	color: var(--h-color-text-muted);
 }
 
 .canonical-communications-message {
 	display: grid;
 	gap: var(--h-space-2);
+	width: 100%;
 	margin-top: var(--h-space-2);
 	padding: var(--h-space-3);
 	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-md);
+	color: inherit;
+	text-align: left;
 	background: var(--h-color-surface);
+}
+
+.canonical-communications-message:hover,
+.canonical-communications-message.selected,
+.canonical-communications-results__grid > button:hover,
+.canonical-communications-results__grid > button.selected {
+	border-color: color-mix(in srgb, var(--h-color-accent) 45%, var(--h-color-border));
+	background: color-mix(in srgb, var(--h-color-accent) 10%, var(--h-color-surface));
 }
 
 .canonical-communications-message > div,
@@ -219,12 +230,14 @@
 	margin-top: var(--h-space-4);
 }
 
-.canonical-communications-results article {
+.canonical-communications-results__grid > button {
 	display: grid;
 	gap: var(--h-space-2);
 	padding: var(--h-space-3);
 	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-md);
+	color: inherit;
+	text-align: left;
 	background: var(--h-color-surface-muted);
 }
 
@@ -240,6 +253,20 @@
 	font-size: var(--h-font-size-xs);
 	font-style: normal;
 	font-weight: 700;
+}
+
+.canonical-communications-load-more {
+	min-height: 2.25rem;
+	margin-top: var(--h-space-3);
+	padding: 0 var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-surface-muted);
+}
+
+.canonical-communications-load-more:disabled {
+	opacity: 0.55;
 }
 
 .canonical-communications-state {

@@ -7,8 +7,13 @@ defineProps<{ model: CanonicalCommunicationsPageModel }>()
 const emit = defineEmits<{
 	retry: []
 	search: []
+	loadMoreAccounts: []
+	loadMoreConversations: []
+	loadMoreMessages: []
+	loadMoreSearchResults: []
 	selectAccount: [accountKey: string]
 	selectConversation: [conversationKey: string]
+	selectMessage: [messageKey: string]
 	updateSearchText: [value: string]
 }>()
 </script>
@@ -64,6 +69,13 @@ const emit = defineEmits<{
 				<p v-if="model.accounts.length === 0" class="canonical-communications-empty">
 					{{ model.statusMessage }}
 				</p>
+				<button
+					v-if="model.hasMoreAccounts"
+					type="button"
+					class="canonical-communications-load-more"
+					:disabled="model.loadingMore"
+					@click="emit('loadMoreAccounts')"
+				>Load more sources</button>
 			</aside>
 
 			<section class="canonical-communications-pane canonical-communications-pane--conversations">
@@ -84,22 +96,40 @@ const emit = defineEmits<{
 				<p v-if="model.conversations.length === 0" class="canonical-communications-empty">
 					{{ model.statusMessage }}
 				</p>
+				<button
+					v-if="model.hasMoreConversations"
+					type="button"
+					class="canonical-communications-load-more"
+					:disabled="model.loadingMore"
+					@click="emit('loadMoreConversations')"
+				>Load more conversations</button>
 			</section>
 
 			<main class="canonical-communications-pane canonical-communications-pane--messages">
 				<header><h2>Message evidence</h2><span>{{ model.messages.length }}</span></header>
-				<article
+				<button
 					v-for="message in model.messages"
 					:key="message.key"
+					type="button"
 					class="canonical-communications-message"
+					:class="{ selected: message.selected }"
+					:aria-pressed="message.selected"
+					@click="emit('selectMessage', message.key)"
 				>
 					<div><strong>{{ message.identityLabel }}</strong><span>{{ message.directionLabel }}</span></div>
 					<p>{{ message.stateLabel }}</p>
 					<small>{{ message.observedRangeLabel }}</small>
-				</article>
+				</button>
 				<p v-if="model.messages.length === 0" class="canonical-communications-empty">
 					{{ model.statusMessage || 'Select a canonical conversation.' }}
 				</p>
+				<button
+					v-if="model.hasMoreMessages"
+					type="button"
+					class="canonical-communications-load-more"
+					:disabled="model.loadingMore"
+					@click="emit('loadMoreMessages')"
+				>Load more messages</button>
 			</main>
 		</div>
 
@@ -113,13 +143,27 @@ const emit = defineEmits<{
 			</header>
 			<p v-if="model.searchMessage" class="canonical-communications-empty">{{ model.searchMessage }}</p>
 			<div v-else class="canonical-communications-results__grid">
-				<article v-for="result in model.searchResults" :key="result.key">
+				<button
+					v-for="result in model.searchResults"
+					:key="result.key"
+					type="button"
+					:class="{ selected: result.selected }"
+					:aria-pressed="result.selected"
+					@click="emit('selectMessage', result.messageKey)"
+				>
 					<strong>{{ result.evidenceLabel }}</strong>
 					<span>{{ result.messageLabel }}</span>
 					<span>{{ result.conversationLabel }}</span>
 					<footer><small>{{ result.observedAtLabel }}</small><em>{{ result.matchLabel }}</em></footer>
-				</article>
+				</button>
 			</div>
+			<button
+				v-if="model.hasMoreSearchResults"
+				type="button"
+				class="canonical-communications-load-more"
+				:disabled="model.loadingMore"
+				@click="emit('loadMoreSearchResults')"
+			>Load more search results</button>
 		</section>
 	</section>
 </template>

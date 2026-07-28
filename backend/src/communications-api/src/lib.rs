@@ -369,48 +369,61 @@ pub struct GetCommunicationConversationV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GetCommunicationMessageV1 {
+    pub message_id: CommunicationMessageIdV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListCommunicationAccountsV1 {
     pub limit: u16,
+    pub cursor: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListCommunicationConversationsV1 {
     pub account_cursor: Option<CommunicationSourceCursorV1>,
     pub limit: u16,
+    pub cursor: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListConversationMessagesV1 {
     pub conversation_id: CommunicationConversationIdV1,
     pub limit: u16,
+    pub cursor: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListConversationParticipantsV1 {
     pub conversation_id: CommunicationConversationIdV1,
     pub limit: u16,
+    pub cursor: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListMessageAttachmentAnchorsV1 {
     pub message_id: CommunicationMessageIdV1,
     pub limit: u16,
+    pub cursor: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListMessageReferencesV1 {
     pub message_id: CommunicationMessageIdV1,
     pub limit: u16,
+    pub cursor: Vec<u8>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListMessageEvidenceV1 {
     pub message_id: CommunicationMessageIdV1,
     pub limit: u16,
+    pub cursor: Vec<u8>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SearchCommunicationsV1 {
     pub query: String,
     pub limit: u16,
+    pub cursor: Vec<u8>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommunicationSearchHitV1 {
@@ -427,6 +440,7 @@ pub struct GetCommunicationEvidenceV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommunicationsClientError {
     UnknownCommunication,
+    InvalidCursor,
     DraftValidationFailed,
     DuplicateObservation,
     Unavailable,
@@ -462,6 +476,7 @@ mod tests {
         let request = super::query_wire::ListMessageEvidenceRequestV1 {
             message_id: vec![7; 16],
             limit: 25,
+            cursor: Vec::new(),
         };
         let decoded = super::query_wire::ListMessageEvidenceRequestV1::decode(
             request.encode_to_vec().as_slice(),

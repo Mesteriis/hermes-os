@@ -6,7 +6,10 @@ use hermes_communications_api::{
 };
 use sqlx::Row;
 
-use crate::{CommunicationsDurablePersistence, CommunicationsPersistenceError};
+use crate::{
+    CanonicalReadAfterV1, CanonicalReadPageV1, CommunicationsDurablePersistence,
+    CommunicationsPersistenceError,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommunicationsSearchProjectionWriteV1 {
@@ -135,8 +138,9 @@ impl CommunicationsDurablePersistence {
     pub async fn search_by_token_digests(
         &self,
         token_digests: &[[u8; 32]],
+        after: Option<CanonicalReadAfterV1>,
         limit: u16,
-    ) -> Result<Vec<CommunicationSearchHitV1>, CommunicationsPersistenceError> {
+    ) -> Result<CanonicalReadPageV1<CommunicationSearchHitV1>, CommunicationsPersistenceError> {
         if token_digests.is_empty() || token_digests.len() > 16 || limit == 0 || limit > 100 {
             return Err(CommunicationsPersistenceError::InvalidRow);
         }
@@ -144,16 +148,45 @@ impl CommunicationsDurablePersistence {
             .iter()
             .map(|digest| digest.to_vec())
             .collect::<Vec<_>>();
+        let (after_observed_at, after_message_id) = after
+            .map(|value| {
+                (
+                    Some(value.observed_at_unix_seconds),
+                    Some(value.canonical_id.to_vec()),
+                )
+            })
+            .unwrap_or((None, None));
         let rows = sqlx::query(
-            "SELECT projection.evidence_id, projection.message_id, projection.conversation_id, projection.observed_at_unix_seconds, COUNT(DISTINCT digest.token_digest) AS matched_token_count FROM hermes_data.communications_derived_index_projections projection JOIN hermes_data.communications_derived_index_token_digests digest ON digest.message_id = projection.message_id WHERE digest.token_digest = ANY($1::bytea[]) GROUP BY projection.evidence_id, projection.message_id, projection.conversation_id, projection.observed_at_unix_seconds HAVING COUNT(DISTINCT digest.token_digest) = $2 ORDER BY projection.observed_at_unix_seconds DESC, projection.message_id ASC LIMIT $3",
+            "SELECT projection.evidence_id, projection.message_id, \
+             projection.conversation_id, projection.observed_at_unix_seconds, \
+             COUNT(DISTINCT digest.token_digest) AS matched_token_count \
+             FROM hermes_data.communications_derived_index_projections projection \
+             JOIN hermes_data.communications_derived_index_token_digests digest \
+               ON digest.message_id = projection.message_id \
+             WHERE digest.token_digest = ANY($1::bytea[]) \
+               AND ($2::BIGINT IS NULL \
+                 OR projection.observed_at_unix_seconds < $2 \
+                 OR (projection.observed_at_unix_seconds = $2 \
+                   AND projection.message_id > $3)) \
+             GROUP BY projection.evidence_id, projection.message_id, \
+               projection.conversation_id, projection.observed_at_unix_seconds \
+             HAVING COUNT(DISTINCT digest.token_digest) = $4 \
+             ORDER BY projection.observed_at_unix_seconds DESC, \
+               projection.message_id ASC LIMIT $5",
         )
         .bind(digests)
-        .bind(i64::try_from(token_digests.len()).map_err(|_| CommunicationsPersistenceError::InvalidRow)?)
-        .bind(i64::from(limit))
+        .bind(after_observed_at)
+        .bind(after_message_id)
+        .bind(
+            i64::try_from(token_digests.len())
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+        )
+        .bind(i64::from(limit) + 1)
         .fetch_all(&self.pool)
         .await
         .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
-        rows.into_iter()
+        let mut items = rows
+            .into_iter()
             .map(|row| {
                 let evidence_id: Vec<u8> = row
                     .try_get("evidence_id")
@@ -179,7 +212,10 @@ impl CommunicationsDurablePersistence {
                         .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
                 })
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+        let has_more = items.len() > usize::from(limit);
+        items.truncate(usize::from(limit));
+        Ok(CanonicalReadPageV1 { items, has_more })
     }
 }
 

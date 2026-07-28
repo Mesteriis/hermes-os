@@ -438,7 +438,10 @@ pub(super) fn wait_for_attachment_state(
             61,
             &CommunicationsQueryRequestV1 {
                 protocol_major: 1,
-                operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
+                operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+                    limit: 16,
+                    cursor: Vec::new(),
+                })),
             }
             .encode_to_vec(),
         );
@@ -455,6 +458,7 @@ pub(super) fn wait_for_attachment_state(
                     operation: Some(Operation::ListConversations(ListConversationsRequestV1 {
                         account_cursor_sha256: account.account_cursor_sha256,
                         limit: 16,
+                        cursor: Vec::new(),
                     })),
                 }
                 .encode_to_vec(),
@@ -473,6 +477,7 @@ pub(super) fn wait_for_attachment_state(
                             ListConversationMessagesRequestV1 {
                                 conversation_id: conversation.conversation_id,
                                 limit: 16,
+                                cursor: Vec::new(),
                             },
                         )),
                     }
@@ -492,6 +497,7 @@ pub(super) fn wait_for_attachment_state(
                                 ListMessageAttachmentAnchorsRequestV1 {
                                     message_id: message.message_id,
                                     limit: 16,
+                                    cursor: Vec::new(),
                                 },
                             )),
                         }

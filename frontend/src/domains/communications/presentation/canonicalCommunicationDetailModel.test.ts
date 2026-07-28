@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest'
+
+import { buildCanonicalCommunicationDetailModel } from './canonicalCommunicationDetailModel'
+
+describe('canonical Communications detail presentation model', () => {
+	it('maps metadata-only detail without provider locators or message content', () => {
+		const messageId = new Uint8Array(16).fill(1)
+		const conversationId = new Uint8Array(16).fill(2)
+		const model = buildCanonicalCommunicationDetailModel({
+			status: 'ready',
+			statusMessage: '',
+			message: {
+				$typeName: 'hermes.communications.query.v1.MessageSummaryV1',
+				messageId,
+				conversationId,
+				sourceCursorSha256: new Uint8Array(32),
+				bodyState: 2,
+				lifecycleState: 1,
+				firstObservedAtUnixSeconds: 10n,
+				lastObservedAtUnixSeconds: 10n,
+				lastEvidenceId: new Uint8Array(16),
+				direction: 1,
+			},
+			conversation: {
+				$typeName: 'hermes.communications.query.v1.ConversationSummaryV1',
+				conversationId,
+				accountCursorSha256: new Uint8Array(32),
+				conversationCursorSha256: new Uint8Array(32),
+				provider: 2,
+				firstObservedAtUnixSeconds: 10n,
+				lastObservedAtUnixSeconds: 10n,
+				lastEvidenceId: new Uint8Array(16),
+			},
+			participants: [],
+			attachments: [],
+			references: [],
+			evidence: [],
+			hasMoreParticipants: false,
+			hasMoreAttachments: false,
+			hasMoreReferences: false,
+			hasMoreEvidence: false,
+			loadingMore: false,
+		})
+
+		expect(model.messageLabel).toContain('Message #010101010101')
+		expect(model.conversationLabel).toContain('Conversation #020202020202')
+		expect(model.bodyStateLabel).toBe('Body state 2')
+		expect(model).not.toHaveProperty('body')
+		expect(model).not.toHaveProperty('providerLocator')
+	})
+})

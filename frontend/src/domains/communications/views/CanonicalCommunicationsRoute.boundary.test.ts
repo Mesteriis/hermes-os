@@ -6,13 +6,25 @@ describe('canonical Communications active route boundary', () => {
 	it('uses only the owner presentation and generated owner query adapter', () => {
 		const route = read('../views/CanonicalCommunicationsRoute.vue')
 		const controller = read('../queries/useCanonicalCommunicationsPage.ts')
+		const detailController = read('../queries/useCanonicalCommunicationDetail.ts')
 		const readAdapter = read('../queries/canonicalCommunicationsRead.ts')
+		const detailAdapter = read('../queries/canonicalCommunicationsDetail.ts')
 		const searchAdapter = read('../queries/canonicalCommunicationsSearch.ts')
 		const presentation = read('../presentation/CanonicalCommunicationsPage.vue')
+		const detailPresentation = read('../presentation/CanonicalCommunicationDetail.vue')
 		const appLayout = read('../../../app/layout/AppLayoutRoot.vue')
 		const compiledAdapters = read('../../../app/client-surfaces/compiledClientSurfaceAdapters.ts')
 
-		for (const source of [route, controller, readAdapter, searchAdapter, presentation]) {
+		for (const source of [
+			route,
+			controller,
+			detailController,
+			readAdapter,
+			detailAdapter,
+			searchAdapter,
+			presentation,
+			detailPresentation,
+		]) {
 			expect(source).not.toMatch(/\/api\/v1\//)
 			expect(source).not.toMatch(/integrations\/(mail|telegram|whatsapp|zulip)/)
 			expect(source).not.toMatch(/components\/(mail|messengers)/)
@@ -20,6 +32,9 @@ describe('canonical Communications active route boundary', () => {
 		expect(readAdapter).toContain('getCommunicationsQueryConnectClient')
 		expect(searchAdapter).toContain('getCommunicationsQueryConnectClient')
 		expect(presentation).not.toMatch(/queries\/|connect\/|fetch\(/)
+		expect(detailPresentation).not.toMatch(/queries\/|connect\/|fetch\(/)
+		expect(detailAdapter).toContain('getCanonicalMessage')
+		expect(detailAdapter).not.toContain('getCommunicationsQueryConnectClient')
 		expect(appLayout).toContain('CanonicalCommunicationsRoute')
 		expect(compiledAdapters).toContain("'communications-owner'")
 	})
