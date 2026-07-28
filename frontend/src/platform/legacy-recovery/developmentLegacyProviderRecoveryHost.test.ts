@@ -80,6 +80,31 @@ describe('DevelopmentLegacyProviderRecoveryHostV1', () => {
 		expect(request.sourceHandle).toBe('b'.repeat(64))
 		expect(request).not.toHaveProperty('secretPayload')
 	})
+
+	it('accepts only exact persisted step dispositions and unsigned public revisions', async () => {
+		const fetchImpl = vi.fn().mockResolvedValue(response({
+			disposition: 'completed',
+			operationId: Array.from({ length: 16 }, () => 5),
+			targetConfigurationInstanceId: 'mail-target',
+			publicRevision: '7',
+		}))
+
+		const step = await new DevelopmentLegacyProviderRecoveryHostV1(
+			fetchImpl as typeof fetch,
+		).beginStep({
+			recoverySessionId: 'a'.repeat(32),
+			sourceHandle: 'b'.repeat(64),
+			stepIdentifier: 'mail_icloud_create_target',
+			explicitRetry: false,
+		})
+
+		expect(step).toEqual({
+			disposition: 'completed',
+			operationId: new Uint8Array(16).fill(5),
+			targetConfigurationInstanceId: 'mail-target',
+			publicRevision: 7n,
+		})
+	})
 })
 
 function response(value: unknown): Response {

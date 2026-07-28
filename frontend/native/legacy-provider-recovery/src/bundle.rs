@@ -76,6 +76,10 @@ impl LegacyProviderRecoveryBundleV1 {
         &self.fingerprint_sha256
     }
 
+    pub(crate) fn source_generation(&self) -> &str {
+        &self.catalog.source_generation
+    }
+
     pub fn counts(&self) -> &LegacyProviderRecoveryCountsV1 {
         &self.catalog.counts
     }

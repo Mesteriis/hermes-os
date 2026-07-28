@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -7,9 +8,11 @@ use crate::error::{LegacyProviderRecoveryErrorV1, LegacyProviderRecoveryResultV1
 use crate::model::{
     LegacyProviderCandidateKindV1, LegacyProviderRecoveryCandidateV1, LegacyProviderRecoveryPlanV1,
     LegacyProviderRecoverySecretPurposeV1, LegacyProviderRecoverySourceV1,
-    LegacyProviderRecoveryStateV1, RECOVERY_SCHEMA_REVISION,
+    LegacyProviderRecoveryStateV1, LegacyProviderRecoveryStepV1,
+    LegacyProviderRecoveryTerminalStateV1, RECOVERY_SCHEMA_REVISION,
 };
 use crate::private_files::sha256_hex;
+use crate::receipt::LegacyProviderRecoveryReceiptStoreV1;
 use zeroize::Zeroizing;
 
 const MAX_SESSIONS: usize = 4;
@@ -19,6 +22,7 @@ pub struct LegacyProviderRecoverySessionsV1 {
     bundle: Arc<LegacyProviderRecoveryBundleV1>,
     sessions: Mutex<BTreeMap<String, Instant>>,
     generated_session_store_keys: Mutex<BTreeMap<String, Zeroizing<Vec<u8>>>>,
+    receipt: Option<LegacyProviderRecoveryReceiptStoreV1>,
 }
 
 impl LegacyProviderRecoverySessionsV1 {
@@ -27,7 +31,30 @@ impl LegacyProviderRecoverySessionsV1 {
             bundle: Arc::new(bundle),
             sessions: Mutex::new(BTreeMap::new()),
             generated_session_store_keys: Mutex::new(BTreeMap::new()),
+            receipt: None,
         }
+    }
+
+    pub fn with_receipt_file(
+        bundle: LegacyProviderRecoveryBundleV1,
+        receipt_file: &Path,
+    ) -> LegacyProviderRecoveryResultV1<Self> {
+        let inventory = bundle
+            .sources()
+            .map(|source| (source.handle().to_owned(), source_kind(source)))
+            .collect();
+        let receipt = LegacyProviderRecoveryReceiptStoreV1::open(
+            receipt_file,
+            bundle.fingerprint_sha256(),
+            bundle.source_generation(),
+            inventory,
+        )?;
+        Ok(Self {
+            bundle: Arc::new(bundle),
+            sessions: Mutex::new(BTreeMap::new()),
+            generated_session_store_keys: Mutex::new(BTreeMap::new()),
+            receipt: Some(receipt),
+        })
     }
 
     pub fn start(&self) -> LegacyProviderRecoveryResultV1<LegacyProviderRecoveryPlanV1> {
@@ -47,12 +74,22 @@ impl LegacyProviderRecoverySessionsV1 {
         let candidates = self
             .bundle
             .sources()
-            .map(|source| LegacyProviderRecoveryCandidateV1 {
-                handle: source.handle().to_owned(),
-                kind: source_kind(source),
-                state: source_state(source),
+            .map(|source| {
+                let handle = source.handle().to_owned();
+                let terminal_state = self
+                    .receipt
+                    .as_ref()
+                    .map(|receipt| receipt.terminal_state(&handle))
+                    .transpose()?
+                    .flatten();
+                Ok(LegacyProviderRecoveryCandidateV1 {
+                    handle,
+                    kind: source_kind(source),
+                    state: source_state(source),
+                    terminal_state,
+                })
             })
-            .collect();
+            .collect::<LegacyProviderRecoveryResultV1<Vec<_>>>()?;
         Ok(LegacyProviderRecoveryPlanV1 {
             schema_revision: RECOVERY_SCHEMA_REVISION,
             session_id,
@@ -111,6 +148,60 @@ impl LegacyProviderRecoverySessionsV1 {
         Ok(())
     }
 
+    pub fn begin_step(
+        &self,
+        session_id: &str,
+        handle: &str,
+        step_identifier: &str,
+        target_configuration_instance_id: Option<&str>,
+        explicit_retry: bool,
+    ) -> LegacyProviderRecoveryResultV1<LegacyProviderRecoveryStepV1> {
+        self.require_session(session_id)?;
+        self.bundle.assert_unchanged()?;
+        self.bundle.source(handle)?;
+        self.receipt()?.begin_step(
+            handle,
+            step_identifier,
+            target_configuration_instance_id,
+            explicit_retry,
+        )
+    }
+
+    pub fn complete_step(
+        &self,
+        session_id: &str,
+        handle: &str,
+        step_identifier: &str,
+        operation_id: [u8; 16],
+        target_configuration_instance_id: Option<&str>,
+        public_revision: Option<u64>,
+    ) -> LegacyProviderRecoveryResultV1<()> {
+        self.require_session(session_id)?;
+        self.bundle.assert_unchanged()?;
+        self.bundle.source(handle)?;
+        self.receipt()?.complete_step(
+            handle,
+            step_identifier,
+            operation_id,
+            target_configuration_instance_id,
+            public_revision,
+        )
+    }
+
+    pub fn finish_candidate(
+        &self,
+        session_id: &str,
+        handle: &str,
+        target_configuration_instance_id: &str,
+        terminal_state: LegacyProviderRecoveryTerminalStateV1,
+    ) -> LegacyProviderRecoveryResultV1<()> {
+        self.require_session(session_id)?;
+        self.bundle.assert_unchanged()?;
+        self.bundle.source(handle)?;
+        self.receipt()?
+            .finish_candidate(handle, target_configuration_instance_id, terminal_state)
+    }
+
     fn require_session(&self, session_id: &str) -> LegacyProviderRecoveryResultV1<()> {
         let mut sessions = self.lock_sessions()?;
         retain_current(&mut sessions);
@@ -130,6 +221,12 @@ impl LegacyProviderRecoverySessionsV1 {
         self.sessions
             .lock()
             .map_err(|_| LegacyProviderRecoveryErrorV1::SessionUnavailable)
+    }
+
+    fn receipt(&self) -> LegacyProviderRecoveryResultV1<&LegacyProviderRecoveryReceiptStoreV1> {
+        self.receipt
+            .as_ref()
+            .ok_or(LegacyProviderRecoveryErrorV1::InvalidReceipt)
     }
 }
 

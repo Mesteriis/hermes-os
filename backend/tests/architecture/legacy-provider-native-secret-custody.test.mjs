@@ -17,6 +17,10 @@ test('legacy provider source secrets stay in the native recovery and Vault hosts
     vite,
     ensemble,
     probe,
+    receipt,
+    stepJournal,
+    mailWorkflow,
+    telegramWorkflow,
   ] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
@@ -58,6 +62,31 @@ test('legacy provider source secrets stay in the native recovery and Vault hosts
       new URL('scripts/probe-dev-legacy-provider-recovery.mjs', BACKEND_ROOT),
       'utf8',
     ),
+    readFile(
+      new URL('frontend/native/legacy-provider-recovery/src/receipt.rs', PROJECT_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'frontend/src/platform/legacy-recovery/legacyProviderRecoveryStepJournal.ts',
+        PROJECT_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'frontend/src/integrations/mail/recovery/mailLegacyRecoveryWorkflow.ts',
+        PROJECT_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'frontend/src/integrations/telegram/recovery/telegramLegacyRecoveryWorkflow.ts',
+        PROJECT_ROOT,
+      ),
+      'utf8',
+    ),
   ]);
 
   const bundleGate = inventory.slices.find(
@@ -67,7 +96,7 @@ test('legacy provider source secrets stay in the native recovery and Vault hosts
     (slice) => slice.gate === 'legacy_provider_native_secret_custody_v1',
   );
   assert.equal(bundleGate?.state, 'implemented');
-  assert.equal(custodyGate?.state, 'planned');
+  assert.equal(custodyGate?.state, 'implemented');
   assert.match(adr, /Legacy `telegram_session_key`.*игнорируется/s);
   assert.match(adr, /Gmail legacy OAuth secret не получает native handle/);
 
@@ -80,6 +109,9 @@ test('legacy provider source secrets stay in the native recovery and Vault hosts
 
   assert.match(developmentHost, /RECOVERY_START_PATH/);
   assert.match(developmentHost, /RECOVERY_SEAL_SOURCE_PATH/);
+  assert.match(developmentHost, /RECOVERY_BEGIN_STEP_PATH/);
+  assert.match(developmentHost, /RECOVERY_COMPLETE_STEP_PATH/);
+  assert.match(developmentHost, /RECOVERY_FINISH_CANDIDATE_PATH/);
   assert.match(developmentHost, /GeneratedTelegramSessionStoreKey/);
   assert.match(developmentHost, /LegacyProviderRecoverySecretPurposeV1::IcloudImapPassword/);
   assert.match(developmentHost, /LegacyProviderRecoverySecretPurposeV1::TelegramApiHash/);
@@ -88,9 +120,22 @@ test('legacy provider source secrets stay in the native recovery and Vault hosts
 
   assert.match(vite, /\/__hermes\/legacy-provider-recovery\/v1/);
   assert.match(ensemble, /HERMES_LEGACY_PROVIDER_RECOVERY_BUNDLE_ROOT/);
+  assert.match(ensemble, /maintenance\/legacy-provider-recovery-v1/);
+  assert.match(ensemble, /--legacy-recovery-receipt-file/);
   assert.match(ensemble, /VITE_HERMES_LEGACY_PROVIDER_RECOVERY/);
   assert.match(ensemble, /probe-dev-legacy-provider-recovery\.mjs/);
   assert.match(probe, /\/__hermes\/legacy-provider-recovery\/v1\/start/);
   assert.match(probe, /\/__hermes\/legacy-provider-recovery\/v1\/cancel/);
   assert.doesNotMatch(probe, /console\.(?:log|info|debug|error)/);
+
+  assert.match(receipt, /bundle_fingerprint_sha256/);
+  assert.match(receipt, /source_generation/);
+  assert.match(receipt, /completed_step_identifiers/);
+  assert.match(receipt, /RecoveryStepStateV1::OutcomeUnknown/);
+  assert.match(receipt, /explicit_retry/);
+  assert.doesNotMatch(receipt, /email|username|secret_payload|oauth_code/);
+  assert.match(stepJournal, /LegacyProviderRecoveryOutcomeUnknownErrorV1/);
+  assert.match(stepJournal, /explicitRetry/);
+  assert.match(mailWorkflow, /LegacyProviderRecoveryStepJournalV1/);
+  assert.match(telegramWorkflow, /LegacyProviderRecoveryStepJournalV1/);
 });

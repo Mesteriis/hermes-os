@@ -9,7 +9,8 @@ use hermes_legacy_provider_recovery::{
     LegacyProviderCandidateKindV1, LegacyProviderRecoveryBundleV1, LegacyProviderRecoveryCountsV1,
     LegacyProviderRecoveryPlanV1, LegacyProviderRecoverySecretPurposeV1,
     LegacyProviderRecoverySessionsV1, LegacyProviderRecoverySourceV1,
-    LegacyProviderRecoveryStateV1,
+    LegacyProviderRecoveryStateV1, LegacyProviderRecoveryStepDispositionV1,
+    LegacyProviderRecoveryTerminalStateV1,
 };
 use hermes_owner_device_proof_host::OwnerDeviceProofHostV1;
 use hermes_owner_vault_provisioning_host::{
@@ -33,6 +34,10 @@ const CANCEL_PATH: &str = "/__hermes/owner-vault-host/v1/cancel";
 const RECOVERY_START_PATH: &str = "/__hermes/legacy-provider-recovery/v1/start";
 const RECOVERY_SOURCE_PATH: &str = "/__hermes/legacy-provider-recovery/v1/source";
 const RECOVERY_SEAL_SOURCE_PATH: &str = "/__hermes/legacy-provider-recovery/v1/seal-source";
+const RECOVERY_BEGIN_STEP_PATH: &str = "/__hermes/legacy-provider-recovery/v1/begin-step";
+const RECOVERY_COMPLETE_STEP_PATH: &str = "/__hermes/legacy-provider-recovery/v1/complete-step";
+const RECOVERY_FINISH_CANDIDATE_PATH: &str =
+    "/__hermes/legacy-provider-recovery/v1/finish-candidate";
 const RECOVERY_CANCEL_PATH: &str = "/__hermes/legacy-provider-recovery/v1/cancel";
 const OWNER_DEVICE_PROOF_SIGN_PATH: &str = "/__hermes/owner-device-proof/v1/sign";
 
@@ -46,14 +51,21 @@ fn main() -> Result<(), String> {
         OwnerDeviceProofHostV1::open(&configuration.owner_device_key_file)
             .map_err(|_| "owner device proof signer is unavailable".to_owned())?,
     );
-    let recovery = configuration
-        .legacy_recovery_bundle_root
-        .as_deref()
-        .map(LegacyProviderRecoveryBundleV1::open)
-        .transpose()
-        .map_err(|_| "legacy provider recovery bundle is unavailable".to_owned())?
-        .map(LegacyProviderRecoverySessionsV1::new)
-        .map(Arc::new);
+    let recovery = match (
+        configuration.legacy_recovery_bundle_root.as_deref(),
+        configuration.legacy_recovery_receipt_file.as_deref(),
+    ) {
+        (Some(bundle_root), Some(receipt_file)) => {
+            let bundle = LegacyProviderRecoveryBundleV1::open(bundle_root)
+                .map_err(|_| "legacy provider recovery bundle is unavailable".to_owned())?;
+            Some(Arc::new(
+                LegacyProviderRecoverySessionsV1::with_receipt_file(bundle, receipt_file)
+                    .map_err(|_| "legacy provider recovery receipt is unavailable".to_owned())?,
+            ))
+        }
+        (None, None) => None,
+        _ => return Err("legacy provider recovery configuration is incomplete".to_owned()),
+    };
     println!(
         "Hermes development host is ready at {}",
         configuration.listen_address
@@ -76,6 +88,7 @@ struct DevelopmentHostConfigurationV1 {
     proof_file: PathBuf,
     owner_device_key_file: PathBuf,
     legacy_recovery_bundle_root: Option<PathBuf>,
+    legacy_recovery_receipt_file: Option<PathBuf>,
 }
 
 impl DevelopmentHostConfigurationV1 {
@@ -85,6 +98,7 @@ impl DevelopmentHostConfigurationV1 {
         let mut proof_file = None;
         let mut owner_device_key_file = None;
         let mut legacy_recovery_bundle_root = None;
+        let mut legacy_recovery_receipt_file = None;
         let mut args = args.peekable();
         while let Some(argument) = args.next() {
             match argument.as_str() {
@@ -113,6 +127,12 @@ impl DevelopmentHostConfigurationV1 {
                     })?;
                     legacy_recovery_bundle_root = Some(PathBuf::from(value));
                 }
+                "--legacy-recovery-receipt-file" => {
+                    let value = args.next().ok_or_else(|| {
+                        "legacy provider recovery receipt file is missing".to_owned()
+                    })?;
+                    legacy_recovery_receipt_file = Some(PathBuf::from(value));
+                }
                 _ => return Err("development host argument is unsupported".to_owned()),
             }
         }
@@ -135,11 +155,24 @@ impl DevelopmentHostConfigurationV1 {
         {
             return Err("legacy provider recovery bundle root must be absolute".to_owned());
         }
+        if legacy_recovery_receipt_file
+            .as_ref()
+            .is_some_and(|path| !path.is_absolute())
+        {
+            return Err("legacy provider recovery receipt file must be absolute".to_owned());
+        }
+        if legacy_recovery_bundle_root.is_some() != legacy_recovery_receipt_file.is_some() {
+            return Err(
+                "legacy provider recovery bundle and receipt must be configured together"
+                    .to_owned(),
+            );
+        }
         Ok(Self {
             listen_address,
             proof_file,
             owner_device_key_file,
             legacy_recovery_bundle_root,
+            legacy_recovery_receipt_file,
         })
     }
 }
@@ -298,6 +331,53 @@ fn dispatch(
                     hpke_authentication_tag: sealed.hpke_authentication_tag,
                 },
             )
+        }
+        RECOVERY_BEGIN_STEP_PATH => {
+            let request: BeginRecoveryStepRequestV1 = json_request(request)?;
+            let step = require_recovery(recovery)?
+                .begin_step(
+                    &request.recovery_session_id,
+                    &request.source_handle,
+                    &request.step_identifier,
+                    request.target_configuration_instance_id.as_deref(),
+                    request.explicit_retry,
+                )
+                .map_err(|_| DevelopmentHostErrorV1::Rejected)?;
+            json_response(
+                StatusCode(200),
+                &BeginRecoveryStepResponseV1 {
+                    disposition: recovery_step_disposition(step.disposition),
+                    operation_id: step.operation_id.to_vec(),
+                    target_configuration_instance_id: step.target_configuration_instance_id,
+                    public_revision: step.public_revision.map(|revision| revision.to_string()),
+                },
+            )
+        }
+        RECOVERY_COMPLETE_STEP_PATH => {
+            let request: CompleteRecoveryStepRequestV1 = json_request(request)?;
+            require_recovery(recovery)?
+                .complete_step(
+                    &request.recovery_session_id,
+                    &request.source_handle,
+                    &request.step_identifier,
+                    exact_array(request.operation_id)?,
+                    request.target_configuration_instance_id.as_deref(),
+                    optional_unsigned(request.public_revision.as_deref())?,
+                )
+                .map_err(|_| DevelopmentHostErrorV1::Rejected)?;
+            json_response(StatusCode(200), &EmptyResponseV1 {})
+        }
+        RECOVERY_FINISH_CANDIDATE_PATH => {
+            let request: FinishRecoveryCandidateRequestV1 = json_request(request)?;
+            require_recovery(recovery)?
+                .finish_candidate(
+                    &request.recovery_session_id,
+                    &request.source_handle,
+                    &request.target_configuration_instance_id,
+                    recovery_terminal_state(&request.terminal_state)?,
+                )
+                .map_err(|_| DevelopmentHostErrorV1::Rejected)?;
+            json_response(StatusCode(200), &EmptyResponseV1 {})
         }
         RECOVERY_CANCEL_PATH => {
             let request: CancelRecoverySessionRequestV1 = json_request(request)?;
@@ -635,6 +715,7 @@ impl From<LegacyProviderRecoveryPlanV1> for RecoveryPlanResponseV1 {
                     source_handle: candidate.handle,
                     kind: recovery_kind(candidate.kind),
                     state: recovery_state(candidate.state),
+                    terminal_state: candidate.terminal_state.map(recovery_terminal_state_wire),
                 })
                 .collect(),
         }
@@ -667,6 +748,7 @@ struct RecoveryCandidateResponseV1 {
     source_handle: String,
     kind: &'static str,
     state: &'static str,
+    terminal_state: Option<&'static str>,
 }
 
 fn recovery_kind(kind: LegacyProviderCandidateKindV1) -> &'static str {
@@ -685,11 +767,91 @@ fn recovery_state(state: LegacyProviderRecoveryStateV1) -> &'static str {
     }
 }
 
+fn recovery_terminal_state_wire(state: LegacyProviderRecoveryTerminalStateV1) -> &'static str {
+    match state {
+        LegacyProviderRecoveryTerminalStateV1::Completed => "completed",
+        LegacyProviderRecoveryTerminalStateV1::ReauthorizationRequired => {
+            "reauthorization_required"
+        }
+        LegacyProviderRecoveryTerminalStateV1::QrAuthorizationRequired => {
+            "qr_authorization_required"
+        }
+        LegacyProviderRecoveryTerminalStateV1::BlockedSource => "blocked_source",
+        LegacyProviderRecoveryTerminalStateV1::BlockedConfig => "blocked_config",
+        LegacyProviderRecoveryTerminalStateV1::OutcomeUnknown => "outcome_unknown",
+    }
+}
+
+fn recovery_step_disposition(disposition: LegacyProviderRecoveryStepDispositionV1) -> &'static str {
+    match disposition {
+        LegacyProviderRecoveryStepDispositionV1::Execute => "execute",
+        LegacyProviderRecoveryStepDispositionV1::Completed => "completed",
+        LegacyProviderRecoveryStepDispositionV1::OutcomeUnknown => "outcome_unknown",
+    }
+}
+
+fn recovery_terminal_state(
+    state: &str,
+) -> Result<LegacyProviderRecoveryTerminalStateV1, DevelopmentHostErrorV1> {
+    match state {
+        "completed" => Ok(LegacyProviderRecoveryTerminalStateV1::Completed),
+        "reauthorization_required" => {
+            Ok(LegacyProviderRecoveryTerminalStateV1::ReauthorizationRequired)
+        }
+        "qr_authorization_required" => {
+            Ok(LegacyProviderRecoveryTerminalStateV1::QrAuthorizationRequired)
+        }
+        "blocked_source" => Ok(LegacyProviderRecoveryTerminalStateV1::BlockedSource),
+        "blocked_config" => Ok(LegacyProviderRecoveryTerminalStateV1::BlockedConfig),
+        "outcome_unknown" => Ok(LegacyProviderRecoveryTerminalStateV1::OutcomeUnknown),
+        _ => Err(DevelopmentHostErrorV1::InvalidRequest),
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct RecoverySourceRequestV1 {
     recovery_session_id: String,
     source_handle: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BeginRecoveryStepRequestV1 {
+    recovery_session_id: String,
+    source_handle: String,
+    step_identifier: String,
+    target_configuration_instance_id: Option<String>,
+    explicit_retry: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BeginRecoveryStepResponseV1 {
+    disposition: &'static str,
+    operation_id: Vec<u8>,
+    target_configuration_instance_id: Option<String>,
+    public_revision: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CompleteRecoveryStepRequestV1 {
+    recovery_session_id: String,
+    source_handle: String,
+    step_identifier: String,
+    operation_id: Vec<u8>,
+    target_configuration_instance_id: Option<String>,
+    public_revision: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FinishRecoveryCandidateRequestV1 {
+    recovery_session_id: String,
+    source_handle: String,
+    target_configuration_instance_id: String,
+    terminal_state: String,
 }
 
 #[derive(Serialize)]
@@ -817,6 +979,10 @@ fn unsigned(value: &str) -> Result<u64, DevelopmentHostErrorV1> {
         .map_err(|_| DevelopmentHostErrorV1::InvalidRequest)
 }
 
+fn optional_unsigned(value: Option<&str>) -> Result<Option<u64>, DevelopmentHostErrorV1> {
+    value.map(unsigned).transpose()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -852,6 +1018,55 @@ mod tests {
                 .map(str::to_owned)
             )
             .is_err()
+        );
+        assert!(
+            DevelopmentHostConfigurationV1::from_args(
+                [
+                    "--proof-file",
+                    "/tmp/proof",
+                    "--owner-device-key-file",
+                    "/tmp/device-es256.key",
+                    "--legacy-recovery-bundle-root",
+                    "/tmp/recovery-bundle",
+                ]
+                .into_iter()
+                .map(str::to_owned)
+            )
+            .is_err()
+        );
+        assert!(
+            DevelopmentHostConfigurationV1::from_args(
+                [
+                    "--proof-file",
+                    "/tmp/proof",
+                    "--owner-device-key-file",
+                    "/tmp/device-es256.key",
+                    "--legacy-recovery-receipt-file",
+                    "/tmp/recovery-receipt.json",
+                ]
+                .into_iter()
+                .map(str::to_owned)
+            )
+            .is_err()
+        );
+        let recovery = DevelopmentHostConfigurationV1::from_args(
+            [
+                "--proof-file",
+                "/tmp/proof",
+                "--owner-device-key-file",
+                "/tmp/device-es256.key",
+                "--legacy-recovery-bundle-root",
+                "/tmp/recovery-bundle",
+                "--legacy-recovery-receipt-file",
+                "/tmp/recovery-receipt.json",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        )
+        .expect("accept paired recovery paths");
+        assert_eq!(
+            recovery.legacy_recovery_receipt_file,
+            Some(PathBuf::from("/tmp/recovery-receipt.json"))
         );
         assert!(
             DevelopmentHostConfigurationV1::from_args(

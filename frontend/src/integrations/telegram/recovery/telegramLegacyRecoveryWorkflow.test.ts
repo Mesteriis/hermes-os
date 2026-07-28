@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Code, ConnectError } from '@connectrpc/connect'
 
 import { TelegramLegacyRecoveryWorkflowV1 } from './telegramLegacyRecoveryWorkflow'
 
@@ -17,12 +16,14 @@ describe('TelegramLegacyRecoveryWorkflowV1', () => {
 			})
 			return { secretRevision: 1n }
 		})
-		const provision = vi.fn()
-			.mockRejectedValueOnce(new ConnectError('credential unavailable', Code.FailedPrecondition))
-			.mockResolvedValue({ accountId: 'telegram-account' })
+		const provision = vi.fn().mockResolvedValue({
+			accountId: 'telegram-account',
+			runtimeEpoch: 1n,
+		})
 		const apply = vi.fn().mockResolvedValue({})
 		const workflow = new TelegramLegacyRecoveryWorkflowV1({
 			source: {
+				...receiptPort(),
 				source: vi.fn().mockResolvedValue({
 					kind: 'telegram_user',
 					sourceHandle,
@@ -79,7 +80,7 @@ describe('TelegramLegacyRecoveryWorkflowV1', () => {
 				{ purpose: 'telegram_session_encryption_key', revision: 1n },
 			],
 		}))
-		expect(provision).toHaveBeenCalledTimes(2)
+		expect(provision).toHaveBeenCalledOnce()
 		expect(apply.mock.calls[0]?.[0].values).toEqual(expect.arrayContaining([
 			expect.objectContaining({ settingId: 'telegram.account_id' }),
 			expect.objectContaining({ settingId: 'telegram.api_id' }),
@@ -90,13 +91,14 @@ describe('TelegramLegacyRecoveryWorkflowV1', () => {
 		}))
 	})
 
-	it('reuses an already-provisioned fresh session key without generating another', async () => {
+	it('provisions both credential revisions before the user-only account command', async () => {
 		const sourceHandle = 'c'.repeat(64)
 		const sealSource = vi.fn().mockResolvedValue({})
 		const provisionCustodied = vi.fn().mockResolvedValue({ secretRevision: 1n })
 		const provision = vi.fn().mockResolvedValue({ accountId: 'telegram-account' })
 		const workflow = new TelegramLegacyRecoveryWorkflowV1({
 			source: {
+				...receiptPort(),
 				source: vi.fn().mockResolvedValue({
 					kind: 'telegram_user',
 					sourceHandle,
@@ -134,11 +136,11 @@ describe('TelegramLegacyRecoveryWorkflowV1', () => {
 			},
 		})
 
-		expect(provisionCustodied).toHaveBeenCalledOnce()
-		expect(provisionCustodied).toHaveBeenCalledWith(
-			expect.objectContaining({ purposeId: 'telegram_api_hash' }),
-			expect.any(Function),
-		)
+		expect(provisionCustodied).toHaveBeenCalledTimes(2)
+		expect(provisionCustodied.mock.calls.map((call) => call[0].purposeId)).toEqual([
+			'telegram_api_hash',
+			'telegram_session_store_key',
+		])
 		expect(provision).toHaveBeenCalledWith(expect.objectContaining({
 			credentials: [
 				{ purpose: 'telegram_api_hash', revision: 1n },
@@ -153,6 +155,7 @@ describe('TelegramLegacyRecoveryWorkflowV1', () => {
 		const apply = vi.fn().mockResolvedValue({})
 		const workflow = new TelegramLegacyRecoveryWorkflowV1({
 			source: {
+				...receiptPort(),
 				source: vi.fn().mockResolvedValue({
 					kind: 'telegram_user',
 					sourceHandle: 'c'.repeat(64),
@@ -192,7 +195,7 @@ describe('TelegramLegacyRecoveryWorkflowV1', () => {
 			},
 		})
 
-		expect(apply).toHaveBeenCalledOnce()
+		expect(apply).not.toHaveBeenCalled()
 		expect(provisionCustodied).not.toHaveBeenCalled()
 		expect(provision).not.toHaveBeenCalled()
 	})
@@ -201,6 +204,7 @@ describe('TelegramLegacyRecoveryWorkflowV1', () => {
 		const apply = vi.fn().mockResolvedValue({})
 		const workflow = new TelegramLegacyRecoveryWorkflowV1({
 			source: {
+				...receiptPort(),
 				source: vi.fn().mockResolvedValue({
 					kind: 'telegram_user',
 					sourceHandle: 'c'.repeat(64),
@@ -211,10 +215,15 @@ describe('TelegramLegacyRecoveryWorkflowV1', () => {
 				}),
 			},
 			configuration: { apply },
-			vault: { provisionCustodied: vi.fn() },
+			vault: {
+				provisionCustodied: vi.fn().mockResolvedValue({ secretRevision: 1n }),
+			},
 			lifecycle: {
-				list: vi.fn().mockResolvedValue([{ accountId: 'telegram-account' }]),
-				provision: vi.fn(),
+				list: vi.fn().mockResolvedValue([]),
+				provision: vi.fn().mockResolvedValue({
+					accountId: 'telegram-account',
+					runtimeEpoch: 1n,
+				}),
 			},
 		} as never)
 		const input = {
@@ -251,3 +260,18 @@ describe('TelegramLegacyRecoveryWorkflowV1', () => {
 		expect(successor.applyOperationId).not.toEqual(first.applyOperationId)
 	})
 })
+
+function receiptPort() {
+	return {
+		beginStep: vi.fn().mockImplementation(async (input) => {
+			const operationId = new Uint8Array(16)
+			for (const [index, character] of [...input.stepIdentifier].entries()) {
+				operationId[index % operationId.length] ^= character.charCodeAt(0)
+			}
+			return { disposition: 'execute', operationId }
+		}),
+		completeStep: vi.fn().mockResolvedValue(undefined),
+		finishCandidate: vi.fn().mockResolvedValue(undefined),
+		cancel: vi.fn().mockResolvedValue(undefined),
+	}
+}

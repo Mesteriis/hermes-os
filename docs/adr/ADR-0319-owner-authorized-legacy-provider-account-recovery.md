@@ -2,12 +2,16 @@
 
 - Статус: принято
 - Дата: 2026-07-28
-- Состояние реализации: partial. Immutable source admission, native secret
+- Состояние реализации: implemented. Immutable source admission, native secret
   custody, provider-specific Mail/Telegram apply flows и live recovery
   `2 Mail + 1 Telegram user` реализованы; deleted Gmail и Telegram bots
   исключены, Gmail требует current OAuth, Telegram показывает real TDLib QR.
-  Gate остаётся открытым только по owner-private resumable receipt ledger и
-  ambiguous-outcome negative.
+  Owner-private versioned receipt хранит только opaque digests, stable operation
+  IDs, target/revision checkpoints и sanitized terminal states. Restart proof
+  восстанавливает три completed candidates без повторных Settings/provider
+  mutations; pending step сначала становится `outcome_unknown`, а replay
+  допускается только explicit retry. Corrupt/unknown/changed-source receipts
+  fail closed до target mutation.
 - Связанные решения: ADR-0200, ADR-0201, ADR-0204, ADR-0205, ADR-0213,
   ADR-0215, ADR-0222, ADR-0223, ADR-0240, ADR-0267, ADR-0278, ADR-0292,
   ADR-0293, ADR-0294, ADR-0295, ADR-0300, ADR-0303, ADR-0309, ADR-0310

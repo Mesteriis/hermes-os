@@ -240,8 +240,13 @@ owner_vault_host_args=(
 	--owner-device-key-file "$data_dir/device-es256.key"
 )
 if test "$legacy_recovery_frontend_flag" = 1; then
+	legacy_recovery_receipt_dir="$data_dir/maintenance/legacy-provider-recovery-v1"
+	mkdir -p -- "$legacy_recovery_receipt_dir"
+	chmod 700 "$data_dir/maintenance" "$legacy_recovery_receipt_dir"
+	legacy_recovery_receipt_file="$legacy_recovery_receipt_dir/receipt.v1.json"
 	owner_vault_host_args+=(
 		--legacy-recovery-bundle-root "$legacy_recovery_bundle_root"
+		--legacy-recovery-receipt-file "$legacy_recovery_receipt_file"
 	)
 fi
 "$owner_vault_host_bin" "${owner_vault_host_args[@]}" &

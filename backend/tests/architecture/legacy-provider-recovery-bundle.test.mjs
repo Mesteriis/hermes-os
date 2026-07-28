@@ -16,6 +16,7 @@ test('legacy provider recovery is an isolated first-party app build unit', async
     legacyConfiguration,
     legacyVault,
     privateFiles,
+    receipt,
   ] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
@@ -59,6 +60,10 @@ test('legacy provider recovery is an isolated first-party app build unit', async
       new URL('frontend/native/legacy-provider-recovery/src/private_files.rs', PROJECT_ROOT),
       'utf8',
     ),
+    readFile(
+      new URL('frontend/native/legacy-provider-recovery/src/receipt.rs', PROJECT_ROOT),
+      'utf8',
+    ),
   ]);
 
   const bundleGate = inventory.slices.find(
@@ -74,8 +79,8 @@ test('legacy provider recovery is an isolated first-party app build unit', async
     state: 'implemented',
     dependsOn: [],
   });
-  assert.equal(custodyGate?.state, 'planned');
-  assert.match(adr, /Состояние реализации: partial/);
+  assert.equal(custodyGate?.state, 'implemented');
+  assert.match(adr, /Состояние реализации: implemented/);
 
   assert.match(manifest, /name = "hermes-legacy-provider-recovery"/);
   assert.match(manifest, /role = "app"/);
@@ -108,4 +113,12 @@ test('legacy provider recovery is an isolated first-party app build unit', async
   assert.match(privateFiles, /BUNDLE_FILES: \[&str; 6\]/);
   assert.match(privateFiles, /metadata\.permissions\(\)\.mode\(\) & 0o077 != 0/);
   assert.match(privateFiles, /metadata\.file_type\(\)\.is_symlink\(\)/);
+  assert.match(receipt, /RECEIPT_SCHEMA_REVISION: u16 = 1/);
+  assert.match(receipt, /RecoveryStepStateV1::OutcomeUnknown/);
+  assert.match(receipt, /explicit_retry/);
+  assert.match(receipt, /create_new\(true\)/);
+  assert.match(receipt, /file\.sync_all\(\)/);
+  assert.match(receipt, /fs::rename\(&temporary, path\)/);
+  assert.match(receipt, /options\.mode\(0o600\)/);
+  assert.doesNotMatch(receipt, /email|username|secret_payload|oauth_code/);
 });

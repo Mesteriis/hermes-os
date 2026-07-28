@@ -70,7 +70,9 @@ async function recoverAll(): Promise<void> {
 				@click="recoverAll"
 			>
 				<Icon icon="tabler:database-import" />
-				Recover 2 Mail + 1 Telegram
+				{{ recovery.retryOutcomeUnknown.value
+					? 'Retry uncertain step'
+					: 'Recover 2 Mail + 1 Telegram' }}
 			</button>
 		</div>
 

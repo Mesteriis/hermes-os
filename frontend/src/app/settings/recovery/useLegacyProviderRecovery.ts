@@ -10,6 +10,7 @@ import {
 	createLegacyProviderRecoveryHostV1,
 	hasLegacyProviderRecoveryHostV1,
 	type LegacyProviderRecoveryCandidateV1,
+	LegacyProviderRecoveryOutcomeUnknownErrorV1,
 	type LegacyProviderRecoveryPlanV1,
 } from '../../../platform/legacy-recovery'
 import { fetchClientBootstrap } from '../../../platform/gateway/clientBootstrap'
@@ -34,6 +35,7 @@ export function useLegacyProviderRecovery(
 	const busy = ref(false)
 	const message = ref('')
 	const messageTone = ref<'neutral' | 'success' | 'error'>('neutral')
+	const retryOutcomeUnknown = ref(false)
 	const available = hasLegacyProviderRecoveryHostV1()
 	let sessionActive = false
 	const canInspect = computed(() => available && !busy.value)
@@ -54,11 +56,17 @@ export function useLegacyProviderRecovery(
 			plan.value = next
 			sessionActive = true
 			progress.value = Object.fromEntries(
-				next.candidates.map((candidate) => [candidate.sourceHandle, 'pending']),
+				next.candidates.map((candidate) => [
+					candidate.sourceHandle,
+					isCompletedTerminalState(candidate.receiptTerminalState)
+						? 'completed'
+						: 'pending',
+				]),
 			)
 			mailResults.value = []
 			telegramResult.value = undefined
 			oauthAccepted.value = false
+			retryOutcomeUnknown.value = false
 			message.value = 'Recovery bundle verified. Three active provider accounts are ready for owner-authorized recovery.'
 		}, 'The private recovery bundle could not be verified.')
 	}
@@ -69,7 +77,16 @@ export function useLegacyProviderRecovery(
 		const currentTelegram = telegramModule()
 		if (!currentPlan || !currentMail?.settings || !currentTelegram?.settings) return
 		await run(async () => {
-			for (const candidate of orderedCandidates(currentPlan.candidates)) {
+			const pendingCandidates = orderedCandidates(currentPlan.candidates).filter(
+				(candidate) => progress.value[candidate.sourceHandle] !== 'completed',
+			)
+			if (pendingCandidates.length === 0) {
+				await cancelActiveSession()
+				retryOutcomeUnknown.value = false
+				message.value = 'All three provider accounts are already recorded as recovered. No provider mutation was replayed.'
+				return
+			}
+			for (const candidate of pendingCandidates) {
 				progress.value = { ...progress.value, [candidate.sourceHandle]: 'running' }
 				try {
 					if (candidate.kind === 'telegram_user') {
@@ -85,6 +102,7 @@ export function useLegacyProviderRecovery(
 							expectedDesiredRevision: latestTelegram.settings.desiredRevision,
 							plan: currentPlan,
 							candidate,
+							explicitRetryOutcomeUnknown: retryOutcomeUnknown.value,
 						})
 					} else {
 						mailResults.value = [
@@ -93,6 +111,7 @@ export function useLegacyProviderRecovery(
 								registrationId: currentMail.registrationId,
 								plan: currentPlan,
 								candidate,
+								explicitRetryOutcomeUnknown: retryOutcomeUnknown.value,
 							}),
 						]
 					}
@@ -103,6 +122,7 @@ export function useLegacyProviderRecovery(
 				}
 			}
 			await cancelActiveSession()
+			retryOutcomeUnknown.value = false
 			message.value = 'Two Mail targets and one Telegram user target were recovered through their provider-owned contracts.'
 		}, 'Recovery stopped at the current provider step. Completed idempotent steps are safe to retry.')
 	}
@@ -129,6 +149,13 @@ export function useLegacyProviderRecovery(
 			await action()
 			messageTone.value = 'success'
 		} catch (error) {
+			if (error instanceof LegacyProviderRecoveryOutcomeUnknownErrorV1) {
+				retryOutcomeUnknown.value = true
+				message.value = 'The last mutation has an unknown outcome. No automatic replay was performed. Click the explicit retry action to reconcile or replay the same stable operation.'
+				messageTone.value = 'error'
+				return
+			}
+			retryOutcomeUnknown.value = false
 			message.value = `${failure} (${safeFailureCode(error)})`
 			messageTone.value = 'error'
 		} finally {
@@ -160,6 +187,7 @@ export function useLegacyProviderRecovery(
 		busy,
 		message,
 		messageTone,
+		retryOutcomeUnknown,
 		available,
 		canInspect,
 		canRecover,
@@ -168,6 +196,14 @@ export function useLegacyProviderRecovery(
 		recoverAll,
 		completeGmail,
 	}
+}
+
+function isCompletedTerminalState(
+	state: LegacyProviderRecoveryCandidateV1['receiptTerminalState'],
+): boolean {
+	return state === 'completed'
+		|| state === 'reauthorization_required'
+		|| state === 'qr_authorization_required'
 }
 
 function safeFailureCode(error: unknown): string {

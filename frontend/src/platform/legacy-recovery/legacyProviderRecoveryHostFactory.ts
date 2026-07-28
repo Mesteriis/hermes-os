@@ -25,6 +25,18 @@ class UnavailableLegacyProviderRecoveryHostV1 implements LegacyProviderRecoveryH
 		return Promise.reject(new Error('legacy provider recovery host is unavailable'))
 	}
 
+	beginStep(): Promise<never> {
+		return Promise.reject(new Error('legacy provider recovery host is unavailable'))
+	}
+
+	completeStep(): Promise<never> {
+		return Promise.reject(new Error('legacy provider recovery host is unavailable'))
+	}
+
+	finishCandidate(): Promise<never> {
+		return Promise.reject(new Error('legacy provider recovery host is unavailable'))
+	}
+
 	cancel(): Promise<void> {
 		return Promise.resolve()
 	}

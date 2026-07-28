@@ -303,7 +303,7 @@
       "gate": "legacy_provider_native_secret_custody_v1",
       "role": "app",
       "owner": "first_party_client",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "legacy_provider_recovery_bundle_v1",
         "owner_vault_provisioning_desktop_v1",

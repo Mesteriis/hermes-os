@@ -1,8 +1,12 @@
 import type {
+	BeginLegacyProviderRecoveryStepInputV1,
+	CompleteLegacyProviderRecoveryStepInputV1,
+	FinishLegacyProviderRecoveryCandidateInputV1,
 	LegacyProviderRecoveryCandidateV1,
 	LegacyProviderRecoveryHostV1,
 	LegacyProviderRecoveryPlanV1,
 	LegacyProviderRecoverySourceV1,
+	LegacyProviderRecoveryStepV1,
 	SealLegacyProviderRecoverySourceInputV1,
 } from './legacyProviderRecoveryHost'
 
@@ -120,6 +124,48 @@ implements LegacyProviderRecoveryHostV1 {
 		}
 	}
 
+	async beginStep(
+		input: BeginLegacyProviderRecoveryStepInputV1,
+	): Promise<LegacyProviderRecoveryStepV1> {
+		const value = await this.post('/begin-step', {
+			recoverySessionId: input.recoverySessionId,
+			sourceHandle: input.sourceHandle,
+			stepIdentifier: input.stepIdentifier,
+			targetConfigurationInstanceId: input.targetConfigurationInstanceId,
+			explicitRetry: input.explicitRetry,
+		})
+		return {
+			disposition: recoveryStepDisposition(value.disposition),
+			operationId: bytes(value.operationId, 16),
+			targetConfigurationInstanceId: optionalBoundedIdentifier(
+				value.targetConfigurationInstanceId,
+			),
+			publicRevision: optionalUnsigned(value.publicRevision),
+		}
+	}
+
+	async completeStep(input: CompleteLegacyProviderRecoveryStepInputV1): Promise<void> {
+		await this.post('/complete-step', {
+			recoverySessionId: input.recoverySessionId,
+			sourceHandle: input.sourceHandle,
+			stepIdentifier: input.stepIdentifier,
+			operationId: Array.from(input.operationId),
+			targetConfigurationInstanceId: input.targetConfigurationInstanceId,
+			publicRevision: input.publicRevision?.toString(),
+		})
+	}
+
+	async finishCandidate(
+		input: FinishLegacyProviderRecoveryCandidateInputV1,
+	): Promise<void> {
+		await this.post('/finish-candidate', {
+			recoverySessionId: input.recoverySessionId,
+			sourceHandle: input.sourceHandle,
+			targetConfigurationInstanceId: input.targetConfigurationInstanceId,
+			terminalState: input.terminalState,
+		})
+	}
+
 	async cancel(recoverySessionId: string): Promise<void> {
 		await this.post('/cancel', { recoverySessionId })
 	}
@@ -152,6 +198,7 @@ function candidate(value: unknown): LegacyProviderRecoveryCandidateV1 {
 		sourceHandle: exactHandle(value.sourceHandle),
 		kind: value.kind,
 		state: value.state,
+		receiptTerminalState: optionalTerminalState(value.terminalState),
 	}
 }
 
@@ -163,6 +210,21 @@ function isRecoveryState(value: unknown): value is LegacyProviderRecoveryCandida
 	return value === 'ready_to_apply'
 		|| value === 'reauthorization_required'
 		|| value === 'qr_authorization_required'
+}
+
+function optionalTerminalState(
+	value: unknown,
+): LegacyProviderRecoveryCandidateV1['receiptTerminalState'] {
+	if (value === null || value === undefined) return undefined
+	if (value === 'completed'
+		|| value === 'reauthorization_required'
+		|| value === 'qr_authorization_required'
+		|| value === 'blocked_source'
+		|| value === 'blocked_config'
+		|| value === 'outcome_unknown') {
+		return value
+	}
+	throw invalidResponse()
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -219,6 +281,34 @@ function bytes(value: unknown, exactLength?: number): Uint8Array {
 		throw invalidResponse()
 	}
 	return Uint8Array.from(value)
+}
+
+function optionalBoundedIdentifier(value: unknown): string | undefined {
+	if (value === null || value === undefined) return undefined
+	if (typeof value !== 'string'
+		|| !/^[A-Za-z0-9._:-]{1,256}$/.test(value)) {
+		throw invalidResponse()
+	}
+	return value
+}
+
+function optionalUnsigned(value: unknown): bigint | undefined {
+	if (value === null || value === undefined) return undefined
+	if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value)) {
+		throw invalidResponse()
+	}
+	const revision = BigInt(value)
+	if (revision > 18_446_744_073_709_551_615n) throw invalidResponse()
+	return revision
+}
+
+function recoveryStepDisposition(
+	value: unknown,
+): LegacyProviderRecoveryStepV1['disposition'] {
+	if (value === 'execute' || value === 'completed' || value === 'outcome_unknown') {
+		return value
+	}
+	throw invalidResponse()
 }
 
 function invalidResponse(): Error {

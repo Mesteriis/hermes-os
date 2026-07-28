@@ -43,6 +43,7 @@ describe('MailLegacyRecoveryWorkflowV1', () => {
 		})
 		const workflow = new MailLegacyRecoveryWorkflowV1({
 			source: {
+				...receiptPort(),
 				source: vi.fn().mockResolvedValue({
 					kind: 'icloud',
 					sourceHandle,
@@ -103,6 +104,7 @@ describe('MailLegacyRecoveryWorkflowV1', () => {
 		})
 		const workflow = new MailLegacyRecoveryWorkflowV1({
 			source: {
+				...receiptPort(),
 				source: vi.fn().mockResolvedValue({
 					kind: 'gmail',
 					sourceHandle,
@@ -157,6 +159,7 @@ describe('MailLegacyRecoveryWorkflowV1', () => {
 		})
 		const workflow = new MailLegacyRecoveryWorkflowV1({
 			source: {
+				...receiptPort(),
 				source: vi.fn().mockResolvedValue({
 					kind: 'gmail',
 					sourceHandle,
@@ -190,3 +193,18 @@ describe('MailLegacyRecoveryWorkflowV1', () => {
 		expect(oauthStart).toHaveBeenCalledOnce()
 	})
 })
+
+function receiptPort() {
+	return {
+		beginStep: vi.fn().mockImplementation(async (input) => {
+			const operationId = new Uint8Array(16)
+			for (const [index, character] of [...input.stepIdentifier].entries()) {
+				operationId[index % operationId.length] ^= character.charCodeAt(0)
+			}
+			return { disposition: 'execute', operationId }
+		}),
+		completeStep: vi.fn().mockResolvedValue(undefined),
+		finishCandidate: vi.fn().mockResolvedValue(undefined),
+		cancel: vi.fn().mockResolvedValue(undefined),
+	}
+}

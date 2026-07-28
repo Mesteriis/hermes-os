@@ -6,6 +6,7 @@ mod legacy_configuration;
 mod legacy_vault;
 mod model;
 mod private_files;
+mod receipt;
 mod recovery_session;
 
 #[cfg(feature = "prepare")]
@@ -17,6 +18,7 @@ pub use model::{
     LegacyProviderCandidateKindV1, LegacyProviderRecoveryCandidateV1,
     LegacyProviderRecoveryCountsV1, LegacyProviderRecoveryPlanV1,
     LegacyProviderRecoverySecretPurposeV1, LegacyProviderRecoverySourceV1,
-    LegacyProviderRecoveryStateV1,
+    LegacyProviderRecoveryStateV1, LegacyProviderRecoveryStepDispositionV1,
+    LegacyProviderRecoveryStepV1, LegacyProviderRecoveryTerminalStateV1,
 };
 pub use recovery_session::LegacyProviderRecoverySessionsV1;

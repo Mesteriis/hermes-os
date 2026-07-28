@@ -26,6 +26,32 @@ impl LegacyProviderCandidateKindV1 {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LegacyProviderRecoveryTerminalStateV1 {
+    Completed,
+    ReauthorizationRequired,
+    QrAuthorizationRequired,
+    BlockedSource,
+    BlockedConfig,
+    OutcomeUnknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LegacyProviderRecoveryStepDispositionV1 {
+    Execute,
+    Completed,
+    OutcomeUnknown,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyProviderRecoveryStepV1 {
+    pub disposition: LegacyProviderRecoveryStepDispositionV1,
+    pub operation_id: [u8; 16],
+    pub target_configuration_instance_id: Option<String>,
+    pub public_revision: Option<u64>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LegacyProviderRecoverySecretPurposeV1 {
     IcloudImapPassword,
@@ -71,6 +97,7 @@ pub struct LegacyProviderRecoveryCandidateV1 {
     pub handle: String,
     pub kind: LegacyProviderCandidateKindV1,
     pub state: LegacyProviderRecoveryStateV1,
+    pub terminal_state: Option<LegacyProviderRecoveryTerminalStateV1>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

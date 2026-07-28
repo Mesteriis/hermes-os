@@ -2,12 +2,13 @@
 
 Статус: Принято
 Дата: 2026-07-28
-Состояние реализации: partial. `legacy_provider_recovery_bundle_v1`, bounded
-native source sessions, direct HPKE sealing в current Owner Vault host и
-provider-specific Mail/Telegram apply flows реализованы. Live evidence
-подтверждает два Mail targets, fresh Gmail OAuth boundary и real Telegram QR.
-`legacy_provider_native_secret_custody_v1` остаётся открыт только по
-owner-private resumable receipt ledger и ambiguous-outcome negative.
+Состояние реализации: implemented. `legacy_provider_recovery_bundle_v1`,
+bounded native source sessions, direct HPKE sealing в current Owner Vault host,
+provider-specific Mail/Telegram apply flows и owner-private resumable receipt
+ledger реализованы. Live evidence подтверждает два Mail targets, fresh Gmail
+OAuth boundary, real Telegram QR и restart resume трёх terminal candidates без
+повторных Settings/provider mutations. Atomic `0600` receipt, changed-source,
+corrupt/unknown schema и ambiguous-outcome/explicit-retry negatives проверены.
 
 Уточняет:
 

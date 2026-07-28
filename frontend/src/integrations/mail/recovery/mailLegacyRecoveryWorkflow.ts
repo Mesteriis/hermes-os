@@ -10,11 +10,11 @@ import type {
 } from '../../../gen/hermes/mail/v1/client_pb'
 import {
 	createLegacyProviderRecoveryHostV1,
-	legacyRecoveryOperationIdV1,
-	legacyRecoveryOperationKeyV1,
+	legacyProviderRecoveryOperationKeyFromStepV1,
 	type LegacyProviderRecoveryCandidateV1,
 	type LegacyProviderRecoveryHostV1,
 	type LegacyProviderRecoveryPlanV1,
+	LegacyProviderRecoveryStepJournalV1,
 } from '../../../platform/legacy-recovery'
 import { ManagedIntegrationSetupV1 } from '../../../platform/settings'
 import {
@@ -70,6 +70,7 @@ export class MailLegacyRecoveryWorkflowV1 {
 		registrationId: string
 		plan: LegacyProviderRecoveryPlanV1
 		candidate: LegacyProviderRecoveryCandidateV1
+		explicitRetryOutcomeUnknown?: boolean
 	}): Promise<MailLegacyRecoveryResultV1> {
 		if (input.candidate.kind !== 'gmail' && input.candidate.kind !== 'icloud') {
 			throw new Error('mail legacy recovery candidate is invalid')
@@ -82,17 +83,47 @@ export class MailLegacyRecoveryWorkflowV1 {
 			|| source.sourceHandle !== input.candidate.sourceHandle) {
 			throw new Error('mail legacy recovery source is invalid')
 		}
-		const operation = (step: string) => legacyRecoveryOperationIdV1(
-			input.plan.bundleFingerprintSha256,
+		const journal = new LegacyProviderRecoveryStepJournalV1(
+			this.ports.source,
+			input.plan.recoverySessionId,
 			input.candidate.sourceHandle,
-			`mail_${source.kind}_${step}`,
+			input.explicitRetryOutcomeUnknown === true,
 		)
+		const createStepId = source.kind === 'gmail'
+			? 'mail_gmail_create_target'
+			: 'mail_icloud_create_target'
+		const createStep = await journal.begin(createStepId)
 		const target = await this.ports.configuration.createTarget(
 			input.registrationId,
-			await operation('create_target'),
+			createStep.operationId,
 		)
+		await journal.complete(createStepId, createStep, {
+			targetConfigurationInstanceId: target.configurationInstanceId,
+			publicRevision: target.desiredRevision,
+		})
 		let settingsRevision = target.desiredRevision
+		const updateStepId = source.kind === 'gmail'
+			? 'mail_gmail_update_settings'
+			: 'mail_icloud_update_settings'
+		const applyStepId = source.kind === 'gmail'
+			? 'mail_gmail_apply_settings'
+			: 'mail_icloud_apply_settings'
+		const settingsStep = target.applyState === 'current'
+			? journal.inspect.bind(journal)
+			: journal.begin.bind(journal)
+		const updateStep = await settingsStep(
+			updateStepId,
+			target.configurationInstanceId,
+		)
+		const applyStep = await settingsStep(
+			applyStepId,
+			target.configurationInstanceId,
+		)
 		if (target.applyState === 'blocked_config') {
+			if (updateStep.disposition === 'completed'
+				|| applyStep.disposition === 'completed') {
+				throw new Error('mail legacy recovery receipt contradicts Settings state')
+			}
 			const applied = await this.ports.configuration.apply({
 				registrationId: input.registrationId,
 				expectedDesiredRevision: target.desiredRevision,
@@ -113,20 +144,38 @@ export class MailLegacyRecoveryWorkflowV1 {
 						imapPort: BigInt(source.imapPort),
 						username: source.username,
 					}),
-				updateOperationId: await operation('update_settings'),
-				applyOperationId: await operation('apply_settings'),
+				updateOperationId: updateStep.operationId,
+				applyOperationId: applyStep.operationId,
 			})
 			settingsRevision = applied.settings.desiredRevision
 		} else if (target.applyState !== 'current') {
 			throw new Error('mail legacy recovery settings outcome is ambiguous')
 		}
+		await journal.complete(updateStepId, updateStep, {
+			targetConfigurationInstanceId: target.configurationInstanceId,
+			publicRevision: settingsRevision,
+		})
+		await journal.complete(applyStepId, applyStep, {
+			targetConfigurationInstanceId: target.configurationInstanceId,
+			publicRevision: settingsRevision,
+		})
 		if (source.kind === 'gmail') {
-			const operationId = await legacyRecoveryOperationKeyV1(
-				input.plan.bundleFingerprintSha256,
-				input.candidate.sourceHandle,
-				`mail_gmail_oauth_revision_${settingsRevision}`,
+			const oauthStepId =
+				`mail_gmail_oauth_start_revision_${settingsRevision}` as const
+			const oauthStep = await journal.begin(
+				oauthStepId,
+				target.configurationInstanceId,
 			)
+			const operationId = legacyProviderRecoveryOperationKeyFromStepV1(oauthStep)
 			const started = await this.ports.oauth.start(operationId, source.accountId)
+			await journal.complete(oauthStepId, oauthStep, {
+				targetConfigurationInstanceId: target.configurationInstanceId,
+				publicRevision: settingsRevision,
+			})
+			await journal.finish(
+				target.configurationInstanceId,
+				'reauthorization_required',
+			)
 			return {
 				kind: 'gmail',
 				state: 'reauthorization_required',
@@ -139,9 +188,15 @@ export class MailLegacyRecoveryWorkflowV1 {
 			(entry) => entry.purpose
 				=== MailCredentialPurposeV1.MAIL_CREDENTIAL_PURPOSE_IMAP_PASSWORD,
 		)
-		if (!binding?.credentialRevision) {
+		const provisionStepId = 'mail_icloud_provision_imap_password'
+		const provisionStep = binding?.credentialRevision
+			? await journal.inspect(provisionStepId, target.configurationInstanceId)
+			: await journal.begin(provisionStepId, target.configurationInstanceId)
+		let credentialRevision = binding?.credentialRevision
+			?? provisionStep.publicRevision
+		if (!credentialRevision) {
 			const vault = await this.ports.vault.provisionCustodied({
-				operationId: await operation('provision_imap_password'),
+				operationId: provisionStep.operationId,
 				targetRegistrationId: input.registrationId,
 				capabilityId: 'mail.imap.credential-provisioning.v1',
 				configurationInstanceId: target.configurationInstanceId,
@@ -155,20 +210,40 @@ export class MailLegacyRecoveryWorkflowV1 {
 				sourceHandle: input.candidate.sourceHandle,
 				secretPurpose: 'icloud_imap_password',
 			}))
+			credentialRevision = vault.secretRevision
+		}
+		await journal.complete(provisionStepId, provisionStep, {
+			targetConfigurationInstanceId: target.configurationInstanceId,
+			publicRevision: credentialRevision,
+		})
+		const bindStepId = 'mail_icloud_bind_imap_password'
+		const bindStep = binding?.credentialRevision
+			? await journal.inspect(bindStepId, target.configurationInstanceId)
+			: await journal.begin(bindStepId, target.configurationInstanceId)
+		if (!binding?.credentialRevision) {
 			await this.ports.mail.bind({
 				connectionId: source.accountId,
 				purpose: MailCredentialPurposeV1.MAIL_CREDENTIAL_PURPOSE_IMAP_PASSWORD,
 				expectedBindingRevision: 0n,
-				credentialRevision: vault.secretRevision,
+				credentialRevision,
 			})
 		}
+		await journal.complete(bindStepId, bindStep, {
+			targetConfigurationInstanceId: target.configurationInstanceId,
+			publicRevision: credentialRevision,
+		})
 		const status = await this.ports.mail.status(source.accountId)
-		return {
+		const result: MailLegacyRecoveryResultV1 = {
 			kind: 'icloud',
 			state: status.readiness === MailAccountReadinessV1.MAIL_ACCOUNT_READINESS_READY
 				? 'ready'
 				: 'applied_pending_readiness',
 		}
+		await journal.finish(
+			target.configurationInstanceId,
+			result.state === 'ready' ? 'completed' : 'blocked_config',
+		)
+		return result
 	}
 
 	async completeGmail(
