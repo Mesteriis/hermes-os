@@ -15,6 +15,7 @@ import { useMailComposition } from '../queries/useMailComposition'
 import { useMailDelivery } from '../queries/useMailDelivery'
 import { useMailOperationalRead } from '../queries/useMailOperationalRead'
 import { useMailMessageFlags } from '../queries/useMailMessageFlags'
+import { useMailMessageLocation } from '../queries/useMailMessageLocation'
 import { useMailSync } from '../queries/useMailSync'
 import { useMailSyncHealth } from '../queries/useMailSyncHealth'
 
@@ -25,6 +26,8 @@ const props = defineProps<{
 	canMutateFlags: boolean
 	canQuery: boolean
 	canQueryFlagStatus: boolean
+	canMutateLocation: boolean
+	canQueryLocationStatus: boolean
 	canSync: boolean
 	canSyncHealth: boolean
 	modules: readonly ClientModuleBootstrapV1[]
@@ -53,6 +56,22 @@ const messageFlags = useMailMessageFlags({
 			messageId: detail.id,
 			isRead: detail.isRead,
 			isStarred: detail.isStarred,
+		}
+	},
+	refreshProjection: read.refresh,
+})
+const messageLocation = useMailMessageLocation({
+	canMutate: () => props.canMutateLocation,
+	canQueryStatus: () => props.canQueryLocationStatus,
+	selection: () => {
+		const detail = read.model.value.detail
+		const connectionId = read.model.value.selectedConnectionId
+		if (!detail || !connectionId) return null
+		return {
+			connectionId,
+			messageId: detail.id,
+			isTrashed: detail.isTrashed,
+			folders: read.model.value.folders,
 		}
 	},
 	refreshProjection: read.refresh,
@@ -86,6 +105,7 @@ watch(
 		:composition-model="composition.model.value"
 		:delivery-model="delivery.model.value"
 		:flag-model="messageFlags.model.value"
+		:location-model="messageLocation.model.value"
 		:read-model="read.model.value"
 		:sync-health-model="syncHealth.model.value"
 		:sync-model="sync.model.value"
@@ -116,6 +136,12 @@ watch(
 		@flag-refresh-status="messageFlags.refreshStatus"
 		@flag-set-read="messageFlags.setRead"
 		@flag-set-starred="messageFlags.setStarred"
+		@location-archive="messageLocation.archive"
+		@location-move="messageLocation.move"
+		@location-refresh-status="messageLocation.refreshStatus"
+		@location-restore="messageLocation.restore"
+		@location-select-target-folder="messageLocation.selectTargetFolder"
+		@location-trash="messageLocation.trash"
 		@refresh-status="delivery.refreshStatus"
 		@select-connection="read.selectConnection"
 		@select-folder="read.selectFolder"

@@ -18,6 +18,7 @@ use serde::Deserialize;
 
 const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_MESSAGE_IDS: usize = 500;
+const MAX_LABEL_IDS: usize = 512;
 const MAX_BEARER_TOKEN_BYTES: usize = 16 * 1024;
 const MAX_OAUTH_RESPONSE_BYTES: usize = 1024 * 1024;
 const GMAIL_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
@@ -40,6 +41,11 @@ pub struct GmailApiClientV1 {
 pub enum GmailMutableMessageFlagV1 {
     Read,
     Starred,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GmailMessageLocationV1 {
+    pub label_ids: Vec<String>,
 }
 
 pub fn decode_raw_rfc822(raw: &str) -> Result<Vec<u8>, GmailAdapterErrorV1> {
@@ -390,6 +396,127 @@ impl GmailApiClientV1 {
             },
         )
         .await
+    }
+
+    pub async fn archive_message(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+    ) -> Result<GmailMessageLocationV1, GmailAdapterErrorV1> {
+        self.batch_modify(
+            access_token,
+            &GmailBatchModifyRequestV1 {
+                message_ids: vec![provider_message_id.to_owned()],
+                add_label_ids: Vec::new(),
+                remove_label_ids: vec!["INBOX".to_owned()],
+            },
+        )
+        .await?;
+        self.fetch_message_location(access_token, provider_message_id)
+            .await
+    }
+
+    pub async fn trash_message(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+    ) -> Result<GmailMessageLocationV1, GmailAdapterErrorV1> {
+        self.post_message_action(access_token, provider_message_id, "trash")
+            .await?;
+        self.fetch_message_location(access_token, provider_message_id)
+            .await
+    }
+
+    pub async fn restore_message(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+    ) -> Result<GmailMessageLocationV1, GmailAdapterErrorV1> {
+        self.post_message_action(access_token, provider_message_id, "untrash")
+            .await?;
+        self.fetch_message_location(access_token, provider_message_id)
+            .await
+    }
+
+    pub async fn move_message(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+        target_label_id: &str,
+        target_is_inbox: bool,
+    ) -> Result<GmailMessageLocationV1, GmailAdapterErrorV1> {
+        let target_label_id = provider_id(target_label_id)?;
+        self.batch_modify(
+            access_token,
+            &GmailBatchModifyRequestV1 {
+                message_ids: vec![provider_message_id.to_owned()],
+                add_label_ids: vec![target_label_id],
+                remove_label_ids: if target_is_inbox {
+                    Vec::new()
+                } else {
+                    vec!["INBOX".to_owned()]
+                },
+            },
+        )
+        .await?;
+        self.fetch_message_location(access_token, provider_message_id)
+            .await
+    }
+
+    async fn post_message_action(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+        action: &str,
+    ) -> Result<(), GmailAdapterErrorV1> {
+        let provider_message_id = provider_id(provider_message_id)?;
+        if !matches!(action, "trash" | "untrash") {
+            return Err(GmailAdapterErrorV1::InvalidRequest);
+        }
+        let _: serde_json::Value = self
+            .request_json(
+                access_token,
+                "POST",
+                &format!(
+                    "/gmail/v1/users/{}/messages/{provider_message_id}/{action}",
+                    self.user_id
+                ),
+                None,
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn fetch_message_location(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+    ) -> Result<GmailMessageLocationV1, GmailAdapterErrorV1> {
+        let provider_message_id = provider_id(provider_message_id)?;
+        let message: GmailRawMessageV1 = self
+            .get(
+                access_token,
+                &format!(
+                    "/gmail/v1/users/{}/messages/{provider_message_id}?format=minimal",
+                    self.user_id
+                ),
+            )
+            .await?;
+        if message.id.as_deref() != Some(provider_message_id.as_str()) {
+            return Err(GmailAdapterErrorV1::InvalidResponse);
+        }
+        let label_ids = message.label_ids.unwrap_or_default();
+        if label_ids.len() > MAX_LABEL_IDS {
+            return Err(GmailAdapterErrorV1::InvalidResponse);
+        }
+        let mut labels = BTreeSet::new();
+        for label_id in label_ids {
+            labels
+                .insert(provider_id(&label_id).map_err(|_| GmailAdapterErrorV1::InvalidResponse)?);
+        }
+        Ok(GmailMessageLocationV1 {
+            label_ids: labels.into_iter().collect(),
+        })
     }
 
     async fn get<T: for<'de> Deserialize<'de>>(

@@ -3,7 +3,7 @@
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
 };
 use std::thread::{self, JoinHandle};
@@ -13,6 +13,10 @@ const FIXTURE_USERNAME: &str = "owner@example.test";
 const FIXTURE_PASSWORD: &str = "managed-mail-imap-password";
 const FIXTURE_UID: u32 = 42;
 const FIXTURE_UID_VALIDITY: u32 = 1;
+const ARCHIVE_UID_VALIDITY: u32 = 7;
+const ARCHIVE_UID: u32 = 84;
+const TRASH_UID_VALIDITY: u32 = 9;
+const TRASH_UID: u32 = 126;
 const FIXTURE_MESSAGE: &[u8] = concat!(
     "From: source@example.test\r\n",
     "To: owner@example.test\r\n",
@@ -38,6 +42,10 @@ pub(super) struct MailImapFixture {
     shutdown: Arc<AtomicBool>,
     accepted_connections: Arc<AtomicUsize>,
     message_flag_mutations: Arc<AtomicUsize>,
+    message_location_mutations: Arc<AtomicUsize>,
+    message_mailbox: Arc<Mutex<String>>,
+    message_uid: Arc<AtomicU32>,
+    move_supported: Arc<AtomicBool>,
     uid_validity: Arc<AtomicU32>,
     worker: Option<JoinHandle<()>>,
 }
@@ -55,10 +63,18 @@ impl MailImapFixture {
         let shutdown = Arc::new(AtomicBool::new(false));
         let accepted_connections = Arc::new(AtomicUsize::new(0));
         let message_flag_mutations = Arc::new(AtomicUsize::new(0));
+        let message_location_mutations = Arc::new(AtomicUsize::new(0));
+        let message_mailbox = Arc::new(Mutex::new("INBOX".to_owned()));
+        let message_uid = Arc::new(AtomicU32::new(FIXTURE_UID));
+        let move_supported = Arc::new(AtomicBool::new(true));
         let uid_validity = Arc::new(AtomicU32::new(FIXTURE_UID_VALIDITY));
         let worker_shutdown = Arc::clone(&shutdown);
         let worker_connections = Arc::clone(&accepted_connections);
         let worker_message_flag_mutations = Arc::clone(&message_flag_mutations);
+        let worker_message_location_mutations = Arc::clone(&message_location_mutations);
+        let worker_message_mailbox = Arc::clone(&message_mailbox);
+        let worker_message_uid = Arc::clone(&message_uid);
+        let worker_move_supported = Arc::clone(&move_supported);
         let worker_uid_validity = Arc::clone(&uid_validity);
         let worker = thread::spawn(move || {
             while !worker_shutdown.load(Ordering::Acquire) {
@@ -71,6 +87,10 @@ impl MailImapFixture {
                         serve_connection(
                             stream,
                             Arc::clone(&worker_message_flag_mutations),
+                            Arc::clone(&worker_message_location_mutations),
+                            Arc::clone(&worker_message_mailbox),
+                            Arc::clone(&worker_message_uid),
+                            Arc::clone(&worker_move_supported),
                             Arc::clone(&worker_uid_validity),
                         );
                     }
@@ -86,6 +106,10 @@ impl MailImapFixture {
             shutdown,
             accepted_connections,
             message_flag_mutations,
+            message_location_mutations,
+            message_mailbox,
+            message_uid,
+            move_supported,
             uid_validity,
             worker: Some(worker),
         }
@@ -101,6 +125,21 @@ impl MailImapFixture {
 
     pub(super) fn message_flag_mutations(&self) -> usize {
         self.message_flag_mutations.load(Ordering::Acquire)
+    }
+
+    pub(super) fn message_location_mutations(&self) -> usize {
+        self.message_location_mutations.load(Ordering::Acquire)
+    }
+
+    pub(super) fn message_mailbox(&self) -> String {
+        self.message_mailbox
+            .lock()
+            .expect("lock fixture message mailbox")
+            .clone()
+    }
+
+    pub(super) fn set_move_supported(&self, supported: bool) {
+        self.move_supported.store(supported, Ordering::Release);
     }
 
     pub(super) fn set_uid_validity(&self, uid_validity: u32) {
@@ -125,6 +164,10 @@ impl Drop for MailImapFixture {
 fn serve_connection(
     mut stream: TcpStream,
     message_flag_mutations: Arc<AtomicUsize>,
+    message_location_mutations: Arc<AtomicUsize>,
+    message_mailbox: Arc<Mutex<String>>,
+    message_uid: Arc<AtomicU32>,
+    move_supported: Arc<AtomicBool>,
     uid_validity: Arc<AtomicU32>,
 ) {
     stream
@@ -147,9 +190,14 @@ fn serve_connection(
             }
             write_tagged(&mut stream, tag, "OK LOGIN completed");
         } else if upper.contains(" CAPABILITY") {
+            let extensions = if move_supported.load(Ordering::Acquire) {
+                " MOVE UIDPLUS"
+            } else {
+                ""
+            };
             write!(
                 stream,
-                "* CAPABILITY IMAP4rev1\r\n{tag} OK CAPABILITY completed\r\n"
+                "* CAPABILITY IMAP4rev1{extensions}\r\n{tag} OK CAPABILITY completed\r\n"
             )
             .expect("write IMAP CAPABILITY response");
         } else if upper.contains(" LIST ") {
@@ -171,6 +219,19 @@ fn serve_connection(
             .expect("write IMAP EXAMINE response");
         } else if upper.contains(" SELECT ") {
             let current_uid_validity = uid_validity.load(Ordering::Acquire);
+            let selected_mailbox = command
+                .split_whitespace()
+                .nth(2)
+                .map(|value| value.trim_matches('"'))
+                .expect("selected fixture mailbox");
+            assert_eq!(
+                selected_mailbox,
+                message_mailbox
+                    .lock()
+                    .expect("lock fixture message mailbox")
+                    .as_str(),
+                "Mail mutation must select the exact current locator mailbox",
+            );
             write!(
                 stream,
                 "* FLAGS (\\Seen \\Flagged)\r\n* 1 EXISTS\r\n* OK [UIDVALIDITY {current_uid_validity}] valid\r\n\
@@ -178,9 +239,10 @@ fn serve_connection(
             )
             .expect("write IMAP SELECT response");
         } else if upper.contains(" UID SEARCH ") {
+            let current_uid = message_uid.load(Ordering::Acquire);
             write!(
                 stream,
-                "* SEARCH {FIXTURE_UID}\r\n{tag} OK UID SEARCH completed\r\n"
+                "* SEARCH {current_uid}\r\n{tag} OK UID SEARCH completed\r\n"
             )
             .expect("write IMAP UID SEARCH response");
         } else if upper.contains(" UID FETCH ") {
@@ -195,14 +257,44 @@ fn serve_connection(
             .and_then(|_| write!(stream, ")\r\n{tag} OK UID FETCH completed\r\n"))
             .expect("write IMAP UID FETCH response");
         } else if upper.contains(" UID STORE ") {
+            let current_uid = message_uid.load(Ordering::Acquire);
             assert!(
-                upper.contains(&format!("UID STORE {FIXTURE_UID}"))
+                upper.contains(&format!("UID STORE {current_uid}"))
                     && upper.contains("FLAGS.SILENT")
                     && (upper.contains("\\SEEN") || upper.contains("\\FLAGGED")),
                 "Mail flag mutation must use exact bounded UID and supported provider flag"
             );
             message_flag_mutations.fetch_add(1, Ordering::AcqRel);
             write_tagged(&mut stream, tag, "OK UID STORE completed");
+        } else if upper.contains(" UID MOVE ") {
+            let current_uid = message_uid.load(Ordering::Acquire);
+            assert!(
+                upper.contains(&format!("UID MOVE {current_uid}")),
+                "Mail location mutation must use the exact current locator UID",
+            );
+            let target = command
+                .split_whitespace()
+                .last()
+                .map(|value| value.trim_matches('"'))
+                .expect("fixture UID MOVE target");
+            let (destination_uid_validity, destination_uid) = match target {
+                "INBOX" => (FIXTURE_UID_VALIDITY, FIXTURE_UID),
+                "Archive" => (ARCHIVE_UID_VALIDITY, ARCHIVE_UID),
+                "Trash" => (TRASH_UID_VALIDITY, TRASH_UID),
+                _ => panic!("unexpected fixture UID MOVE target"),
+            };
+            message_location_mutations.fetch_add(1, Ordering::AcqRel);
+            *message_mailbox
+                .lock()
+                .expect("lock fixture message mailbox") = target.to_owned();
+            message_uid.store(destination_uid, Ordering::Release);
+            uid_validity.store(destination_uid_validity, Ordering::Release);
+            write!(
+                stream,
+                "* OK [COPYUID {destination_uid_validity} {current_uid} {destination_uid}] moved\r\n\
+                 * 1 EXPUNGE\r\n{tag} OK UID MOVE completed\r\n"
+            )
+            .expect("write IMAP UID MOVE response");
         } else if upper.contains(" LOGOUT") {
             write!(
                 stream,

@@ -10,6 +10,7 @@ import type { MailDeliveryModel } from './mailDeliveryModel'
 import MailDeliveryPanel from './MailDeliveryPanel.vue'
 import MailOperationalReadPanel from './MailOperationalReadPanel.vue'
 import type { MailMessageFlagModel } from './mailMessageFlagModel'
+import type { MailMessageLocationModel } from './mailMessageLocationModel'
 import type { MailOperationalReadModel } from './mailOperationalReadModel'
 import MailSyncHealthPanel from './MailSyncHealthPanel.vue'
 import type { MailSyncHealthModel } from './mailSyncHealthModel'
@@ -21,6 +22,7 @@ defineProps<{
 	compositionModel: MailCompositionModel
 	deliveryModel: MailDeliveryModel
 	flagModel: MailMessageFlagModel
+	locationModel: MailMessageLocationModel
 	readModel: MailOperationalReadModel
 	syncHealthModel: MailSyncHealthModel
 	syncModel: MailSyncModel
@@ -50,6 +52,12 @@ const emit = defineEmits<{
 	flagRefreshStatus: []
 	flagSetRead: [targetValue: boolean]
 	flagSetStarred: [targetValue: boolean]
+	locationArchive: []
+	locationMove: []
+	locationRefreshStatus: []
+	locationRestore: []
+	locationSelectTargetFolder: [folderId: string]
+	locationTrash: []
 	loadMoreFolders: []
 	loadMoreMessages: []
 	loadMoreThreads: []
@@ -87,10 +95,17 @@ const emit = defineEmits<{
 
 		<MailOperationalReadPanel
 			:flag-model="flagModel"
+			:location-model="locationModel"
 			:model="readModel"
 			@flag-refresh-status="emit('flagRefreshStatus')"
 			@flag-set-read="emit('flagSetRead', $event)"
 			@flag-set-starred="emit('flagSetStarred', $event)"
+			@location-archive="emit('locationArchive')"
+			@location-move="emit('locationMove')"
+			@location-refresh-status="emit('locationRefreshStatus')"
+			@location-restore="emit('locationRestore')"
+			@location-select-target-folder="emit('locationSelectTargetFolder', $event)"
+			@location-trash="emit('locationTrash')"
 			@load-more-folders="emit('loadMoreFolders')"
 			@load-more-messages="emit('loadMoreMessages')"
 			@load-more-threads="emit('loadMoreThreads')"

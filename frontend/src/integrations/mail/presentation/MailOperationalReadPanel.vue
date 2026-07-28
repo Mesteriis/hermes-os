@@ -2,10 +2,13 @@
 import type { MailOperationalReadModel } from './mailOperationalReadModel'
 import type { MailMessageFlagModel } from './mailMessageFlagModel'
 import MailMessageFlagActions from './MailMessageFlagActions.vue'
+import type { MailMessageLocationModel } from './mailMessageLocationModel'
+import MailMessageLocationActions from './MailMessageLocationActions.vue'
 import './mailOperationalReadPanel.css'
 
 defineProps<{
 	flagModel: MailMessageFlagModel
+	locationModel: MailMessageLocationModel
 	model: MailOperationalReadModel
 }>()
 
@@ -21,6 +24,12 @@ const emit = defineEmits<{
 	flagRefreshStatus: []
 	flagSetRead: [targetValue: boolean]
 	flagSetStarred: [targetValue: boolean]
+	locationArchive: []
+	locationMove: []
+	locationRefreshStatus: []
+	locationRestore: []
+	locationSelectTargetFolder: [folderId: string]
+	locationTrash: []
 }>()
 </script>
 
@@ -142,6 +151,15 @@ const emit = defineEmits<{
 				@refresh-status="emit('flagRefreshStatus')"
 				@set-read="emit('flagSetRead', $event)"
 				@set-starred="emit('flagSetStarred', $event)"
+			/>
+			<MailMessageLocationActions
+				:model="locationModel"
+				@archive="emit('locationArchive')"
+				@move="emit('locationMove')"
+				@refresh-status="emit('locationRefreshStatus')"
+				@restore="emit('locationRestore')"
+				@select-target-folder="emit('locationSelectTargetFolder', $event)"
+				@trash="emit('locationTrash')"
 			/>
 		</article>
 	</section>

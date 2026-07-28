@@ -3,8 +3,9 @@
 - Статус: принято
 - Дата: 2026-07-28
 - Состояние реализации: реализовано полностью для bounded read/unread и
-  star/unstar среза. `mail_message_location_command_v1` и closure gate
-  `mail_operational_command_v1` остаются `planned`.
+  star/unstar среза. Отдельный `mail_message_location_command_v1` также
+  реализован по ADR-0308; closure gate `mail_operational_command_v1` остаётся
+  `planned` до permanent-delete gate.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0212, ADR-0213, ADR-0220,
   ADR-0223, ADR-0247, ADR-0278, ADR-0281, ADR-0282, ADR-0298, ADR-0299
 
@@ -167,9 +168,10 @@ mail_message_location_command_v1
 mail_operational_command_v1
 ```
 
+`mail_message_location_command_v1` реализован отдельно по ADR-0308.
 `mail_operational_command_v1` является closure gate и остаётся `planned`, пока
-не реализованы message flags, folder/location mutations и existing delivery
-dependency. Bulk action не входит в этот gate.
+не реализован отдельный permanent-delete gate. Bulk action не входит в этот
+gate.
 
 ## Gate `mail_message_flags_command_v1`
 

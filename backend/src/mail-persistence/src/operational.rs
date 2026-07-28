@@ -1051,7 +1051,7 @@ pub(crate) async fn refresh_folder(
     .map_err(|_| MailDurablePersistenceError::Database)
 }
 
-async fn upsert_operational_folder(
+pub(crate) async fn upsert_operational_folder(
     transaction: &mut Transaction<'_, Postgres>,
     connection_id: &str,
     folder: &MailOperationalFolderSnapshotV1,

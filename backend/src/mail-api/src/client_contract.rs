@@ -1,7 +1,7 @@
 pub const MAIL_CLIENT_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.mail.v1.bin"));
 pub const MAIL_CLIENT_CONTRACT_MAJOR: u32 = 1;
-pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 10;
+pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 11;
 pub const MAIL_MODULE_ID: &str = "hermes-mail-runtime";
 pub const MAIL_OWNER_ID: &str = "mail";
 
@@ -24,12 +24,14 @@ pub enum MailClientContractV1 {
     CompositionQuery,
     MessageFlagCommand,
     MessageFlagQuery,
+    MessageLocationCommand,
+    MessageLocationQuery,
     OperationalQuery,
     SyncHealthQuery,
 }
 
 impl MailClientContractV1 {
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 21] = [
         Self::AccountCredentialBind,
         Self::AccountDelete,
         Self::AccountLifecycleQuery,
@@ -46,6 +48,8 @@ impl MailClientContractV1 {
         Self::CompositionQuery,
         Self::MessageFlagCommand,
         Self::MessageFlagQuery,
+        Self::MessageLocationCommand,
+        Self::MessageLocationQuery,
         Self::OperationalQuery,
         Self::Sync,
         Self::SyncHealthQuery,
@@ -71,6 +75,8 @@ impl MailClientContractV1 {
             Self::CompositionQuery => "mail.composition.query.v1",
             Self::MessageFlagCommand => "mail.message-flags.command.v1",
             Self::MessageFlagQuery => "mail.message-flags.query.v1",
+            Self::MessageLocationCommand => "mail.message-location.command.v1",
+            Self::MessageLocationQuery => "mail.message-location.query.v1",
             Self::OperationalQuery => "mail.operational.query.v1",
             Self::SyncHealthQuery => "mail.sync.health.query.v1",
         }
@@ -118,6 +124,12 @@ impl MailClientContractV1 {
             }
             Self::MessageFlagQuery => {
                 "/hermes.mail.message_flags.v1.MailMessageFlagQueryService/GetOperationStatus"
+            }
+            Self::MessageLocationCommand => {
+                "/hermes.mail.message_location.v1.MailMessageLocationCommandService/Mutate"
+            }
+            Self::MessageLocationQuery => {
+                "/hermes.mail.message_location.v1.MailMessageLocationQueryService/GetOperationStatus"
             }
             Self::OperationalQuery => {
                 "/hermes.mail.operational.v1.MailOperationalQueryService/Query"

@@ -18,6 +18,7 @@ fn main() {
                 "proto/hermes/mail/account_lifecycle/v1/client.proto",
                 "proto/hermes/mail/composition/v1/client.proto",
                 "proto/hermes/mail/message_flags/v1/client.proto",
+                "proto/hermes/mail/message_location/v1/client.proto",
                 "proto/hermes/mail/operational/v1/client.proto",
                 "proto/hermes/mail/sync_health/v1/client.proto",
                 "proto/hermes/mail/portability/v1/portability.proto",

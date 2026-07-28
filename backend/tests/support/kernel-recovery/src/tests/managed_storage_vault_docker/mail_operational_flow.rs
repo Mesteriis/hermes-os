@@ -9,6 +9,10 @@ use hermes_mail_api::{
         MailMessageFlagCommandV1, MailMessageFlagKindV1, MailMessageFlagOperationOutcomeV1,
         MailMessageFlagStatusRequestV1,
     },
+    message_location::{
+        MailMessageLocationCommandV1, MailMessageLocationKindV1,
+        MailMessageLocationOperationOutcomeV1, MailMessageLocationStatusRequestV1,
+    },
     operational::{
         MailFolderKindV1, MailMessageFlagV1, MailOperationalQueryResponseV1, MailOperationalQueryV1,
     },
@@ -331,6 +335,266 @@ pub(super) fn assert_mail_identity_survives_restart_and_stale_locator_is_rejecte
         panic!("stale IMAP locator projection query returned the wrong response")
     };
     assert!(!detail.summary.flags.contains(&MailMessageFlagV1::Starred));
+}
+
+pub(super) fn assert_mail_message_archive(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    imap: &MailImapFixture,
+) -> String {
+    let messages = query_operational(
+        store,
+        supervisor,
+        mail,
+        200,
+        MailOperationalQueryV1::ListMessages {
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            folder_id: Some("INBOX".to_owned()),
+            provider_thread_id: None,
+            cursor: None,
+            limit: 1,
+        },
+    );
+    let MailOperationalQueryResponseV1::Messages(messages) = messages else {
+        panic!("Mail message location setup returned the wrong response")
+    };
+    let message_id = messages.items[0].message_id.clone();
+    assert_opaque_imap_message_id(&message_id);
+    let command = MailMessageLocationCommandV1 {
+        operation_id: "managed-mail-message-archive-1".to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        message_id: message_id.clone(),
+        kind: MailMessageLocationKindV1::Archive,
+        target_folder_id: None,
+    };
+    let provider_mutations_before = imap.message_location_mutations();
+    let accepted = route_message_location_command(store, supervisor, mail, 201, command.clone());
+    assert_eq!(accepted, command.operation_id);
+    let status =
+        wait_for_message_location_status(store, supervisor, mail, 202, &command.operation_id);
+    assert_eq!(
+        status.outcome,
+        MailMessageLocationOperationOutcomeV1::Succeeded
+    );
+    assert!(
+        status
+            .projection_revision
+            .is_some_and(|revision| revision > 0)
+    );
+    assert_eq!(imap.message_mailbox(), "Archive");
+    assert_eq!(
+        imap.message_location_mutations(),
+        provider_mutations_before + 1,
+        "managed archive must reach IMAP exactly once"
+    );
+    assert_message_folders(store, supervisor, mail, 253, &message_id, &["Archive"]);
+
+    let replayed = route_message_location_command(store, supervisor, mail, 254, command);
+    assert_eq!(replayed, accepted);
+    std::thread::sleep(Duration::from_millis(250));
+    assert_eq!(
+        imap.message_location_mutations(),
+        provider_mutations_before + 1,
+        "an exact replayed location command must not reach IMAP twice"
+    );
+    message_id
+}
+
+pub(super) fn assert_mail_message_location_survives_restart_and_fails_closed(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    imap: &MailImapFixture,
+    message_id: &str,
+) {
+    let provider_mutations_before = imap.message_location_mutations();
+    let trash = MailMessageLocationCommandV1 {
+        operation_id: "managed-mail-message-trash-1".to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        message_id: message_id.to_owned(),
+        kind: MailMessageLocationKindV1::Trash,
+        target_folder_id: None,
+    };
+    route_message_location_command(store, supervisor, mail, 260, trash.clone());
+    let trash_status =
+        wait_for_message_location_status(store, supervisor, mail, 261, &trash.operation_id);
+    assert_eq!(
+        trash_status.outcome,
+        MailMessageLocationOperationOutcomeV1::Succeeded,
+        "restart must restore the Archive locator and move the same stable message to Trash"
+    );
+    assert_eq!(imap.message_mailbox(), "Trash");
+    assert_eq!(
+        imap.message_location_mutations(),
+        provider_mutations_before + 1
+    );
+    assert_message_folders(store, supervisor, mail, 312, message_id, &["Trash"]);
+
+    imap.set_uid_validity(10);
+    let stale = MailMessageLocationCommandV1 {
+        operation_id: "managed-mail-message-restore-stale-1".to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        message_id: message_id.to_owned(),
+        kind: MailMessageLocationKindV1::Restore,
+        target_folder_id: None,
+    };
+    route_message_location_command(store, supervisor, mail, 313, stale.clone());
+    let stale_status =
+        wait_for_message_location_status(store, supervisor, mail, 314, &stale.operation_id);
+    assert_eq!(
+        stale_status.outcome,
+        MailMessageLocationOperationOutcomeV1::Rejected
+    );
+    assert_eq!(
+        imap.message_location_mutations(),
+        provider_mutations_before + 1,
+        "stale UIDVALIDITY must reject before UID MOVE"
+    );
+
+    imap.set_uid_validity(9);
+    imap.set_move_supported(false);
+    let unsupported = MailMessageLocationCommandV1 {
+        operation_id: "managed-mail-message-restore-unsupported-1".to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        message_id: message_id.to_owned(),
+        kind: MailMessageLocationKindV1::Restore,
+        target_folder_id: None,
+    };
+    route_message_location_command(store, supervisor, mail, 365, unsupported.clone());
+    let unsupported_status =
+        wait_for_message_location_status(store, supervisor, mail, 366, &unsupported.operation_id);
+    assert_eq!(
+        unsupported_status.outcome,
+        MailMessageLocationOperationOutcomeV1::Unsupported
+    );
+    assert_eq!(
+        imap.message_location_mutations(),
+        provider_mutations_before + 1,
+        "server without MOVE/UIDPLUS must not receive UID MOVE"
+    );
+    assert_message_folders(store, supervisor, mail, 417, message_id, &["Trash"]);
+}
+
+fn route_message_location_command(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    command: MailMessageLocationCommandV1,
+) -> String {
+    let request = encode_module_request(
+        request_id,
+        &MailClientRequestV1::MessageLocationCommand(command),
+    )
+    .expect("encode Mail message location command");
+    let bytes = route(
+        store,
+        supervisor,
+        mail,
+        MailClientContractV1::MessageLocationCommand,
+        &request,
+    )
+    .expect("route Mail message location command");
+    let (actual_request_id, response) =
+        decode_module_response(MailClientContractV1::MessageLocationCommand, &bytes)
+            .expect("decode Mail message location command response");
+    assert_eq!(actual_request_id, request_id);
+    let MailClientResponseV1::MessageLocationAccepted(response) = response else {
+        panic!("Mail message location command returned the wrong response")
+    };
+    response.operation_id
+}
+
+fn wait_for_message_location_status(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    operation_id: &str,
+) -> hermes_mail_api::message_location::MailMessageLocationOperationStatusV1 {
+    (0..50)
+        .find_map(|attempt| {
+            let status = query_message_location_status(
+                store,
+                supervisor,
+                mail,
+                request_id + attempt,
+                operation_id,
+            );
+            match status.outcome {
+                MailMessageLocationOperationOutcomeV1::Pending => {
+                    std::thread::sleep(Duration::from_millis(100));
+                    None
+                }
+                _ => Some(status),
+            }
+        })
+        .expect("Mail message location operation reaches a terminal status")
+}
+
+fn query_message_location_status(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    operation_id: &str,
+) -> hermes_mail_api::message_location::MailMessageLocationOperationStatusV1 {
+    let request = encode_module_request(
+        request_id,
+        &MailClientRequestV1::MessageLocationStatus(MailMessageLocationStatusRequestV1 {
+            operation_id: operation_id.to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+        }),
+    )
+    .expect("encode Mail message location status query");
+    let bytes = route(
+        store,
+        supervisor,
+        mail,
+        MailClientContractV1::MessageLocationQuery,
+        &request,
+    )
+    .expect("route Mail message location status query");
+    let (actual_request_id, response) =
+        decode_module_response(MailClientContractV1::MessageLocationQuery, &bytes)
+            .expect("decode Mail message location status response");
+    assert_eq!(actual_request_id, request_id);
+    let MailClientResponseV1::MessageLocationStatus(Some(response)) = response else {
+        panic!("Mail message location status returned the wrong response")
+    };
+    response
+}
+
+fn assert_message_folders(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+    message_id: &str,
+    expected: &[&str],
+) {
+    let detail = query_operational(
+        store,
+        supervisor,
+        mail,
+        request_id,
+        MailOperationalQueryV1::GetMessage {
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            message_id: message_id.to_owned(),
+        },
+    );
+    let MailOperationalQueryResponseV1::Message(detail) = detail else {
+        panic!("Mail message location projection returned the wrong response")
+    };
+    assert_eq!(detail.summary.message_id, message_id);
+    assert_eq!(
+        detail.summary.folder_ids,
+        expected
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect::<Vec<_>>()
+    );
 }
 
 fn assert_opaque_imap_message_id(message_id: &str) {

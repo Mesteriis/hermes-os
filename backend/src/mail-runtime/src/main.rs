@@ -6,7 +6,9 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use hermes_mail_runtime::managed::{MailDeliveryDispatchErrorV1, MailMessageFlagDispatchErrorV1};
+use hermes_mail_runtime::managed::{
+    MailDeliveryDispatchErrorV1, MailMessageFlagDispatchErrorV1, MailMessageLocationDispatchErrorV1,
+};
 use hermes_mail_runtime::{
     MailRuntimeAdmission,
     attachment_security_outbox::MailAttachmentSecurityOutboxRelayError,
@@ -179,6 +181,26 @@ where
             Err(MailMessageFlagDispatchErrorV1::Persistence) => {
                 developer_diagnostic("developer_mail_message_flag_persistence_failed");
                 return Err("Mail runtime message flag persistence failed".to_owned());
+            }
+        }
+        match runtime.block_on(admitted.execute_next_message_location_command(now)) {
+            Ok(_) => {}
+            Err(MailMessageLocationDispatchErrorV1::ProviderRejected) => {
+                developer_diagnostic("developer_mail_message_location_rejected");
+            }
+            Err(MailMessageLocationDispatchErrorV1::ProviderUnsupported) => {
+                developer_diagnostic("developer_mail_message_location_unsupported");
+            }
+            Err(MailMessageLocationDispatchErrorV1::ProviderOutcomeUnknown) => {
+                developer_diagnostic("developer_mail_message_location_outcome_unknown");
+            }
+            Err(MailMessageLocationDispatchErrorV1::InvalidStoredCommand) => {
+                developer_diagnostic("developer_mail_message_location_command_invalid");
+                return Err("Mail runtime message location command is invalid".to_owned());
+            }
+            Err(MailMessageLocationDispatchErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_message_location_persistence_failed");
+                return Err("Mail runtime message location persistence failed".to_owned());
             }
         }
         runtime

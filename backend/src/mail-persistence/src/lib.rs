@@ -8,6 +8,7 @@ mod conformance;
 mod durable;
 mod lifecycle;
 mod message_flags;
+mod message_location;
 mod oauth;
 mod operational;
 mod provider_location;
@@ -35,6 +36,10 @@ pub use lifecycle::{MAIL_SCHEMA_V8, MailAccountLifecycleBeginV1};
 pub use message_flags::{
     MAIL_SCHEMA_V12, MailMessageFlagPersistenceErrorV1, MailQueuedMessageFlagCommandV1,
 };
+pub use message_location::{
+    MAIL_SCHEMA_V15, MailMessageLocationPersistenceErrorV1, MailMessageLocationReconciliationV1,
+    MailQueuedMessageLocationCommandV1,
+};
 pub use oauth::{
     GmailOAuthAttemptStartV1, GmailOAuthCredentialBindingV1, GmailOAuthEnqueueOutcomeV1,
     GmailOAuthOperationKindV1, GmailOAuthOperationOutcomeV1, GmailOAuthOperationV1,
@@ -54,7 +59,8 @@ pub use schema::{
     MAIL_STORAGE_BUNDLE_REVISION_V7, MAIL_STORAGE_BUNDLE_REVISION_V8,
     MAIL_STORAGE_BUNDLE_REVISION_V9, MAIL_STORAGE_BUNDLE_REVISION_V10,
     MAIL_STORAGE_BUNDLE_REVISION_V11, MAIL_STORAGE_BUNDLE_REVISION_V12,
-    MAIL_STORAGE_BUNDLE_REVISION_V13, MAIL_STORAGE_BUNDLE_REVISION_V14, mail_storage_bundle_v1,
+    MAIL_STORAGE_BUNDLE_REVISION_V13, MAIL_STORAGE_BUNDLE_REVISION_V14,
+    MAIL_STORAGE_BUNDLE_REVISION_V15, mail_storage_bundle_v1,
 };
 pub use sync_health::{MAIL_SCHEMA_V10, MailSyncRunStartOutcomeV1};
 

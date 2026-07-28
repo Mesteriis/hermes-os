@@ -27,6 +27,7 @@ const protoFiles = [
   join(mailProtoRoot, 'hermes', 'mail', 'account_lifecycle', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'composition', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'message_flags', 'v1', 'client.proto'),
+  join(mailProtoRoot, 'hermes', 'mail', 'message_location', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'operational', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'sync_health', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'portability', 'v1', 'portability.proto'),

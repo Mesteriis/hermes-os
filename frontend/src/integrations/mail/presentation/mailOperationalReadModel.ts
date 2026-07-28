@@ -69,6 +69,7 @@ export type MailMessageDetailCard = {
 	contentState: string
 	isRead: boolean
 	isStarred: boolean
+	isTrashed: boolean
 }
 
 export function buildMailConnectionOptions(
@@ -143,6 +144,7 @@ export function buildMailMessageDetail(
 			: 'No plain-text content was observed.',
 		isRead: message.flag.includes(MailMessageFlagV1.MAIL_MESSAGE_FLAG_READ),
 		isStarred: message.flag.includes(MailMessageFlagV1.MAIL_MESSAGE_FLAG_STARRED),
+		isTrashed: message.flag.includes(MailMessageFlagV1.MAIL_MESSAGE_FLAG_TRASHED),
 	}
 }
 

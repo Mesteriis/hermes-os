@@ -24,6 +24,10 @@ use hermes_mail_api::{MAX_PLAIN_TEXT_BYTES, MAX_WINDOW, MAX_WINDOWS, WINDOW_DEAD
 use hermes_mail_core::rfc822::{
     AttachmentDispositionV1, attachment_metadata, extract_attachment_part, operational_preview,
 };
+use imap_proto::{
+    Response, Status,
+    types::{ResponseCode, UidSetMember},
+};
 
 pub const PACKAGE: &str = "hermes-mail-imap";
 
@@ -111,8 +115,22 @@ pub struct ImapMessageFlagAccessV1<'a> {
     pub password: &'a str,
 }
 
+pub struct ImapMessageLocationAccessV1<'a> {
+    pub host: &'a str,
+    pub port: u16,
+    pub username: &'a str,
+    pub password: &'a str,
+}
+
 pub struct ImapMessageLocatorV1<'a> {
     pub mailbox_id: &'a str,
+    pub uid_validity: u32,
+    pub uid: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImapMessageLocationResultV1 {
+    pub mailbox_id: String,
     pub uid_validity: u32,
     pub uid: u32,
 }
@@ -188,7 +206,15 @@ impl ImapError {
 
     #[must_use]
     pub fn is_definite_rejection(&self) -> bool {
-        matches!(self.kind, "validation" | "stale_locator")
+        matches!(
+            self.kind,
+            "validation" | "stale_locator" | "provider_rejected"
+        )
+    }
+
+    #[must_use]
+    pub fn is_unsupported(&self) -> bool {
+        self.kind == "unsupported"
     }
 }
 
@@ -263,6 +289,119 @@ pub fn set_message_flag(
             .await
             .map_err(|error| ImapError::new("protocol", format!("imap logout failed: {error}")))?;
         Ok(())
+    })
+}
+
+pub fn move_message(
+    access: ImapMessageLocationAccessV1<'_>,
+    locator: ImapMessageLocatorV1<'_>,
+    destination_mailbox_id: &str,
+) -> Result<ImapMessageLocationResultV1, ImapError> {
+    if locator.uid == 0
+        || locator.uid_validity == 0
+        || !valid_mailbox_id(locator.mailbox_id)
+        || !valid_mailbox_id(destination_mailbox_id)
+        || access.username.trim().is_empty()
+        || access.password.is_empty()
+    {
+        return Err(ImapError::new(
+            "validation",
+            "imap message location mutation input is invalid",
+        ));
+    }
+    if locator.mailbox_id == destination_mailbox_id {
+        return Ok(ImapMessageLocationResultV1 {
+            mailbox_id: destination_mailbox_id.to_owned(),
+            uid_validity: locator.uid_validity,
+            uid: locator.uid,
+        });
+    }
+    task::block_on(async move {
+        let mut session =
+            open_session(access.host, access.port, access.username, access.password).await?;
+        let capabilities = session.capabilities().await.map_err(|_| {
+            ImapError::new("protocol", "imap CAPABILITY failed before message move")
+        })?;
+        if !capabilities.has_str("MOVE") || !capabilities.has_str("UIDPLUS") {
+            return Err(ImapError::new(
+                "unsupported",
+                "imap server does not advertise MOVE and UIDPLUS",
+            ));
+        }
+        let selected = session
+            .select(locator.mailbox_id)
+            .await
+            .map_err(|_| ImapError::new("protocol", "imap SELECT failed before message move"))?;
+        if selected.uid_validity != Some(locator.uid_validity) {
+            return Err(ImapError::new(
+                "stale_locator",
+                "imap mailbox UIDVALIDITY does not match the stored locator",
+            ));
+        }
+        let request_id = session
+            .run_command(format!(
+                "UID MOVE {} {}",
+                locator.uid,
+                imap_mailbox_argument(destination_mailbox_id)
+            ))
+            .await
+            .map_err(|_| ImapError::new("protocol", "imap UID MOVE write failed"))?;
+        let mut destination = None;
+        loop {
+            let response = session
+                .read_response()
+                .await
+                .map_err(|_| ImapError::new("protocol", "imap UID MOVE response failed"))?
+                .ok_or_else(|| {
+                    ImapError::new("protocol", "imap connection closed during UID MOVE")
+                })?;
+            match response.parsed() {
+                Response::Data {
+                    code: Some(ResponseCode::CopyUid(uid_validity, source, target)),
+                    ..
+                }
+                | Response::Done {
+                    code: Some(ResponseCode::CopyUid(uid_validity, source, target)),
+                    ..
+                } => {
+                    let Some(target_uid) = exact_single_uid(target) else {
+                        return Err(ImapError::new(
+                            "protocol",
+                            "imap UID MOVE returned an inexact COPYUID mapping",
+                        ));
+                    };
+                    if exact_single_uid(source) != Some(locator.uid) {
+                        return Err(ImapError::new(
+                            "protocol",
+                            "imap UID MOVE returned an inexact COPYUID mapping",
+                        ));
+                    }
+                    destination = Some((*uid_validity, target_uid));
+                }
+                Response::Done { tag, status, .. } if tag == &request_id => {
+                    if status != &Status::Ok {
+                        return Err(ImapError::new(
+                            "protocol",
+                            "imap UID MOVE did not complete successfully",
+                        ));
+                    }
+                    break;
+                }
+                _ => {}
+            }
+        }
+        let (uid_validity, uid) = destination.ok_or_else(|| {
+            ImapError::new(
+                "protocol",
+                "imap UID MOVE succeeded without exact COPYUID evidence",
+            )
+        })?;
+        let _ = session.logout().await;
+        Ok(ImapMessageLocationResultV1 {
+            mailbox_id: destination_mailbox_id.to_owned(),
+            uid_validity,
+            uid,
+        })
     })
 }
 
@@ -510,6 +649,21 @@ fn valid_mailbox_id(mailbox_id: &str) -> bool {
         && mailbox_id.len() <= 512
         && mailbox_id.trim() == mailbox_id
         && !mailbox_id.contains(['\0', '\r', '\n'])
+}
+
+fn imap_mailbox_argument(mailbox_id: &str) -> String {
+    format!(
+        "\"{}\"",
+        mailbox_id.replace('\\', "\\\\").replace('"', "\\\"")
+    )
+}
+
+fn exact_single_uid(values: &[UidSetMember]) -> Option<u32> {
+    match values {
+        [UidSetMember::Uid(uid)] => Some(*uid),
+        [UidSetMember::UidRange(range)] if range.start() == range.end() => Some(*range.start()),
+        _ => None,
+    }
 }
 
 #[cfg(not(feature = "conformance-test-support"))]
@@ -860,6 +1014,60 @@ mod tests {
                 true,
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn message_location_mutation_validates_target_before_network_io() {
+        let result = move_message(
+            ImapMessageLocationAccessV1 {
+                host: "mail.example.com",
+                port: 993,
+                username: "alice",
+                password: "secret",
+            },
+            ImapMessageLocatorV1 {
+                mailbox_id: "INBOX",
+                uid_validity: 1,
+                uid: 42,
+            },
+            "Archive\r\nUID EXPUNGE",
+        );
+
+        assert!(matches!(result, Err(error) if error.is_definite_rejection()));
+    }
+
+    #[test]
+    fn same_mailbox_location_is_a_provider_noop() {
+        assert_eq!(
+            move_message(
+                ImapMessageLocationAccessV1 {
+                    host: "not-a-network-endpoint",
+                    port: 1,
+                    username: "alice",
+                    password: "secret",
+                },
+                ImapMessageLocatorV1 {
+                    mailbox_id: "INBOX",
+                    uid_validity: 7,
+                    uid: 42,
+                },
+                "INBOX",
+            )
+            .expect("same mailbox is already reconciled"),
+            ImapMessageLocationResultV1 {
+                mailbox_id: "INBOX".to_owned(),
+                uid_validity: 7,
+                uid: 42,
+            }
+        );
+    }
+
+    #[test]
+    fn uid_move_mailbox_argument_is_quoted_and_escaped() {
+        assert_eq!(
+            imap_mailbox_argument("Owner \"Archive\" \\ 2026"),
+            "\"Owner \\\"Archive\\\" \\\\ 2026\""
         );
     }
 

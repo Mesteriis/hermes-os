@@ -30,6 +30,14 @@ pub mod message_flags_wire;
 pub mod message_flags_wire_generated {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail.message_flags.v1.rs"));
 }
+pub mod message_location;
+pub mod message_location_wire;
+pub mod message_location_wire_generated {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.mail.message_location.v1.rs"
+    ));
+}
 pub mod oauth;
 pub mod oauth_wire;
 pub mod operational;
@@ -79,6 +87,8 @@ pub enum MailClientRequestV1 {
     CompositionQuery(composition::MailCompositionQueryV1),
     MessageFlagCommand(message_flags::MailMessageFlagCommandV1),
     MessageFlagStatus(message_flags::MailMessageFlagStatusRequestV1),
+    MessageLocationCommand(message_location::MailMessageLocationCommandV1),
+    MessageLocationStatus(message_location::MailMessageLocationStatusRequestV1),
     OperationalQuery(operational::MailOperationalQueryV1),
     SyncHealthQuery(sync_health::MailSyncHealthQueryV1),
 }
@@ -123,6 +133,8 @@ pub enum MailClientResponseV1 {
     CompositionQuery(composition::MailCompositionQueryResponseV1),
     MessageFlagAccepted(message_flags::MailMessageFlagAcceptedV1),
     MessageFlagStatus(Option<message_flags::MailMessageFlagOperationStatusV1>),
+    MessageLocationAccepted(message_location::MailMessageLocationAcceptedV1),
+    MessageLocationStatus(Option<message_location::MailMessageLocationOperationStatusV1>),
     OperationalQuery(operational::MailOperationalQueryResponseV1),
     SyncHealthQuery(sync_health::MailSyncHealthQueryResponseV1),
 }

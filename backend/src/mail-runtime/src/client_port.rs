@@ -4,7 +4,8 @@ use hermes_mail_api::client_contract::{
 };
 use hermes_mail_api::{
     MailClientRequestV1, MailClientResponseV1, account_lifecycle_wire, account_wire, client_wire,
-    composition_wire, message_flags_wire, oauth_wire, operational_wire, sync_health_wire,
+    composition_wire, message_flags_wire, message_location_wire, oauth_wire, operational_wire,
+    sync_health_wire,
 };
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
@@ -66,6 +67,10 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
         MailClientRequestV1::CompositionQuery(_) => MailClientContractV1::CompositionQuery,
         MailClientRequestV1::MessageFlagCommand(_) => MailClientContractV1::MessageFlagCommand,
         MailClientRequestV1::MessageFlagStatus(_) => MailClientContractV1::MessageFlagQuery,
+        MailClientRequestV1::MessageLocationCommand(_) => {
+            MailClientContractV1::MessageLocationCommand
+        }
+        MailClientRequestV1::MessageLocationStatus(_) => MailClientContractV1::MessageLocationQuery,
         MailClientRequestV1::OperationalQuery(_) => MailClientContractV1::OperationalQuery,
         MailClientRequestV1::SyncHealthQuery(_) => MailClientContractV1::SyncHealthQuery,
     }
@@ -119,6 +124,14 @@ fn encode_request_payload(request: &MailClientRequestV1) -> Result<Vec<u8>, Mail
         }
         MailClientRequestV1::MessageFlagStatus(value) => {
             message_flags_wire::encode_message_flag_status_request(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::MessageLocationCommand(value) => {
+            message_location_wire::encode_message_location_command(value)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientRequestV1::MessageLocationStatus(value) => {
+            message_location_wire::encode_message_location_status_request(value)
                 .map_err(|_| MailClientPortErrorV1::Protocol)
         }
         MailClientRequestV1::OperationalQuery(value) => {
@@ -194,6 +207,16 @@ fn decode_request_payload(
         MailClientContractV1::MessageFlagQuery => {
             message_flags_wire::decode_message_flag_status_request(bytes)
                 .map(MailClientRequestV1::MessageFlagStatus)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientContractV1::MessageLocationCommand => {
+            message_location_wire::decode_message_location_command(bytes)
+                .map(MailClientRequestV1::MessageLocationCommand)
+                .map_err(|_| MailClientPortErrorV1::Protocol)
+        }
+        MailClientContractV1::MessageLocationQuery => {
+            message_location_wire::decode_message_location_status_request(bytes)
+                .map(MailClientRequestV1::MessageLocationStatus)
                 .map_err(|_| MailClientPortErrorV1::Protocol)
         }
         MailClientContractV1::OperationalQuery => operational_wire::decode_operational_query(bytes)
@@ -356,6 +379,16 @@ pub async fn handle_client_request(
             .await
             .map(MailClientResponseV1::MessageFlagStatus)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::MessageLocationCommand(value) => runtime
+            .submit_message_location_command(&value, requested_at_unix_seconds)
+            .await
+            .map(MailClientResponseV1::MessageLocationAccepted)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
+        MailClientRequestV1::MessageLocationStatus(value) => runtime
+            .message_location_operation_status(&value)
+            .await
+            .map(MailClientResponseV1::MessageLocationStatus)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
         MailClientRequestV1::OperationalQuery(value) => runtime
             .operational_query(&value)
             .await
@@ -439,6 +472,16 @@ fn encode_module_response(
             MailClientContractV1::MessageFlagQuery,
             MailClientResponseV1::MessageFlagStatus(status),
         ) => message_flags_wire::encode_message_flag_status_response(status.as_ref())
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
+        (
+            MailClientContractV1::MessageLocationCommand,
+            MailClientResponseV1::MessageLocationAccepted(accepted),
+        ) => message_location_wire::encode_message_location_accepted(accepted)
+            .map_err(|_| MailClientPortErrorV1::Protocol)?,
+        (
+            MailClientContractV1::MessageLocationQuery,
+            MailClientResponseV1::MessageLocationStatus(status),
+        ) => message_location_wire::encode_message_location_status_response(status.as_ref())
             .map_err(|_| MailClientPortErrorV1::Protocol)?,
         (
             MailClientContractV1::OperationalQuery,
@@ -532,6 +575,16 @@ pub fn decode_module_response(
             message_flags_wire::decode_message_flag_status_response(&envelope.response_payload)
                 .map(MailClientResponseV1::MessageFlagStatus)
         }
+        MailClientContractV1::MessageLocationCommand => {
+            message_location_wire::decode_message_location_accepted(&envelope.response_payload)
+                .map(MailClientResponseV1::MessageLocationAccepted)
+        }
+        MailClientContractV1::MessageLocationQuery => {
+            message_location_wire::decode_message_location_status_response(
+                &envelope.response_payload,
+            )
+            .map(MailClientResponseV1::MessageLocationStatus)
+        }
         MailClientContractV1::OperationalQuery => {
             operational_wire::decode_operational_query_response(&envelope.response_payload)
                 .map(MailClientResponseV1::OperationalQuery)
@@ -560,6 +613,11 @@ mod tests {
             MailMessageFlagAcceptedV1, MailMessageFlagCommandV1, MailMessageFlagKindV1,
             MailMessageFlagOperationOutcomeV1, MailMessageFlagOperationStatusV1,
             MailMessageFlagStatusRequestV1,
+        },
+        message_location::{
+            MailMessageLocationAcceptedV1, MailMessageLocationCommandV1, MailMessageLocationKindV1,
+            MailMessageLocationOperationOutcomeV1, MailMessageLocationOperationStatusV1,
+            MailMessageLocationStatusRequestV1,
         },
         operational::{
             MailOperationalPageV1, MailOperationalQueryResponseV1, MailOperationalQueryV1,
@@ -624,6 +682,23 @@ mod tests {
     fn message_flag_query() -> MailClientRequestV1 {
         MailClientRequestV1::MessageFlagStatus(MailMessageFlagStatusRequestV1 {
             operation_id: "flag-operation".to_owned(),
+            connection_id: "mail-account".to_owned(),
+        })
+    }
+
+    fn message_location_command() -> MailClientRequestV1 {
+        MailClientRequestV1::MessageLocationCommand(MailMessageLocationCommandV1 {
+            operation_id: "location-operation".to_owned(),
+            connection_id: "mail-account".to_owned(),
+            message_id: "stable-message".to_owned(),
+            kind: MailMessageLocationKindV1::Move,
+            target_folder_id: Some("archive-folder".to_owned()),
+        })
+    }
+
+    fn message_location_query() -> MailClientRequestV1 {
+        MailClientRequestV1::MessageLocationStatus(MailMessageLocationStatusRequestV1 {
+            operation_id: "location-operation".to_owned(),
             connection_id: "mail-account".to_owned(),
         })
     }
@@ -799,6 +874,56 @@ mod tests {
         assert_eq!(
             decode_module_response(query_contract, &bytes),
             Ok((10, response))
+        );
+        assert_ne!(command_contract, query_contract);
+    }
+
+    #[test]
+    fn message_location_command_and_status_use_independent_exact_contracts() {
+        let command = message_location_command();
+        let encoded = encode_module_request(11, &command).expect("message location command");
+        let (_, command_contract, decoded) =
+            decode_module_request(&encoded).expect("decode message location command");
+        assert_eq!(
+            command_contract,
+            MailClientContractV1::MessageLocationCommand
+        );
+        assert_eq!(decoded, command);
+        let response =
+            MailClientResponseV1::MessageLocationAccepted(MailMessageLocationAcceptedV1 {
+                operation_id: "location-operation".to_owned(),
+            });
+        let bytes = encode_module_response(11, command_contract, &response)
+            .expect("message location accepted response");
+        assert_eq!(
+            decode_module_response(command_contract, &bytes),
+            Ok((11, response))
+        );
+
+        let query = message_location_query();
+        let encoded = encode_module_request(12, &query).expect("message location query");
+        let (_, query_contract, decoded) =
+            decode_module_request(&encoded).expect("decode message location query");
+        assert_eq!(query_contract, MailClientContractV1::MessageLocationQuery);
+        assert_eq!(decoded, query);
+        let response = MailClientResponseV1::MessageLocationStatus(Some(
+            MailMessageLocationOperationStatusV1 {
+                operation_id: "location-operation".to_owned(),
+                connection_id: "mail-account".to_owned(),
+                message_id: "stable-message".to_owned(),
+                kind: MailMessageLocationKindV1::Move,
+                target_folder_id: Some("archive-folder".to_owned()),
+                outcome: MailMessageLocationOperationOutcomeV1::Succeeded,
+                requested_at_unix_seconds: 100,
+                completed_at_unix_seconds: Some(101),
+                projection_revision: Some(3),
+            },
+        ));
+        let bytes = encode_module_response(12, query_contract, &response)
+            .expect("message location status response");
+        assert_eq!(
+            decode_module_response(query_contract, &bytes),
+            Ok((12, response))
         );
         assert_ne!(command_contract, query_contract);
     }

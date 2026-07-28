@@ -114,6 +114,12 @@ use hermes_mail_api::{
         MailMessageFlagStatusRequestV1,
     },
     message_flags_wire::{decode_message_flag_command, encode_message_flag_command},
+    message_location::{
+        MailMessageLocationAcceptedV1, MailMessageLocationCommandV1,
+        MailMessageLocationOperationOutcomeV1, MailMessageLocationOperationStatusV1,
+        MailMessageLocationStatusRequestV1,
+    },
+    message_location_wire::{decode_message_location_command, encode_message_location_command},
     operational::{
         MailFolderKindV1, MailMessageFlagV1, MailOperationalQueryResponseV1,
         MailOperationalQueryV1, operational_query_connection_id,
@@ -140,16 +146,18 @@ use hermes_mail_gmail::{
     decode_raw_rfc822, history_message_ids,
 };
 use hermes_mail_imap::{
-    ImapMailboxKindV1, ImapMessageFlagAccessV1, ImapMessageLocatorV1, ImapMutableMessageFlagV1,
+    ImapMailboxKindV1, ImapMessageFlagAccessV1, ImapMessageLocationAccessV1, ImapMessageLocatorV1,
+    ImapMutableMessageFlagV1,
 };
 use hermes_mail_persistence::{
     MailAttachmentBlobAdmissionCompletionV1,
     MailAttachmentDispositionV1 as PersistedAttachmentDispositionV1,
     MailAttachmentMaterializationV1, MailCredentialBindingV1, MailDeliveryAttemptOutcomeV1,
     MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailDurablePersistenceError,
-    MailImapMessageLocatorV1, MailOperationalFolderSnapshotV1, MailOperationalMaterializationV1,
-    MailOperationalMessageSnapshotV1, MailQueuedDeliveryV1, MailQueuedMessageFlagCommandV1,
-    MailSyncRunStartOutcomeV1, initial_imap_message_id,
+    MailImapMessageLocatorV1, MailMessageLocationReconciliationV1, MailOperationalFolderSnapshotV1,
+    MailOperationalMaterializationV1, MailOperationalMessageSnapshotV1, MailQueuedDeliveryV1,
+    MailQueuedMessageFlagCommandV1, MailQueuedMessageLocationCommandV1, MailSyncRunStartOutcomeV1,
+    initial_imap_message_id,
 };
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
@@ -265,6 +273,15 @@ pub enum MailMessageFlagDispatchErrorV1 {
     InvalidStoredCommand,
     Persistence,
     ProviderRejected,
+    ProviderOutcomeUnknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailMessageLocationDispatchErrorV1 {
+    InvalidStoredCommand,
+    Persistence,
+    ProviderRejected,
+    ProviderUnsupported,
     ProviderOutcomeUnknown,
 }
 
@@ -950,6 +967,229 @@ impl MailAdmittedRuntime {
             .complete_message_flag_success(&queued, completed_at_unix_seconds)
             .await
             .map_err(|_| MailMessageFlagDispatchErrorV1::Persistence)?;
+        Ok(true)
+    }
+
+    pub async fn submit_message_location_command(
+        &self,
+        command: &MailMessageLocationCommandV1,
+        requested_at_unix_seconds: i64,
+    ) -> Result<MailMessageLocationAcceptedV1, MailBootstrapError> {
+        if !self.provider_io_permitted() || command.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        match &self.account.inbound {
+            MailInboundTransportV1::Imap(_) if self.imap_password.is_none() => {
+                return Err(MailBootstrapError::Credential);
+            }
+            MailInboundTransportV1::Gmail(_)
+                if self
+                    .durable
+                    .gmail_oauth_credential_binding(&self.account.connection_id)
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?
+                    .is_none() =>
+            {
+                return Err(MailBootstrapError::Credential);
+            }
+            MailInboundTransportV1::Imap(_) | MailInboundTransportV1::Gmail(_) => {}
+        }
+        let canonical_command_bytes =
+            encode_message_location_command(command).map_err(|_| MailBootstrapError::Admission)?;
+        self.durable
+            .enqueue_message_location_command(
+                command,
+                &canonical_command_bytes,
+                requested_at_unix_seconds,
+            )
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)
+    }
+
+    pub async fn message_location_operation_status(
+        &self,
+        request: &MailMessageLocationStatusRequestV1,
+    ) -> Result<Option<MailMessageLocationOperationStatusV1>, MailBootstrapError> {
+        if request.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        self.durable
+            .message_location_operation_status(request)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)
+    }
+
+    pub async fn execute_next_message_location_command(
+        &mut self,
+        completed_at_unix_seconds: i64,
+    ) -> Result<bool, MailMessageLocationDispatchErrorV1> {
+        if !self.provider_io_permitted() {
+            return Ok(false);
+        }
+        let Some(queued) = self
+            .durable
+            .next_message_location_command(&self.account.connection_id)
+            .await
+            .map_err(|_| MailMessageLocationDispatchErrorV1::Persistence)?
+        else {
+            return Ok(false);
+        };
+        let command = decode_message_location_command(&queued.exact_command_bytes)
+            .map_err(|_| MailMessageLocationDispatchErrorV1::InvalidStoredCommand)?;
+        if !queued_location_matches_command(&queued, &command) {
+            return Err(MailMessageLocationDispatchErrorV1::InvalidStoredCommand);
+        }
+        let provider_result = match self.account.inbound.clone() {
+            MailInboundTransportV1::Imap(configuration) => {
+                async {
+                    let locator = self
+                        .durable
+                        .imap_message_locator(&command.connection_id, &command.message_id)
+                        .await
+                        .map_err(|_| MailMessageLocationDispatchErrorV1::Persistence)?
+                        .ok_or(MailMessageLocationDispatchErrorV1::ProviderRejected)?;
+                    let target = self
+                        .durable
+                        .message_location_target_folder(&command)
+                        .await
+                        .map_err(|_| MailMessageLocationDispatchErrorV1::Persistence)?
+                        .ok_or(MailMessageLocationDispatchErrorV1::ProviderUnsupported)?;
+                    let password = self
+                        .imap_password
+                        .as_ref()
+                        .ok_or(MailMessageLocationDispatchErrorV1::ProviderOutcomeUnknown)?;
+                    let password = Zeroizing::new(password.to_vec());
+                    let password = std::str::from_utf8(&password)
+                        .map_err(|_| MailMessageLocationDispatchErrorV1::InvalidStoredCommand)?;
+                    let moved = hermes_mail_imap::move_message(
+                        ImapMessageLocationAccessV1 {
+                            host: &configuration.host,
+                            port: configuration.port,
+                            username: &configuration.username,
+                            password,
+                        },
+                        ImapMessageLocatorV1 {
+                            mailbox_id: &locator.mailbox_id,
+                            uid_validity: locator.uid_validity,
+                            uid: locator.uid,
+                        },
+                        &target.folder_id,
+                    )
+                    .map_err(|error| {
+                        if error.is_unsupported() {
+                            MailMessageLocationDispatchErrorV1::ProviderUnsupported
+                        } else if error.is_definite_rejection() {
+                            MailMessageLocationDispatchErrorV1::ProviderRejected
+                        } else {
+                            MailMessageLocationDispatchErrorV1::ProviderOutcomeUnknown
+                        }
+                    })?;
+                    Ok(MailMessageLocationReconciliationV1 {
+                        folders: vec![target],
+                        imap_locator: Some(MailImapMessageLocatorV1 {
+                            mailbox_id: moved.mailbox_id,
+                            uid_validity: moved.uid_validity,
+                            uid: moved.uid,
+                        }),
+                    })
+                }
+                .await
+            }
+            MailInboundTransportV1::Gmail(configuration) => {
+                async {
+                    let token =
+                        self.resolve_gmail_access_token()
+                            .await
+                            .map_err(|error| match error {
+                                MailBootstrapError::Persistence => {
+                                    MailMessageLocationDispatchErrorV1::Persistence
+                                }
+                                MailBootstrapError::Credential => {
+                                    MailMessageLocationDispatchErrorV1::ProviderOutcomeUnknown
+                                }
+                                _ => MailMessageLocationDispatchErrorV1::InvalidStoredCommand,
+                            })?;
+                    let token = std::str::from_utf8(&token)
+                        .map_err(|_| MailMessageLocationDispatchErrorV1::InvalidStoredCommand)?;
+                    let client = gmail_api_client(&configuration)
+                        .map_err(|_| MailMessageLocationDispatchErrorV1::ProviderRejected)?;
+                    let location = match command.kind {
+                        hermes_mail_api::message_location::MailMessageLocationKindV1::Archive => {
+                            client.archive_message(token, &command.message_id).await
+                        }
+                        hermes_mail_api::message_location::MailMessageLocationKindV1::Trash => {
+                            client.trash_message(token, &command.message_id).await
+                        }
+                        hermes_mail_api::message_location::MailMessageLocationKindV1::Restore => {
+                            client.restore_message(token, &command.message_id).await
+                        }
+                        hermes_mail_api::message_location::MailMessageLocationKindV1::Move => {
+                            let target = self
+                                .durable
+                                .message_location_target_folder(&command)
+                                .await
+                                .map_err(|_| MailMessageLocationDispatchErrorV1::Persistence)?
+                                .ok_or(MailMessageLocationDispatchErrorV1::ProviderUnsupported)?;
+                            let target_is_inbox = match target.kind {
+                                MailFolderKindV1::Inbox => true,
+                                MailFolderKindV1::ProviderLabel => false,
+                                _ => {
+                                    return Err(
+                                        MailMessageLocationDispatchErrorV1::ProviderUnsupported,
+                                    );
+                                }
+                            };
+                            client
+                                .move_message(
+                                    token,
+                                    &command.message_id,
+                                    &target.folder_id,
+                                    target_is_inbox,
+                                )
+                                .await
+                        }
+                    }
+                    .map_err(map_gmail_location_error)?;
+                    Ok(MailMessageLocationReconciliationV1 {
+                        folders: gmail_operational_folders(&location.label_ids),
+                        imap_locator: None,
+                    })
+                }
+                .await
+            }
+        };
+        let reconciliation = match provider_result {
+            Ok(reconciliation) => reconciliation,
+            Err(error) => {
+                let outcome = match error {
+                    MailMessageLocationDispatchErrorV1::ProviderRejected
+                    | MailMessageLocationDispatchErrorV1::InvalidStoredCommand => {
+                        MailMessageLocationOperationOutcomeV1::Rejected
+                    }
+                    MailMessageLocationDispatchErrorV1::ProviderUnsupported => {
+                        MailMessageLocationOperationOutcomeV1::Unsupported
+                    }
+                    MailMessageLocationDispatchErrorV1::ProviderOutcomeUnknown => {
+                        MailMessageLocationOperationOutcomeV1::OutcomeUnknown
+                    }
+                    MailMessageLocationDispatchErrorV1::Persistence => return Err(error),
+                };
+                self.durable
+                    .complete_message_location_failure(
+                        &queued.operation_id,
+                        &queued.connection_id,
+                        outcome,
+                        completed_at_unix_seconds,
+                    )
+                    .await
+                    .map_err(|_| MailMessageLocationDispatchErrorV1::Persistence)?;
+                return Err(error);
+            }
+        };
+        self.durable
+            .complete_message_location_success(&queued, &reconciliation, completed_at_unix_seconds)
+            .await
+            .map_err(|_| MailMessageLocationDispatchErrorV1::Persistence)?;
         Ok(true)
     }
 
@@ -2614,6 +2854,30 @@ fn queued_matches_command(
         && queued.message_id == command.message_id
         && queued.kind == command.kind
         && queued.target_value == command.target_value
+}
+
+fn queued_location_matches_command(
+    queued: &MailQueuedMessageLocationCommandV1,
+    command: &MailMessageLocationCommandV1,
+) -> bool {
+    queued.operation_id == command.operation_id
+        && queued.connection_id == command.connection_id
+        && queued.message_id == command.message_id
+        && queued.kind == command.kind
+        && queued.target_folder_id == command.target_folder_id
+}
+
+fn map_gmail_location_error(error: GmailAdapterErrorV1) -> MailMessageLocationDispatchErrorV1 {
+    match error {
+        GmailAdapterErrorV1::InvalidRequest | GmailAdapterErrorV1::ProviderStatus(400..=499) => {
+            MailMessageLocationDispatchErrorV1::ProviderRejected
+        }
+        GmailAdapterErrorV1::Transport
+        | GmailAdapterErrorV1::ProviderStatus(_)
+        | GmailAdapterErrorV1::InvalidResponse => {
+            MailMessageLocationDispatchErrorV1::ProviderOutcomeUnknown
+        }
+    }
 }
 
 const fn imap_message_flag(kind: MailMessageFlagKindV1) -> ImapMutableMessageFlagV1 {

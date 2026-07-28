@@ -2,9 +2,10 @@
 
 - Статус: принято
 - Дата: 2026-07-28
-- Состояние реализации: реализовано полностью для prerequisite
-  `mail_provider_location_identity_v1`. `mail_message_location_command_v1`
-  остаётся отдельным planned gate и не открывается наличием identity foundation.
+- Состояние реализации: реализовано полностью для
+  `mail_provider_location_identity_v1` и отдельного
+  `mail_message_location_command_v1`. Permanent delete остаётся закрытым
+  отдельным gate.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0212, ADR-0213, ADR-0220,
   ADR-0222, ADR-0223, ADR-0278, ADR-0282, ADR-0298, ADR-0299, ADR-0307
 
@@ -120,6 +121,22 @@ mailbox соответствующей role. При нуле или ambiguity к
 Explicit move принимает `target_folder_id`, но persistence проверяет, что
 folder принадлежит той же connection и является selectable.
 
+`restore` имеет exact provider-owned semantics, а не generic "вернуть куда
+было":
+
+- IMAP restore переносит письмо только в единственный selectable mailbox роли
+  `inbox`;
+- Gmail restore использует exact `messages.untrash`;
+- отсутствие или ambiguity IMAP Inbox завершают операцию как `unsupported`;
+- runtime не угадывает previous folder, не использует hardcoded mailbox name и
+  не выполняет fallback copy/delete.
+
+Для Gmail explicit move допускает только сохранённый folder роли `inbox` или
+`provider_folder`: target label добавляется, а `INBOX` снимается для
+`provider_folder`. Остальные system roles имеют отдельные exact commands.
+После Gmail mutation runtime повторно читает exact provider message labels и
+только затем атомарно reconciles Mail projection.
+
 ### UIDVALIDITY fence
 
 Любая IMAP mutation:
@@ -219,6 +236,31 @@ Gate реализован атомарно: public Rust/Protobuf/frontend исп
 indexes; managed Docker conformance подтверждает mailbox roles, opaque identity,
 provider mutation exactly once, restart-safe locator restore и отказ при
 изменившемся UIDVALIDITY до `UID STORE`.
+
+## Gate `mail_message_location_command_v1`
+
+Gate становится `implemented` только атомарно при наличии:
+
+1. независимых exact command/query contracts и capability grants;
+2. owner-local V15 journal с exact canonical command bytes/hash;
+3. archive/trash/restore/move без permanent delete;
+4. IMAP `UID MOVE` только после `UIDVALIDITY` fence и только при
+   `MOVE` + `UIDPLUS` с exact `COPYUID`;
+5. Gmail exact trash/untrash/label mutation и provider-label reread;
+6. atomic provider locator, folder membership, counts, projection revision и
+   terminal status reconciliation;
+7. exact replay без повторной provider mutation и restart-safe continuation;
+8. managed positive, stale locator и unsupported capability conformance;
+9. generated frontend command/query clients, SRP controller и Mail-only
+   presentation actions;
+10. architecture/Cargo guards, сохраняющих integration, Communications,
+    Kernel, Gateway и permanent-delete boundaries.
+
+Gate реализован атомарно: Mail storage bundle V15 хранит durable journal;
+IMAP adapter требует `MOVE`/`UIDPLUS` и exact `COPYUID`; Gmail adapter
+перечитывает exact labels после mutation; managed Docker conformance
+подтверждает replay, restart, stale UIDVALIDITY и unsupported server behavior.
+Frontend показывает reversible actions только при наличии обоих exact grants.
 
 ## Последствия
 

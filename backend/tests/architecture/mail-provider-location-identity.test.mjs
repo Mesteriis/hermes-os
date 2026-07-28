@@ -100,11 +100,11 @@ test('Mail provider location identity is stable, private and live-conformant', a
     state: 'implemented',
     dependsOn: ['mail_operational_read_v1', 'mail_message_flags_command_v1'],
   });
-  assert.equal(location.state, 'planned');
+  assert.equal(location.state, 'implemented');
   assert.match(adr, /реализовано полностью/);
   assert.match(adr, /V13\/V14/);
   assert.match(adr, /stale-UIDVALIDITY negative conformance/);
-  assert.match(adr, /mail_message_location_command_v1[\s\S]*planned gate/);
+  assert.match(adr, /Gate `mail_message_location_command_v1`/);
 
   for (const source of [
     operationalProto,
@@ -143,7 +143,7 @@ test('Mail provider location identity is stable, private and live-conformant', a
   assert.doesNotMatch(runtime, /split_once\(['"]:/);
   assert.doesNotMatch(runtime, /select\(["']INBOX["']\)/i);
 
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V14/);
+  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V15/);
   assert.match(managedFlow, /assert_opaque_imap_message_id/);
   assert.match(managedFlow, /assert_mail_identity_survives_restart/);
   assert.match(managedFlow, /MailMessageFlagOperationOutcomeV1::Rejected/);
