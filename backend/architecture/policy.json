@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communications_saved_search_v1",
+    "currentSlice": "communications_sender_insights_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -441,6 +441,12 @@
       },
       {
         "name": "hermes-communications-saved-query-api",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communications-sender-insights-api",
         "role": "domain",
         "owner": "communications",
         "surface": "contract"
@@ -965,6 +971,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communications-sender-insights-api",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-events-jetstream",
           "kind": "normal"
         },
@@ -1251,7 +1261,8 @@
         }
       ],
       "hermes-communications-content-api": [],
-      "hermes-communications-saved-query-api": []
+      "hermes-communications-saved-query-api": [],
+      "hermes-communications-sender-insights-api": []
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-events-protocol": [
@@ -3389,6 +3400,40 @@
           "defaultFeatures": false,
           "features": []
         }
+      ],
+      "hermes-communications-sender-insights-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -3696,6 +3741,10 @@
       "hermes-communications-saved-query-api": {
         "primaryKind": "lib",
         "customBuildAllowed": true
+      },
+      "hermes-communications-sender-insights-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
       }
     },
     "developmentProfile": {
@@ -3756,6 +3805,7 @@
         "communications.query.v1",
         "communications.saved-search.v1",
         "communications.search.index.v1",
+        "communications.sender-insights.v1",
         "communications.storage.v1",
         "mail.attachment-anchor.consume.v1",
         "mail.attachment-blob-admission.publish.v1",
@@ -3914,6 +3964,9 @@
         "client_blob_v1"
       ],
       "communications_saved_search_v1": [
+        "communications_content_read_v1"
+      ],
+      "communications_sender_insights_v1": [
         "communications_content_read_v1"
       ],
       "clock_v1": [
@@ -4079,6 +4132,17 @@
         "authenticated_gateway_managed_runtime_conformance",
         "generated_frontend_exact_capability_guard",
         "query_plaintext_and_provider_truth_non_disclosure",
+        "architecture_srp_cargo_clippy_managed_browser_gates"
+      ],
+      "communications_sender_insights_v1": [
+        "exact_sender_insights_contract_build_unit",
+        "typed_ingress_actor_and_bounded_display_metadata",
+        "atomic_rebuildable_sender_fact_projection",
+        "active_incoming_message_only_aggregation",
+        "account_scope_count_timestamp_sender_cursor_fencing",
+        "authenticated_gateway_managed_runtime_conformance",
+        "generated_frontend_exact_capability_guard",
+        "provider_locator_content_and_review_truth_non_disclosure",
         "architecture_srp_cargo_clippy_managed_browser_gates"
       ],
       "clock_v1": [

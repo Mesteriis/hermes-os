@@ -33,6 +33,7 @@ pub const COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID: &str = "communicatio
 pub const MAX_OBSERVATION_ID_LEN: usize = 256;
 pub const MAX_EXTERNAL_RECORD_ID_LEN: usize = 512;
 pub const MAX_SOURCE_SCOPE_ID_LEN: usize = 512;
+pub const MAX_PARTICIPANT_DISPLAY_LABEL_BYTES: usize = 256;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProviderProvenanceV1 {
@@ -153,6 +154,7 @@ pub struct CommunicationObservationDraft {
     pub body_blob: Option<BodyBlobReceiptV1>,
     pub body_admission_failure: Option<BodyAdmissionFailureV1>,
     pub attachment_descriptor: Option<AttachmentDescriptorV1>,
+    pub participant_display_label: Option<String>,
     pub observed_at_unix_seconds: Option<i64>,
 }
 
@@ -176,6 +178,7 @@ pub enum IngressDraftError {
     ExternalForwardOriginRecordIdTooLong,
     InvalidAttachmentDescriptor,
     InvalidBodyAdmission,
+    InvalidParticipantDisplayLabel,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -226,6 +229,7 @@ pub fn new_communication_observation_draft(
         body_blob: None,
         body_admission_failure: None,
         attachment_descriptor: None,
+        participant_display_label: None,
         observed_at_unix_seconds,
     })
 }
@@ -268,6 +272,16 @@ pub fn with_attachment_descriptor(
         return Err(IngressDraftError::InvalidAttachmentDescriptor);
     }
     draft.attachment_descriptor = Some(descriptor);
+    Ok(draft)
+}
+
+pub fn with_participant_display_label(
+    mut draft: CommunicationObservationDraft,
+    display_label: Option<String>,
+) -> Result<CommunicationObservationDraft, IngressDraftError> {
+    draft.participant_display_label = display_label
+        .map(|value| normalize_participant_display_label(&value))
+        .transpose()?;
     Ok(draft)
 }
 
@@ -356,6 +370,7 @@ pub fn build_observation_outbox_record_v1(
             .body_admission_failure
             .map(body_admission_failure_value)
             .unwrap_or_default(),
+        participant_display_label: draft.participant_display_label.clone(),
     }
     .encode_to_vec();
     let envelope = DurableEnvelopeV1 {
@@ -640,6 +655,18 @@ fn valid_attachment_descriptor(value: &AttachmentDescriptorV1) -> bool {
         && !value.media_type.contains([' ', '\t', '\n', '\r', ';'])
         && value.declared_bytes <= 64 * 1024 * 1024
 }
+
+fn normalize_participant_display_label(value: &str) -> Result<String, IngressDraftError> {
+    let value = value.trim();
+    if value.is_empty()
+        || value.len() > MAX_PARTICIPANT_DISPLAY_LABEL_BYTES
+        || value.chars().any(char::is_control)
+    {
+        return Err(IngressDraftError::InvalidParticipantDisplayLabel);
+    }
+    Ok(value.to_owned())
+}
+
 fn valid_body_blob_receipt(value: &BodyBlobReceiptV1) -> bool {
     !value.blob_ref.trim().is_empty()
         && value.blob_ref.len() <= 512

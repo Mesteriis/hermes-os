@@ -23,6 +23,7 @@ const ALL_GATES = [
   'client_blob_v1',
   'communications_content_read_v1',
   'communications_saved_search_v1',
+  'communications_sender_insights_v1',
   'clock_v1',
   'scheduler_v1',
   'browser_client_v1',
@@ -44,6 +45,7 @@ const NOT_AUTHORIZED = ALL_GATES.filter((gate) => ![
   'client_blob_v1',
   'communications_content_read_v1',
   'communications_saved_search_v1',
+  'communications_sender_insights_v1',
   'clock_v1',
   'scheduler_v1',
   'browser_client_v1',
@@ -96,6 +98,9 @@ const REQUIRES = {
     'client_blob_v1',
   ],
   communications_saved_search_v1: [
+    'communications_content_read_v1',
+  ],
+  communications_sender_insights_v1: [
     'communications_content_read_v1',
   ],
   clock_v1: ['module_control_plane_v1', 'managed_launch_trust_v1'],
@@ -260,6 +265,17 @@ const REQUIRED_DECISION_FIELDS = {
     'authenticated_gateway_managed_runtime_conformance',
     'generated_frontend_exact_capability_guard',
     'query_plaintext_and_provider_truth_non_disclosure',
+    'architecture_srp_cargo_clippy_managed_browser_gates',
+  ],
+  communications_sender_insights_v1: [
+    'exact_sender_insights_contract_build_unit',
+    'typed_ingress_actor_and_bounded_display_metadata',
+    'atomic_rebuildable_sender_fact_projection',
+    'active_incoming_message_only_aggregation',
+    'account_scope_count_timestamp_sender_cursor_fencing',
+    'authenticated_gateway_managed_runtime_conformance',
+    'generated_frontend_exact_capability_guard',
+    'provider_locator_content_and_review_truth_non_disclosure',
     'architecture_srp_cargo_clippy_managed_browser_gates',
   ],
   clock_v1: [

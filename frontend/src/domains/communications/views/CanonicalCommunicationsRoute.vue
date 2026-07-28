@@ -5,12 +5,17 @@ import CanonicalCommunicationContent from '../presentation/CanonicalCommunicatio
 import CanonicalCommunicationDetail from '../presentation/CanonicalCommunicationDetail.vue'
 import CanonicalCommunicationsPage from '../presentation/CanonicalCommunicationsPage.vue'
 import CanonicalSavedSearchPanel from '../presentation/CanonicalSavedSearchPanel.vue'
+import CanonicalSenderInsightsPanel from '../presentation/CanonicalSenderInsightsPanel.vue'
 import { useCanonicalCommunicationContent } from '../queries/useCanonicalCommunicationContent'
 import { useCanonicalCommunicationDetail } from '../queries/useCanonicalCommunicationDetail'
 import { useCanonicalCommunicationsPage } from '../queries/useCanonicalCommunicationsPage'
 import { useCanonicalCommunicationsSavedSearches } from '../queries/useCanonicalCommunicationsSavedSearches'
+import { useCanonicalCommunicationsSenderInsights } from '../queries/useCanonicalCommunicationsSenderInsights'
 
-const props = defineProps<{ canManageSavedSearches: boolean }>()
+const props = defineProps<{
+	canManageSavedSearches: boolean
+	canReadSenderInsights: boolean
+}>()
 const surface = useCanonicalCommunicationsPage()
 const detail = useCanonicalCommunicationDetail()
 const content = useCanonicalCommunicationContent()
@@ -18,10 +23,15 @@ const savedSearches = useCanonicalCommunicationsSavedSearches(
 	() => props.canManageSavedSearches,
 	surface.currentSearchDraft,
 )
+const senderInsights = useCanonicalCommunicationsSenderInsights(
+	() => props.canReadSenderInsights,
+	() => surface.currentSearchDraft().accountId,
+)
 
 onMounted(() => {
 	void surface.load()
 	void savedSearches.load()
+	void senderInsights.load()
 })
 
 function openMessage(messageKey: string): void {
@@ -75,6 +85,12 @@ function closeMessage(): void {
 			@update-description="savedSearches.updateDescription"
 			@update-name="savedSearches.updateName"
 			@update-scope-current-account="savedSearches.updateScopeCurrentAccount"
+		/>
+		<CanonicalSenderInsightsPanel
+			:model="senderInsights.model.value"
+			@load-more="senderInsights.loadMore"
+			@retry="senderInsights.load"
+			@update-scope-current-account="senderInsights.updateScopeCurrentAccount"
 		/>
 		<CanonicalCommunicationDetail
 			:model="detail.model.value"

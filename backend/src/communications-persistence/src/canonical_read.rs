@@ -170,7 +170,7 @@ impl CommunicationsDurablePersistence {
     > {
         let (after_observed_at, after_id) = descending_after(after);
         let rows = sqlx::query(
-            "SELECT participant_id, conversation_id, participant_cursor_sha256, \
+            "SELECT participant_id, conversation_id, participant_cursor_sha256, display_label, \
              first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id \
              FROM hermes_data.communications_observed_participants \
              WHERE conversation_id = $1 \

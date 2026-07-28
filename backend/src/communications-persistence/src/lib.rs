@@ -12,6 +12,7 @@ mod saved_search;
 mod schema;
 mod search;
 mod search_job;
+mod sender_insights;
 pub use canonical_read::{
     CanonicalReadAfterV1, CanonicalReadPageV1, CanonicalReferenceReadAfterV1,
     CanonicalReferenceReadItemV1,
@@ -38,6 +39,10 @@ pub use search_job::{
     CommunicationsDerivedIndexFailureV1, CommunicationsDerivedIndexJobErrorV1,
     CommunicationsDerivedIndexJobOperationV1, CommunicationsDerivedIndexJobV1,
     communications_derived_index_job_id_v1,
+};
+pub use sender_insights::{
+    CommunicationsSenderInsightAfterV1, CommunicationsSenderInsightV1,
+    CommunicationsSenderInsightsErrorV1,
 };
 
 /// Private Communications-owned work item for an admitted producer body. It

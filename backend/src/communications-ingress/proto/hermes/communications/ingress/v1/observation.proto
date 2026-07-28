@@ -19,6 +19,9 @@ message CommunicationObservationV1 {
   CommunicationDirectionV1 direction = 11;
   BodyBlobReceiptV1 body_blob = 12;
   BodyAdmissionFailureV1 body_admission_failure = 13;
+  // Bounded provider-neutral display metadata. It is not an identity, cursor,
+  // authorization input or provider locator.
+  optional string participant_display_label = 14;
 }
 
 message BodyBlobReceiptV1 {

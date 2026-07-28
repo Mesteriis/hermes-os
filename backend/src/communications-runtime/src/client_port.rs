@@ -14,6 +14,7 @@ use crate::admission::{
     communications_content_read_contract_reference_v1,
     communications_content_ticket_contract_reference_v1,
     communications_query_contract_reference_v1, communications_saved_search_contract_reference_v1,
+    communications_sender_insights_contract_reference_v1,
 };
 use crate::content_blob_client_port::{
     CommunicationsContentBlobClientPortErrorV1, handle_module_content_blob_request_v1,
@@ -29,6 +30,9 @@ use crate::saved_search_port::{
     CommunicationsSavedSearchClientPortErrorV1, handle_module_saved_search_request_v1,
 };
 use crate::search_access::CommunicationsSearchAccessV1;
+use crate::sender_insights_port::{
+    CommunicationsSenderInsightsClientPortErrorV1, handle_module_sender_insights_request_v1,
+};
 
 const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
 
@@ -76,6 +80,12 @@ pub async fn dispatch_module_client_request_v1(
         )
         .await
         .map_err(map_saved_search_error)
+    } else if request.contract.as_ref()
+        == Some(&communications_sender_insights_contract_reference_v1())
+    {
+        handle_module_sender_insights_request_v1(persistence, &encoded)
+            .await
+            .map_err(map_sender_insights_error)
     } else {
         return module_error(request.request_id, "REJECTED");
     };
@@ -125,5 +135,14 @@ const fn map_saved_search_error(error: CommunicationsSavedSearchClientPortErrorV
     match error {
         CommunicationsSavedSearchClientPortErrorV1::Protocol => "REJECTED",
         CommunicationsSavedSearchClientPortErrorV1::Unavailable => "UNAVAILABLE",
+    }
+}
+
+const fn map_sender_insights_error(
+    error: CommunicationsSenderInsightsClientPortErrorV1,
+) -> &'static str {
+    match error {
+        CommunicationsSenderInsightsClientPortErrorV1::Protocol => "REJECTED",
+        CommunicationsSenderInsightsClientPortErrorV1::Unavailable => "UNAVAILABLE",
     }
 }

@@ -18,6 +18,7 @@ message CommunicationEvidenceRecordedV1 {
   bytes reply_to_source_cursor_sha256 = 11;
   bytes forward_origin_source_cursor_sha256 = 12;
   CommunicationDirectionV1 direction = 13;
+  optional string participant_display_label = 14;
 }
 
 enum CommunicationProviderProvenanceV1 {

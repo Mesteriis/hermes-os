@@ -35,14 +35,20 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
     COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION,
     COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS, COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
-    COMMUNICATIONS_STORAGE_CAPABILITY_ID, communication_evidence_recorded_contract_reference_v1,
-    communications_module_descriptor_v1, communications_settings_schema_bytes_v1,
+    COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID, COMMUNICATIONS_STORAGE_CAPABILITY_ID,
+    communication_evidence_recorded_contract_reference_v1, communications_module_descriptor_v1,
+    communications_settings_schema_bytes_v1,
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
 use hermes_communications_saved_query_api::{
     COMMUNICATIONS_SAVED_SEARCH_SCHEMA_SHA256, SAVED_SEARCH_CONNECT_PATH_V1,
     SAVED_SEARCH_CONTRACT_MAJOR_V1, SAVED_SEARCH_CONTRACT_NAME_V1,
     SAVED_SEARCH_CONTRACT_REVISION_V1,
+};
+use hermes_communications_sender_insights_api::{
+    COMMUNICATIONS_SENDER_INSIGHTS_SCHEMA_SHA256, SENDER_INSIGHTS_CONNECT_PATH_V1,
+    SENDER_INSIGHTS_CONTRACT_MAJOR_V1, SENDER_INSIGHTS_CONTRACT_NAME_V1,
+    SENDER_INSIGHTS_CONTRACT_REVISION_V1,
 };
 use hermes_kernel_control_store::{
     ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientBlobContractVersionV1,
@@ -583,11 +589,12 @@ pub(super) fn assert_communications_ingress_delivery(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
 ) {
-    let draft = hermes_mail_core::draft_ingress_observation_with_body(
+    let draft = hermes_mail_core::draft_ingress_observation_with_sender_body(
         "managed-ingress-observation-1",
         hermes_communications_ingress::ProviderProvenanceV1::MailImap,
         "integration-private-account-1",
         "integration-private-record-1",
+        Some("Fixture Sender <sender@example.test>".to_owned()),
         hermes_communications_ingress::BodyAvailabilityV1::MetadataOnly,
     )
     .expect("build typed Mail ingress draft");
@@ -1913,6 +1920,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         "communications.query.v1".to_owned(),
         COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_STORAGE_CAPABILITY_ID.to_owned(),
     ];
     let storage = ModuleStorageRequestV1::new(
@@ -2039,6 +2047,18 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             },
             COMMUNICATIONS_SAVED_SEARCH_SCHEMA_SHA256,
             SAVED_SEARCH_CONNECT_PATH_V1,
+        ),
+        ModuleClientRpcRouteV1::new(
+            COMMUNICATIONS_REGISTRATION,
+            COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID,
+            COMMUNICATIONS_OWNER_ID,
+            SENDER_INSIGHTS_CONTRACT_NAME_V1,
+            ModuleClientRpcContractVersionV1 {
+                major: SENDER_INSIGHTS_CONTRACT_MAJOR_V1,
+                revision: SENDER_INSIGHTS_CONTRACT_REVISION_V1,
+            },
+            COMMUNICATIONS_SENDER_INSIGHTS_SCHEMA_SHA256,
+            SENDER_INSIGHTS_CONNECT_PATH_V1,
         ),
     ];
     let client_blob_route = ModuleClientBlobRouteV1::new(

@@ -23,3 +23,4 @@ pub mod search_job;
 pub mod search_projection;
 pub mod search_query;
 pub mod search_worker;
+pub mod sender_insights_port;

@@ -444,6 +444,33 @@ fn assert_communications_gateway_query_delivery(
             )
             .expect("decode Gateway Communications saved-search response")
         };
+    let route_sender_insights =
+        |request: hermes_communications_sender_insights_api::ListSenderInsightsRequestV1| {
+            let response = runtime.block_on(
+                router.route(
+                    hyper::Request::builder()
+                        .method("POST")
+                        .uri(
+                            hermes_communications_sender_insights_api::SENDER_INSIGHTS_CONNECT_PATH_V1,
+                        )
+                        .header("content-type", "application/connect+proto")
+                        .header("cookie", &cookie)
+                        .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                            request.encode_to_vec(),
+                        )))
+                        .expect("Gateway Communications sender-insights request"),
+                ),
+            );
+            assert_eq!(response.status(), hyper::StatusCode::OK);
+            let bytes = runtime
+                .block_on(response.into_body().collect())
+                .expect("Gateway Communications sender-insights response")
+                .to_bytes();
+            hermes_communications_sender_insights_api::ListSenderInsightsResponseV1::decode(
+                bytes.as_ref(),
+            )
+            .expect("decode Gateway Communications sender-insights response")
+        };
     let response = route_query(
         hermes_communications_api::query_wire::CommunicationsQueryRequestV1 {
             protocol_major: 1,
@@ -535,6 +562,51 @@ fn assert_communications_gateway_query_delivery(
                 .windows(private_value.len())
                 .any(|window| window == private_value.as_bytes()),
             "external Communications search must not reveal private body or Blob locator",
+        );
+    }
+
+    let sender_insights = route_sender_insights(
+        hermes_communications_sender_insights_api::ListSenderInsightsRequestV1 {
+            protocol_major: 1,
+            account_id: None,
+            limit: 20,
+            cursor: Vec::new(),
+        },
+    );
+    assert_eq!(
+        sender_insights.error,
+        hermes_communications_sender_insights_api::SenderInsightsErrorCodeV1::SenderInsightsErrorCodeUnspecified
+            as i32
+    );
+    let sender_insight = sender_insights
+        .items
+        .iter()
+        .find(|item| item.display_label.as_deref() == Some("Fixture Sender <sender@example.test>"))
+        .expect("managed sender projection contains the admitted Mail fixture sender");
+    assert_eq!(sender_insight.sender_id.len(), 16);
+    assert_eq!(
+        sender_insight.display_label.as_deref(),
+        Some("Fixture Sender <sender@example.test>")
+    );
+    assert_eq!(sender_insight.message_count, 1);
+    assert_eq!(sender_insight.conversation_count, 1);
+    assert!(sender_insight.first_observed_at_unix_seconds > 0);
+    assert!(
+        sender_insight.last_observed_at_unix_seconds
+            >= sender_insight.first_observed_at_unix_seconds
+    );
+    let sender_insights_payload = sender_insights.encode_to_vec();
+    for private_value in [
+        "integration-private-account-1",
+        "integration-private-record-1",
+        "fixture source body for custody transfer",
+        "blob://fixture-source/admitted-body-1",
+    ] {
+        assert!(
+            !sender_insights_payload
+                .windows(private_value.len())
+                .any(|window| window == private_value.as_bytes()),
+            "sender-insights response must not reveal provider locators or message content",
         );
     }
 

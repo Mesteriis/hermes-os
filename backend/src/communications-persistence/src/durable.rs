@@ -175,8 +175,8 @@ impl CommunicationsDurablePersistence {
         let inserted_summary = sqlx::query(
             r#"
             INSERT INTO hermes_data.communications_evidence_summaries
-                (observation_id, source_cursor_sha256, account_cursor_sha256, conversation_cursor_sha256, participant_cursor_sha256, media_cursor_sha256, reply_to_source_cursor_sha256, forward_origin_source_cursor_sha256, provider, direction, evidence_kind, body_state, body_blob_ref, body_blob_reference_id, body_blob_declared_bytes, body_blob_sha256, body_admission_failure, observed_at_unix_seconds)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                (observation_id, source_cursor_sha256, account_cursor_sha256, conversation_cursor_sha256, participant_cursor_sha256, participant_display_label, media_cursor_sha256, reply_to_source_cursor_sha256, forward_origin_source_cursor_sha256, provider, direction, evidence_kind, body_state, body_blob_ref, body_blob_reference_id, body_blob_declared_bytes, body_blob_sha256, body_admission_failure, observed_at_unix_seconds)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
             ON CONFLICT (observation_id) DO NOTHING
             "#,
         )
@@ -185,6 +185,7 @@ impl CommunicationsDurablePersistence {
         .bind(summary.account_cursor.map(|value| value.bytes().to_vec()))
         .bind(summary.conversation_cursor.map(|value| value.bytes().to_vec()))
         .bind(summary.participant_cursor.map(|value| value.bytes().to_vec()))
+        .bind(&summary.participant_display_label)
         .bind(summary.media_cursor.map(|value| value.bytes().to_vec()))
         .bind(summary.reply_to_source_cursor.map(|value| value.bytes().to_vec()))
         .bind(summary.forward_origin_source_cursor.map(|value| value.bytes().to_vec()))
@@ -324,12 +325,87 @@ impl CommunicationsDurablePersistence {
         }
         if let Some(participant) = &observation.projection.participant {
             sqlx::query(
-                "INSERT INTO hermes_data.communications_observed_participants (participant_id, conversation_id, participant_cursor_sha256, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id) VALUES ($1, $2, $3, $4, $4, $5) ON CONFLICT (participant_id) DO UPDATE SET last_observed_at_unix_seconds = GREATEST(communications_observed_participants.last_observed_at_unix_seconds, EXCLUDED.last_observed_at_unix_seconds), last_evidence_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds >= communications_observed_participants.last_observed_at_unix_seconds THEN EXCLUDED.last_evidence_id ELSE communications_observed_participants.last_evidence_id END",
+                "INSERT INTO hermes_data.communications_observed_participants (participant_id, conversation_id, participant_cursor_sha256, display_label, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id) VALUES ($1, $2, $3, $4, $5, $5, $6) ON CONFLICT (participant_id) DO UPDATE SET display_label = CASE WHEN EXCLUDED.last_observed_at_unix_seconds >= communications_observed_participants.last_observed_at_unix_seconds THEN COALESCE(EXCLUDED.display_label, communications_observed_participants.display_label) ELSE communications_observed_participants.display_label END, last_observed_at_unix_seconds = GREATEST(communications_observed_participants.last_observed_at_unix_seconds, EXCLUDED.last_observed_at_unix_seconds), last_evidence_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds >= communications_observed_participants.last_observed_at_unix_seconds THEN EXCLUDED.last_evidence_id ELSE communications_observed_participants.last_evidence_id END",
             )
             .bind(participant.participant_id.bytes().as_slice())
             .bind(participant.conversation_id.bytes().as_slice())
             .bind(participant.participant_cursor.bytes().as_slice())
+            .bind(&participant.display_label)
             .bind(participant.observed_at_unix_seconds)
+            .bind(summary.evidence_id.bytes().as_slice())
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        }
+        if let (Some(account), Some(message), Some(participant), Some(sender_id)) = (
+            observation.projection.account.as_ref(),
+            observation.projection.message.as_ref(),
+            observation.projection.participant.as_ref(),
+            observation
+                .projection
+                .participant
+                .as_ref()
+                .and_then(|participant| participant.sender_id),
+        ) && message.direction == CommunicationDirectionV1::Incoming
+        {
+            sqlx::query(
+                "INSERT INTO hermes_data.communications_sender_profiles \
+                 (sender_id, display_label, first_observed_at_unix_seconds, \
+                  last_observed_at_unix_seconds, last_evidence_id) \
+                 VALUES ($1, $2, $3, $3, $4) \
+                 ON CONFLICT (sender_id) DO UPDATE SET \
+                   display_label = CASE WHEN EXCLUDED.last_observed_at_unix_seconds \
+                     >= communications_sender_profiles.last_observed_at_unix_seconds \
+                     THEN COALESCE(EXCLUDED.display_label, \
+                       communications_sender_profiles.display_label) \
+                     ELSE communications_sender_profiles.display_label END, \
+                   last_observed_at_unix_seconds = GREATEST(\
+                     communications_sender_profiles.last_observed_at_unix_seconds, \
+                     EXCLUDED.last_observed_at_unix_seconds), \
+                   last_evidence_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds \
+                     >= communications_sender_profiles.last_observed_at_unix_seconds \
+                     THEN EXCLUDED.last_evidence_id \
+                     ELSE communications_sender_profiles.last_evidence_id END",
+            )
+            .bind(sender_id.bytes().as_slice())
+            .bind(&participant.display_label)
+            .bind(message.observed_at_unix_seconds)
+            .bind(summary.evidence_id.bytes().as_slice())
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+            sqlx::query(
+                "INSERT INTO hermes_data.communications_message_sender_facts \
+                 (message_id, sender_id, participant_id, account_id, \
+                  first_observed_at_unix_seconds, last_observed_at_unix_seconds, \
+                  last_evidence_id) \
+                 VALUES ($1, $2, $3, $4, $5, $5, $6) \
+                 ON CONFLICT (message_id) DO UPDATE SET \
+                   sender_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds \
+                     >= communications_message_sender_facts.last_observed_at_unix_seconds \
+                     THEN EXCLUDED.sender_id \
+                     ELSE communications_message_sender_facts.sender_id END, \
+                   participant_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds \
+                     >= communications_message_sender_facts.last_observed_at_unix_seconds \
+                     THEN EXCLUDED.participant_id \
+                     ELSE communications_message_sender_facts.participant_id END, \
+                   account_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds \
+                     >= communications_message_sender_facts.last_observed_at_unix_seconds \
+                     THEN EXCLUDED.account_id \
+                     ELSE communications_message_sender_facts.account_id END, \
+                   last_observed_at_unix_seconds = GREATEST(\
+                     communications_message_sender_facts.last_observed_at_unix_seconds, \
+                     EXCLUDED.last_observed_at_unix_seconds), \
+                   last_evidence_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds \
+                     >= communications_message_sender_facts.last_observed_at_unix_seconds \
+                     THEN EXCLUDED.last_evidence_id \
+                     ELSE communications_message_sender_facts.last_evidence_id END",
+            )
+            .bind(message.message_id.bytes().as_slice())
+            .bind(sender_id.bytes().as_slice())
+            .bind(participant.participant_id.bytes().as_slice())
+            .bind(account.account_id.bytes().as_slice())
+            .bind(message.observed_at_unix_seconds)
             .bind(summary.evidence_id.bytes().as_slice())
             .execute(&mut *transaction)
             .await
@@ -483,7 +559,7 @@ impl CommunicationsDurablePersistence {
         evidence_id: CommunicationObservationIdV1,
     ) -> Result<Option<CommunicationSummary>, CommunicationsPersistenceError> {
         let row = sqlx::query(
-            "SELECT summary.observation_id, lineage.causation_message_id, COALESCE(lineage.correlation_id, summary.observation_id) AS correlation_id, summary.source_cursor_sha256, summary.account_cursor_sha256, summary.conversation_cursor_sha256, summary.participant_cursor_sha256, summary.media_cursor_sha256, summary.reply_to_source_cursor_sha256, summary.forward_origin_source_cursor_sha256, summary.provider, summary.direction, summary.evidence_kind, summary.body_state, summary.body_blob_ref, summary.body_blob_reference_id, summary.body_blob_declared_bytes, summary.body_blob_sha256, summary.body_admission_failure, summary.observed_at_unix_seconds, COALESCE(lineage.recorded_at_unix_seconds, summary.observed_at_unix_seconds) AS recorded_at_unix_seconds, COALESCE(lineage.recorded_at_nanos, 0) AS recorded_at_nanos FROM hermes_data.communications_evidence_summaries summary LEFT JOIN hermes_data.communications_evidence_audit_lineage lineage ON lineage.evidence_id = summary.observation_id WHERE summary.observation_id = $1",
+            "SELECT summary.observation_id, lineage.causation_message_id, COALESCE(lineage.correlation_id, summary.observation_id) AS correlation_id, summary.source_cursor_sha256, summary.account_cursor_sha256, summary.conversation_cursor_sha256, summary.participant_cursor_sha256, summary.participant_display_label, summary.media_cursor_sha256, summary.reply_to_source_cursor_sha256, summary.forward_origin_source_cursor_sha256, summary.provider, summary.direction, summary.evidence_kind, summary.body_state, summary.body_blob_ref, summary.body_blob_reference_id, summary.body_blob_declared_bytes, summary.body_blob_sha256, summary.body_admission_failure, summary.observed_at_unix_seconds, COALESCE(lineage.recorded_at_unix_seconds, summary.observed_at_unix_seconds) AS recorded_at_unix_seconds, COALESCE(lineage.recorded_at_nanos, 0) AS recorded_at_nanos FROM hermes_data.communications_evidence_summaries summary LEFT JOIN hermes_data.communications_evidence_audit_lineage lineage ON lineage.evidence_id = summary.observation_id WHERE summary.observation_id = $1",
         )
         .bind(evidence_id.bytes().as_slice())
         .fetch_optional(&self.pool)
@@ -510,6 +586,9 @@ impl CommunicationsDurablePersistence {
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let participant_cursor: Option<Vec<u8>> = row
                 .try_get("participant_cursor_sha256")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let participant_display_label: Option<String> = row
+                .try_get("participant_display_label")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let media_cursor: Option<Vec<u8>> = row
                 .try_get("media_cursor_sha256")
@@ -664,6 +743,7 @@ impl CommunicationsDurablePersistence {
                 account_cursor,
                 conversation_cursor,
                 participant_cursor,
+                participant_display_label,
                 media_cursor,
                 reply_to_source_cursor,
                 forward_origin_source_cursor,
@@ -760,7 +840,7 @@ impl CommunicationsDurablePersistence {
         limit: u16,
     ) -> Result<Vec<CommunicationObservedParticipantSummaryV1>, CommunicationsPersistenceError>
     {
-        let rows = sqlx::query("SELECT participant_id, conversation_id, participant_cursor_sha256, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id FROM hermes_data.communications_observed_participants WHERE conversation_id = $1 ORDER BY last_observed_at_unix_seconds DESC, participant_id ASC LIMIT $2")
+        let rows = sqlx::query("SELECT participant_id, conversation_id, participant_cursor_sha256, display_label, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id FROM hermes_data.communications_observed_participants WHERE conversation_id = $1 ORDER BY last_observed_at_unix_seconds DESC, participant_id ASC LIMIT $2")
             .bind(conversation_id.bytes().as_slice())
             .bind(i64::from(limit.clamp(1, 100)))
             .fetch_all(&self.pool)
@@ -983,6 +1063,9 @@ pub(crate) fn participant_from_row(
     let participant_cursor: Vec<u8> = row
         .try_get("participant_cursor_sha256")
         .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let display_label: Option<String> = row
+        .try_get("display_label")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
     let first_observed_at_unix_seconds: i64 = row
         .try_get("first_observed_at_unix_seconds")
         .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
@@ -996,6 +1079,7 @@ pub(crate) fn participant_from_row(
         participant_id: CommunicationParticipantIdV1::new(id16(&participant_id)?),
         conversation_id: CommunicationConversationIdV1::new(id16(&conversation_id)?),
         participant_cursor: CommunicationSourceCursorV1::new(id32(&participant_cursor)?),
+        display_label,
         first_observed_at_unix_seconds,
         last_observed_at_unix_seconds,
         last_evidence_id: CommunicationObservationIdV1::new(id16(&last_evidence_id)?),

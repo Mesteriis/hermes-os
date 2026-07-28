@@ -6,7 +6,7 @@ use hermes_communications_ingress::{
     AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1, CommunicationDirectionV1,
     CommunicationEvidenceKindV1, CommunicationObservationDraft, ProviderProvenanceV1,
     SourceEnvelope, SourceScopeEnvelope, new_scoped_communication_observation_draft,
-    with_attachment_descriptor,
+    with_attachment_descriptor, with_participant_display_label,
 };
 use hermes_mail_api::{
     DEFAULT_WINDOW, MAX_PLAIN_TEXT_BYTES, MAX_WINDOWS, MailContractError::WindowLimitExceeded,
@@ -262,6 +262,65 @@ pub fn draft_ingress_observation_with_body(
         None,
     )
     .map_err(|_| MailContractError::InvalidPayload)
+}
+
+pub fn draft_ingress_observation_with_sender_body(
+    operation_id: &str,
+    provider: ProviderProvenanceV1,
+    account_id: impl Into<String>,
+    source_id: impl Into<String>,
+    sender: Option<String>,
+    body: BodyAvailabilityV1,
+) -> Result<CommunicationObservationDraft, MailContractError> {
+    let source_id = source_id.into();
+    let sender = sender.map(normalize_mail_sender).transpose()?;
+    let draft = new_scoped_communication_observation_draft(
+        operation_id,
+        SourceEnvelope {
+            provider,
+            external_record_id: source_id.clone(),
+            scope: Some(SourceScopeEnvelope {
+                external_account_id: account_id.into(),
+                external_conversation_id: Some(source_id),
+                external_participant_id: sender.as_ref().map(|sender| sender.external_id.clone()),
+                external_media_id: None,
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        CommunicationEvidenceKindV1::EmailMessage,
+        body,
+        CommunicationDirectionV1::Incoming,
+        None,
+    )
+    .map_err(|_| MailContractError::InvalidPayload)?;
+    with_participant_display_label(draft, sender.map(|sender| sender.display_label))
+        .map_err(|_| MailContractError::InvalidPayload)
+}
+
+struct MailSenderMetadataV1 {
+    external_id: String,
+    display_label: String,
+}
+
+fn normalize_mail_sender(value: String) -> Result<MailSenderMetadataV1, MailContractError> {
+    let display_label = value.trim();
+    if display_label.is_empty()
+        || display_label.len() > 256
+        || display_label.chars().any(char::is_control)
+    {
+        return Err(MailContractError::InvalidPayload);
+    }
+    let external_id = display_label
+        .rfind('<')
+        .and_then(|start| display_label[start + 1..].strip_suffix('>').map(str::trim))
+        .filter(|value| !value.is_empty())
+        .unwrap_or(display_label)
+        .to_lowercase();
+    Ok(MailSenderMetadataV1 {
+        external_id,
+        display_label: display_label.to_owned(),
+    })
 }
 
 pub struct MailAttachmentIngressRequestV1 {

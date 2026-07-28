@@ -193,6 +193,7 @@ message ObservedParticipantSummaryV1 {
   int64 first_observed_at_unix_seconds = 4;
   int64 last_observed_at_unix_seconds = 5;
   bytes last_evidence_id = 6;
+  optional string display_label = 7;
 }
 
 message AttachmentAnchorSummaryV1 {

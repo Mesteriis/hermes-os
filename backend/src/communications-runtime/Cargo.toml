@@ -22,6 +22,7 @@ hermes-communications-api = { path = "../communications-api" }
 hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }
 hermes-communications-content-api = { path = "../communications-content-api" }
 hermes-communications-saved-query-api = { path = "../communications-saved-query-api" }
+hermes-communications-sender-insights-api = { path = "../communications-sender-insights-api" }
 hermes-communications-domain = { path = "../communications-domain" }
 hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-communications-persistence = { path = "../communications-persistence" }

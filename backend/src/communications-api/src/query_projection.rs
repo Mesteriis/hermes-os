@@ -81,6 +81,7 @@ impl From<&CommunicationObservedParticipantSummaryV1> for query_wire::ObservedPa
             first_observed_at_unix_seconds: value.first_observed_at_unix_seconds,
             last_observed_at_unix_seconds: value.last_observed_at_unix_seconds,
             last_evidence_id: value.last_evidence_id.bytes().to_vec(),
+            display_label: value.display_label.clone(),
         }
     }
 }
@@ -250,6 +251,7 @@ mod tests {
             account_cursor: Some(CommunicationSourceCursorV1::new([4; 32])),
             conversation_cursor: Some(CommunicationSourceCursorV1::new([5; 32])),
             participant_cursor: None,
+            participant_display_label: None,
             media_cursor: None,
             reply_to_source_cursor: None,
             forward_origin_source_cursor: None,

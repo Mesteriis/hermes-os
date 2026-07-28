@@ -78,6 +78,7 @@ pub fn build_evidence_recorded_outbox_v1(
         forward_origin_source_cursor_sha256: summary
             .forward_origin_source_cursor
             .map_or_else(Vec::new, |value| value.bytes().to_vec()),
+        participant_display_label: summary.participant_display_label.clone(),
         provider: provider_value(summary.provider),
         kind: kind_value(summary.kind),
         body: body_value(summary.body),
@@ -379,6 +380,7 @@ mod tests {
             account_cursor: Some(CommunicationSourceCursorV1::new([5; 32])),
             conversation_cursor: Some(CommunicationSourceCursorV1::new([6; 32])),
             participant_cursor: None,
+            participant_display_label: None,
             media_cursor: None,
             reply_to_source_cursor: None,
             forward_origin_source_cursor: None,

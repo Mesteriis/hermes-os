@@ -8,9 +8,9 @@ use hermes_communications_api::{
     CanonicalConversationProjectionV1, CanonicalMessageMutationV1, CanonicalMessageProjectionV1,
     CanonicalMessageReferenceProjectionV1, CanonicalObservedParticipantProjectionV1,
     CommunicationAccountIdV1, CommunicationAttachmentAnchorIdV1, CommunicationConversationIdV1,
-    CommunicationMessageIdV1, CommunicationMessageReferenceKindV1, CommunicationObservationIdV1,
-    CommunicationParticipantIdV1, CommunicationSummary, CommunicationsClientError,
-    RecordCommunicationEvidenceV1,
+    CommunicationDirectionV1, CommunicationMessageIdV1, CommunicationMessageReferenceKindV1,
+    CommunicationObservationIdV1, CommunicationParticipantIdV1, CommunicationSenderIdV1,
+    CommunicationSummary, CommunicationsClientError, RecordCommunicationEvidenceV1,
 };
 use sha2::{Digest, Sha256};
 
@@ -47,6 +47,7 @@ pub enum CommunicationsDomainError {
     InvalidRecordedTime,
     MissingMessageScope,
     InvalidAttachmentScope,
+    InvalidParticipantMetadata,
     InvalidAttachmentSafetyTransition,
 }
 
@@ -59,6 +60,18 @@ pub fn accept_command(
             || command.media_cursor.is_none())
     {
         return Err(CommunicationsDomainError::InvalidAttachmentScope);
+    }
+    if command
+        .participant_display_label
+        .as_ref()
+        .is_some_and(|label| {
+            command.participant_cursor.is_none()
+                || label.is_empty()
+                || label.len() > 256
+                || label.chars().any(char::is_control)
+        })
+    {
+        return Err(CommunicationsDomainError::InvalidParticipantMetadata);
     }
     if requires_message_scope(command.kind)
         && (command.account_cursor.is_none() || command.conversation_cursor.is_none())
@@ -79,6 +92,7 @@ pub fn accept_command(
         account_cursor: command.account_cursor,
         conversation_cursor: command.conversation_cursor,
         participant_cursor: command.participant_cursor,
+        participant_display_label: command.participant_display_label,
         media_cursor: command.media_cursor,
         reply_to_source_cursor: command.reply_to_source_cursor,
         forward_origin_source_cursor: command.forward_origin_source_cursor,
@@ -247,6 +261,15 @@ pub fn canonicalize_communication(
     };
     let participant = match (&conversation, summary.participant_cursor) {
         (Some(conversation), Some(participant_cursor)) => {
+            let sender_id = message
+                .as_ref()
+                .filter(|message| message.direction == CommunicationDirectionV1::Incoming)
+                .map(|_| {
+                    CommunicationSenderIdV1::new(identifier(
+                        b"hermes.communications.sender.v1\0",
+                        &[&participant_cursor.bytes()],
+                    ))
+                });
             Some(CanonicalObservedParticipantProjectionV1 {
                 participant_id: CommunicationParticipantIdV1::new(identifier(
                     b"hermes.communications.participant.v1\0",
@@ -255,8 +278,10 @@ pub fn canonicalize_communication(
                         &participant_cursor.bytes(),
                     ],
                 )),
+                sender_id,
                 conversation_id: conversation.conversation_id,
                 participant_cursor,
+                display_label: summary.participant_display_label.clone(),
                 observed_at_unix_seconds: summary.observed_at_unix_seconds,
             })
         }
@@ -330,7 +355,8 @@ pub fn convert_client_query_error(error: CommunicationsDomainError) -> Communica
         | CommunicationsDomainError::MissingMessageScope => {
             CommunicationsClientError::DraftValidationFailed
         }
-        CommunicationsDomainError::InvalidAttachmentScope => {
+        CommunicationsDomainError::InvalidAttachmentScope
+        | CommunicationsDomainError::InvalidParticipantMetadata => {
             CommunicationsClientError::DraftValidationFailed
         }
         CommunicationsDomainError::InvalidAttachmentSafetyTransition => {
@@ -361,6 +387,7 @@ mod tests {
             account_cursor: Some(cursor(3)),
             conversation_cursor: Some(cursor(4)),
             participant_cursor: Some(cursor(5)),
+            participant_display_label: None,
             media_cursor: None,
             reply_to_source_cursor: None,
             forward_origin_source_cursor: None,
@@ -404,6 +431,7 @@ mod tests {
             account_cursor: Some(cursor(3)),
             conversation_cursor: Some(cursor(4)),
             participant_cursor: None,
+            participant_display_label: None,
             media_cursor: None,
             reply_to_source_cursor: None,
             forward_origin_source_cursor: None,
@@ -438,6 +466,7 @@ mod tests {
             account_cursor: Some(cursor(3)),
             conversation_cursor: None,
             participant_cursor: None,
+            participant_display_label: None,
             media_cursor: None,
             reply_to_source_cursor: None,
             forward_origin_source_cursor: None,
@@ -480,6 +509,7 @@ mod tests {
             account_cursor: Some(cursor(3)),
             conversation_cursor: Some(cursor(4)),
             participant_cursor: None,
+            participant_display_label: None,
             media_cursor: None,
             reply_to_source_cursor: Some(cursor(5)),
             forward_origin_source_cursor: Some(cursor(6)),
@@ -510,6 +540,43 @@ mod tests {
                 .message_references
                 .iter()
                 .any(|reference| reference.kind == CommunicationMessageReferenceKindV1::Forward)
+        );
+    }
+
+    #[test]
+    fn incoming_participant_projects_a_cross_conversation_sender_identity() {
+        let summary = accept_command(RecordCommunicationEvidenceV1 {
+            observation_id: CommunicationObservationIdV1::new([1; 16]),
+            causation_message_id: None,
+            correlation_id: CommunicationObservationIdV1::new([6; 16]),
+            source_cursor: cursor(2),
+            account_cursor: Some(cursor(3)),
+            conversation_cursor: Some(cursor(4)),
+            participant_cursor: Some(cursor(5)),
+            participant_display_label: Some("Ada <ada@example.test>".to_owned()),
+            media_cursor: None,
+            reply_to_source_cursor: None,
+            forward_origin_source_cursor: None,
+            provider: CommunicationProviderProvenanceV1::MailImap,
+            direction: CommunicationDirectionV1::Incoming,
+            kind: CanonicalCommunicationEvidenceKindV1::EmailMessage,
+            body: CommunicationBodyStateV1::MetadataOnly,
+            body_blob: None,
+            body_admission_failure: None,
+            attachment_descriptor: None,
+            observed_at_unix_seconds: 1,
+            recorded_at_unix_seconds: 2,
+            recorded_at_nanos: 3,
+        })
+        .expect("valid incoming sender evidence");
+
+        let projection = canonicalize_communication(&summary).expect("projection");
+        let participant = projection.participant.expect("participant projection");
+
+        assert!(participant.sender_id.is_some());
+        assert_eq!(
+            participant.display_label.as_deref(),
+            Some("Ada <ada@example.test>")
         );
     }
 }

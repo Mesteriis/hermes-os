@@ -56,7 +56,7 @@ test('Communications remains the exact domain owner after Mail integration admis
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'communications_saved_search_v1');
+  assert.equal(policy.implementation.currentSlice, 'communications_sender_insights_v1');
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications'],
     integrations: ['mail'],
@@ -77,6 +77,7 @@ test('Communications remains the exact domain owner after Mail integration admis
       'communications.query.v1',
       'communications.saved-search.v1',
       'communications.search.index.v1',
+      'communications.sender-insights.v1',
       'communications.storage.v1',
       'mail.attachment-anchor.consume.v1',
       'mail.attachment-blob-admission.publish.v1',

@@ -90,6 +90,17 @@ impl CommunicationParticipantIdV1 {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct CommunicationSenderIdV1([u8; 16]);
+impl CommunicationSenderIdV1 {
+    pub const fn new(value: [u8; 16]) -> Self {
+        Self(value)
+    }
+    pub const fn bytes(self) -> [u8; 16] {
+        self.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct CommunicationAttachmentAnchorIdV1([u8; 16]);
 impl CommunicationAttachmentAnchorIdV1 {
@@ -172,6 +183,7 @@ pub struct RecordCommunicationEvidenceV1 {
     pub account_cursor: Option<CommunicationSourceCursorV1>,
     pub conversation_cursor: Option<CommunicationSourceCursorV1>,
     pub participant_cursor: Option<CommunicationSourceCursorV1>,
+    pub participant_display_label: Option<String>,
     pub media_cursor: Option<CommunicationSourceCursorV1>,
     pub reply_to_source_cursor: Option<CommunicationSourceCursorV1>,
     pub forward_origin_source_cursor: Option<CommunicationSourceCursorV1>,
@@ -197,6 +209,7 @@ pub struct CommunicationSummary {
     pub account_cursor: Option<CommunicationSourceCursorV1>,
     pub conversation_cursor: Option<CommunicationSourceCursorV1>,
     pub participant_cursor: Option<CommunicationSourceCursorV1>,
+    pub participant_display_label: Option<String>,
     pub media_cursor: Option<CommunicationSourceCursorV1>,
     pub reply_to_source_cursor: Option<CommunicationSourceCursorV1>,
     pub forward_origin_source_cursor: Option<CommunicationSourceCursorV1>,
@@ -250,8 +263,10 @@ pub struct CanonicalMessageProjectionV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CanonicalObservedParticipantProjectionV1 {
     pub participant_id: CommunicationParticipantIdV1,
+    pub sender_id: Option<CommunicationSenderIdV1>,
     pub conversation_id: CommunicationConversationIdV1,
     pub participant_cursor: CommunicationSourceCursorV1,
+    pub display_label: Option<String>,
     pub observed_at_unix_seconds: i64,
 }
 
@@ -334,6 +349,7 @@ pub struct CommunicationObservedParticipantSummaryV1 {
     pub participant_id: CommunicationParticipantIdV1,
     pub conversation_id: CommunicationConversationIdV1,
     pub participant_cursor: CommunicationSourceCursorV1,
+    pub display_label: Option<String>,
     pub first_observed_at_unix_seconds: i64,
     pub last_observed_at_unix_seconds: i64,
     pub last_evidence_id: CommunicationObservationIdV1,

@@ -33,6 +33,7 @@ hermes-communications-ingress = { path = "../../../src/communications-ingress" }
 hermes-communications-api = { path = "../../../src/communications-api" }
 hermes-communications-content-api = { path = "../../../src/communications-content-api" }
 hermes-communications-saved-query-api = { path = "../../../src/communications-saved-query-api" }
+hermes-communications-sender-insights-api = { path = "../../../src/communications-sender-insights-api" }
 hermes-mail-api = { path = "../../../src/mail-api" }
 hermes-mail-core = { path = "../../../src/mail-core" }
 hermes-mail-gmail = { path = "../../../src/mail-gmail", features = ["conformance-test-support"] }

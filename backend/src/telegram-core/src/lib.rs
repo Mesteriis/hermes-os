@@ -4,7 +4,7 @@ use hermes_communications_ingress::{
     AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1, CommunicationDirectionV1,
     CommunicationEvidenceKindV1, ProviderProvenanceV1, SourceEnvelope, SourceScopeEnvelope,
     new_communication_observation_draft, new_scoped_communication_observation_draft,
-    with_attachment_descriptor,
+    with_attachment_descriptor, with_participant_display_label,
 };
 use hermes_telegram_api::{
     TelegramAccount, TelegramAccountState, TelegramAttachmentProjection,
@@ -345,7 +345,7 @@ pub fn observation_draft(
     if let Some(text) = &text_preview {
         validate_text(text)?;
     }
-    new_scoped_communication_observation_draft(
+    let draft = new_scoped_communication_observation_draft(
         source_id.clone(),
         SourceEnvelope {
             provider: ProviderProvenanceV1::Telegram,
@@ -396,7 +396,9 @@ pub fn observation_draft(
         },
         Some(observation.observed_at_unix_seconds),
     )
-    .map_err(|_| TelegramContractError::InvalidTransition)
+    .map_err(|_| TelegramContractError::InvalidTransition)?;
+    with_participant_display_label(draft, observation.sender_display_name)
+        .map_err(|_| TelegramContractError::InvalidTransition)
 }
 
 pub fn attachment_observation_draft(

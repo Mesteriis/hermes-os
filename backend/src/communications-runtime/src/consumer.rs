@@ -206,6 +206,9 @@ fn command_from_envelope(
             account_cursor: optional_cursor(&payload.account_cursor_sha256)?,
             conversation_cursor: optional_cursor(&payload.conversation_cursor_sha256)?,
             participant_cursor: optional_cursor(&payload.participant_cursor_sha256)?,
+            participant_display_label: participant_display_label_from_wire(
+                payload.participant_display_label,
+            )?,
             media_cursor: optional_cursor(&payload.media_cursor_sha256)?,
             reply_to_source_cursor: optional_cursor(&payload.reply_to_source_cursor_sha256)?,
             forward_origin_source_cursor: optional_cursor(
@@ -438,6 +441,23 @@ fn optional_cursor(
         return Ok(None);
     }
     Ok(Some(CommunicationSourceCursorV1::new(id32(value)?)))
+}
+
+fn participant_display_label_from_wire(
+    value: Option<String>,
+) -> Result<Option<String>, CommunicationsEventConsumeErrorV1> {
+    value
+        .map(|value| {
+            let normalized = value.trim();
+            if normalized.is_empty()
+                || normalized.len() > 256
+                || normalized.chars().any(char::is_control)
+            {
+                return Err(CommunicationsEventConsumeErrorV1::InvalidPayload);
+            }
+            Ok(normalized.to_owned())
+        })
+        .transpose()
 }
 fn persistence_error(error: CommunicationsPersistenceError) -> CommunicationsEventConsumeErrorV1 {
     if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
