@@ -11,11 +11,9 @@ const REPLAY_LIMIT = 100
 
 export type ProvisionTelegramAccountInput = {
 	accountId: string
-	providerKind: string
 	displayName: string
 	externalAccountId: string
 	credentials: readonly CredentialBinding[]
-	qrAuthorized: boolean
 }
 
 export async function listTelegramAccounts(): Promise<readonly TelegramAccountResponse[]> {
@@ -36,11 +34,10 @@ export async function provisionTelegramAccount(
 			case: 'provision',
 			value: {
 				accountId: requireIdentifier('account ID', input.accountId),
-				providerKind: requireIdentifier('provider kind', input.providerKind),
 				displayName: requireIdentifier('display name', input.displayName),
 				externalAccountId: input.externalAccountId.trim(),
 				credential: [...input.credentials],
-				qrAuthorized: input.qrAuthorized,
+				qrAuthorized: false,
 			},
 		},
 	})

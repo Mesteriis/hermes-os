@@ -116,6 +116,9 @@ policy через ссылки из новых документов.
 - [ADR-0305: Mail-owned composition, drafts, templates and signatures](ADR-0305-mail-owned-composition-drafts-templates-and-signatures.md)
 - [ADR-0306: Repeatable development release refresh and successor fencing](ADR-0306-repeatable-development-release-refresh-and-successor-fencing.md)
 - [ADR-0307: Mail-owned message flag mutations and provider reconciliation](ADR-0307-mail-message-flag-mutations-and-provider-reconciliation.md)
+- [ADR-0308: Mail message identity, IMAP mailbox roles and location authority](ADR-0308-mail-message-identity-imap-mailbox-roles-and-location-authority.md)
+- [ADR-0309: Loopback browser Owner Vault provisioning host](ADR-0309-loopback-browser-owner-vault-provisioning-host.md)
+- [ADR-0310: Telegram user-only TDLib QR account identity](ADR-0310-telegram-user-only-tdlib-qr-account-identity.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -416,3 +419,17 @@ ADR-0307 разделяет Mail operational mutations по различным f
 read/star flags идут через exact convergent command и owner-local journal,
 folder moves/delete остаются отдельным gate, а Kernel/Core Gateway переносят
 opaque payload и не становятся generic provider-command service.
+ADR-0308 вводит обязательную identity foundation для Mail location mutations:
+client использует стабильный Mail-owned `message_id`, IMAP locator
+`mailbox/UIDVALIDITY/UID` остаётся private, special-use roles берутся из
+bounded provider discovery, а permanent delete получает отдельный destructive
+capability и grant.
+ADR-0309 добавляет недостающий development-only host adapter для browser
+`make dev`: отдельный native process переиспользует HPKE/Vault ceremony,
+Vite добавляет private proxy proof только для exact loopback route, а
+Gateway/Kernel остаются blind к credential plaintext. Telegram integration
+после реального account setup сама запускает TDLib QR lifecycle.
+ADR-0310 удаляет ложный Telegram bot path из active clean-room contract:
+Telegram integration поддерживает только TDLib user account, client больше не
+выбирает `provider_kind`, а QR создаётся только из transient provider
+`tg://login` после защищённого account setup.

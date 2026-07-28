@@ -1,6 +1,6 @@
 import { computed, ref, shallowRef } from 'vue'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
-import { hasNativeOwnerVaultProvisioningHostV1 } from '../../../platform/vault'
+import { hasOwnerVaultProvisioningHostV1 } from '../../../platform/vault'
 import {
 	MailAccountSetupWorkflowV1,
 	type MailGmailSetupStateV1,
@@ -28,7 +28,7 @@ export function useMailAccountSetup(
 	const busy = ref(false)
 	const message = ref('')
 	const messageTone = ref<'neutral' | 'success' | 'error'>('neutral')
-	const secureHostAvailable = hasNativeOwnerVaultProvisioningHostV1()
+	const secureHostAvailable = hasOwnerVaultProvisioningHostV1()
 	const configured = computed(() => (module()?.settings?.effectiveRevision ?? 0n) > 0n)
 	const canSubmit = computed(() => {
 		if (!module()?.settings || !connectionId.value.trim()) return false
@@ -55,7 +55,7 @@ export function useMailAccountSetup(
 		const current = module()
 		if (!current?.settings || !canSubmit.value) return
 		if (kind.value === 'imap' && !secureHostAvailable) {
-			message.value = 'Open the desktop shell to seal mail passwords. Browser Settings never sends them to the Gateway.'
+			message.value = 'Use the desktop shell or root make dev to seal mail credentials.'
 			messageTone.value = 'neutral'
 			return
 		}

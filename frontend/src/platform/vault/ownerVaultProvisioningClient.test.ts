@@ -20,7 +20,7 @@ import type {
 } from './ownerVaultProvisioningHost'
 
 describe('OwnerVaultProvisioningClientV1', () => {
-	it('composes generated Gateway calls with opaque host crypto and clears secret bytes', async () => {
+	it('accepts the Telegram session-store key class and clears secret bytes', async () => {
 		const secret = Uint8Array.from([112, 97, 115, 115])
 		let sealedSecret: number[] = []
 		const host: OwnerVaultProvisioningHostV1 = {
@@ -53,11 +53,11 @@ describe('OwnerVaultProvisioningClientV1', () => {
 
 		const receipt = await client.provision({
 			operationId: new Uint8Array(16).fill(1),
-			targetRegistrationId: 'mail-registration',
-			capabilityId: 'mail.imap.credential-provisioning.v1',
-			configurationInstanceId: 'mail-account',
-			purposeId: 'mail_imap_password',
-			secretClass: OwnerVaultSecretClassV1.PROVIDER_CREDENTIAL,
+			targetRegistrationId: 'telegram-registration',
+			capabilityId: 'telegram.tdlib.credential-provisioning.v1',
+			configurationInstanceId: 'telegram-account',
+			purposeId: 'telegram_tdlib_session_store_key',
+			secretClass: OwnerVaultSecretClassV1.SESSION_STORE_KEY,
 			action: OwnerVaultActionV1.CREATE,
 			secretRevision: 1n,
 			secretPayload: secret,
@@ -67,9 +67,10 @@ describe('OwnerVaultProvisioningClientV1', () => {
 		expect(sealedSecret).toEqual([112, 97, 115, 115])
 		expect(secret).toEqual(new Uint8Array(4))
 		expect(gateway.prepare.mock.calls[0]?.[0]).toMatchObject({
-			targetRegistrationId: 'mail-registration',
-			capabilityId: 'mail.imap.credential-provisioning.v1',
-			purposeId: 'mail_imap_password',
+			targetRegistrationId: 'telegram-registration',
+			capabilityId: 'telegram.tdlib.credential-provisioning.v1',
+			purposeId: 'telegram_tdlib_session_store_key',
+			secretClass: OwnerVaultSecretClassV1.SESSION_STORE_KEY,
 		})
 		expect(gateway.authorize).toHaveBeenCalledOnce()
 		expect(gateway.commit).toHaveBeenCalledOnce()

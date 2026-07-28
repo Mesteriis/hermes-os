@@ -13,9 +13,9 @@ use crate::{
     TelegramMessageProjection, TelegramMessageReferences, TelegramMessageTombstone,
     TelegramMessageVersion, TelegramMessageVersionSource, TelegramOperation, TelegramParticipant,
     TelegramParticipantFilter, TelegramParticipantPage, TelegramProviderCommand,
-    TelegramProviderEvent, TelegramProviderKind, TelegramProviderQuery,
-    TelegramProviderQueryResponse, TelegramReactionObservation, TelegramReactionSummary,
-    TelegramRealtimeFrame, TelegramRealtimeReplayPage, TelegramRuntimeReconfiguration,
+    TelegramProviderEvent, TelegramProviderQuery, TelegramProviderQueryResponse,
+    TelegramReactionObservation, TelegramReactionSummary, TelegramRealtimeFrame,
+    TelegramRealtimeReplayPage, TelegramRuntimeReconfiguration,
     TelegramRuntimeReconfigurationRequest, TelegramRuntimeReconfigurationState, TelegramSendMedia,
     TelegramSendMessage, TelegramTombstoneReason, TelegramTopic, TelegramTypingState,
     wire::{
@@ -2525,7 +2525,6 @@ pub fn encode_lifecycle_request(request: &TelegramLifecycleRequest) -> Vec<u8> {
         TelegramLifecycleRequest::Provision(setup) => {
             Request::Provision(wire::ProvisionAccountRequest {
                 account_id: setup.account_id.clone(),
-                provider_kind: setup.provider_kind.as_str().to_owned(),
                 display_name: setup.display_name.clone(),
                 external_account_id: setup.external_account_id.clone(),
                 credential: setup
@@ -2588,18 +2587,12 @@ pub fn decode_lifecycle_request(
         .ok_or(TelegramAuthorizationWireError::MissingVariant)?
     {
         Request::Provision(value) => {
-            let provider_kind = match value.provider_kind.as_str() {
-                "telegram_user" => TelegramProviderKind::User,
-                "telegram_bot" => TelegramProviderKind::Bot,
-                _ => return Err(TelegramAuthorizationWireError::InvalidPayload),
-            };
             let credentials = value
                 .credential
                 .into_iter()
                 .map(|binding| {
                     let purpose = match binding.purpose.as_str() {
                         "telegram_api_hash" => TelegramCredentialPurpose::ApiHash,
-                        "telegram_bot_token" => TelegramCredentialPurpose::BotToken,
                         "telegram_session_encryption_key" => {
                             TelegramCredentialPurpose::SessionEncryptionKey
                         }
@@ -2611,14 +2604,16 @@ pub fn decode_lifecycle_request(
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(TelegramLifecycleRequest::Provision(TelegramAccountSetup {
+            let setup = TelegramAccountSetup {
                 account_id: value.account_id,
-                provider_kind,
                 display_name: value.display_name,
                 external_account_id: value.external_account_id,
                 credentials,
                 qr_authorized: value.qr_authorized,
-            }))
+            };
+            crate::validate_setup(&setup)
+                .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
+            Ok(TelegramLifecycleRequest::Provision(setup))
         }
         Request::Retry(value) => Ok(TelegramLifecycleRequest::Retry {
             operation_id: value.operation_id,
@@ -2643,7 +2638,6 @@ pub fn decode_lifecycle_request(
 fn account_to_wire(account: &TelegramAccount) -> wire::TelegramAccountResponse {
     wire::TelegramAccountResponse {
         account_id: account.account_id.clone(),
-        provider_kind: account.provider_kind.as_str().to_owned(),
         display_name: account.display_name.clone(),
         external_account_id: account.external_account_id.clone(),
         state: match account.state {
@@ -2742,11 +2736,6 @@ pub fn decode_command_response(
 fn parse_account(
     value: wire::TelegramAccountResponse,
 ) -> Result<TelegramAccount, TelegramAuthorizationWireError> {
-    let provider_kind = match value.provider_kind.as_str() {
-        "telegram_user" => TelegramProviderKind::User,
-        "telegram_bot" => TelegramProviderKind::Bot,
-        _ => return Err(TelegramAuthorizationWireError::InvalidPayload),
-    };
     let state = match value.state.as_str() {
         "provisioning" => crate::TelegramAccountState::Provisioning,
         "ready" => crate::TelegramAccountState::Ready,
@@ -2764,7 +2753,6 @@ fn parse_account(
     };
     Ok(TelegramAccount {
         account_id: value.account_id,
-        provider_kind,
         display_name: value.display_name,
         external_account_id: value.external_account_id,
         state,

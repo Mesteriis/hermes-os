@@ -200,8 +200,8 @@ provider-neutral business intent сохраняют отдельные owners и
 `mail_message_flags_command_v1` открыт атомарно:
 
 - exact Protobuf command/query contracts собраны отдельными generated clients;
-- canonical wire validation и Mail client contract revision 9 покрыты Rust
-  regression tests;
+- canonical wire validation и Mail client contract revision 10 после
+  ADR-0308 stable message identity cutover покрыты Rust regression tests;
 - Mail Storage bundle revision 12 содержит exact-byte durable operation
   journal без cross-owner или projection-lifecycle foreign key;
 - Gmail `batchModify` и IMAP read-write `SELECT` + `UID STORE` реализуют

@@ -4,7 +4,7 @@ use super::*;
 
 use hermes_telegram_api::{
     TelegramAccount, TelegramAccountState, TelegramCredentialBinding, TelegramCredentialPurpose,
-    TelegramProviderKind, TelegramRuntimeState,
+    TelegramRuntimeState,
     client_contract::{TELEGRAM_MODULE_ID, TELEGRAM_OWNER_ID},
 };
 use hermes_telegram_assembly::{
@@ -348,7 +348,6 @@ fn seed_telegram_account() {
                 .upsert_account(
                     &TelegramAccount {
                         account_id: TELEGRAM_ACCOUNT_ID.to_owned(),
-                        provider_kind: TelegramProviderKind::User,
                         display_name: "Managed Telegram".to_owned(),
                         external_account_id: "telegram-owner-account".to_owned(),
                         state: TelegramAccountState::Ready,

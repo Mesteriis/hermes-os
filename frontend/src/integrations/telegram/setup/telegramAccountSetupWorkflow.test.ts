@@ -39,7 +39,6 @@ describe('TelegramAccountSetupWorkflowV1', () => {
 			'lifecycle',
 		])
 		expect(lifecycle).toHaveBeenCalledWith(expect.objectContaining({
-			qrAuthorized: false,
 			credentials: [
 				{ purpose: 'telegram_api_hash', revision: 1n },
 				{ purpose: 'telegram_session_encryption_key', revision: 1n },

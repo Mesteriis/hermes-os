@@ -392,9 +392,12 @@ runtime не является domain, а app composition не становитс
 | Mail accounts/sync/folders/threads/messages | Mail | `mail_operational_read_v1` |
 | Mail drafts/compose/templates/signatures | Mail | `mail_composition_v1` |
 | Mail read/unread and star/unstar | Mail | `mail_message_flags_command_v1` |
-| Mail archive/trash/restore/move/delete | Mail | `mail_message_location_command_v1` |
-| Mail full mutation and delivery closure | Mail | `mail_operational_command_v1` |
+| Mail stable message identity, IMAP locator and mailbox roles | Mail | `mail_provider_location_identity_v1` |
+| Mail archive/trash/restore/move | Mail | `mail_message_location_command_v1` |
+| Mail permanent provider delete | Mail | `mail_message_permanent_delete_command_v1` |
+| Mail full mutation and delivery closure | Mail | `mail_operational_command_v1` after both location gates |
 | Telegram authorization, history, search, media, mutations and operation audit | Telegram | `telegram_core_operational_v1` |
+| Telegram user-only TDLib account identity and QR authorization | Telegram | `telegram_tdlib_user_qr_identity_v1` |
 | Telegram atomic runtime restart/reconfiguration | Telegram | `telegram_runtime_reconfiguration_v1` |
 | Telegram folder reassignment | Telegram | `telegram_folder_reassignment_v1` |
 | Telegram automation policies, templates and dry-run | Telegram | `telegram_automation_v1` |
@@ -408,6 +411,8 @@ runtime не является domain, а app composition не становитс
 | WhatsApp operational realtime/replay | WhatsApp | `whatsapp_operational_realtime_v1` |
 | WhatsApp full generated client and UI closure | WhatsApp | `whatsapp_full_operational_v1` after both WhatsApp backend gates |
 | Zulip lifecycle/history/search/client | Zulip | `zulip_full_operational_v1` |
+| Provider-owned Telegram/WhatsApp QR frontend | first-party client composition | `provider_qr_account_linking_frontend_v1` |
+| Browser development credential sealing | first-party development host | `loopback_browser_owner_vault_host_v1` |
 | Provider-neutral delivery intent | `communication_delivery_intent` workflow | `communication_delivery_intent_v1` |
 | Delayed delivery | `communication_delayed_delivery` workflow | `communication_delayed_delivery_v1` |
 | Bulk action | `communication_bulk_action` workflow | `communication_bulk_action_v1` |
@@ -446,6 +451,7 @@ release.
    executable inventory assertions и gap ledger.
 2. Telegram проходит независимые gates:
    implemented `telegram_core_operational_v1`,
+   implemented `telegram_tdlib_user_qr_identity_v1`,
    `telegram_runtime_reconfiguration_v1`,
    implemented `telegram_folder_reassignment_v1`,
    `telegram_automation_v1`,
@@ -472,7 +478,11 @@ release.
    ADR-0293 и implemented `owner_vault_provisioning_backend_v1` по ADR-0295.
    First-party desktop отдельно закрывает implemented
    `owner_vault_provisioning_desktop_v1`, включая generated client, native host
-   adapter и integration-owned UI. Multi-client `owner_vault_provisioning_v1`
+   adapter и integration-owned UI. First-party development assembly отдельно
+   закрывает `loopback_browser_owner_vault_host_v1`, а provider frontend
+   закрывает `provider_qr_account_linking_frontend_v1`; эти gates не
+   превращают host adapter в integration или QR authority. Multi-client
+   `owner_vault_provisioning_v1`
    остаётся planned до Android adapter; backend gate не подменяет client gates.
    Mail независимо проходит implemented
    `mail_account_credential_binding_v1`, implemented

@@ -9,6 +9,8 @@ compose_file="$backend_root/development/authenticated/compose.yaml"
 legacy_compose_file="$backend_root/development/compose.yaml"
 gateway_address="127.0.0.1:9444"
 gateway_target="http://$gateway_address"
+owner_vault_host_address="127.0.0.1:9445"
+owner_vault_host_target="http://$owner_vault_host_address"
 browser_origin="http://127.0.0.1:5173"
 browser_url="$browser_origin/"
 data_dir="${HERMES_DEV_DATA_DIR:-$project_root/.local/kernel-dev}"
@@ -17,7 +19,9 @@ release_root="${HERMES_DEV_RELEASE_ROOT:-$project_root/.local/dev-release}"
 distribution_id="hermes-local-development"
 generation_metadata_name="development-distribution-generation"
 startup_timeout_seconds="${HERMES_DEV_STARTUP_TIMEOUT_SECONDS:-120}"
+rust_toolchain="${RUST_TOOLCHAIN:-1.97.0}"
 kernel_pid=""
+owner_vault_host_pid=""
 frontend_pid=""
 temporary_dir=""
 proof_file=""
@@ -61,12 +65,16 @@ cleanup() {
 	if test -n "$frontend_pid"; then
 		kill -TERM "$frontend_pid" 2>/dev/null || true
 	fi
+	if test -n "$owner_vault_host_pid"; then
+		kill -TERM "$owner_vault_host_pid" 2>/dev/null || true
+	fi
 	if test -n "$kernel_pid"; then
 		kill -TERM "$kernel_pid" 2>/dev/null || true
 	fi
 	attempt=0
 	while test "$attempt" -lt 50; do
 		frontend_alive=false
+		owner_vault_host_alive=false
 		kernel_alive=false
 		if test -n "$frontend_pid" && kill -0 "$frontend_pid" 2>/dev/null; then
 			frontend_alive=true
@@ -74,7 +82,12 @@ cleanup() {
 		if test -n "$kernel_pid" && kill -0 "$kernel_pid" 2>/dev/null; then
 			kernel_alive=true
 		fi
-		if test "$frontend_alive" = false && test "$kernel_alive" = false; then
+		if test -n "$owner_vault_host_pid" && kill -0 "$owner_vault_host_pid" 2>/dev/null; then
+			owner_vault_host_alive=true
+		fi
+		if test "$frontend_alive" = false \
+			&& test "$owner_vault_host_alive" = false \
+			&& test "$kernel_alive" = false; then
 			break
 		fi
 		attempt=$((attempt + 1))
@@ -86,11 +99,17 @@ cleanup() {
 	if test -n "$kernel_pid" && kill -0 "$kernel_pid" 2>/dev/null; then
 		kill -KILL "$kernel_pid" 2>/dev/null || true
 	fi
+	if test -n "$owner_vault_host_pid" && kill -0 "$owner_vault_host_pid" 2>/dev/null; then
+		kill -KILL "$owner_vault_host_pid" 2>/dev/null || true
+	fi
 	if test -n "$frontend_pid"; then
 		wait "$frontend_pid" 2>/dev/null || true
 	fi
 	if test -n "$kernel_pid"; then
 		wait "$kernel_pid" 2>/dev/null || true
+	fi
+	if test -n "$owner_vault_host_pid"; then
+		wait "$owner_vault_host_pid" 2>/dev/null || true
 	fi
 	if test -n "$proof_file"; then
 		rm -f -- "$proof_file"
@@ -122,6 +141,7 @@ test "$startup_timeout_seconds" -gt 0 || fail "HERMES_DEV_STARTUP_TIMEOUT_SECOND
 
 require_available_port 5173
 require_available_port 9444
+require_available_port 9445
 
 printf '%s\n' 'Materializing the signed clean-room development release...'
 HERMES_DEV_CARGO_TARGET_DIR="$cargo_target_dir" \
@@ -129,6 +149,7 @@ HERMES_DEV_CARGO_TARGET_DIR="$cargo_target_dir" \
 kernel_bin="$release_root/HermesDev.app/Contents/MacOS/hermes-kernel"
 generation_metadata="$release_root/$generation_metadata_name"
 development_assembly_bin="$cargo_target_dir/debug/hermes-development-assembly"
+owner_vault_host_bin="$cargo_target_dir/debug/hermes-owner-vault-development-host"
 test -x "$kernel_bin" || fail "signed Kernel development binary is unavailable"
 test -x "$development_assembly_bin" || fail "development assembly unit is unavailable"
 test -f "$generation_metadata" && test ! -L "$generation_metadata" \
@@ -143,6 +164,15 @@ case "$distribution_generation" in
 esac
 test "$distribution_generation" -gt 0 \
 	|| fail "development release generation metadata is invalid"
+
+printf '%s\n' 'Building the loopback Owner Vault provisioning host...'
+cargo +"$rust_toolchain" build \
+	--locked \
+	--manifest-path "$frontend_root/native/owner-vault-provisioning-host/Cargo.toml" \
+	--features development-server \
+	--bin hermes-owner-vault-development-host \
+	--target-dir "$cargo_target_dir"
+test -x "$owner_vault_host_bin" || fail "development Owner Vault host is unavailable"
 
 status_output="$("$kernel_bin" --data-dir "$data_dir" status)"
 owner_identity="$(printf '%s\n' "$status_output" | sed -n 's/^owner_identity=//p')"
@@ -191,6 +221,24 @@ proof_file="$temporary_dir/gateway-proof"
 node -e \
 	'const fs = require("node:fs"); const crypto = require("node:crypto"); fs.writeFileSync(process.argv[1], crypto.randomBytes(32).toString("hex"), { encoding: "utf8", flag: "wx", mode: 0o600 });' \
 	"$proof_file"
+
+printf '%s\n' 'Starting the loopback Owner Vault provisioning host...'
+"$owner_vault_host_bin" \
+	--listen-address "$owner_vault_host_address" \
+	--proof-file "$proof_file" &
+owner_vault_host_pid=$!
+
+deadline=$(( $(date +%s) + startup_timeout_seconds ))
+while :; do
+	kill -0 "$owner_vault_host_pid" 2>/dev/null \
+		|| fail "development Owner Vault host exited before readiness"
+	if node "$backend_root/scripts/probe-dev-owner-vault-host.mjs" "$proof_file"; then
+		break
+	fi
+	test "$(date +%s)" -lt "$deadline" \
+		|| fail "development Owner Vault host readiness deadline expired"
+	sleep 1
+done
 
 printf '%s\n' 'Starting Hermes Kernel and loopback Core Gateway...'
 start_kernel() {
@@ -270,6 +318,8 @@ printf '%s\n' 'Starting the Vue/Vite browser client...'
 	cd "$frontend_root"
 	exec env HERMES_DEV_GATEWAY_TARGET="$gateway_target" \
 		HERMES_DEV_GATEWAY_PROOF_FILE="$proof_file" \
+		HERMES_DEV_OWNER_VAULT_HOST_TARGET="$owner_vault_host_target" \
+		VITE_HERMES_DEV_OWNER_VAULT_HOST=1 \
 		pnpm exec vite --host 127.0.0.1 --strictPort
 ) &
 frontend_pid=$!
@@ -277,6 +327,8 @@ frontend_pid=$!
 deadline=$(( $(date +%s) + startup_timeout_seconds ))
 while :; do
 	kill -0 "$kernel_pid" 2>/dev/null || fail "Kernel exited before browser readiness"
+	kill -0 "$owner_vault_host_pid" 2>/dev/null \
+		|| fail "development Owner Vault host exited before browser readiness"
 	kill -0 "$frontend_pid" 2>/dev/null || fail "Vite exited before readiness"
 	if curl --fail --silent --show-error --max-time 2 "$browser_origin/readyz" >/dev/null; then
 		break
@@ -289,12 +341,18 @@ printf 'Hermes development ensemble is ready at %s\n' "$browser_url"
 open "$browser_url"
 printf '%s\n' 'Browser opened. Press Ctrl-C to stop the full local ensemble.'
 
-while kill -0 "$kernel_pid" 2>/dev/null && kill -0 "$frontend_pid" 2>/dev/null; do
+while kill -0 "$kernel_pid" 2>/dev/null \
+	&& kill -0 "$owner_vault_host_pid" 2>/dev/null \
+	&& kill -0 "$frontend_pid" 2>/dev/null; do
 	sleep 1
 done
 if ! kill -0 "$kernel_pid" 2>/dev/null; then
 	wait "$kernel_pid" || child_status=$?
 	fail "Kernel stopped unexpectedly with status ${child_status:-0}"
+fi
+if ! kill -0 "$owner_vault_host_pid" 2>/dev/null; then
+	wait "$owner_vault_host_pid" || child_status=$?
+	fail "development Owner Vault host stopped unexpectedly with status ${child_status:-0}"
 fi
 wait "$frontend_pid" || child_status=$?
 fail "Vite stopped unexpectedly with status ${child_status:-0}"

@@ -7,7 +7,7 @@ import {
 } from '../../../gen/hermes/mail/account/v1/client_pb'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import { publicModuleStringSetting } from '../../../platform/gateway/publicModuleSettings'
-import { hasNativeOwnerVaultProvisioningHostV1 } from '../../../platform/vault'
+import { hasOwnerVaultProvisioningHostV1 } from '../../../platform/vault'
 import {
 	MailAccountManagementWorkflowV1,
 	type MailPasswordPurposeV1,
@@ -31,7 +31,7 @@ export function useMailAccountManagement(
 	const busy = ref(false)
 	const message = ref('')
 	const messageTone = ref<'neutral' | 'success' | 'error'>('neutral')
-	const secureHostAvailable = hasNativeOwnerVaultProvisioningHostV1()
+	const secureHostAvailable = hasOwnerVaultProvisioningHostV1()
 	const ownedModule = computed(() => module()?.moduleId === MAIL_MODULE_ID ? module() : null)
 	const connectionId = computed(() => publicModuleStringSetting(ownedModule.value, 'mail.connection_id') ?? '')
 	const canQuery = computed(() => hasCapability('mail.account.query.v1') && Boolean(connectionId.value))

@@ -13,7 +13,6 @@ use hermes_runtime_protocol::{
         managed_integration_runtime::validate_managed_integration_runtime_configuration,
     },
 };
-use hermes_telegram_api::TelegramProviderKind;
 use hermes_telegram_call_media_tgcalls::TgCallsMediaAdapter;
 use hermes_telegram_runtime::{bootstrap, process, settings};
 use hermes_telegram_tdlib::TdJsonLibrary;
@@ -85,7 +84,6 @@ where
             &configuration.runtime_instance_id,
             settings.api_id,
             &settings.account_id,
-            TelegramProviderKind::User,
             runtime_bindings.into_database_directory(),
             &admission,
             storage,

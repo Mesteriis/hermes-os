@@ -23,11 +23,9 @@ type TelegramAccountSetupPortsV1 = {
 	lifecycle: {
 		provision(input: {
 			accountId: string
-			providerKind: string
 			displayName: string
 			externalAccountId: string
 			credentials: readonly { purpose: string; revision: bigint }[]
-			qrAuthorized: boolean
 		}): Promise<TelegramAccountResponse>
 	}
 }
@@ -93,7 +91,6 @@ export class TelegramAccountSetupWorkflowV1 {
 		})
 		const account = await this.ports.lifecycle.provision({
 			accountId,
-			providerKind: 'telegram',
 			displayName,
 			externalAccountId: '',
 			credentials: [
@@ -103,7 +100,6 @@ export class TelegramAccountSetupWorkflowV1 {
 					revision: sessionKey.secretRevision,
 				},
 			],
-			qrAuthorized: false,
 		})
 		return { apiHash, sessionKey, configuration, account }
 	}

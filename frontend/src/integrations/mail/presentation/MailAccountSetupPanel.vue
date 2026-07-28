@@ -18,7 +18,7 @@ const setup = useMailAccountSetup(() => props.module)
 		:submit-label="setup.submitLabel.value"
 		:busy="setup.busy.value"
 		:disabled="!setup.canSubmit.value"
-		:message="setup.message.value || (setup.kind.value === 'imap' && !setup.secureHostAvailable ? 'Secure password commit is available in the desktop shell.' : '')"
+		:message="setup.message.value || (setup.kind.value === 'imap' && !setup.secureHostAvailable ? 'Secure password commit requires the desktop shell or root make dev.' : '')"
 		:message-tone="setup.messageTone.value"
 		:expanded="!setup.configured.value"
 		@submit="setup.submit"

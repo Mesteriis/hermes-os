@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
-import { hasNativeOwnerVaultProvisioningHostV1 } from '../../../platform/vault'
+import { hasOwnerVaultProvisioningHostV1 } from '../../../platform/vault'
 import { ZulipAccountSetupWorkflowV1 } from './zulipAccountSetupWorkflow'
 
 export function useZulipAccountSetup(
@@ -14,7 +14,7 @@ export function useZulipAccountSetup(
 	const busy = ref(false)
 	const message = ref('')
 	const messageTone = ref<'neutral' | 'success' | 'error'>('neutral')
-	const secureHostAvailable = hasNativeOwnerVaultProvisioningHostV1()
+	const secureHostAvailable = hasOwnerVaultProvisioningHostV1()
 	const configured = computed(() => (module()?.settings?.effectiveRevision ?? 0n) > 0n)
 	const canSubmit = computed(() => Boolean(
 		module()?.settings
@@ -28,7 +28,7 @@ export function useZulipAccountSetup(
 		const current = module()
 		if (!current?.settings || !canSubmit.value) return
 		if (!secureHostAvailable) {
-			message.value = 'Open the desktop shell to seal the Zulip API key. It is never sent through browser Settings.'
+			message.value = 'Use the desktop shell or root make dev to seal the Zulip API key.'
 			messageTone.value = 'neutral'
 			return
 		}

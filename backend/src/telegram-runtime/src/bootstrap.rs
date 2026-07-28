@@ -26,7 +26,6 @@ use hermes_storage_vault::StorageVaultRouteContextV1;
 use hermes_telegram_api::client_contract::TELEGRAM_OWNER_ID;
 use hermes_telegram_api::{
     TelegramAccountSetup, TelegramCredentialBinding, TelegramCredentialPurpose,
-    TelegramProviderKind,
 };
 use hermes_telegram_automation_persistence::TelegramAutomationPersistence;
 use hermes_telegram_calls_persistence::TelegramCallsPersistence;
@@ -52,7 +51,6 @@ pub enum TelegramBootstrapError {
     Persistence(TelegramDurablePersistenceError),
     InvalidStorageTopology,
     AdmissionMismatch,
-    UnsupportedProvider,
     MissingApiHash,
     EventHub,
     CallsBackfill,
@@ -139,16 +137,12 @@ pub async fn open_admitted_runtime(
     runtime_instance_id: &str,
     api_id: i64,
     account_id: &str,
-    provider_kind: TelegramProviderKind,
     database_directory: PathBuf,
     launch_admission: &TelegramManagedLaunchAdmissionV1,
     storage_configuration: ManagedStorageRuntimeConfigurationV1,
     event_hub_endpoint: &str,
     event_credential_revision: u64,
 ) -> Result<TelegramAdmittedRuntime, TelegramBootstrapError> {
-    if provider_kind != TelegramProviderKind::User {
-        return Err(TelegramBootstrapError::UnsupportedProvider);
-    }
     if launch_admission.runtime_instance_id != runtime_instance_id
         || event_hub_endpoint.trim().is_empty()
         || event_credential_revision == 0
@@ -211,9 +205,7 @@ pub async fn open_admitted_runtime(
         .account(account_id)
         .await
         .map_err(TelegramBootstrapError::Persistence)?
-        .filter(|(account, _)| {
-            account.account_id == account_id && account.provider_kind == provider_kind
-        })
+        .filter(|(account, _)| account.account_id == account_id)
         .ok_or(TelegramBootstrapError::AdmissionMismatch)?;
     let (api_hash_revision, session_encryption_key_revision) =
         credential_revisions(&credential_bindings)?;
@@ -311,7 +303,6 @@ pub async fn open_admitted_runtime(
     .map_err(TelegramBootstrapError::Provider)?;
     let account_setup = TelegramAccountSetup {
         account_id: account_id.to_owned(),
-        provider_kind,
         display_name: persisted_account.display_name,
         external_account_id: persisted_account.external_account_id,
         credentials: credential_bindings,
@@ -366,9 +357,6 @@ fn credential_revisions(
         let selected = match binding.purpose {
             TelegramCredentialPurpose::ApiHash => &mut api_hash_revision,
             TelegramCredentialPurpose::SessionEncryptionKey => &mut session_encryption_key_revision,
-            TelegramCredentialPurpose::BotToken => {
-                return Err(TelegramBootstrapError::AdmissionMismatch);
-            }
         };
         if selected.replace(binding.revision).is_some() {
             return Err(TelegramBootstrapError::AdmissionMismatch);
@@ -604,7 +592,7 @@ mod credential_binding_tests {
     }
 
     #[test]
-    fn rejects_duplicate_or_bot_credential_bindings() {
+    fn rejects_duplicate_credential_bindings() {
         assert!(
             credential_revisions(&[
                 TelegramCredentialBinding {
@@ -614,19 +602,6 @@ mod credential_binding_tests {
                 TelegramCredentialBinding {
                     purpose: TelegramCredentialPurpose::ApiHash,
                     revision: 2,
-                },
-            ])
-            .is_err()
-        );
-        assert!(
-            credential_revisions(&[
-                TelegramCredentialBinding {
-                    purpose: TelegramCredentialPurpose::ApiHash,
-                    revision: 1,
-                },
-                TelegramCredentialBinding {
-                    purpose: TelegramCredentialPurpose::BotToken,
-                    revision: 1,
                 },
             ])
             .is_err()

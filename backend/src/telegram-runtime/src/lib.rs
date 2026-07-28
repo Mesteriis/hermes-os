@@ -31,7 +31,7 @@ use hermes_telegram_api::{
     TelegramAccount, TelegramAccountSetup, TelegramAccountState, TelegramContractError,
     TelegramDeliveryState, TelegramDownloadFile, TelegramFileSnapshot, TelegramMessageObservation,
     TelegramMessageTombstone, TelegramOperation, TelegramParticipantFilter,
-    TelegramParticipantPage, TelegramProviderCommand, TelegramProviderKind, TelegramProviderQuery,
+    TelegramParticipantPage, TelegramProviderCommand, TelegramProviderQuery,
     TelegramProviderQueryResponse, TelegramRealtimeFrame, TelegramRuntimeLease,
     TelegramRuntimeLeaseState, TelegramRuntimeReconfiguration,
     TelegramRuntimeReconfigurationRequest, TelegramRuntimeReconfigurationState,
@@ -582,7 +582,6 @@ mod tests {
     use super::*;
     use hermes_telegram_api::{
         TelegramMessageObservation, TelegramMessageReferences, TelegramProviderEvent,
-        TelegramProviderKind,
     };
 
     struct PollingTransport {
@@ -685,7 +684,6 @@ mod tests {
         let mut runtime = TelegramRuntime::new(PollingTransport { events: Vec::new() });
         runtime.persistence.put_account(TelegramAccount {
             account_id: "account".to_owned(),
-            provider_kind: TelegramProviderKind::User,
             display_name: "Telegram".to_owned(),
             external_account_id: "telegram:1".to_owned(),
             state: TelegramAccountState::Ready,
@@ -945,7 +943,6 @@ impl TelegramRuntimeComposition {
             library,
             TelegramAccountSetup {
                 account_id: account_id.clone(),
-                provider_kind: TelegramProviderKind::User,
                 display_name: account_id.clone(),
                 external_account_id: account_id,
                 credentials: Vec::new(),
@@ -964,11 +961,6 @@ impl TelegramRuntimeComposition {
         if account_id.trim().is_empty() {
             return Err(TdlibError::Protocol(
                 "Telegram account id is empty".to_owned(),
-            ));
-        }
-        if account_setup.provider_kind != TelegramProviderKind::User {
-            return Err(TdlibError::Protocol(
-                "Telegram managed runtime supports user accounts only".to_owned(),
             ));
         }
         let client = library.create_client()?;
@@ -1335,7 +1327,6 @@ where
         validate_setup(&setup)?;
         let account = TelegramAccount {
             account_id: setup.account_id,
-            provider_kind: setup.provider_kind,
             display_name: setup.display_name,
             external_account_id: setup.external_account_id,
             state: TelegramAccountState::Provisioning,

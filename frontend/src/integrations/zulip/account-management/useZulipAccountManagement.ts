@@ -3,7 +3,7 @@ import { ZulipCredentialBindingStateV1 } from '../../../gen/hermes/zulip/account
 import type { ZulipAccountStatusV1 } from '../../../gen/hermes/zulip/operational/v1/client_pb'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import { publicModuleStringSetting } from '../../../platform/gateway/publicModuleSettings'
-import { hasNativeOwnerVaultProvisioningHostV1 } from '../../../platform/vault'
+import { hasOwnerVaultProvisioningHostV1 } from '../../../platform/vault'
 import { ZulipAccountManagementWorkflowV1 } from './zulipAccountManagementWorkflow'
 
 const ZULIP_MODULE_ID = 'hermes-zulip-runtime'
@@ -22,7 +22,7 @@ export function useZulipAccountManagement(
 	const busy = ref(false)
 	const message = ref('')
 	const messageTone = ref<'neutral' | 'success' | 'error'>('neutral')
-	const secureHostAvailable = hasNativeOwnerVaultProvisioningHostV1()
+	const secureHostAvailable = hasOwnerVaultProvisioningHostV1()
 	const ownedModule = computed(() => module()?.moduleId === ZULIP_MODULE_ID ? module() : null)
 	const accountId = computed(() => publicModuleStringSetting(ownedModule.value, 'zulip.account_id') ?? '')
 	const canQuery = computed(() => hasCapability('zulip.operational.query.v1') && Boolean(accountId.value))

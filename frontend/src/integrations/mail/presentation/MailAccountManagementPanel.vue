@@ -34,7 +34,7 @@ function deleteAccount(): void {
 		icon="tabler:mail-cog"
 		:account-state="management.stateLabel.value"
 		:busy="management.busy.value"
-		:message="management.message.value || (!management.secureHostAvailable ? 'Password rotation is available in the desktop shell.' : '')"
+		:message="management.message.value || (!management.secureHostAvailable ? 'Password rotation requires the desktop shell or root make dev.' : '')"
 		:message-tone="management.messageTone.value"
 	>
 		<template #summary>

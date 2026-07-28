@@ -43,11 +43,9 @@ describe('Telegram lifecycle Gateway adapter', () => {
 		await expect(listTelegramAccounts()).resolves.toHaveLength(1)
 		await expect(provisionTelegramAccount({
 			accountId: ' account-2 ',
-			providerKind: ' telegram ',
 			displayName: ' Personal ',
 			externalAccountId: ' @owner ',
 			credentials: [],
-			qrAuthorized: true,
 		})).resolves.toMatchObject({ accountId: 'account-2' })
 
 		expect(execute).toHaveBeenNthCalledWith(2, {
@@ -55,11 +53,10 @@ describe('Telegram lifecycle Gateway adapter', () => {
 				case: 'provision',
 				value: {
 					accountId: 'account-2',
-					providerKind: 'telegram',
 					displayName: 'Personal',
 					externalAccountId: '@owner',
 					credential: [],
-					qrAuthorized: true,
+					qrAuthorized: false,
 				},
 			},
 		})

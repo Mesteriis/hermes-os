@@ -131,6 +131,7 @@ test('Mail message flags stay provider-owned, durable, typed and separately admi
     'mail.delivery.v1',
     'mail_message_flags_command_v1',
     'mail_message_location_command_v1',
+    'mail_message_permanent_delete_command_v1',
   ]);
 
   assert.match(adr, /реализовано полностью/);

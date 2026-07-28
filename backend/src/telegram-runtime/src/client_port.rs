@@ -948,7 +948,7 @@ mod tests {
         assert_eq!(contract.owner, "telegram");
         assert_eq!(contract.name, "telegram.query.v1");
         assert_eq!(contract.major, 1);
-        assert_eq!(contract.revision, 5);
+        assert_eq!(contract.revision, 6);
         assert_eq!(contract.schema_sha256.len(), 32);
     }
 

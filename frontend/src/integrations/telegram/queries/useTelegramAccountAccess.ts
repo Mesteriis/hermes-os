@@ -87,11 +87,9 @@ export function useTelegramAccountAccess(capabilities: {
 		await runLifecycleAction(async () => {
 			const account = await provisionTelegramAccount({
 				accountId: provisionAccountId.value,
-				providerKind: 'telegram',
 				displayName: provisionDisplayName.value,
 				externalAccountId: provisionExternalAccountId.value,
 				credentials: [],
-				qrAuthorized: false,
 			})
 			selectedAccountId.value = account.accountId
 			statusMessage.value = `Telegram account ${account.accountId} provisioned.`

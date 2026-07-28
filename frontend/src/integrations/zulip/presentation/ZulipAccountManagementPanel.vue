@@ -27,7 +27,7 @@ function retire(): void {
 		icon="tabler:brand-zulip"
 		:account-state="management.stateLabel.value"
 		:busy="management.busy.value"
-		:message="management.message.value || (!management.secureHostAvailable ? 'API-key rotation is available in the desktop shell.' : '')"
+		:message="management.message.value || (!management.secureHostAvailable ? 'API-key rotation requires the desktop shell or root make dev.' : '')"
 		:message-tone="management.messageTone.value"
 	>
 		<template #summary>

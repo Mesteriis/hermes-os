@@ -19,10 +19,10 @@ import {
 	resolveOwnerOperationIdV1,
 } from '../gateway/ownerOperationId'
 import {
-	NativeOwnerVaultProvisioningHostV1,
 	type OwnerVaultProvisioningHostV1,
 	type SanitizedProvisioningHostReceiptV1,
 } from './ownerVaultProvisioningHost'
+import { createOwnerVaultProvisioningHostV1 } from './ownerVaultProvisioningHostFactory'
 
 export type OwnerVaultProvisioningInputV1 = {
 	operationId?: Uint8Array
@@ -43,7 +43,7 @@ export class OwnerVaultProvisioningClientV1 {
 			createBrowserGatewayConnectTransport(),
 		),
 		private readonly host: OwnerVaultProvisioningHostV1 =
-			new NativeOwnerVaultProvisioningHostV1(),
+			createOwnerVaultProvisioningHostV1(),
 		private readonly deviceProof: OwnerDeviceProofV1 =
 			new BrowserOwnerDeviceProofV1(),
 	) {}
@@ -153,6 +153,7 @@ function isSecretClass(value: OwnerVaultSecretClassV1): boolean {
 	return value === OwnerVaultSecretClassV1.PROVIDER_CREDENTIAL
 		|| value === OwnerVaultSecretClassV1.OAUTH_REFRESH_CREDENTIAL
 		|| value === OwnerVaultSecretClassV1.SESSION_CREDENTIAL_BLOB
+		|| value === OwnerVaultSecretClassV1.SESSION_STORE_KEY
 }
 
 function isAction(value: OwnerVaultActionV1): boolean {

@@ -12,6 +12,7 @@
       "state": "planned",
       "dependsOn": [
         "telegram_core_operational_v1",
+        "telegram_tdlib_user_qr_identity_v1",
         "telegram_runtime_reconfiguration_v1",
         "telegram_folder_reassignment_v1",
         "telegram_automation_v1",
@@ -24,6 +25,19 @@
       "owner": "telegram",
       "state": "implemented",
       "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
+    },
+    {
+      "gate": "telegram_tdlib_user_qr_identity_v1",
+      "role": "integration",
+      "owner": "telegram",
+      "state": "implemented",
+      "dependsOn": [
+        "telegram_core_operational_v1",
+        "managed_integration_settings_apply_v1",
+        "owner_vault_provisioning_backend_v1",
+        "provider_qr_account_linking_frontend_v1",
+        "loopback_browser_owner_vault_host_v1"
+      ]
     },
     {
       "gate": "telegram_runtime_reconfiguration_v1",
@@ -249,6 +263,27 @@
       ]
     },
     {
+      "gate": "loopback_browser_owner_vault_host_v1",
+      "role": "app",
+      "owner": "first_party_development",
+      "state": "implemented",
+      "dependsOn": [
+        "owner_vault_provisioning_backend_v1"
+      ]
+    },
+    {
+      "gate": "provider_qr_account_linking_frontend_v1",
+      "role": "app",
+      "owner": "first_party_client",
+      "state": "implemented",
+      "dependsOn": [
+        "telegram_core_operational_v1",
+        "whatsapp_integration_v1",
+        "owner_vault_provisioning_desktop_v1",
+        "loopback_browser_owner_vault_host_v1"
+      ]
+    },
+    {
       "gate": "owner_vault_provisioning_v1",
       "role": "app",
       "owner": "first_party_client",
@@ -325,11 +360,25 @@
       "dependsOn": ["mail_operational_read_v1", "mail_gmail_oauth_v1"]
     },
     {
+      "gate": "mail_provider_location_identity_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "planned",
+      "dependsOn": ["mail_operational_read_v1", "mail_message_flags_command_v1"]
+    },
+    {
       "gate": "mail_message_location_command_v1",
       "role": "integration",
       "owner": "mail",
       "state": "planned",
-      "dependsOn": ["mail_message_flags_command_v1", "mail_operational_read_v1"]
+      "dependsOn": ["mail_provider_location_identity_v1"]
+    },
+    {
+      "gate": "mail_message_permanent_delete_command_v1",
+      "role": "integration",
+      "owner": "mail",
+      "state": "planned",
+      "dependsOn": ["mail_provider_location_identity_v1"]
     },
     {
       "gate": "mail_operational_command_v1",
@@ -339,7 +388,8 @@
       "dependsOn": [
         "mail.delivery.v1",
         "mail_message_flags_command_v1",
-        "mail_message_location_command_v1"
+        "mail_message_location_command_v1",
+        "mail_message_permanent_delete_command_v1"
       ]
     },
     {

@@ -21,15 +21,8 @@ pub type TelegramSetupId = String;
 pub type TelegramRuntimeReconfigurationId = String;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum TelegramProviderKind {
-    User,
-    Bot,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TelegramCredentialPurpose {
     ApiHash,
-    BotToken,
     SessionEncryptionKey,
 }
 
@@ -37,7 +30,6 @@ impl TelegramCredentialPurpose {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::ApiHash => "telegram_api_hash",
-            Self::BotToken => "telegram_bot_token",
             Self::SessionEncryptionKey => "telegram_session_encryption_key",
         }
     }
@@ -51,15 +43,6 @@ impl TelegramCredentialPurpose {
 pub struct TelegramCredentialBinding {
     pub purpose: TelegramCredentialPurpose,
     pub revision: u64,
-}
-
-impl TelegramProviderKind {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::User => "telegram_user",
-            Self::Bot => "telegram_bot",
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -110,7 +93,6 @@ pub struct TelegramAuthorizationStatus {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TelegramAccountSetup {
     pub account_id: TelegramAccountId,
-    pub provider_kind: TelegramProviderKind,
     pub display_name: String,
     pub external_account_id: String,
     pub credentials: Vec<TelegramCredentialBinding>,
@@ -120,7 +102,6 @@ pub struct TelegramAccountSetup {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TelegramAccount {
     pub account_id: TelegramAccountId,
-    pub provider_kind: TelegramProviderKind,
     pub display_name: String,
     pub external_account_id: String,
     pub state: TelegramAccountState,
@@ -1896,22 +1877,29 @@ pub enum TelegramContractError {
 
 pub fn validate_setup(setup: &TelegramAccountSetup) -> Result<(), TelegramContractError> {
     validate_id(&setup.account_id)?;
-    validate_id(&setup.external_account_id)?;
     validate_id(&setup.display_name)?;
-    if setup.credentials.is_empty() && !setup.qr_authorized {
-        return Err(TelegramContractError::EmptyField);
+    if !setup.external_account_id.is_empty() {
+        validate_id(&setup.external_account_id)?;
     }
-    let mut has_provider_credential = false;
+    if setup.qr_authorized {
+        return Err(TelegramContractError::InvalidTransition);
+    }
+    let mut has_api_hash = false;
+    let mut has_session_encryption_key = false;
     for binding in &setup.credentials {
         if binding.revision == 0 {
             return Err(TelegramContractError::InvalidTransition);
         }
-        if binding.purpose.is_session_store_key() {
-            continue;
+        let selected = match binding.purpose {
+            TelegramCredentialPurpose::ApiHash => &mut has_api_hash,
+            TelegramCredentialPurpose::SessionEncryptionKey => &mut has_session_encryption_key,
+        };
+        if *selected {
+            return Err(TelegramContractError::InvalidTransition);
         }
-        has_provider_credential = true;
+        *selected = true;
     }
-    if !has_provider_credential && !setup.qr_authorized {
+    if !has_api_hash || !has_session_encryption_key || setup.credentials.len() != 2 {
         return Err(TelegramContractError::EmptyField);
     }
     Ok(())
@@ -1963,4 +1951,57 @@ fn validate_id(value: &str) -> Result<(), TelegramContractError> {
         return Err(TelegramContractError::FieldTooLong);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod account_setup_tests {
+    use super::*;
+
+    fn user_setup() -> TelegramAccountSetup {
+        TelegramAccountSetup {
+            account_id: "personal-telegram".to_owned(),
+            display_name: "Personal Telegram".to_owned(),
+            external_account_id: String::new(),
+            credentials: vec![
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::ApiHash,
+                    revision: 1,
+                },
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::SessionEncryptionKey,
+                    revision: 1,
+                },
+            ],
+            qr_authorized: false,
+        }
+    }
+
+    #[test]
+    fn user_setup_requires_exact_tdlib_credentials() {
+        assert_eq!(validate_setup(&user_setup()), Ok(()));
+
+        let mut missing_session_key = user_setup();
+        missing_session_key.credentials.pop();
+        assert_eq!(
+            validate_setup(&missing_session_key),
+            Err(TelegramContractError::EmptyField)
+        );
+
+        let mut duplicate_api_hash = user_setup();
+        duplicate_api_hash.credentials[1].purpose = TelegramCredentialPurpose::ApiHash;
+        assert_eq!(
+            validate_setup(&duplicate_api_hash),
+            Err(TelegramContractError::InvalidTransition)
+        );
+    }
+
+    #[test]
+    fn client_cannot_assert_qr_authorization() {
+        let mut setup = user_setup();
+        setup.qr_authorized = true;
+        assert_eq!(
+            validate_setup(&setup),
+            Err(TelegramContractError::InvalidTransition)
+        );
+    }
 }

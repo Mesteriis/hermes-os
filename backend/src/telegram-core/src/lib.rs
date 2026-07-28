@@ -47,9 +47,6 @@ pub fn credential_lease_purpose_for_purpose(
             TELEGRAM_SESSION_STORE_KEY_PURPOSE_ID,
             SecretClassV1::SessionStoreKey,
         ),
-        hermes_telegram_api::TelegramCredentialPurpose::BotToken => {
-            return Err(TelegramContractError::InvalidTransition);
-        }
     };
     VaultPurposeRequestV1::new(
         purpose_id.to_owned(),
@@ -848,21 +845,24 @@ fn telegram_record_id(account_id: &str, chat_id: &str, message_id: &str) -> Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hermes_telegram_api::{
-        TelegramAccountSetup, TelegramCredentialPurpose, TelegramProviderKind,
-    };
+    use hermes_telegram_api::{TelegramAccountSetup, TelegramCredentialPurpose};
     use hermes_vault_protocol::{SecretClassV1, VaultActionV1};
 
     fn account_setup() -> TelegramAccountSetup {
         TelegramAccountSetup {
             account_id: "telegram-account".to_owned(),
-            provider_kind: TelegramProviderKind::User,
             display_name: "Personal Telegram".to_owned(),
             external_account_id: "telegram:42".to_owned(),
-            credentials: vec![TelegramCredentialBinding {
-                purpose: TelegramCredentialPurpose::ApiHash,
-                revision: 1,
-            }],
+            credentials: vec![
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::ApiHash,
+                    revision: 1,
+                },
+                TelegramCredentialBinding {
+                    purpose: TelegramCredentialPurpose::SessionEncryptionKey,
+                    revision: 1,
+                },
+            ],
             qr_authorized: false,
         }
     }
@@ -925,7 +925,6 @@ mod tests {
     fn runtime_reconfiguration_fences_epoch_before_any_transition() {
         let account = TelegramAccount {
             account_id: "telegram-account".to_owned(),
-            provider_kind: TelegramProviderKind::User,
             display_name: "Personal Telegram".to_owned(),
             external_account_id: "telegram:42".to_owned(),
             state: TelegramAccountState::Ready,
@@ -944,7 +943,6 @@ mod tests {
     fn runtime_reconfiguration_applies_one_target_epoch_only_at_completion() {
         let account = TelegramAccount {
             account_id: "telegram-account".to_owned(),
-            provider_kind: TelegramProviderKind::User,
             display_name: "Personal Telegram".to_owned(),
             external_account_id: "telegram:42".to_owned(),
             state: TelegramAccountState::Ready,

@@ -335,6 +335,7 @@ test('Telegram completion remains closed behind its independent capability slice
     'telegram_core_operational_v1',
     'telegram_folder_reassignment_v1',
     'telegram_runtime_reconfiguration_v1',
+    'telegram_tdlib_user_qr_identity_v1',
   ];
   const fullGate = telegramSlices.get('telegram_full_operational_v1');
 
@@ -400,7 +401,7 @@ test('Telegram completion remains closed behind its independent capability slice
   assert.match(realtimeAdrSource, /reset_required/);
   assert.match(realtimeAdrSource, /Состояние реализации: Реализовано/);
   assert.match(clientContractSource, /TelegramClientContractV1[\s\S]*Realtime/);
-  assert.match(clientContractSource, /TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 5/);
+  assert.match(clientContractSource, /TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 6/);
   assert.match(runtimeAdmissionSource, /TelegramClientContractV1::Realtime/);
   assert.match(
     managedFlowSource,

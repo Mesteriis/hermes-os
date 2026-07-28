@@ -18,7 +18,7 @@ const setup = useZulipAccountSetup(() => props.module)
 		submit-label="Connect Zulip"
 		:busy="setup.busy.value"
 		:disabled="!setup.canSubmit.value"
-		:message="setup.message.value || (!setup.secureHostAvailable ? 'Secure credential commit is available in the desktop shell.' : '')"
+		:message="setup.message.value || (!setup.secureHostAvailable ? 'Secure credential commit requires the desktop shell or root make dev.' : '')"
 		:message-tone="setup.messageTone.value"
 		:expanded="!setup.configured.value"
 		@submit="setup.submit"

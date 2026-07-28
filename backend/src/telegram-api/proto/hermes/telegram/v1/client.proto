@@ -42,7 +42,8 @@ message TelegramLifecycleRequestV1 {
 
 message ProvisionAccountRequest {
   string account_id = 1;
-  string provider_kind = 2;
+  reserved 2;
+  reserved "provider_kind";
   string display_name = 3;
   string external_account_id = 4;
   repeated CredentialBinding credential = 5;
@@ -118,7 +119,8 @@ message TelegramLifecycleResponseV1 {
 }
 message TelegramAccountResponse {
   string account_id = 1;
-  string provider_kind = 2;
+  reserved 2;
+  reserved "provider_kind";
   string display_name = 3;
   string external_account_id = 4;
   string state = 5;
