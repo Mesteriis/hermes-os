@@ -129,6 +129,7 @@ policy через ссылки из новых документов.
 - [ADR-0318: Communications evidence export workflow](ADR-0318-communications-evidence-export-workflow.md)
 - [ADR-0319: Owner-authorized legacy provider account recovery](ADR-0319-owner-authorized-legacy-provider-account-recovery.md)
 - [ADR-0320: Mail multi-account configuration instances and runtime multiplexing](ADR-0320-mail-multi-account-configuration-instances-and-runtime-multiplexing.md)
+- [ADR-0321: Legacy provider recovery bundle and native secret custody](ADR-0321-legacy-provider-recovery-bundle-and-native-secret-custody.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
