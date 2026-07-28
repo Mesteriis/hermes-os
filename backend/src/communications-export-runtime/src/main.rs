@@ -177,7 +177,7 @@ async fn consume_or_tick(
         return Ok(());
     }
     match runtime.consume_next().await {
-        Ok(()) => Ok(()),
+        Ok(()) => run_maintenance(runtime).await,
         Err(CommunicationsExportRuntimeErrorV1::Unavailable) => {
             tokio::select! {
                 _ = maintenance.tick() => run_maintenance(runtime).await,

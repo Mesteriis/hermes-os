@@ -323,12 +323,13 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     assert_communications_ingress_delivery(&store, &supervisor);
     assert_communications_relationship_projection(&store, &supervisor);
     assert_communications_attachment_anchor_projection(&store, &supervisor);
-    assert_communications_transferred_body_projection(
+    let _ = assert_communications_transferred_body_projection(
         &store,
         &supervisor,
         &data,
         release.kernel(),
         &root.join("runtime"),
+        true,
     );
     assert_communications_query_delivery(&store, &supervisor);
     assert_communications_canonical_read_v2_pagination(&store, &supervisor);
@@ -349,6 +350,25 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Blob and Communications Export workflow binaries"]
 fn managed_communications_export_workflow_starts_with_owner_local_storage_and_events() {
+    use hermes_communications_export_api::{
+        COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1, COMMUNICATIONS_EXPORT_MODULE_ID_V1,
+        COMMUNICATIONS_EXPORT_OWNER_V1,
+        wire::{
+            EvidenceExportArtifactReadRequestV1, EvidenceExportStatusV1,
+            GetEvidenceExportStatusRequestV1, GetEvidenceExportStatusResponseV1,
+            IssueEvidenceExportReadRequestV1, IssueEvidenceExportReadResponseV1,
+            StartEvidenceExportRequestV1, StartEvidenceExportResponseV1,
+        },
+    };
+    use hermes_communications_export_runtime::admission::{
+        communications_export_command_contract_reference_v1,
+        communications_export_query_contract_reference_v1,
+        communications_export_read_contract_reference_v1,
+        communications_export_ticket_contract_reference_v1,
+    };
+    use hermes_runtime_protocol::v1::{
+        ModuleClientBlobAuthorizationV1, ModuleClientRequestV1, ModuleClientResponseV1,
+    };
     assert_eq!(
         std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
         Ok("1")
@@ -388,14 +408,34 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         release.kernel(),
         &storage_runtime_directory(),
     );
+    issue_initial_communications_storage_binding(&store);
+    crate::platform::storage::provisioning::apply_reserved_binding(
+        &supervisor,
+        &store,
+        &communications_storage_binding(&store),
+    )
+    .expect("provision Communications Storage binding");
+    configure_communications_jetstream(&store);
+    assert_eq!(
+        start_communications_domain(&supervisor, &store, &root.join("runtime")),
+        1,
+        "Communications source owner starts independently before its export workflow"
+    );
+    let message_id = assert_communications_transferred_body_projection(
+        &store,
+        &supervisor,
+        &data,
+        release.kernel(),
+        &root.join("runtime"),
+        false,
+    );
     issue_initial_communications_export_storage_binding(&store);
     crate::platform::storage::provisioning::apply_reserved_binding(
         &supervisor,
         &store,
         &communications_export_storage_binding(&store),
     )
-    .expect("provision Communications Export Storage binding");
-    configure_communications_jetstream(&store);
+    .expect("provision Communications Export Storage binding after the source-owner recovery");
     assert_eq!(
         start_communications_export_workflow(&supervisor, &store, &root.join("runtime")),
         1,
@@ -406,6 +446,123 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
             .is_active(COMMUNICATIONS_EXPORT_REGISTRATION)
             .expect("read Communications Export process state")
     );
+    let route = |request_id: u64,
+                 contract: hermes_runtime_protocol::v1::ContractReferenceV1,
+                 request_payload: Vec<u8>| {
+        let request = ModuleClientRequestV1 {
+            protocol_major: 1,
+            module_id: COMMUNICATIONS_EXPORT_MODULE_ID_V1.to_owned(),
+            owner_id: COMMUNICATIONS_EXPORT_OWNER_V1.to_owned(),
+            contract: Some(contract),
+            request_id,
+            request_payload,
+            logical_owner_id: "owner-1".to_owned(),
+        }
+        .encode_to_vec();
+        let launch = store
+            .effective_managed_launch_record(COMMUNICATIONS_EXPORT_REGISTRATION)
+            .expect("read Communications Export launch")
+            .expect("Communications Export launch is active");
+        let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+            COMMUNICATIONS_EXPORT_REGISTRATION,
+            launch.runtime_instance_id(),
+            launch.runtime_generation(),
+            launch.grant_epoch(),
+            COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1,
+            &request,
+        );
+        let bytes = crate::modules::capability::router::route_managed_client_request(
+            store.as_ref(),
+            &supervisor.relay_port(),
+            &route,
+        )
+        .expect("route exact Communications Export client request");
+        let response = ModuleClientResponseV1::decode(bytes.as_slice())
+            .expect("decode Communications Export module response");
+        assert_eq!(response.request_id, request_id);
+        assert!(
+            response.error_code.is_empty(),
+            "Communications Export request {request_id} failed: {}",
+            response.error_code,
+        );
+        response.response_payload
+    };
+    let export_id = [11; 16];
+    let start = StartEvidenceExportResponseV1::decode(
+        route(
+            1,
+            communications_export_command_contract_reference_v1(),
+            StartEvidenceExportRequestV1 {
+                protocol_major: 1,
+                operation_id: export_id.to_vec(),
+                message_ids: vec![message_id],
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode accepted Communications Export command");
+    assert_eq!(start.export_id, export_id);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let status = GetEvidenceExportStatusResponseV1::decode(
+            route(
+                2,
+                communications_export_query_contract_reference_v1(),
+                GetEvidenceExportStatusRequestV1 {
+                    protocol_major: 1,
+                    export_id: export_id.to_vec(),
+                }
+                .encode_to_vec(),
+            )
+            .as_slice(),
+        )
+        .expect("decode Communications Export status");
+        if status.status == EvidenceExportStatusV1::EvidenceExportStatusReady as i32 {
+            assert_eq!(status.requested_items, 1);
+            assert_eq!(status.completed_items, 1);
+            assert!(status.artifact_bytes > 0);
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "durable Communications Export command did not reach a ready artifact; status={status:?}; runtime_failure={:?}",
+            supervisor
+                .last_failure(COMMUNICATIONS_EXPORT_REGISTRATION)
+                .expect("read Communications Export runtime failure"),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let ticket = IssueEvidenceExportReadResponseV1::decode(
+        route(
+            3,
+            communications_export_ticket_contract_reference_v1(),
+            IssueEvidenceExportReadRequestV1 {
+                protocol_major: 1,
+                export_id: export_id.to_vec(),
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode one-use Communications Export read ticket");
+    assert_eq!(ticket.opaque_read_capability.len(), 32);
+    assert!(ticket.declared_bytes > 0);
+    let authorization = ModuleClientBlobAuthorizationV1::decode(
+        route(
+            4,
+            communications_export_read_contract_reference_v1(),
+            EvidenceExportArtifactReadRequestV1 {
+                opaque_read_capability: ticket.opaque_read_capability,
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("authorize the exact descriptor-declared export client_blob route");
+    assert_eq!(authorization.reference_id.len(), 16);
+    assert_eq!(authorization.declared_size, ticket.declared_bytes);
+    assert_eq!(authorization.expected_plaintext_sha256.len(), 32);
     supervisor.shutdown().expect("stop managed processes");
     unsafe {
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");

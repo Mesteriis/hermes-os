@@ -285,6 +285,8 @@ async function run_managed_process_conformance(secrets) {
     '-p',
     'hermes-communications-runtime',
     '-p',
+    'hermes-communications-export-runtime',
+    '-p',
     'hermes-attachment-security-runtime',
     '-p',
     'hermes-mail-runtime',

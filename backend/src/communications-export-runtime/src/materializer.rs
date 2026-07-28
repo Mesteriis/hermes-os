@@ -3,8 +3,9 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobCustodyTransferRequestV1, ManagedBlobSessionRequestV1,
-    request_managed_blob_custody_transfer_v2, request_managed_blob_session_v2,
+    BlobClientError, BlobDataClient, ManagedBlobCustodyTransferRequestV1,
+    ManagedBlobSessionRequestV1, request_managed_blob_custody_transfer_v2,
+    request_managed_blob_session_v2,
 };
 use hermes_communications_export_core::{
     EvidenceExportBodyV1, EvidenceExportItemV1, EvidenceExportManifestV1,
@@ -100,7 +101,7 @@ fn materialize(
                         evidence_envelope_sha256: &claim.source_result_envelope_sha256,
                     },
                 )
-                .map_err(|_| MaterializationFailureV1::Retry)?;
+                .map_err(blob_failure)?;
                 let target_reference_id: [u8; 16] = transfer
                     .grant
                     .target_reference_id
@@ -113,7 +114,7 @@ fn materialize(
                     .and_then(|client| {
                         client.custody_transfer(transfer.grant, transfer.channel_binding)
                     })
-                    .map_err(|_| MaterializationFailureV1::Retry)?;
+                    .map_err(blob_failure)?;
                 let bytes = read_target(
                     control_channel,
                     dispatcher,
@@ -168,12 +169,12 @@ fn read_target(
             custody_target: None,
         },
     )
-    .map_err(|_| MaterializationFailureV1::Retry)?;
+    .map_err(blob_failure)?;
     let bytes = BlobDataClient::new(session.data_socket_path)
         .and_then(|client| {
             client.read_range(session.grant, session.channel_binding, 0, declared_bytes)
         })
-        .map_err(|_| MaterializationFailureV1::Retry)?;
+        .map_err(blob_failure)?;
     if bytes.len() != usize::try_from(declared_bytes).unwrap_or(usize::MAX)
         || Sha256::digest(&bytes).as_slice() != expected_sha256
         || std::str::from_utf8(&bytes).is_err()
@@ -209,18 +210,30 @@ fn write_artifact(
             custody_target: None,
         },
     )
-    .map_err(|_| MaterializationFailureV1::Retry)?;
-    if !session.custody_transfer_source_proof.is_empty() {
-        return Err(MaterializationFailureV1::Policy);
-    }
+    .map_err(blob_failure)?;
     BlobDataClient::new(session.data_socket_path)
         .and_then(|client| client.write(session.grant, session.channel_binding, bytes))
-        .map_err(|_| MaterializationFailureV1::Retry)?;
+        .map_err(blob_failure)?;
     Ok(CommunicationsExportArtifactReceiptV1 {
         reference_id,
         declared_bytes,
         sha256,
     })
+}
+
+fn blob_failure(error: BlobClientError) -> MaterializationFailureV1 {
+    match error {
+        BlobClientError::Unavailable
+        | BlobClientError::Connect(_)
+        | BlobClientError::Io(_)
+        | BlobClientError::InvalidTimeout => MaterializationFailureV1::Retry,
+        BlobClientError::InvalidSocketPath
+        | BlobClientError::FrameTooLarge
+        | BlobClientError::InvalidFrame
+        | BlobClientError::InvalidResponse
+        | BlobClientError::Rejected(_)
+        | BlobClientError::InvalidSessionRequest => MaterializationFailureV1::Policy,
+    }
 }
 
 fn artifact_reference_id(export_id: [u8; 16], sha256: [u8; 32]) -> [u8; 16] {

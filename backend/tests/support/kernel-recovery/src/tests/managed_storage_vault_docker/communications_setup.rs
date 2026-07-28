@@ -827,7 +827,8 @@ pub(super) fn assert_communications_transferred_body_projection(
     kernel_data: &Path,
     kernel: &Path,
     runtime_dir: &Path,
-) {
+    exercise_recovery_failures: bool,
+) -> Vec<u8> {
     const OPAQUE_BLOB_REFERENCE: &str = "blob://fixture-source/admitted-body-1";
     let body_account_cursor = fixture_account_cursor(
         hermes_communications_ingress::ProviderProvenanceV1::Telegram,
@@ -975,6 +976,26 @@ pub(super) fn assert_communications_transferred_body_projection(
         .expect("Event Hub topology")
         .nats_endpoint()
         .to_owned();
+    if !exercise_recovery_failures {
+        tokio::runtime::Runtime::new()
+            .expect("Tokio runtime")
+            .block_on(async move {
+                async_nats::jetstream::new(
+                    async_nats::connect(endpoint)
+                        .await
+                        .expect("connect disposable JetStream"),
+                )
+                .publish(
+                    "hermes.observation.v1.communications.communication_observed.v1",
+                    record.exact_bytes().to_vec().into(),
+                )
+                .await
+                .expect("publish admitted-body typed ingress envelope")
+                .await
+                .expect("acknowledge admitted-body typed ingress envelope");
+            });
+        return wait_for_transferred_body_message(store, supervisor, &body_account_cursor);
+    }
     supervisor
         .stop("vault")
         .expect("stop Vault for custody outage");
@@ -1355,6 +1376,13 @@ pub(super) fn assert_communications_transferred_body_projection(
             continue;
         }
         if transferred && rejected >= 3 {
+            let transferred_message_id = messages
+                .messages
+                .iter()
+                .find(|message| message.body_state == 4)
+                .expect("transferred message is present in the canonical projection")
+                .message_id
+                .clone();
             let public_payload = CommunicationsQueryResponseV1 {
                 result: Some(QueryResult::ListConversationMessages(messages)),
                 error_code: String::new(),
@@ -1366,11 +1394,107 @@ pub(super) fn assert_communications_transferred_body_projection(
                     .any(|window| window == OPAQUE_BLOB_REFERENCE.as_bytes()),
                 "public Communications query must not reveal an owner-private Blob reference",
             );
-            return;
+            return transferred_message_id;
         }
         assert!(
             std::time::Instant::now() < deadline,
             "custody transfer must retain a policy-rejected body without blocking a valid body"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
+fn wait_for_transferred_body_message(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    account_cursor: &[u8],
+) -> Vec<u8> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let accounts = route_communications_query(
+            store,
+            supervisor,
+            41,
+            &CommunicationsQueryRequestV1 {
+                protocol_major: 1,
+                operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+                    limit: 16,
+                    cursor: Vec::new(),
+                })),
+            }
+            .encode_to_vec(),
+        );
+        let Some(QueryResult::ListAccounts(accounts)) = accounts.result else {
+            panic!("Communications accounts query result");
+        };
+        let Some(account) = accounts
+            .accounts
+            .iter()
+            .find(|account| account.account_cursor_sha256 == account_cursor)
+        else {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "exportable admitted-body account was not projected"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            continue;
+        };
+        let conversations = route_communications_query(
+            store,
+            supervisor,
+            42,
+            &CommunicationsQueryRequestV1 {
+                protocol_major: 1,
+                operation: Some(Operation::ListConversations(
+                    hermes_communications_api::query_wire::ListConversationsRequestV1 {
+                        account_cursor_sha256: account.account_cursor_sha256.clone(),
+                        limit: 16,
+                        cursor: Vec::new(),
+                    },
+                )),
+            }
+            .encode_to_vec(),
+        );
+        let Some(QueryResult::ListConversations(conversations)) = conversations.result else {
+            panic!("Communications conversations query result");
+        };
+        let Some(conversation) = conversations.conversations.first() else {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "exportable admitted-body conversation was not projected"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            continue;
+        };
+        let messages = route_communications_query(
+            store,
+            supervisor,
+            43,
+            &CommunicationsQueryRequestV1 {
+                protocol_major: 1,
+                operation: Some(Operation::ListConversationMessages(
+                    hermes_communications_api::query_wire::ListConversationMessagesRequestV1 {
+                        conversation_id: conversation.conversation_id.clone(),
+                        limit: 16,
+                        cursor: Vec::new(),
+                    },
+                )),
+            }
+            .encode_to_vec(),
+        );
+        let Some(QueryResult::ListConversationMessages(messages)) = messages.result else {
+            panic!("Communications messages query result");
+        };
+        if let Some(message) = messages
+            .messages
+            .iter()
+            .find(|message| message.body_state == 4)
+        {
+            return message.message_id.clone();
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "exportable admitted-body message was not projected"
         );
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
