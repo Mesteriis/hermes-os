@@ -217,6 +217,7 @@ pub(super) fn start_whatsapp_runtime(
         configuration_instance_id: WHATSAPP_ACCOUNT_ID.to_owned(),
         runtime_artifacts: Vec::new(),
         integration_state_root: None,
+        configuration_instances: Vec::new(),
     };
     let host_bridge_configuration =
         whatsapp_host_bridge_configuration(runtime_dir, store, &reservation);

@@ -5,7 +5,11 @@ use std::path::Path;
 use hermes_kernel_control_store::{PlatformStorageBindingStateV1, SettingsApplyState};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
-    v1::{ManagedIntegrationHostBridgeConfigurationV1, ManagedIntegrationRuntimeConfigurationV1},
+    SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID,
+    v1::{
+        ManagedIntegrationConfigurationInstanceV1, ManagedIntegrationHostBridgeConfigurationV1,
+        ManagedIntegrationRuntimeConfigurationV1,
+    },
     validation::{
         descriptor::decode_settings_snapshot_v1,
         integration_host_bridge::validate_managed_integration_host_bridge_configuration,
@@ -70,6 +74,19 @@ pub(crate) fn launch_reserved(
         Some(bytes) => bytes,
         None => admitted_settings_snapshot(store, registration_id)?.bytes,
     };
+    let configuration_instances = if granted_capability_ids
+        .iter()
+        .any(|capability_id| capability_id == SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID)
+    {
+        admitted_configuration_instances(
+            store,
+            registration_id,
+            configuration_instance_id,
+            &settings_snapshot_bytes,
+        )?
+    } else {
+        Vec::new()
+    };
     let configuration = ManagedIntegrationRuntimeConfigurationV1 {
         major: 1,
         logical_owner_id: registration.owner_id().to_owned(),
@@ -83,6 +100,7 @@ pub(crate) fn launch_reserved(
         configuration_instance_id: configuration_instance_id.to_owned(),
         runtime_artifacts: Vec::new(),
         integration_state_root: None,
+        configuration_instances,
     };
     validate_managed_integration_runtime_configuration(&configuration)
         .map_err(|_| "managed integration runtime configuration is invalid".to_owned())?;
@@ -122,6 +140,67 @@ pub(crate) fn launch_reserved(
         )?,
     };
     Ok((runtime_generation, host_bridge_socket_path))
+}
+
+fn admitted_configuration_instances(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    selected_configuration_instance_id: &str,
+    selected_snapshot_bytes: &[u8],
+) -> Result<Vec<ManagedIntegrationConfigurationInstanceV1>, String> {
+    let selected_snapshot = decode_settings_snapshot_v1(selected_snapshot_bytes)
+        .map_err(|_| "managed integration settings catalog is invalid".to_owned())?;
+    if selected_snapshot.target_id != selected_configuration_instance_id
+        || selected_snapshot.revision == 0
+    {
+        return Err("managed integration settings catalog is invalid".to_owned());
+    }
+
+    let mut selected_found = false;
+    let mut instances = Vec::new();
+    for target in store
+        .settings_configuration_targets(registration_id)
+        .map_err(|_| "managed integration settings catalog is unavailable".to_owned())?
+    {
+        let target_id = target.configuration_instance_id();
+        let snapshot_bytes = if target_id == selected_configuration_instance_id {
+            selected_found = true;
+            selected_snapshot_bytes.to_vec()
+        } else {
+            if target.effective_revision() == 0
+                || target.desired_revision() != target.effective_revision()
+                || target.apply_state() != SettingsApplyState::Current
+            {
+                continue;
+            }
+            let (revision, bytes) = store
+                .desired_settings_snapshot_for_target(registration_id, target_id)
+                .map_err(|_| "managed integration settings catalog is unavailable".to_owned())?
+                .ok_or_else(|| "managed integration settings catalog is unavailable".to_owned())?;
+            let snapshot = decode_settings_snapshot_v1(&bytes)
+                .map_err(|_| "managed integration settings catalog is invalid".to_owned())?;
+            if revision != target.effective_revision()
+                || snapshot.target_id != target_id
+                || snapshot.revision != target.effective_revision()
+            {
+                return Err("managed integration settings catalog is stale".to_owned());
+            }
+            bytes
+        };
+        instances.push(ManagedIntegrationConfigurationInstanceV1 {
+            configuration_instance_id: target_id.to_owned(),
+            settings_snapshot_bytes: snapshot_bytes,
+            integration_state_root: None,
+        });
+    }
+    if !selected_found {
+        return Err("managed integration settings target is unavailable".to_owned());
+    }
+    instances.sort_by(|left, right| {
+        left.configuration_instance_id
+            .cmp(&right.configuration_instance_id)
+    });
+    Ok(instances)
 }
 
 fn host_bridge_configuration(

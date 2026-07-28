@@ -33,6 +33,8 @@ fn initial_settings_materialization_is_atomic_exact_and_idempotent() {
         .expect("bind settings schema");
     let initial = SettingsInitialSnapshot {
         registration_id: "registration-1".to_owned(),
+        configuration_instance_id: "registration-1".to_owned(),
+        created_operation_id: None,
         snapshot_bytes: vec![1, 2, 3],
         complete: true,
     };
@@ -57,6 +59,31 @@ fn initial_settings_materialization_is_atomic_exact_and_idempotent() {
             .desired_settings_snapshot("registration-1")
             .expect("read initial snapshot"),
         Some((1, vec![1, 2, 3])),
+    );
+    let new_target = SettingsInitialSnapshot {
+        registration_id: "registration-1".to_owned(),
+        configuration_instance_id: "cfg-second".to_owned(),
+        created_operation_id: Some([7; 16]),
+        snapshot_bytes: vec![4, 5, 6],
+        complete: true,
+    };
+    assert_eq!(
+        fixture
+            .store
+            .materialize_initial_settings_snapshot(&new_target)
+            .expect("materialize complete new target"),
+        1,
+    );
+    let new_target = fixture
+        .store
+        .settings_configuration_target("registration-1", "cfg-second")
+        .expect("read complete new target")
+        .expect("complete new target");
+    assert_eq!(new_target.desired_revision(), 1);
+    assert_eq!(new_target.effective_revision(), 0);
+    assert_eq!(
+        new_target.apply_state(),
+        SettingsApplyState::PendingValidation
     );
     let current = fixture.settings_binding();
     assert_eq!(current.desired_revision(), 1);
@@ -115,6 +142,8 @@ fn incomplete_initial_settings_are_atomically_blocked_without_effective_revision
         .expect("bind incomplete schema");
     let initial = SettingsInitialSnapshot {
         registration_id: "registration-incomplete".to_owned(),
+        configuration_instance_id: "registration-incomplete".to_owned(),
+        created_operation_id: None,
         snapshot_bytes: vec![4, 5, 6],
         complete: false,
     };
@@ -318,6 +347,7 @@ impl RegistrationFixture {
             .store
             .commit_desired_settings_snapshot(&SettingsDesiredSnapshot {
                 registration_id: "registration-1".into(),
+                configuration_instance_id: "registration-1".into(),
                 expected_revision: 0,
                 snapshot_bytes: vec![1, 2, 3],
             })
@@ -357,6 +387,7 @@ impl RegistrationFixture {
             .store
             .commit_desired_settings_snapshot(&SettingsDesiredSnapshot {
                 registration_id: "registration-1".into(),
+                configuration_instance_id: "registration-1".into(),
                 expected_revision: 1,
                 snapshot_bytes: vec![4],
             })
@@ -394,6 +425,7 @@ impl RegistrationFixture {
             self.store
                 .commit_desired_settings_snapshot(&SettingsDesiredSnapshot {
                     registration_id: "registration-1".into(),
+                    configuration_instance_id: "registration-1".into(),
                     expected_revision: 0,
                     snapshot_bytes: vec![4],
                 })

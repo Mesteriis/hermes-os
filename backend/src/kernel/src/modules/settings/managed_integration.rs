@@ -50,6 +50,7 @@ pub(crate) fn prepare(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     registration_id: &str,
+    configuration_instance_id: &str,
     storage_capability_id: &str,
     expected_desired_revision: u64,
 ) -> Result<PreparedManagedIntegrationSettingsV1, String> {
@@ -57,31 +58,39 @@ pub(crate) fn prepare(
         store,
         supervisor,
         registration_id,
+        configuration_instance_id,
         storage_capability_id,
         expected_desired_revision,
     )?;
-    let snapshot_bytes =
-        match validate_desired_snapshot(store, registration_id, expected_desired_revision) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                block(
-                    store,
-                    registration_id,
-                    expected_desired_revision,
-                    VALIDATION_FAILED,
-                );
-                return Err(error);
-            }
-        };
-    application::acknowledge(
+    let snapshot_bytes = match validate_desired_snapshot(
         store,
         registration_id,
+        configuration_instance_id,
+        expected_desired_revision,
+    ) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            block(
+                store,
+                registration_id,
+                configuration_instance_id,
+                expected_desired_revision,
+                VALIDATION_FAILED,
+            );
+            return Err(error);
+        }
+    };
+    application::acknowledge_target(
+        store,
+        registration_id,
+        configuration_instance_id,
         expected_desired_revision,
         ApplyAcknowledgement::ValidationAccepted,
     )?;
-    application::acknowledge(
+    application::acknowledge_target(
         store,
         registration_id,
+        configuration_instance_id,
         expected_desired_revision,
         ApplyAcknowledgement::ApplyStarted,
     )?;
@@ -92,6 +101,7 @@ pub(crate) fn prepare(
         block(
             store,
             registration_id,
+            configuration_instance_id,
             expected_desired_revision,
             REPLACEMENT_FAILED,
         );
@@ -107,14 +117,16 @@ pub(crate) fn wait_for_ready_and_confirm(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     registration_id: &str,
+    configuration_instance_id: &str,
     revision: u64,
 ) -> Result<(), String> {
     let deadline = Instant::now() + READY_DEADLINE;
     loop {
         if supervisor.relay_port().is_ready(registration_id) == Ok(true) {
-            return application::acknowledge(
+            return application::acknowledge_target(
                 store,
                 registration_id,
+                configuration_instance_id,
                 revision,
                 ApplyAcknowledgement::RuntimeApplied,
             );
@@ -124,7 +136,13 @@ pub(crate) fn wait_for_ready_and_confirm(
                 && supervisor.last_failure(registration_id)?.is_some())
         {
             let _ = supervisor.stop_if_active(registration_id);
-            block(store, registration_id, revision, READINESS_FAILED);
+            block(
+                store,
+                registration_id,
+                configuration_instance_id,
+                revision,
+                READINESS_FAILED,
+            );
             return Err("managed integration did not acknowledge the desired settings".to_owned());
         }
         std::thread::sleep(READY_POLL_INTERVAL);
@@ -134,15 +152,23 @@ pub(crate) fn wait_for_ready_and_confirm(
 pub(crate) fn block_after_launch_failure(
     store: &SqliteControlStore,
     registration_id: &str,
+    configuration_instance_id: &str,
     revision: u64,
 ) {
-    block(store, registration_id, revision, REPLACEMENT_FAILED);
+    block(
+        store,
+        registration_id,
+        configuration_instance_id,
+        revision,
+        REPLACEMENT_FAILED,
+    );
 }
 
 fn validate_current_target(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     registration_id: &str,
+    configuration_instance_id: &str,
     storage_capability_id: &str,
     expected_desired_revision: u64,
 ) -> Result<ManagedIntegrationApplyKindV1, String> {
@@ -159,7 +185,7 @@ fn validate_current_target(
     }
     let active = supervisor.is_active(registration_id)?;
     let settings = store
-        .settings_schema_binding(registration_id)
+        .settings_configuration_target(registration_id, configuration_instance_id)
         .map_err(store_error)?
         .ok_or_else(|| "managed integration settings are unavailable".to_owned())?;
     if settings.desired_revision() != expected_desired_revision
@@ -180,9 +206,7 @@ fn validate_current_target(
     }
     match (settings.effective_revision(), active) {
         (0, false) => Ok(ManagedIntegrationApplyKindV1::InitialLaunch),
-        (0, true) => {
-            Err("managed integration initial settings target is already active".to_owned())
-        }
+        (0, true) => Ok(ManagedIntegrationApplyKindV1::Replacement),
         (_, true) => Ok(ManagedIntegrationApplyKindV1::Replacement),
         (_, false) => Err("managed integration settings target is unavailable".to_owned()),
     }
@@ -191,6 +215,7 @@ fn validate_current_target(
 fn validate_desired_snapshot(
     store: &SqliteControlStore,
     registration_id: &str,
+    configuration_instance_id: &str,
     revision: u64,
 ) -> Result<Vec<u8>, String> {
     let binding = store
@@ -216,14 +241,14 @@ fn validate_desired_snapshot(
         return Err("managed integration settings require an unsupported apply mode".to_owned());
     }
     let (stored_revision, snapshot_bytes) = store
-        .desired_settings_snapshot(registration_id)
+        .desired_settings_snapshot_for_target(registration_id, configuration_instance_id)
         .map_err(store_error)?
         .ok_or_else(|| "managed integration desired settings are unavailable".to_owned())?;
     let snapshot = decode_settings_snapshot_v1(&snapshot_bytes)
         .map_err(|_| "managed integration desired settings are invalid".to_owned())?;
     if stored_revision != revision
         || snapshot.revision != revision
-        || snapshot.target_id != registration_id
+        || snapshot.target_id != configuration_instance_id
         || validate_settings_snapshot_against_schema_v1(&schema, &snapshot).is_err()
     {
         return Err("managed integration desired settings are stale".to_owned());
@@ -252,9 +277,16 @@ fn reserve_successor_storage(
     provisioning::apply_reserved_binding(supervisor, store, &binding)
 }
 
-fn block(store: &SqliteControlStore, registration_id: &str, revision: u64, reason: &str) {
-    let _ = store.transition_settings_apply_state(
+fn block(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    configuration_instance_id: &str,
+    revision: u64,
+    reason: &str,
+) {
+    let _ = store.transition_settings_apply_state_for_target(
         registration_id,
+        configuration_instance_id,
         revision,
         SettingsApplyState::BlockedConfig,
         Some(reason),

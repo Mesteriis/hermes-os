@@ -25,8 +25,9 @@ pub use grant_snapshot::ModuleGrantSnapshot;
 pub use registration::{ModuleRegistration, ModuleRegistrationState};
 pub use scheduler_request::ModuleSchedulerJobRequestV1;
 pub use settings::{
-    SettingsApplyState, SettingsDesiredSnapshot, SettingsInitialSnapshot, SettingsSchemaBinding,
-    SettingsSchemaBindingInputV1,
+    SettingsApplyState, SettingsConfigurationTarget, SettingsConfigurationTargetInputV1,
+    SettingsDesiredSnapshot, SettingsInitialSnapshot, SettingsSchemaBinding,
+    SettingsSchemaBindingInputV1, SettingsSchemaTargetSuccessor,
 };
 pub use storage_request::ModuleStorageRequestV1;
 pub use vault_purpose_request::{ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1};

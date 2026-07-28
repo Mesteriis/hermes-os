@@ -30,6 +30,7 @@ use sha2::{Digest, Sha256};
 use crate::settings::{
     MAIL_SETTINGS_SCHEMA_MAJOR_V2, MAIL_SETTINGS_SCHEMA_REVISION_V2, mail_settings_schema_bytes_v2,
 };
+use hermes_runtime_protocol::SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID;
 
 pub const MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID: &str =
     "mail.attachment.scan-candidate.publish.v1";
@@ -144,7 +145,17 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_storage_capability_v1(),
         mail_client_capability_v1(MailClientContractV1::SyncHealthQuery),
         mail_client_capability_v1(MailClientContractV1::Sync),
+        mail_settings_configuration_catalog_capability_v1(),
     ]
+}
+
+fn mail_settings_configuration_catalog_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        ..Default::default()
+    }
 }
 
 #[must_use]
@@ -420,7 +431,7 @@ pub fn mail_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
     let settings_schema = mail_settings_schema_bytes_v2();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 6,
+        descriptor_revision: 7,
         module_id: MAIL_MODULE_ID.to_owned(),
         owner_id: MAIL_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Integration as i32,
@@ -508,6 +519,7 @@ mod tests {
                 MAIL_STORAGE_CAPABILITY_ID,
                 MailClientContractV1::SyncHealthQuery.capability_id(),
                 MailClientContractV1::Sync.capability_id(),
+                SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID,
             ]
         );
 

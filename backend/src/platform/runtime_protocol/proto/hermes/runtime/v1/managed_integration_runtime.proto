@@ -23,6 +23,12 @@ message IntegrationStateRootV1 {
   uint32 state_layout_revision = 3;
 }
 
+message ManagedIntegrationConfigurationInstanceV1 {
+  string configuration_instance_id = 1;
+  bytes settings_snapshot_bytes = 2;
+  IntegrationStateRootV1 integration_state_root = 3;
+}
+
 message ManagedIntegrationRuntimeConfigurationV1 {
   uint32 major = 1;
   string logical_owner_id = 2;
@@ -36,4 +42,5 @@ message ManagedIntegrationRuntimeConfigurationV1 {
   string configuration_instance_id = 10;
   repeated ManagedRuntimeArtifactBindingV1 runtime_artifacts = 11;
   IntegrationStateRootV1 integration_state_root = 12;
+  repeated ManagedIntegrationConfigurationInstanceV1 configuration_instances = 13;
 }

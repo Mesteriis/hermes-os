@@ -280,6 +280,7 @@ fn apply_managed_integration_settings(
         store,
         supervisor,
         &request.registration_id,
+        &request.configuration_instance_id,
         &request.storage_capability_id,
         request.expected_desired_revision,
     )?;
@@ -300,6 +301,7 @@ fn apply_managed_integration_settings(
             managed_integration_settings::block_after_launch_failure(
                 store,
                 &request.registration_id,
+                &request.configuration_instance_id,
                 prepared.revision(),
             );
             return Err(error);
@@ -309,6 +311,7 @@ fn apply_managed_integration_settings(
         store,
         supervisor,
         &request.registration_id,
+        &request.configuration_instance_id,
         prepared.revision(),
     )?;
     Ok(OwnerResult::ApplyManagedIntegrationSettings(

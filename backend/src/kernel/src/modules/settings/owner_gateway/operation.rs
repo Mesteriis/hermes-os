@@ -22,19 +22,20 @@ pub(super) fn update_desired(
     update: UpdateOwnerModuleSettingsV1,
 ) -> Result<CommitOwnerModuleSettingsResponseV1, OwnerModuleSettingsRouteErrorV1> {
     let snapshot = canonical_snapshot(
-        &update.registration_id,
+        &update.configuration_instance_id,
         update.expected_desired_revision,
         update.values,
     )?;
-    let desired_revision = mutation::commit_after_owner_authorization(
+    let desired_revision = mutation::commit_after_owner_authorization_for_target(
         store,
         &update.registration_id,
+        &update.configuration_instance_id,
         update.expected_desired_revision,
         &snapshot.encode_to_vec(),
     )
     .map_err(map_mutation_error)?;
-    let binding = store
-        .settings_schema_binding(&update.registration_id)
+    let target = store
+        .settings_configuration_target(&update.registration_id, &update.configuration_instance_id)
         .map_err(|_| OwnerModuleSettingsRouteErrorV1::Internal)?
         .ok_or(OwnerModuleSettingsRouteErrorV1::Internal)?;
     Ok(CommitOwnerModuleSettingsResponseV1 {
@@ -44,7 +45,8 @@ pub(super) fn update_desired(
             UpdateOwnerModuleSettingsReceiptV1 {
                 registration_id: update.registration_id,
                 desired_revision,
-                apply_state: binding.apply_state().as_str().to_owned(),
+                apply_state: target.apply_state().as_str().to_owned(),
+                configuration_instance_id: update.configuration_instance_id,
             },
         )),
     })
@@ -63,6 +65,7 @@ pub(super) fn apply_managed_integration(
         store,
         supervisor,
         &apply.registration_id,
+        &apply.configuration_instance_id,
         &apply.storage_capability_id,
         apply.expected_desired_revision,
     )
@@ -84,6 +87,7 @@ pub(super) fn apply_managed_integration(
             managed_integration::block_after_launch_failure(
                 store,
                 &apply.registration_id,
+                &apply.configuration_instance_id,
                 prepared.revision(),
             );
             return Err(OwnerModuleSettingsRouteErrorV1::Unavailable);
@@ -93,15 +97,16 @@ pub(super) fn apply_managed_integration(
         store,
         supervisor,
         &apply.registration_id,
+        &apply.configuration_instance_id,
         prepared.revision(),
     )
     .map_err(|_| OwnerModuleSettingsRouteErrorV1::Unavailable)?;
-    let binding = store
-        .settings_schema_binding(&apply.registration_id)
+    let target = store
+        .settings_configuration_target(&apply.registration_id, &apply.configuration_instance_id)
         .map_err(|_| OwnerModuleSettingsRouteErrorV1::Internal)?
         .ok_or(OwnerModuleSettingsRouteErrorV1::Internal)?;
-    if binding.effective_revision() != prepared.revision()
-        || binding.apply_state() != SettingsApplyState::Current
+    if target.effective_revision() != prepared.revision()
+        || target.apply_state() != SettingsApplyState::Current
     {
         return Err(OwnerModuleSettingsRouteErrorV1::Internal);
     }
@@ -111,10 +116,11 @@ pub(super) fn apply_managed_integration(
         result: Some(commit_owner_module_settings_response_v1::Result::Applied(
             ApplyOwnerManagedIntegrationSettingsReceiptV1 {
                 registration_id: apply.registration_id,
-                effective_revision: binding.effective_revision(),
+                effective_revision: target.effective_revision(),
                 runtime_generation,
-                apply_state: binding.apply_state().as_str().to_owned(),
+                apply_state: target.apply_state().as_str().to_owned(),
                 host_bridge_socket_path,
+                configuration_instance_id: apply.configuration_instance_id,
             },
         )),
     })

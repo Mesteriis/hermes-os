@@ -43,10 +43,30 @@ pub fn acknowledge<S>(
 where
     S: SettingsRegistryStore<Error = StoreError>,
 {
+    acknowledge_target(
+        store,
+        registration_id,
+        registration_id,
+        revision,
+        acknowledgement,
+    )
+}
+
+pub fn acknowledge_target<S>(
+    store: &S,
+    registration_id: &str,
+    configuration_instance_id: &str,
+    revision: u64,
+    acknowledgement: ApplyAcknowledgement,
+) -> Result<(), String>
+where
+    S: SettingsRegistryStore<Error = StoreError>,
+{
     match acknowledgement {
         ApplyAcknowledgement::ValidationAccepted => transition(
             store,
             registration_id,
+            configuration_instance_id,
             revision,
             SettingsApplyState::PendingApply,
             None,
@@ -54,6 +74,7 @@ where
         ApplyAcknowledgement::ValidationRejected { reason_code } => transition(
             store,
             registration_id,
+            configuration_instance_id,
             revision,
             SettingsApplyState::BlockedConfig,
             Some(&reason_code),
@@ -61,6 +82,7 @@ where
         ApplyAcknowledgement::ApplyStarted => transition(
             store,
             registration_id,
+            configuration_instance_id,
             revision,
             SettingsApplyState::Applying,
             None,
@@ -68,12 +90,17 @@ where
         ApplyAcknowledgement::ExternalRestartRequired => transition(
             store,
             registration_id,
+            configuration_instance_id,
             revision,
             SettingsApplyState::AwaitingExternalRestart,
             None,
         ),
         ApplyAcknowledgement::RuntimeApplied => store
-            .confirm_effective_settings_revision(registration_id, revision)
+            .confirm_effective_settings_revision_for_target(
+                registration_id,
+                configuration_instance_id,
+                revision,
+            )
             .map_err(|error| format!("{error:?}")),
     }
 }
@@ -81,6 +108,7 @@ where
 fn transition<S>(
     store: &S,
     registration_id: &str,
+    configuration_instance_id: &str,
     revision: u64,
     next: SettingsApplyState,
     reason_code: Option<&str>,
@@ -89,6 +117,12 @@ where
     S: SettingsRegistryStore<Error = StoreError>,
 {
     store
-        .transition_settings_apply_state(registration_id, revision, next, reason_code)
+        .transition_settings_apply_state_for_target(
+            registration_id,
+            configuration_instance_id,
+            revision,
+            next,
+            reason_code,
+        )
         .map_err(|error| format!("{error:?}"))
 }

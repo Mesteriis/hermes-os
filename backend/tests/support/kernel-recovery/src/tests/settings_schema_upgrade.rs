@@ -1,6 +1,7 @@
 use hermes_kernel_control_store::{
-    ModuleRegistration, ModuleRegistrationState, SettingsApplyState, SettingsInitialSnapshot,
-    SettingsSchemaBinding, SettingsSchemaBindingInputV1,
+    ModuleRegistration, ModuleRegistrationState, SettingsApplyState, SettingsConfigurationTarget,
+    SettingsConfigurationTargetInputV1, SettingsInitialSnapshot, SettingsSchemaBinding,
+    SettingsSchemaBindingInputV1, SettingsSchemaTargetSuccessor,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 
@@ -33,10 +34,21 @@ fn settings_schema_upgrade_commits_binding_artifact_and_successor_snapshot_atomi
     store
         .materialize_initial_settings_snapshot(&SettingsInitialSnapshot {
             registration_id: registration.registration_id().to_owned(),
+            configuration_instance_id: registration.registration_id().to_owned(),
+            created_operation_id: None,
             snapshot_bytes: b"snapshot-v1".to_vec(),
             complete: false,
         })
         .expect("materialize existing snapshot");
+    store
+        .materialize_initial_settings_snapshot(&SettingsInitialSnapshot {
+            registration_id: registration.registration_id().to_owned(),
+            configuration_instance_id: "cfg-second".to_owned(),
+            created_operation_id: Some([9; 16]),
+            snapshot_bytes: b"snapshot-second-v1".to_vec(),
+            complete: false,
+        })
+        .expect("materialize second target snapshot");
     let expected = store
         .settings_schema_binding(registration.registration_id())
         .expect("read existing binding")
@@ -44,7 +56,37 @@ fn settings_schema_upgrade_commits_binding_artifact_and_successor_snapshot_atomi
     let successor = binding(3, [3; 32], 2, 0);
 
     store
-        .upgrade_settings_schema_with_successor(&expected, &successor, b"schema-v3", b"snapshot-v2")
+        .upgrade_settings_schema_with_successor(
+            &expected,
+            &successor,
+            b"schema-v3",
+            &[
+                SettingsSchemaTargetSuccessor {
+                    target: SettingsConfigurationTarget::new(SettingsConfigurationTargetInputV1 {
+                        registration_id: registration.registration_id().to_owned(),
+                        configuration_instance_id: "cfg-second".to_owned(),
+                        desired_revision: 2,
+                        effective_revision: 0,
+                        apply_state: SettingsApplyState::BlockedConfig,
+                        sanitized_reason_code: Some("required_settings_missing".to_owned()),
+                        created_operation_id: Some([9; 16]),
+                    }),
+                    snapshot_bytes: b"snapshot-second-v2".to_vec(),
+                },
+                SettingsSchemaTargetSuccessor {
+                    target: SettingsConfigurationTarget::new(SettingsConfigurationTargetInputV1 {
+                        registration_id: registration.registration_id().to_owned(),
+                        configuration_instance_id: registration.registration_id().to_owned(),
+                        desired_revision: 2,
+                        effective_revision: 0,
+                        apply_state: SettingsApplyState::BlockedConfig,
+                        sanitized_reason_code: Some("required_settings_missing".to_owned()),
+                        created_operation_id: None,
+                    }),
+                    snapshot_bytes: b"snapshot-v2".to_vec(),
+                },
+            ],
+        )
         .expect("upgrade settings schema");
 
     assert_eq!(
@@ -64,6 +106,12 @@ fn settings_schema_upgrade_commits_binding_artifact_and_successor_snapshot_atomi
             .desired_settings_snapshot(registration.registration_id())
             .expect("read successor snapshot"),
         Some((2, b"snapshot-v2".to_vec())),
+    );
+    assert_eq!(
+        store
+            .desired_settings_snapshot_for_target(registration.registration_id(), "cfg-second",)
+            .expect("read second target successor snapshot"),
+        Some((2, b"snapshot-second-v2".to_vec())),
     );
 
     drop(store);

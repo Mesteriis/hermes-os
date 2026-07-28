@@ -115,13 +115,93 @@ impl SettingsSchemaBinding {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettingsDesiredSnapshot {
     pub registration_id: String,
+    pub configuration_instance_id: String,
     pub expected_revision: u64,
+    pub snapshot_bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettingsSchemaTargetSuccessor {
+    pub target: SettingsConfigurationTarget,
     pub snapshot_bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettingsInitialSnapshot {
     pub registration_id: String,
+    pub configuration_instance_id: String,
+    pub created_operation_id: Option<[u8; 16]>,
     pub snapshot_bytes: Vec<u8>,
     pub complete: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettingsConfigurationTarget {
+    registration_id: String,
+    configuration_instance_id: String,
+    desired_revision: u64,
+    effective_revision: u64,
+    apply_state: SettingsApplyState,
+    sanitized_reason_code: Option<String>,
+    created_operation_id: Option<[u8; 16]>,
+}
+
+pub struct SettingsConfigurationTargetInputV1 {
+    pub registration_id: String,
+    pub configuration_instance_id: String,
+    pub desired_revision: u64,
+    pub effective_revision: u64,
+    pub apply_state: SettingsApplyState,
+    pub sanitized_reason_code: Option<String>,
+    pub created_operation_id: Option<[u8; 16]>,
+}
+
+impl SettingsConfigurationTarget {
+    #[must_use]
+    pub fn new(fields: SettingsConfigurationTargetInputV1) -> Self {
+        Self {
+            registration_id: fields.registration_id,
+            configuration_instance_id: fields.configuration_instance_id,
+            desired_revision: fields.desired_revision,
+            effective_revision: fields.effective_revision,
+            apply_state: fields.apply_state,
+            sanitized_reason_code: fields.sanitized_reason_code,
+            created_operation_id: fields.created_operation_id,
+        }
+    }
+
+    #[must_use]
+    pub fn registration_id(&self) -> &str {
+        &self.registration_id
+    }
+
+    #[must_use]
+    pub fn configuration_instance_id(&self) -> &str {
+        &self.configuration_instance_id
+    }
+
+    #[must_use]
+    pub fn desired_revision(&self) -> u64 {
+        self.desired_revision
+    }
+
+    #[must_use]
+    pub fn effective_revision(&self) -> u64 {
+        self.effective_revision
+    }
+
+    #[must_use]
+    pub fn apply_state(&self) -> SettingsApplyState {
+        self.apply_state
+    }
+
+    #[must_use]
+    pub fn sanitized_reason_code(&self) -> Option<&str> {
+        self.sanitized_reason_code.as_deref()
+    }
+
+    #[must_use]
+    pub fn created_operation_id(&self) -> Option<&[u8; 16]> {
+        self.created_operation_id.as_ref()
+    }
 }

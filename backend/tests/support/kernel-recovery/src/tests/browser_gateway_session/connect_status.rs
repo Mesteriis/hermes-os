@@ -312,6 +312,7 @@ fn advance_visible_settings_revision(fixture: &AuthenticationHttpFixture) {
         .store
         .commit_desired_settings_snapshot(&SettingsDesiredSnapshot {
             registration_id: "registration-visible".to_owned(),
+            configuration_instance_id: "registration-visible".to_owned(),
             expected_revision: 1,
             snapshot_bytes: current_snapshot("registration-visible", 2).encode_to_vec(),
         })
@@ -462,6 +463,7 @@ fn admit_current_visible_settings(fixture: &AuthenticationHttpFixture) {
         .store
         .commit_desired_settings_snapshot(&SettingsDesiredSnapshot {
             registration_id: "registration-visible".to_owned(),
+            configuration_instance_id: "registration-visible".to_owned(),
             expected_revision: 0,
             snapshot_bytes: current_snapshot("registration-visible", 1).encode_to_vec(),
         })

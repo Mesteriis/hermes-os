@@ -4,6 +4,7 @@ mod authorization;
 mod export;
 mod operation;
 mod state;
+mod target;
 mod values;
 
 use std::path::{Path, PathBuf};
@@ -160,6 +161,11 @@ impl OwnerModuleSettingsHandlerV1 for KernelOwnerModuleSettingsHandlerV1 {
             Some(prepare_owner_module_settings_request_v1::Operation::ExportEffective(export)) => {
                 export::effective(&self.store, operation_id, export)
             }
+            Some(
+                prepare_owner_module_settings_request_v1::Operation::CreateConfigurationTarget(
+                    create,
+                ),
+            ) => target::create(&self.store, operation_id, create),
             None => Err(OwnerModuleSettingsRouteErrorV1::InvalidArgument),
         }
     }
@@ -191,6 +197,9 @@ fn operation_registration_id(
         Some(prepare_owner_module_settings_request_v1::Operation::ExportEffective(export)) => {
             Ok(&export.registration_id)
         }
+        Some(prepare_owner_module_settings_request_v1::Operation::CreateConfigurationTarget(
+            create,
+        )) => Ok(&create.registration_id),
         None => Err(OwnerModuleSettingsRouteErrorV1::InvalidArgument),
     }
 }

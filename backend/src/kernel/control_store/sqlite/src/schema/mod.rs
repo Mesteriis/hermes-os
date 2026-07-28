@@ -44,8 +44,9 @@ mod v39_to_v40;
 mod v40_to_v41;
 mod v41_to_v42;
 mod v42_to_v43;
+mod v43_to_v44;
 
-pub const SCHEMA_VERSION: i64 = 43;
+pub const SCHEMA_VERSION: i64 = 44;
 
 pub fn migrate_schema(connection: &Connection) -> Result<(), StoreError> {
     loop {
@@ -154,6 +155,14 @@ fn version_feature_exists(connection: &Connection, version: i64) -> Result<bool,
             connection,
             "hermes_kernel_module_client_blob_route_request",
             "max_response_bytes BETWEEN 1 AND 25165824",
+        ),
+        44 => Ok(
+            table_exists(connection, "hermes_kernel_settings_configuration_target")?
+                && columns_exist(
+                    connection,
+                    "hermes_kernel_settings_desired_snapshot",
+                    &["registration_id", "configuration_instance_id"],
+                )?,
         ),
         _ => Ok(false),
     }
@@ -340,6 +349,7 @@ fn apply_step(version: i64, transaction: &Transaction<'_>) -> Result<(), StoreEr
         40 => v40_to_v41::apply(transaction),
         41 => v41_to_v42::apply(transaction),
         42 => v42_to_v43::apply(transaction),
+        43 => v43_to_v44::apply(transaction),
         unsupported => Err(StoreError::UnsupportedSchema(unsupported)),
     }
 }

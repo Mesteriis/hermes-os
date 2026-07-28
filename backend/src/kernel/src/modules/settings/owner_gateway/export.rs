@@ -24,9 +24,13 @@ pub(super) fn effective(
         .settings_schema_binding(&export.registration_id)
         .map_err(|_| OwnerModuleSettingsRouteErrorV1::Internal)?
         .ok_or(OwnerModuleSettingsRouteErrorV1::NotFound)?;
-    if binding.desired_revision() != binding.effective_revision()
-        || binding.effective_revision() != export.expected_effective_revision
-        || binding.apply_state() != SettingsApplyState::Current
+    let target = store
+        .settings_configuration_target(&export.registration_id, &export.configuration_instance_id)
+        .map_err(|_| OwnerModuleSettingsRouteErrorV1::Internal)?
+        .ok_or(OwnerModuleSettingsRouteErrorV1::NotFound)?;
+    if target.desired_revision() != target.effective_revision()
+        || target.effective_revision() != export.expected_effective_revision
+        || target.apply_state() != SettingsApplyState::Current
     {
         return Err(OwnerModuleSettingsRouteErrorV1::Conflict);
     }
@@ -44,14 +48,17 @@ pub(super) fn effective(
         return Err(OwnerModuleSettingsRouteErrorV1::Conflict);
     }
     let (revision, snapshot_bytes) = store
-        .desired_settings_snapshot(&export.registration_id)
+        .desired_settings_snapshot_for_target(
+            &export.registration_id,
+            &export.configuration_instance_id,
+        )
         .map_err(|_| OwnerModuleSettingsRouteErrorV1::Internal)?
         .ok_or(OwnerModuleSettingsRouteErrorV1::NotFound)?;
     let snapshot = decode_settings_snapshot_v1(&snapshot_bytes)
         .map_err(|_| OwnerModuleSettingsRouteErrorV1::Conflict)?;
-    if revision != binding.effective_revision()
-        || snapshot.target_id != export.registration_id
-        || snapshot.revision != binding.effective_revision()
+    if revision != target.effective_revision()
+        || snapshot.target_id != export.configuration_instance_id
+        || snapshot.revision != target.effective_revision()
     {
         return Err(OwnerModuleSettingsRouteErrorV1::Conflict);
     }
@@ -66,8 +73,9 @@ pub(super) fn effective(
                 registration_id: export.registration_id,
                 schema_major: binding.schema_major(),
                 schema_revision: binding.schema_revision(),
-                effective_revision: binding.effective_revision(),
+                effective_revision: target.effective_revision(),
                 values,
+                configuration_instance_id: export.configuration_instance_id,
             },
         )),
     })

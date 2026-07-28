@@ -4,6 +4,10 @@ pub mod managed_control;
 pub mod platform_control;
 pub mod validation;
 
+/// Exact grant which allows one integration registration to receive a bounded
+/// catalog of independently revisioned configuration instances.
+pub const SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID: &str = "settings.configuration-catalog.v1";
+
 #[allow(clippy::large_enum_variant)]
 pub mod v1 {
     include!(concat!(env!("OUT_DIR"), "/hermes.runtime.v1.rs"));

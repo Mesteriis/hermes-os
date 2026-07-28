@@ -78,7 +78,8 @@ test('effective Settings export is fresh-proof, current, typed and provider-neut
     /\b(?:raw_snapshot|snapshot_bytes|schema_bytes|credential_revision|secret_reference|storage_location)\b/i,
   );
   assert.match(exportAuthority, /SettingsApplyState::Current/);
-  assert.match(exportAuthority, /desired_revision\(\) != binding\.effective_revision\(\)/);
+  assert.match(exportAuthority, /target\.desired_revision\(\) != target\.effective_revision\(\)/);
+  assert.match(exportAuthority, /snapshot\.target_id != export\.configuration_instance_id/);
   assert.match(exportAuthority, /settings_schema_artifact/);
   assert.match(exportAuthority, /schema_sha256 != \*binding\.schema_sha256\(\)/);
   assert.match(exportAuthority, /validate_settings_snapshot_against_schema_v1/);

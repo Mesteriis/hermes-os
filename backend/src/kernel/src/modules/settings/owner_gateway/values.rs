@@ -10,7 +10,7 @@ use hermes_runtime_protocol::v1::{
 };
 
 pub(super) fn canonical_snapshot(
-    registration_id: &str,
+    configuration_instance_id: &str,
     expected_desired_revision: u64,
     mut values: Vec<OwnerSettingEntryV1>,
 ) -> Result<SettingsSnapshotV1, OwnerModuleSettingsRouteErrorV1> {
@@ -29,7 +29,7 @@ pub(super) fn canonical_snapshot(
         .map(canonical_entry)
         .collect::<Result<Vec<_>, _>>()?;
     Ok(SettingsSnapshotV1 {
-        target_id: registration_id.to_owned(),
+        target_id: configuration_instance_id.to_owned(),
         revision,
         values,
     })

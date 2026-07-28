@@ -28,7 +28,36 @@ where
         + OwnerIdentityStore<Error = StoreError>
         + SettingsRegistryStore<Error = StoreError>,
 {
-    let (_, schema_sha256) = validate(store, registration_id, expected_revision, snapshot_bytes)?;
+    commit_target(
+        data_dir,
+        store,
+        registration_id,
+        registration_id,
+        expected_revision,
+        snapshot_bytes,
+    )
+}
+
+pub fn commit_target<S>(
+    data_dir: &std::path::Path,
+    store: &S,
+    registration_id: &str,
+    configuration_instance_id: &str,
+    expected_revision: u64,
+    snapshot_bytes: &[u8],
+) -> Result<u64, String>
+where
+    S: HealthRecoveryStore
+        + OwnerIdentityStore<Error = StoreError>
+        + SettingsRegistryStore<Error = StoreError>,
+{
+    let (_, schema_sha256) = validate(
+        store,
+        registration_id,
+        configuration_instance_id,
+        expected_revision,
+        snapshot_bytes,
+    )?;
     let expected = expected_revision.to_string();
     let schema_hex = hex_digest(&schema_sha256);
     let snapshot_hex = hex_digest(&Sha256::digest(snapshot_bytes).into());
@@ -36,9 +65,21 @@ where
         data_dir,
         store,
         "settings.operator_update.v1",
-        operation_digest(&[registration_id, &expected, &schema_hex, &snapshot_hex])?,
+        operation_digest(&[
+            registration_id,
+            configuration_instance_id,
+            &expected,
+            &schema_hex,
+            &snapshot_hex,
+        ])?,
     )?;
-    commit_after_owner_authorization(store, registration_id, expected_revision, snapshot_bytes)
+    commit_after_owner_authorization_for_target(
+        store,
+        registration_id,
+        configuration_instance_id,
+        expected_revision,
+        snapshot_bytes,
+    )
 }
 
 pub fn commit_after_owner_authorization<S>(
@@ -50,10 +91,36 @@ pub fn commit_after_owner_authorization<S>(
 where
     S: SettingsRegistryStore<Error = StoreError>,
 {
-    let (snapshot, _) = validate(store, registration_id, expected_revision, snapshot_bytes)?;
+    commit_after_owner_authorization_for_target(
+        store,
+        registration_id,
+        registration_id,
+        expected_revision,
+        snapshot_bytes,
+    )
+}
+
+pub fn commit_after_owner_authorization_for_target<S>(
+    store: &S,
+    registration_id: &str,
+    configuration_instance_id: &str,
+    expected_revision: u64,
+    snapshot_bytes: &[u8],
+) -> Result<u64, String>
+where
+    S: SettingsRegistryStore<Error = StoreError>,
+{
+    let (snapshot, _) = validate(
+        store,
+        registration_id,
+        configuration_instance_id,
+        expected_revision,
+        snapshot_bytes,
+    )?;
     store
         .commit_desired_settings_snapshot(&SettingsDesiredSnapshot {
             registration_id: registration_id.to_owned(),
+            configuration_instance_id: configuration_instance_id.to_owned(),
             expected_revision,
             snapshot_bytes: snapshot.encode_to_vec(),
         })
@@ -63,6 +130,7 @@ where
 fn validate<S>(
     store: &S,
     registration_id: &str,
+    configuration_instance_id: &str,
     expected_revision: u64,
     snapshot_bytes: &[u8],
 ) -> Result<(SettingsSnapshotV1, [u8; 32]), String>
@@ -73,7 +141,11 @@ where
         .settings_schema_binding(registration_id)
         .map_err(|error| format!("{error:?}"))?
         .ok_or_else(|| "settings schema is not admitted for this registration".to_owned())?;
-    if binding.desired_revision() != expected_revision {
+    let target = store
+        .settings_configuration_target(registration_id, configuration_instance_id)
+        .map_err(|error| format!("{error:?}"))?
+        .ok_or_else(|| "settings configuration target does not exist".to_owned())?;
+    if target.desired_revision() != expected_revision {
         return Err("settings desired revision conflicts with the current revision".to_owned());
     }
     let schema_bytes = store
@@ -91,7 +163,7 @@ where
     let next_revision = expected_revision
         .checked_add(1)
         .ok_or_else(|| "settings desired revision overflowed".to_owned())?;
-    if snapshot.target_id != registration_id || snapshot.revision != next_revision {
+    if snapshot.target_id != configuration_instance_id || snapshot.revision != next_revision {
         return Err("settings snapshot target or revision is invalid".to_owned());
     }
     validate_settings_snapshot_against_schema_v1(&schema, &snapshot)

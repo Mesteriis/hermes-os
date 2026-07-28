@@ -2,9 +2,13 @@
 
 Статус: Принято
 Дата: 2026-07-28
-Состояние реализации: Не реализовано. Решение открывает
-`mail_multi_account_v1`; implementation evidence должно обновлять этот раздел
-по завершённым phase gates.
+Состояние реализации: Частично реализовано. `kernel_configuration_targets_v1`
+и platform launch half `managed_configuration_catalog_v1` реализованы:
+Control Store schema v44, target-scoped public Settings receipts/CAS,
+`settings.configuration-catalog.v1` grant gate, atomic all-target schema
+upgrade и bounded deterministic runtime catalog. Mail runtime ещё не потребляет
+catalog, Mail account List/frontend/recovery не реализованы, поэтому
+`mail_multi_account_v1` остаётся закрыт.
 
 Уточняет:
 
@@ -70,6 +74,8 @@ Public `OwnerModuleSettingsService` получает отдельную generic 
 
 - требует fresh active owner-device proof;
 - адресует exact approved module registration с admitted Settings schema;
+- требует effective grant `settings.configuration-catalog.v1`; наличие
+  configuration-instance scoped schema само по себе не открывает multi-account;
 - генерирует stable opaque `configuration_instance_id` в Kernel;
 - materializes только defaults definitions со scope
   `configuration_instance`;
@@ -104,11 +110,19 @@ sanitized_reason_code
 Desired/effective snapshot key является
 `(registration_id, configuration_instance_id, revision)`.
 Все CAS, recovery and restart transitions включают оба identity fields.
+Registration-scoped desired/effective/apply columns старого schema binding
+временно остаются read-compatible mirror только для legacy target
+`configuration_instance_id == registration_id`; authoritative состояние всех
+targets находится в новой relation.
 
 Существующий singular row не копируется во все targets. Schema migration
 создаёт ровно один target для каждой существующей admitted integration,
-используя уже сохранённый launch `configuration_instance_id`; несовпадение или
-неоднозначность fail closed до runtime replacement.
+используя deterministic compatibility identity
+`configuration_instance_id == registration_id`. Старый Control Store не
+сохранял launch `configuration_instance_id` как durable Settings identity,
+поэтому утверждать его восстановление нельзя. Все новые targets получают
+Kernel-generated opaque identity; неоднозначность fail closed до runtime
+replacement.
 
 ### Managed runtime catalog
 
@@ -198,6 +212,21 @@ CreateConfigurationTarget
   -> Mail catalog/status
   -> provider-specific credential or Gmail OAuth flow
 ```
+
+`Add mail account` является Mail-owned wizard с явным выбором профиля:
+
+- Gmail: address/profile settings, target apply, затем real OAuth через typed
+  Mail lifecycle;
+- iCloud: address, app-specific password provisioning и pinned IMAP/SMTP
+  defaults;
+- custom IMAP/SMTP: explicit endpoints, TLS policy, username и отдельные
+  inbound/outbound credential purposes.
+
+Wizard не пишет canonical account list, secret или provider session во
+frontend state. Каждый шаг либо хранит локальный draft до submit, либо получает
+typed receipt от Settings/Mail/Vault authority. Закрытие и повторное открытие
+wizard восстанавливает состояние из provider-owned query, а не из общего
+`AccountService`.
 
 Compose, folders, sync and account operations всегда несут selected
 `connection_id`. UI не создаёт generic provider account model и не хранит

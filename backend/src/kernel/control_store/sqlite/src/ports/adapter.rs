@@ -272,14 +272,14 @@ impl SettingsRegistryStore for SqliteControlStore {
         expected: &SettingsSchemaBinding,
         successor: &SettingsSchemaBinding,
         schema_bytes: &[u8],
-        successor_snapshot_bytes: &[u8],
+        target_successors: &[hermes_kernel_control_store::SettingsSchemaTargetSuccessor],
     ) -> Result<(), Self::Error> {
         SqliteControlStore::upgrade_settings_schema_with_successor(
             self,
             expected,
             successor,
             schema_bytes,
-            successor_snapshot_bytes,
+            target_successors,
         )
     }
     fn settings_schema_artifact(&self, id: &str) -> Result<Option<Vec<u8>>, Self::Error> {
@@ -290,6 +290,23 @@ impl SettingsRegistryStore for SqliteControlStore {
         id: &str,
     ) -> Result<Option<SettingsSchemaBinding>, Self::Error> {
         SqliteControlStore::settings_schema_binding(self, id)
+    }
+    fn settings_configuration_target(
+        &self,
+        registration_id: &str,
+        configuration_instance_id: &str,
+    ) -> Result<Option<hermes_kernel_control_store::SettingsConfigurationTarget>, Self::Error> {
+        SqliteControlStore::settings_configuration_target(
+            self,
+            registration_id,
+            configuration_instance_id,
+        )
+    }
+    fn settings_configuration_targets(
+        &self,
+        registration_id: &str,
+    ) -> Result<Vec<hermes_kernel_control_store::SettingsConfigurationTarget>, Self::Error> {
+        SqliteControlStore::settings_configuration_targets(self, registration_id)
     }
     fn commit_desired_settings_snapshot(
         &self,
@@ -303,24 +320,74 @@ impl SettingsRegistryStore for SqliteControlStore {
     ) -> Result<u64, Self::Error> {
         SqliteControlStore::materialize_initial_settings_snapshot(self, update)
     }
-    fn desired_settings_snapshot(&self, id: &str) -> Result<Option<(u64, Vec<u8>)>, Self::Error> {
-        SqliteControlStore::desired_settings_snapshot(self, id)
+    fn desired_settings_snapshot(
+        &self,
+        registration_id: &str,
+    ) -> Result<Option<(u64, Vec<u8>)>, Self::Error> {
+        SqliteControlStore::desired_settings_snapshot(self, registration_id)
+    }
+    fn desired_settings_snapshot_for_target(
+        &self,
+        registration_id: &str,
+        configuration_instance_id: &str,
+    ) -> Result<Option<(u64, Vec<u8>)>, Self::Error> {
+        SqliteControlStore::desired_settings_snapshot_for_target(
+            self,
+            registration_id,
+            configuration_instance_id,
+        )
     }
     fn transition_settings_apply_state(
         &self,
-        id: &str,
+        registration_id: &str,
         revision: u64,
         next: SettingsApplyState,
         reason: Option<&str>,
     ) -> Result<(), Self::Error> {
-        SqliteControlStore::transition_settings_apply_state(self, id, revision, next, reason)
+        SqliteControlStore::transition_settings_apply_state(
+            self,
+            registration_id,
+            revision,
+            next,
+            reason,
+        )
+    }
+    fn transition_settings_apply_state_for_target(
+        &self,
+        registration_id: &str,
+        configuration_instance_id: &str,
+        revision: u64,
+        next: SettingsApplyState,
+        reason: Option<&str>,
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::transition_settings_apply_state_for_target(
+            self,
+            registration_id,
+            configuration_instance_id,
+            revision,
+            next,
+            reason,
+        )
     }
     fn confirm_effective_settings_revision(
         &self,
-        id: &str,
+        registration_id: &str,
         revision: u64,
     ) -> Result<(), Self::Error> {
-        SqliteControlStore::confirm_effective_settings_revision(self, id, revision)
+        SqliteControlStore::confirm_effective_settings_revision(self, registration_id, revision)
+    }
+    fn confirm_effective_settings_revision_for_target(
+        &self,
+        registration_id: &str,
+        configuration_instance_id: &str,
+        revision: u64,
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::confirm_effective_settings_revision_for_target(
+            self,
+            registration_id,
+            configuration_instance_id,
+            revision,
+        )
     }
 }
 

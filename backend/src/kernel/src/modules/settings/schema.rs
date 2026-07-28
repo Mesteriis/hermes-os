@@ -1,8 +1,9 @@
 //! Verifies and persists the immutable SettingsSchema artifact for one module registration.
 
 use hermes_kernel_control_store::{
-    ModuleRegistrationState, ModuleRegistryStore, SettingsApplyState, SettingsInitialSnapshot,
-    SettingsRegistryStore, SettingsSchemaBinding, SettingsSchemaBindingInputV1,
+    ModuleRegistrationState, ModuleRegistryStore, SettingsApplyState, SettingsConfigurationTarget,
+    SettingsConfigurationTargetInputV1, SettingsInitialSnapshot, SettingsRegistryStore,
+    SettingsSchemaBinding, SettingsSchemaBindingInputV1, SettingsSchemaTargetSuccessor,
 };
 use hermes_kernel_control_store_sqlite::StoreError;
 use hermes_runtime_protocol::v1::{SettingsSchemaV1, SettingsSnapshotV1, SettingsValueEntryV1};
@@ -103,12 +104,73 @@ where
         store
             .materialize_initial_settings_snapshot(&SettingsInitialSnapshot {
                 registration_id: registration_id.to_owned(),
+                configuration_instance_id: registration_id.to_owned(),
+                created_operation_id: None,
                 snapshot_bytes: snapshot.encode_to_vec(),
                 complete,
             })
             .map_err(|error| format!("{error:?}"))?;
     }
     Ok(binding)
+}
+
+pub(crate) fn materialize_configuration_target<S>(
+    store: &S,
+    registration_id: &str,
+    configuration_instance_id: &str,
+    created_operation_id: [u8; 16],
+) -> Result<hermes_kernel_control_store::SettingsConfigurationTarget, String>
+where
+    S: SettingsRegistryStore<Error = StoreError>,
+{
+    let schema_bytes = store
+        .settings_schema_artifact(registration_id)
+        .map_err(|error| format!("{error:?}"))?
+        .ok_or_else(|| "settings schema artifact is unavailable".to_owned())?;
+    let schema = decode_settings_schema_v1(&schema_bytes)
+        .map_err(|_| "settings schema is invalid or exceeds protocol limits".to_owned())?;
+    if schema.definitions.is_empty()
+        || schema.definitions.iter().any(|definition| {
+            definition.target_scope
+                != hermes_runtime_protocol::v1::SettingTargetScopeV1::ConfigurationInstance as i32
+        })
+    {
+        return Err("settings schema does not admit configuration targets".to_owned());
+    }
+    let values = schema
+        .definitions
+        .iter()
+        .filter_map(|definition| {
+            definition
+                .default_value
+                .clone()
+                .map(|value| SettingsValueEntryV1 {
+                    setting_id: definition.setting_id.clone(),
+                    value: Some(value),
+                })
+        })
+        .collect::<Vec<_>>();
+    let complete = values.len() == schema.definitions.len();
+    let snapshot = SettingsSnapshotV1 {
+        target_id: configuration_instance_id.to_owned(),
+        revision: 1,
+        values,
+    };
+    validate_settings_snapshot_against_schema_v1(&schema, &snapshot)
+        .map_err(|_| "initial configuration target snapshot is invalid".to_owned())?;
+    store
+        .materialize_initial_settings_snapshot(&SettingsInitialSnapshot {
+            registration_id: registration_id.to_owned(),
+            configuration_instance_id: configuration_instance_id.to_owned(),
+            created_operation_id: Some(created_operation_id),
+            snapshot_bytes: snapshot.encode_to_vec(),
+            complete,
+        })
+        .map_err(|error| format!("{error:?}"))?;
+    store
+        .settings_configuration_target(registration_id, configuration_instance_id)
+        .map_err(|error| format!("{error:?}"))?
+        .ok_or_else(|| "configuration target was not materialized".to_owned())
 }
 
 fn upgrade_bundled_schema<S>(
@@ -133,67 +195,95 @@ where
         .map_err(|_| "existing settings schema artifact is invalid".to_owned())?;
     let candidate_schema = decode_settings_schema_v1(schema_bytes)
         .map_err(|_| "settings schema is invalid or exceeds protocol limits".to_owned())?;
-    let desired = existing_desired_snapshot(store, registration_id, existing)?;
-    validate_settings_snapshot_against_schema_v1(&existing_schema, &desired)
-        .map_err(|_| "existing settings snapshot does not match its schema".to_owned())?;
-    let next_revision = existing
-        .desired_revision()
-        .checked_add(1)
-        .ok_or_else(|| "settings desired revision overflowed".to_owned())?;
-    let (successor_snapshot, complete) = project_successor_snapshot(
-        registration_id,
-        next_revision,
-        &existing_schema,
-        &desired,
-        &candidate_schema,
-    )?;
+    let targets = store
+        .settings_configuration_targets(registration_id)
+        .map_err(|error| format!("{error:?}"))?;
+    if targets.is_empty() {
+        return Err("existing settings configuration targets are unavailable".to_owned());
+    }
+    let mut target_successors = Vec::with_capacity(targets.len());
+    for target in targets {
+        let desired = existing_desired_snapshot_for_target(store, registration_id, &target)?;
+        validate_settings_snapshot_against_schema_v1(&existing_schema, &desired)
+            .map_err(|_| "existing settings snapshot does not match its schema".to_owned())?;
+        let next_revision = target
+            .desired_revision()
+            .checked_add(1)
+            .ok_or_else(|| "settings desired revision overflowed".to_owned())?;
+        let (successor_snapshot, complete) = project_successor_snapshot(
+            target.configuration_instance_id(),
+            next_revision,
+            &existing_schema,
+            &desired,
+            &candidate_schema,
+        )?;
+        target_successors.push(SettingsSchemaTargetSuccessor {
+            target: SettingsConfigurationTarget::new(SettingsConfigurationTargetInputV1 {
+                registration_id: registration_id.to_owned(),
+                configuration_instance_id: target.configuration_instance_id().to_owned(),
+                desired_revision: next_revision,
+                effective_revision: target.effective_revision(),
+                apply_state: if complete {
+                    SettingsApplyState::PendingValidation
+                } else {
+                    SettingsApplyState::BlockedConfig
+                },
+                sanitized_reason_code: (!complete).then(|| "required_settings_missing".to_owned()),
+                created_operation_id: target.created_operation_id().copied(),
+            }),
+            snapshot_bytes: successor_snapshot.encode_to_vec(),
+        });
+    }
+    let legacy_successor = target_successors
+        .iter()
+        .find(|target| target.target.configuration_instance_id() == registration_id)
+        .ok_or_else(|| "legacy settings configuration target is unavailable".to_owned())?;
+    let legacy_target = &legacy_successor.target;
     let successor = SettingsSchemaBinding::new(SettingsSchemaBindingInputV1 {
         registration_id: registration_id.to_owned(),
         schema_major: candidate.schema_major(),
         schema_revision: candidate.schema_revision(),
         schema_sha256: *candidate.schema_sha256(),
-        desired_revision: next_revision,
-        effective_revision: existing.effective_revision(),
-        apply_state: if complete {
-            SettingsApplyState::PendingValidation
-        } else {
-            SettingsApplyState::BlockedConfig
-        },
-        sanitized_reason_code: (!complete).then(|| "required_settings_missing".to_owned()),
+        desired_revision: legacy_target.desired_revision(),
+        effective_revision: legacy_target.effective_revision(),
+        apply_state: legacy_target.apply_state(),
+        sanitized_reason_code: legacy_target.sanitized_reason_code().map(str::to_owned),
     });
     store
         .upgrade_settings_schema_with_successor(
             existing,
             &successor,
             schema_bytes,
-            &successor_snapshot.encode_to_vec(),
+            &target_successors,
         )
         .map_err(|error| format!("{error:?}"))?;
     Ok(successor)
 }
 
-fn existing_desired_snapshot<S>(
+fn existing_desired_snapshot_for_target<S>(
     store: &S,
     registration_id: &str,
-    binding: &SettingsSchemaBinding,
+    target: &SettingsConfigurationTarget,
 ) -> Result<SettingsSnapshotV1, String>
 where
     S: SettingsRegistryStore<Error = StoreError>,
 {
     match store
-        .desired_settings_snapshot(registration_id)
+        .desired_settings_snapshot_for_target(registration_id, target.configuration_instance_id())
         .map_err(|error| format!("{error:?}"))?
     {
-        Some((revision, bytes)) if revision == binding.desired_revision() => {
+        Some((revision, bytes)) if revision == target.desired_revision() => {
             let snapshot = decode_settings_snapshot_v1(&bytes)
                 .map_err(|_| "existing settings snapshot is invalid".to_owned())?;
-            if snapshot.target_id != registration_id || snapshot.revision != revision {
+            if snapshot.target_id != target.configuration_instance_id()
+                || snapshot.revision != revision
+            {
                 return Err("existing settings snapshot target or revision is invalid".to_owned());
             }
             Ok(snapshot)
         }
-        None if binding.desired_revision() == 0 => Ok(SettingsSnapshotV1 {
-            target_id: registration_id.to_owned(),
+        None if target.desired_revision() == 0 => Ok(SettingsSnapshotV1 {
+            target_id: target.configuration_instance_id().to_owned(),
             revision: 0,
             values: Vec::new(),
         }),

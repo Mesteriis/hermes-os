@@ -2,8 +2,8 @@
 
 use hermes_gateway_protocol::v1::{
     CommitOwnerModuleSettingsRequestV1, CommitOwnerModuleSettingsResponseV1,
-    ExportEffectiveOwnerModuleSettingsV1, OwnerSettingEntryV1, OwnerSettingValueV1,
-    PrepareOwnerModuleSettingsRequestV1, PrepareOwnerModuleSettingsResponseV1,
+    CreateOwnerModuleSettingsTargetV1, ExportEffectiveOwnerModuleSettingsV1, OwnerSettingEntryV1,
+    OwnerSettingValueV1, PrepareOwnerModuleSettingsRequestV1, PrepareOwnerModuleSettingsResponseV1,
     UpdateOwnerModuleSettingsV1, commit_owner_module_settings_response_v1, owner_setting_value_v1,
     prepare_owner_module_settings_request_v1,
 };
@@ -11,6 +11,7 @@ use hermes_gateway_runtime::{
     OWNER_MODULE_SETTINGS_COMMIT_PATH, OWNER_MODULE_SETTINGS_PREPARE_PATH, OwnerBrowserPrincipalV1,
     OwnerModuleSettingsHandlerV1, OwnerModuleSettingsRouteErrorV1,
 };
+use hermes_runtime_protocol::SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID;
 use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 use hyper::{Request, StatusCode};
@@ -144,6 +145,87 @@ fn owner_settings_requires_fresh_proof_and_preserves_schema_cas() {
 }
 
 #[test]
+fn owner_settings_creates_idempotent_isolated_configuration_targets() {
+    let fixture = OwnerSettingsFixture::new("hermes-owner-settings-targets");
+    let handler = fixture.handler();
+    let principal = principal(SESSION);
+    let signing_key = super::browser_gateway_session::browser_signing_key();
+
+    let first = commit_direct(
+        &handler,
+        &principal,
+        &signing_key,
+        create_target_request([9; 16]),
+    )
+    .expect("create first configuration target");
+    let first_id = created_configuration_instance_id(&first);
+    let repeated = commit_direct(
+        &handler,
+        &principal,
+        &signing_key,
+        create_target_request([9; 16]),
+    )
+    .expect("repeat idempotent target creation");
+    assert_eq!(created_configuration_instance_id(&repeated), first_id);
+
+    let second = commit_direct(
+        &handler,
+        &principal,
+        &signing_key,
+        create_target_request([10; 16]),
+    )
+    .expect("create second configuration target");
+    let second_id = created_configuration_instance_id(&second);
+    assert_ne!(first_id, second_id);
+    assert_eq!(
+        fixture
+            .store
+            .settings_configuration_targets(REGISTRATION)
+            .expect("list configuration targets")
+            .len(),
+        3
+    );
+
+    commit_direct(
+        &handler,
+        &principal,
+        &signing_key,
+        update_target_request([11; 16], &first_id, 1, unsigned_value(7)),
+    )
+    .expect("update first configuration target");
+    assert_eq!(
+        fixture
+            .store
+            .settings_configuration_target(REGISTRATION, &first_id)
+            .expect("read first target")
+            .expect("first target")
+            .desired_revision(),
+        2
+    );
+    assert_eq!(
+        fixture
+            .store
+            .settings_configuration_target(REGISTRATION, &second_id)
+            .expect("read second target")
+            .expect("second target")
+            .desired_revision(),
+        1
+    );
+}
+
+#[test]
+fn owner_settings_denies_configuration_target_without_exact_catalog_grant() {
+    let fixture = OwnerSettingsFixture::new_without_catalog(
+        "hermes-owner-settings-target-without-catalog-grant",
+    );
+    let error = fixture
+        .handler()
+        .prepare(&principal(SESSION), create_target_request([12; 16]))
+        .expect_err("catalog target creation must require its exact grant");
+    assert_eq!(error, OwnerModuleSettingsRouteErrorV1::PermissionDenied);
+}
+
+#[test]
 fn owner_settings_gateway_requires_authenticated_same_origin_and_denies_lan_mode() {
     let fixture = OwnerSettingsFixture::new("hermes-owner-settings-gateway");
     let signing_key = super::browser_gateway_session::browser_signing_key();
@@ -267,6 +349,7 @@ fn owner_settings_export_returns_only_current_client_visible_values() {
         .store
         .commit_desired_settings_snapshot(&SettingsDesiredSnapshot {
             registration_id: REGISTRATION.to_owned(),
+            configuration_instance_id: REGISTRATION.to_owned(),
             expected_revision: 1,
             snapshot_bytes: canonical_snapshot(2, 2).encode_to_vec(),
         })
@@ -292,6 +375,14 @@ struct OwnerSettingsFixture {
 
 impl OwnerSettingsFixture {
     fn new(prefix: &str) -> Self {
+        Self::new_with_catalog_grant(prefix, true)
+    }
+
+    fn new_without_catalog(prefix: &str) -> Self {
+        Self::new_with_catalog_grant(prefix, false)
+    }
+
+    fn new_with_catalog_grant(prefix: &str, catalog_granted: bool) -> Self {
         let root = unique_target_root(prefix);
         let data = root.join("kernel");
         let runtime = root.join("runtime");
@@ -301,7 +392,7 @@ impl OwnerSettingsFixture {
             SqliteControlStore::create(&root.join("control.sqlite"), "kernel-main", 1)
                 .expect("create Control Store"),
         );
-        admit_owner_browser_registration_and_schema(&store);
+        admit_owner_browser_registration_and_schema(&store, catalog_granted);
         Self {
             root,
             data,
@@ -327,7 +418,10 @@ impl Drop for OwnerSettingsFixture {
     }
 }
 
-fn admit_owner_browser_registration_and_schema(store: &Arc<SqliteControlStore>) {
+fn admit_owner_browser_registration_and_schema(
+    store: &Arc<SqliteControlStore>,
+    catalog_granted: bool,
+) {
     store
         .claim_initial_owner(&InitialOwnerIdentity::new(
             HUMAN_OWNER,
@@ -336,6 +430,10 @@ fn admit_owner_browser_registration_and_schema(store: &Arc<SqliteControlStore>) 
         ))
         .expect("claim owner");
     super::browser_gateway_session::admit_browser_test_device(store, HUMAN_OWNER);
+    let mut capability_ids = vec![CAPABILITY.to_owned()];
+    if catalog_granted {
+        capability_ids.push(SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID.to_owned());
+    }
     store
         .create_pending_registration(
             &ModuleRegistration::new(
@@ -346,11 +444,11 @@ fn admit_owner_browser_registration_and_schema(store: &Arc<SqliteControlStore>) 
                 ModuleRegistrationState::Pending,
                 1,
             ),
-            &[CAPABILITY.to_owned()],
+            &capability_ids,
         )
         .expect("record Mail registration");
     store
-        .approve_module_registration(REGISTRATION, &[CAPABILITY.to_owned()])
+        .approve_module_registration(REGISTRATION, &capability_ids)
         .expect("approve Mail registration");
     let schema = settings_schema();
     let bytes = schema.encode_to_vec();
@@ -383,7 +481,7 @@ fn settings_schema() -> SettingsSchemaV1 {
                 capability_id: String::new(),
                 value_type: SettingValueTypeV1::String as i32,
                 mutation_authority: SettingMutationAuthorityV1::KernelManaged as i32,
-                target_scope: SettingTargetScopeV1::ModuleRegistration as i32,
+                target_scope: SettingTargetScopeV1::ConfigurationInstance as i32,
                 apply_mode: SettingApplyModeV1::RestartModule as i32,
                 client_visibility: SettingClientVisibilityV1::Hidden as i32,
                 fresh_owner_proof_required: false,
@@ -396,7 +494,7 @@ fn settings_schema() -> SettingsSchemaV1 {
                 capability_id: String::new(),
                 value_type: SettingValueTypeV1::UnsignedInteger as i32,
                 mutation_authority: SettingMutationAuthorityV1::OperatorManaged as i32,
-                target_scope: SettingTargetScopeV1::ModuleRegistration as i32,
+                target_scope: SettingTargetScopeV1::ConfigurationInstance as i32,
                 apply_mode: SettingApplyModeV1::RestartModule as i32,
                 client_visibility: SettingClientVisibilityV1::Editable as i32,
                 fresh_owner_proof_required: true,
@@ -453,6 +551,7 @@ fn make_export_snapshot_current(store: &SqliteControlStore) {
     store
         .commit_desired_settings_snapshot(&SettingsDesiredSnapshot {
             registration_id: REGISTRATION.to_owned(),
+            configuration_instance_id: REGISTRATION.to_owned(),
             expected_revision: 0,
             snapshot_bytes: export_snapshot(1, 1).encode_to_vec(),
         })
@@ -477,12 +576,22 @@ fn update_request(
     expected_desired_revision: u64,
     value: OwnerSettingValueV1,
 ) -> PrepareOwnerModuleSettingsRequestV1 {
+    update_target_request(operation_id, REGISTRATION, expected_desired_revision, value)
+}
+
+fn update_target_request(
+    operation_id: [u8; 16],
+    configuration_instance_id: &str,
+    expected_desired_revision: u64,
+    value: OwnerSettingValueV1,
+) -> PrepareOwnerModuleSettingsRequestV1 {
     PrepareOwnerModuleSettingsRequestV1 {
         operation_id: operation_id.to_vec(),
         operation: Some(
             prepare_owner_module_settings_request_v1::Operation::UpdateDesired(
                 UpdateOwnerModuleSettingsV1 {
                     registration_id: REGISTRATION.to_owned(),
+                    configuration_instance_id: configuration_instance_id.to_owned(),
                     expected_desired_revision,
                     values: vec![OwnerSettingEntryV1 {
                         setting_id: "mail.sync.window".to_owned(),
@@ -491,6 +600,28 @@ fn update_request(
                 },
             ),
         ),
+    }
+}
+
+fn create_target_request(operation_id: [u8; 16]) -> PrepareOwnerModuleSettingsRequestV1 {
+    PrepareOwnerModuleSettingsRequestV1 {
+        operation_id: operation_id.to_vec(),
+        operation: Some(
+            prepare_owner_module_settings_request_v1::Operation::CreateConfigurationTarget(
+                CreateOwnerModuleSettingsTargetV1 {
+                    registration_id: REGISTRATION.to_owned(),
+                },
+            ),
+        ),
+    }
+}
+
+fn created_configuration_instance_id(response: &CommitOwnerModuleSettingsResponseV1) -> String {
+    match response.result.as_ref() {
+        Some(commit_owner_module_settings_response_v1::Result::Created(created)) => {
+            created.configuration_instance_id.clone()
+        }
+        _ => panic!("configuration target creation receipt"),
     }
 }
 
@@ -504,6 +635,7 @@ fn export_request(
             prepare_owner_module_settings_request_v1::Operation::ExportEffective(
                 ExportEffectiveOwnerModuleSettingsV1 {
                     registration_id: REGISTRATION.to_owned(),
+                    configuration_instance_id: REGISTRATION.to_owned(),
                     expected_effective_revision,
                 },
             ),

@@ -793,6 +793,7 @@ fn start_mail_runtime_with_settings(
         configuration_instance_id: MAIL_ACCOUNT_ID.to_owned(),
         runtime_artifacts: Vec::new(),
         integration_state_root: None,
+        configuration_instances: Vec::new(),
     };
     managed_launch::start_reserved_integration(
         supervisor,

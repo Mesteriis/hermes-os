@@ -26,8 +26,9 @@ pub use modules::{
     ModuleEventSubscriptionRequirementV1, ModuleGrantSnapshot, ModuleRegistration,
     ModuleRegistrationState, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
     ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1, SettingsApplyState,
-    SettingsDesiredSnapshot, SettingsInitialSnapshot, SettingsSchemaBinding,
-    SettingsSchemaBindingInputV1,
+    SettingsConfigurationTarget, SettingsConfigurationTargetInputV1, SettingsDesiredSnapshot,
+    SettingsInitialSnapshot, SettingsSchemaBinding, SettingsSchemaBindingInputV1,
+    SettingsSchemaTargetSuccessor,
 };
 pub use operation::{
     OperationAdmissionV1, OperationIdV1, OperationStatusV1, OperationTerminalOutcomeV1,

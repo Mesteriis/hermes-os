@@ -1,7 +1,8 @@
 //! Pure validation and enum-decoding helpers for persisted records.
 
 use hermes_kernel_control_store::{
-    ModuleRegistrationState, OwnerPinnedArtifactBinding, SettingsApplyState, SettingsSchemaBinding,
+    ModuleRegistrationState, OwnerPinnedArtifactBinding, SettingsApplyState,
+    SettingsConfigurationTarget, SettingsSchemaBinding,
 };
 
 pub(crate) fn valid_identity_token(value: &str) -> bool {
@@ -42,26 +43,45 @@ pub(crate) fn valid_sanitized_reason_code(value: Option<&str>) -> bool {
 }
 
 pub(crate) fn valid_settings_binding_state(binding: &SettingsSchemaBinding) -> bool {
-    binding.effective_revision() <= binding.desired_revision()
-        && valid_sanitized_reason_code(binding.sanitized_reason_code())
-        && valid_apply_state(binding)
+    valid_settings_state(
+        binding.desired_revision(),
+        binding.effective_revision(),
+        binding.apply_state(),
+        binding.sanitized_reason_code(),
+    )
 }
 
-fn valid_apply_state(binding: &SettingsSchemaBinding) -> bool {
-    match binding.apply_state() {
-        SettingsApplyState::Current => {
-            binding.desired_revision() == binding.effective_revision()
-                && binding.sanitized_reason_code().is_none()
+pub(crate) fn valid_settings_configuration_target(target: &SettingsConfigurationTarget) -> bool {
+    valid_identity_token(target.registration_id())
+        && valid_identity_token(target.configuration_instance_id())
+        && valid_settings_state(
+            target.desired_revision(),
+            target.effective_revision(),
+            target.apply_state(),
+            target.sanitized_reason_code(),
+        )
+}
+
+fn valid_settings_state(
+    desired_revision: u64,
+    effective_revision: u64,
+    apply_state: SettingsApplyState,
+    sanitized_reason_code: Option<&str>,
+) -> bool {
+    effective_revision <= desired_revision
+        && valid_sanitized_reason_code(sanitized_reason_code)
+        && match apply_state {
+            SettingsApplyState::Current => {
+                desired_revision == effective_revision && sanitized_reason_code.is_none()
+            }
+            SettingsApplyState::BlockedConfig => sanitized_reason_code.is_some(),
+            SettingsApplyState::PendingValidation
+            | SettingsApplyState::PendingApply
+            | SettingsApplyState::Applying
+            | SettingsApplyState::AwaitingExternalRestart => {
+                desired_revision > effective_revision && sanitized_reason_code.is_none()
+            }
         }
-        SettingsApplyState::BlockedConfig => binding.sanitized_reason_code().is_some(),
-        SettingsApplyState::PendingValidation
-        | SettingsApplyState::PendingApply
-        | SettingsApplyState::Applying
-        | SettingsApplyState::AwaitingExternalRestart => {
-            binding.desired_revision() > binding.effective_revision()
-                && binding.sanitized_reason_code().is_none()
-        }
-    }
 }
 
 pub(crate) fn valid_owner_pinned_artifact_binding(binding: &OwnerPinnedArtifactBinding) -> bool {

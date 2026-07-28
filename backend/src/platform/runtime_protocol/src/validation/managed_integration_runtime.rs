@@ -9,6 +9,8 @@ const MAX_ENDPOINT_BYTES: usize = 1_024;
 const MAX_PRIVATE_PATH_BYTES: usize = 4_096;
 const MAX_RUNTIME_ARTIFACTS: usize = 16;
 const MAX_RUNTIME_ARTIFACT_BYTES: u64 = 1024 * 1024 * 1024;
+const MAX_CONFIGURATION_INSTANCES: usize = 32;
+const MAX_SETTINGS_SNAPSHOT_BYTES: usize = 256 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ManagedIntegrationRuntimeValidationErrorV1 {
@@ -35,6 +37,7 @@ pub fn validate_managed_integration_runtime_configuration(
         || storage.runtime_instance_id != configuration.runtime_instance_id
         || !valid_storage_configuration(storage)
         || !valid_runtime_artifacts(&configuration.runtime_artifacts)
+        || !valid_configuration_instances(configuration)
         || !configuration
             .integration_state_root
             .as_ref()
@@ -47,6 +50,50 @@ pub fn validate_managed_integration_runtime_configuration(
         return Err(ManagedIntegrationRuntimeValidationErrorV1::InvalidConfiguration);
     }
     Ok(())
+}
+
+fn valid_configuration_instances(configuration: &ManagedIntegrationRuntimeConfigurationV1) -> bool {
+    if configuration.configuration_instances.is_empty() {
+        return true;
+    }
+    if configuration.configuration_instances.len() > MAX_CONFIGURATION_INSTANCES {
+        return false;
+    }
+    let mut previous_id = "";
+    let mut state_roots = std::collections::BTreeSet::new();
+    let mut selected = None;
+    for instance in &configuration.configuration_instances {
+        if !valid_identifier(&instance.configuration_instance_id)
+            || instance.configuration_instance_id.as_str() <= previous_id
+            || instance.settings_snapshot_bytes.is_empty()
+            || instance.settings_snapshot_bytes.len() > MAX_SETTINGS_SNAPSHOT_BYTES
+        {
+            return false;
+        }
+        let Ok(snapshot) = crate::validation::descriptor::decode_settings_snapshot_v1(
+            &instance.settings_snapshot_bytes,
+        ) else {
+            return false;
+        };
+        if snapshot.target_id != instance.configuration_instance_id || snapshot.revision == 0 {
+            return false;
+        }
+        if let Some(root) = instance.integration_state_root.as_ref()
+            && (root.state_generation == 0
+                || root.state_layout_revision == 0
+                || !valid_private_path(&root.root_path)
+                || !state_roots.insert(root.root_path.as_str()))
+        {
+            return false;
+        }
+        if instance.configuration_instance_id == configuration.configuration_instance_id {
+            selected = Some(instance);
+        }
+        previous_id = &instance.configuration_instance_id;
+    }
+    selected.is_some_and(|instance| {
+        instance.integration_state_root == configuration.integration_state_root
+    })
 }
 
 fn valid_runtime_artifacts(artifacts: &[crate::v1::ManagedRuntimeArtifactBindingV1]) -> bool {
@@ -123,11 +170,13 @@ fn valid_event_hub_endpoint(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use prost::Message;
+
     use super::validate_managed_integration_runtime_configuration;
     use crate::v1::{
-        IntegrationStateRootV1, ManagedIntegrationRuntimeConfigurationV1,
-        ManagedRuntimeArtifactBindingV1, ManagedStorageRuntimeConfigurationV1,
-        RuntimeArtifactUseV1,
+        IntegrationStateRootV1, ManagedIntegrationConfigurationInstanceV1,
+        ManagedIntegrationRuntimeConfigurationV1, ManagedRuntimeArtifactBindingV1,
+        ManagedStorageRuntimeConfigurationV1, RuntimeArtifactUseV1, SettingsSnapshotV1,
     };
 
     #[test]
@@ -148,6 +197,49 @@ mod tests {
             .expect("state root")
             .root_path = "/private/hermes/state/../other".to_owned();
         assert!(validate_managed_integration_runtime_configuration(&configuration).is_err());
+    }
+
+    #[test]
+    fn configuration_catalog_is_sorted_target_exact_and_root_isolated() {
+        let mut configuration = valid_configuration();
+        configuration.configuration_instances = vec![
+            configuration_instance("account-1", "/private/hermes/state/telegram/account-1"),
+            configuration_instance("account-2", "/private/hermes/state/telegram/account-2"),
+        ];
+        assert_eq!(
+            validate_managed_integration_runtime_configuration(&configuration),
+            Ok(())
+        );
+
+        configuration.configuration_instances.swap(0, 1);
+        assert!(validate_managed_integration_runtime_configuration(&configuration).is_err());
+
+        let mut configuration = valid_configuration();
+        configuration.configuration_instances = vec![configuration_instance(
+            "account-2",
+            "/private/hermes/state/telegram/account-1",
+        )];
+        assert!(validate_managed_integration_runtime_configuration(&configuration).is_err());
+    }
+
+    fn configuration_instance(
+        configuration_instance_id: &str,
+        root_path: &str,
+    ) -> ManagedIntegrationConfigurationInstanceV1 {
+        ManagedIntegrationConfigurationInstanceV1 {
+            configuration_instance_id: configuration_instance_id.to_owned(),
+            settings_snapshot_bytes: SettingsSnapshotV1 {
+                target_id: configuration_instance_id.to_owned(),
+                revision: 1,
+                values: Vec::new(),
+            }
+            .encode_to_vec(),
+            integration_state_root: Some(IntegrationStateRootV1 {
+                root_path: root_path.to_owned(),
+                state_generation: 1,
+                state_layout_revision: 1,
+            }),
+        }
     }
 
     fn valid_configuration() -> ManagedIntegrationRuntimeConfigurationV1 {
@@ -194,6 +286,7 @@ mod tests {
                 state_generation: 1,
                 state_layout_revision: 1,
             }),
+            configuration_instances: Vec::new(),
         }
     }
 }

@@ -16,5 +16,5 @@ pub use recovery::{ControlStoreExport, StagedControlStoreRestore};
 pub(crate) use database::validation::{
     module_registration_state_from_str, settings_apply_state_from_str, valid_capability_ids,
     valid_identity_token, valid_owner_pinned_artifact_binding, valid_sanitized_reason_code,
-    valid_settings_binding_state,
+    valid_settings_binding_state, valid_settings_configuration_target,
 };
