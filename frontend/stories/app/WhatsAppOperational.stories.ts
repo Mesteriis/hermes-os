@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from '@storybook/vue3-vite'
 
 import WhatsAppOperationalPage from '../../src/integrations/whatsapp/presentation/WhatsAppOperationalPage.vue'
 import type { WhatsAppOperationalPageModel } from '../../src/integrations/whatsapp/presentation/whatsAppOperationalPageModel'
+import type { WhatsAppOperationalReadModel } from '../../src/integrations/whatsapp/presentation/whatsAppOperationalReadModel'
+import type { WhatsAppOperationalReplayModel } from '../../src/integrations/whatsapp/presentation/whatsAppOperationalReplayModel'
 
 const meta = {
 	title: 'Hermes App/Communications/WhatsApp Operational',
@@ -29,6 +31,41 @@ const model: WhatsAppOperationalPageModel = {
 	},
 }
 
+const readModel: WhatsAppOperationalReadModel = {
+	canQuery: true,
+	state: 'ready',
+	statusMessage: '',
+	accounts: [{ id: 'whatsapp-owner-primary', label: 'whatsapp-owner-primary' }],
+	selectedAccountId: 'whatsapp-owner-primary',
+	selectedChatId: '34600000000@c.us',
+	searchQuery: '',
+	runtime: null,
+	dialogs: [],
+	messages: [],
+	participants: [],
+	events: [],
+	searchResults: [],
+	hasMoreDialogs: false,
+	hasMoreMessages: false,
+	hasMoreParticipants: false,
+	hasMoreEvents: false,
+	hasMoreSearchResults: false,
+}
+
+const replayModel: WhatsAppOperationalReplayModel = {
+	canReplay: true,
+	state: 'ready',
+	statusMessage: '',
+	accounts: [{ id: 'whatsapp-owner-primary', label: 'whatsapp-owner-primary' }],
+	selectedAccountId: 'whatsapp-owner-primary',
+	earliestSequence: '1',
+	latestSequence: '12',
+	nextSequence: '13',
+	resetRequired: false,
+	frames: [],
+	hasMore: false,
+}
+
 export const Default: Story = {
-	args: { model },
+	args: { model, readModel, replayModel },
 }

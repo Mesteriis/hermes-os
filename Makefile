@@ -2,7 +2,7 @@ SHELL := /usr/bin/env bash
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build test dev docker tauri clean
+.PHONY: help build test dev docker tauri clean pre-commit pre-push
 
 help:
 	@printf '%s\n' 'Hermes development commands:'
@@ -12,6 +12,17 @@ help:
 	@printf '%s\n' '  make docker  Start the local PostgreSQL, PgBouncer and NATS contour'
 	@printf '%s\n' '  make tauri   Build the desktop application'
 	@printf '%s\n' '  make clean   Remove reproducible Hermes build and test output'
+	@printf '%s\n' '  make pre-commit  Run the fast local commit gate'
+	@printf '%s\n' '  make pre-push    Run the full backend and frontend gate'
 
 build test dev docker tauri clean:
 	@$(MAKE) -C backend $@
+
+pre-commit:
+	@$(MAKE) -C backend architecture-policy-check architecture-evidence-check srp-policy-check cargo-boundaries-check test-architecture fmt-check
+	@cd frontend && pnpm lint
+	@cd frontend && pnpm typecheck
+
+pre-push:
+	@$(MAKE) -C backend ci
+	@cd frontend && pnpm validate

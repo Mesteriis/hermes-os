@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from '@storybook/vue3-vite'
 
 import ZulipOperationalPage from '../../src/integrations/zulip/presentation/ZulipOperationalPage.vue'
 import type { ZulipOperationalPageModel } from '../../src/integrations/zulip/presentation/zulipOperationalPageModel'
+import type { ZulipOperationalReadModel } from '../../src/integrations/zulip/presentation/zulipOperationalReadModel'
+import type { ZulipOperationalReplayModel } from '../../src/integrations/zulip/presentation/zulipOperationalReplayModel'
 
 const meta = {
 	title: 'Hermes App/Communications/Zulip Operational',
@@ -33,6 +35,39 @@ const model: ZulipOperationalPageModel = {
 	},
 }
 
+const readModel: ZulipOperationalReadModel = {
+	canQuery: true,
+	state: 'ready',
+	statusMessage: '',
+	accounts: [{ id: 'zulip-owner-primary', label: 'zulip-owner-primary' }],
+	selectedAccountId: 'zulip-owner-primary',
+	selectedConversationId: 'engineering:clean-room',
+	searchQuery: '',
+	accountStatus: null,
+	conversations: [],
+	messages: [],
+	events: [],
+	searchResults: [],
+	hasMoreConversations: false,
+	hasMoreMessages: false,
+	hasMoreEvents: false,
+	hasMoreSearchResults: false,
+}
+
+const replayModel: ZulipOperationalReplayModel = {
+	canReplay: true,
+	state: 'ready',
+	statusMessage: '',
+	accounts: [{ id: 'zulip-owner-primary', label: 'zulip-owner-primary' }],
+	selectedAccountId: 'zulip-owner-primary',
+	earliestSequence: '1',
+	latestSequence: '9',
+	nextSequence: '10',
+	resetRequired: false,
+	frames: [],
+	hasMore: false,
+}
+
 export const Default: Story = {
-	args: { model },
+	args: { model, readModel, replayModel },
 }

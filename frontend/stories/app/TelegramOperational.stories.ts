@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
 
 import TelegramOperationalPage from '../../src/integrations/telegram/presentation/TelegramOperationalPage.vue'
+import type { TelegramAccountAccessModel } from '../../src/integrations/telegram/presentation/telegramAccountAccessModel'
+import type { TelegramDiscoveryModel } from '../../src/integrations/telegram/presentation/telegramDiscoveryModel'
 import type { TelegramOperationalPageModel } from '../../src/integrations/telegram/presentation/telegramOperationalPageModel'
 
 const meta = {
@@ -32,6 +34,42 @@ const model: TelegramOperationalPageModel = {
 	canSend: true,
 }
 
+const accountAccess: TelegramAccountAccessModel = {
+	accounts: [{
+		id: 'telegram-owner-primary',
+		title: 'Hermes owner',
+		detail: 'Authorized user account',
+		selected: true,
+	}],
+	selectedAccountId: 'telegram-owner-primary',
+	authorizationState: 'ready',
+	authorizationQrDataUrl: '',
+	authorizationPasswordHint: '',
+	password: '',
+	provisionAccountId: '',
+	provisionDisplayName: '',
+	provisionExternalAccountId: '',
+	statusMessage: '',
+	pending: false,
+	canAuthorize: true,
+	canManageLifecycle: true,
+	canReconfigure: true,
+}
+
+const discovery: TelegramDiscoveryModel = {
+	query: '',
+	statusMessage: '',
+	pending: false,
+	canQuery: true,
+	results: [],
+	history: [],
+	participants: [],
+	topics: [],
+	folders: [],
+	operations: [],
+	chatState: [],
+}
+
 export const Default: Story = {
-	args: { model },
+	args: { accountAccess, discovery, model },
 }

@@ -33,6 +33,8 @@ make dev
 make docker
 make tauri
 make clean
+make pre-commit
+make pre-push
 ```
 
 `test` запускает только проверки, затронутые текущими изменениями (базовый
@@ -44,6 +46,18 @@ development owner identity, запускает Kernel с loopback Core Gateway �
 Compose остаётся запущенным после остановки. По умолчанию используется
 `.local/kernel-dev`; другой абсолютный data directory задаётся через
 `HERMES_DEV_DATA_DIR`. `tauri` собирает desktop app.
+
+`.pre-commit-config.yaml` устанавливает оба Git hook type одной командой:
+
+```sh
+pre-commit install
+```
+
+`pre-commit` является быстрым локальным gate: architecture policy/evidence,
+SRP и Cargo boundaries, architecture tests, Rust format, frontend lint и
+typecheck. Медленные Rust workspace/integration tests, Clippy, dependency и
+supply-chain checks, frontend unit/visual tests и production build выполняются
+на `pre-push` через канонические `backend ci` и `frontend validate`.
 
 Не следует использовать старые legacy `make`-цели,
 `/api/v1/**` routes или `X-Hermes-Secret` как описание новой системы. Legacy

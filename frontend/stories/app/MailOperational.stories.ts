@@ -1,8 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
 
+import { MailCompositionModeV1 } from '../../src/gen/hermes/mail/composition/v1/client_pb'
 import MailOperationalPage from '../../src/integrations/mail/presentation/MailOperationalPage.vue'
-import type { MailOperationalPageModel } from '../../src/integrations/mail/presentation/mailOperationalPageModel'
+import type { MailCompositionModel } from '../../src/integrations/mail/presentation/mailCompositionModel'
+import type { MailDeliveryModel } from '../../src/integrations/mail/presentation/mailDeliveryModel'
+import type { MailMessageFlagModel } from '../../src/integrations/mail/presentation/mailMessageFlagModel'
+import type { MailMessageLocationModel } from '../../src/integrations/mail/presentation/mailMessageLocationModel'
+import type { MailMessagePermanentDeleteModel } from '../../src/integrations/mail/presentation/mailMessagePermanentDeleteModel'
 import type { MailOperationalReadModel } from '../../src/integrations/mail/presentation/mailOperationalReadModel'
+import type { MailSyncHealthModel } from '../../src/integrations/mail/presentation/mailSyncHealthModel'
+import type { MailSyncModel } from '../../src/integrations/mail/presentation/mailSyncModel'
 
 const meta = {
 	title: 'Hermes App/Communications/Mail Operational',
@@ -13,17 +20,11 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-const model: MailOperationalPageModel = {
-	recipients: 'owner@example.com',
-	subject: 'Clean-room delivery boundary',
-	textBody: 'Mail owns provider delivery. Communications receives durable evidence.',
-	providerConversationId: '',
+const deliveryModel: MailDeliveryModel = {
 	operationId: '170d768c-d956-4963-9603-2a0f578a2db4',
-	busyAction: null,
+	busy: false,
 	canDeliver: true,
-	canSync: true,
 	notice: '',
-	syncSummary: '18 messages observed by sync-17.',
 	status: {
 		operationId: '170d768c-d956-4963-9603-2a0f578a2db4',
 		connectionId: 'gmail-primary',
@@ -32,6 +33,125 @@ const model: MailOperationalPageModel = {
 		completedAt: 'Jul 26, 2026, 10:42',
 		responseCode: '202',
 	},
+}
+
+const syncModel: MailSyncModel = {
+	busy: false,
+	canSync: true,
+	notice: '',
+	summary: '18 messages observed by sync-17.',
+}
+
+const compositionModel: MailCompositionModel = {
+	canMutate: true,
+	canQuery: true,
+	status: 'ready',
+	statusMessage: '',
+	notice: '',
+	busyAction: null,
+	connections: [{ id: 'gmail-primary', label: 'gmail-primary', detail: 'Gmail · operational' }],
+	selectedConnectionId: 'gmail-primary',
+	drafts: [{ id: 'draft-1', label: 'Clean-room delivery boundary', detail: 'revision 7' }],
+	templates: [{ id: 'template-1', label: 'Status update', detail: 'en' }],
+	signatures: [{ id: 'signature-1', label: 'Owner', detail: 'default' }],
+	draft: {
+		draftId: 'draft-1',
+		revision: '7',
+		mode: MailCompositionModeV1.MAIL_COMPOSITION_MODE_NEW,
+		providerConversationId: '',
+		inReplyToProviderMessageId: '',
+		toRecipients: 'owner@example.com',
+		ccRecipients: '',
+		bccRecipients: '',
+		subject: 'Clean-room delivery boundary',
+		textBody: 'Mail owns provider delivery. Communications receives durable evidence.',
+		templateId: 'template-1',
+		signatureId: 'signature-1',
+	},
+	template: {
+		templateId: 'template-1',
+		revision: '3',
+		name: 'Status update',
+		subjectTemplate: 'Hermes status: {{subject}}',
+		textBodyTemplate: 'Current status: {{status}}',
+		variables: 'subject\nstatus',
+		locale: 'en',
+		previewValues: 'subject=Clean-room delivery\nstatus=ready',
+		previewSummary: 'Hermes status: Clean-room delivery',
+	},
+	signature: {
+		signatureId: 'signature-1',
+		revision: '2',
+		name: 'Owner',
+		textBody: 'Hermes owner',
+		isDefault: true,
+	},
+}
+
+const syncHealthModel: MailSyncHealthModel = {
+	canQuery: true,
+	state: 'ready',
+	statusMessage: '',
+	connections: [{ id: 'gmail-primary', label: 'gmail-primary' }],
+	selectedConnectionId: 'gmail-primary',
+	readiness: 'Ready',
+	readinessTone: 'success',
+	latestOutcome: 'Succeeded',
+	latestOutcomeTone: 'success',
+	lastSuccessAt: 'Jul 26, 2026, 10:42',
+	consecutiveFailures: '0',
+	projectionRevision: '17',
+	runs: [
+		{
+			operationId: 'sync-17',
+			trigger: 'Manual',
+			outcome: 'Succeeded',
+			outcomeTone: 'success',
+			observedMessages: '18',
+			startedAt: 'Jul 26, 2026, 10:41',
+			completedAt: 'Jul 26, 2026, 10:42',
+			failure: '',
+			runtimeGeneration: '5',
+			projectionRevision: '17',
+		},
+	],
+	hasMoreRuns: false,
+}
+
+const flagModel: MailMessageFlagModel = {
+	canMutate: true,
+	canQueryStatus: true,
+	hasSelection: true,
+	isRead: false,
+	isStarred: true,
+	busy: false,
+	status: 'idle',
+	statusMessage: '',
+	operationId: '',
+}
+
+const locationModel: MailMessageLocationModel = {
+	canMutate: true,
+	canQueryStatus: true,
+	hasSelection: true,
+	isTrashed: false,
+	busy: false,
+	status: 'idle',
+	statusMessage: '',
+	operationId: '',
+	targetFolderId: 'archive',
+	targetFolders: [{ id: 'archive', label: 'Archive' }],
+}
+
+const permanentDeleteModel: MailMessagePermanentDeleteModel = {
+	canDelete: false,
+	canQueryStatus: true,
+	hasTrashSelection: false,
+	confirmed: false,
+	busy: false,
+	status: 'idle',
+	statusMessage: '',
+	operationId: '',
 }
 
 const readModel: MailOperationalReadModel = {
@@ -103,5 +223,14 @@ const readModel: MailOperationalReadModel = {
 }
 
 export const Default: Story = {
-	args: { model, readModel },
+	args: {
+		compositionModel,
+		deliveryModel,
+		flagModel,
+		locationModel,
+		permanentDeleteModel,
+		readModel,
+		syncHealthModel,
+		syncModel,
+	},
 }

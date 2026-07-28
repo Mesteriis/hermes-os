@@ -1,5 +1,6 @@
-import { create } from '@bufbuild/protobuf'
+import { create, toBinary } from '@bufbuild/protobuf'
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { http, HttpResponse } from 'msw'
 import type { Component } from 'vue'
 
 import AppSettingsPage from '../../src/app/settings/AppSettingsPage.vue'
@@ -11,6 +12,13 @@ import {
 	ClientSettingValueV1Schema,
 	ClientSettingsApplyStateV1,
 } from '../../src/gen/hermes/gateway/v1/client_bootstrap_pb'
+import {
+	MailAccountCatalogV1Schema,
+	MailAccountReadinessV1,
+	MailAccountStatusV1Schema,
+	MailConnectorProfileV1,
+	MailProviderPathReadinessV1,
+} from '../../src/gen/hermes/mail/account/v1/client_pb'
 import {
 	recoveryClientBootstrap,
 	type ClientBootstrapSnapshot,
@@ -30,6 +38,19 @@ export const Default: Story = {
 
 export const Mail: Story = {
 	render: () => createSettingsStory('mail'),
+	parameters: {
+		msw: {
+			handlers: [
+				http.post(
+					'*/hermes.mail.account.v1.MailAccountCatalogService/List',
+					() => new HttpResponse(
+						toBinary(MailAccountCatalogV1Schema, mailAccountCatalog()),
+						{ headers: { 'content-type': 'application/proto' } },
+					),
+				),
+			],
+		},
+	},
 }
 
 function createSettingsStory(initialOwner: 'mail' | 'system'): Component {
@@ -114,5 +135,28 @@ function setting(
 		displayName,
 		editable: true,
 		value: create(ClientSettingValueV1Schema, { value }),
+	})
+}
+
+function mailAccountCatalog() {
+	return create(MailAccountCatalogV1Schema, {
+		accounts: [
+			mailAccount('icloud-primary', MailConnectorProfileV1.MAIL_CONNECTOR_PROFILE_IMAP_SMTP),
+			mailAccount('gmail-primary', MailConnectorProfileV1.MAIL_CONNECTOR_PROFILE_GMAIL),
+		],
+	})
+}
+
+function mailAccount(connectionId: string, connectorProfile: MailConnectorProfileV1) {
+	return create(MailAccountStatusV1Schema, {
+		connectionId,
+		settingsRevision: 8n,
+		runtimeGeneration: 5n,
+		readiness: MailAccountReadinessV1.MAIL_ACCOUNT_READINESS_READY,
+		connectorProfile,
+		syncReadiness: MailProviderPathReadinessV1.MAIL_PROVIDER_PATH_READINESS_READY,
+		deliveryReadiness: MailProviderPathReadinessV1.MAIL_PROVIDER_PATH_READINESS_READY,
+		lifecycleRevision: 3n,
+		configurationInstanceId: connectionId,
 	})
 }
