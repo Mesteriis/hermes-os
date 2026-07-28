@@ -595,13 +595,40 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     .expect("decode one-use Communications Export read ticket");
     assert_eq!(ticket.opaque_read_capability.len(), 32);
     assert!(ticket.declared_bytes > 0);
-    assert_communications_export_gateway_delivery(
+    let browser_cookie = assert_communications_export_gateway_delivery(
         &store,
         &supervisor,
         &root,
         &data,
         ticket.opaque_read_capability,
         ticket.declared_bytes,
+    );
+    let revoked_ticket = IssueEvidenceExportReadResponseV1::decode(
+        route(
+            6,
+            communications_export_ticket_contract_reference_v1(),
+            IssueEvidenceExportReadRequestV1 {
+                protocol_major: 1,
+                export_id: export_id.to_vec(),
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("issue read ticket before export workflow revoke");
+    store
+        .transition_module_registration(
+            COMMUNICATIONS_EXPORT_REGISTRATION,
+            ModuleRegistrationState::Revoked,
+        )
+        .expect("revoke Communications Export workflow registration");
+    assert_communications_export_gateway_rejects_revoked_ticket(
+        &store,
+        &supervisor,
+        &root,
+        &data,
+        revoked_ticket.opaque_read_capability,
+        &browser_cookie,
     );
     supervisor.shutdown().expect("stop managed processes");
     unsafe {
@@ -618,7 +645,7 @@ fn assert_communications_export_gateway_delivery(
     kernel_data: &std::path::Path,
     opaque_read_capability: Vec<u8>,
     declared_bytes: u64,
-) {
+) -> String {
     use hermes_communications_export_api::{
         COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1, wire::EvidenceExportArtifactReadRequestV1,
     };
@@ -686,6 +713,59 @@ fn assert_communications_export_gateway_delivery(
             .any(|window| window == b"fixture source body for custody transfer")
     );
     assert_eq!(read().status(), hyper::StatusCode::NOT_FOUND);
+    cookie
+}
+
+fn assert_communications_export_gateway_rejects_revoked_ticket(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    root: &std::path::Path,
+    kernel_data: &std::path::Path,
+    opaque_read_capability: Vec<u8>,
+    cookie: &str,
+) {
+    use hermes_communications_export_api::{
+        COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1, wire::EvidenceExportArtifactReadRequestV1,
+    };
+
+    let configuration = crate::platform::gateway::BrowserGatewayConfigurationV1::new(
+        "127.0.0.1:9443".parse().expect("loopback Gateway address"),
+        "https://hub.local".to_owned(),
+        "hub.local".to_owned(),
+        root.join("gateway-cert.der"),
+        root.join("gateway-key.der"),
+    )
+    .expect("Gateway configuration");
+    let router = crate::platform::gateway::gateway_service(
+        Arc::clone(store),
+        kernel_data,
+        supervisor.clone(),
+        &configuration,
+        None,
+    )
+    .expect("compose Gateway after export workflow revoke");
+    let runtime = tokio::runtime::Runtime::new().expect("Gateway test runtime");
+    let response = runtime.block_on(
+        router.route(
+            hyper::Request::builder()
+                .method("POST")
+                .uri(COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1)
+                .header("content-type", "application/proto")
+                .header("cookie", cookie)
+                .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                    EvidenceExportArtifactReadRequestV1 {
+                        opaque_read_capability,
+                    }
+                    .encode_to_vec(),
+                )))
+                .expect("Gateway revoked Communications Export artifact read request"),
+        ),
+    );
+    assert_eq!(
+        response.status(),
+        hyper::StatusCode::NOT_FOUND,
+        "revoke removes the exact export client_blob route before any artifact read"
+    );
 }
 
 fn short_communications_kernel_data_directory() -> PathBuf {
