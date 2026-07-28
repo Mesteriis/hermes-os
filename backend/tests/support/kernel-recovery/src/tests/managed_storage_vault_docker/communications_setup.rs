@@ -26,6 +26,19 @@ use hermes_communications_evidence_export_source_api::{
     evidence_export_prepare_contract_reference_v1, evidence_export_prepared_contract_reference_v1,
     evidence_export_rejected_contract_reference_v1,
 };
+use hermes_communications_export_api::{
+    COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1, COMMUNICATIONS_EXPORT_MODULE_ID_V1,
+    COMMUNICATIONS_EXPORT_OWNER_V1,
+};
+use hermes_communications_export_persistence::schema::{
+    COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V1, communications_export_storage_bundle_v1,
+};
+use hermes_communications_export_runtime::admission::{
+    COMMUNICATIONS_EXPORT_BLOB_CAPABILITY_ID_V1, COMMUNICATIONS_EXPORT_BLOB_CUSTODY_SCOPE_ID_V1,
+    COMMUNICATIONS_EXPORT_BLOB_QUOTA_BYTES_V1, COMMUNICATIONS_EXPORT_EVENTS_CAPABILITY_ID_V1,
+    COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY_ID_V1, communications_export_module_descriptor_v1,
+    communications_export_settings_schema_bytes_v1,
+};
 use hermes_communications_persistence::{
     COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1, communications_storage_bundle_v1,
 };
@@ -67,7 +80,9 @@ use hermes_runtime_protocol::v1::{
 };
 
 pub(super) const COMMUNICATIONS_REGISTRATION: &str = "communications-runtime";
+pub(super) const COMMUNICATIONS_EXPORT_REGISTRATION: &str = "communications-export-runtime";
 const COMMUNICATIONS_RUNTIME_INSTANCE_ID: &str = "02020202020202020202020202020202";
+const COMMUNICATIONS_EXPORT_RUNTIME_INSTANCE_ID: &str = "06060606060606060606060606060606";
 const COMMUNICATIONS_RUNTIME_INSTANCE_ID_V2: &str = "05050505050505050505050505050505";
 const FIXTURE_SOURCE_REGISTRATION: &str = "fixture-source-integration";
 const FIXTURE_SOURCE_CAPABILITY_ID: &str = "fixture-source.blob.v1";
@@ -83,6 +98,7 @@ pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> Sql
         communications_module_descriptor_v1("managed-communications-live").encode_to_vec();
     let grant_epoch = record_communications_registration(&store, &descriptor);
     record_communications_runtime_fixture(&store, &schema, &descriptor, grant_epoch);
+    record_communications_export_runtime_fixture(&store);
     store
 }
 
@@ -110,6 +126,44 @@ pub(super) fn issue_initial_communications_storage_binding(store: &SqliteControl
     )
     .expect("issue Communications Storage binding");
     assert_eq!(binding.runtime_generation(), 1);
+}
+
+pub(super) fn issue_initial_communications_export_storage_binding(store: &SqliteControlStore) {
+    let bundle = store
+        .platform_storage_bundle(
+            COMMUNICATIONS_EXPORT_OWNER_V1,
+            u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V1),
+        )
+        .expect("read Communications Export Storage bundle")
+        .expect("Communications Export Storage bundle is present");
+    issue_managed(
+        store,
+        COMMUNICATIONS_EXPORT_REGISTRATION,
+        COMMUNICATIONS_EXPORT_RUNTIME_INSTANCE_ID,
+        1,
+        COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY_ID_V1,
+        StorageBindingIssueV1::new(
+            1,
+            1,
+            u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V1),
+            *bundle.digest(),
+        )
+        .expect("initial Communications Export Storage issue"),
+    )
+    .expect("issue Communications Export Storage binding");
+}
+
+pub(super) fn communications_export_storage_binding(
+    store: &SqliteControlStore,
+) -> hermes_kernel_control_store::PlatformStorageBindingV1 {
+    store
+        .platform_storage_binding(
+            COMMUNICATIONS_EXPORT_REGISTRATION,
+            COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY_ID_V1,
+        )
+        .expect("read Communications Export Storage binding")
+        .filter(|binding| binding.state() == PlatformStorageBindingStateV1::Active)
+        .expect("active Communications Export Storage binding")
 }
 
 pub(super) fn communications_storage_binding(
@@ -185,6 +239,56 @@ pub(super) fn start_communications_domain(
         .expect("load Communications reservation");
     let binding = communications_storage_binding(store);
     start_reserved_communications_domain(supervisor, store, runtime_dir, reservation, binding)
+}
+
+pub(super) fn start_communications_export_workflow(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+) -> u64 {
+    let reservation = managed_launch::load(supervisor, store, COMMUNICATIONS_EXPORT_REGISTRATION)
+        .expect("load Communications Export reservation");
+    let runtime_instance_id = reservation.runtime_instance_id().to_owned();
+    let runtime_generation = reservation.runtime_generation();
+    let grant_epoch = reservation.grant_epoch();
+    let binding = communications_export_storage_binding(store);
+    let topology =
+        crate::platform::storage::topology::current(store).expect("read Storage topology");
+    let vault = vault_status::read_current(store, &supervisor.relay_port())
+        .expect("read live Vault status");
+    let storage = crate::platform::storage::topology::to_managed_runtime_configuration(
+        &topology,
+        &binding,
+        store.snapshot().instance_id(),
+        vault.runtime_generation(),
+        vault.hpke_public_key_x25519(),
+    )
+    .expect("build Communications Export Storage configuration");
+    let events = store
+        .platform_event_hub_topology()
+        .expect("read Event Hub topology")
+        .expect("Event Hub topology");
+    let generation = managed_launch::start_reserved_workflow(
+        supervisor,
+        runtime_dir,
+        reservation,
+        hermes_runtime_protocol::v1::ManagedWorkflowRuntimeConfigurationV1 {
+            major: 1,
+            logical_owner_id: COMMUNICATIONS_EXPORT_OWNER_V1.to_owned(),
+            registration_id: COMMUNICATIONS_EXPORT_REGISTRATION.to_owned(),
+            runtime_instance_id,
+            runtime_generation,
+            grant_epoch,
+            storage: Some(storage),
+            event_hub_endpoint: events.nats_endpoint().to_owned(),
+            event_credential_revision: events.credential_revision(),
+        },
+    )
+    .expect("start Communications Export workflow");
+    supervisor
+        .wait_until_ready(COMMUNICATIONS_EXPORT_REGISTRATION)
+        .expect("wait for Communications Export readiness");
+    generation
 }
 
 pub(super) fn restart_communications_domain(
@@ -2236,6 +2340,162 @@ fn record_communications_runtime_fixture(
         .expect("record Event Hub topology");
 }
 
+fn record_communications_export_runtime_fixture(store: &SqliteControlStore) {
+    let schema = communications_export_settings_schema_bytes_v1();
+    let descriptor =
+        communications_export_module_descriptor_v1("managed-communications-export-live")
+            .encode_to_vec();
+    let registration = ModuleRegistration::new(
+        COMMUNICATIONS_EXPORT_REGISTRATION,
+        COMMUNICATIONS_EXPORT_MODULE_ID_V1,
+        COMMUNICATIONS_EXPORT_OWNER_V1,
+        Sha256::digest(&descriptor).into(),
+        ModuleRegistrationState::Pending,
+        1,
+    );
+    let capabilities = [
+        COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1.to_owned(),
+        COMMUNICATIONS_EXPORT_BLOB_CAPABILITY_ID_V1.to_owned(),
+        COMMUNICATIONS_EXPORT_EVENTS_CAPABILITY_ID_V1.to_owned(),
+        COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY_ID_V1.to_owned(),
+    ];
+    let storage = ModuleStorageRequestV1::new(
+        COMMUNICATIONS_EXPORT_REGISTRATION,
+        COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY_ID_V1,
+        COMMUNICATIONS_EXPORT_OWNER_V1,
+        4,
+        5_000,
+    );
+    let client_blob = ModuleBlobQuotaRequestV1::new(
+        COMMUNICATIONS_EXPORT_REGISTRATION,
+        COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1,
+        COMMUNICATIONS_EXPORT_OWNER_V1,
+        COMMUNICATIONS_EXPORT_BLOB_QUOTA_BYTES_V1,
+        COMMUNICATIONS_EXPORT_BLOB_CUSTODY_SCOPE_ID_V1,
+        vec![ModuleBlobOperationV1::ReadRange],
+    );
+    let artifact_blob = ModuleBlobQuotaRequestV1::new(
+        COMMUNICATIONS_EXPORT_REGISTRATION,
+        COMMUNICATIONS_EXPORT_BLOB_CAPABILITY_ID_V1,
+        COMMUNICATIONS_EXPORT_OWNER_V1,
+        COMMUNICATIONS_EXPORT_BLOB_QUOTA_BYTES_V1,
+        COMMUNICATIONS_EXPORT_BLOB_CUSTODY_SCOPE_ID_V1,
+        vec![
+            ModuleBlobOperationV1::Write,
+            ModuleBlobOperationV1::ReadRange,
+            ModuleBlobOperationV1::CustodyTransfer,
+        ],
+    );
+    let prepare = evidence_export_prepare_contract_reference_v1();
+    let prepared = evidence_export_prepared_contract_reference_v1();
+    let rejected = evidence_export_rejected_contract_reference_v1();
+    let routes = [
+        communications_export_event_route(
+            ModuleEventEnvelopeKindV1::Command,
+            &prepare,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_export_event_route(
+            ModuleEventEnvelopeKindV1::Result,
+            &prepared,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_export_event_route(
+            ModuleEventEnvelopeKindV1::Result,
+            &rejected,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+    ];
+    store
+        .create_pending_registration_with_all_descriptor_requests(
+            &registration,
+            &capabilities,
+            ModuleDescriptorRegistrationRequestsV1 {
+                storage: std::slice::from_ref(&storage),
+                events: &routes,
+                blobs: &[client_blob, artifact_blob],
+                scheduler: &[],
+                vault_purposes: &[],
+                client_rpc_routes: &[],
+                client_blob_routes: &[],
+            },
+        )
+        .expect("record Communications Export registration");
+    let grant_epoch = store
+        .approve_module_registration(COMMUNICATIONS_EXPORT_REGISTRATION, &capabilities)
+        .expect("approve Communications Export capabilities")
+        .grant_epoch();
+    let bundle = communications_export_storage_bundle_v1().encode_to_vec();
+    store
+        .record_platform_storage_bundle(
+            &PlatformStorageBundleV1::new(
+                COMMUNICATIONS_EXPORT_OWNER_V1,
+                u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V1),
+                Sha256::digest(&bundle).into(),
+                bundle,
+            )
+            .expect("record Communications Export Storage bundle"),
+        )
+        .expect("persist Communications Export Storage bundle");
+    store
+        .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
+            COMMUNICATIONS_EXPORT_REGISTRATION,
+            1,
+            "hermes-managed-runtime-conformance",
+            "workflow.communications_export",
+            Sha256::digest(
+                std::fs::read(communications_export_binary())
+                    .expect("Communications Export binary bytes"),
+            )
+            .into(),
+            Sha256::digest(&descriptor).into(),
+            Some(Sha256::digest(&schema).into()),
+        ))
+        .expect("record Communications Export release binding");
+    store
+        .record_managed_launch(&ManagedLaunchRecord::new(
+            COMMUNICATIONS_EXPORT_REGISTRATION,
+            COMMUNICATIONS_EXPORT_RUNTIME_INSTANCE_ID,
+            1,
+            1,
+            1,
+            grant_epoch,
+        ))
+        .expect("record Communications Export reservation");
+}
+
+fn communications_export_event_route(
+    kind: ModuleEventEnvelopeKindV1,
+    contract: &hermes_runtime_protocol::v1::ContractReferenceV1,
+    direction: ModuleEventRouteDirectionV1,
+) -> ModuleEventRouteRequestV1 {
+    ModuleEventRouteRequestV1::new(
+        hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
+            registration_id: COMMUNICATIONS_EXPORT_REGISTRATION.to_owned(),
+            capability_id: COMMUNICATIONS_EXPORT_EVENTS_CAPABILITY_ID_V1.to_owned(),
+            envelope_kind: kind,
+            contract_owner: contract.owner.clone(),
+            contract_name: contract.name.clone(),
+            contract_major: contract.major,
+            contract_revision: contract.revision,
+            contract_schema_sha256: contract
+                .schema_sha256
+                .as_slice()
+                .try_into()
+                .expect("contract digest"),
+            direction,
+            max_in_flight: 16,
+            delivery_policy: matches!(direction, ModuleEventRouteDirectionV1::Consume).then(|| {
+                ModuleEventDeliveryPolicyV1::new(
+                    ModuleEventSubscriptionRequirementV1::Required,
+                    8,
+                    30_000,
+                )
+            }),
+        },
+    )
+}
+
 fn communications_event_route(
     capability: &str,
     kind: ModuleEventEnvelopeKindV1,
@@ -2314,11 +2574,22 @@ pub(super) fn communications_release_artifacts() -> Vec<SignedRuntimeArtifact> {
             communications_module_descriptor_v1("managed-communications-live").encode_to_vec(),
         )
         .with_settings_schema(communications_settings_schema_bytes_v1()),
+        SignedRuntimeArtifact::new(
+            "workflow.communications_export",
+            communications_export_binary(),
+            communications_export_module_descriptor_v1("managed-communications-export-live")
+                .encode_to_vec(),
+        )
+        .with_settings_schema(communications_export_settings_schema_bytes_v1()),
     ]
 }
 
 fn communications_binary() -> PathBuf {
     binary("HERMES_COMMUNICATIONS_RUNTIME_BIN")
+}
+
+fn communications_export_binary() -> PathBuf {
+    binary("HERMES_COMMUNICATIONS_EXPORT_RUNTIME_BIN")
 }
 
 fn blob_binary() -> PathBuf {

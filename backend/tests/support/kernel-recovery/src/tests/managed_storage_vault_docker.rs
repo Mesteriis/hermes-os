@@ -346,6 +346,74 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
 }
 
+#[test]
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Blob and Communications Export workflow binaries"]
+fn managed_communications_export_workflow_starts_with_owner_local_storage_and_events() {
+    assert_eq!(
+        std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
+        Ok("1")
+    );
+    let root = unique_target_root("hermes-managed-communications-export");
+    let data = private_directory(short_communications_kernel_data_directory());
+    initialize_vault(
+        &private_directory(data.join("vault")),
+        &credential_directory(),
+    );
+    let release = installed_communications_release(&root);
+    unsafe {
+        std::env::set_var("HERMES_TEST_KERNEL_EXECUTABLE", release.kernel());
+    }
+    let store = Arc::new(configured_communications_store(&root, release.kernel()));
+    let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
+    configure_route_handler(&supervisor, &store, &data);
+    supervisor
+        .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
+            Arc::clone(&store),
+        )))
+        .expect("configure Export Event credential handler");
+    start_vault(&supervisor, &store, &data, release.kernel());
+    blob_launch::start_from_kernel(
+        &supervisor,
+        &store,
+        release.kernel(),
+        &data,
+        &root.join("runtime"),
+    )
+    .expect("start signed Blob runtime");
+    start_storage(
+        &supervisor,
+        &store,
+        release.kernel(),
+        &storage_runtime_directory(),
+    );
+    issue_initial_communications_export_storage_binding(&store);
+    crate::platform::storage::provisioning::apply_reserved_binding(
+        &supervisor,
+        &store,
+        &communications_export_storage_binding(&store),
+    )
+    .expect("provision Communications Export Storage binding");
+    configure_communications_jetstream(&store);
+    assert_eq!(
+        start_communications_export_workflow(&supervisor, &store, &root.join("runtime")),
+        1,
+        "generic managed-workflow launch admits Communications Export without a Kernel owner facade"
+    );
+    assert!(
+        supervisor
+            .is_active(COMMUNICATIONS_EXPORT_REGISTRATION)
+            .expect("read Communications Export process state")
+    );
+    supervisor.shutdown().expect("stop managed processes");
+    unsafe {
+        std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
+    }
+    std::fs::remove_dir_all(root).expect("remove fixture");
+    std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
+}
+
 fn short_communications_kernel_data_directory() -> PathBuf {
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
