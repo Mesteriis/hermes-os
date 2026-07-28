@@ -194,6 +194,12 @@ Kernel не импортирует Communications/export packages, не знае
 transport. Module-to-module socket, cross-owner SQL и generic query/read-all
 grant не вводятся.
 
+Development assembly обновляет exact pre-export state из шести модулей по
+stable runtime artifact identity: существующие registration IDs и fences
+сохраняются как predecessors, новый workflow получает отдельные registration,
+Storage binding и runtime fences. Произвольный partial state, перестановка
+модулей или тот же distribution generation fail closed.
+
 ## Gate `communications_export_v1`
 
 Gate становится `implemented` только атомарно при наличии:

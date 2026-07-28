@@ -136,6 +136,14 @@ const MODULE_PLAN: [ModulePlanV1; 7] = [
         request_host_bridge: false,
     },
 ];
+const PRE_EXPORT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3: [&str; 6] = [
+    COMMUNICATIONS_RUNTIME_ARTIFACT,
+    ATTACHMENT_SECURITY_RUNTIME_ARTIFACT,
+    MAIL_RUNTIME_ARTIFACT,
+    TELEGRAM_RUNTIME_ARTIFACT,
+    WHATSAPP_RUNTIME_ARTIFACT,
+    ZULIP_RUNTIME_ARTIFACT,
+];
 
 fn main() {
     if let Err(error) = run(Cli::parse()) {
@@ -498,6 +506,7 @@ fn reconcile_plan(
     if let Some(state) = existing_state {
         development_assembly_status(Some(state), distribution_id, distribution_generation)?;
         if state.distribution_generation == distribution_generation {
+            validate_state_plan(state)?;
             return Ok(ReconciliationResultV1 {
                 state: state.clone(),
                 outcome: ReconciliationOutcomeV1::Current,
@@ -518,77 +527,13 @@ fn reconcile_plan(
 
     let mut modules = Vec::with_capacity(MODULE_PLAN.len());
     for module in MODULE_PLAN {
-        let proposal = client
-            .propose_bundled_managed_artifact(
-                owner_session_id,
-                module.runtime_artifact_id,
-                distribution_id,
-                distribution_generation,
-                operation_id(module.runtime_artifact_id),
-            )
-            .map_err(|error| admission_error(module.runtime_artifact_id, "propose", error))?;
-        let status = client
-            .module_registration_status(&proposal.registration_id)
-            .map_err(|error| admission_error(module.runtime_artifact_id, "status", error))?;
-        match status.registration_state.as_str() {
-            "pending" => {
-                client
-                    .approve_module_registration(
-                        owner_session_id,
-                        &proposal.registration_id,
-                        proposal.requested_capability_ids.clone(),
-                    )
-                    .map_err(|error| {
-                        admission_error(module.runtime_artifact_id, "approve", error)
-                    })?;
-            }
-            "approved"
-                if usize::try_from(status.effective_capability_count).ok()
-                    == Some(proposal.requested_capability_ids.len()) => {}
-            _ => return Err("development module admission state is invalid".to_owned()),
-        }
-        client
-            .bind_bundled_managed_release(
-                owner_session_id,
-                &proposal.registration_id,
-                module.runtime_artifact_id,
-            )
-            .map_err(|error| admission_error(module.runtime_artifact_id, "bind_release", error))?;
-        let storage = client
-            .admit_bundled_storage_artifact(
-                owner_session_id,
-                module.storage_artifact_id,
-                distribution_id,
-                distribution_generation,
-            )
-            .map_err(|error| admission_error(module.runtime_artifact_id, "admit_storage", error))?;
-        let storage_capability_id = exact_requested_capability(
-            proposal.requested_capability_ids.iter().map(String::as_str),
-            module.storage_capability_id,
-        )
-        .map_err(|error| admission_error(module.runtime_artifact_id, "select_storage", error))?;
-        let reservation = client
-            .reserve_bundled_managed_runtime(owner_session_id, &proposal.registration_id)
-            .map_err(|error| {
-                admission_error(module.runtime_artifact_id, "reserve_runtime", error)
-            })?;
-        modules.push(ModuleReservationV1 {
-            runtime_artifact_id: module.runtime_artifact_id.to_owned(),
-            registration_id: proposal.registration_id,
-            storage_capability_id,
-            runtime_instance_id: reservation.runtime_instance_id,
-            runtime_generation: reservation.runtime_generation,
-            role_epoch: 1,
-            credential_lease_revision: 1,
-            storage_bundle_revision: storage.storage_bundle_revision,
-            storage_bundle_digest: storage.storage_bundle_digest.try_into().map_err(|_| {
-                admission_error(
-                    module.runtime_artifact_id,
-                    "admit_storage",
-                    "Storage bundle digest is invalid".to_owned(),
-                )
-            })?,
-        });
+        modules.push(reserve_new_module(
+            client,
+            owner_session_id,
+            distribution_id,
+            distribution_generation,
+            &module,
+        )?);
     }
     let reservation = EnsembleReservationV2 {
         distribution_id: distribution_id.to_owned(),
@@ -602,6 +547,82 @@ fn reconcile_plan(
     })
 }
 
+fn reserve_new_module(
+    client: &OwnerControlClientV1,
+    owner_session_id: &str,
+    distribution_id: &str,
+    distribution_generation: u64,
+    module: &ModulePlanV1,
+) -> Result<ModuleReservationV1, String> {
+    let proposal = client
+        .propose_bundled_managed_artifact(
+            owner_session_id,
+            module.runtime_artifact_id,
+            distribution_id,
+            distribution_generation,
+            operation_id(module.runtime_artifact_id),
+        )
+        .map_err(|error| admission_error(module.runtime_artifact_id, "propose", error))?;
+    let status = client
+        .module_registration_status(&proposal.registration_id)
+        .map_err(|error| admission_error(module.runtime_artifact_id, "status", error))?;
+    match status.registration_state.as_str() {
+        "pending" => {
+            client
+                .approve_module_registration(
+                    owner_session_id,
+                    &proposal.registration_id,
+                    proposal.requested_capability_ids.clone(),
+                )
+                .map_err(|error| admission_error(module.runtime_artifact_id, "approve", error))?;
+        }
+        "approved"
+            if usize::try_from(status.effective_capability_count).ok()
+                == Some(proposal.requested_capability_ids.len()) => {}
+        _ => return Err("development module admission state is invalid".to_owned()),
+    }
+    client
+        .bind_bundled_managed_release(
+            owner_session_id,
+            &proposal.registration_id,
+            module.runtime_artifact_id,
+        )
+        .map_err(|error| admission_error(module.runtime_artifact_id, "bind_release", error))?;
+    let storage = client
+        .admit_bundled_storage_artifact(
+            owner_session_id,
+            module.storage_artifact_id,
+            distribution_id,
+            distribution_generation,
+        )
+        .map_err(|error| admission_error(module.runtime_artifact_id, "admit_storage", error))?;
+    let storage_capability_id = exact_requested_capability(
+        proposal.requested_capability_ids.iter().map(String::as_str),
+        module.storage_capability_id,
+    )
+    .map_err(|error| admission_error(module.runtime_artifact_id, "select_storage", error))?;
+    let reservation = client
+        .reserve_bundled_managed_runtime(owner_session_id, &proposal.registration_id)
+        .map_err(|error| admission_error(module.runtime_artifact_id, "reserve_runtime", error))?;
+    Ok(ModuleReservationV1 {
+        runtime_artifact_id: module.runtime_artifact_id.to_owned(),
+        registration_id: proposal.registration_id,
+        storage_capability_id,
+        runtime_instance_id: reservation.runtime_instance_id,
+        runtime_generation: reservation.runtime_generation,
+        role_epoch: 1,
+        credential_lease_revision: 1,
+        storage_bundle_revision: storage.storage_bundle_revision,
+        storage_bundle_digest: storage.storage_bundle_digest.try_into().map_err(|_| {
+            admission_error(
+                module.runtime_artifact_id,
+                "admit_storage",
+                "Storage bundle digest is invalid".to_owned(),
+            )
+        })?,
+    })
+}
+
 fn refresh_plan(
     client: &OwnerControlClientV1,
     owner_session_id: &str,
@@ -610,7 +631,7 @@ fn refresh_plan(
     current: &DevelopmentAssemblyStateV1,
     reservation_path: &Path,
 ) -> Result<DevelopmentAssemblyStateV1, String> {
-    validate_state_plan(current)?;
+    validate_refreshable_state_plan(current)?;
     if current.distribution_id != distribution_id
         || distribution_generation <= current.distribution_generation
     {
@@ -618,7 +639,21 @@ fn refresh_plan(
     }
 
     let mut modules = Vec::with_capacity(MODULE_PLAN.len());
-    for (plan, previous) in MODULE_PLAN.iter().zip(&current.modules) {
+    for plan in &MODULE_PLAN {
+        let Some(previous) = current
+            .modules
+            .iter()
+            .find(|module| module.runtime_artifact_id == plan.runtime_artifact_id)
+        else {
+            modules.push(reserve_new_module(
+                client,
+                owner_session_id,
+                distribution_id,
+                distribution_generation,
+                plan,
+            )?);
+            continue;
+        };
         let current_binding = client
             .managed_storage_binding_status(
                 owner_session_id,
@@ -710,18 +745,42 @@ fn successor_fences(role_epoch: u64, credential_lease_revision: u64) -> Result<(
 }
 
 fn validate_state_plan(state: &DevelopmentAssemblyStateV1) -> Result<(), String> {
-    if state.modules.len() != MODULE_PLAN.len()
-        || MODULE_PLAN
+    if !state_matches_runtime_artifact_plan(
+        state,
+        &MODULE_PLAN
             .iter()
-            .zip(&state.modules)
-            .any(|(plan, module)| {
-                module.runtime_artifact_id != plan.runtime_artifact_id
-                    || module.storage_capability_id != plan.storage_capability_id
-            })
-    {
+            .map(|plan| plan.runtime_artifact_id)
+            .collect::<Vec<_>>(),
+    ) {
         return Err("development assembly module state does not match the plan".to_owned());
     }
     Ok(())
+}
+
+fn validate_refreshable_state_plan(state: &DevelopmentAssemblyStateV1) -> Result<(), String> {
+    if validate_state_plan(state).is_ok()
+        || state_matches_runtime_artifact_plan(state, &PRE_EXPORT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3)
+    {
+        return Ok(());
+    }
+    Err("development assembly module state does not match a refreshable plan".to_owned())
+}
+
+fn state_matches_runtime_artifact_plan(
+    state: &DevelopmentAssemblyStateV1,
+    runtime_artifact_ids: &[&str],
+) -> bool {
+    state.modules.len() == runtime_artifact_ids.len()
+        && runtime_artifact_ids
+            .iter()
+            .zip(&state.modules)
+            .all(|(runtime_artifact_id, module)| {
+                module.runtime_artifact_id == *runtime_artifact_id
+                    && MODULE_PLAN.iter().any(|plan| {
+                        plan.runtime_artifact_id == *runtime_artifact_id
+                            && module.storage_capability_id == plan.storage_capability_id
+                    })
+            })
 }
 
 fn admission_error(artifact_id: &str, phase: &str, error: String) -> String {
@@ -1111,24 +1170,27 @@ fn read_state(path: &Path) -> Result<DevelopmentAssemblyStateV1, String> {
         "3" => 6,
         _ => return Err("development assembly state is invalid".to_owned()),
     };
-    if required_field(&fields, "module_count")?
+    let module_count = required_field(&fields, "module_count")?
         .parse::<usize>()
-        .ok()
-        != Some(MODULE_PLAN.len())
-        || fields.len() != 4 + MODULE_PLAN.len() * fields_per_module
+        .map_err(|_| "development assembly state is invalid".to_owned())?;
+    if ![
+        MODULE_PLAN.len(),
+        PRE_EXPORT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3.len(),
+    ]
+    .contains(&module_count)
+        || fields.len() != 4 + module_count * fields_per_module
     {
         return Err("development assembly state is invalid".to_owned());
     }
-    let modules = MODULE_PLAN
-        .iter()
-        .enumerate()
-        .map(|(index, plan)| {
+    let modules = (0..module_count)
+        .map(|index| {
             let field = |name: &str| format!("module.{index}.{name}");
             let runtime_artifact_id = required_field(&fields, &field("runtime_artifact_id"))?;
             let storage_capability_id = required_field(&fields, &field("storage_capability_id"))?;
-            if runtime_artifact_id != plan.runtime_artifact_id
-                || storage_capability_id != plan.storage_capability_id
-            {
+            if !MODULE_PLAN.iter().any(|plan| {
+                runtime_artifact_id == plan.runtime_artifact_id
+                    && storage_capability_id == plan.storage_capability_id
+            }) {
                 return Err("development assembly state is invalid".to_owned());
             }
             Ok(ModuleAssemblyStateV1 {
@@ -1160,7 +1222,8 @@ fn read_state(path: &Path) -> Result<DevelopmentAssemblyStateV1, String> {
             .map_err(|_| "development assembly state is invalid".to_owned())?,
         modules,
     };
-    if state.distribution_generation == 0
+    if validate_refreshable_state_plan(&state).is_err()
+        || state.distribution_generation == 0
         || std::iter::once(state.distribution_id.as_str())
             .chain(state.modules.iter().flat_map(|module| {
                 [
@@ -1263,6 +1326,17 @@ mod tests {
         }
     }
 
+    fn write_test_state(path: &Path, bytes: &[u8]) {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(path)
+            .unwrap();
+        file.write_all(bytes).unwrap();
+        file.sync_all().unwrap();
+    }
+
     #[test]
     fn development_plan_keeps_domains_workflows_engines_and_integrations_as_distinct_artifacts() {
         assert_eq!(MODULE_PLAN.len(), 7);
@@ -1357,6 +1431,39 @@ mod tests {
     }
 
     #[test]
+    fn pre_export_state_v3_is_refreshable_but_not_current() {
+        let path = temporary_state_path("pre-export-v3");
+        let mut legacy = fixture_state(25);
+        legacy
+            .modules
+            .retain(|module| module.runtime_artifact_id != COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT);
+        let mut bytes = format!(
+            "version=3\ndistribution_id={}\ndistribution_generation={}\nmodule_count={}\n",
+            legacy.distribution_id,
+            legacy.distribution_generation,
+            legacy.modules.len(),
+        );
+        for (index, module) in legacy.modules.iter().enumerate() {
+            bytes.push_str(&format!(
+                "module.{index}.runtime_artifact_id={}\nmodule.{index}.registration_id={}\nmodule.{index}.storage_capability_id={}\nmodule.{index}.storage_binding_revision={}\nmodule.{index}.role_epoch={}\nmodule.{index}.credential_lease_revision={}\n",
+                module.runtime_artifact_id,
+                module.registration_id,
+                module.storage_capability_id,
+                module.storage_binding_revision,
+                module.role_epoch,
+                module.credential_lease_revision,
+            ));
+        }
+        write_test_state(&path, bytes.as_bytes());
+
+        let state = read_state(&path).unwrap();
+        assert_eq!(state, legacy);
+        assert!(validate_refreshable_state_plan(&state).is_ok());
+        assert!(validate_state_plan(&state).is_err());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn legacy_state_v2_migrates_the_only_implemented_initial_fences() {
         let path = temporary_state_path("v2");
         let mut bytes = format!(
@@ -1374,14 +1481,7 @@ mod tests {
                 plan.runtime_artifact_id, plan.storage_capability_id,
             ));
         }
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&path)
-            .unwrap();
-        file.write_all(bytes.as_bytes()).unwrap();
-        file.sync_all().unwrap();
+        write_test_state(&path, bytes.as_bytes());
 
         let state = read_state(&path).unwrap();
         assert_eq!(state.distribution_generation, 1);
