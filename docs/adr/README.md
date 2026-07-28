@@ -127,6 +127,7 @@ policy через ссылки из новых документов.
 - [ADR-0316: Communications saved search derived projection](ADR-0316-communications-saved-search-derived-projection.md)
 - [ADR-0317: Communications sender insights derived projection](ADR-0317-communications-sender-insights-derived-projection.md)
 - [ADR-0318: Communications evidence export workflow](ADR-0318-communications-evidence-export-workflow.md)
+- [ADR-0319: Owner-authorized legacy provider account recovery](ADR-0319-owner-authorized-legacy-provider-account-recovery.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
