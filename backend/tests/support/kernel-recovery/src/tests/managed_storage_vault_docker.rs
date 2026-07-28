@@ -333,7 +333,7 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     assert_communications_query_delivery(&store, &supervisor);
     assert_communications_canonical_read_v2_pagination(&store, &supervisor);
     assert_communications_search_query_delivery(&store, &supervisor);
-    assert_communications_gateway_query_delivery(&store, &supervisor, &root);
+    assert_communications_gateway_query_delivery(&store, &supervisor, &root, &data);
     assert_telegram_outbox_delivery(&store, &supervisor);
     assert_fenced_communications_target_cannot_issue_blob_custody_grant(&store, &supervisor, &data);
 
@@ -358,6 +358,7 @@ fn assert_communications_gateway_query_delivery(
     store: &Arc<SqliteControlStore>,
     supervisor: &ManagedRuntimeSupervisor,
     root: &std::path::Path,
+    kernel_data: &std::path::Path,
 ) {
     use http_body_util::BodyExt as _;
 
@@ -371,7 +372,7 @@ fn assert_communications_gateway_query_delivery(
     .expect("Gateway configuration");
     let router = crate::platform::gateway::gateway_service(
         Arc::clone(store),
-        root,
+        kernel_data,
         supervisor.clone(),
         &configuration,
         None,
@@ -463,6 +464,42 @@ fn assert_communications_gateway_query_delivery(
                         && hit.matched_token_count > 0
                 })
     ));
+    let message_id = match &response.result {
+        Some(
+            hermes_communications_api::query_wire::communications_query_response_v1::Result::SearchCommunications(
+                hits,
+            ),
+        ) => hits
+            .hits
+            .iter()
+            .find_map(|hit| {
+                let detail = route_query(
+                    hermes_communications_api::query_wire::CommunicationsQueryRequestV1 {
+                        protocol_major: 1,
+                        operation: Some(
+                            hermes_communications_api::query_wire::communications_query_request_v1::Operation::GetMessage(
+                                hermes_communications_api::query_wire::GetMessageRequestV1 {
+                                    message_id: hit.message_id.clone(),
+                                },
+                            ),
+                        ),
+                    },
+                );
+                matches!(
+                    detail.result,
+                    Some(
+                        hermes_communications_api::query_wire::communications_query_response_v1::Result::GetMessage(
+                            hermes_communications_api::query_wire::GetMessageResponseV1 {
+                                message: Some(ref message),
+                            },
+                        ),
+                    ) if message.body_state == 4
+                )
+                .then(|| hit.message_id.clone())
+            })
+            .expect("search result includes the admitted canonical body"),
+        _ => unreachable!("search result checked above"),
+    };
     let public_payload = response.encode_to_vec();
     for private_value in [
         "fixture source body for custody transfer",
@@ -475,6 +512,79 @@ fn assert_communications_gateway_query_delivery(
             "external Communications search must not reveal private body or Blob locator",
         );
     }
+
+    let ticket_response = runtime.block_on(
+        router.route(
+            hyper::Request::builder()
+                .method("POST")
+                .uri(hermes_communications_content_api::CONTENT_TICKET_CONNECT_PATH_V1)
+                .header("content-type", "application/connect+proto")
+                .header("cookie", &cookie)
+                .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                    hermes_communications_content_api::IssueMessageBodyReadRequestV1 {
+                        protocol_major: 1,
+                        message_id,
+                    }
+                    .encode_to_vec(),
+                )))
+                .expect("Gateway Communications content ticket request"),
+        ),
+    );
+    assert_eq!(ticket_response.status(), hyper::StatusCode::OK);
+    let ticket_bytes = runtime
+        .block_on(ticket_response.into_body().collect())
+        .expect("Gateway Communications content ticket response")
+        .to_bytes();
+    let ticket = hermes_communications_content_api::IssueMessageBodyReadResponseV1::decode(
+        ticket_bytes.as_ref(),
+    )
+    .expect("decode Communications content ticket");
+    assert!(ticket.error_code.is_empty());
+    assert_eq!(ticket.opaque_read_capability.len(), 32);
+    assert_eq!(
+        ticket.declared_bytes,
+        u64::try_from("fixture source body for custody transfer".len()).expect("fixture body size")
+    );
+    let read_request = hermes_communications_content_api::ReadMessageBodyRequestV1 {
+        protocol_major: 1,
+        opaque_read_capability: ticket.opaque_read_capability,
+    }
+    .encode_to_vec();
+    let read = || {
+        runtime.block_on(
+            router.route(
+                hyper::Request::builder()
+                    .method("POST")
+                    .uri(hermes_communications_content_api::CONTENT_READ_BLOB_PATH_V1)
+                    .header("content-type", "application/proto")
+                    .header("cookie", &cookie)
+                    .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                        read_request.clone(),
+                    )))
+                    .expect("Gateway Communications content read request"),
+            ),
+        )
+    };
+    let content = read();
+    assert_eq!(content.status(), hyper::StatusCode::OK);
+    assert_eq!(
+        content
+            .headers()
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
+    assert!(content.headers().get("x-blob-reference").is_none());
+    assert!(content.headers().get("digest").is_none());
+    assert_eq!(
+        runtime
+            .block_on(content.into_body().collect())
+            .expect("Gateway Communications content response")
+            .to_bytes()
+            .as_ref(),
+        b"fixture source body for custody transfer"
+    );
+    assert_eq!(read().status(), hyper::StatusCode::NOT_FOUND);
 }
 
 struct SchedulerRecoveryFixture {

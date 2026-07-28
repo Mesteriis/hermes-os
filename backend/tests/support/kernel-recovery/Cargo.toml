@@ -31,6 +31,7 @@ hermes-communications-runtime = { path = "../../../src/communications-runtime" }
 hermes-communications-attachment-contract = { path = "../../../src/communications-attachment-contract" }
 hermes-communications-ingress = { path = "../../../src/communications-ingress" }
 hermes-communications-api = { path = "../../../src/communications-api" }
+hermes-communications-content-api = { path = "../../../src/communications-content-api" }
 hermes-mail-api = { path = "../../../src/mail-api" }
 hermes-mail-core = { path = "../../../src/mail-core" }
 hermes-mail-gmail = { path = "../../../src/mail-gmail", features = ["conformance-test-support"] }

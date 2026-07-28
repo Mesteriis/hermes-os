@@ -20,6 +20,7 @@ surface = "runtime"
 [dependencies]
 hermes-communications-api = { path = "../communications-api" }
 hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }
+hermes-communications-content-api = { path = "../communications-content-api" }
 hermes-communications-domain = { path = "../communications-domain" }
 hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-communications-persistence = { path = "../communications-persistence" }
@@ -30,6 +31,7 @@ hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-storage-vault = { path = "../platform/storage/vault" }
 hermes-managed-vault-client = { path = "../platform/vault/managed_client" }
+getrandom = "=0.4.3"
 libc = "=0.2.186"
 prost = "=0.14.4"
 prost-types = "=0.14.4"

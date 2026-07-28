@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "mail_outbound_mime_attachments_v1",
+    "currentSlice": "communications_content_read_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -432,6 +432,12 @@
         "role": "integration",
         "owner": "mail",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-communications-content-api",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "contract"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -929,6 +935,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communications-content-api",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-communications-ingress",
           "kind": "normal"
         },
@@ -1229,7 +1239,8 @@
           "name": "hermes-storage-protocol",
           "kind": "normal"
         }
-      ]
+      ],
+      "hermes-communications-content-api": []
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-events-protocol": [
@@ -2769,6 +2780,14 @@
       ],
       "hermes-communications-runtime": [
         {
+          "name": "getrandom",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.4.3",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
           "name": "libc",
           "kind": "normal",
           "source": "crates_io",
@@ -3291,6 +3310,40 @@
           "defaultFeatures": true,
           "features": []
         }
+      ],
+      "hermes-communications-content-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -3590,6 +3643,10 @@
       "hermes-mail-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
+      },
+      "hermes-communications-content-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
       }
     },
     "developmentProfile": {
@@ -3644,6 +3701,7 @@
         "communications.attachment.blob-admission.observe.v1",
         "communications.attachment.safety-verdict.observe.v1",
         "communications.blob.v1",
+        "communications.content.v1",
         "communications.events.v1",
         "communications.observe.v1",
         "communications.query.v1",
@@ -3790,6 +3848,21 @@
         "attachment_security_engine_v1",
         "client_gateway_v1"
       ],
+      "client_blob_v1": [
+        "managed_launch_trust_v1",
+        "vault_v1",
+        "blob_v1",
+        "client_gateway_v1"
+      ],
+      "communications_content_read_v1": [
+        "managed_launch_trust_v1",
+        "vault_v1",
+        "storage_control_v1",
+        "nats_data_plane_v1",
+        "blob_v1",
+        "client_gateway_v1",
+        "client_blob_v1"
+      ],
       "clock_v1": [
         "module_control_plane_v1",
         "managed_launch_trust_v1"
@@ -3923,6 +3996,26 @@
         "smtp_gmail_live_attachment_conformance",
         "negative_output_privacy",
         "architecture_srp_cargo_clippy_full_backend_gates"
+      ],
+      "client_blob_v1": [
+        "descriptor_control_store_route_authority",
+        "authenticated_bounded_no_query_http_route",
+        "owner_runtime_authorization_without_content",
+        "digest_bound_one_use_full_blob_read",
+        "registration_grant_runtime_revoke_fencing",
+        "private_metadata_and_error_non_disclosure",
+        "architecture_srp_cargo_clippy_managed_gates"
+      ],
+      "communications_content_read_v1": [
+        "exact_content_contract_build_unit",
+        "owner_local_current_receipt_authorization",
+        "runtime_local_one_use_ticket_lifecycle",
+        "read_only_shared_custody_capability",
+        "managed_observation_custody_ticket_content_replay",
+        "stale_delete_revoke_blob_outage_negative_matrix",
+        "generated_frontend_inert_utf8_presentation",
+        "provider_fallback_and_blob_metadata_non_disclosure",
+        "architecture_srp_cargo_clippy_managed_browser_gates"
       ],
       "clock_v1": [
         "protocol_and_package_topology",

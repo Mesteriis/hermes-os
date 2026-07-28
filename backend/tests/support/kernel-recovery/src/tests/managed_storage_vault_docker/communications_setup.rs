@@ -16,6 +16,12 @@ use hermes_communications_attachment_contract::admission::{
     communication_attachment_safety_state_changed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
 };
+use hermes_communications_content_api::{
+    COMMUNICATIONS_CONTENT_READ_SCHEMA_SHA256, COMMUNICATIONS_CONTENT_TICKET_SCHEMA_SHA256,
+    CONTENT_CONTRACT_MAJOR_V1, CONTENT_CONTRACT_REVISION_V1, CONTENT_READ_BLOB_PATH_V1,
+    CONTENT_READ_CONTRACT_NAME_V1, CONTENT_TICKET_CONNECT_PATH_V1, CONTENT_TICKET_CONTRACT_NAME_V1,
+    MAX_MESSAGE_BODY_BYTES_V1,
+};
 use hermes_communications_persistence::{
     COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1, communications_storage_bundle_v1,
 };
@@ -23,7 +29,8 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_BLOB_CAPABILITY_ID, COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
-    COMMUNICATIONS_BLOB_QUOTA_BYTES, COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
+    COMMUNICATIONS_BLOB_QUOTA_BYTES, COMMUNICATIONS_CONTENT_CAPABILITY_ID,
+    COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
     COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
     COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
     COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION, COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS,
@@ -33,7 +40,8 @@ use hermes_communications_runtime::admission::{
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
 use hermes_kernel_control_store::{
-    ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientRpcContractVersionV1,
+    ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientBlobContractVersionV1,
+    ModuleClientBlobRouteV1, ModuleClientBlobTransportV1, ModuleClientRpcContractVersionV1,
     ModuleClientRpcRouteV1, ModuleDescriptorRegistrationRequestsV1, ModuleRegistrationState,
     ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1, PlatformStorageBindingStateV1,
 };
@@ -1894,6 +1902,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID.to_owned(),
         "communications.blob.v1".to_owned(),
+        COMMUNICATIONS_CONTENT_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_EVENTS_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_OBSERVE_CAPABILITY_ID.to_owned(),
         "communications.query.v1".to_owned(),
@@ -1917,6 +1926,14 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             ModuleBlobOperationV1::ReadRange,
             ModuleBlobOperationV1::CustodyTransfer,
         ],
+    );
+    let content_blob = ModuleBlobQuotaRequestV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_CONTENT_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        COMMUNICATIONS_BLOB_QUOTA_BYTES,
+        COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
+        vec![ModuleBlobOperationV1::ReadRange],
     );
     let vault_purpose = ModuleVaultPurposeRequestV1::new_with_key_schema_revision(
         COMMUNICATIONS_REGISTRATION,
@@ -1980,17 +1997,46 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             ModuleEventRouteDirectionV1::Consume,
         ),
     ];
-    let client_rpc_route = ModuleClientRpcRouteV1::new(
+    let client_rpc_routes = [
+        ModuleClientRpcRouteV1::new(
+            COMMUNICATIONS_REGISTRATION,
+            COMMUNICATIONS_QUERY_CAPABILITY_ID,
+            COMMUNICATIONS_OWNER_ID,
+            "communications.query",
+            ModuleClientRpcContractVersionV1 {
+                major: 1,
+                revision: 1,
+            },
+            hermes_communications_api::COMMUNICATIONS_QUERY_SCHEMA_SHA256,
+            "/hermes.communications.query.v1.CommunicationsQueryService/Query",
+        ),
+        ModuleClientRpcRouteV1::new(
+            COMMUNICATIONS_REGISTRATION,
+            COMMUNICATIONS_CONTENT_CAPABILITY_ID,
+            COMMUNICATIONS_OWNER_ID,
+            CONTENT_TICKET_CONTRACT_NAME_V1,
+            ModuleClientRpcContractVersionV1 {
+                major: CONTENT_CONTRACT_MAJOR_V1,
+                revision: CONTENT_CONTRACT_REVISION_V1,
+            },
+            COMMUNICATIONS_CONTENT_TICKET_SCHEMA_SHA256,
+            CONTENT_TICKET_CONNECT_PATH_V1,
+        ),
+    ];
+    let client_blob_route = ModuleClientBlobRouteV1::new(
         COMMUNICATIONS_REGISTRATION,
-        COMMUNICATIONS_QUERY_CAPABILITY_ID,
+        COMMUNICATIONS_CONTENT_CAPABILITY_ID,
         COMMUNICATIONS_OWNER_ID,
-        "communications.query",
-        ModuleClientRpcContractVersionV1 {
-            major: 1,
-            revision: 1,
+        CONTENT_READ_CONTRACT_NAME_V1,
+        ModuleClientBlobContractVersionV1 {
+            major: CONTENT_CONTRACT_MAJOR_V1,
+            revision: CONTENT_CONTRACT_REVISION_V1,
         },
-        hermes_communications_api::COMMUNICATIONS_QUERY_SCHEMA_SHA256,
-        "/hermes.communications.query.v1.CommunicationsQueryService/Query",
+        COMMUNICATIONS_CONTENT_READ_SCHEMA_SHA256,
+        ModuleClientBlobTransportV1 {
+            path: CONTENT_READ_BLOB_PATH_V1.to_owned(),
+            max_response_bytes: MAX_MESSAGE_BODY_BYTES_V1,
+        },
     );
     store
         .create_pending_registration_with_all_descriptor_requests(
@@ -1999,11 +2045,11 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             ModuleDescriptorRegistrationRequestsV1 {
                 storage: std::slice::from_ref(&storage),
                 events: &routes,
-                blobs: std::slice::from_ref(&blob),
+                blobs: &[blob, content_blob],
                 scheduler: &[],
                 vault_purposes: std::slice::from_ref(&vault_purpose),
-                client_rpc_routes: std::slice::from_ref(&client_rpc_route),
-                client_blob_routes: &[],
+                client_rpc_routes: &client_rpc_routes,
+                client_blob_routes: std::slice::from_ref(&client_blob_route),
             },
         )
         .expect("record Communications registration");

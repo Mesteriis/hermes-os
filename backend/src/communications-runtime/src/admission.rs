@@ -10,6 +10,12 @@ use hermes_communications_attachment_contract::admission::{
     communication_attachment_safety_state_changed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
 };
+use hermes_communications_content_api::{
+    COMMUNICATIONS_CONTENT_READ_SCHEMA_SHA256, COMMUNICATIONS_CONTENT_TICKET_SCHEMA_SHA256,
+    CONTENT_CONTRACT_MAJOR_V1, CONTENT_CONTRACT_REVISION_V1, CONTENT_READ_BLOB_PATH_V1,
+    CONTENT_READ_CONTRACT_NAME_V1, CONTENT_TICKET_CONNECT_PATH_V1, CONTENT_TICKET_CONTRACT_NAME_V1,
+    MAX_MESSAGE_BODY_BYTES_V1,
+};
 use hermes_communications_ingress::admission::{
     COMMUNICATION_OBSERVED_MAX_IN_FLIGHT, communication_observed_contract_reference_v1,
 };
@@ -37,6 +43,7 @@ pub const COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID: &str =
 pub const COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID: &str =
     "communications.attachment.safety-verdict.observe.v1";
 pub const COMMUNICATIONS_QUERY_CAPABILITY_ID: &str = "communications.query.v1";
+pub const COMMUNICATIONS_CONTENT_CAPABILITY_ID: &str = "communications.content.v1";
 pub const COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID: &str = "communications.search.index.v1";
 pub const COMMUNICATIONS_STORAGE_CAPABILITY_ID: &str = "communications.storage.v1";
 pub const COMMUNICATIONS_MODULE_ID: &str = COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID;
@@ -57,12 +64,49 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_attachment_blob_admission_observe_capability_v1(),
         communications_attachment_safety_verdict_observe_capability_v1(),
         communications_blob_capability_v1(),
+        communications_content_capability_v1(),
         communications_events_capability_v1(),
         communications_observe_capability_v1(),
         communications_query_capability_v1(),
         communications_search_index_capability_v1(),
         communications_storage_capability_v1(),
     ]
+}
+
+#[must_use]
+pub fn communications_content_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_CONTENT_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+                contract: Some(communications_content_ticket_contract_reference_v1()),
+                client_rpc_route: Some(hermes_runtime_protocol::v1::ClientRpcRouteV1 {
+                    path: CONTENT_TICKET_CONNECT_PATH_V1.to_owned(),
+                }),
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::ClientBlob as i32,
+                contract: Some(communications_content_read_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: Some(hermes_runtime_protocol::v1::ClientBlobRouteV1 {
+                    path: CONTENT_READ_BLOB_PATH_V1.to_owned(),
+                    max_response_bytes: MAX_MESSAGE_BODY_BYTES_V1,
+                }),
+            },
+        ],
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+                max_bytes: COMMUNICATIONS_BLOB_QUOTA_BYTES,
+                custody_scope_id: COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID.to_owned(),
+                allowed_operations: vec![BlobQuotaOperationV1::ReadRange as i32],
+            })),
+        }],
+        ..Default::default()
+    }
 }
 
 #[must_use]
@@ -295,6 +339,28 @@ pub fn communications_query_contract_reference_v1() -> ContractReferenceV1 {
 }
 
 #[must_use]
+pub fn communications_content_ticket_contract_reference_v1() -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: COMMUNICATIONS_OWNER_ID.to_owned(),
+        name: CONTENT_TICKET_CONTRACT_NAME_V1.to_owned(),
+        major: CONTENT_CONTRACT_MAJOR_V1,
+        revision: CONTENT_CONTRACT_REVISION_V1,
+        schema_sha256: COMMUNICATIONS_CONTENT_TICKET_SCHEMA_SHA256.to_vec(),
+    }
+}
+
+#[must_use]
+pub fn communications_content_read_contract_reference_v1() -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: COMMUNICATIONS_OWNER_ID.to_owned(),
+        name: CONTENT_READ_CONTRACT_NAME_V1.to_owned(),
+        major: CONTENT_CONTRACT_MAJOR_V1,
+        revision: CONTENT_CONTRACT_REVISION_V1,
+        schema_sha256: COMMUNICATIONS_CONTENT_READ_SCHEMA_SHA256.to_vec(),
+    }
+}
+
+#[must_use]
 pub fn communication_evidence_recorded_contract_reference_v1() -> ContractReferenceV1 {
     ContractReferenceV1 {
         owner: COMMUNICATIONS_OWNER_ID.to_owned(),
@@ -324,7 +390,7 @@ pub fn communications_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1
     let settings_schema = communications_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 2,
+        descriptor_revision: 3,
         module_id: COMMUNICATIONS_MODULE_ID.to_owned(),
         owner_id: COMMUNICATIONS_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Domain as i32,
@@ -383,6 +449,7 @@ mod tests {
                 COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_BLOB_CAPABILITY_ID,
+                COMMUNICATIONS_CONTENT_CAPABILITY_ID,
                 COMMUNICATIONS_EVENTS_CAPABILITY_ID,
                 COMMUNICATIONS_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_QUERY_CAPABILITY_ID,

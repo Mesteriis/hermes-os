@@ -2,6 +2,7 @@
 
 use std::{
     os::unix::net::UnixStream,
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -39,7 +40,6 @@ use hermes_storage_protocol::{
 use hermes_storage_vault::{
     InheritedKernelVaultRouteV2, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
 };
-use prost::Message;
 
 use crate::{
     attachment_observation_consumer::{
@@ -47,7 +47,9 @@ use crate::{
         consume_next_attachment_safety_verdict_observation_v1,
     },
     canonical_outbox::CanonicalEventContextV1,
+    client_port::dispatch_module_client_request_v1,
     consumer::{CommunicationsDeliveryErrorV1, consume_next_observation_v1},
+    content_ticket_store::CommunicationsContentTicketStoreV1,
     custody_worker::{CommunicationsCustodyWorkerErrorV1, process_next_body_custody_transfer_v1},
     domain_outbox::{CommunicationsDomainOutboxRelayErrorV1, relay_domain_outbox_once},
     search_access::CommunicationsSearchAccessV1,
@@ -70,6 +72,7 @@ pub struct CommunicationsEventRuntimeV1 {
     domain_publish_permit: RuntimePublishPermitV1,
     persistence: CommunicationsDurablePersistence,
     search_access: CommunicationsSearchAccessV1,
+    content_tickets: Arc<CommunicationsContentTicketStoreV1>,
     runtime_instance_id: String,
     runtime_generation: u64,
 }
@@ -160,6 +163,7 @@ fn exact_contract(left: &ContractReferenceV1, right: &ContractReferenceV1) -> bo
 struct CommunicationsNestedRequestDispatcher<'a> {
     persistence: &'a CommunicationsDurablePersistence,
     search_access: &'a mut CommunicationsSearchAccessV1,
+    content_tickets: &'a Arc<CommunicationsContentTicketStoreV1>,
 }
 
 impl ManagedControlRequestDispatcherV2<UnixStream> for CommunicationsNestedRequestDispatcher<'_> {
@@ -173,27 +177,18 @@ impl ManagedControlRequestDispatcherV2<UnixStream> for CommunicationsNestedReque
             Some(Operation::ClientDelivery(delivery)) => match delivery.request {
                 Some(request) if validate_module_client_request_v1(&request).is_ok() => {
                     let mut reject_nested_request = RejectManagedControlRequestsV2;
-                    let result = tokio::task::block_in_place(|| {
+                    let response = tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(
-                            crate::query_client_port::handle_module_query_request_v1(
+                            dispatch_module_client_request_v1(
                                 self.persistence,
+                                self.content_tickets,
                                 self.search_access,
                                 channel,
                                 &mut reject_nested_request,
-                                &request.encode_to_vec(),
+                                &request,
                             ),
                         )
                     });
-                    let response = result
-                        .ok()
-                        .and_then(|payload| ModuleClientResponseV1::decode(payload.as_slice()).ok())
-                        .filter(|response| response.request_id == request.request_id)
-                        .unwrap_or(ModuleClientResponseV1 {
-                            protocol_major: 1,
-                            request_id: request.request_id,
-                            response_payload: Vec::new(),
-                            error_code: "UNAVAILABLE".to_owned(),
-                        });
                     ManagedRuntimeControlResponseV1 {
                         result: Some(ControlResult::ClientDelivery(
                             ManagedRuntimeClientDeliveryResponseV1 {
@@ -360,6 +355,7 @@ impl CommunicationsEventRuntimeV1 {
             domain_publish_permit,
             persistence,
             search_access,
+            content_tickets: Arc::new(CommunicationsContentTicketStoreV1::new()),
             runtime_instance_id: admission.runtime_instance_id.clone(),
             runtime_generation: admission.runtime_generation,
         })
@@ -430,33 +426,25 @@ impl CommunicationsEventRuntimeV1 {
         let mut nested_dispatcher = CommunicationsNestedRequestDispatcher {
             persistence: &self.persistence,
             search_access: &mut nested_search_access,
+            content_tickets: &self.content_tickets,
         };
         self.control_channel
             .inner_mut()
             .set_nonblocking(false)
             .map_err(|_| unavailable_at("client_blocking"))?;
-        let payload = crate::query_client_port::handle_module_query_request_v1(
+        let response = dispatch_module_client_request_v1(
             &self.persistence,
+            &self.content_tickets,
             &mut self.search_access,
             &mut self.control_channel,
             &mut nested_dispatcher,
-            &request.encode_to_vec(),
+            &request,
         )
         .await;
         self.control_channel
             .inner_mut()
             .set_nonblocking(true)
             .map_err(|_| unavailable_at("client_nonblocking"))?;
-        let response = match payload {
-            Ok(payload) => ModuleClientResponseV1::decode(payload.as_slice())
-                .map_err(|_| unavailable_at("client_response_decode"))?,
-            Err(_) => ModuleClientResponseV1 {
-                protocol_major: 1,
-                request_id: request.request_id,
-                response_payload: Vec::new(),
-                error_code: "UNAVAILABLE".to_owned(),
-            },
-        };
         validate_module_client_response_v1(&response)
             .map_err(|_| unavailable_at("client_response_validate"))?;
         if response.request_id != request.request_id {
@@ -523,6 +511,7 @@ impl CommunicationsEventRuntimeV1 {
         let mut dispatcher = CommunicationsNestedRequestDispatcher {
             persistence: &self.persistence,
             search_access: &mut self.search_access,
+            content_tickets: &self.content_tickets,
         };
         match process_next_body_custody_transfer_v1(
             &mut self.control_channel,
@@ -551,6 +540,7 @@ impl CommunicationsEventRuntimeV1 {
         let mut nested_dispatcher = CommunicationsNestedRequestDispatcher {
             persistence: &self.persistence,
             search_access: &mut nested_search_access,
+            content_tickets: &self.content_tickets,
         };
         self.control_channel
             .inner_mut()
