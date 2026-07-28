@@ -46,6 +46,7 @@ fn validate_contract(
 
 fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
     match request {
+        MailClientRequestV1::AccountCatalog(_) => MailClientContractV1::AccountCatalog,
         MailClientRequestV1::BindCredential(_) => MailClientContractV1::AccountCredentialBind,
         MailClientRequestV1::AccountStatus(_) => MailClientContractV1::AccountQuery,
         MailClientRequestV1::RetireAccount(_) => MailClientContractV1::AccountRetire,
@@ -84,6 +85,9 @@ fn request_contract(request: &MailClientRequestV1) -> MailClientContractV1 {
 
 fn encode_request_payload(request: &MailClientRequestV1) -> Result<Vec<u8>, MailClientPortErrorV1> {
     match request {
+        MailClientRequestV1::AccountCatalog(value) => {
+            Ok(account_wire::encode_catalog_request(value))
+        }
         MailClientRequestV1::BindCredential(value) => {
             account_wire::encode_bind_request(value).map_err(|_| MailClientPortErrorV1::Protocol)
         }
@@ -164,6 +168,9 @@ fn decode_request_payload(
     bytes: &[u8],
 ) -> Result<MailClientRequestV1, MailClientPortErrorV1> {
     match contract {
+        MailClientContractV1::AccountCatalog => account_wire::decode_catalog_request(bytes)
+            .map(MailClientRequestV1::AccountCatalog)
+            .map_err(|_| MailClientPortErrorV1::Protocol),
         MailClientContractV1::AccountCredentialBind => account_wire::decode_bind_request(bytes)
             .map(MailClientRequestV1::BindCredential)
             .map_err(|_| MailClientPortErrorV1::Protocol),
@@ -304,7 +311,17 @@ pub async fn handle_client_request(
         return Err(MailClientPortErrorV1::Protocol);
     }
     let (request_id, contract, request) = decode_module_request(bytes)?;
+    if let Some(connection_id) = request_connection_id(&request) {
+        runtime
+            .select_account(connection_id)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?;
+    }
     let response = match request {
+        MailClientRequestV1::AccountCatalog(_) => runtime
+            .account_catalog()
+            .await
+            .map(MailClientResponseV1::AccountCatalog)
+            .map_err(|_| MailClientPortErrorV1::Runtime)?,
         MailClientRequestV1::BindCredential(value) => runtime
             .bind_account_credential(&value, requested_at_unix_seconds)
             .await
@@ -442,6 +459,44 @@ pub async fn handle_client_request(
     encode_module_response(request_id, contract, &response)
 }
 
+fn request_connection_id(request: &MailClientRequestV1) -> Option<&str> {
+    match request {
+        MailClientRequestV1::AccountCatalog(_) => None,
+        MailClientRequestV1::BindCredential(value) => Some(&value.connection_id),
+        MailClientRequestV1::AccountStatus(value) => Some(&value.connection_id),
+        MailClientRequestV1::RetireAccount(value) | MailClientRequestV1::DeleteAccount(value) => {
+            Some(&value.connection_id)
+        }
+        MailClientRequestV1::RetryAccountLifecycle(value) => Some(&value.connection_id),
+        MailClientRequestV1::AccountLifecycleStatus(value) => Some(&value.connection_id),
+        MailClientRequestV1::SyncInbox(value) => Some(&value.connection_id),
+        MailClientRequestV1::SendMail(value) => Some(&value.connection_id),
+        MailClientRequestV1::DeliveryStatus(value) => Some(&value.connection_id),
+        MailClientRequestV1::GmailOAuthStart(value) => Some(&value.connection_id),
+        MailClientRequestV1::GmailOAuthComplete(value) => Some(&value.connection_id),
+        MailClientRequestV1::GmailOAuthRefresh(value) => Some(&value.connection_id),
+        MailClientRequestV1::GmailOAuthStatus(value) => Some(&value.connection_id),
+        MailClientRequestV1::CompositionCommand(value) => {
+            Some(hermes_mail_api::composition::composition_command_connection_id(value))
+        }
+        MailClientRequestV1::CompositionQuery(value) => {
+            Some(hermes_mail_api::composition::composition_query_connection_id(value))
+        }
+        MailClientRequestV1::MessageFlagCommand(value) => Some(&value.connection_id),
+        MailClientRequestV1::MessageFlagStatus(value) => Some(&value.connection_id),
+        MailClientRequestV1::MessageLocationCommand(value) => Some(&value.connection_id),
+        MailClientRequestV1::MessageLocationStatus(value) => Some(&value.connection_id),
+        MailClientRequestV1::MessagePermanentDeleteCommand(value) => Some(&value.connection_id),
+        MailClientRequestV1::MessagePermanentDeleteStatus(value) => Some(&value.connection_id),
+        MailClientRequestV1::OperationalQuery(value) => {
+            Some(hermes_mail_api::operational::operational_query_connection_id(value))
+        }
+        MailClientRequestV1::SyncHealthQuery(value) => {
+            Some(hermes_mail_api::sync_health::sync_health_query_connection_id(value))
+        }
+    }
+}
+
 fn encode_module_response(
     request_id: u64,
     contract: MailClientContractV1,
@@ -451,6 +506,10 @@ fn encode_module_response(
         return Err(MailClientPortErrorV1::Protocol);
     }
     let response_payload = match (contract, response) {
+        (MailClientContractV1::AccountCatalog, MailClientResponseV1::AccountCatalog(catalog)) => {
+            account_wire::encode_account_catalog(catalog)
+                .map_err(|_| MailClientPortErrorV1::Protocol)?
+        }
         (
             MailClientContractV1::AccountCredentialBind,
             MailClientResponseV1::CredentialBinding(receipt),
@@ -579,6 +638,10 @@ pub fn decode_module_response(
         return Err(MailClientPortErrorV1::Protocol);
     }
     let response = match contract {
+        MailClientContractV1::AccountCatalog => {
+            account_wire::decode_account_catalog(&envelope.response_payload)
+                .map(MailClientResponseV1::AccountCatalog)
+        }
         MailClientContractV1::AccountCredentialBind => {
             account_wire::decode_binding_receipt(&envelope.response_payload)
                 .map(MailClientResponseV1::CredentialBinding)
@@ -666,7 +729,9 @@ mod tests {
     use hermes_mail_api::{
         MailDeliveryStatusRequestV1, MailSendMailRequestV1, MailSyncInboxRequestV1,
         account::{
-            MailAccountStatusRequestV1, MailBindCredentialRequestV1, MailCredentialPurposeV1,
+            MailAccountCatalogRequestV1, MailAccountCatalogV1, MailAccountReadinessV1,
+            MailAccountStatusRequestV1, MailAccountStatusV1, MailBindCredentialRequestV1,
+            MailConnectorProfileV1, MailCredentialPurposeV1, MailProviderPathReadinessV1,
         },
         account_lifecycle::{
             MailAccountLifecycleCommandV1, MailAccountLifecycleRetryV1,
@@ -701,12 +766,14 @@ mod tests {
     fn sync_request() -> MailClientRequestV1 {
         MailClientRequestV1::SyncInbox(MailSyncInboxRequestV1 {
             operation_id: "sync-operation".to_owned(),
+            connection_id: "mail-account".to_owned(),
         })
     }
 
     fn delivery_request() -> MailClientRequestV1 {
         MailClientRequestV1::SendMail(MailSendMailRequestV1 {
             operation_id: "delivery-operation".to_owned(),
+            connection_id: "mail-account".to_owned(),
             provider_conversation_id: "conversation".to_owned(),
             recipients: vec!["recipient@example.com".to_owned()],
             cc_recipients: Vec::new(),
@@ -720,6 +787,7 @@ mod tests {
     fn delivery_query() -> MailClientRequestV1 {
         MailClientRequestV1::DeliveryStatus(MailDeliveryStatusRequestV1 {
             operation_id: "delivery-operation".to_owned(),
+            connection_id: "mail-account".to_owned(),
         })
     }
 
@@ -814,6 +882,39 @@ mod tests {
         assert_eq!(decoded_bind, bind);
         assert_eq!(decoded_query, query);
         assert_ne!(bind_contract, query_contract);
+    }
+
+    #[test]
+    fn account_catalog_uses_its_exact_query_contract_and_response_codec() {
+        let request = MailClientRequestV1::AccountCatalog(MailAccountCatalogRequestV1);
+        let encoded = encode_module_request(6, &request).expect("account catalog");
+        let (request_id, contract, decoded) =
+            decode_module_request(&encoded).expect("decode account catalog");
+        assert_eq!(request_id, 6);
+        assert_eq!(contract, MailClientContractV1::AccountCatalog);
+        assert_eq!(decoded, request);
+
+        let response = MailClientResponseV1::AccountCatalog(MailAccountCatalogV1 {
+            accounts: vec![MailAccountStatusV1 {
+                connection_id: "mail-account".to_owned(),
+                configuration_instance_id: "mail-configuration".to_owned(),
+                settings_revision: 1,
+                runtime_generation: 2,
+                readiness: MailAccountReadinessV1::Ready,
+                connector_profile: MailConnectorProfileV1::Gmail,
+                sync_readiness: MailProviderPathReadinessV1::Ready,
+                delivery_readiness: MailProviderPathReadinessV1::Ready,
+                bindings: Vec::new(),
+                lifecycle_revision: 0,
+                lifecycle_operation_id: None,
+            }],
+        });
+        let encoded_response =
+            encode_module_response(6, contract, &response).expect("account catalog response");
+        assert_eq!(
+            decode_module_response(contract, &encoded_response),
+            Ok((6, response))
+        );
     }
 
     #[test]

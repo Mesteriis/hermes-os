@@ -208,5 +208,8 @@ test('Mail permanent delete is explicit, provider-owned and live-conformant', as
   assert.match(controller, /confirmed: true/);
   assert.match(component, /type="checkbox"/);
   assert.match(component, /I understand this cannot be undone at the provider/);
-  assert.match(authorization, /client\.start\(operationId\.value, 'permanent-delete'\)/);
+  assert.match(
+    authorization,
+    /client\.start\([\s\S]*operationId\.value,[\s\S]*requiredConnectionId\(connectionId\.value\),[\s\S]*'permanent-delete'/,
+  );
 });

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
 	ApplyOwnerManagedIntegrationSettingsReceiptV1Schema,
+	CreateOwnerModuleSettingsTargetReceiptV1Schema,
 	UpdateOwnerModuleSettingsReceiptV1Schema,
 } from '../../../gen/hermes/gateway/v1/owner_module_settings_pb'
 import {
@@ -124,6 +125,15 @@ describe('MailAccountPortabilityWorkflowV1', () => {
 		})
 		const ports: MailAccountPortabilityPortsV1 = {
 			settings: {
+				createConfigurationTarget: vi.fn().mockResolvedValue(create(
+					CreateOwnerModuleSettingsTargetReceiptV1Schema,
+					{
+						registrationId: 'mail-registration',
+						configurationInstanceId: 'mail-target',
+						desiredRevision: 1n,
+						applyState: 'draft',
+					},
+				)),
 				exportEffective: vi.fn(),
 				updateDesired: vi.fn().mockResolvedValue(create(
 					UpdateOwnerModuleSettingsReceiptV1Schema,
@@ -215,6 +225,15 @@ function fakePorts(smtp = true): MailAccountPortabilityPortsV1 & {
 	const ready = status(MailAccountReadinessV1.MAIL_ACCOUNT_READINESS_READY, smtp)
 	return {
 		settings: {
+			createConfigurationTarget: vi.fn().mockResolvedValue(create(
+				CreateOwnerModuleSettingsTargetReceiptV1Schema,
+				{
+					registrationId: 'mail-registration',
+					configurationInstanceId: 'mail-target',
+					desiredRevision: 1n,
+					applyState: 'draft',
+				},
+			)),
 			exportEffective: vi.fn(),
 			updateDesired: vi.fn().mockResolvedValue(create(
 				UpdateOwnerModuleSettingsReceiptV1Schema,

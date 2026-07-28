@@ -25,7 +25,7 @@ import { MailGmailOAuthClientV1 } from '../api/mailGmailOAuthClient'
 const MAIL_STORAGE_CAPABILITY_ID = 'mail.storage.v1'
 
 type MailAccountSetupPortsV1 = {
-	configuration: Pick<ManagedIntegrationSetupV1, 'apply'>
+	configuration: Pick<ManagedIntegrationSetupV1, 'createTarget' | 'apply'>
 	activation: Pick<OwnerModuleSettingsClientV1, 'applyManagedIntegration'>
 	vault: Pick<OwnerVaultProvisioningClientV1, 'provision'>
 	mail: {
@@ -59,6 +59,7 @@ export type MailImapAccountSetupInputV1 = {
 
 export type MailGmailSetupStateV1 = {
 	operationId: string
+	connectionId: string
 	started: GmailOAuthStartedV1
 	configuration: ManagedIntegrationSetupReceiptV1
 }
@@ -68,17 +69,19 @@ export class MailAccountSetupWorkflowV1 {
 
 	async setupImap(input: MailImapAccountSetupInputV1): Promise<void> {
 		const connectionId = required(input.connectionId, 'mail_connection_id_invalid')
+		const target = await this.ports.configuration.createTarget(input.registrationId)
 		const configuration = await this.ports.configuration.apply({
 			registrationId: input.registrationId,
-			expectedDesiredRevision: input.expectedDesiredRevision,
+			expectedDesiredRevision: target.desiredRevision,
 			storageCapabilityId: MAIL_STORAGE_CAPABILITY_ID,
-			configurationInstanceId: connectionId,
+			configurationInstanceId: target.configurationInstanceId,
 			requestHostBridge: false,
 			values: imapSettings(input),
 		})
 		let status = await this.ports.mail.status(connectionId)
 		await this.provisionAndBind({
 			registrationId: input.registrationId,
+			configurationInstanceId: target.configurationInstanceId,
 			connectionId,
 			kind: 'imap',
 			secretPayload: input.imapPassword,
@@ -88,6 +91,7 @@ export class MailAccountSetupWorkflowV1 {
 			status = await this.ports.mail.status(connectionId)
 			await this.provisionAndBind({
 				registrationId: input.registrationId,
+				configurationInstanceId: target.configurationInstanceId,
 				connectionId,
 				kind: 'smtp',
 				secretPayload: input.smtp.password,
@@ -97,7 +101,7 @@ export class MailAccountSetupWorkflowV1 {
 		await this.ports.activation.applyManagedIntegration({
 			registrationId: input.registrationId,
 			storageCapabilityId: MAIL_STORAGE_CAPABILITY_ID,
-			configurationInstanceId: connectionId,
+			configurationInstanceId: target.configurationInstanceId,
 			expectedDesiredRevision: configuration.settings.desiredRevision,
 			requestHostBridge: false,
 		})
@@ -112,17 +116,18 @@ export class MailAccountSetupWorkflowV1 {
 		redirectUri: string
 	}): Promise<MailGmailSetupStateV1> {
 		const connectionId = required(input.connectionId, 'mail_connection_id_invalid')
+		const target = await this.ports.configuration.createTarget(input.registrationId)
 		const configuration = await this.ports.configuration.apply({
 			registrationId: input.registrationId,
-			expectedDesiredRevision: input.expectedDesiredRevision,
+			expectedDesiredRevision: target.desiredRevision,
 			storageCapabilityId: MAIL_STORAGE_CAPABILITY_ID,
-			configurationInstanceId: connectionId,
+			configurationInstanceId: target.configurationInstanceId,
 			requestHostBridge: false,
 			values: gmailSettings(input),
 		})
 		const operationId = crypto.randomUUID()
-		const started = await this.ports.oauth.start(operationId)
-		return { operationId, started, configuration }
+		const started = await this.ports.oauth.start(operationId, connectionId)
+		return { operationId, connectionId, started, configuration }
 	}
 
 	async completeGmail(
@@ -131,6 +136,7 @@ export class MailAccountSetupWorkflowV1 {
 	): Promise<MailAcceptedV1> {
 		return this.ports.oauth.complete({
 			operationId: state.operationId,
+			connectionId: state.connectionId,
 			setupId: state.started.setupId,
 			state: required(input.returnedState, 'mail_gmail_state_required'),
 			authorizationCode: required(
@@ -142,6 +148,7 @@ export class MailAccountSetupWorkflowV1 {
 
 	private async provisionAndBind(input: {
 		registrationId: string
+		configurationInstanceId: string
 		connectionId: string
 		kind: 'imap' | 'smtp'
 		secretPayload: Uint8Array
@@ -155,7 +162,7 @@ export class MailAccountSetupWorkflowV1 {
 		const vault = await this.ports.vault.provision({
 			targetRegistrationId: input.registrationId,
 			capabilityId: `mail.${input.kind}.credential-provisioning.v1`,
-			configurationInstanceId: input.connectionId,
+			configurationInstanceId: input.configurationInstanceId,
 			purposeId: `mail_${input.kind}_password`,
 			secretClass: OwnerVaultSecretClassV1.PROVIDER_CREDENTIAL,
 			action: current?.credentialRevision

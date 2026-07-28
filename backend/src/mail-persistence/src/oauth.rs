@@ -356,9 +356,10 @@ impl MailDurablePersistence {
 
     pub async fn claim_next_gmail_oauth_operation(
         &self,
+        connection_id: &str,
         dispatched_at_unix_seconds: i64,
     ) -> Result<Option<GmailOAuthQueuedOperationV1>, MailDurablePersistenceError> {
-        if dispatched_at_unix_seconds <= 0 {
+        if !valid_identifier(connection_id) || dispatched_at_unix_seconds <= 0 {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
         let mut transaction = self
@@ -373,9 +374,11 @@ impl MailDurablePersistence {
              LEFT JOIN hermes_data.mail_gmail_oauth_attempts attempt \
                 ON attempt.setup_id = operation.setup_id \
              WHERE operation.state = 1 AND operation.dispatched_at_unix_seconds IS NULL \
+               AND operation.connection_id = $1 \
              ORDER BY operation.requested_at_unix_seconds, operation.operation_id \
              LIMIT 1 FOR UPDATE OF operation SKIP LOCKED",
         )
+        .bind(connection_id)
         .fetch_optional(&mut *transaction)
         .await
         .map_err(|_| MailDurablePersistenceError::Database)?;

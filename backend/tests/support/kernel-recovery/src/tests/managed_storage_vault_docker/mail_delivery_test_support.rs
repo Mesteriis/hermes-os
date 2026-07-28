@@ -98,6 +98,7 @@ pub(super) fn assert_delivery_completed(
             72,
             &MailClientRequestV1::DeliveryStatus(MailDeliveryStatusRequestV1 {
                 operation_id: operation_id.to_owned(),
+                connection_id: MAIL_ACCOUNT_ID.to_owned(),
             }),
         );
         let MailClientResponseV1::DeliveryStatus(Some(status)) = response else {
@@ -140,6 +141,7 @@ pub(super) fn assert_delivery_outcome_unknown(
             73,
             &MailClientRequestV1::DeliveryStatus(MailDeliveryStatusRequestV1 {
                 operation_id: operation_id.to_owned(),
+                connection_id: MAIL_ACCOUNT_ID.to_owned(),
             }),
         );
         let MailClientResponseV1::DeliveryStatus(Some(status)) = response else {

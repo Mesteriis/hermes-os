@@ -1,12 +1,13 @@
 pub const MAIL_CLIENT_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.mail.v1.bin"));
 pub const MAIL_CLIENT_CONTRACT_MAJOR: u32 = 1;
-pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 12;
+pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 13;
 pub const MAIL_MODULE_ID: &str = "hermes-mail-runtime";
 pub const MAIL_OWNER_ID: &str = "mail";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailClientContractV1 {
+    AccountCatalog,
     AccountCredentialBind,
     AccountQuery,
     AccountRetire,
@@ -33,7 +34,8 @@ pub enum MailClientContractV1 {
 }
 
 impl MailClientContractV1 {
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 24] = [
+        Self::AccountCatalog,
         Self::AccountCredentialBind,
         Self::AccountDelete,
         Self::AccountLifecycleQuery,
@@ -62,6 +64,7 @@ impl MailClientContractV1 {
     #[must_use]
     pub const fn capability_id(self) -> &'static str {
         match self {
+            Self::AccountCatalog => "mail.account.catalog.query.v1",
             Self::AccountCredentialBind => "mail.account.credential.bind.v1",
             Self::AccountQuery => "mail.account.query.v1",
             Self::AccountRetire => "mail.account.retire.v1",
@@ -96,6 +99,7 @@ impl MailClientContractV1 {
     #[must_use]
     pub const fn connect_path(self) -> &'static str {
         match self {
+            Self::AccountCatalog => "/hermes.mail.account.v1.MailAccountCatalogService/List",
             Self::AccountCredentialBind => {
                 "/hermes.mail.account.v1.MailAccountCredentialBindingService/Bind"
             }

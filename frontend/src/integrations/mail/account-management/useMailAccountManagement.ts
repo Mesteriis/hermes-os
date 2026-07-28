@@ -6,7 +6,6 @@ import {
 	type MailAccountStatusV1,
 } from '../../../gen/hermes/mail/account/v1/client_pb'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
-import { publicModuleStringSetting } from '../../../platform/gateway/publicModuleSettings'
 import { hasOwnerVaultProvisioningHostV1 } from '../../../platform/vault'
 import {
 	MailAccountManagementWorkflowV1,
@@ -18,7 +17,7 @@ const MAIL_STORAGE_CAPABILITY_ID = 'mail.storage.v1'
 
 type MailAccountManagementWorkflow = Pick<
 	MailAccountManagementWorkflowV1,
-	'status' | 'retire' | 'delete' | 'retry' | 'refreshLifecycle' | 'rotatePassword'
+	'catalog' | 'status' | 'retire' | 'delete' | 'retry' | 'refreshLifecycle' | 'rotatePassword'
 >
 
 export function useMailAccountManagement(
@@ -26,6 +25,8 @@ export function useMailAccountManagement(
 	workflow: MailAccountManagementWorkflow = new MailAccountManagementWorkflowV1(),
 ) {
 	const status = shallowRef<MailAccountStatusV1 | null>(null)
+	const accounts = shallowRef<MailAccountStatusV1[]>([])
+	const connectionId = ref('')
 	const imapPassword = ref('')
 	const smtpPassword = ref('')
 	const busy = ref(false)
@@ -33,7 +34,7 @@ export function useMailAccountManagement(
 	const messageTone = ref<'neutral' | 'success' | 'error'>('neutral')
 	const secureHostAvailable = hasOwnerVaultProvisioningHostV1()
 	const ownedModule = computed(() => module()?.moduleId === MAIL_MODULE_ID ? module() : null)
-	const connectionId = computed(() => publicModuleStringSetting(ownedModule.value, 'mail.connection_id') ?? '')
+	const canCatalog = computed(() => hasCapability('mail.account.catalog.query.v1'))
 	const canQuery = computed(() => hasCapability('mail.account.query.v1') && Boolean(connectionId.value))
 	const stateLabel = computed(() => mailReadinessLabel(status.value?.readiness))
 	const canRetire = computed(() => hasCapability('mail.account.retire.v1') && Boolean(status.value))
@@ -44,18 +45,38 @@ export function useMailAccountManagement(
 		&& Boolean(status.value?.lifecycleOperationId))
 
 	async function refresh(): Promise<void> {
-		if (!canQuery.value) {
+		if (!canCatalog.value) {
 			status.value = null
-			message.value = connectionId.value
-				? 'Mail account status capability is not admitted.'
-				: 'Configure a Mail account to expose its lifecycle status.'
+			accounts.value = []
+			message.value = 'Mail account catalog capability is not admitted.'
 			messageTone.value = 'neutral'
 			return
 		}
 		await run(async () => {
-			status.value = await workflow.status(connectionId.value)
-			message.value = `Mail account ${status.value.connectionId} status refreshed.`
+			const catalog = await workflow.catalog()
+			accounts.value = [...catalog.accounts]
+			if (!accounts.value.some((account) => account.connectionId === connectionId.value)) {
+				connectionId.value = accounts.value[0]?.connectionId ?? ''
+			}
+			status.value = accounts.value.find(
+				(account) => account.connectionId === connectionId.value,
+			) ?? null
+			message.value = status.value
+				? `Mail account ${status.value.connectionId} status refreshed.`
+				: 'No Mail accounts are configured yet.'
 		}, 'Mail account status is unavailable.')
+	}
+
+	async function selectAccount(nextConnectionId: string): Promise<void> {
+		connectionId.value = nextConnectionId
+		status.value = accounts.value.find(
+			(account) => account.connectionId === nextConnectionId,
+		) ?? null
+		if (canQuery.value) {
+			await run(async () => {
+				status.value = await workflow.status(nextConnectionId)
+			}, 'Mail account status is unavailable.')
+		}
 	}
 
 	async function retire(): Promise<void> {
@@ -95,8 +116,8 @@ export function useMailAccountManagement(
 			const receipt = await workflow.rotatePassword({
 				registrationId: currentModule.registrationId,
 				storageCapabilityId: MAIL_STORAGE_CAPABILITY_ID,
-				configurationInstanceId: current.connectionId,
-				expectedDesiredRevision: currentModule.settings.desiredRevision,
+				configurationInstanceId: current.configurationInstanceId,
+				expectedDesiredRevision: current.settingsRevision,
 				status: current,
 				purpose,
 				secretPayload: new TextEncoder().encode(secret),
@@ -157,6 +178,7 @@ export function useMailAccountManagement(
 
 	return {
 		status,
+		accounts,
 		connectionId,
 		imapPassword,
 		smtpPassword,
@@ -173,6 +195,7 @@ export function useMailAccountManagement(
 		canRotateImap: computed(() => canRotate('imap')),
 		canRotateSmtp: computed(() => canRotate('smtp')),
 		refresh,
+		selectAccount,
 		retire,
 		deleteAccount,
 		retry,

@@ -140,7 +140,7 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(wire, /encode_sync_health_query/);
   assert.match(wire, /decode_sync_health_response/);
   assert.match(wire, /encode_sync_health_response\(&response\)\? != bytes/);
-  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 12/);
+  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 13/);
   assert.match(contract, /mail\.sync\.health\.query\.v1/);
   assert.match(
     contract,

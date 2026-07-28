@@ -33,13 +33,16 @@ export class MailGmailOAuthClientV1 {
 
 	async start(
 		operationId: string,
+		connectionId: string,
 		authority: 'operational' | 'permanent-delete' = 'operational',
 	): Promise<GmailOAuthStartedV1> {
 		validateOperationId(operationId)
+		validateOperationId(connectionId)
 		return this.startClient.start(create(
 			StartGmailOAuthRequestV1Schema,
 			{
 				operationId,
+				connectionId,
 				authority: authority === 'permanent-delete'
 					? GmailOAuthAuthorityV1.GMAIL_OAUTH_AUTHORITY_PERMANENT_DELETE
 					: GmailOAuthAuthorityV1.GMAIL_OAUTH_AUTHORITY_OPERATIONAL,
@@ -49,12 +52,13 @@ export class MailGmailOAuthClientV1 {
 
 	async complete(input: {
 		operationId: string
+		connectionId: string
 		setupId: string
 		state: string
 		authorizationCode: string
 	}): Promise<MailAcceptedV1> {
 		validateOperationId(input.operationId)
-		for (const value of [input.setupId, input.state, input.authorizationCode]) {
+		for (const value of [input.connectionId, input.setupId, input.state, input.authorizationCode]) {
 			if (value.trim().length === 0) throw new Error('Gmail OAuth completion input is invalid')
 		}
 		return this.completeClient.complete(create(
@@ -63,11 +67,15 @@ export class MailGmailOAuthClientV1 {
 		))
 	}
 
-	async status(operationId: string): Promise<GmailOAuthOperationStatusV1 | undefined> {
+	async status(
+		operationId: string,
+		connectionId: string,
+	): Promise<GmailOAuthOperationStatusV1 | undefined> {
 		validateOperationId(operationId)
+		validateOperationId(connectionId)
 		return (await this.queryClient.getOperationStatus(create(
 			GetGmailOAuthStatusRequestV1Schema,
-			{ operationId },
+			{ operationId, connectionId },
 		))).status
 	}
 }

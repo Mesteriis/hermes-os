@@ -199,6 +199,7 @@ fn assert_revoked_sync_route_is_rejected(
         3,
         &MailClientRequestV1::SyncInbox(MailSyncInboxRequestV1 {
             operation_id: "revoked-mail-sync".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
         }),
     )
     .expect("encode revoked Mail sync module request");
@@ -226,6 +227,7 @@ fn assert_ungranted_delivery_is_rejected(
         1,
         &MailClientRequestV1::SendMail(MailSendMailRequestV1 {
             operation_id: "ungranted-mail-delivery".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
             provider_conversation_id: "conversation-1".to_owned(),
             recipients: vec!["recipient@example.test".to_owned()],
             cc_recipients: Vec::new(),
@@ -260,6 +262,7 @@ fn assert_stale_sync_generation_is_rejected(
         2,
         &MailClientRequestV1::SyncInbox(MailSyncInboxRequestV1 {
             operation_id: "stale-mail-sync".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
         }),
     )
     .expect("encode exact Mail sync module request");

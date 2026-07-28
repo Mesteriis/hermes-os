@@ -1092,9 +1092,10 @@ impl MailDurablePersistence {
 
     pub async fn claim_next_delivery(
         &self,
+        connection_id: &str,
         dispatched_at_unix_seconds: i64,
     ) -> Result<Option<MailQueuedDeliveryV1>, MailDurablePersistenceError> {
-        if dispatched_at_unix_seconds <= 0 {
+        if connection_id.trim().is_empty() || dispatched_at_unix_seconds <= 0 {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
         let mut transaction = self
@@ -1106,8 +1107,9 @@ impl MailDurablePersistence {
             "WITH next AS (SELECT queue.operation_id FROM hermes_data.mail_delivery_queue queue \
              JOIN hermes_data.mail_delivery_attempts attempt ON attempt.operation_id = queue.operation_id \
              WHERE queue.dispatched_at_unix_seconds IS NULL AND attempt.state = $1 \
+               AND attempt.connection_id = $2 \
              ORDER BY attempt.attempted_at_unix_seconds, queue.operation_id FOR UPDATE SKIP LOCKED LIMIT 1) \
-             UPDATE hermes_data.mail_delivery_queue queue SET dispatched_at_unix_seconds = $2 FROM next \
+             UPDATE hermes_data.mail_delivery_queue queue SET dispatched_at_unix_seconds = $3 FROM next \
              JOIN hermes_data.mail_delivery_attempts attempt ON attempt.operation_id = next.operation_id \
              WHERE queue.operation_id = next.operation_id \
              RETURNING queue.operation_id, attempt.connection_id, attempt.rfc822_sha256, \
@@ -1115,6 +1117,7 @@ impl MailDurablePersistence {
                        queue.exact_command_bytes",
         )
         .bind(MailSmtpDeliveryAttemptStateV1::Pending as i16)
+        .bind(connection_id)
         .bind(dispatched_at_unix_seconds)
         .fetch_optional(&mut *transaction)
         .await

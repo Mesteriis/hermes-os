@@ -3,7 +3,7 @@ use prost::Message;
 use crate::{
     MAX_DELIVERY_ATTACHMENTS, MailClientResponseV1, MailDeliveryOperationStatusV1,
     MailDeliveryOutcomeV1, MailDeliveryStatusRequestV1, MailSendMailRequestV1,
-    MailSyncInboxRequestV1, wire,
+    MailSyncInboxRequestV1, account::valid_connection_id, wire,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -15,6 +15,7 @@ pub enum MailClientWireErrorV1 {
 pub fn encode_sync_request(request: &MailSyncInboxRequestV1) -> Vec<u8> {
     wire::SyncInboxRequestV1 {
         operation_id: request.operation_id.clone(),
+        connection_id: request.connection_id.clone(),
     }
     .encode_to_vec()
 }
@@ -24,8 +25,12 @@ pub fn decode_sync_request(bytes: &[u8]) -> Result<MailSyncInboxRequestV1, MailC
         .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
     let request = MailSyncInboxRequestV1 {
         operation_id: request.operation_id,
+        connection_id: request.connection_id,
     };
-    if request.operation_id.trim().is_empty() || encode_sync_request(&request) != bytes {
+    if request.operation_id.trim().is_empty()
+        || !valid_connection_id(&request.connection_id)
+        || encode_sync_request(&request) != bytes
+    {
         return Err(MailClientWireErrorV1::InvalidPayload);
     }
     Ok(request)
@@ -46,6 +51,7 @@ pub fn encode_delivery_request(request: &MailSendMailRequestV1) -> Vec<u8> {
             .collect(),
         cc_recipient: request.cc_recipients.clone(),
         bcc_recipient: request.bcc_recipients.clone(),
+        connection_id: request.connection_id.clone(),
     }
     .encode_to_vec()
 }
@@ -70,6 +76,7 @@ pub fn decode_delivery_request(
         .collect::<Result<Vec<_>, _>>()?;
     let request = MailSendMailRequestV1 {
         operation_id: request.operation_id,
+        connection_id: request.connection_id,
         provider_conversation_id: request.provider_conversation_id,
         recipients: request.recipient,
         cc_recipients: request.cc_recipient,
@@ -79,6 +86,7 @@ pub fn decode_delivery_request(
         attachment_anchor_ids,
     };
     if request.operation_id.trim().is_empty()
+        || !valid_connection_id(&request.connection_id)
         || request.recipients.is_empty()
         || request
             .recipients
@@ -106,6 +114,7 @@ pub fn decode_delivery_request(
 pub fn encode_delivery_status_request(request: &MailDeliveryStatusRequestV1) -> Vec<u8> {
     wire::GetMailDeliveryStatusRequestV1 {
         operation_id: request.operation_id.clone(),
+        connection_id: request.connection_id.clone(),
     }
     .encode_to_vec()
 }
@@ -117,8 +126,12 @@ pub fn decode_delivery_status_request(
         .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
     let request = MailDeliveryStatusRequestV1 {
         operation_id: request.operation_id,
+        connection_id: request.connection_id,
     };
-    if request.operation_id.trim().is_empty() || encode_delivery_status_request(&request) != bytes {
+    if request.operation_id.trim().is_empty()
+        || !valid_connection_id(&request.connection_id)
+        || encode_delivery_status_request(&request) != bytes
+    {
         return Err(MailClientWireErrorV1::InvalidPayload);
     }
     Ok(request)
@@ -280,11 +293,13 @@ mod tests {
     fn preserves_each_exact_route_payload() {
         let sync = MailSyncInboxRequestV1 {
             operation_id: "sync-operation".to_owned(),
+            connection_id: "mail-account".to_owned(),
         };
         assert_eq!(decode_sync_request(&encode_sync_request(&sync)), Ok(sync));
 
         let delivery = MailSendMailRequestV1 {
             operation_id: "delivery-operation".to_owned(),
+            connection_id: "mail-account".to_owned(),
             provider_conversation_id: "conversation".to_owned(),
             recipients: vec!["recipient@example.com".to_owned()],
             cc_recipients: Vec::new(),
@@ -299,6 +314,7 @@ mod tests {
         );
         let query = MailDeliveryStatusRequestV1 {
             operation_id: delivery.operation_id,
+            connection_id: delivery.connection_id,
         };
         assert_eq!(
             decode_delivery_status_request(&encode_delivery_status_request(&query)),
@@ -322,6 +338,7 @@ mod tests {
     fn rejects_an_exact_delivery_payload_as_sync() {
         let delivery = MailSendMailRequestV1 {
             operation_id: "delivery-operation".to_owned(),
+            connection_id: "mail-account".to_owned(),
             provider_conversation_id: "conversation".to_owned(),
             recipients: vec!["recipient@example.com".to_owned()],
             cc_recipients: Vec::new(),
@@ -349,6 +366,7 @@ mod tests {
                 attachment_anchor_id,
                 cc_recipient: Vec::new(),
                 bcc_recipient: Vec::new(),
+                connection_id: "mail-account".to_owned(),
             }
             .encode_to_vec()
         };

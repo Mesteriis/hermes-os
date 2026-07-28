@@ -223,6 +223,7 @@ fn assert_delivery_accepted(
         71,
         &MailClientRequestV1::SendMail(MailSendMailRequestV1 {
             operation_id: OPERATION_ID.to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
             provider_conversation_id: "smtp-conversation-1".to_owned(),
             recipients: vec![PRIVATE_RECIPIENT.to_owned()],
             cc_recipients: Vec::new(),

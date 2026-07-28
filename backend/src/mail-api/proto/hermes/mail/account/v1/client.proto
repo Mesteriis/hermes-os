@@ -11,6 +11,10 @@ service MailAccountQueryService {
   rpc Get(MailAccountStatusRequestV1) returns (MailAccountStatusV1);
 }
 
+service MailAccountCatalogService {
+  rpc List(MailAccountCatalogRequestV1) returns (MailAccountCatalogV1);
+}
+
 enum MailCredentialPurposeV1 {
   MAIL_CREDENTIAL_PURPOSE_UNSPECIFIED = 0;
   MAIL_CREDENTIAL_PURPOSE_IMAP_PASSWORD = 1;
@@ -74,6 +78,10 @@ message MailAccountStatusRequestV1 {
   string connection_id = 1;
 }
 
+message MailAccountCatalogRequestV1 {
+  uint32 major = 1;
+}
+
 message MailCredentialBindingStatusV1 {
   MailCredentialPurposeV1 purpose = 1;
   MailCredentialBindingStateV1 state = 2;
@@ -93,4 +101,9 @@ message MailAccountStatusV1 {
   repeated MailCredentialBindingStatusV1 binding = 8;
   uint64 lifecycle_revision = 9;
   optional string lifecycle_operation_id = 10;
+  string configuration_instance_id = 11;
+}
+
+message MailAccountCatalogV1 {
+  repeated MailAccountStatusV1 accounts = 1;
 }

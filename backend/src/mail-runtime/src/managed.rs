@@ -1,5 +1,6 @@
 //! Kernel-admitted Mail runtime bootstrap. No CLI, provider, or domain fallback exists here.
 
+use std::collections::BTreeMap;
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -93,9 +94,10 @@ use hermes_mail_api::{
     MailCredentialPurpose, MailDeliveryOperationStatusV1, MailDeliveryOutcomeV1,
     MailGmailConfigurationV1, MailInboundTransportV1, MailSendMailRequestV1, OutgoingMailV1,
     account::{
-        MailAccountReadinessV1, MailAccountStatusV1, MailBindCredentialRequestV1,
-        MailConnectorProfileV1, MailCredentialBindingReceiptV1, MailCredentialBindingStateV1,
-        MailCredentialBindingStatusV1, MailCredentialPurposeV1, MailProviderPathReadinessV1,
+        MailAccountCatalogV1, MailAccountReadinessV1, MailAccountStatusV1,
+        MailBindCredentialRequestV1, MailConnectorProfileV1, MailCredentialBindingReceiptV1,
+        MailCredentialBindingStateV1, MailCredentialBindingStatusV1, MailCredentialPurposeV1,
+        MailProviderPathReadinessV1,
     },
     account_lifecycle::{
         MailAccountLifecycleActionV1, MailAccountLifecycleCommandV1, MailAccountLifecycleReceiptV1,
@@ -191,8 +193,21 @@ pub struct MailAdmittedRuntime {
     pub(crate) gmail_oauth_operation_in_flight: Option<String>,
     pub(crate) provider_credential_context: ManagedProviderCredentialContextV1,
     pub(crate) settings_revision: u64,
+    parked_accounts: BTreeMap<String, MailRuntimeAccountSlotV1>,
     runtime_instance_id: String,
     runtime_generation: u64,
+}
+
+struct MailRuntimeAccountSlotV1 {
+    imap_password: Option<Zeroizing<Vec<u8>>>,
+    smtp_password: Option<Zeroizing<Vec<u8>>>,
+    account_lifecycle: MailAccountLifecycleCoordinatorV1,
+    account: hermes_mail_api::MailAccountConfigurationV1,
+    configuration_instance_id: String,
+    gmail_oauth: Option<hermes_mail_api::GmailOAuthConfigurationV1>,
+    gmail_oauth_operation_in_flight: Option<String>,
+    provider_credential_context: ManagedProviderCredentialContextV1,
+    settings_revision: u64,
 }
 
 struct MailAttachmentBlobWriteV1 {
@@ -320,13 +335,50 @@ pub async fn open_admitted_runtime(
     event_hub_endpoint: &str,
     event_credential_revision: u64,
 ) -> Result<MailAdmittedRuntime, MailBootstrapError> {
+    open_admitted_runtime_catalog(
+        control_channel,
+        descriptor_bytes,
+        settings_schema_bytes,
+        std::slice::from_ref(admission),
+        storage_configuration,
+        event_hub_endpoint,
+        event_credential_revision,
+    )
+    .await
+}
+
+pub async fn open_admitted_runtime_catalog(
+    control_channel: UnixStream,
+    descriptor_bytes: Vec<u8>,
+    settings_schema_bytes: Vec<u8>,
+    admissions: &[MailRuntimeAdmission],
+    storage_configuration: ManagedStorageRuntimeConfigurationV1,
+    event_hub_endpoint: &str,
+    event_credential_revision: u64,
+) -> Result<MailAdmittedRuntime, MailBootstrapError> {
+    let admission = admissions.first().ok_or(MailBootstrapError::Admission)?;
     if descriptor_bytes.is_empty()
         || settings_schema_bytes.is_empty()
+        || admissions.len() > hermes_mail_api::account::MAX_MAIL_ACCOUNT_CATALOG_ENTRIES
         || admission.runtime_instance_id.trim().is_empty()
-        || !valid_account_configuration(&admission.account)
         || event_hub_endpoint.trim().is_empty()
         || event_credential_revision == 0
     {
+        return Err(MailBootstrapError::Admission);
+    }
+    let mut configuration_instance_ids = std::collections::BTreeSet::new();
+    let mut connection_ids = std::collections::BTreeSet::new();
+    if admissions.iter().any(|candidate| {
+        !valid_account_configuration(&candidate.account)
+            || candidate.logical_owner_id != admission.logical_owner_id
+            || candidate.module_registration_id != admission.module_registration_id
+            || candidate.runtime_instance_id != admission.runtime_instance_id
+            || candidate.runtime_generation != admission.runtime_generation
+            || candidate.grant_epoch != admission.grant_epoch
+            || candidate.vault_runtime_generation != admission.vault_runtime_generation
+            || !configuration_instance_ids.insert(candidate.configuration_instance_id.as_str())
+            || !connection_ids.insert(candidate.account.connection_id.as_str())
+    }) {
         return Err(MailBootstrapError::Admission);
     }
     control_channel
@@ -346,8 +398,6 @@ pub async fn open_admitted_runtime(
     {
         return Err(MailBootstrapError::Admission);
     }
-
-    let provider_context = provider_credential_context(admission, &storage_configuration)?;
 
     let binding = storage_binding(&storage_configuration, admission)?;
     let storage_context = StorageVaultRouteContextV1::new(
@@ -397,37 +447,57 @@ pub async fn open_admitted_runtime(
         .interrupt_stale_sync_runs(admission.runtime_generation, current_unix_seconds()?)
         .await
         .map_err(|_| MailBootstrapError::Persistence)?;
-    let lifecycle_quiesced = durable
-        .latest_account_lifecycle(&admission.account.connection_id)
-        .await
-        .map_err(|_| MailBootstrapError::Persistence)?
-        .is_some();
-    let imap_password = match (&admission.account.inbound, lifecycle_quiesced) {
-        (_, true) => None,
-        (MailInboundTransportV1::Imap(_), false) => {
+    let mut account_slots = Vec::with_capacity(admissions.len());
+    for admission in admissions {
+        let provider_context = provider_credential_context(admission, &storage_configuration)?;
+        let lifecycle_quiesced = durable
+            .latest_account_lifecycle(&admission.account.connection_id)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?
+            .is_some();
+        let imap_password = match (&admission.account.inbound, lifecycle_quiesced) {
+            (_, true) => None,
+            (MailInboundTransportV1::Imap(_), false) => {
+                activate_bound_account_credential(
+                    &mut control_channel,
+                    &provider_context,
+                    &durable,
+                    admission,
+                    MailCredentialPurposeV1::ImapPassword,
+                )
+                .await?
+            }
+            (MailInboundTransportV1::Gmail(_), false) => None,
+        };
+        let smtp_password = if admission.account.smtp_endpoint.is_some() && !lifecycle_quiesced {
             activate_bound_account_credential(
                 &mut control_channel,
                 &provider_context,
                 &durable,
                 admission,
-                MailCredentialPurposeV1::ImapPassword,
+                MailCredentialPurposeV1::SmtpPassword,
             )
             .await?
-        }
-        (MailInboundTransportV1::Gmail(_), false) => None,
-    };
-    let smtp_password = if admission.account.smtp_endpoint.is_some() && !lifecycle_quiesced {
-        activate_bound_account_credential(
-            &mut control_channel,
-            &provider_context,
-            &durable,
-            admission,
-            MailCredentialPurposeV1::SmtpPassword,
-        )
-        .await?
-    } else {
-        None
-    };
+        } else {
+            None
+        };
+        account_slots.push(MailRuntimeAccountSlotV1 {
+            imap_password,
+            smtp_password,
+            account_lifecycle: MailAccountLifecycleCoordinatorV1::new(lifecycle_quiesced),
+            account: admission.account.clone(),
+            configuration_instance_id: admission.configuration_instance_id.clone(),
+            gmail_oauth: admission.gmail_oauth.clone(),
+            gmail_oauth_operation_in_flight: None,
+            provider_credential_context: provider_context,
+            settings_revision: admission.settings_revision,
+        });
+    }
+    let active_slot = account_slots.remove(0);
+    let parked_accounts = account_slots
+        .into_iter()
+        .map(|slot| (slot.account.connection_id.clone(), slot))
+        .collect();
     let event_access = request_managed_runtime_event_access_v2(
         &mut control_channel,
         &admission.logical_owner_id,
@@ -491,30 +561,118 @@ pub async fn open_admitted_runtime(
         .and_then(|_| control_channel.inner_mut().set_write_timeout(None))
         .and_then(|_| control_channel.inner_mut().set_nonblocking(true))
         .map_err(|_| MailBootstrapError::Control)?;
+    let MailRuntimeAccountSlotV1 {
+        imap_password,
+        smtp_password,
+        account_lifecycle,
+        account,
+        configuration_instance_id,
+        gmail_oauth,
+        gmail_oauth_operation_in_flight,
+        provider_credential_context,
+        settings_revision,
+    } = active_slot;
     Ok(MailAdmittedRuntime {
         control_channel,
         durable,
         imap_password,
         smtp_password,
-        account_lifecycle: MailAccountLifecycleCoordinatorV1::new(lifecycle_quiesced),
+        account_lifecycle,
         event_connection,
         event_publish_permit,
         attachment_anchor_subscribe_permit: subscribe_permits.anchor,
         attachment_safety_subscribe_permit: subscribe_permits.safety,
         attachment_blob_admission_publish_permitted,
         attachment_security_scan_candidate_publish_permitted,
-        account: admission.account.clone(),
-        configuration_instance_id: admission.configuration_instance_id.clone(),
-        gmail_oauth: admission.gmail_oauth.clone(),
-        gmail_oauth_operation_in_flight: None,
-        provider_credential_context: provider_context,
-        settings_revision: admission.settings_revision,
+        account,
+        configuration_instance_id,
+        gmail_oauth,
+        gmail_oauth_operation_in_flight,
+        provider_credential_context,
+        settings_revision,
+        parked_accounts,
         runtime_instance_id: admission.runtime_instance_id.clone(),
         runtime_generation: admission.runtime_generation,
     })
 }
 
 impl MailAdmittedRuntime {
+    #[must_use]
+    pub fn connection_ids(&self) -> Vec<String> {
+        let mut connection_ids = self.parked_accounts.keys().cloned().collect::<Vec<_>>();
+        connection_ids.push(self.account.connection_id.clone());
+        connection_ids.sort();
+        connection_ids
+    }
+
+    pub fn select_account(&mut self, connection_id: &str) -> Result<(), MailBootstrapError> {
+        if self.account.connection_id == connection_id {
+            return Ok(());
+        }
+        let next = self
+            .parked_accounts
+            .remove(connection_id)
+            .ok_or(MailBootstrapError::Admission)?;
+        let MailRuntimeAccountSlotV1 {
+            imap_password,
+            smtp_password,
+            account_lifecycle,
+            account,
+            configuration_instance_id,
+            gmail_oauth,
+            gmail_oauth_operation_in_flight,
+            provider_credential_context,
+            settings_revision,
+        } = next;
+        let previous = MailRuntimeAccountSlotV1 {
+            imap_password: std::mem::replace(&mut self.imap_password, imap_password),
+            smtp_password: std::mem::replace(&mut self.smtp_password, smtp_password),
+            account_lifecycle: std::mem::replace(&mut self.account_lifecycle, account_lifecycle),
+            account: std::mem::replace(&mut self.account, account),
+            configuration_instance_id: std::mem::replace(
+                &mut self.configuration_instance_id,
+                configuration_instance_id,
+            ),
+            gmail_oauth: std::mem::replace(&mut self.gmail_oauth, gmail_oauth),
+            gmail_oauth_operation_in_flight: std::mem::replace(
+                &mut self.gmail_oauth_operation_in_flight,
+                gmail_oauth_operation_in_flight,
+            ),
+            provider_credential_context: std::mem::replace(
+                &mut self.provider_credential_context,
+                provider_credential_context,
+            ),
+            settings_revision: std::mem::replace(&mut self.settings_revision, settings_revision),
+        };
+        self.parked_accounts
+            .insert(previous.account.connection_id.clone(), previous);
+        Ok(())
+    }
+
+    pub async fn account_catalog(&mut self) -> Result<MailAccountCatalogV1, MailBootstrapError> {
+        let original_connection_id = self.account.connection_id.clone();
+        let connection_ids = self.connection_ids();
+        let mut accounts = Vec::with_capacity(connection_ids.len());
+        let mut result = Ok(());
+        for connection_id in connection_ids {
+            if let Err(error) = self.select_account(&connection_id) {
+                result = Err(error);
+                break;
+            }
+            match self.account_status(&connection_id).await {
+                Ok(status) => accounts.push(status),
+                Err(error) => {
+                    result = Err(error);
+                    break;
+                }
+            }
+        }
+        let restore = self.select_account(&original_connection_id);
+        result?;
+        restore?;
+        Ok(MailAccountCatalogV1 { accounts })
+    }
+
     #[must_use]
     pub(crate) fn provider_io_permitted(&self) -> bool {
         self.account_lifecycle.provider_io_permitted()
@@ -784,6 +942,7 @@ impl MailAdmittedRuntime {
         bindings.sort_by_key(|binding| binding.purpose);
         Ok(MailAccountStatusV1 {
             connection_id: connection_id.to_owned(),
+            configuration_instance_id: self.configuration_instance_id.clone(),
             settings_revision: self.settings_revision,
             runtime_generation: self.runtime_generation,
             readiness,
@@ -1672,7 +1831,7 @@ impl MailAdmittedRuntime {
         }
         let Some(queued) = self
             .durable
-            .claim_next_delivery(dispatched_at_unix_seconds)
+            .claim_next_delivery(&self.account.connection_id, dispatched_at_unix_seconds)
             .await
             .map_err(|_| MailDeliveryDispatchErrorV1::Persistence)?
         else {

@@ -1,5 +1,6 @@
 import type {
 	ApplyOwnerManagedIntegrationSettingsReceiptV1,
+	CreateOwnerModuleSettingsTargetReceiptV1,
 	ExportEffectiveOwnerModuleSettingsReceiptV1,
 	UpdateOwnerModuleSettingsReceiptV1,
 } from '../../../gen/hermes/gateway/v1/owner_module_settings_pb'
@@ -19,6 +20,7 @@ import { resolveOwnerOperationIdV1 } from '../../../platform/gateway/ownerOperat
 import {
 	OwnerModuleSettingsClientV1,
 	type ApplyOwnerManagedIntegrationSettingsInputV1,
+	type CreateOwnerModuleSettingsTargetInputV1,
 	type ExportEffectiveOwnerModuleSettingsInputV1,
 	type UpdateOwnerModuleSettingsInputV1,
 } from '../../../platform/settings'
@@ -68,9 +70,11 @@ export type MailAccountImportStateV1 = {
 	targetRegistrationId: string
 	expectedDesiredRevision: bigint
 	phase: MailImportPhaseV1
+	configurationTargetOperationId: Uint8Array
 	settingsUpdateOperationId: Uint8Array
 	configurationApplyOperationId: Uint8Array
 	activationApplyOperationId: Uint8Array
+	configurationTargetReceipt?: CreateOwnerModuleSettingsTargetReceiptV1
 	settingsUpdateReceipt?: UpdateOwnerModuleSettingsReceiptV1
 	configurationApplyReceipt?: ApplyOwnerManagedIntegrationSettingsReceiptV1
 	imap?: MailCredentialImportProgressV1
@@ -85,6 +89,9 @@ export type MailAccountImportStateV1 = {
 }
 
 type SettingsPortV1 = {
+	createConfigurationTarget(
+		input: CreateOwnerModuleSettingsTargetInputV1,
+	): Promise<CreateOwnerModuleSettingsTargetReceiptV1>
 	exportEffective(
 		input: ExportEffectiveOwnerModuleSettingsInputV1,
 	): Promise<ExportEffectiveOwnerModuleSettingsReceiptV1>
@@ -108,14 +115,18 @@ type MailPortV1 = {
 }
 
 type GmailOAuthPortV1 = {
-	start(operationId: string): Promise<GmailOAuthStartedV1>
+	start(operationId: string, connectionId: string): Promise<GmailOAuthStartedV1>
 	complete(input: {
 		operationId: string
+		connectionId: string
 		setupId: string
 		state: string
 		authorizationCode: string
 	}): Promise<MailAcceptedV1>
-	status(operationId: string): Promise<GmailOAuthOperationStatusV1 | undefined>
+	status(
+		operationId: string,
+		connectionId: string,
+	): Promise<GmailOAuthOperationStatusV1 | undefined>
 }
 
 export type MailAccountPortabilityPortsV1 = {
@@ -135,13 +146,12 @@ export class MailAccountPortabilityWorkflowV1 {
 		expectedEffectiveRevision: bigint
 		connectionId: string
 	}): Promise<{ exported: MailAccountExportV1; json: string }> {
-		const [settings, status] = await Promise.all([
-			this.ports.settings.exportEffective({
-				registrationId: input.registrationId,
-				expectedEffectiveRevision: input.expectedEffectiveRevision,
-			}),
-			this.ports.mail.status(input.connectionId),
-		])
+		const status = await this.ports.mail.status(input.connectionId)
+		const settings = await this.ports.settings.exportEffective({
+			registrationId: input.registrationId,
+			configurationInstanceId: status.configurationInstanceId,
+			expectedEffectiveRevision: input.expectedEffectiveRevision,
+		})
 		const exported = buildMailAccountExportV1(settings, status)
 		return { exported, json: serializeMailAccountExportV1(exported) }
 	}
@@ -161,6 +171,7 @@ export class MailAccountPortabilityWorkflowV1 {
 			targetRegistrationId: input.targetRegistrationId,
 			expectedDesiredRevision: input.expectedDesiredRevision,
 			phase: 'validated',
+			configurationTargetOperationId: resolveOwnerOperationIdV1(),
 			settingsUpdateOperationId: resolveOwnerOperationIdV1(),
 			configurationApplyOperationId: resolveOwnerOperationIdV1(),
 			activationApplyOperationId: resolveOwnerOperationIdV1(),
@@ -177,21 +188,33 @@ export class MailAccountPortabilityWorkflowV1 {
 		state: MailAccountImportStateV1,
 	): Promise<MailAccountImportStateV1> {
 		if (state.settingsUpdateReceipt) return state
+		let next = state
 		try {
+			const target = state.configurationTargetReceipt
+				?? await this.ports.settings.createConfigurationTarget({
+					operationId: state.configurationTargetOperationId,
+					registrationId: state.targetRegistrationId,
+				})
+			next = {
+				...state,
+				configurationTargetReceipt: target,
+				lastErrorCode: undefined,
+			}
 			const receipt = await this.ports.settings.updateDesired({
 				operationId: state.settingsUpdateOperationId,
 				registrationId: state.targetRegistrationId,
-				expectedDesiredRevision: state.expectedDesiredRevision,
+				configurationInstanceId: target.configurationInstanceId,
+				expectedDesiredRevision: target.desiredRevision,
 				values: mailAccountExportSettingsInputs(state.exported),
 			})
 			return {
-				...state,
+				...next,
 				phase: 'settings_updated',
 				settingsUpdateReceipt: receipt,
 				lastErrorCode: undefined,
 			}
 		} catch {
-			return blocked(state, 'mail_import_settings_update_failed')
+			return blocked(next, 'mail_import_settings_update_failed')
 		}
 	}
 
@@ -207,7 +230,7 @@ export class MailAccountPortabilityWorkflowV1 {
 				operationId: state.configurationApplyOperationId,
 				registrationId: state.targetRegistrationId,
 				storageCapabilityId: MAIL_STORAGE_CAPABILITY_ID,
-				configurationInstanceId: connectionId(state),
+				configurationInstanceId: configurationInstanceId(state),
 				expectedDesiredRevision: state.settingsUpdateReceipt.desiredRevision,
 				requestHostBridge: false,
 			})
@@ -250,7 +273,7 @@ export class MailAccountPortabilityWorkflowV1 {
 					capabilityId: kind === 'imap'
 						? MAIL_IMAP_PROVISIONING_CAPABILITY_ID
 						: MAIL_SMTP_PROVISIONING_CAPABILITY_ID,
-					configurationInstanceId: connectionId(state),
+					configurationInstanceId: configurationInstanceId(state),
 					purposeId: kind === 'imap' ? 'mail_imap_password' : 'mail_smtp_password',
 					secretClass: OwnerVaultSecretClassV1.PROVIDER_CREDENTIAL,
 					action: current?.credentialRevision
@@ -298,7 +321,7 @@ export class MailAccountPortabilityWorkflowV1 {
 				operationId: state.activationApplyOperationId,
 				registrationId: state.targetRegistrationId,
 				storageCapabilityId: MAIL_STORAGE_CAPABILITY_ID,
-				configurationInstanceId: connectionId(state),
+				configurationInstanceId: configurationInstanceId(state),
 				expectedDesiredRevision: state.settingsUpdateReceipt.desiredRevision,
 				requestHostBridge: false,
 			})
@@ -326,7 +349,10 @@ export class MailAccountPortabilityWorkflowV1 {
 		if (state.gmailOAuthStarted) return state
 		const operationId = state.gmailOAuthOperationId ?? crypto.randomUUID()
 		try {
-			const started = await this.ports.gmailOAuth.start(operationId)
+			const started = await this.ports.gmailOAuth.start(
+				operationId,
+				connectionId(state),
+			)
 			return {
 				...state,
 				phase: 'awaiting_gmail_authorization',
@@ -352,6 +378,7 @@ export class MailAccountPortabilityWorkflowV1 {
 		try {
 			const accepted = await this.ports.gmailOAuth.complete({
 				operationId: state.gmailOAuthOperationId,
+				connectionId: connectionId(state),
 				setupId: state.gmailOAuthStarted.setupId,
 				state: input.state,
 				authorizationCode: input.authorizationCode,
@@ -374,7 +401,10 @@ export class MailAccountPortabilityWorkflowV1 {
 			const [accountStatus, gmailOAuthStatus] = await Promise.all([
 				this.ports.mail.status(connectionId(state)),
 				state.gmailOAuthOperationId
-					? this.ports.gmailOAuth.status(state.gmailOAuthOperationId)
+					? this.ports.gmailOAuth.status(
+						state.gmailOAuthOperationId,
+						connectionId(state),
+					)
 					: Promise.resolve(undefined),
 			])
 			return {
@@ -408,6 +438,12 @@ function defaultPorts(): MailAccountPortabilityPortsV1 {
 function connectionId(state: MailAccountImportStateV1): string {
 	const value = state.exported.configuration?.connectionId
 	if (!value) throw new Error('Mail import connection is unavailable')
+	return value
+}
+
+function configurationInstanceId(state: MailAccountImportStateV1): string {
+	const value = state.configurationTargetReceipt?.configurationInstanceId
+	if (!value) throw new Error('Mail import configuration target is unavailable')
 	return value
 }
 

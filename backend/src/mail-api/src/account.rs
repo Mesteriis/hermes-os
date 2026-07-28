@@ -1,6 +1,7 @@
 //! Typed Mail-owned account credential binding and sanitized status.
 
 const MAX_CONNECTION_ID_BYTES: usize = 256;
+pub const MAX_MAIL_ACCOUNT_CATALOG_ENTRIES: usize = 32;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum MailCredentialPurposeV1 {
@@ -75,6 +76,9 @@ pub struct MailAccountStatusRequestV1 {
     pub connection_id: String,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct MailAccountCatalogRequestV1;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailCredentialBindingStatusV1 {
     pub purpose: MailCredentialPurposeV1,
@@ -87,6 +91,7 @@ pub struct MailCredentialBindingStatusV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailAccountStatusV1 {
     pub connection_id: String,
+    pub configuration_instance_id: String,
     pub settings_revision: u64,
     pub runtime_generation: u64,
     pub readiness: MailAccountReadinessV1,
@@ -96,6 +101,11 @@ pub struct MailAccountStatusV1 {
     pub bindings: Vec<MailCredentialBindingStatusV1>,
     pub lifecycle_revision: u64,
     pub lifecycle_operation_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailAccountCatalogV1 {
+    pub accounts: Vec<MailAccountStatusV1>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -136,6 +146,7 @@ pub fn validate_account_status(
     status: &MailAccountStatusV1,
 ) -> Result<(), MailAccountValidationErrorV1> {
     if !valid_connection_id(&status.connection_id)
+        || !valid_connection_id(&status.configuration_instance_id)
         || status.settings_revision == 0
         || status.runtime_generation == 0
         || status.bindings.len() > 4
@@ -159,6 +170,25 @@ pub fn validate_account_status(
     (purposes.len() == status.bindings.len() && status.bindings.iter().all(valid_binding_status))
         .then_some(())
         .ok_or(MailAccountValidationErrorV1::Invalid)
+}
+
+pub fn validate_account_catalog(
+    catalog: &MailAccountCatalogV1,
+) -> Result<(), MailAccountValidationErrorV1> {
+    if catalog.accounts.is_empty()
+        || catalog.accounts.len() > MAX_MAIL_ACCOUNT_CATALOG_ENTRIES
+        || catalog
+            .accounts
+            .iter()
+            .any(|status| validate_account_status(status).is_err())
+        || catalog
+            .accounts
+            .windows(2)
+            .any(|pair| pair[0].connection_id >= pair[1].connection_id)
+    {
+        return Err(MailAccountValidationErrorV1::Invalid);
+    }
+    Ok(())
 }
 
 fn valid_binding_status(status: &MailCredentialBindingStatusV1) -> bool {
@@ -191,7 +221,7 @@ fn valid_binding_status(status: &MailCredentialBindingStatusV1) -> bool {
     }
 }
 
-fn valid_connection_id(value: &str) -> bool {
+pub(crate) fn valid_connection_id(value: &str) -> bool {
     !value.trim().is_empty() && value.len() <= MAX_CONNECTION_ID_BYTES && !value.contains('\0')
 }
 

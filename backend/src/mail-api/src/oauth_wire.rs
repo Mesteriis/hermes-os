@@ -17,6 +17,7 @@ const MAX_AUTHORIZATION_URL_BYTES: usize = 16 * 1024;
 pub fn encode_start_request(request: &GmailOAuthStartRequestV1) -> Vec<u8> {
     wire::StartGmailOAuthRequestV1 {
         operation_id: request.operation_id.clone(),
+        connection_id: request.connection_id.clone(),
         authority: match request.authority {
             GmailOAuthAuthorityV1::Operational => {
                 wire::GmailOAuthAuthorityV1::GmailOauthAuthorityOperational as i32
@@ -36,6 +37,7 @@ pub fn decode_start_request(
         .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
     let request = GmailOAuthStartRequestV1 {
         operation_id: request.operation_id,
+        connection_id: request.connection_id,
         authority: match wire::GmailOAuthAuthorityV1::try_from(request.authority)
             .map_err(|_| MailClientWireErrorV1::InvalidPayload)?
         {
@@ -51,6 +53,7 @@ pub fn decode_start_request(
         },
     };
     if !valid_identifier(&request.operation_id, MAX_OPERATION_ID_BYTES)
+        || !valid_identifier(&request.connection_id, MAX_OPERATION_ID_BYTES)
         || encode_start_request(&request) != bytes
     {
         return Err(MailClientWireErrorV1::InvalidPayload);
@@ -96,6 +99,7 @@ pub fn encode_complete_request(request: &GmailOAuthCompleteRequestV1) -> Vec<u8>
         setup_id: request.setup_id.clone(),
         state: request.state.clone(),
         authorization_code: request.authorization_code.clone(),
+        connection_id: request.connection_id.clone(),
     }
     .encode_to_vec()
 }
@@ -110,8 +114,10 @@ pub fn decode_complete_request(
         setup_id: request.setup_id,
         state: request.state,
         authorization_code: request.authorization_code,
+        connection_id: request.connection_id,
     };
     if !valid_identifier(&request.operation_id, MAX_OPERATION_ID_BYTES)
+        || !valid_identifier(&request.connection_id, MAX_OPERATION_ID_BYTES)
         || !valid_identifier(&request.setup_id, MAX_SETUP_ID_BYTES)
         || !valid_secret_carrier(&request.state, MAX_STATE_BYTES)
         || !valid_secret_carrier(&request.authorization_code, MAX_AUTHORIZATION_CODE_BYTES)
@@ -126,6 +132,7 @@ pub fn decode_complete_request(
 pub fn encode_refresh_request(request: &GmailOAuthRefreshRequestV1) -> Vec<u8> {
     wire::RefreshGmailOAuthRequestV1 {
         operation_id: request.operation_id.clone(),
+        connection_id: request.connection_id.clone(),
     }
     .encode_to_vec()
 }
@@ -137,8 +144,10 @@ pub fn decode_refresh_request(
         .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
     let request = GmailOAuthRefreshRequestV1 {
         operation_id: request.operation_id,
+        connection_id: request.connection_id,
     };
     if !valid_identifier(&request.operation_id, MAX_OPERATION_ID_BYTES)
+        || !valid_identifier(&request.connection_id, MAX_OPERATION_ID_BYTES)
         || encode_refresh_request(&request) != bytes
     {
         return Err(MailClientWireErrorV1::InvalidPayload);
@@ -150,6 +159,7 @@ pub fn decode_refresh_request(
 pub fn encode_status_request(request: &GmailOAuthStatusRequestV1) -> Vec<u8> {
     wire::GetGmailOAuthStatusRequestV1 {
         operation_id: request.operation_id.clone(),
+        connection_id: request.connection_id.clone(),
     }
     .encode_to_vec()
 }
@@ -161,8 +171,10 @@ pub fn decode_status_request(
         .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
     let request = GmailOAuthStatusRequestV1 {
         operation_id: request.operation_id,
+        connection_id: request.connection_id,
     };
     if !valid_identifier(&request.operation_id, MAX_OPERATION_ID_BYTES)
+        || !valid_identifier(&request.connection_id, MAX_OPERATION_ID_BYTES)
         || encode_status_request(&request) != bytes
     {
         return Err(MailClientWireErrorV1::InvalidPayload);
@@ -330,6 +342,7 @@ mod tests {
         ] {
             let request = GmailOAuthStartRequestV1 {
                 operation_id: format!("start-{authority:?}"),
+                connection_id: "mail-account".to_owned(),
                 authority,
             };
             assert_eq!(
@@ -340,6 +353,7 @@ mod tests {
 
         let unspecified = wire::StartGmailOAuthRequestV1 {
             operation_id: "start-unspecified".to_owned(),
+            connection_id: "mail-account".to_owned(),
             authority: wire::GmailOAuthAuthorityV1::GmailOauthAuthorityUnspecified as i32,
         }
         .encode_to_vec();
@@ -356,6 +370,7 @@ mod tests {
             setup_id: "setup-id".to_owned(),
             state: "state-value".to_owned(),
             authorization_code: "authorization-code".to_owned(),
+            connection_id: "mail-account".to_owned(),
         };
         assert_eq!(
             decode_complete_request(&encode_complete_request(&complete)),
@@ -390,6 +405,7 @@ mod tests {
             setup_id: "setup-id".to_owned(),
             state: String::new(),
             authorization_code: "code\r\nInjected: value".to_owned(),
+            connection_id: "mail-account".to_owned(),
         };
         assert_eq!(
             decode_complete_request(&encode_complete_request(&request)),

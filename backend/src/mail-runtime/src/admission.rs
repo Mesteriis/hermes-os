@@ -71,6 +71,7 @@ pub const MAIL_CREDENTIAL_LEASE_TTL_SECONDS: u32 = 60;
 #[must_use]
 pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
+        mail_client_capability_v1(MailClientContractV1::AccountCatalog),
         mail_client_capability_v1(MailClientContractV1::AccountCredentialBind),
         mail_client_capability_v1(MailClientContractV1::AccountDelete),
         mail_client_capability_v1(MailClientContractV1::AccountLifecycleQuery),
@@ -478,6 +479,7 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                MailClientContractV1::AccountCatalog.capability_id(),
                 MailClientContractV1::AccountCredentialBind.capability_id(),
                 MailClientContractV1::AccountDelete.capability_id(),
                 MailClientContractV1::AccountLifecycleQuery.capability_id(),

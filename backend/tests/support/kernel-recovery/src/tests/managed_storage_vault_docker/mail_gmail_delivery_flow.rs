@@ -240,6 +240,7 @@ fn assert_gmail_delivery_accepted(
         81,
         &MailClientRequestV1::SendMail(MailSendMailRequestV1 {
             operation_id: OPERATION_ID.to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
             provider_conversation_id: PROVIDER_THREAD_ID.to_owned(),
             recipients: vec![PRIVATE_RECIPIENT.to_owned()],
             cc_recipients: Vec::new(),

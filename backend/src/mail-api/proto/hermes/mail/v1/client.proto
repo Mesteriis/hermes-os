@@ -1,7 +1,10 @@
 syntax = "proto3";
 package hermes.mail.v1;
 
-message SyncInboxRequestV1 { string operation_id = 1; }
+message SyncInboxRequestV1 {
+  string operation_id = 1;
+  string connection_id = 2;
+}
 message SendMailRequestV1 {
   string operation_id = 1;
   string provider_conversation_id = 2;
@@ -11,8 +14,12 @@ message SendMailRequestV1 {
   repeated bytes attachment_anchor_id = 6;
   repeated string cc_recipient = 7;
   repeated string bcc_recipient = 8;
+  string connection_id = 9;
 }
-message GetMailDeliveryStatusRequestV1 { string operation_id = 1; }
+message GetMailDeliveryStatusRequestV1 {
+  string operation_id = 1;
+  string connection_id = 2;
+}
 message SyncInboxCompletedV1 { string operation_id = 1; uint32 observed_messages = 2; }
 message MailAcceptedV1 { string operation_id = 1; }
 enum MailDeliveryOutcomeV1 {
@@ -41,6 +48,7 @@ enum GmailOAuthAuthorityV1 {
 message StartGmailOAuthRequestV1 {
   string operation_id = 1;
   GmailOAuthAuthorityV1 authority = 2;
+  string connection_id = 3;
 }
 message GmailOAuthStartedV1 {
   string operation_id = 1;
@@ -53,9 +61,16 @@ message CompleteGmailOAuthRequestV1 {
   string setup_id = 2;
   string state = 3;
   string authorization_code = 4;
+  string connection_id = 5;
 }
-message RefreshGmailOAuthRequestV1 { string operation_id = 1; }
-message GetGmailOAuthStatusRequestV1 { string operation_id = 1; }
+message RefreshGmailOAuthRequestV1 {
+  string operation_id = 1;
+  string connection_id = 2;
+}
+message GetGmailOAuthStatusRequestV1 {
+  string operation_id = 1;
+  string connection_id = 2;
+}
 enum GmailOAuthOperationKindV1 {
   GMAIL_OAUTH_OPERATION_KIND_UNSPECIFIED = 0;
   GMAIL_OAUTH_OPERATION_KIND_COMPLETE = 1;

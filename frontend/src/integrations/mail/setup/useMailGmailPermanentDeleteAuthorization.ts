@@ -7,6 +7,7 @@ import { MailGmailOAuthClientV1 } from '../api/mailGmailOAuthClient'
 
 export function useMailGmailPermanentDeleteAuthorization() {
 	const client = new MailGmailOAuthClientV1()
+	const connectionId = ref('')
 	const operationId = ref('')
 	const started = ref<GmailOAuthStartedV1>()
 	const returnedState = ref('')
@@ -25,12 +26,17 @@ export function useMailGmailPermanentDeleteAuthorization() {
 		try {
 			if (!started.value) {
 				operationId.value = `mail-gmail-permanent-delete-auth-${crypto.randomUUID()}`
-				started.value = await client.start(operationId.value, 'permanent-delete')
+				started.value = await client.start(
+					operationId.value,
+					requiredConnectionId(connectionId.value),
+					'permanent-delete',
+				)
 				message.value = 'Open Google authorization, then paste the returned state and code.'
 				return
 			}
 			await client.complete({
 				operationId: operationId.value,
+				connectionId: requiredConnectionId(connectionId.value),
 				setupId: started.value.setupId,
 				state: returnedState.value,
 				authorizationCode: authorizationCode.value,
@@ -50,7 +56,10 @@ export function useMailGmailPermanentDeleteAuthorization() {
 		busy.value = true
 		failed.value = false
 		try {
-			const status = await client.status(operationId.value)
+			const status = await client.status(
+				operationId.value,
+				requiredConnectionId(connectionId.value),
+			)
 			if (status?.outcome === GmailOAuthOutcomeV1.GMAIL_OAUTH_OUTCOME_COMPLETED) {
 				message.value = 'Permanent-delete authority is active for this Gmail account.'
 				return
@@ -74,6 +83,7 @@ export function useMailGmailPermanentDeleteAuthorization() {
 	return {
 		authorizationCode,
 		busy,
+		connectionId,
 		failed,
 		message,
 		operationId,
@@ -83,4 +93,10 @@ export function useMailGmailPermanentDeleteAuthorization() {
 		submit,
 		submitLabel,
 	}
+}
+
+function requiredConnectionId(value: string): string {
+	const connectionId = value.trim()
+	if (!connectionId) throw new Error('Select a Gmail account before authorization.')
+	return connectionId
 }

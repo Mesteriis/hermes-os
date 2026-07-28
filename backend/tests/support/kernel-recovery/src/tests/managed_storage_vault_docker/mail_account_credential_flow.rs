@@ -155,6 +155,7 @@ fn managed_mail_credential_rotation_quiesces_until_settings_successor() {
         85,
         &MailClientRequestV1::SyncInbox(MailSyncInboxRequestV1 {
             operation_id: "mail-sync-quiesced".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
         }),
     )
     .expect_err("pending IMAP binding must quiesce provider sync");
@@ -223,6 +224,7 @@ fn managed_mail_credential_rotation_quiesces_until_settings_successor() {
         88,
         &MailClientRequestV1::SyncInbox(MailSyncInboxRequestV1 {
             operation_id: "mail-sync-successor".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
         }),
     );
     assert!(matches!(
@@ -376,6 +378,7 @@ fn managed_mail_credential_rotation_quiesces_until_settings_successor() {
             95,
             &MailClientRequestV1::SyncInbox(MailSyncInboxRequestV1 {
                 operation_id: "mail-sync-retired".to_owned(),
+                connection_id: MAIL_ACCOUNT_ID.to_owned(),
             }),
         )
         .is_err()
@@ -565,6 +568,7 @@ fn query_account_status(
 fn delivery_request(operation_id: &str) -> MailClientRequestV1 {
     MailClientRequestV1::SendMail(MailSendMailRequestV1 {
         operation_id: operation_id.to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
         provider_conversation_id: "mail-credential-conversation".to_owned(),
         recipients: vec!["recipient@example.test".to_owned()],
         cc_recipients: Vec::new(),

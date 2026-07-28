@@ -219,6 +219,7 @@ fn managed_mail_gmail_oauth_rotates_credentials_once_and_fails_closed() {
     let conflicting_complete =
         MailClientRequestV1::GmailOAuthComplete(GmailOAuthCompleteRequestV1 {
             operation_id: "managed-mail-gmail-oauth-conflict".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
             setup_id: started.setup_id.clone(),
             state: authorization.state.clone(),
             authorization_code: "managed-mail-gmail-conflicting-code".to_owned(),
@@ -240,6 +241,7 @@ fn managed_mail_gmail_oauth_rotates_credentials_once_and_fails_closed() {
 
     let refresh = MailClientRequestV1::GmailOAuthRefresh(GmailOAuthRefreshRequestV1 {
         operation_id: REFRESH_OPERATION_ID.to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
     });
     let response = route_mail_client(
         &store,
@@ -515,6 +517,7 @@ fn start_oauth_with_authority(
         request_id,
         &MailClientRequestV1::GmailOAuthStart(GmailOAuthStartRequestV1 {
             operation_id: operation_id.to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
             authority,
         }),
     );
@@ -543,6 +546,7 @@ fn complete_oauth(
         request_id,
         &MailClientRequestV1::GmailOAuthComplete(GmailOAuthCompleteRequestV1 {
             operation_id: operation_id.to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
             setup_id: started.setup_id.clone(),
             state: state.to_owned(),
             authorization_code: authorization_code.to_owned(),
@@ -578,6 +582,7 @@ fn wait_for_oauth_outcome(
             request_id,
             &MailClientRequestV1::GmailOAuthStatus(GmailOAuthStatusRequestV1 {
                 operation_id: operation_id.to_owned(),
+                connection_id: MAIL_ACCOUNT_ID.to_owned(),
             }),
         );
         let MailClientResponseV1::GmailOAuthStatus(Some(status)) = response else {
@@ -662,6 +667,7 @@ fn assert_stale_client_fences(
         20,
         &MailClientRequestV1::GmailOAuthStart(GmailOAuthStartRequestV1 {
             operation_id: "stale-mail-gmail-oauth".to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
             authority: GmailOAuthAuthorityV1::Operational,
         }),
     )
@@ -694,6 +700,7 @@ fn assert_revoked_oauth_route_is_rejected(
         21,
         &MailClientRequestV1::GmailOAuthStatus(GmailOAuthStatusRequestV1 {
             operation_id: COMPLETE_OPERATION_ID.to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
         }),
     )
     .expect("encode revoked Gmail OAuth query");

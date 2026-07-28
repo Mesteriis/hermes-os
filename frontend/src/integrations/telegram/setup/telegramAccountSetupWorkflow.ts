@@ -18,7 +18,7 @@ const SESSION_KEY_PROVISIONING_CAPABILITY_ID =
 	'telegram.session-store-key.credential-provisioning.v1'
 
 type TelegramAccountSetupPortsV1 = {
-	configuration: Pick<ManagedIntegrationSetupV1, 'apply'>
+	configuration: Pick<ManagedIntegrationSetupV1, 'createTarget' | 'apply'>
 	vault: Pick<OwnerVaultProvisioningClientV1, 'provision'>
 	lifecycle: {
 		provision(input: {
@@ -51,10 +51,11 @@ export class TelegramAccountSetupWorkflowV1 {
 		const accountId = required(input.accountId, 'telegram_account_id_invalid')
 		const displayName = required(input.displayName, 'telegram_display_name_invalid')
 		if (input.apiId <= 0n) throw new Error('telegram_api_id_invalid')
+		const target = await this.ports.configuration.createTarget(input.registrationId)
 		const apiHash = await this.ports.vault.provision({
 			targetRegistrationId: input.registrationId,
 			capabilityId: API_HASH_PROVISIONING_CAPABILITY_ID,
-			configurationInstanceId: accountId,
+			configurationInstanceId: target.configurationInstanceId,
 			purposeId: 'telegram_api_hash',
 			secretClass: OwnerVaultSecretClassV1.PROVIDER_CREDENTIAL,
 			action: OwnerVaultActionV1.CREATE,
@@ -65,7 +66,7 @@ export class TelegramAccountSetupWorkflowV1 {
 		const sessionKey = await this.ports.vault.provision({
 			targetRegistrationId: input.registrationId,
 			capabilityId: SESSION_KEY_PROVISIONING_CAPABILITY_ID,
-			configurationInstanceId: accountId,
+			configurationInstanceId: target.configurationInstanceId,
 			purposeId: 'telegram_session_encryption_key',
 			secretClass: OwnerVaultSecretClassV1.SESSION_STORE_KEY,
 			action: OwnerVaultActionV1.CREATE,
@@ -74,9 +75,9 @@ export class TelegramAccountSetupWorkflowV1 {
 		})
 		const configuration = await this.ports.configuration.apply({
 			registrationId: input.registrationId,
-			expectedDesiredRevision: input.expectedDesiredRevision,
+			expectedDesiredRevision: target.desiredRevision,
 			storageCapabilityId: TELEGRAM_STORAGE_CAPABILITY_ID,
-			configurationInstanceId: accountId,
+			configurationInstanceId: target.configurationInstanceId,
 			requestHostBridge: false,
 			values: [
 				{

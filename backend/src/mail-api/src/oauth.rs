@@ -29,6 +29,7 @@ pub struct GmailOAuthConfigurationV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GmailOAuthStartRequestV1 {
     pub operation_id: String,
+    pub connection_id: String,
     pub authority: GmailOAuthAuthorityV1,
 }
 
@@ -49,6 +50,7 @@ pub struct GmailOAuthStartedV1 {
 #[derive(Clone, Eq, PartialEq)]
 pub struct GmailOAuthCompleteRequestV1 {
     pub operation_id: String,
+    pub connection_id: String,
     pub setup_id: String,
     pub state: String,
     pub authorization_code: String,
@@ -81,11 +83,13 @@ impl fmt::Debug for GmailOAuthCompleteRequestV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GmailOAuthRefreshRequestV1 {
     pub operation_id: String,
+    pub connection_id: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GmailOAuthStatusRequestV1 {
     pub operation_id: String,
+    pub connection_id: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -252,6 +256,7 @@ mod tests {
             setup_id: "setup".to_owned(),
             state: "private-state".to_owned(),
             authorization_code: "private-code".to_owned(),
+            connection_id: "mail-account".to_owned(),
         };
         let debug = format!("{started:?} {complete:?}");
         assert!(!debug.contains("private-state"));

@@ -6,6 +6,8 @@ import {
 	type ApplyOwnerManagedIntegrationSettingsReceiptV1,
 	CommitOwnerModuleSettingsRequestV1Schema,
 	type CommitOwnerModuleSettingsResponseV1,
+	type CreateOwnerModuleSettingsTargetReceiptV1,
+	CreateOwnerModuleSettingsTargetV1Schema,
 	type ExportEffectiveOwnerModuleSettingsReceiptV1,
 	ExportEffectiveOwnerModuleSettingsV1Schema,
 	OwnerModuleSettingsService,
@@ -40,8 +42,14 @@ export type OwnerSettingInputV1 = {
 export type UpdateOwnerModuleSettingsInputV1 = {
 	operationId?: Uint8Array
 	registrationId: string
+	configurationInstanceId: string
 	expectedDesiredRevision: bigint
 	values: OwnerSettingInputV1[]
+}
+
+export type CreateOwnerModuleSettingsTargetInputV1 = {
+	operationId?: Uint8Array
+	registrationId: string
 }
 
 export type ApplyOwnerManagedIntegrationSettingsInputV1 = {
@@ -56,6 +64,7 @@ export type ApplyOwnerManagedIntegrationSettingsInputV1 = {
 export type ExportEffectiveOwnerModuleSettingsInputV1 = {
 	operationId?: Uint8Array
 	registrationId: string
+	configurationInstanceId: string
 	expectedEffectiveRevision: bigint
 }
 
@@ -69,10 +78,28 @@ export class OwnerModuleSettingsClientV1 {
 			new BrowserOwnerDeviceProofV1(),
 	) {}
 
+	async createConfigurationTarget(
+		input: CreateOwnerModuleSettingsTargetInputV1,
+	): Promise<CreateOwnerModuleSettingsTargetReceiptV1> {
+		validateRegistrationId(input.registrationId)
+		const response = await this.execute(
+			input.operationId,
+			{
+				case: 'createConfigurationTarget',
+				value: create(CreateOwnerModuleSettingsTargetV1Schema, {
+					registrationId: input.registrationId,
+				}),
+			},
+		)
+		if (response.result.case !== 'created') throw unexpectedResult()
+		return response.result.value
+	}
+
 	async updateDesired(
 		input: UpdateOwnerModuleSettingsInputV1,
 	): Promise<UpdateOwnerModuleSettingsReceiptV1> {
 		validateRegistrationId(input.registrationId)
+		validateIdentifier(input.configurationInstanceId)
 		validateRevision(input.expectedDesiredRevision)
 		if (input.values.length === 0) throw invalidInput()
 		const settingIds = new Set<string>()
@@ -89,6 +116,7 @@ export class OwnerModuleSettingsClientV1 {
 				case: 'updateDesired',
 				value: create(UpdateOwnerModuleSettingsV1Schema, {
 					registrationId: input.registrationId,
+					configurationInstanceId: input.configurationInstanceId,
 					expectedDesiredRevision: input.expectedDesiredRevision,
 					values: input.values.map((entry) => create(
 						OwnerSettingEntryV1Schema,
@@ -135,6 +163,7 @@ export class OwnerModuleSettingsClientV1 {
 		input: ExportEffectiveOwnerModuleSettingsInputV1,
 	): Promise<ExportEffectiveOwnerModuleSettingsReceiptV1> {
 		validateRegistrationId(input.registrationId)
+		validateIdentifier(input.configurationInstanceId)
 		validateRevision(input.expectedEffectiveRevision)
 
 		const response = await this.execute(
@@ -143,6 +172,7 @@ export class OwnerModuleSettingsClientV1 {
 				case: 'exportEffective',
 				value: create(ExportEffectiveOwnerModuleSettingsV1Schema, {
 					registrationId: input.registrationId,
+					configurationInstanceId: input.configurationInstanceId,
 					expectedEffectiveRevision: input.expectedEffectiveRevision,
 				}),
 			},

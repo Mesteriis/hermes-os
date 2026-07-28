@@ -34,6 +34,7 @@ describe('OwnerModuleSettingsClientV1', () => {
 		).updateDesired({
 			operationId,
 			registrationId: 'mail-registration',
+			configurationInstanceId: 'mail-target',
 			expectedDesiredRevision: 1n,
 			values: [
 				{
@@ -54,6 +55,7 @@ describe('OwnerModuleSettingsClientV1', () => {
 				case: 'updateDesired',
 				value: {
 					registrationId: 'mail-registration',
+					configurationInstanceId: 'mail-target',
 					expectedDesiredRevision: 1n,
 					values: [
 						{
@@ -149,6 +151,7 @@ describe('OwnerModuleSettingsClientV1', () => {
 		).exportEffective({
 			operationId,
 			registrationId: 'mail-registration',
+			configurationInstanceId: 'mail-target',
 			expectedEffectiveRevision: 5n,
 		})
 
@@ -164,6 +167,7 @@ describe('OwnerModuleSettingsClientV1', () => {
 				case: 'exportEffective',
 				value: {
 					registrationId: 'mail-registration',
+					configurationInstanceId: 'mail-target',
 					expectedEffectiveRevision: 5n,
 				},
 			},
@@ -181,6 +185,7 @@ describe('OwnerModuleSettingsClientV1', () => {
 		await expect(client.updateDesired({
 			operationId: new Uint8Array(16).fill(4),
 			registrationId: 'mail-registration',
+			configurationInstanceId: 'mail-target',
 			expectedDesiredRevision: 1n,
 			values: [{
 				settingId: 'mail.imap.host',
@@ -202,6 +207,7 @@ describe('OwnerModuleSettingsClientV1', () => {
 		await expect(client.exportEffective({
 			operationId: new Uint8Array(16).fill(5),
 			registrationId: 'mail-registration',
+			configurationInstanceId: 'mail-target',
 			expectedEffectiveRevision: 1n,
 		})).rejects.toThrow('owner settings receipt is invalid')
 	})

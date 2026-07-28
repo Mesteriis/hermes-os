@@ -4,10 +4,11 @@ use prost::Message;
 
 use crate::{
     account::{
-        MailAccountReadinessV1, MailAccountStatusRequestV1, MailAccountStatusV1,
-        MailBindCredentialRequestV1, MailConnectorProfileV1, MailCredentialBindingReceiptV1,
-        MailCredentialBindingStateV1, MailCredentialBindingStatusV1, MailCredentialPurposeV1,
-        MailProviderPathReadinessV1, validate_account_status, validate_account_status_request,
+        MailAccountCatalogRequestV1, MailAccountCatalogV1, MailAccountReadinessV1,
+        MailAccountStatusRequestV1, MailAccountStatusV1, MailBindCredentialRequestV1,
+        MailConnectorProfileV1, MailCredentialBindingReceiptV1, MailCredentialBindingStateV1,
+        MailCredentialBindingStatusV1, MailCredentialPurposeV1, MailProviderPathReadinessV1,
+        validate_account_catalog, validate_account_status, validate_account_status_request,
         validate_bind_credential_request, validate_binding_receipt,
     },
     account_wire_generated as wire,
@@ -93,6 +94,21 @@ pub fn decode_status_request(
     Ok(request)
 }
 
+pub fn encode_catalog_request(_: &MailAccountCatalogRequestV1) -> Vec<u8> {
+    wire::MailAccountCatalogRequestV1 { major: 1 }.encode_to_vec()
+}
+
+pub fn decode_catalog_request(
+    bytes: &[u8],
+) -> Result<MailAccountCatalogRequestV1, MailClientWireErrorV1> {
+    let request = wire::MailAccountCatalogRequestV1::decode(bytes)
+        .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    if request.major != 1 || request.encode_to_vec() != bytes {
+        return Err(MailClientWireErrorV1::InvalidPayload);
+    }
+    Ok(MailAccountCatalogRequestV1)
+}
+
 pub fn encode_account_status(
     status: &MailAccountStatusV1,
 ) -> Result<Vec<u8>, MailClientWireErrorV1> {
@@ -103,8 +119,39 @@ pub fn encode_account_status(
 pub fn decode_account_status(bytes: &[u8]) -> Result<MailAccountStatusV1, MailClientWireErrorV1> {
     let status = wire::MailAccountStatusV1::decode(bytes)
         .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    status_from_wire(status)
+}
+
+pub fn encode_account_catalog(
+    catalog: &MailAccountCatalogV1,
+) -> Result<Vec<u8>, MailClientWireErrorV1> {
+    validate_account_catalog(catalog).map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    Ok(wire::MailAccountCatalogV1 {
+        accounts: catalog.accounts.iter().map(wire_status).collect(),
+    }
+    .encode_to_vec())
+}
+
+pub fn decode_account_catalog(bytes: &[u8]) -> Result<MailAccountCatalogV1, MailClientWireErrorV1> {
+    let catalog = wire::MailAccountCatalogV1::decode(bytes)
+        .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    let catalog = MailAccountCatalogV1 {
+        accounts: catalog
+            .accounts
+            .into_iter()
+            .map(status_from_wire)
+            .collect::<Result<_, _>>()?,
+    };
+    validate_account_catalog(&catalog).map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
+    Ok(catalog)
+}
+
+fn status_from_wire(
+    status: wire::MailAccountStatusV1,
+) -> Result<MailAccountStatusV1, MailClientWireErrorV1> {
     let status = MailAccountStatusV1 {
         connection_id: status.connection_id,
+        configuration_instance_id: status.configuration_instance_id,
         settings_revision: status.settings_revision,
         runtime_generation: status.runtime_generation,
         readiness: readiness_from_wire(status.readiness)?,
@@ -126,6 +173,7 @@ pub fn decode_account_status(bytes: &[u8]) -> Result<MailAccountStatusV1, MailCl
 fn wire_status(status: &MailAccountStatusV1) -> wire::MailAccountStatusV1 {
     wire::MailAccountStatusV1 {
         connection_id: status.connection_id.clone(),
+        configuration_instance_id: status.configuration_instance_id.clone(),
         settings_revision: status.settings_revision,
         runtime_generation: status.runtime_generation,
         readiness: readiness_to_wire(status.readiness),
@@ -323,24 +371,10 @@ fn provider_path_readiness_from_wire(
 mod tests {
     use super::*;
 
-    #[test]
-    fn account_binding_round_trips_without_secret_or_record_identifiers() {
-        let request = MailBindCredentialRequestV1 {
-            connection_id: "mail-account".to_owned(),
-            purpose: MailCredentialPurposeV1::SmtpPassword,
-            expected_binding_revision: 2,
-            credential_revision: 3,
-        };
-        assert_eq!(
-            decode_bind_request(&encode_bind_request(&request).expect("encode")),
-            Ok(request)
-        );
-    }
-
-    #[test]
-    fn sanitized_account_status_round_trips_connector_and_path_readiness() {
-        let status = MailAccountStatusV1 {
-            connection_id: "mail-account".to_owned(),
+    fn sample_account_status(connection_id: &str) -> MailAccountStatusV1 {
+        MailAccountStatusV1 {
+            connection_id: connection_id.to_owned(),
+            configuration_instance_id: format!("{connection_id}-configuration"),
             settings_revision: 4,
             runtime_generation: 9,
             readiness: MailAccountReadinessV1::PendingRestart,
@@ -364,12 +398,58 @@ mod tests {
                 },
             ],
             lifecycle_revision: 3,
-            lifecycle_operation_id: Some("mail-lifecycle-3".to_owned()),
+            lifecycle_operation_id: Some(format!("{connection_id}-lifecycle-3")),
+        }
+    }
+
+    #[test]
+    fn account_binding_round_trips_without_secret_or_record_identifiers() {
+        let request = MailBindCredentialRequestV1 {
+            connection_id: "mail-account".to_owned(),
+            purpose: MailCredentialPurposeV1::SmtpPassword,
+            expected_binding_revision: 2,
+            credential_revision: 3,
         };
+        assert_eq!(
+            decode_bind_request(&encode_bind_request(&request).expect("encode")),
+            Ok(request)
+        );
+    }
+
+    #[test]
+    fn sanitized_account_status_round_trips_connector_and_path_readiness() {
+        let status = sample_account_status("mail-account");
 
         assert_eq!(
             decode_account_status(&encode_account_status(&status).expect("encode")),
             Ok(status)
+        );
+    }
+
+    #[test]
+    fn account_catalog_is_sorted_bounded_and_round_trips_canonically() {
+        let catalog = MailAccountCatalogV1 {
+            accounts: vec![
+                sample_account_status("mail-account-a"),
+                sample_account_status("mail-account-b"),
+            ],
+        };
+        assert_eq!(
+            decode_account_catalog(&encode_account_catalog(&catalog).expect("encode catalog")),
+            Ok(catalog.clone())
+        );
+
+        let mut unsorted = catalog;
+        unsorted.accounts.reverse();
+        assert_eq!(
+            encode_account_catalog(&unsorted),
+            Err(MailClientWireErrorV1::InvalidPayload)
+        );
+        assert_eq!(
+            encode_account_catalog(&MailAccountCatalogV1 {
+                accounts: Vec::new(),
+            }),
+            Err(MailClientWireErrorV1::InvalidPayload)
         );
     }
 }

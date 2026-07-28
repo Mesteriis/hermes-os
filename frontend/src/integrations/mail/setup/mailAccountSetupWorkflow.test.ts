@@ -5,6 +5,10 @@ import { MailAccountSetupWorkflowV1 } from './mailAccountSetupWorkflow'
 describe('MailAccountSetupWorkflowV1', () => {
 	it('applies non-secret IMAP settings before Vault binding and activation', async () => {
 		const order: string[] = []
+		const createTarget = vi.fn().mockImplementation(async () => {
+			order.push('target')
+			return { configurationInstanceId: 'mail-target', desiredRevision: 1n }
+		})
 		const apply = vi.fn().mockImplementation(async () => {
 			order.push('settings')
 			return { settings: { desiredRevision: 2n }, application: {} }
@@ -26,7 +30,7 @@ describe('MailAccountSetupWorkflowV1', () => {
 			return {}
 		})
 		const workflow = new MailAccountSetupWorkflowV1({
-			configuration: { apply },
+			configuration: { createTarget, apply },
 			activation: { applyManagedIntegration: activate },
 			vault: { provision },
 			mail: { status, bind },
@@ -43,12 +47,14 @@ describe('MailAccountSetupWorkflowV1', () => {
 			imapPassword: new TextEncoder().encode('secret'),
 		})
 
-		expect(order).toEqual(['settings', 'status', 'vault', 'binding', 'activation'])
+		expect(order).toEqual(['target', 'settings', 'status', 'vault', 'binding', 'activation'])
 		expect(provision).toHaveBeenCalledWith(expect.objectContaining({
 			capabilityId: 'mail.imap.credential-provisioning.v1',
+			configurationInstanceId: 'mail-target',
 			purposeId: 'mail_imap_password',
 		}))
 		expect(activate).toHaveBeenCalledWith(expect.objectContaining({
+			configurationInstanceId: 'mail-target',
 			expectedDesiredRevision: 2n,
 		}))
 	})

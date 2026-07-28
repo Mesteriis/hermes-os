@@ -53,6 +53,18 @@ pub struct CompletedGmailOAuthProviderOperationV1 {
     provider_result: Result<GmailOAuthTokenResponseV1, MailGmailOAuthDispatchErrorV1>,
 }
 
+impl CompletedGmailOAuthProviderOperationV1 {
+    #[must_use]
+    pub fn connection_id(&self) -> &str {
+        match &self.prepared {
+            PreparedGmailOAuthProviderOperationV1::Complete { queued, .. }
+            | PreparedGmailOAuthProviderOperationV1::Refresh { queued, .. } => {
+                &queued.connection_id
+            }
+        }
+    }
+}
+
 impl MailAdmittedRuntime {
     pub async fn start_gmail_oauth(
         &self,
@@ -257,17 +269,20 @@ impl MailAdmittedRuntime {
         if self.gmail_oauth_operation_in_flight.is_some() {
             return Err(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation);
         }
+        if !self.provider_io_permitted() {
+            return Ok(None);
+        }
         let queued = self
             .durable
-            .claim_next_gmail_oauth_operation(dispatched_at_unix_seconds)
+            .claim_next_gmail_oauth_operation(
+                &self.account.connection_id,
+                dispatched_at_unix_seconds,
+            )
             .await
             .map_err(map_dispatch_persistence_error)?;
         let Some(queued) = queued else {
             return Ok(None);
         };
-        if queued.connection_id != self.account.connection_id {
-            return Err(MailGmailOAuthDispatchErrorV1::InvalidStoredOperation);
-        }
         let configuration = self
             .gmail_oauth
             .clone()

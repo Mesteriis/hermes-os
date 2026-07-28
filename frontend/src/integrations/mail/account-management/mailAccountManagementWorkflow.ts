@@ -1,5 +1,6 @@
 import {
 	MailCredentialPurposeV1,
+	type MailAccountCatalogV1,
 	type MailAccountStatusV1,
 	type MailCredentialBindingReceiptV1,
 } from '../../../gen/hermes/mail/account/v1/client_pb'
@@ -19,11 +20,12 @@ import {
 	retireMailAccount,
 	retryMailAccountLifecycle,
 } from '../api/mailAccountLifecycleClient'
-import { getMailAccountStatus } from '../api/mailAccountQueryClient'
+import { getMailAccountStatus, listMailAccounts } from '../api/mailAccountQueryClient'
 
 export type MailPasswordPurposeV1 = 'imap' | 'smtp'
 
 type MailAccountManagementPortsV1 = {
+	catalog(): Promise<MailAccountCatalogV1>
 	status(connectionId: string): Promise<MailAccountStatusV1>
 	retire(input: {
 		connectionId: string
@@ -61,6 +63,10 @@ export type MailPasswordRotationReceiptV1 = {
 
 export class MailAccountManagementWorkflowV1 {
 	constructor(private readonly ports: MailAccountManagementPortsV1 = defaultPorts()) {}
+
+	catalog(): Promise<MailAccountCatalogV1> {
+		return this.ports.catalog()
+	}
 
 	status(connectionId: string): Promise<MailAccountStatusV1> {
 		return this.ports.status(required(connectionId))
@@ -149,6 +155,7 @@ export class MailAccountManagementWorkflowV1 {
 
 function defaultPorts(): MailAccountManagementPortsV1 {
 	return {
+		catalog: listMailAccounts,
 		status: getMailAccountStatus,
 		retire: retireMailAccount,
 		delete: deleteMailAccount,

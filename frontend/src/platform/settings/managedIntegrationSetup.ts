@@ -1,5 +1,6 @@
 import type {
 	ApplyOwnerManagedIntegrationSettingsReceiptV1,
+	CreateOwnerModuleSettingsTargetReceiptV1,
 	UpdateOwnerModuleSettingsReceiptV1,
 } from '../../gen/hermes/gateway/v1/owner_module_settings_pb'
 import {
@@ -23,7 +24,7 @@ export type ManagedIntegrationSetupReceiptV1 = {
 
 type ManagedIntegrationSettingsPortV1 = Pick<
 	OwnerModuleSettingsClientV1,
-	'updateDesired' | 'applyManagedIntegration'
+	'createConfigurationTarget' | 'updateDesired' | 'applyManagedIntegration'
 >
 
 export class ManagedIntegrationSetupV1 {
@@ -32,11 +33,18 @@ export class ManagedIntegrationSetupV1 {
 			new OwnerModuleSettingsClientV1(),
 	) {}
 
+	async createTarget(
+		registrationId: string,
+	): Promise<CreateOwnerModuleSettingsTargetReceiptV1> {
+		return this.settings.createConfigurationTarget({ registrationId })
+	}
+
 	async apply(
 		input: ManagedIntegrationSetupInputV1,
 	): Promise<ManagedIntegrationSetupReceiptV1> {
 		const settings = await this.settings.updateDesired({
 			registrationId: input.registrationId,
+			configurationInstanceId: input.configurationInstanceId,
 			expectedDesiredRevision: input.expectedDesiredRevision,
 			values: [...input.values],
 		})

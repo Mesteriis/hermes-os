@@ -122,6 +122,7 @@ fn managed_mail_delivers_only_canonical_safe_attachment_from_its_blob_custody() 
 
     let unknown_attachment = MailClientRequestV1::SendMail(MailSendMailRequestV1 {
         operation_id: "managed-mail-unknown-attachment-rejection".to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
         provider_conversation_id: "smtp-attachment-thread".to_owned(),
         recipients: vec![PRIVATE_RECIPIENT.to_owned()],
         cc_recipients: Vec::new(),
@@ -175,6 +176,7 @@ fn managed_mail_delivers_only_canonical_safe_attachment_from_its_blob_custody() 
 
     let delivery = MailClientRequestV1::SendMail(MailSendMailRequestV1 {
         operation_id: OPERATION_ID.to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
         provider_conversation_id: "smtp-attachment-thread".to_owned(),
         recipients: vec![PRIVATE_RECIPIENT.to_owned()],
         cc_recipients: Vec::new(),
@@ -279,6 +281,7 @@ fn managed_mail_delivers_only_canonical_safe_attachment_from_its_blob_custody() 
     wait_for_mail_ready(&supervisor, &mail);
     let ambiguous_delivery = MailClientRequestV1::SendMail(MailSendMailRequestV1 {
         operation_id: AMBIGUOUS_OPERATION_ID.to_owned(),
+        connection_id: MAIL_ACCOUNT_ID.to_owned(),
         provider_conversation_id: "smtp-attachment-thread".to_owned(),
         recipients: vec![PRIVATE_RECIPIENT.to_owned()],
         cc_recipients: Vec::new(),
@@ -474,6 +477,7 @@ fn managed_gmail_materializes_then_delivers_canonical_safe_attachment() {
         80,
         &MailClientRequestV1::SendMail(MailSendMailRequestV1 {
             operation_id: GMAIL_OPERATION_ID.to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
             provider_conversation_id: "gmail-attachment-thread".to_owned(),
             recipients: vec![PRIVATE_RECIPIENT.to_owned()],
             cc_recipients: Vec::new(),

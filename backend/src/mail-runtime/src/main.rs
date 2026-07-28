@@ -60,9 +60,10 @@ where
     let schema_bytes = read_contract(&paths.settings_schema)?;
     let schema = decode_settings_schema_v1(&schema_bytes)
         .map_err(|_| "Mail runtime settings schema is invalid".to_owned())?;
-    let snapshot = decode_settings_snapshot_v1(&read_contract(&paths.settings_snapshot)?)
+    let selected_snapshot_bytes = read_contract(&paths.settings_snapshot)?;
+    let selected_snapshot = decode_settings_snapshot_v1(&selected_snapshot_bytes)
         .map_err(|_| "Mail runtime settings snapshot is invalid".to_owned())?;
-    validate_settings_snapshot_against_schema_v1(&schema, &snapshot)
+    validate_settings_snapshot_against_schema_v1(&schema, &selected_snapshot)
         .map_err(|_| "Mail runtime settings snapshot is invalid".to_owned())?;
     let configuration = ManagedIntegrationRuntimeConfigurationV1::decode(
         read_contract(&paths.runtime_configuration)?.as_slice(),
@@ -73,32 +74,62 @@ where
     if configuration.runtime_instance_id != paths.runtime_instance_id {
         return Err("Mail runtime configuration is stale".to_owned());
     }
-    let settings = settings::decode(&snapshot)?;
+    let snapshots = if configuration.configuration_instances.is_empty() {
+        vec![selected_snapshot]
+    } else {
+        let selected = configuration
+            .configuration_instances
+            .iter()
+            .find(|instance| {
+                instance.configuration_instance_id == configuration.configuration_instance_id
+            })
+            .ok_or_else(|| "Mail runtime settings catalog is invalid".to_owned())?;
+        if selected.settings_snapshot_bytes != selected_snapshot_bytes {
+            return Err("Mail runtime settings catalog is stale".to_owned());
+        }
+        configuration
+            .configuration_instances
+            .iter()
+            .map(|instance| {
+                let snapshot = decode_settings_snapshot_v1(&instance.settings_snapshot_bytes)
+                    .map_err(|_| "Mail runtime settings catalog is invalid".to_owned())?;
+                validate_settings_snapshot_against_schema_v1(&schema, &snapshot)
+                    .map_err(|_| "Mail runtime settings catalog is invalid".to_owned())?;
+                Ok(snapshot)
+            })
+            .collect::<Result<Vec<_>, String>>()?
+    };
     let storage = configuration
         .storage
         .clone()
         .ok_or_else(|| "Mail runtime configuration is invalid".to_owned())?;
-    let admission = MailRuntimeAdmission {
-        logical_owner_id: configuration.logical_owner_id,
-        configuration_instance_id: configuration.configuration_instance_id,
-        module_registration_id: configuration.registration_id,
-        runtime_instance_id: configuration.runtime_instance_id,
-        runtime_generation: configuration.runtime_generation,
-        grant_epoch: configuration.grant_epoch,
-        vault_runtime_generation: storage.vault_runtime_generation,
-        settings_revision: snapshot.revision,
-        account: settings.account,
-        gmail_oauth: settings.gmail_oauth,
-    };
+    let admissions = snapshots
+        .into_iter()
+        .map(|snapshot| {
+            let settings = settings::decode(&snapshot)?;
+            Ok(MailRuntimeAdmission {
+                logical_owner_id: configuration.logical_owner_id.clone(),
+                configuration_instance_id: snapshot.target_id,
+                module_registration_id: configuration.registration_id.clone(),
+                runtime_instance_id: configuration.runtime_instance_id.clone(),
+                runtime_generation: configuration.runtime_generation,
+                grant_epoch: configuration.grant_epoch,
+                vault_runtime_generation: storage.vault_runtime_generation,
+                settings_revision: snapshot.revision,
+                account: settings.account,
+                gmail_oauth: settings.gmail_oauth,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
     let control_channel = inherited_control_channel()?;
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|_| "Mail runtime executor is unavailable".to_owned())?;
     let mut admitted = runtime
-        .block_on(managed::open_admitted_runtime(
+        .block_on(managed::open_admitted_runtime_catalog(
             control_channel,
             descriptor,
             schema_bytes,
-            &admission,
+            &admissions,
             storage,
             &configuration.event_hub_endpoint,
             configuration.event_credential_revision,
@@ -133,101 +164,37 @@ where
                         .expect("finished Gmail OAuth provider operation"),
                 )
                 .map_err(|_| "Mail runtime Gmail OAuth provider worker failed".to_owned())?;
+            let connection_id = completed.connection_id().to_owned();
+            admitted
+                .select_account(&connection_id)
+                .map_err(|_| "Mail runtime Gmail OAuth account selection failed".to_owned())?;
             handle_gmail_oauth_dispatch_result(
                 runtime.block_on(admitted.finalize_gmail_oauth_provider_operation(completed, now)),
             )?;
         }
         if gmail_oauth_provider_operation.is_none() {
-            match runtime.block_on(admitted.prepare_next_gmail_oauth_provider_operation(now, now)) {
-                Ok(Some(prepared)) => {
-                    gmail_oauth_provider_operation =
-                        Some(runtime.spawn(execute_gmail_oauth_provider_operation(prepared)));
+            for connection_id in admitted.connection_ids() {
+                admitted
+                    .select_account(&connection_id)
+                    .map_err(|_| "Mail runtime Gmail OAuth account selection failed".to_owned())?;
+                match runtime
+                    .block_on(admitted.prepare_next_gmail_oauth_provider_operation(now, now))
+                {
+                    Ok(Some(prepared)) => {
+                        gmail_oauth_provider_operation =
+                            Some(runtime.spawn(execute_gmail_oauth_provider_operation(prepared)));
+                        break;
+                    }
+                    Ok(None) => {}
+                    Err(error) => handle_gmail_oauth_dispatch_result(Err(error))?,
                 }
-                Ok(None) => {}
-                Err(error) => handle_gmail_oauth_dispatch_result(Err(error))?,
             }
         }
-        match runtime.block_on(admitted.execute_next_delivery(now, now)) {
-            Ok(_) => {}
-            Err(MailDeliveryDispatchErrorV1::ProviderRejected) => {
-                developer_diagnostic("developer_mail_delivery_rejected");
-            }
-            Err(MailDeliveryDispatchErrorV1::AttachmentRejected) => {
-                developer_diagnostic("developer_mail_delivery_attachment_rejected");
-            }
-            Err(MailDeliveryDispatchErrorV1::ProviderOutcomeUnknown) => {
-                developer_diagnostic("developer_mail_delivery_outcome_unknown");
-            }
-            Err(MailDeliveryDispatchErrorV1::InvalidStoredCommand) => {
-                developer_diagnostic("developer_mail_delivery_command_invalid");
-                return Err("Mail runtime delivery command is invalid".to_owned());
-            }
-            Err(MailDeliveryDispatchErrorV1::Persistence) => {
-                developer_diagnostic("developer_mail_delivery_persistence_failed");
-                return Err("Mail runtime delivery persistence failed".to_owned());
-            }
-        }
-        match runtime.block_on(admitted.execute_next_message_flag_command(now)) {
-            Ok(_) => {}
-            Err(MailMessageFlagDispatchErrorV1::ProviderRejected) => {
-                developer_diagnostic("developer_mail_message_flag_rejected");
-            }
-            Err(MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown) => {
-                developer_diagnostic("developer_mail_message_flag_outcome_unknown");
-            }
-            Err(MailMessageFlagDispatchErrorV1::InvalidStoredCommand) => {
-                developer_diagnostic("developer_mail_message_flag_command_invalid");
-                return Err("Mail runtime message flag command is invalid".to_owned());
-            }
-            Err(MailMessageFlagDispatchErrorV1::Persistence) => {
-                developer_diagnostic("developer_mail_message_flag_persistence_failed");
-                return Err("Mail runtime message flag persistence failed".to_owned());
-            }
-        }
-        match runtime.block_on(admitted.execute_next_message_location_command(now)) {
-            Ok(_) => {}
-            Err(MailMessageLocationDispatchErrorV1::ProviderRejected) => {
-                developer_diagnostic("developer_mail_message_location_rejected");
-            }
-            Err(MailMessageLocationDispatchErrorV1::ProviderUnsupported) => {
-                developer_diagnostic("developer_mail_message_location_unsupported");
-            }
-            Err(MailMessageLocationDispatchErrorV1::ProviderOutcomeUnknown) => {
-                developer_diagnostic("developer_mail_message_location_outcome_unknown");
-            }
-            Err(MailMessageLocationDispatchErrorV1::InvalidStoredCommand) => {
-                developer_diagnostic("developer_mail_message_location_command_invalid");
-                return Err("Mail runtime message location command is invalid".to_owned());
-            }
-            Err(MailMessageLocationDispatchErrorV1::Persistence) => {
-                developer_diagnostic("developer_mail_message_location_persistence_failed");
-                return Err("Mail runtime message location persistence failed".to_owned());
-            }
-        }
-        match runtime.block_on(admitted.execute_next_message_permanent_delete_command(now)) {
-            Ok(_) => {}
-            Err(MailMessagePermanentDeleteDispatchErrorV1::ProviderRejected) => {
-                developer_diagnostic("developer_mail_message_permanent_delete_rejected");
-            }
-            Err(MailMessagePermanentDeleteDispatchErrorV1::ProviderUnsupported) => {
-                developer_diagnostic("developer_mail_message_permanent_delete_unsupported");
-            }
-            Err(MailMessagePermanentDeleteDispatchErrorV1::ReauthorizationRequired) => {
-                developer_diagnostic(
-                    "developer_mail_message_permanent_delete_reauthorization_required",
-                );
-            }
-            Err(MailMessagePermanentDeleteDispatchErrorV1::ProviderOutcomeUnknown) => {
-                developer_diagnostic("developer_mail_message_permanent_delete_outcome_unknown");
-            }
-            Err(MailMessagePermanentDeleteDispatchErrorV1::InvalidStoredCommand) => {
-                developer_diagnostic("developer_mail_message_permanent_delete_command_invalid");
-                return Err("Mail runtime permanent delete command is invalid".to_owned());
-            }
-            Err(MailMessagePermanentDeleteDispatchErrorV1::Persistence) => {
-                developer_diagnostic("developer_mail_message_permanent_delete_persistence_failed");
-                return Err("Mail runtime permanent delete persistence failed".to_owned());
-            }
+        for connection_id in admitted.connection_ids() {
+            admitted
+                .select_account(&connection_id)
+                .map_err(|_| "Mail runtime account selection failed".to_owned())?;
+            execute_account_queues(&runtime, &mut admitted, now)?;
         }
         runtime
             .block_on(admitted.try_consume_attachment_anchor_handoff(now))
@@ -265,6 +232,96 @@ where
         }
         std::thread::sleep(Duration::from_secs(1));
     }
+}
+
+fn execute_account_queues(
+    runtime: &tokio::runtime::Runtime,
+    admitted: &mut managed::MailAdmittedRuntime,
+    now: i64,
+) -> Result<(), String> {
+    match runtime.block_on(admitted.execute_next_delivery(now, now)) {
+        Ok(_) => {}
+        Err(MailDeliveryDispatchErrorV1::ProviderRejected) => {
+            developer_diagnostic("developer_mail_delivery_rejected");
+        }
+        Err(MailDeliveryDispatchErrorV1::AttachmentRejected) => {
+            developer_diagnostic("developer_mail_delivery_attachment_rejected");
+        }
+        Err(MailDeliveryDispatchErrorV1::ProviderOutcomeUnknown) => {
+            developer_diagnostic("developer_mail_delivery_outcome_unknown");
+        }
+        Err(MailDeliveryDispatchErrorV1::InvalidStoredCommand) => {
+            developer_diagnostic("developer_mail_delivery_command_invalid");
+            return Err("Mail runtime delivery command is invalid".to_owned());
+        }
+        Err(MailDeliveryDispatchErrorV1::Persistence) => {
+            developer_diagnostic("developer_mail_delivery_persistence_failed");
+            return Err("Mail runtime delivery persistence failed".to_owned());
+        }
+    }
+    match runtime.block_on(admitted.execute_next_message_flag_command(now)) {
+        Ok(_) => {}
+        Err(MailMessageFlagDispatchErrorV1::ProviderRejected) => {
+            developer_diagnostic("developer_mail_message_flag_rejected");
+        }
+        Err(MailMessageFlagDispatchErrorV1::ProviderOutcomeUnknown) => {
+            developer_diagnostic("developer_mail_message_flag_outcome_unknown");
+        }
+        Err(MailMessageFlagDispatchErrorV1::InvalidStoredCommand) => {
+            developer_diagnostic("developer_mail_message_flag_command_invalid");
+            return Err("Mail runtime message flag command is invalid".to_owned());
+        }
+        Err(MailMessageFlagDispatchErrorV1::Persistence) => {
+            developer_diagnostic("developer_mail_message_flag_persistence_failed");
+            return Err("Mail runtime message flag persistence failed".to_owned());
+        }
+    }
+    match runtime.block_on(admitted.execute_next_message_location_command(now)) {
+        Ok(_) => {}
+        Err(MailMessageLocationDispatchErrorV1::ProviderRejected) => {
+            developer_diagnostic("developer_mail_message_location_rejected");
+        }
+        Err(MailMessageLocationDispatchErrorV1::ProviderUnsupported) => {
+            developer_diagnostic("developer_mail_message_location_unsupported");
+        }
+        Err(MailMessageLocationDispatchErrorV1::ProviderOutcomeUnknown) => {
+            developer_diagnostic("developer_mail_message_location_outcome_unknown");
+        }
+        Err(MailMessageLocationDispatchErrorV1::InvalidStoredCommand) => {
+            developer_diagnostic("developer_mail_message_location_command_invalid");
+            return Err("Mail runtime message location command is invalid".to_owned());
+        }
+        Err(MailMessageLocationDispatchErrorV1::Persistence) => {
+            developer_diagnostic("developer_mail_message_location_persistence_failed");
+            return Err("Mail runtime message location persistence failed".to_owned());
+        }
+    }
+    match runtime.block_on(admitted.execute_next_message_permanent_delete_command(now)) {
+        Ok(_) => {}
+        Err(MailMessagePermanentDeleteDispatchErrorV1::ProviderRejected) => {
+            developer_diagnostic("developer_mail_message_permanent_delete_rejected");
+        }
+        Err(MailMessagePermanentDeleteDispatchErrorV1::ProviderUnsupported) => {
+            developer_diagnostic("developer_mail_message_permanent_delete_unsupported");
+        }
+        Err(MailMessagePermanentDeleteDispatchErrorV1::ReauthorizationRequired) => {
+            developer_diagnostic(
+                "developer_mail_message_permanent_delete_reauthorization_required",
+            );
+        }
+        Err(MailMessagePermanentDeleteDispatchErrorV1::ProviderOutcomeUnknown) => {
+            developer_diagnostic("developer_mail_message_permanent_delete_outcome_unknown");
+        }
+        Err(MailMessagePermanentDeleteDispatchErrorV1::InvalidStoredCommand) => {
+            developer_diagnostic("developer_mail_message_permanent_delete_command_invalid");
+            return Err("Mail runtime permanent delete command is invalid".to_owned());
+        }
+        Err(MailMessagePermanentDeleteDispatchErrorV1::Persistence) => {
+            developer_diagnostic("developer_mail_message_permanent_delete_persistence_failed");
+            return Err("Mail runtime permanent delete persistence failed".to_owned());
+        }
+    }
+    Ok(())
 }
 
 fn developer_diagnostic(message: &str) {

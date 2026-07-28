@@ -80,6 +80,7 @@ pub use portability::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MailClientRequestV1 {
     BindCredential(account::MailBindCredentialRequestV1),
+    AccountCatalog(account::MailAccountCatalogRequestV1),
     AccountStatus(account::MailAccountStatusRequestV1),
     RetireAccount(account_lifecycle::MailAccountLifecycleCommandV1),
     DeleteAccount(account_lifecycle::MailAccountLifecycleCommandV1),
@@ -108,10 +109,12 @@ pub enum MailClientRequestV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailSyncInboxRequestV1 {
     pub operation_id: String,
+    pub connection_id: String,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailSendMailRequestV1 {
     pub operation_id: String,
+    pub connection_id: String,
     pub provider_conversation_id: String,
     pub recipients: Vec<String>,
     pub cc_recipients: Vec<String>,
@@ -123,10 +126,12 @@ pub struct MailSendMailRequestV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailDeliveryStatusRequestV1 {
     pub operation_id: String,
+    pub connection_id: String,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MailClientResponseV1 {
     CredentialBinding(account::MailCredentialBindingReceiptV1),
+    AccountCatalog(account::MailAccountCatalogV1),
     AccountStatus(account::MailAccountStatusV1),
     AccountLifecycle(account_lifecycle::MailAccountLifecycleReceiptV1),
     SyncInboxCompleted {

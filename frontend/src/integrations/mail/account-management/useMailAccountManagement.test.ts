@@ -13,14 +13,15 @@ import {
 import { useMailAccountManagement } from './useMailAccountManagement'
 
 describe('useMailAccountManagement', () => {
-	it('loads the exact configured account and applies lifecycle mutations through Mail contracts', async () => {
+	it('loads the account catalog and applies lifecycle mutations through Mail contracts', async () => {
 		const current = create(MailAccountStatusV1Schema, {
 			connectionId: 'personal-mail',
 			readiness: MailAccountReadinessV1.MAIL_ACCOUNT_READINESS_READY,
 			lifecycleRevision: 4n,
 		})
 		const workflow = {
-			status: vi.fn().mockResolvedValueOnce(current),
+			catalog: vi.fn().mockResolvedValue({ accounts: [current] }),
+			status: vi.fn(),
 			retire: vi.fn().mockResolvedValue({
 				operationId: 'retire-mail-1',
 			}),
@@ -35,7 +36,8 @@ describe('useMailAccountManagement', () => {
 		)
 
 		await controller.refresh()
-		expect(workflow.status).toHaveBeenCalledWith('personal-mail')
+		expect(workflow.catalog).toHaveBeenCalledOnce()
+		expect(controller.connectionId.value).toBe('personal-mail')
 		expect(controller.stateLabel.value).toBe('Ready')
 
 		await controller.retire()
@@ -45,8 +47,9 @@ describe('useMailAccountManagement', () => {
 		expect(controller.message.value).toContain('accepted')
 	})
 
-	it('fails closed before transport when no effective account is configured', async () => {
+	it('fails closed before transport when the account catalog is not admitted', async () => {
 		const workflow = {
+			catalog: vi.fn(),
 			status: vi.fn(),
 			retire: vi.fn(),
 			delete: vi.fn(),
@@ -64,8 +67,9 @@ describe('useMailAccountManagement', () => {
 		)
 
 		await controller.refresh()
+		expect(workflow.catalog).not.toHaveBeenCalled()
 		expect(workflow.status).not.toHaveBeenCalled()
-		expect(controller.message.value).toContain('Configure a Mail account')
+		expect(controller.message.value).toContain('catalog capability is not admitted')
 	})
 })
 
@@ -74,6 +78,7 @@ function mailModule() {
 		registrationId: 'mail.local',
 		moduleId: 'hermes-mail-runtime',
 		capabilityIds: [
+			'mail.account.catalog.query.v1',
 			'mail.account.query.v1',
 			'mail.account.retire.v1',
 		],

@@ -33,6 +33,7 @@ pub(super) fn assert_mail_sync_replay_and_health(
         request_id,
         MailClientRequestV1::SyncInbox(MailSyncInboxRequestV1 {
             operation_id: operation_id.to_owned(),
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
         }),
     )
     .expect("replay exact Mail sync operation");

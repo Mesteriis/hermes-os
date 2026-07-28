@@ -51,19 +51,19 @@ export function useMailAccountSetup(
 		return 'Connect IMAP account'
 	})
 
-	async function submit(): Promise<void> {
+	async function submit(): Promise<boolean> {
 		const current = module()
-		if (!current?.settings || !canSubmit.value) return
+		if (!current?.settings || !canSubmit.value) return false
 		if (kind.value === 'imap' && !secureHostAvailable) {
 			message.value = 'Use the desktop shell or root make dev to seal mail credentials.'
 			messageTone.value = 'neutral'
-			return
+			return false
 		}
 		busy.value = true
 		message.value = ''
 		try {
 			if (kind.value === 'gmail') {
-				await submitGmail(current)
+				return await submitGmail(current)
 			} else {
 				await workflow.setupImap({
 					registrationId: current.registrationId,
@@ -86,17 +86,19 @@ export function useMailAccountSetup(
 				clearSecrets()
 				message.value = 'Mail account configured and credential bindings activated.'
 				messageTone.value = 'success'
+				return true
 			}
 		} catch {
 			clearSecrets()
 			message.value = 'Mail account setup failed before readiness. Secrets were not stored in Settings.'
 			messageTone.value = 'error'
+			return false
 		} finally {
 			busy.value = false
 		}
 	}
 
-	async function submitGmail(current: ClientModuleBootstrapV1): Promise<void> {
+	async function submitGmail(current: ClientModuleBootstrapV1): Promise<boolean> {
 		if (!gmailState.value) {
 			gmailState.value = await workflow.startGmail({
 				registrationId: current.registrationId,
@@ -108,7 +110,7 @@ export function useMailAccountSetup(
 			})
 			message.value = 'Gmail configuration is active. Open Google authorization and return the state and code.'
 			messageTone.value = 'neutral'
-			return
+			return true
 		}
 		await workflow.completeGmail(gmailState.value, {
 			returnedState: returnedState.value,
@@ -117,6 +119,7 @@ export function useMailAccountSetup(
 		authorizationCode.value = ''
 		message.value = 'Gmail OAuth completion accepted. Readiness will update after reconciliation.'
 		messageTone.value = 'success'
+		return true
 	}
 
 	function clearSecrets(): void {
