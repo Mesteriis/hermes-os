@@ -1,12 +1,18 @@
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
+import {
+	MailConnectorProfileV1,
+	type MailAccountStatusV1,
+} from '../../../gen/hermes/mail/account/v1/client_pb'
 import {
 	GmailOAuthOutcomeV1,
 	type GmailOAuthStartedV1,
 } from '../../../gen/hermes/mail/v1/client_pb'
 import { MailGmailOAuthClientV1 } from '../api/mailGmailOAuthClient'
+import { listMailAccounts } from '../api/mailAccountQueryClient'
 
 export function useMailGmailPermanentDeleteAuthorization() {
 	const client = new MailGmailOAuthClientV1()
+	const accounts = shallowRef<MailAccountStatusV1[]>([])
 	const connectionId = ref('')
 	const operationId = ref('')
 	const started = ref<GmailOAuthStartedV1>()
@@ -18,6 +24,27 @@ export function useMailGmailPermanentDeleteAuthorization() {
 	const submitLabel = computed(() =>
 		started.value ? 'Complete authorization' : 'Authorize deletion',
 	)
+
+	async function refreshAccounts(): Promise<void> {
+		busy.value = true
+		failed.value = false
+		try {
+			const catalog = await listMailAccounts()
+			accounts.value = catalog.accounts.filter(
+				(account) => account.connectorProfile
+					=== MailConnectorProfileV1.MAIL_CONNECTOR_PROFILE_GMAIL,
+			)
+			if (!accounts.value.some((account) => account.connectionId === connectionId.value)) {
+				connectionId.value = accounts.value[0]?.connectionId ?? ''
+			}
+		} catch {
+			accounts.value = []
+			failed.value = true
+			message.value = 'Gmail account catalog is unavailable.'
+		} finally {
+			busy.value = false
+		}
+	}
 
 	async function submit(): Promise<void> {
 		busy.value = true
@@ -81,12 +108,14 @@ export function useMailGmailPermanentDeleteAuthorization() {
 	}
 
 	return {
+		accounts,
 		authorizationCode,
 		busy,
 		connectionId,
 		failed,
 		message,
 		operationId,
+		refreshAccounts,
 		refreshStatus,
 		returnedState,
 		started,

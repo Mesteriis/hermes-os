@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import {
 	publicModuleSettingRows,
@@ -15,6 +15,7 @@ import MailGmailPermanentDeleteAuthorizationPanel from './MailGmailPermanentDele
 
 const MAIL_MODULE_ID = 'hermes-mail-runtime'
 const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
+const accountRefreshRequest = ref(0)
 const model = computed<ModuleSettingsPanelModel>(() => {
 	const owned = props.module?.moduleId === MAIL_MODULE_ID ? props.module : null
 	const settings = owned?.settings
@@ -31,13 +32,17 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 		settings: publicModuleSettingRows(owned ? [owned] : []),
 	}
 })
+
+function refreshAccounts(): void {
+	accountRefreshRequest.value += 1
+}
 </script>
 
 <template>
 	<div class="mail-settings-owner">
 		<ModuleSettingsPanel :model="model" />
-		<MailAccountSetupPanel :module="module" />
-		<MailAccountManagementPanel :module="module" />
+		<MailAccountSetupPanel :module="module" @completed="refreshAccounts" />
+		<MailAccountManagementPanel :module="module" :refresh-request="accountRefreshRequest" />
 		<MailGmailPermanentDeleteAuthorizationPanel />
 		<MailPortabilityPanel :module="module" />
 	</div>

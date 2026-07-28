@@ -10,7 +10,7 @@ import { TelegramAccountResponseSchema } from '../../../gen/hermes/telegram/v1/c
 import { useTelegramAccountManagement } from './useTelegramAccountManagement'
 
 describe('useTelegramAccountManagement', () => {
-	it('selects only the configured account and uses its runtime epoch for restart', async () => {
+	it('selects from the provider catalog and uses the selected runtime epoch for restart', async () => {
 		const configured = create(TelegramAccountResponseSchema, {
 			accountId: 'personal-telegram',
 			displayName: 'Personal Telegram',
@@ -20,8 +20,8 @@ describe('useTelegramAccountManagement', () => {
 		})
 		const ports = {
 			list: vi.fn().mockResolvedValue([
-				create(TelegramAccountResponseSchema, { accountId: 'another-account' }),
 				configured,
+				create(TelegramAccountResponseSchema, { accountId: 'another-account' }),
 			]),
 			restart: vi.fn().mockResolvedValue({
 				reconfigurationId: 'reconfigure-1',
@@ -36,6 +36,7 @@ describe('useTelegramAccountManagement', () => {
 		)
 
 		await controller.refresh()
+		expect(controller.accounts.value).toHaveLength(2)
 		expect(controller.account.value?.accountId).toBe('personal-telegram')
 		expect(controller.stateLabel.value).toBe('running')
 
@@ -44,9 +45,9 @@ describe('useTelegramAccountManagement', () => {
 		expect(controller.message.value).toContain('reconfigure-1')
 	})
 
-	it('does not list provider accounts without an effective account setting', async () => {
+	it('lists the provider catalog without deriving account identity from module settings', async () => {
 		const ports = {
-			list: vi.fn(),
+			list: vi.fn().mockResolvedValue([]),
 			restart: vi.fn(),
 			replay: vi.fn(),
 			retire: vi.fn(),
@@ -61,8 +62,8 @@ describe('useTelegramAccountManagement', () => {
 		)
 
 		await controller.refresh()
-		expect(ports.list).not.toHaveBeenCalled()
-		expect(controller.message.value).toContain('Configure a Telegram account')
+		expect(ports.list).toHaveBeenCalledOnce()
+		expect(controller.message.value).toContain('No Telegram accounts')
 	})
 })
 

@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import '../../../shared/ui/settings/integrationAccountSetupCard.css'
 import { useMailGmailPermanentDeleteAuthorization } from '../setup/useMailGmailPermanentDeleteAuthorization'
 
 const authorization = useMailGmailPermanentDeleteAuthorization()
+onMounted(() => void authorization.refreshAccounts())
 </script>
 
 <template>
@@ -24,6 +26,23 @@ const authorization = useMailGmailPermanentDeleteAuthorization()
 			</summary>
 			<form class="integration-account-setup__form" @submit.prevent="authorization.submit">
 				<div class="integration-account-setup__fields">
+					<label class="wide">
+						<span>Gmail account</span>
+						<select
+							v-model="authorization.connectionId.value"
+							:disabled="Boolean(authorization.started.value)"
+							required
+						>
+							<option v-if="authorization.accounts.value.length === 0" value="">No Gmail accounts</option>
+							<option
+								v-for="account in authorization.accounts.value"
+								:key="account.connectionId"
+								:value="account.connectionId"
+							>
+								{{ account.connectionId }}
+							</option>
+						</select>
+					</label>
 					<a
 						v-if="authorization.started.value"
 						class="wide"

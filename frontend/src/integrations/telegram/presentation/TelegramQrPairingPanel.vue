@@ -7,6 +7,7 @@ import './telegramQrPairingPanel.css'
 const props = defineProps<{
 	module: ClientModuleBootstrapV1 | null
 	startRequest?: number
+	embedded?: boolean
 }>()
 const pairing = useTelegramQrPairing(
 	() => props.module,
@@ -15,7 +16,10 @@ const pairing = useTelegramQrPairing(
 </script>
 
 <template>
-	<section class="telegram-qr-pairing">
+	<section
+		class="telegram-qr-pairing"
+		:class="{ 'telegram-qr-pairing--embedded': embedded }"
+	>
 		<header>
 			<div>
 				<small>Provider authorization</small>

@@ -9,6 +9,12 @@
 		var(--h-color-bg-muted);
 }
 
+.telegram-qr-pairing--embedded {
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+
 .telegram-qr-pairing header,
 .telegram-qr-pairing footer,
 .telegram-qr-pairing__password {

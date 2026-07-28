@@ -10,11 +10,10 @@ import ModuleSettingsPanel from '../../../shared/ui/settings/ModuleSettingsPanel
 import type { ModuleSettingsPanelModel } from '../../../shared/ui/settings/ModuleSettingsPanelModel'
 import TelegramAccountManagementPanel from './TelegramAccountManagementPanel.vue'
 import TelegramAccountSetupPanel from './TelegramAccountSetupPanel.vue'
-import TelegramQrPairingPanel from './TelegramQrPairingPanel.vue'
 
 const TELEGRAM_MODULE_ID = 'hermes-telegram-runtime'
 const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
-const qrStartRequest = ref(0)
+const accountRefreshRequest = ref(0)
 const model = computed<ModuleSettingsPanelModel>(() => {
 	const owned = props.module?.moduleId === TELEGRAM_MODULE_ID ? props.module : null
 	const settings = owned?.settings
@@ -32,16 +31,15 @@ const model = computed<ModuleSettingsPanelModel>(() => {
 	}
 })
 
-function startQrAuthorization(): void {
-	qrStartRequest.value += 1
+function refreshAccounts(): void {
+	accountRefreshRequest.value += 1
 }
 </script>
 
 <template>
 	<div class="provider-settings-stack">
 		<ModuleSettingsPanel :model="model" />
-		<TelegramAccountSetupPanel :module="module" @provisioned="startQrAuthorization" />
-		<TelegramAccountManagementPanel :module="module" />
-		<TelegramQrPairingPanel :module="module" :start-request="qrStartRequest" />
+		<TelegramAccountSetupPanel :module="module" @completed="refreshAccounts" />
+		<TelegramAccountManagementPanel :module="module" :refresh-request="accountRefreshRequest" />
 	</div>
 </template>

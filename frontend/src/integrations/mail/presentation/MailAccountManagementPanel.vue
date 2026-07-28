@@ -1,14 +1,25 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import Icon from '../../../shared/ui/Icon.vue'
 import IntegrationAccountLifecycleCard from '../../../shared/ui/settings/IntegrationAccountLifecycleCard.vue'
 import { useMailAccountManagement } from '../account-management/useMailAccountManagement'
 
-const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
+const props = defineProps<{
+	module: ClientModuleBootstrapV1 | null
+	refreshRequest?: number
+}>()
 const management = useMailAccountManagement(() => props.module)
 
 onMounted(() => void management.refresh())
+watch(() => props.refreshRequest, () => void management.refresh())
+
+function selectAccount(event: Event): void {
+	const target = event.target
+	if (target instanceof HTMLSelectElement) {
+		void management.selectAccount(target.value)
+	}
+}
 
 function retire(): void {
 	const accountId = management.status.value?.connectionId
@@ -44,6 +55,23 @@ function deleteAccount(): void {
 			<div><small>Lifecycle revision</small><strong>{{ management.status.value?.lifecycleRevision ?? '—' }}</strong></div>
 		</template>
 
+		<label>
+			<span>Mail account</span>
+			<select
+				:value="management.connectionId.value"
+				:disabled="management.busy.value || management.accounts.value.length === 0"
+				@change="selectAccount"
+			>
+				<option v-if="management.accounts.value.length === 0" value="">No accounts</option>
+				<option
+					v-for="account in management.accounts.value"
+					:key="account.connectionId"
+					:value="account.connectionId"
+				>
+					{{ account.connectionId }}
+				</option>
+			</select>
+		</label>
 		<label v-if="management.canRotateImap.value">
 			<span>New IMAP password</span>
 			<input v-model="management.imapPassword.value" type="password" autocomplete="new-password">

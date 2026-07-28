@@ -1,7 +1,6 @@
 import { computed, ref, shallowRef } from 'vue'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import type { TelegramAccountResponse } from '../../../gen/hermes/telegram/v1/client_pb'
-import { publicModuleStringSetting } from '../../../platform/gateway/publicModuleSettings'
 import {
 	listTelegramAccounts,
 	replayTelegramAccount,
@@ -23,12 +22,13 @@ export function useTelegramAccountManagement(
 	ports: TelegramAccountManagementPorts = defaultPorts(),
 ) {
 	const account = shallowRef<TelegramAccountResponse | null>(null)
+	const accounts = shallowRef<readonly TelegramAccountResponse[]>([])
+	const accountId = ref('')
 	const busy = ref(false)
 	const message = ref('')
 	const messageTone = ref<'neutral' | 'success' | 'error'>('neutral')
 	const ownedModule = computed(() => module()?.moduleId === TELEGRAM_MODULE_ID ? module() : null)
-	const accountId = computed(() => publicModuleStringSetting(ownedModule.value, 'telegram.account_id') ?? '')
-	const canManage = computed(() => hasCapability('telegram.lifecycle.v1') && Boolean(accountId.value))
+	const canManage = computed(() => hasCapability('telegram.lifecycle.v1'))
 	const canReconfigure = computed(() => hasCapability('telegram.reconfiguration.v1')
 		&& (account.value?.runtimeEpoch ?? 0n) > 0n)
 	const stateLabel = computed(() => account.value?.runtimeState || account.value?.state || 'No account')
@@ -36,20 +36,31 @@ export function useTelegramAccountManagement(
 	async function refresh(): Promise<void> {
 		if (!canManage.value) {
 			account.value = null
-			message.value = accountId.value
-				? 'Telegram lifecycle capability is not admitted.'
-				: 'Configure a Telegram account to expose its lifecycle status.'
+			accounts.value = []
+			message.value = 'Telegram lifecycle capability is not admitted.'
 			messageTone.value = 'neutral'
 			return
 		}
 		await run(async () => {
-			const accounts = await ports.list()
-			account.value = accounts.find((candidate) => candidate.accountId === accountId.value) ?? null
+			accounts.value = await ports.list()
+			if (!accounts.value.some((candidate) => candidate.accountId === accountId.value)) {
+				accountId.value = accounts.value[0]?.accountId ?? ''
+			}
+			account.value = accounts.value.find(
+				(candidate) => candidate.accountId === accountId.value,
+			) ?? null
 			message.value = account.value
 				? `Telegram account ${account.value.accountId} status refreshed.`
-				: `Telegram account ${accountId.value} is not provisioned in the integration runtime.`
+				: 'No Telegram accounts are provisioned in the integration runtime.'
 			messageTone.value = account.value ? 'success' : 'neutral'
 		}, 'Telegram account status is unavailable.')
+	}
+
+	function selectAccount(nextAccountId: string): void {
+		accountId.value = nextAccountId
+		account.value = accounts.value.find(
+			(candidate) => candidate.accountId === nextAccountId,
+		) ?? null
 	}
 
 	async function restart(): Promise<void> {
@@ -99,6 +110,7 @@ export function useTelegramAccountManagement(
 
 	return {
 		account,
+		accounts,
 		accountId,
 		busy,
 		message,
@@ -107,6 +119,7 @@ export function useTelegramAccountManagement(
 		canManage,
 		canReconfigure,
 		refresh,
+		selectAccount,
 		restart,
 		replay,
 		retire,

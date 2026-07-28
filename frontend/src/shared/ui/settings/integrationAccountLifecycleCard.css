@@ -119,7 +119,8 @@
 	font-size: var(--h-font-size-sm);
 }
 
-.integration-account-lifecycle__controls input {
+.integration-account-lifecycle__controls input,
+.integration-account-lifecycle__controls select {
 	min-width: 0;
 	padding: var(--h-space-3);
 	border: 1px solid var(--h-color-border);
@@ -129,7 +130,8 @@
 	font: inherit;
 }
 
-.integration-account-lifecycle__controls input:focus {
+.integration-account-lifecycle__controls input:focus,
+.integration-account-lifecycle__controls select:focus {
 	border-color: var(--integration-account-lifecycle-accent);
 	outline: 2px solid color-mix(in srgb, var(--integration-account-lifecycle-accent) 28%, transparent);
 }
