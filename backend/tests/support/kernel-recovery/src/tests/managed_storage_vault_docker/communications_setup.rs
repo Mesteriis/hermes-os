@@ -1404,6 +1404,99 @@ pub(super) fn assert_communications_transferred_body_projection(
     }
 }
 
+pub(super) fn publish_and_wait_for_communications_message_deletion(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    message_id: &[u8],
+) {
+    let draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
+        "managed-deleted-body-observation-1",
+        hermes_communications_ingress::SourceEnvelope {
+            provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
+            external_record_id: "integration-private-body-record-1".to_owned(),
+            scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                external_account_id: "integration-private-body-account-1".to_owned(),
+                external_conversation_id: Some(
+                    "integration-private-body-conversation-1".to_owned(),
+                ),
+                external_participant_id: None,
+                external_media_id: None,
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        hermes_communications_ingress::CommunicationEvidenceKindV1::MessageDeleted,
+        hermes_communications_ingress::BodyAvailabilityV1::Unavailable,
+        hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+        Some(1_783_024_010),
+    )
+    .expect("build deleted-message ingress draft");
+    let record = hermes_communications_ingress::build_observation_outbox_record_v1(
+        &draft,
+        &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+            runtime_instance_id: "integration-test-runtime-1".to_owned(),
+            runtime_generation: 1,
+            module_id: "integration-test-runtime".to_owned(),
+            recorded_at_unix_seconds: 1_783_024_010,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build deleted-message typed ingress envelope");
+    let endpoint = store
+        .platform_event_hub_topology()
+        .expect("read Event Hub topology")
+        .expect("Event Hub topology")
+        .nats_endpoint()
+        .to_owned();
+    tokio::runtime::Runtime::new()
+        .expect("Tokio runtime")
+        .block_on(async move {
+            async_nats::jetstream::new(
+                async_nats::connect(endpoint)
+                    .await
+                    .expect("connect disposable JetStream"),
+            )
+            .publish(
+                "hermes.observation.v1.communications.communication_observed.v1",
+                record.exact_bytes().to_vec().into(),
+            )
+            .await
+            .expect("publish deleted-message typed ingress envelope")
+            .await
+            .expect("acknowledge deleted-message typed ingress envelope");
+        });
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let detail = route_communications_query(
+            store,
+            supervisor,
+            72,
+            &CommunicationsQueryRequestV1 {
+                protocol_major: 1,
+                operation: Some(Operation::GetMessage(GetMessageRequestV1 {
+                    message_id: message_id.to_vec(),
+                })),
+            }
+            .encode_to_vec(),
+        );
+        let Some(QueryResult::GetMessage(detail)) = detail.result else {
+            panic!("Communications deleted-message detail result");
+        };
+        let message = detail
+            .message
+            .expect("deleted canonical message remains available as evidence metadata");
+        if message.lifecycle_state == 2 {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Communications delete observation did not advance canonical lifecycle; message={message:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
 fn wait_for_transferred_body_message(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,

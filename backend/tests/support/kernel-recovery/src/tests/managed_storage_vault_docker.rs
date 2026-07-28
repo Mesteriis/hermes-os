@@ -500,7 +500,7 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
             StartEvidenceExportRequestV1 {
                 protocol_major: 1,
                 operation_id: export_id.to_vec(),
-                message_ids: vec![message_id],
+                message_ids: vec![message_id.clone()],
             }
             .encode_to_vec(),
         )
@@ -535,6 +535,49 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
             supervisor
                 .last_failure(COMMUNICATIONS_EXPORT_REGISTRATION)
                 .expect("read Communications Export runtime failure"),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    publish_and_wait_for_communications_message_deletion(store.as_ref(), &supervisor, &message_id);
+    let deleted_export_id = [13; 16];
+    let deleted_start = StartEvidenceExportResponseV1::decode(
+        route(
+            8,
+            communications_export_command_contract_reference_v1(),
+            StartEvidenceExportRequestV1 {
+                protocol_major: 1,
+                operation_id: deleted_export_id.to_vec(),
+                message_ids: vec![message_id],
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode accepted deleted-message export command");
+    assert_eq!(deleted_start.export_id, deleted_export_id);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let status = GetEvidenceExportStatusResponseV1::decode(
+            route(
+                9,
+                communications_export_query_contract_reference_v1(),
+                GetEvidenceExportStatusRequestV1 {
+                    protocol_major: 1,
+                    export_id: deleted_export_id.to_vec(),
+                }
+                .encode_to_vec(),
+            )
+            .as_slice(),
+        )
+        .expect("decode deleted-message Communications Export status");
+        if status.status == EvidenceExportStatusV1::EvidenceExportStatusRejected as i32 {
+            assert_eq!(status.completed_items, 0);
+            assert_eq!(status.artifact_bytes, 0);
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "deleted canonical message must reach terminal rejected export status; status={status:?}"
         );
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
