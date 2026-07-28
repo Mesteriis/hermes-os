@@ -510,4 +510,20 @@ mod tests {
         assert_ne!(first, source_reference_id([9; 16], &item(), [5; 32]));
         assert!(first.iter().any(|byte| *byte != 0));
     }
+
+    #[test]
+    fn snapshot_policy_failures_map_to_typed_terminal_rejections() {
+        assert_eq!(
+            snapshot_rejection_code(CommunicationsEvidenceExportSourceErrorV1::ContentLimit),
+            Ok(EvidenceExportRejectCodeV1::EvidenceExportRejectCodeContentLimit)
+        );
+        assert_eq!(
+            snapshot_rejection_code(CommunicationsEvidenceExportSourceErrorV1::NotFound),
+            Ok(EvidenceExportRejectCodeV1::EvidenceExportRejectCodeNotFound)
+        );
+        assert_eq!(
+            snapshot_rejection_code(CommunicationsEvidenceExportSourceErrorV1::StorageUnavailable),
+            Err(CommunicationsEvidenceExportDeliveryErrorV1::Unavailable)
+        );
+    }
 }

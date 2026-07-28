@@ -108,9 +108,8 @@ impl CommunicationsDurablePersistence {
                             .map_err(|_| CommunicationsEvidenceExportSourceErrorV1::InvalidRow)?,
                     )
                     .map_err(|_| CommunicationsEvidenceExportSourceErrorV1::InvalidRow)?;
-                    total_source_bytes = total_source_bytes
-                        .checked_add(declared_bytes)
-                        .ok_or(CommunicationsEvidenceExportSourceErrorV1::ContentLimit)?;
+                    total_source_bytes =
+                        checked_export_source_bytes(total_source_bytes, declared_bytes)?;
                     Some(CommunicationsEvidenceExportBodyReceiptV1 {
                         reference_id: id16(
                             &row.try_get::<Vec<u8>, _>("body_blob_reference_id")
@@ -166,9 +165,6 @@ impl CommunicationsDurablePersistence {
                     .map_err(|_| CommunicationsEvidenceExportSourceErrorV1::InvalidRow)?,
                 body,
             });
-        }
-        if total_source_bytes > MAX_EXPORT_SOURCE_BYTES_V1 {
-            return Err(CommunicationsEvidenceExportSourceErrorV1::ContentLimit);
         }
         Ok(items)
     }
@@ -260,6 +256,19 @@ fn validate_message_ids(
     Ok(())
 }
 
+fn checked_export_source_bytes(
+    current: u64,
+    declared_bytes: u64,
+) -> Result<u64, CommunicationsEvidenceExportSourceErrorV1> {
+    let total = current
+        .checked_add(declared_bytes)
+        .ok_or(CommunicationsEvidenceExportSourceErrorV1::ContentLimit)?;
+    if total > MAX_EXPORT_SOURCE_BYTES_V1 {
+        return Err(CommunicationsEvidenceExportSourceErrorV1::ContentLimit);
+    }
+    Ok(total)
+}
+
 fn direction_from_value(
     value: i16,
 ) -> Result<CommunicationDirectionV1, CommunicationsEvidenceExportSourceErrorV1> {
@@ -315,6 +324,22 @@ mod tests {
         assert_eq!(
             validate_message_ids(&[[1; 16], [1; 16]]),
             Err(CommunicationsEvidenceExportSourceErrorV1::InvalidRequest)
+        );
+    }
+
+    #[test]
+    fn aggregate_source_bytes_reject_the_first_byte_above_the_exact_limit() {
+        assert_eq!(
+            checked_export_source_bytes(0, MAX_EXPORT_SOURCE_BYTES_V1),
+            Ok(MAX_EXPORT_SOURCE_BYTES_V1)
+        );
+        assert_eq!(
+            checked_export_source_bytes(MAX_EXPORT_SOURCE_BYTES_V1, 1),
+            Err(CommunicationsEvidenceExportSourceErrorV1::ContentLimit)
+        );
+        assert_eq!(
+            checked_export_source_bytes(u64::MAX, 1),
+            Err(CommunicationsEvidenceExportSourceErrorV1::ContentLimit)
         );
     }
 }
