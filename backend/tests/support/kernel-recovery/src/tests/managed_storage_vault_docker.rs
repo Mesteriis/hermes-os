@@ -623,6 +623,78 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     assert_eq!(restarted_status.requested_items, 1);
     assert_eq!(restarted_status.completed_items, 1);
     assert!(restarted_status.artifact_bytes > 0);
+    set_authenticated_nats_container_running(false);
+    let outage_export_id = [16; 16];
+    let outage_start = StartEvidenceExportResponseV1::decode(
+        route(
+            17,
+            communications_export_command_contract_reference_v1(),
+            StartEvidenceExportRequestV1 {
+                protocol_major: 1,
+                operation_id: outage_export_id.to_vec(),
+                message_ids: vec![message_id.clone()],
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode Communications Export command accepted during NATS outage");
+    assert_eq!(outage_start.export_id, outage_export_id);
+    std::thread::sleep(std::time::Duration::from_millis(1_500));
+    let outage_pending = GetEvidenceExportStatusResponseV1::decode(
+        route(
+            18,
+            communications_export_query_contract_reference_v1(),
+            GetEvidenceExportStatusRequestV1 {
+                protocol_major: 1,
+                export_id: outage_export_id.to_vec(),
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode Communications Export status during NATS outage");
+    let export_runtime_active_during_outage = supervisor
+        .is_active(COMMUNICATIONS_EXPORT_REGISTRATION)
+        .expect("read Communications Export process state during NATS outage");
+    set_authenticated_nats_container_running(true);
+    assert_eq!(
+        outage_pending.status,
+        EvidenceExportStatusV1::EvidenceExportStatusPendingSource as i32,
+        "NATS outage retains the exact export request before source preparation"
+    );
+    assert!(
+        export_runtime_active_during_outage,
+        "NATS outage is retryable and does not stop Communications Export"
+    );
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    loop {
+        let status = GetEvidenceExportStatusResponseV1::decode(
+            route(
+                19,
+                communications_export_query_contract_reference_v1(),
+                GetEvidenceExportStatusRequestV1 {
+                    protocol_major: 1,
+                    export_id: outage_export_id.to_vec(),
+                }
+                .encode_to_vec(),
+            )
+            .as_slice(),
+        )
+        .expect("decode Communications Export status after NATS recovery");
+        if status.status == EvidenceExportStatusV1::EvidenceExportStatusReady as i32 {
+            assert_eq!(status.requested_items, 1);
+            assert_eq!(status.completed_items, 1);
+            assert!(status.artifact_bytes > 0);
+            break;
+        }
+        assert!(
+            status.status != EvidenceExportStatusV1::EvidenceExportStatusRejected as i32
+                && std::time::Instant::now() < deadline,
+            "persisted export request must resume after NATS recovery; status={status:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     publish_and_wait_for_communications_message_deletion(store.as_ref(), &supervisor, &message_id);
     let deleted_export_id = [13; 16];
     let deleted_start = StartEvidenceExportResponseV1::decode(
