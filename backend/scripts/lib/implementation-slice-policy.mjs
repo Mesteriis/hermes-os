@@ -868,7 +868,10 @@ const RECOVERY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
-  'hermes-runtime-protocol': PROTOCOL_THIRD_PARTY_DEPENDENCIES,
+  'hermes-runtime-protocol': [
+    ...PROTOCOL_THIRD_PARTY_DEPENDENCIES,
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+  ],
   'hermes-gateway-protocol': PROTOCOL_THIRD_PARTY_DEPENDENCIES,
   'hermes-kernel-control-store': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },

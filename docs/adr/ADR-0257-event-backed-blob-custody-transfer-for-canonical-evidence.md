@@ -22,7 +22,10 @@ pending custody replay through successor Vault, Storage, Blob and Communications
 runtime generations, and a current target generation whose reissued GrantSet no
 longer contains `communications.blob.v1`. Communications reports `ready` only
 after its Event, Storage and search dependencies are open; transient
-Storage/NATS outbox failures retain the exact pending bytes for retry.
+Storage/NATS outbox failures retain the exact pending bytes for retry. The
+production runtime maps both Blob retry-pending and transient custody Storage
+unavailability to an idle maintenance tick; neither outcome exits the runtime
+or consumes its Kernel restart budget.
 
 Зависит от:
 

@@ -15,6 +15,7 @@ use hermes_runtime_protocol::v1::{
     managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
+use hermes_runtime_protocol::vault_request_id::next_vault_transport_request_id_v1;
 use hermes_vault_protocol::{
     LeaseAudienceV1, LeaseIdV1, SecretClassV1, VaultActionV1, VaultCiphertextFrameV1,
     VaultLeaseIssueRequestV1, VaultPurposeRequestV1, VaultResponseRecipientV1,
@@ -208,7 +209,7 @@ impl ManagedProviderCredentialClientV1 {
             return Err(ManagedProviderCredentialErrorV1::InvalidContext);
         }
         let recipient = VaultResponseRecipientV1::generate();
-        let request_id = random_request_id()?;
+        let request_id = next_request_id()?;
         let delivery = self.issue_lease(
             request_id,
             request,
@@ -304,7 +305,7 @@ impl ManagedProviderCredentialClientV1 {
         audience: LeaseAudienceV1,
         command: VaultTransportCommandV1,
     ) -> Result<Zeroizing<Vec<u8>>, ManagedProviderCredentialErrorV1> {
-        let request_id = random_request_id()?;
+        let request_id = next_request_id()?;
         let recipient = VaultResponseRecipientV1::generate();
         let request_binding = binding(
             &audience,
@@ -553,7 +554,7 @@ impl<'a> ManagedProviderCredentialClientV2<'a> {
             return Err(ManagedProviderCredentialErrorV1::InvalidContext);
         }
         let recipient = VaultResponseRecipientV1::generate();
-        let request_id = random_request_id()?;
+        let request_id = next_request_id()?;
         let delivery = self.issue_lease(
             dispatcher,
             request_id,
@@ -634,7 +635,7 @@ impl<'a> ManagedProviderCredentialClientV2<'a> {
         audience: LeaseAudienceV1,
         command: VaultTransportCommandV1,
     ) -> Result<Zeroizing<Vec<u8>>, ManagedProviderCredentialErrorV1> {
-        let request_id = random_request_id()?;
+        let request_id = next_request_id()?;
         let recipient = VaultResponseRecipientV1::generate();
         let request_binding = binding(
             &audience,
@@ -848,10 +849,8 @@ pub(crate) fn read_frame(
     Err(ManagedProviderCredentialErrorV1::Rejected)
 }
 
-pub(crate) fn random_request_id() -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
-    let mut request_id = [0_u8; 16];
-    getrandom::fill(&mut request_id).map_err(|_| ManagedProviderCredentialErrorV1::Unavailable)?;
-    Ok(request_id)
+pub(crate) fn next_request_id() -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
+    next_vault_transport_request_id_v1().ok_or(ManagedProviderCredentialErrorV1::Unavailable)
 }
 
 #[cfg(test)]

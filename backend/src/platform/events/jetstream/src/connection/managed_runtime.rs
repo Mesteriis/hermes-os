@@ -19,6 +19,7 @@ use hermes_runtime_protocol::v1::{
     managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ResponseResult,
 };
+use hermes_runtime_protocol::vault_request_id::next_vault_transport_request_id_v1;
 use prost::Message;
 
 use super::{RuntimePublishPermitV1, RuntimeSubscribePermitV1};
@@ -252,9 +253,7 @@ fn consumer_spec(
 }
 
 fn request_id() -> Result<[u8; 16], ManagedRuntimeEventAccessErrorV1> {
-    let mut value = [0_u8; 16];
-    getrandom::fill(&mut value).map_err(|_| ManagedRuntimeEventAccessErrorV1::Unavailable)?;
-    Ok(value)
+    next_vault_transport_request_id_v1().ok_or(ManagedRuntimeEventAccessErrorV1::Unavailable)
 }
 fn write_frame(
     channel: &mut UnixStream,

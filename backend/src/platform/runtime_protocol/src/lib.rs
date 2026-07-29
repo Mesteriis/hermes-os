@@ -3,6 +3,7 @@
 pub mod managed_control;
 pub mod platform_control;
 pub mod validation;
+pub mod vault_request_id;
 
 /// Exact grant which allows one integration registration to receive a bounded
 /// catalog of independently revisioned configuration instances.

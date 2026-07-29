@@ -15,6 +15,7 @@ use hermes_runtime_protocol::v1::{
     ManagedRuntimeEventCredentialRequestV1, managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ResponseResult,
 };
+use hermes_runtime_protocol::vault_request_id::next_vault_transport_request_id_v1;
 use prost::Message;
 
 const MAX_FRAME_BYTES: usize = 512 * 1024;
@@ -81,9 +82,7 @@ fn delivery(
 }
 
 fn request_id() -> Result<[u8; 16], SchedulerNatsCredentialErrorV1> {
-    let mut value = [0_u8; 16];
-    getrandom::fill(&mut value).map_err(|_| SchedulerNatsCredentialErrorV1::Unavailable)?;
-    Ok(value)
+    next_vault_transport_request_id_v1().ok_or(SchedulerNatsCredentialErrorV1::Unavailable)
 }
 
 fn write_frame(

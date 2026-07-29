@@ -3,6 +3,7 @@
 use hermes_runtime_protocol::v1::{
     VaultCiphertextResponseV1, VaultCiphertextRouteDirectionV1, VaultCiphertextRouteV1,
 };
+use hermes_runtime_protocol::vault_request_id::next_vault_transport_request_id_v1;
 use hermes_vault_protocol::{
     CredentialLeaseV1, LeaseAudienceV1, SecretClassV1, VaultCiphertextFrameV1,
     VaultResponseRecipientV1, VaultTransportBindingV1, VaultTransportCommandV1,
@@ -57,7 +58,7 @@ pub fn resolve_kernel_credential_lease(
         lease_id: lease.lease_id().clone(),
         secret_class: SecretClassV1::PlatformCredential,
     };
-    let request_id = random_request_id().map_err(|_| KernelCredentialLeaseErrorV1::Rejected)?;
+    let request_id = next_request_id().map_err(|_| KernelCredentialLeaseErrorV1::Rejected)?;
     let recipient = VaultResponseRecipientV1::generate();
     let request_binding = binding(
         &audience,
@@ -148,8 +149,6 @@ fn validated_response(
     .ok()
 }
 
-fn random_request_id() -> Result<[u8; REQUEST_ID_BYTES], ()> {
-    let mut request_id = [0_u8; REQUEST_ID_BYTES];
-    getrandom::fill(&mut request_id).map_err(|_| ())?;
-    Ok(request_id)
+fn next_request_id() -> Result<[u8; REQUEST_ID_BYTES], ()> {
+    next_vault_transport_request_id_v1().ok_or(())
 }

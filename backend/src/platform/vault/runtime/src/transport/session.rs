@@ -1,22 +1,26 @@
 //! Vault-private authentication and replay fencing for HPKE transport sessions.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use hermes_runtime_protocol::v1::VaultCiphertextRouteV1;
+use hermes_runtime_protocol::vault_request_id::vault_transport_request_position_v1;
 use hermes_vault_protocol::{
-    SecretClassV1, VaultActionV1, VaultTransportBindingV1, VaultTransportCommandV1,
-    VaultTransportDirectionV1, VaultTransportError, VaultTransportSessionV1,
+    LeaseAudienceV1, SecretClassV1, VaultActionV1, VaultTransportBindingV1,
+    VaultTransportCommandV1, VaultTransportDirectionV1, VaultTransportError,
+    VaultTransportSessionV1,
 };
 use zeroize::Zeroizing;
 
 use crate::service::runtime::{VaultService, VaultServiceError};
 use crate::transport::keys::VaultTransportKeyPair;
 
-pub const MAX_TRANSPORT_SESSIONS: usize = 1_024;
+pub const MAX_TRANSPORT_REPLAY_STREAMS: usize = 1_024;
+
+type VaultTransportReplayStreamKeyV1 = (String, String, u64, u64, u64);
 
 pub struct VaultTransportReplayGuard {
     runtime_generation: u64,
-    consumed_request_ids: BTreeSet<[u8; 16]>,
+    stream_high_watermarks: BTreeMap<VaultTransportReplayStreamKeyV1, u64>,
 }
 
 impl VaultTransportReplayGuard {
@@ -24,7 +28,7 @@ impl VaultTransportReplayGuard {
     pub fn new(runtime_generation: u64) -> Self {
         Self {
             runtime_generation,
-            consumed_request_ids: BTreeSet::new(),
+            stream_high_watermarks: BTreeMap::new(),
         }
     }
 
@@ -40,7 +44,7 @@ impl VaultTransportReplayGuard {
         if command.operation_digest() != *session.binding().operation_digest() {
             return Err(VaultTransportError::InvalidBinding);
         }
-        self.consume_request_id(*session.binding().request_id())?;
+        self.consume_request_id(session.binding().audience(), session.binding().request_id())?;
         Ok(command)
     }
 
@@ -57,16 +61,40 @@ impl VaultTransportReplayGuard {
         Ok(())
     }
 
-    fn consume_request_id(&mut self, request_id: [u8; 16]) -> Result<(), VaultTransportError> {
-        if self.consumed_request_ids.contains(&request_id) {
-            return Err(VaultTransportError::ReplayDetected);
+    fn consume_request_id(
+        &mut self,
+        audience: &LeaseAudienceV1,
+        request_id: &[u8; 16],
+    ) -> Result<(), VaultTransportError> {
+        let (stream_id, sequence) = vault_transport_request_position_v1(request_id)
+            .ok_or(VaultTransportError::InvalidBinding)?;
+        let stream_key = replay_stream_key(audience, stream_id);
+        if let Some(high_watermark) = self.stream_high_watermarks.get_mut(&stream_key) {
+            if sequence <= *high_watermark {
+                return Err(VaultTransportError::ReplayDetected);
+            }
+            *high_watermark = sequence;
+            return Ok(());
         }
-        if self.consumed_request_ids.len() == MAX_TRANSPORT_SESSIONS {
+        if self.stream_high_watermarks.len() == MAX_TRANSPORT_REPLAY_STREAMS {
             return Err(VaultTransportError::SessionCapacityExceeded);
         }
-        self.consumed_request_ids.insert(request_id);
+        self.stream_high_watermarks.insert(stream_key, sequence);
         Ok(())
     }
+}
+
+fn replay_stream_key(
+    audience: &LeaseAudienceV1,
+    stream_id: u64,
+) -> VaultTransportReplayStreamKeyV1 {
+    (
+        audience.module_registration_id().to_owned(),
+        audience.runtime_instance_id().to_owned(),
+        audience.runtime_generation(),
+        audience.grant_epoch(),
+        stream_id,
+    )
 }
 
 pub fn execute_session(
@@ -145,4 +173,100 @@ fn validate_storage_command(
 pub enum VaultSessionExecutionError {
     Transport(VaultTransportError),
     Service(VaultServiceError),
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_runtime_protocol::vault_request_id::vault_transport_request_id_v1;
+
+    use super::*;
+
+    fn audience(index: usize) -> LeaseAudienceV1 {
+        LeaseAudienceV1::new(format!("module-{index}"), format!("runtime-{index}"), 1, 1)
+            .expect("valid audience")
+    }
+
+    #[test]
+    fn one_audience_accepts_more_than_the_old_request_capacity() {
+        let mut guard = VaultTransportReplayGuard::new(1);
+        let audience = audience(1);
+
+        for sequence in 1..=u64::try_from(MAX_TRANSPORT_REPLAY_STREAMS + 1).expect("bounded test") {
+            let request_id = vault_transport_request_id_v1(7, sequence).expect("positive position");
+            guard
+                .consume_request_id(&audience, &request_id)
+                .expect("increasing sequence");
+        }
+
+        assert_eq!(guard.stream_high_watermarks.len(), 1);
+    }
+
+    #[test]
+    fn repeated_lower_and_out_of_order_sequences_are_replays() {
+        let mut guard = VaultTransportReplayGuard::new(1);
+        let audience = audience(1);
+        let second = vault_transport_request_id_v1(7, 2).expect("position");
+        let first = vault_transport_request_id_v1(7, 1).expect("position");
+
+        guard
+            .consume_request_id(&audience, &second)
+            .expect("first accepted sequence");
+        assert!(matches!(
+            guard.consume_request_id(&audience, &second),
+            Err(VaultTransportError::ReplayDetected)
+        ));
+        assert!(matches!(
+            guard.consume_request_id(&audience, &first),
+            Err(VaultTransportError::ReplayDetected)
+        ));
+    }
+
+    #[test]
+    fn one_audience_accepts_independent_process_streams() {
+        let mut guard = VaultTransportReplayGuard::new(1);
+        let audience = audience(1);
+        let first_stream = vault_transport_request_id_v1(7, 1).expect("position");
+        let second_stream = vault_transport_request_id_v1(8, 1).expect("position");
+
+        guard
+            .consume_request_id(&audience, &first_stream)
+            .expect("first process stream");
+        guard
+            .consume_request_id(&audience, &second_stream)
+            .expect("second process stream");
+
+        assert_eq!(guard.stream_high_watermarks.len(), 2);
+    }
+
+    #[test]
+    fn capacity_is_bounded_by_distinct_audience_streams() {
+        let mut guard = VaultTransportReplayGuard::new(1);
+
+        for index in 0..MAX_TRANSPORT_REPLAY_STREAMS {
+            let request_id =
+                vault_transport_request_id_v1(u64::try_from(index + 1).expect("stream"), 1)
+                    .expect("position");
+            guard
+                .consume_request_id(&audience(index), &request_id)
+                .expect("audience stream within capacity");
+        }
+        let overflow_request_id = vault_transport_request_id_v1(1, 1).expect("overflow position");
+        assert!(matches!(
+            guard.consume_request_id(
+                &audience(MAX_TRANSPORT_REPLAY_STREAMS),
+                &overflow_request_id
+            ),
+            Err(VaultTransportError::SessionCapacityExceeded)
+        ));
+    }
+
+    #[test]
+    fn zero_stream_and_sequence_request_id_is_rejected() {
+        let mut guard = VaultTransportReplayGuard::new(1);
+
+        assert!(matches!(
+            guard.consume_request_id(&audience(1), &[0_u8; 16]),
+            Err(VaultTransportError::InvalidBinding)
+        ));
+    }
 }

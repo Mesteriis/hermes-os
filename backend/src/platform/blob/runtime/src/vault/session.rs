@@ -3,6 +3,7 @@
 use hermes_runtime_protocol::v1::{
     VaultCiphertextResponseV1, VaultCiphertextRouteDirectionV1, VaultCiphertextRouteV1,
 };
+use hermes_runtime_protocol::vault_request_id::next_vault_transport_request_id_v1;
 use hermes_vault_protocol::{
     LeaseAudienceV1, VaultCiphertextFrameV1, VaultResponseRecipientV1, VaultTransportBindingV1,
     VaultTransportCommandV1, VaultTransportDirectionV1, seal,
@@ -115,9 +116,7 @@ fn route(
 }
 
 fn request_id() -> Result<[u8; 16], ()> {
-    let mut value = [0; 16];
-    getrandom::fill(&mut value).map_err(|_| ())?;
-    Ok(value)
+    next_vault_transport_request_id_v1().ok_or(())
 }
 
 fn valid_response(

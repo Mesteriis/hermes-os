@@ -476,3 +476,10 @@ ADR-0324 фиксирует transport semantics пустого Protobuf request:
 передаёт exact zero-length payload descriptor-declared owner runtime, а
 owner-specific decoder сохраняет authority над schema validation. Искусственные
 поля и Mail-specific Gateway special case запрещены.
+ADR-0325 переводит Mail sync в durable asynchronous operation: client получает
+быстрое acceptance, provider I/O выполняется вне control loop, а IMAP получает
+bounded chunks, retries и whole-run deadline без импорта Communications.
+ADR-0326 заменяет исчерпаемый Vault replay set на audience-scoped monotonic
+sequence high-watermark: owner-neutral runtime protocol владеет exact opaque
+request ID рядом с ciphertext route, private Vault хранит bounded число runtime
+sessions, а Mail/Blob/Communications не получают доступ к replay lifecycle.

@@ -19,6 +19,7 @@ use hermes_gateway_runtime::{
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::VaultCiphertextResponseV1;
+use hermes_runtime_protocol::vault_request_id::next_vault_transport_request_id_v1;
 use hermes_vault_protocol::{
     LeaseAudienceV1, VaultCiphertextFrameV1, VaultLeaseIssueRequestV1, VaultTransportBindingV1,
     VaultTransportCommandV1, VaultTransportDirectionV1, VaultTransportPublicKey, seal,
@@ -167,8 +168,10 @@ impl OwnerVaultProvisioningHandlerV1 for KernelOwnerVaultProvisioningHandlerV1 {
         let command = VaultTransportCommandV1::IssueLease {
             request: lease_request,
         };
-        let lease_request_id = random_bytes::<16>()?;
-        let command_request_id = random_bytes::<16>()?;
+        let lease_request_id = next_vault_transport_request_id_v1()
+            .ok_or(OwnerVaultProvisioningRouteErrorV1::Unavailable)?;
+        let command_request_id = next_vault_transport_request_id_v1()
+            .ok_or(OwnerVaultProvisioningRouteErrorV1::Unavailable)?;
         let vault_key = VaultTransportPublicKey::from_bytes(*vault.hpke_public_key_x25519())
             .map_err(|_| OwnerVaultProvisioningRouteErrorV1::Unavailable)?;
         let lease_binding = VaultTransportBindingV1::new(

@@ -21,7 +21,7 @@ use prost::Message;
 use zeroize::Zeroizing;
 
 use crate::{
-    ManagedProviderCredentialErrorV1, binding, random_request_id, read_frame, valid_response,
+    ManagedProviderCredentialErrorV1, binding, next_request_id, read_frame, valid_response,
     write_frame,
 };
 
@@ -98,7 +98,7 @@ impl ManagedOwnerDerivedKeyClientV1 {
         ttl_seconds: u32,
     ) -> Result<LeaseIdV1, ManagedOwnerDerivedKeyErrorV1> {
         let recipient = VaultResponseRecipientV1::generate();
-        let request_id = random_request_id().map_err(map_transport_error)?;
+        let request_id = next_request_id().map_err(map_transport_error)?;
         let delivery = self.request_owner_key_lease(
             request_id,
             capability_id,
@@ -196,7 +196,7 @@ impl ManagedOwnerDerivedKeyClientV1 {
         audience: LeaseAudienceV1,
         command: VaultTransportCommandV1,
     ) -> Result<Zeroizing<Vec<u8>>, ManagedOwnerDerivedKeyErrorV1> {
-        let request_id = random_request_id().map_err(map_transport_error)?;
+        let request_id = next_request_id().map_err(map_transport_error)?;
         let recipient = VaultResponseRecipientV1::generate();
         let request_binding = binding(
             &audience,
@@ -297,7 +297,7 @@ pub fn ensure_managed_owner_derived_key_v2(
         return Err(ManagedOwnerDerivedKeyErrorV1::InvalidContext);
     }
     let recipient = VaultResponseRecipientV1::generate();
-    let request_id = random_request_id().map_err(map_transport_error)?;
+    let request_id = next_request_id().map_err(map_transport_error)?;
     let delivery = request_owner_key_lease_v2(
         channel,
         dispatcher,
@@ -392,7 +392,7 @@ fn execute_owner_key_command_v2(
     audience: LeaseAudienceV1,
     command: VaultTransportCommandV1,
 ) -> Result<Zeroizing<Vec<u8>>, ManagedOwnerDerivedKeyErrorV1> {
-    let request_id = random_request_id().map_err(map_transport_error)?;
+    let request_id = next_request_id().map_err(map_transport_error)?;
     let recipient = VaultResponseRecipientV1::generate();
     let request_binding = binding(
         &audience,

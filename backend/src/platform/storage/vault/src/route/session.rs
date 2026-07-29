@@ -3,6 +3,7 @@
 use hermes_runtime_protocol::v1::{
     VaultCiphertextResponseV1, VaultCiphertextRouteDirectionV1, VaultCiphertextRouteV1,
 };
+use hermes_runtime_protocol::vault_request_id::next_vault_transport_request_id_v1;
 use hermes_storage_protocol::StorageBindingV1;
 use hermes_vault_protocol::{
     LeaseAudienceV1, VaultCiphertextFrameV1, VaultResponseRecipientV1, VaultTransportBindingV1,
@@ -76,7 +77,7 @@ pub(super) fn prepare(
     context: &StorageVaultRouteContextV1,
     command: &VaultTransportCommandV1,
 ) -> Result<PreparedVaultCommandV1, ()> {
-    let request_id = random_request_id()?;
+    let request_id = next_request_id()?;
     let recipient = VaultResponseRecipientV1::generate();
     let request_binding =
         transport_binding(&audience, context, request_id, command, &recipient, true)?;
@@ -183,10 +184,8 @@ pub(super) fn binding_audience(
     .map_err(|_| ())
 }
 
-fn random_request_id() -> Result<[u8; 16], ()> {
-    let mut request_id = [0; 16];
-    getrandom::fill(&mut request_id).map_err(|_| ())?;
-    Ok(request_id)
+fn next_request_id() -> Result<[u8; 16], ()> {
+    next_vault_transport_request_id_v1().ok_or(())
 }
 
 fn validated_response(

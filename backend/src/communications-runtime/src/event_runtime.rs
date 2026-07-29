@@ -565,21 +565,16 @@ impl CommunicationsEventRuntimeV1 {
             search_access: &mut self.search_access,
             content_tickets: &self.content_tickets,
         };
-        match process_next_body_custody_transfer_v1(
-            &mut self.control_channel,
-            &mut dispatcher,
-            &self.persistence,
-            &format!("{}:{}", self.runtime_instance_id, self.runtime_generation),
-            context.recorded_at_unix_seconds,
+        custody_worker_outcome(
+            process_next_body_custody_transfer_v1(
+                &mut self.control_channel,
+                &mut dispatcher,
+                &self.persistence,
+                &format!("{}:{}", self.runtime_instance_id, self.runtime_generation),
+                context.recorded_at_unix_seconds,
+            )
+            .await,
         )
-        .await
-        {
-            Ok(processed) => Ok(processed),
-            Err(CommunicationsCustodyWorkerErrorV1::RetryPending) => Ok(false),
-            Err(CommunicationsCustodyWorkerErrorV1::StorageUnavailable) => {
-                Err(CommunicationsEventRuntimeErrorV1::Unavailable)
-            }
-        }
     }
 
     pub async fn process_next_derived_index_job(
@@ -657,6 +652,18 @@ impl CommunicationsEventRuntimeV1 {
             published_at_unix_seconds,
         )
         .await
+    }
+}
+
+fn custody_worker_outcome(
+    outcome: Result<bool, CommunicationsCustodyWorkerErrorV1>,
+) -> Result<bool, CommunicationsEventRuntimeErrorV1> {
+    match outcome {
+        Ok(processed) => Ok(processed),
+        Err(
+            CommunicationsCustodyWorkerErrorV1::RetryPending
+            | CommunicationsCustodyWorkerErrorV1::StorageUnavailable,
+        ) => Ok(false),
     }
 }
 
@@ -815,7 +822,21 @@ fn storage_binding(
 
 #[cfg(test)]
 mod tests {
-    use super::CommunicationsConsumerV1;
+    use super::{
+        CommunicationsConsumerV1, CommunicationsCustodyWorkerErrorV1, custody_worker_outcome,
+    };
+
+    #[test]
+    fn transient_custody_dependencies_keep_the_runtime_available_for_retry() {
+        assert_eq!(
+            custody_worker_outcome(Err(CommunicationsCustodyWorkerErrorV1::RetryPending)),
+            Ok(false)
+        );
+        assert_eq!(
+            custody_worker_outcome(Err(CommunicationsCustodyWorkerErrorV1::StorageUnavailable)),
+            Ok(false)
+        );
+    }
 
     #[test]
     fn event_consumers_advance_without_empty_consumer_starvation() {

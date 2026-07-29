@@ -1498,6 +1498,14 @@
           "version": "=3.2.0",
           "defaultFeatures": true,
           "features": []
+        },
+        {
+          "name": "getrandom",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.4.3",
+          "defaultFeatures": false,
+          "features": []
         }
       ],
       "hermes-gateway-protocol": [
