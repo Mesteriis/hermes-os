@@ -48,6 +48,7 @@ impl WhatsAppDurablePersistence {
         observation: &WhatsAppHostObservationRecordV1,
         operational: Option<&WhatsAppOperationalObservationV1>,
         outbox: Option<&OutboxRecordV1>,
+        delivery_route_locator: Option<&crate::WhatsAppDeliveryRouteLocatorV1>,
         created_at_unix_seconds: i64,
     ) -> Result<bool, WhatsAppDurablePersistenceError> {
         if let Some(operational @ WhatsAppOperationalObservationV1::ResyncState { .. }) =
@@ -112,6 +113,14 @@ impl WhatsAppDurablePersistence {
             .execute(&mut *transaction)
             .await
             .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
+        }
+        if let Some(locator) = delivery_route_locator {
+            crate::delivery_intent::upsert_delivery_route_locator(
+                &mut transaction,
+                locator,
+                created_at_unix_seconds,
+            )
+            .await?;
         }
         transaction
             .commit()

@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 
 pub const WHATSAPP_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
 pub const WHATSAPP_STORAGE_BUNDLE_REVISION_V2: u32 = 2;
+pub const WHATSAPP_STORAGE_BUNDLE_REVISION_V3: u32 = 3;
 
 pub const WHATSAPP_SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS hermes_data.whatsapp_communications_outbox (
@@ -182,7 +183,7 @@ CREATE TABLE IF NOT EXISTS hermes_data.whatsapp_operational_controls (
 pub fn whatsapp_storage_bundle_v1() -> StorageBundleV1 {
     StorageBundleV1 {
         major: 1,
-        revision: WHATSAPP_STORAGE_BUNDLE_REVISION_V2,
+        revision: WHATSAPP_STORAGE_BUNDLE_REVISION_V3,
         bundle_id: "whatsapp_state".to_owned(),
         owner_id: "whatsapp".to_owned(),
         steps: vec![
@@ -197,6 +198,13 @@ pub fn whatsapp_storage_bundle_v1() -> StorageBundleV1 {
                 migration_id: "whatsapp_operational_read".to_owned(),
                 forward_sql_utf8: WHATSAPP_SCHEMA_V2.as_bytes().to_vec(),
                 sha256: Sha256::digest(WHATSAPP_SCHEMA_V2.as_bytes()).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: WHATSAPP_STORAGE_BUNDLE_REVISION_V3,
+                migration_id: "whatsapp_delivery_route_locator".to_owned(),
+                forward_sql_utf8: crate::WHATSAPP_DELIVERY_ROUTE_SCHEMA_V1.as_bytes().to_vec(),
+                sha256: Sha256::digest(crate::WHATSAPP_DELIVERY_ROUTE_SCHEMA_V1.as_bytes())
+                    .to_vec(),
             },
         ],
     }
@@ -214,8 +222,8 @@ mod tests {
 
         assert_eq!(bundle.owner_id, "whatsapp");
         assert_eq!(bundle.bundle_id, "whatsapp_state");
-        assert_eq!(bundle.revision, WHATSAPP_STORAGE_BUNDLE_REVISION_V2);
-        assert_eq!(bundle.steps.len(), 2);
+        assert_eq!(bundle.revision, WHATSAPP_STORAGE_BUNDLE_REVISION_V3);
+        assert_eq!(bundle.steps.len(), 3);
         assert_eq!(validate_storage_bundle(&bundle), Ok(()));
         assert_eq!(
             bundle.steps[0].forward_sql_utf8,
@@ -225,17 +233,21 @@ mod tests {
             bundle.steps[1].forward_sql_utf8,
             WHATSAPP_SCHEMA_V2.as_bytes()
         );
+        assert_eq!(
+            bundle.steps[2].forward_sql_utf8,
+            crate::WHATSAPP_DELIVERY_ROUTE_SCHEMA_V1.as_bytes()
+        );
         let sql = bundle
             .steps
             .iter()
             .map(|step| std::str::from_utf8(&step.forward_sql_utf8).expect("WhatsApp SQL is UTF-8"))
             .collect::<Vec<_>>()
             .join("\n");
-        assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 10);
+        assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 13);
         assert_eq!(
             sql.matches("CREATE TABLE IF NOT EXISTS hermes_data.")
                 .count(),
-            10
+            13
         );
         assert!(!sql.contains("hermes_data.communications_"));
         assert!(!sql.contains("REFERENCES hermes_data.communications_"));

@@ -13,6 +13,7 @@ owner = "whatsapp"
 surface = "persistence"
 
 [dependencies]
+hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-events-protocol = { path = "../platform/events" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-whatsapp-api = { path = "../whatsapp-api" }

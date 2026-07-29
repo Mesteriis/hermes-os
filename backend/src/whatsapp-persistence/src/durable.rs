@@ -15,6 +15,7 @@ pub enum WhatsAppDurablePersistenceError {
     InvalidRow,
     ObservationConflict,
     CommandConflict,
+    ConflictingDeliveryRouteLocator,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -306,6 +307,7 @@ impl WhatsAppDurablePersistence {
             observation,
             None,
             Some(record),
+            None,
             created_at_unix_seconds,
         )
         .await

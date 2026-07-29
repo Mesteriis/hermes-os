@@ -13,8 +13,8 @@ pub mod managed;
 pub mod settings;
 
 use hermes_communications_ingress::{
-    CommunicationObservationDraft, ObservationEnvelopeBuildErrorV1, ObservationEnvelopeContextV1,
-    build_observation_outbox_record_v1,
+    CommunicationEvidenceKindV1, CommunicationObservationDraft, ObservationEnvelopeBuildErrorV1,
+    ObservationEnvelopeContextV1, build_observation_outbox_record_v1,
 };
 use hermes_whatsapp_api::host_bridge::WhatsAppHostBridgeEnvelopeV1;
 use hermes_whatsapp_api::{
@@ -28,9 +28,9 @@ use hermes_whatsapp_core::{
     project_operational_host_observation,
 };
 use hermes_whatsapp_persistence::{
-    WhatsAppClaimedCommandV1, WhatsAppDurablePersistence, WhatsAppDurablePersistenceError,
-    WhatsAppHostObservationRecordV1, WhatsAppOperationalObservationV1,
-    WhatsAppProviderCommandStateV1 as PersistedCommandStateV1,
+    WhatsAppClaimedCommandV1, WhatsAppDeliveryRouteLocatorV1, WhatsAppDurablePersistence,
+    WhatsAppDurablePersistenceError, WhatsAppHostObservationRecordV1,
+    WhatsAppOperationalObservationV1, WhatsAppProviderCommandStateV1 as PersistedCommandStateV1,
 };
 
 pub use communications_outbox::{
@@ -181,6 +181,21 @@ pub async fn accept_host_observation(
             .map_err(WhatsAppHostIngressError::Envelope)
         })
         .transpose()?;
+    let delivery_route_locator = communication_projection
+        .as_ref()
+        .filter(|projection| projection.evidence_kind == CommunicationEvidenceKindV1::ChatMessage)
+        .map(|projection| {
+            let provider_chat_id = projection.provider_conversation_id.as_deref().ok_or(
+                WhatsAppHostIngressError::Persistence(WhatsAppDurablePersistenceError::InvalidRow),
+            )?;
+            WhatsAppDeliveryRouteLocatorV1::new(
+                &projection.account_id,
+                provider_chat_id,
+                &projection.provider_record_id,
+            )
+            .map_err(WhatsAppHostIngressError::Persistence)
+        })
+        .transpose()?;
     let observation = WhatsAppHostObservationRecordV1 {
         account_id: envelope.account_id.clone(),
         provider_event_id: envelope.provider_event_id.clone(),
@@ -194,6 +209,7 @@ pub async fn accept_host_observation(
             &observation,
             operational.as_ref(),
             record.as_ref(),
+            delivery_route_locator.as_ref(),
             recorded_at_unix_seconds,
         )
         .await
