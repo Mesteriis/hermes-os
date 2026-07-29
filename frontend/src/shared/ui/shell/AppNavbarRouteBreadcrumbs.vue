@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, type ComponentPublicInstance } from 'vue'
 import Icon from '../Icon.vue'
+import Skeleton from '../Skeleton.vue'
 import { useMouseLeaveDismiss } from '../useMouseLeaveDismiss'
 
 type AppNavbarRouteBreadcrumbItem = {
@@ -10,6 +11,7 @@ type AppNavbarRouteBreadcrumbItem = {
 	iconTone?: AppNavbarRouteBreadcrumbIconTone
 	disabled?: boolean
 	disabledReason?: string
+	loading?: boolean
 }
 
 type AppNavbarRouteBreadcrumbLevel = {
@@ -139,7 +141,16 @@ function selectItem(itemId: string): void {
 						:class="iconToneClass(level.currentItem.iconTone)"
 						aria-hidden="true"
 					/>
-					<span v-if="isLastLevel(index)" class="app-navbar-route-breadcrumbs__label">{{ level.currentItem.label }}</span>
+					<Skeleton
+						v-if="isLastLevel(index) && level.currentItem.loading"
+						width="96px"
+						height="16px"
+						aria-label="Загрузка аккаунтов"
+					/>
+					<span
+						v-else-if="isLastLevel(index)"
+						class="app-navbar-route-breadcrumbs__label"
+					>{{ level.currentItem.label }}</span>
 					<Icon
 						v-if="isLastLevel(index)"
 						icon="tabler:chevron-down"
@@ -176,7 +187,13 @@ function selectItem(itemId: string): void {
 							:class="iconToneClass(item.iconTone)"
 							aria-hidden="true"
 						/>
-						<span class="app-navbar-route-breadcrumbs__option-label">{{ item.label }}</span>
+						<Skeleton
+							v-if="item.loading"
+							width="112px"
+							height="14px"
+							aria-label="Загрузка аккаунтов"
+						/>
+						<span v-else class="app-navbar-route-breadcrumbs__option-label">{{ item.label }}</span>
 						<span v-if="item.disabledReason" class="app-navbar-route-breadcrumbs__option-status">{{ item.disabledReason }}</span>
 						<Icon
 							v-if="item.id === level.currentItem.id"

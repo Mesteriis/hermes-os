@@ -9,6 +9,7 @@ import TelegramWorkspaceChatList from './TelegramWorkspaceChatList.vue'
 import TelegramWorkspaceThread from './TelegramWorkspaceThread.vue'
 import TelegramWorkspaceToolbar from './TelegramWorkspaceToolbar.vue'
 import './telegramOperationalPage.css'
+import '../../../shared/ui/shell/providerOperationalWorkspace.css'
 
 defineProps<{
 	accountAccess: TelegramAccountAccessModel

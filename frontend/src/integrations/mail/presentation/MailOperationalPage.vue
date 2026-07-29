@@ -21,6 +21,7 @@ import MailWorkspaceList from './MailWorkspaceList.vue'
 import MailWorkspaceReader from './MailWorkspaceReader.vue'
 import MailWorkspaceToolbar from './MailWorkspaceToolbar.vue'
 import './mailOperationalPage.css'
+import '../../../shared/ui/shell/providerOperationalWorkspace.css'
 
 defineProps<{
 	compositionModel: MailCompositionModel

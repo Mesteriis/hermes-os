@@ -1,0 +1,47 @@
+:is(.mail-operational-page, .telegram-operational-page) {
+	gap: var(--h-space-3);
+	padding: var(--h-space-3);
+	background: var(--h-color-bg);
+}
+
+:is(
+	.mail-workspace-toolbar,
+	.telegram-workspace-toolbar,
+	.telegram-action-rail
+) {
+	flex: 0 0 auto;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-sm);
+}
+
+:is(.mail-workspace-shell, .telegram-workspace-grid) {
+	gap: var(--h-space-3);
+}
+
+:is(
+	.mail-workspace-list,
+	.mail-workspace-reader,
+	.mail-workspace-inspector,
+	.telegram-workspace-chat-list,
+	.telegram-workspace-thread,
+	.telegram-workspace-inspector
+) {
+	overflow: hidden;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-sm);
+}
+
+@media (max-width: 900px) {
+	:is(.mail-operational-page, .telegram-operational-page) {
+		gap: var(--h-space-2);
+		padding: var(--h-space-2);
+	}
+
+	:is(.mail-workspace-shell, .telegram-workspace-grid) {
+		gap: var(--h-space-2);
+	}
+}

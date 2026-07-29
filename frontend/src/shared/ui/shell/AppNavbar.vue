@@ -38,6 +38,7 @@ type AppNavbarNavigationItem = AppNavbarBreadcrumb & {
 	iconTone?: AppNavbarNavigationIconTone
 	disabled?: boolean
 	disabledReason?: string
+	loading?: boolean
 }
 
 type AppNavbarNavigationLevel = {

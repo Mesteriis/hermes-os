@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
+import type { ProviderAccountNavigationSnapshot } from '../../../shared/ui/shell/providerAccountNavigation'
 import TelegramOperationalPage from '../presentation/TelegramOperationalPage.vue'
 import TelegramCommandWorkbench from '../presentation/TelegramCommandWorkbench.vue'
 import TelegramMessageInspector from '../presentation/TelegramMessageInspector.vue'
@@ -13,6 +14,7 @@ import { useTelegramMessageCommands } from '../queries/useTelegramMessageCommand
 import { useTelegramMessageInspector } from '../queries/useTelegramMessageInspector'
 import { useTelegramOperationRetry } from '../queries/useTelegramOperationRetry'
 import { useTelegramTopicCommands } from '../queries/useTelegramTopicCommands'
+import { telegramAccountNavigation } from '../presentation/telegramAccountNavigation'
 
 const props = defineProps<{
 	canAuthorize: boolean
@@ -20,6 +22,10 @@ const props = defineProps<{
 	canQuery: boolean
 	canReconfigure: boolean
 	canSend: boolean
+	navigationAccountId?: string
+}>()
+const emit = defineEmits<{
+	accountNavigationChange: [snapshot: ProviderAccountNavigationSnapshot]
 }>()
 const surface = useTelegramOperationalPage(() => props.canSend)
 const accountAccess = useTelegramAccountAccess({
@@ -76,6 +82,20 @@ function updateAccountId(accountId: string): void {
 	accountAccess.selectAccount(accountId)
 	surface.updateAccountId(accountId)
 }
+
+watch(
+	accountAccess.model,
+	(model) => emit('accountNavigationChange', telegramAccountNavigation(model)),
+	{ immediate: true },
+)
+
+watch(
+	() => props.navigationAccountId,
+	(accountId) => {
+		if (accountId === undefined || accountId === accountAccess.selectedAccountId.value) return
+		void selectAccount(accountId)
+	},
+)
 
 onMounted(() => {
 	void refreshAccounts()
