@@ -62,6 +62,7 @@ members = [
   "src/communication-delayed-delivery-api",
   "src/communication-delayed-delivery-core",
   "src/communication-delayed-delivery-persistence",
+  "src/communication-delayed-delivery-execution",
   "src/mail-delivery-intent-contract",
   "src/telegram-delivery-intent-contract",
   "src/whatsapp-delivery-intent-contract",

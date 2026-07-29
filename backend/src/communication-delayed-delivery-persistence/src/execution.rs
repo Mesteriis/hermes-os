@@ -11,6 +11,7 @@ const STATE_DUE: i16 = 4;
 const STATE_DISPATCHING: i16 = 5;
 const STATE_DELIVERY_ACCEPTED: i16 = 6;
 const STATE_CANCEL_REQUESTED: i16 = 7;
+const STATE_FAILED: i16 = 9;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClaimDueExecutionV1 {
@@ -45,6 +46,14 @@ pub struct MarkDeliveryAcceptedV1 {
     pub claim: DelayedDeliveryExecutionClaimV1,
     pub terminal_receipt: DelayedDeliveryDurableMessageV1,
     pub accepted_at_unix_millis: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MarkDeliveryFailedV1 {
+    pub claim: DelayedDeliveryExecutionClaimV1,
+    pub error_code: u16,
+    pub terminal_receipt: DelayedDeliveryDurableMessageV1,
+    pub failed_at_unix_millis: u64,
 }
 
 impl CommunicationDelayedDeliveryPersistenceV1 {
@@ -152,6 +161,69 @@ impl CommunicationDelayedDeliveryPersistenceV1 {
             &command.claim.delayed_operation_id,
             &command.terminal_receipt,
             accepted_at,
+        )
+        .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| DelayedDeliveryPersistenceErrorV1::StorageUnavailable)
+    }
+
+    pub async fn mark_delivery_failed(
+        &self,
+        command: &MarkDeliveryFailedV1,
+    ) -> Result<(), DelayedDeliveryPersistenceErrorV1> {
+        if !valid_claim(&command.claim)
+            || !(1..=7).contains(&command.error_code)
+            || command.failed_at_unix_millis == 0
+            || !valid_receipt(&command.terminal_receipt, "scheduler.job_run.result.v1")
+            || command.claim.fence.lease_expires_at_unix_millis <= command.failed_at_unix_millis
+        {
+            return Err(DelayedDeliveryPersistenceErrorV1::InvalidInput);
+        }
+        let failed_at = signed(command.failed_at_unix_millis)?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| DelayedDeliveryPersistenceErrorV1::StorageUnavailable)?;
+        let affected = sqlx::query(
+            "UPDATE hermes_data.communication_delayed_delivery_operations
+             SET state = $3, state_revision = state_revision + 1,
+                 error_code = $4, updated_at_unix_millis = $5
+             WHERE logical_owner_id = $1 AND delayed_operation_id = $2
+               AND delivery_operation_id = $6 AND state = $7
+               AND scheduler_run_id = $8
+               AND scheduler_schedule_revision = $9
+               AND scheduler_lease_epoch = $10
+               AND scheduler_lease_expires_at_unix_millis > $5",
+        )
+        .bind(&command.claim.logical_owner_id)
+        .bind(command.claim.delayed_operation_id.as_slice())
+        .bind(STATE_FAILED)
+        .bind(
+            i16::try_from(command.error_code)
+                .map_err(|_| DelayedDeliveryPersistenceErrorV1::InvalidInput)?,
+        )
+        .bind(failed_at)
+        .bind(command.claim.delivery_operation_id.as_slice())
+        .bind(STATE_DISPATCHING)
+        .bind(command.claim.fence.run_id.as_slice())
+        .bind(signed(command.claim.fence.schedule_revision)?)
+        .bind(signed(command.claim.fence.lease_epoch)?)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| DelayedDeliveryPersistenceErrorV1::StorageUnavailable)?
+        .rows_affected();
+        if affected != 1 {
+            return Err(DelayedDeliveryPersistenceErrorV1::ClaimLost);
+        }
+        insert_receipt_outbox(
+            &mut transaction,
+            &command.claim.logical_owner_id,
+            &command.claim.delayed_operation_id,
+            &command.terminal_receipt,
+            failed_at,
         )
         .await?;
         transaction

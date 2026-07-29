@@ -6,7 +6,7 @@ pub mod schema;
 
 pub use execution::{
     ClaimDueExecutionOutcomeV1, ClaimDueExecutionV1, DelayedDeliveryExecutionClaimV1,
-    MarkDeliveryAcceptedV1,
+    MarkDeliveryAcceptedV1, MarkDeliveryFailedV1,
 };
 use hermes_storage_protocol::StorageBindingV1;
 pub use operations::{

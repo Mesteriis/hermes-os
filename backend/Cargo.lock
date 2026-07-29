@@ -1787,6 +1787,17 @@ name = "hermes-communication-delayed-delivery-core"
 version = "0.1.0"
 
 [[package]]
+name = "hermes-communication-delayed-delivery-execution"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-delivery-intent-api",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-communication-delayed-delivery-persistence"
 version = "0.1.0"
 dependencies = [

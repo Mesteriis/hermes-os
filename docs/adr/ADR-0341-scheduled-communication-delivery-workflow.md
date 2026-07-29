@@ -19,8 +19,13 @@ custody materialization ещё не подключён, но due command уже 
 `scheduled|cancel_requested -> due -> dispatching`, сохраняет exact
 run/schedule/lease fence и acceptance receipt outbox. Delivery-intent acceptance
 может завершить operation и записать terminal Scheduler result только при живом
-exact lease. Managed runtime, assembly, client routing и live end-to-end contour
-ещё не реализованы. Этот ADR не открывает workflow gate сам по себе.
+exact lease. Отдельная execution unit реализует owner-local due orchestration
+через compile-isolated ports: one-use body read с проверкой custody size/digest,
+stable delivery-intent request, fenced accepted/failed transition, terminal
+Scheduler receipt и durable cleanup-pending outcome. Реальные managed adapters
+для Scheduler/Blob/request routing, executable admission, assembly, client
+routing и live end-to-end contour ещё не реализованы. Этот ADR не открывает
+workflow gate сам по себе.
 
 Уточняет:
 
@@ -62,6 +67,7 @@ module-to-Scheduler contract через event spine.
 hermes-communication-delayed-delivery-api
 hermes-communication-delayed-delivery-core
 hermes-communication-delayed-delivery-persistence
+hermes-communication-delayed-delivery-execution
 hermes-communication-delayed-delivery-runtime
 hermes-communication-delayed-delivery-assembly
 ```
@@ -69,9 +75,9 @@ hermes-communication-delayed-delivery-assembly
 API содержит generated Schedule/Cancel/Status/realtime contracts. Core
 валидирует lifecycle и cancellation race. Persistence владеет workflow
 operation, body custody reference, Scheduler correlation и owner-local inbox /
-outbox. Runtime обслуживает client contract, durable Scheduler adapters и
-owner-local Job Executor. Assembly создаёт отдельный signed runtime/storage
-fragment.
+outbox. Execution unit владеет только fenced due orchestration через public
+ports. Runtime обслуживает client contract, durable Scheduler/Blob adapters и
+managed lifecycle. Assembly создаёт отдельный signed runtime/storage fragment.
 
 Ни одна unit не импортирует Communications implementation, integration
 runtime/persistence, Scheduler implementation/persistence или Kernel

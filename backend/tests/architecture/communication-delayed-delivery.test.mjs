@@ -21,6 +21,10 @@ test('delayed delivery admits separate contract and policy units while its runti
     persistenceExecution,
     persistenceMigration,
     schedulerReceiptMigration,
+    executionManifest,
+    executionSource,
+    executionPorts,
+    executionWorker,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -108,6 +112,22 @@ test('delayed delivery admits separate contract and policy units while its runti
       ),
       'utf8',
     ),
+    readFile(
+      new URL('src/communication-delayed-delivery-execution/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-delayed-delivery-execution/src/lib.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-delayed-delivery-execution/src/ports.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-delayed-delivery-execution/src/worker.rs', BACKEND_ROOT),
+      'utf8',
+    ),
   ]);
 
   const inventory = JSON.parse(inventorySource);
@@ -154,6 +174,7 @@ test('delayed delivery admits separate contract and policy units while its runti
   assert.match(persistenceOperations, /state_revision = state_revision \+ 1/);
   assert.match(persistenceExecution, /pub async fn claim_due_execution/);
   assert.match(persistenceExecution, /pub async fn mark_delivery_accepted/);
+  assert.match(persistenceExecution, /pub async fn mark_delivery_failed/);
   assert.match(
     persistenceExecution,
     /scheduler_lease_expires_at_unix_millis > \$4/,
@@ -167,6 +188,22 @@ test('delayed delivery admits separate contract and policy units while its runti
   );
   assert.match(persistenceMigration, /communication_delayed_delivery_outbox/);
   assert.doesNotMatch(persistenceMigration, /body_utf8|provider_id|account_id/);
+  assert.match(
+    executionManifest,
+    /owner = "communication_delayed_delivery"[\s\S]*surface = "implementation"/,
+  );
+  assert.match(executionPorts, /pub trait BodyReadPortV1/);
+  assert.match(executionPorts, /pub trait BodyCleanupPortV1/);
+  assert.match(executionPorts, /pub trait SchedulerReceiptFactoryPortV1/);
+  assert.match(executionWorker, /pub async fn execute_due_delivery_v1/);
+  assert.match(executionWorker, /Sha256::digest/);
+  assert.match(executionWorker, /cleanup_pending/);
+  for (const source of [executionSource, executionPorts, executionWorker]) {
+    assert.doesNotMatch(
+      source,
+      /scheduler_(?:implementation|persistence)|kernel::|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
+    );
+  }
   assert.doesNotMatch(apiProto, /provider_id|account_id|map</);
   for (const source of [apiSource, coreSource]) {
     assert.doesNotMatch(source, /async_nats|sqlx|kernel::/);

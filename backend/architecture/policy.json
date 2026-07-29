@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delayed_delivery_persistence_v1",
+    "currentSlice": "communication_delayed_delivery_execution_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -594,6 +594,12 @@
         "role": "workflow",
         "owner": "communication_delayed_delivery",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-communication-delayed-delivery-execution",
+        "role": "workflow",
+        "owner": "communication_delayed_delivery",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1733,6 +1739,12 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-delayed-delivery-execution": [
+        {
+          "name": "hermes-communication-delivery-intent-api",
           "kind": "normal"
         }
       ]
@@ -4623,6 +4635,43 @@
             "tls-rustls-ring"
           ]
         }
+      ],
+      "hermes-communication-delayed-delivery-execution": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "macros",
+            "rt"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -5028,6 +5077,10 @@
         "customBuildAllowed": false
       },
       "hermes-communication-delayed-delivery-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-delayed-delivery-execution": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       }
