@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_bulk_action_managed_runtime_v1",
+    "currentSlice": "communication_bulk_action_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -570,6 +570,12 @@
         "role": "workflow",
         "owner": "communication_bulk_action",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-communication-bulk-action-assembly",
+        "role": "workflow",
+        "owner": "communication_bulk_action",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1589,6 +1595,24 @@
         },
         {
           "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-bulk-action-assembly": [
+        {
+          "name": "hermes-communication-bulk-action-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-bulk-action-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -4471,6 +4495,35 @@
           "defaultFeatures": true,
           "features": []
         }
+      ],
+      "hermes-communication-bulk-action-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -4860,6 +4913,10 @@
         "customBuildAllowed": false
       },
       "hermes-communication-bulk-action-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-bulk-action-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       }

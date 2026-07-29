@@ -14,6 +14,7 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
     coreManifest,
     persistenceManifest,
     runtimeManifest,
+    assemblyManifest,
     api,
     core,
     contract,
@@ -26,6 +27,7 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
     managedDeliveryPort,
     clientRealtime,
     admission,
+    assembly,
   ] =
     await Promise.all([
     readFile(
@@ -60,6 +62,13 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
       ),
       readFile(
         new URL('src/communication-bulk-action-runtime/Cargo.toml', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-bulk-action-assembly/Cargo.toml',
+          BACKEND_ROOT,
+        ),
         'utf8',
       ),
       readFile(
@@ -140,6 +149,13 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
         ),
         'utf8',
       ),
+      readFile(
+        new URL(
+          'src/communication-bulk-action-assembly/src/lib.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
     ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -165,7 +181,7 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
   assert.match(adr, /Принятый ADR сам по себе gate не открывает/);
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_bulk_action_managed_runtime_v1',
+    'communication_bulk_action_assembly_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages
@@ -176,6 +192,7 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
       'hermes-communication-bulk-action-core:implementation',
       'hermes-communication-bulk-action-persistence:persistence',
       'hermes-communication-bulk-action-runtime:runtime',
+      'hermes-communication-bulk-action-assembly:assembly',
     ],
   );
   assert.match(apiManifest, /role = "workflow"[\s\S]*surface = "contract"/);
@@ -188,6 +205,7 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
     runtimeManifest,
     /role = "workflow"[\s\S]*surface = "runtime"/,
   );
+  assert.match(assemblyManifest, /role = "workflow"[\s\S]*surface = "assembly"/);
   assert.doesNotMatch(
     `${apiManifest}\n${coreManifest}\n${persistenceManifest}\n${runtimeManifest}`,
     /hermes-(?:communications-domain|mail|telegram|whatsapp|zulip|kernel)/,
@@ -218,6 +236,9 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
   assert.match(clientRealtime, /PublishClientRealtime/);
   assert.match(clientRealtime, /BulkDeliveryStatusChangedV1/);
   assert.match(admission, /dependencies: vec!\[delivery_intent_command_contract_v1\(\)\]/);
+  assert.match(assembly, /communication_bulk_action_module_descriptor_v1/);
+  assert.match(assembly, /communication_bulk_action_storage_bundle_v1/);
+  assert.match(assembly, /communication_bulk_action\.runtime\.v1/);
   assert.doesNotMatch(
     `${runtimeWorker}\n${runtimeClient}`,
     /body_utf8.*(?:log|event|status)|hermes-(?:mail|telegram|whatsapp|zulip)/,
