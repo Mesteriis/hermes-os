@@ -7,6 +7,8 @@ use hermes_runtime_protocol::v1::{
 
 pub const PACKAGE: &str = "hermes-mail-delivery-intent-contract";
 pub const MAIL_DELIVERY_INTENT_OWNER_ID_V1: &str = "mail";
+pub const MAIL_DELIVERY_INTENT_SOURCE_MODULE_ID_V1: &str =
+    "hermes-communication-delivery-intent-runtime";
 pub const MAIL_DELIVERY_INTENT_TARGET_MODULE_ID_V1: &str = "hermes-mail-runtime";
 pub const MAIL_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1: &str = "mail.delivery-intent.v1";
 pub const MAIL_DELIVERY_INTENT_TARGET_BLOB_CAPABILITY_ID_V1: &str = "mail.blob.v1";

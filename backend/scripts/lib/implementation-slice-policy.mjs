@@ -1573,6 +1573,26 @@ const DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIS
 
 const DELIVERY_INTENT_TARGET_BOUND_BLOB_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-runtime': [
+    { name: 'hermes-mail-api', kind: 'normal' },
+    { name: 'hermes-mail-core', kind: 'normal' },
+    { name: 'hermes-mail-imap', kind: 'normal' },
+    { name: 'hermes-mail-gmail', kind: 'normal' },
+    { name: 'hermes-mail-smtp', kind: 'normal' },
+    { name: 'hermes-mail-persistence', kind: 'normal' },
+    { name: 'hermes-mail-delivery-intent-contract', kind: 'normal' },
+    { name: 'hermes-attachment-security-contract', kind: 'normal' },
+    { name: 'hermes-communications-attachment-contract', kind: 'normal' },
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-managed-vault-client', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
   'hermes-communication-delivery-intent-runtime': [
     { name: 'hermes-blob-client', kind: 'normal' },
     { name: 'hermes-communication-delivery-intent-api', kind: 'normal' },
@@ -1698,6 +1718,19 @@ const DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWL
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
+const DELIVERY_INTENT_TARGET_BOUND_BLOB_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-runtime': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -2429,7 +2462,7 @@ function expectedSlice(currentSlice) {
       workspaceDependencies:
         DELIVERY_INTENT_TARGET_BOUND_BLOB_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
-        DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+        DELIVERY_INTENT_TARGET_BOUND_BLOB_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

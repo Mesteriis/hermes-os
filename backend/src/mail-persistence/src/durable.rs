@@ -263,6 +263,11 @@ pub struct MailDeliveryAttemptV1 {
 }
 
 impl MailDurablePersistence {
+    #[must_use]
+    pub fn delivery_intent_store(&self) -> crate::MailDeliveryIntentStoreV1 {
+        crate::MailDeliveryIntentStoreV1::new(self.pool.clone())
+    }
+
     pub async fn connect_runtime(
         binding: &StorageBindingV1,
         database_id: &str,

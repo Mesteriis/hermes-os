@@ -1298,6 +1298,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-mail-delivery-intent-contract",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-attachment-security-contract",
           "kind": "normal"
         },
@@ -3607,6 +3611,14 @@
         },
         {
           "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
           "kind": "normal",
           "source": "crates_io",
           "version": "=0.14.4",
