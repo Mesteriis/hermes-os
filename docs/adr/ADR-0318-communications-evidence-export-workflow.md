@@ -234,6 +234,10 @@ Gate становится `implemented` только атомарно при н�
   JSONL, artifact receipt и one-use authenticated `client_blob`;
 - generated frontend workflow controller/presentation без domain-to-workflow
   implementation import;
+- live root `make dev` browser flow:
+  start → ready → one-use `/api/blobs/communications-export/v1/artifact`
+  download через first-party adapter; Vite проксирует только exact
+  `/api/blobs/` prefix в Core Gateway с development proxy proof;
 - managed wrong-owner status/ticket, edit snapshot, delete, unknown ID,
   replay, aggregate size, invalid UTF-8, restart, revoke, NATS outage и Blob
   outage checks;
@@ -243,17 +247,14 @@ Gate становится `implemented` только атомарно при н�
 - architecture/SRP/Cargo/Clippy, workspace/integration tests, dependency policy,
   SBOM и managed Storage/Vault/NATS/Blob/Gateway contour.
 
-Gate всё ещё не `implemented`, потому что отсутствуют:
+Gate всё ещё не `implemented`, потому что отсутствует:
 
 1. детерминированный managed race test, который изменяет canonical revision
    между source snapshot и result commit и наблюдает terminal
    `STALE_REVISION`;
-2. live browser evidence через root `make dev` для полного
-   start → status → one-use download flow, включая сохранение artifact
-   first-party download adapter.
 
 Static architecture test, Storybook visual test и прямой managed Gateway route
-не заменяют эти два доказательства.
+не заменяют оставшееся race-доказательство.
 
 ## Rollback
 

@@ -65,6 +65,7 @@ const paths = {
     'frontend/src/workflows/communications-export/api/communicationsEvidenceExport.ts',
     PROJECT_ROOT,
   ),
+  frontendViteConfig: new URL('frontend/vite.config.ts', PROJECT_ROOT),
   adr: new URL(
     'docs/adr/ADR-0318-communications-evidence-export-workflow.md',
     PROJECT_ROOT,
@@ -182,10 +183,11 @@ test('export artifact stays within one exact platform client Blob ceiling', asyn
 });
 
 test('Frontend composition passes canonical IDs into a generated workflow without domain imports', async () => {
-  const [route, app, workflow] = await Promise.all([
+  const [route, app, workflow, viteConfig] = await Promise.all([
     readFile(paths.frontendRoute, 'utf8'),
     readFile(paths.frontendApp, 'utf8'),
     readFile(paths.frontendWorkflow, 'utf8'),
+    readFile(paths.frontendViteConfig, 'utf8'),
   ]);
   assert.match(route, /canonicalMessageSelected/);
   assert.doesNotMatch(route, /workflows\/communications-export|communicationsEvidenceExport/);
@@ -195,5 +197,6 @@ test('Frontend composition passes canonical IDs into a generated workflow withou
   assert.match(workflow, /getCommunicationsExportQueryClient/);
   assert.match(workflow, /getCommunicationsExportTicketClient/);
   assert.match(workflow, /BrowserGatewayFetch/);
+  assert.match(viteConfig, /'\/api\/blobs\/': developmentGatewayProxy\(developmentGateway\)/);
   assert.doesNotMatch(workflow, /integrations\/(?:mail|telegram|whatsapp|zulip)|provider/);
 });

@@ -110,6 +110,7 @@ const developmentProxies = developmentGateway === undefined
 	? undefined
 	: {
 		'^/hermes\\.': developmentGatewayProxy(developmentGateway),
+		'/api/blobs/': developmentGatewayProxy(developmentGateway),
 		'/api/realtime/v1/events': developmentGatewayProxy(developmentGateway),
 		'/healthz': developmentGatewayProxy(developmentGateway),
 		'/readyz': developmentGatewayProxy(developmentGateway),

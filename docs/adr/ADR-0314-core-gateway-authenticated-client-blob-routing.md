@@ -2,8 +2,11 @@
 
 - Статус: принято
 - Дата: 2026-07-28
-- Состояние реализации: planned. Решение должно быть реализовано до открытия
-  первого owner-specific `client_blob` route.
+- Состояние реализации: implemented. Descriptor/Control Store authority,
+  authenticated Gateway adapter, live Blob/Vault full-read contour и первый
+  owner-specific route Communications Export реализованы. Loopback development
+  assembly проксирует exact `/api/blobs/` prefix server-side тем же
+  per-process proof boundary, не открывая generic frontend route.
 - Связанные решения: ADR-0200, ADR-0205, ADR-0212, ADR-0213, ADR-0215,
   ADR-0221, ADR-0230, ADR-0231, ADR-0279
 
@@ -141,4 +144,3 @@ Gateway и Kernel не импортируют owner API/implementation. Owner mo
 - Owner-specific Gateway handler: Core начинает импортировать domain contract.
 - Generic read by client-supplied reference: наличие opaque ID не является
   owner authorization.
-

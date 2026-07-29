@@ -6,8 +6,9 @@
 lifecycle, locally signed release, platform foundation, distinct
 Communications/Attachment Security/integration admission, active
 Storage/Event/Vault bindings, replayable Gateway SSE source, Vite same-origin
-proxy, readiness barrier и browser open подтверждены executable и live
-evidence. Provider runtime с обязательными Settings намеренно остаётся
+proxy для generated RPC, SSE и descriptor-declared `client_blob`, readiness
+barrier и browser open подтверждены executable и live evidence. Provider
+runtime с обязательными Settings намеренно остаётся
 `unconfigured`, пока владелец не создаст учётную запись по ADR-0302; это
 fail-closed состояние полного ensemble, а не отсутствие assembly unit.
 
@@ -186,8 +187,8 @@ Gate `loopback_full_stack_dev_assembly_v1` открывается только �
 - frontend lint, typecheck, clean-room boundary, 120 test files/276 tests и
   production build успешны;
 - live root `make dev` подтвердил healthy Compose, direct и same-origin
-  readiness, session status, client bootstrap и browser page без console
-  errors;
+  readiness, session status, client bootstrap, descriptor-declared
+  `/api/blobs/` delivery и browser page без console errors;
 - interrupt завершил Kernel/Vite и освободил оба listener, удалил per-run proof,
   оставив Compose healthy; повторный запуск использовал существующего enrolled
   development owner и снова достиг readiness.
