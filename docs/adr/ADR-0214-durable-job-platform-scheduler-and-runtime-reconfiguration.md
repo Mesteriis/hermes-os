@@ -94,11 +94,12 @@ child, а missing child получает только fresh reserve/bind/start s
 После трёх consecutive launch failures worker не retry-ит бесконечно и ждёт
 explicit healthy owner start/restart. Disposable PostgreSQL+JetStream
 conformance уже доказывает exact-byte relay, receipt commit до JetStream ACK,
-acceptance/terminal/retry fencing. Это всё ещё не `scheduler_v1`: live
-managed-runtime crash/restart conformance, hot reconciliation и full
-restart/revocation conformance должны соединить этот delivery contour с
-Kernel-managed successor identity/lease. Receipt delivery, materialization и
-relay не являются owner execution.
+acceptance/terminal/retry fencing. Live authenticated managed-runtime
+conformance теперь соединяет этот contour с Kernel lifecycle: schedule revision
+1 → 2 применяется без restart, crash приводит к fresh successor generation,
+role epoch и credential lease revision, сохранённый one-shot dispatch
+доставляется после restart, а revoked binding не resurrect-ит runtime. Receipt
+delivery, materialization и relay не являются owner execution.
 `SchedulerJobRequestV1` из validated `ModuleDescriptorV1` теперь сохраняется
 в private Control Store как exact owner-bound JobKind contract request и
 становится Scheduler catalog entry только после capability-level approval;
@@ -112,10 +113,9 @@ Kernel сверяет exact JobKind/revision/schema с current approved Schedule
 catalog и передаёт mutation только по authenticated inherited channel active
 Scheduler runtime. Runtime сам декодирует versioned canonical policy и
 upsert-ит свою PostgreSQL row; Kernel не получает SQL pool или schedule table
-access. Это закрывает mutation seam; automatic production lifecycle уже
-ограничен ранее admitted active binding и fail-closed restart budget, но hot
-reconciliation или live restart/revoke conformance всё ещё не доказаны и не открывают
-`scheduler_v1`.
+access. Это закрывает mutation seam. Live conformance подтверждает hot
+revisioned reconciliation и automatic successor lifecycle только для durable
+active binding; revoke останавливает runtime и не создаёт successor.
 Runtime protocol теперь дополнительно фиксирует bounded non-secret набор
 Event-Hub-authorized command publisher bindings и receipt bindings: publisher
 содержит exact command subject, а для каждого approved owner receipt contract
@@ -134,13 +134,18 @@ PostgreSQL transaction с slot reservation, current-policy verification и
 single-use deletion. Fixed-delay run не меняет due point на claim и rearm
 только в terminal fenced completion как `finished_at + delay`; обновлённая или
 disabled schedule не перезаписывается старым run. Atomic due-claim integration
-и dispatch остаются частью закрытого runtime slice, а не доказательством
-`scheduler_v1`. Retry snapshot хранится вместе с run: после transient failure
+и dispatch входят в реализованный Scheduler runtime. Retry snapshot хранится
+вместе с run: после transient failure
 тот же `JobRunId` ждёт bounded backoff, а retry claim требует строго больший
 lease epoch. Старый worker после этого не может terminally complete run или
 освободить его concurrency slot. Disposable PostgreSQL conformance подтверждает
 этот переход, включая отказ stale completion; это всё ещё persistence
 foundation, а не NATS delivery или owner execution runtime.
+
+Все required decision fields и live managed evidence для `scheduler_v1`
+закрыты; gate реализован. Это не открывает owner-specific Job Executor,
+module-originated schedule-control contract или конкретный workflow:
+они остаются отдельными capability gates.
 
 Scheduler строит один canonical `DurableEnvelopeV1` для каждого persisted
 dispatch: delivery `message_id` остаётся идентичностью exact-byte outbox
@@ -175,9 +180,9 @@ domains или product projections; Graph rebuild остаётся только 
 примером job kind до отдельного решения.
 
 Scheduler и Job Plane не входят в `kernel_recovery_only_v1`. Их packages,
-storage, NATS consumers и runtime activation разрешаются только отдельным
-`scheduler_v1` gate ADR-0225 после Clock, Storage, NATS, Vault, Telemetry,
-module control plane и managed-launch trust.
+storage, NATS consumers и runtime activation открыты отдельным
+`scheduler_v1` gate ADR-0225 после реализованных Clock, Storage, NATS, Vault,
+Telemetry, module control plane и managed-launch trust.
 
 ## Контекст
 

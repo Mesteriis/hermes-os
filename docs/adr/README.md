@@ -543,5 +543,6 @@ ADR-0341 согласует отдельный `communication_delayed_delivery` 
 Kernel, Scheduler и delivery-intent: schedule control идёт durable
 command/result через event spine, due execution получает стандартный
 `ScheduledJobCommandV1`, private body остаётся в workflow-owned Blob custody,
-а cancellation race решает Scheduler. Gate остаётся закрыт до полного
-`scheduler_v1` и live managed evidence.
+а cancellation race решает Scheduler. `scheduler_v1` уже подтверждён live
+managed evidence; workflow gate остаётся закрыт до module-originated
+schedule-control contract и отдельных delayed-delivery units.

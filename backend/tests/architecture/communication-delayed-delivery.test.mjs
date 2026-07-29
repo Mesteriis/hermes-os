@@ -51,7 +51,7 @@ test('delayed delivery stays a planned workflow behind Scheduler and event-only 
   assert.match(adr, /workflow-owned encrypted Blob custody/);
   assert.match(adr, /не вызывает Gateway/);
   assert.match(adr, /не импортирует Communications implementation/);
-  assert.match(schedulerAdr, /Это всё ещё не `scheduler_v1`/);
+  assert.match(schedulerAdr, /gate реализован/);
   assert.doesNotMatch(
     adr,
     /direct (?:domain|integration|Scheduler) (?:call|socket|SQL)/i,

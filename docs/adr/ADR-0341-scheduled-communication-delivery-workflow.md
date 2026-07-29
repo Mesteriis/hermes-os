@@ -5,11 +5,11 @@
 Дата: 2026-07-29
 
 Состояние реализации: не реализовано. Gate
-`communication_delayed_delivery_v1` остаётся `planned`. Текущий
-`scheduler_v1` также закрыт: persistence, materialization и managed runtime
-foundation не заменяют отсутствующие live restart/revoke и hot-reconciliation
-evidence. Этот ADR согласует owner boundaries и exact contracts до кода, но
-сам по себе не открывает ни один gate.
+`communication_delayed_delivery_v1` остаётся `planned`. `scheduler_v1`
+реализован с live restart/revoke и hot-reconciliation evidence, но
+module-originated schedule-control contract и delayed-delivery units ещё не
+реализованы. Этот ADR согласует owner boundaries и exact contracts до кода, но
+сам по себе не открывает workflow gate.
 
 Уточняет:
 

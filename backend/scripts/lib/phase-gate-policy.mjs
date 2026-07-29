@@ -294,6 +294,9 @@ const REQUIRED_DECISION_FIELDS = {
     'hot_schedule_reconciliation',
     'retry_idempotency_and_recovery',
     'deterministic_clock_conformance',
+    'managed_successor_restart_recovery',
+    'revoked_binding_no_resurrection',
+    'authenticated_storage_nats_live_conformance',
   ],
   browser_client_v1: [
     'exact_gateway_package_and_local_listener_inventory',
