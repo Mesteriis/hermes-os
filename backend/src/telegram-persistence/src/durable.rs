@@ -253,9 +253,15 @@ pub enum TelegramDurablePersistenceError {
     ReconfigurationUnknown,
     InvalidReconfigurationTransition,
     ConflictingDeliveryRouteLocator,
+    ConflictingDeliveryIntentInbox,
 }
 
 impl TelegramDurablePersistence {
+    #[must_use]
+    pub fn delivery_intent_store(&self) -> crate::TelegramDeliveryIntentStoreV1 {
+        crate::TelegramDeliveryIntentStoreV1::new(self.pool.clone())
+    }
+
     pub async fn connect_runtime(
         binding: &StorageBindingV1,
         database_id: &str,

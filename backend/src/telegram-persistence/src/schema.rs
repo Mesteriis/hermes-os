@@ -3,10 +3,11 @@
 use hermes_storage_protocol::v1::{StorageBundleV1, StorageMigrationStepV1};
 use sha2::{Digest, Sha256};
 
-use crate::{TELEGRAM_SCHEMA_V1, TELEGRAM_SCHEMA_V2};
+use crate::{TELEGRAM_SCHEMA_V1, TELEGRAM_SCHEMA_V2, TELEGRAM_SCHEMA_V3};
 
 pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
 pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V2: u32 = 2;
+pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V3: u32 = 3;
 
 /// Returns the complete Telegram operational schema as one immutable bundle.
 ///
@@ -16,7 +17,7 @@ pub const TELEGRAM_STORAGE_BUNDLE_REVISION_V2: u32 = 2;
 pub fn telegram_storage_bundle_v1() -> StorageBundleV1 {
     StorageBundleV1 {
         major: 1,
-        revision: TELEGRAM_STORAGE_BUNDLE_REVISION_V2,
+        revision: TELEGRAM_STORAGE_BUNDLE_REVISION_V3,
         bundle_id: "telegram_state".to_owned(),
         owner_id: "telegram".to_owned(),
         steps: vec![
@@ -31,6 +32,12 @@ pub fn telegram_storage_bundle_v1() -> StorageBundleV1 {
                 migration_id: "telegram_delivery_route_locators".to_owned(),
                 forward_sql_utf8: TELEGRAM_SCHEMA_V2.as_bytes().to_vec(),
                 sha256: Sha256::digest(TELEGRAM_SCHEMA_V2.as_bytes()).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: TELEGRAM_STORAGE_BUNDLE_REVISION_V3,
+                migration_id: "telegram_delivery_intent_inbox_jobs_and_result_outbox".to_owned(),
+                forward_sql_utf8: TELEGRAM_SCHEMA_V3.as_bytes().to_vec(),
+                sha256: Sha256::digest(TELEGRAM_SCHEMA_V3.as_bytes()).to_vec(),
             },
         ],
     }
@@ -48,8 +55,8 @@ mod tests {
 
         assert_eq!(bundle.owner_id, "telegram");
         assert_eq!(bundle.bundle_id, "telegram_state");
-        assert_eq!(bundle.revision, TELEGRAM_STORAGE_BUNDLE_REVISION_V2);
-        assert_eq!(bundle.steps.len(), 2);
+        assert_eq!(bundle.revision, TELEGRAM_STORAGE_BUNDLE_REVISION_V3);
+        assert_eq!(bundle.steps.len(), 3);
         assert_eq!(validate_storage_bundle(&bundle), Ok(()));
     }
 }

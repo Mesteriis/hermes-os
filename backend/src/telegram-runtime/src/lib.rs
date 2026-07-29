@@ -12,6 +12,7 @@ pub mod client_port;
 pub mod client_transport;
 pub mod communications_outbox;
 mod configuration_client_port;
+pub mod delivery_intent_consumer;
 mod durable_restore;
 pub mod managed_control;
 pub mod process;

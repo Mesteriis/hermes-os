@@ -2847,6 +2847,7 @@ dependencies = [
  "hermes-telegram-calls-core",
  "hermes-telegram-calls-persistence",
  "hermes-telegram-core",
+ "hermes-telegram-delivery-intent-contract",
  "hermes-telegram-persistence",
  "hermes-telegram-tdlib",
  "hermes-vault-protocol",
