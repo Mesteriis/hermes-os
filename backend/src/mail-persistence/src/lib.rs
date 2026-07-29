@@ -29,7 +29,8 @@ pub use composition::{MAIL_SCHEMA_V11, MailCompositionPersistenceErrorV1};
 pub use conformance::MailPersistenceConformanceV1;
 pub use delivery_intent::{MAIL_SCHEMA_V18, MailDeliveryRouteLocatorV1};
 pub use delivery_intent_inbox::{
-    MAIL_SCHEMA_V19, MailDeliveryIntentAdmissionV1, MailDeliveryIntentInboxOutcomeV1,
+    ClaimedMailDeliveryIntentJobV1, MAIL_SCHEMA_V19, MAIL_SCHEMA_V20,
+    MailDeliveryIntentAdmissionV1, MailDeliveryIntentInboxOutcomeV1, MailDeliveryIntentJobStateV1,
     MailDeliveryIntentJobV1, MailDeliveryIntentStoreV1,
 };
 pub use durable::{

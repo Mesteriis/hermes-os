@@ -74,6 +74,27 @@ CREATE TABLE IF NOT EXISTS hermes_data.mail_delivery_intent_result_outbox (
 );
 "#;
 
+pub const MAIL_SCHEMA_V20: &str = r#"
+ALTER TABLE hermes_data.mail_delivery_intent_jobs
+    ADD COLUMN target_body_reference_id BYTEA CHECK (
+        target_body_reference_id IS NULL OR
+        octet_length(target_body_reference_id) = 16
+    ),
+    ADD COLUMN target_body_receipt_sha256 BYTEA CHECK (
+        target_body_receipt_sha256 IS NULL OR
+        octet_length(target_body_receipt_sha256) = 32
+    ),
+    ADD CONSTRAINT mail_delivery_intent_target_body_receipt_complete CHECK (
+        (target_body_reference_id IS NULL AND target_body_receipt_sha256 IS NULL)
+        OR (
+            target_body_reference_id IS NOT NULL AND
+            target_body_receipt_sha256 IS NOT NULL
+        )
+    );
+"#;
+
+const MAIL_DELIVERY_INTENT_MAX_ATTEMPTS_V1: i32 = 12;
+
 #[derive(Clone)]
 pub struct MailDeliveryIntentStoreV1 {
     pool: PgPool,
@@ -108,6 +129,41 @@ pub struct MailDeliveryIntentJobV1 {
     pub body_sha256: [u8; 32],
     pub custody_transfer_source_proof: Vec<u8>,
     pub provider_operation_id: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(i16)]
+pub enum MailDeliveryIntentJobStateV1 {
+    PendingCustody = 1,
+    BodyReady = 2,
+    DeliveryQueued = 3,
+    Succeeded = 4,
+    Rejected = 5,
+    OutcomeUnknown = 6,
+}
+
+impl MailDeliveryIntentJobStateV1 {
+    const fn from_i16(value: i16) -> Option<Self> {
+        match value {
+            1 => Some(Self::PendingCustody),
+            2 => Some(Self::BodyReady),
+            3 => Some(Self::DeliveryQueued),
+            4 => Some(Self::Succeeded),
+            5 => Some(Self::Rejected),
+            6 => Some(Self::OutcomeUnknown),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimedMailDeliveryIntentJobV1 {
+    pub job: MailDeliveryIntentJobV1,
+    pub state: MailDeliveryIntentJobStateV1,
+    pub target_body_reference_id: Option<[u8; 16]>,
+    pub target_body_receipt_sha256: Option<[u8; 32]>,
+    pub worker_id: String,
+    pub attempt_count: u32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -253,6 +309,223 @@ impl MailDeliveryIntentStoreV1 {
             .map_err(|_| MailDurablePersistenceError::Database)?;
         Ok(outcome)
     }
+
+    pub async fn claim_next_job(
+        &self,
+        worker_id: &str,
+        now_unix_seconds: i64,
+        lease_expires_at_unix_seconds: i64,
+    ) -> Result<Option<ClaimedMailDeliveryIntentJobV1>, MailDurablePersistenceError> {
+        if worker_id.trim().is_empty()
+            || worker_id.len() > 128
+            || now_unix_seconds <= 0
+            || lease_expires_at_unix_seconds <= now_unix_seconds
+        {
+            return Err(MailDurablePersistenceError::InvalidRow);
+        }
+        let row = sqlx::query(
+            "WITH next AS (
+                SELECT intent_id
+                FROM hermes_data.mail_delivery_intent_jobs
+                WHERE state BETWEEN 1 AND 3
+                  AND next_attempt_at_unix_seconds <= $1
+                  AND attempt_count < $2
+                  AND (
+                    claimed_by IS NULL OR
+                    lease_expires_at_unix_seconds IS NULL OR
+                    lease_expires_at_unix_seconds <= $1
+                  )
+                ORDER BY next_attempt_at_unix_seconds, intent_id
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+             )
+             UPDATE hermes_data.mail_delivery_intent_jobs job
+             SET claimed_by = $3,
+                 lease_expires_at_unix_seconds = $4,
+                 attempt_count = attempt_count + 1
+             FROM next
+             WHERE job.intent_id = next.intent_id
+             RETURNING job.*",
+        )
+        .bind(now_unix_seconds)
+        .bind(MAIL_DELIVERY_INTENT_MAX_ATTEMPTS_V1)
+        .bind(worker_id)
+        .bind(lease_expires_at_unix_seconds)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| MailDurablePersistenceError::Database)?;
+        row.map(|row| claimed_job_from_row(row, worker_id))
+            .transpose()
+    }
+
+    pub async fn record_target_body_receipt(
+        &self,
+        intent_id: [u8; 16],
+        worker_id: &str,
+        target_body_reference_id: [u8; 16],
+        target_body_receipt_sha256: [u8; 32],
+        now_unix_seconds: i64,
+    ) -> Result<(), MailDurablePersistenceError> {
+        if intent_id.iter().all(|byte| *byte == 0)
+            || worker_id.trim().is_empty()
+            || target_body_reference_id.iter().all(|byte| *byte == 0)
+            || target_body_receipt_sha256.iter().all(|byte| *byte == 0)
+            || now_unix_seconds <= 0
+        {
+            return Err(MailDurablePersistenceError::InvalidRow);
+        }
+        let updated = sqlx::query(
+            "UPDATE hermes_data.mail_delivery_intent_jobs
+             SET state = $1,
+                 target_body_reference_id = $2,
+                 target_body_receipt_sha256 = $3,
+                 next_attempt_at_unix_seconds = $4,
+                 claimed_by = NULL,
+                 lease_expires_at_unix_seconds = NULL
+             WHERE intent_id = $5
+               AND state = $6
+               AND claimed_by = $7
+               AND lease_expires_at_unix_seconds > $4",
+        )
+        .bind(MailDeliveryIntentJobStateV1::BodyReady as i16)
+        .bind(target_body_reference_id.as_slice())
+        .bind(target_body_receipt_sha256.as_slice())
+        .bind(now_unix_seconds)
+        .bind(intent_id.as_slice())
+        .bind(MailDeliveryIntentJobStateV1::PendingCustody as i16)
+        .bind(worker_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| MailDurablePersistenceError::Database)?;
+        if updated.rows_affected() != 1 {
+            return Err(MailDurablePersistenceError::InvalidDeliveryIntentTransition);
+        }
+        Ok(())
+    }
+
+    pub async fn mark_delivery_queued(
+        &self,
+        intent_id: [u8; 16],
+        worker_id: &str,
+        now_unix_seconds: i64,
+    ) -> Result<(), MailDurablePersistenceError> {
+        if intent_id.iter().all(|byte| *byte == 0)
+            || worker_id.trim().is_empty()
+            || now_unix_seconds <= 0
+        {
+            return Err(MailDurablePersistenceError::InvalidRow);
+        }
+        let updated = sqlx::query(
+            "UPDATE hermes_data.mail_delivery_intent_jobs
+             SET state = $1,
+                 next_attempt_at_unix_seconds = $2,
+                 claimed_by = NULL,
+                 lease_expires_at_unix_seconds = NULL
+             WHERE intent_id = $3
+               AND state = $4
+               AND claimed_by = $5
+               AND lease_expires_at_unix_seconds > $2
+               AND target_body_reference_id IS NOT NULL
+               AND target_body_receipt_sha256 IS NOT NULL",
+        )
+        .bind(MailDeliveryIntentJobStateV1::DeliveryQueued as i16)
+        .bind(now_unix_seconds)
+        .bind(intent_id.as_slice())
+        .bind(MailDeliveryIntentJobStateV1::BodyReady as i16)
+        .bind(worker_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| MailDurablePersistenceError::Database)?;
+        if updated.rows_affected() != 1 {
+            return Err(MailDurablePersistenceError::InvalidDeliveryIntentTransition);
+        }
+        Ok(())
+    }
+}
+
+fn claimed_job_from_row(
+    row: sqlx::postgres::PgRow,
+    worker_id: &str,
+) -> Result<ClaimedMailDeliveryIntentJobV1, MailDurablePersistenceError> {
+    let target_body_reference_id = optional_id::<16>(&row, "target_body_reference_id")?;
+    let target_body_receipt_sha256 = optional_id::<32>(&row, "target_body_receipt_sha256")?;
+    if target_body_reference_id.is_some() != target_body_receipt_sha256.is_some() {
+        return Err(MailDurablePersistenceError::InvalidRow);
+    }
+    Ok(ClaimedMailDeliveryIntentJobV1 {
+        job: MailDeliveryIntentJobV1 {
+            intent_id: required_id::<16>(&row, "intent_id")?,
+            command_message_id: required_id::<16>(&row, "command_message_id")?,
+            connection_id: required_string(&row, "connection_id")?,
+            provider_thread_id: required_string(&row, "provider_thread_id")?,
+            reply_to_provider_message_id: row
+                .try_get("reply_to_provider_message_id")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+            recipient: required_string(&row, "recipient")?,
+            subject: required_string(&row, "subject")?,
+            body_reference_id: required_id::<16>(&row, "body_reference_id")?,
+            body_declared_bytes: u64::try_from(
+                row.try_get::<i64, _>("body_declared_bytes")
+                    .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+            )
+            .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+            body_sha256: required_id::<32>(&row, "body_sha256")?,
+            custody_transfer_source_proof: row
+                .try_get("custody_transfer_source_proof")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+            provider_operation_id: required_string(&row, "provider_operation_id")?,
+        },
+        state: MailDeliveryIntentJobStateV1::from_i16(
+            row.try_get("state")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+        )
+        .ok_or(MailDurablePersistenceError::InvalidRow)?,
+        target_body_reference_id,
+        target_body_receipt_sha256,
+        worker_id: worker_id.to_owned(),
+        attempt_count: u32::try_from(
+            row.try_get::<i32, _>("attempt_count")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+        )
+        .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+    })
+}
+
+fn required_id<const WIDTH: usize>(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<[u8; WIDTH], MailDurablePersistenceError> {
+    row.try_get::<Vec<u8>, _>(column)
+        .map_err(|_| MailDurablePersistenceError::InvalidRow)?
+        .try_into()
+        .map_err(|_| MailDurablePersistenceError::InvalidRow)
+}
+
+fn optional_id<const WIDTH: usize>(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<Option<[u8; WIDTH]>, MailDurablePersistenceError> {
+    row.try_get::<Option<Vec<u8>>, _>(column)
+        .map_err(|_| MailDurablePersistenceError::InvalidRow)?
+        .map(|value| {
+            value
+                .try_into()
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)
+        })
+        .transpose()
+}
+
+fn required_string(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<String, MailDurablePersistenceError> {
+    let value: String = row
+        .try_get(column)
+        .map_err(|_| MailDurablePersistenceError::InvalidRow)?;
+    if value.trim().is_empty() {
+        return Err(MailDurablePersistenceError::InvalidRow);
+    }
+    Ok(value)
 }
 
 struct ResolvedMailDeliveryRouteV1 {
@@ -415,6 +688,14 @@ mod tests {
         assert!(MAIL_SCHEMA_V19.contains("mail_delivery_intent_result_outbox"));
         assert!(!MAIL_SCHEMA_V19.contains("communications_"));
         assert!(!MAIL_SCHEMA_V19.contains("telegram"));
+    }
+
+    #[test]
+    fn custody_checkpoint_is_complete_and_kept_in_the_mail_owned_job() {
+        assert!(MAIL_SCHEMA_V20.contains("target_body_reference_id BYTEA"));
+        assert!(MAIL_SCHEMA_V20.contains("target_body_receipt_sha256 BYTEA"));
+        assert!(MAIL_SCHEMA_V20.contains("mail_delivery_intent_target_body_receipt_complete"));
+        assert!(!MAIL_SCHEMA_V20.contains("communications_"));
     }
 
     #[test]

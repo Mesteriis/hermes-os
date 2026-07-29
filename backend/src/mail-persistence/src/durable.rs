@@ -174,6 +174,7 @@ pub enum MailDurablePersistenceError {
     MissingSyncRun,
     ConflictingSyncOperation,
     ConflictingDeliveryRouteLocator,
+    InvalidDeliveryIntentTransition,
     SyncRunInProgress,
     InvalidSyncTransition,
 }
