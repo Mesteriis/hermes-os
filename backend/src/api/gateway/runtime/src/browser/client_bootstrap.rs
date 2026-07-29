@@ -4,8 +4,6 @@ use hermes_gateway_protocol::v1::{
     ClientModuleSettingsBootstrapV1, ClientSettingValueEntryV1, ClientSettingValueV1 as WireValue,
     ClientSettingsApplyStateV1, ClientSurfaceAvailabilityStateV1 as WireSurfaceState,
     ClientSurfaceAvailabilityV1, ClientSurfaceIdV1 as WireSurfaceId,
-    ClientSystemComponentIdV1 as WireSystemComponentId,
-    ClientSystemComponentStateV1 as WireSystemComponentState, ClientSystemComponentStatusV1,
     client_setting_value_v1::Value,
 };
 use hermes_gateway_session_contract::{
@@ -15,9 +13,6 @@ use hermes_gateway_session_contract::{
     ClientSurfaceAvailabilityProjectionV1,
     ClientSurfaceAvailabilityStateV1 as ProjectionSurfaceState,
     ClientSurfaceIdV1 as ProjectionSurfaceId,
-    ClientSystemComponentIdV1 as ProjectionSystemComponentId,
-    ClientSystemComponentStateV1 as ProjectionSystemComponentState,
-    ClientSystemComponentStatusProjectionV1,
 };
 use http_body_util::{BodyExt, Limited};
 use hyper::body::Body;
@@ -25,6 +20,7 @@ use hyper::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, HeaderName};
 use hyper::{Method, Request, Response, StatusCode};
 use prost::Message;
 
+use super::system_status::wire_system_statuses;
 use crate::{GatewayHttpResponse, SharedBrowserGatewaySessionService, full_gateway_body};
 
 const BOOTSTRAP_PATH: &str = "/hermes.gateway.v1.ClientBootstrapService/GetBootstrap";
@@ -96,11 +92,7 @@ fn response(projection: ClientBootstrapProjectionV1) -> GatewayHttpResponse {
         major: 1,
         modules: projection.modules().iter().map(module).collect(),
         surfaces: projection.surfaces().iter().map(surface).collect(),
-        system_status: projection
-            .system_status()
-            .iter()
-            .map(system_status)
-            .collect(),
+        system_status: wire_system_statuses(projection.system_status()),
     };
     Response::builder()
         .status(StatusCode::OK)
@@ -109,50 +101,6 @@ fn response(projection: ClientBootstrapProjectionV1) -> GatewayHttpResponse {
         .header(CONNECT_PROTOCOL_VERSION, "1")
         .body(full_gateway_body(response.encode_to_vec()))
         .expect("Gateway Connect response is valid")
-}
-
-fn system_status(
-    status: &ClientSystemComponentStatusProjectionV1,
-) -> ClientSystemComponentStatusV1 {
-    ClientSystemComponentStatusV1 {
-        component_id: system_component_id(status.component_id()) as i32,
-        state: system_component_state(status.state()) as i32,
-        sanitized_reason_code: status
-            .sanitized_reason_code()
-            .unwrap_or_default()
-            .to_owned(),
-    }
-}
-
-fn system_component_id(value: ProjectionSystemComponentId) -> WireSystemComponentId {
-    match value {
-        ProjectionSystemComponentId::Kernel => WireSystemComponentId::Kernel,
-        ProjectionSystemComponentId::ControlStore => WireSystemComponentId::ControlStore,
-        ProjectionSystemComponentId::ModuleControlPlane => {
-            WireSystemComponentId::ModuleControlPlane
-        }
-        ProjectionSystemComponentId::Gateway => WireSystemComponentId::Gateway,
-        ProjectionSystemComponentId::Vault => WireSystemComponentId::Vault,
-        ProjectionSystemComponentId::StorageControl => WireSystemComponentId::StorageControl,
-        ProjectionSystemComponentId::Postgresql => WireSystemComponentId::Postgresql,
-        ProjectionSystemComponentId::Pgbouncer => WireSystemComponentId::Pgbouncer,
-        ProjectionSystemComponentId::Nats => WireSystemComponentId::Nats,
-        ProjectionSystemComponentId::EventHub => WireSystemComponentId::EventHub,
-        ProjectionSystemComponentId::Scheduler => WireSystemComponentId::Scheduler,
-        ProjectionSystemComponentId::Clock => WireSystemComponentId::Clock,
-        ProjectionSystemComponentId::Blob => WireSystemComponentId::Blob,
-        ProjectionSystemComponentId::Telemetry => WireSystemComponentId::Telemetry,
-        ProjectionSystemComponentId::Sse => WireSystemComponentId::Sse,
-    }
-}
-
-fn system_component_state(value: ProjectionSystemComponentState) -> WireSystemComponentState {
-    match value {
-        ProjectionSystemComponentState::Healthy => WireSystemComponentState::Healthy,
-        ProjectionSystemComponentState::Degraded => WireSystemComponentState::Degraded,
-        ProjectionSystemComponentState::Unavailable => WireSystemComponentState::Unavailable,
-        ProjectionSystemComponentState::NotAdmitted => WireSystemComponentState::NotAdmitted,
-    }
 }
 
 fn surface(surface: &ClientSurfaceAvailabilityProjectionV1) -> ClientSurfaceAvailabilityV1 {

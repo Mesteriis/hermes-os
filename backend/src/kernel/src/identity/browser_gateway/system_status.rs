@@ -11,7 +11,7 @@ use crate::platform::{
 };
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
-pub(super) fn client_system_status(
+pub(crate) fn client_system_status(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     developer_realtime_enabled: bool,

@@ -41,6 +41,12 @@ export function problemHealthGroupIds(items: readonly TreeItemData[]): string[] 
 		.map((item) => item.id)
 }
 
+export function healthStatusSignature(checks: readonly AppNavbarHealthCheck[]): string {
+	return checks
+		.map((check) => `${check.id}:${check.status}`)
+		.join('|')
+}
+
 function toTreeItem(check: AppNavbarHealthCheck): TreeItemData {
 	return {
 		id: check.id,

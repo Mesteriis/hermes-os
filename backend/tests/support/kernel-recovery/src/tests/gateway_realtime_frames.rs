@@ -1,16 +1,21 @@
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hermes_gateway_protocol::{
-    v1::{ClientRealtimeEventV1, ClientRealtimeFrameV1, client_realtime_frame_v1::Frame},
+    v1::{
+        ClientRealtimeEventV1, ClientRealtimeFrameV1, ClientSystemStatusChangedV1,
+        client_realtime_frame_v1::Frame,
+    },
     validation::validate_client_realtime_frame,
 };
 use hermes_gateway_runtime::{
     BrowserRealtimeRouter, BrowserRealtimeSubscriptionSource, ClientRealtimeSubscriptionV1,
+    InMemoryBrowserRealtimeSource,
 };
 use hermes_gateway_session::{BrowserGatewaySessionService, BrowserSession};
 use hermes_gateway_session_contract::{
     BrowserAssertionAuthority, BrowserAuthenticationAuthority, BrowserDeviceAuthority,
-    BrowserDeviceCredentialV1, BrowserDevicePrincipalV1, GatewayIdentityFenceV1,
+    BrowserDeviceCredentialV1, BrowserDevicePrincipalV1, ClientSystemComponentIdV1,
+    ClientSystemComponentStateV1, ClientSystemComponentStatusProjectionV1, GatewayIdentityFenceV1,
 };
 use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
@@ -179,6 +184,55 @@ fn live_frames_sends_replay_gap_on_lag_and_disconnects() {
     assert_eq!(frame.reason_code, "live_buffer_overrun");
 }
 
+#[test]
+fn system_status_transition_reaches_the_shared_gateway_sse_without_bootstrap_polling() {
+    let runtime = tokio::runtime::Runtime::new().expect("test runtime");
+    let source = InMemoryBrowserRealtimeSource::new(4).expect("realtime source");
+    source.admit_owner("owner-1").expect("admitted owner");
+    let service = Arc::new(
+        BrowserGatewaySessionService::new_loopback_development(
+            DummyAuthority,
+            "http://127.0.0.1:5173",
+            "owner-1",
+            "browser-1",
+        )
+        .expect("loopback development service"),
+    );
+    let router = BrowserRealtimeRouter::new(service, source.clone());
+
+    let response = router.route(
+        Request::builder()
+            .method("GET")
+            .uri("/api/realtime/v1/events")
+            .body(Full::new(Bytes::new()))
+            .expect("realtime request"),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    source
+        .reconcile_system_status("owner-1", &system_statuses(), 1_000)
+        .expect("system status transition");
+    source.revoke_owner("owner-1").expect("close owner stream");
+
+    let body = runtime
+        .block_on(response.into_body().collect())
+        .expect("realtime response body")
+        .to_bytes();
+    let status_event = parse_realtime_frames(&body)
+        .into_iter()
+        .find_map(|frame| match frame.frame {
+            Some(Frame::Event(event)) if event.contract_name == "hermes.gateway.system-status" => {
+                Some(event)
+            }
+            _ => None,
+        })
+        .expect("typed system status event");
+    assert_eq!(status_event.event_kind, "platform.system_status.changed");
+    let payload =
+        ClientSystemStatusChangedV1::decode(status_event.payload.as_slice()).expect("payload");
+    assert_eq!(payload.revision, 1);
+    assert_eq!(payload.statuses.len(), 15);
+}
+
 fn valid_frame(cursor: &str) -> ClientRealtimeFrameV1 {
     ClientRealtimeFrameV1 {
         frame: Some(Frame::Event(ClientRealtimeEventV1 {
@@ -214,6 +268,13 @@ fn invalid_frame(cursor: &str) -> ClientRealtimeFrameV1 {
 }
 
 fn parse_realtime_replay_gaps(body: &[u8]) -> Vec<ClientRealtimeFrameV1> {
+    parse_realtime_frames(body)
+        .into_iter()
+        .filter(|frame| matches!(frame.frame.as_ref(), Some(Frame::ReplayGap(_))))
+        .collect()
+}
+
+fn parse_realtime_frames(body: &[u8]) -> Vec<ClientRealtimeFrameV1> {
     let text = std::str::from_utf8(body).expect("SSE response body");
     text.split("\n\n")
         .filter_map(|frame| {
@@ -225,6 +286,34 @@ fn parse_realtime_replay_gaps(body: &[u8]) -> Vec<ClientRealtimeFrameV1> {
                 .is_ok()
                 .then_some(frame)
         })
-        .filter(|frame| matches!(frame.frame.as_ref(), Some(Frame::ReplayGap(_))))
         .collect()
+}
+
+fn system_statuses() -> Vec<ClientSystemComponentStatusProjectionV1> {
+    [
+        ClientSystemComponentIdV1::Kernel,
+        ClientSystemComponentIdV1::ControlStore,
+        ClientSystemComponentIdV1::ModuleControlPlane,
+        ClientSystemComponentIdV1::Gateway,
+        ClientSystemComponentIdV1::Vault,
+        ClientSystemComponentIdV1::StorageControl,
+        ClientSystemComponentIdV1::Postgresql,
+        ClientSystemComponentIdV1::Pgbouncer,
+        ClientSystemComponentIdV1::Nats,
+        ClientSystemComponentIdV1::EventHub,
+        ClientSystemComponentIdV1::Scheduler,
+        ClientSystemComponentIdV1::Clock,
+        ClientSystemComponentIdV1::Blob,
+        ClientSystemComponentIdV1::Telemetry,
+        ClientSystemComponentIdV1::Sse,
+    ]
+    .into_iter()
+    .map(|component_id| {
+        ClientSystemComponentStatusProjectionV1::new(
+            component_id,
+            ClientSystemComponentStateV1::Healthy,
+            None,
+        )
+    })
+    .collect()
 }

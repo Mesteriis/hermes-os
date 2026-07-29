@@ -7,7 +7,11 @@ import ToggleGroup from '../ToggleGroup.vue'
 import { hermesBrandAssets } from '../assets/brand'
 import type { UiThemeFamily, UiThemeMode } from '../foundation/theme'
 import { useMouseLeaveDismiss } from '../useMouseLeaveDismiss'
-import { buildAppNavbarHealthTree, problemHealthGroupIds } from './appNavbarHealthTree'
+import {
+	buildAppNavbarHealthTree,
+	healthStatusSignature,
+	problemHealthGroupIds,
+} from './appNavbarHealthTree'
 import AppNavbarRouteBreadcrumbs from './AppNavbarRouteBreadcrumbs.vue'
 
 import type { AppNavbarHealthCheck, AppNavbarHealthStatus } from './appNavbarHealthTree'
@@ -169,8 +173,8 @@ const systemStatusLabel = computed(() => {
 
 const healthTreeItems = computed(() => buildAppNavbarHealthTree(props.healthChecks))
 
-watch(healthTreeItems, (items) => {
-	expandedHealthGroups.value = problemHealthGroupIds(items)
+watch(() => healthStatusSignature(props.healthChecks), () => {
+	expandedHealthGroups.value = problemHealthGroupIds(healthTreeItems.value)
 }, { immediate: true })
 
 const resolvedHealthStatusLabelVisibleMs = computed(() => {

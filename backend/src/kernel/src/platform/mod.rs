@@ -11,5 +11,6 @@ pub(crate) mod macos;
 pub(crate) mod managed;
 pub(crate) mod scheduler;
 pub(crate) mod storage;
+pub(crate) mod system_status_realtime;
 pub(crate) mod telemetry;
 pub(crate) mod vault;

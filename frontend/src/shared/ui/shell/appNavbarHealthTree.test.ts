@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildAppNavbarHealthTree, problemHealthGroupIds } from './appNavbarHealthTree'
+import {
+	buildAppNavbarHealthTree,
+	healthStatusSignature,
+	problemHealthGroupIds,
+} from './appNavbarHealthTree'
 
 describe('buildAppNavbarHealthTree', () => {
 	it('groups the detailed health checks by platform topology', () => {
@@ -17,5 +21,22 @@ describe('buildAppNavbarHealthTree', () => {
 		expect(tree[3]?.status).toBe('unavailable')
 		expect(tree[2]?.children?.[0]).toMatchObject({ label: 'Vault', static: true })
 		expect(problemHealthGroupIds(tree)).toEqual(['health-data', 'health-runtime'])
+	})
+
+	it('keeps expansion reconciliation stable when only health details refresh', () => {
+		const before = [
+			{ id: 'network', label: 'Connection', status: 'healthy' as const, detail: '8 ms round-trip' },
+			{ id: 'backend-9', label: 'NATS', status: 'unavailable' as const, detail: 'not_admitted' },
+		]
+		const after = [
+			{ ...before[0]!, detail: '18 ms round-trip' },
+			{ ...before[1]!, detail: 'runtime_status_not_admitted' },
+		]
+
+		expect(healthStatusSignature(after)).toBe(healthStatusSignature(before))
+		expect(healthStatusSignature([
+			...after.slice(0, 1),
+			{ ...after[1]!, status: 'healthy' },
+		])).not.toBe(healthStatusSignature(before))
 	})
 })

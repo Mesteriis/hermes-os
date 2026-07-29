@@ -27,7 +27,7 @@ use hermes_runtime_protocol::{
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 #[path = "browser_gateway/system_status.rs"]
-mod system_status;
+pub(crate) mod system_status;
 
 #[derive(Clone)]
 pub(crate) struct ControlStoreBrowserAuthority {

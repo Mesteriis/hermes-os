@@ -418,6 +418,7 @@ runtime не является domain, а app composition не становитс
 | Native legacy secret custody and provider-specific apply | first-party client composition | `legacy_provider_native_secret_custody_v1` |
 | Capability-routed current owner lookup for workflows | Kernel capability router | `capability_routed_module_query_rpc_v1` |
 | Capability-routed managed client realtime | Kernel capability router | `capability_routed_managed_client_realtime_v1` |
+| Client-safe platform system status over shared realtime | Kernel system-status projection + Core Gateway | `client_system_status_realtime_v1` |
 | Provider-neutral delivery intent | `communication_delivery_intent` workflow | `communication_delivery_intent_v1` |
 | Delayed delivery | `communication_delayed_delivery` workflow | `communication_delayed_delivery_v1` |
 | Bulk action | `communication_bulk_action` workflow | `communication_bulk_action_v1` |

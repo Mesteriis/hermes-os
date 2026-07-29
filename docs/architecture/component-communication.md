@@ -328,7 +328,9 @@ module runtimes
 
 - ConnectRPC/Protobuf обслуживает typed queries, requests и commands.
 - Один multiplexed SSE stream на active client session даёт replayable
-  realtime и terminal command results.
+  realtime, sanitized platform system-status transitions и terminal command
+  results. Initial `ClientBootstrap` является snapshot/recovery query; client
+  не polling-ит его ради health или latency.
 - SSE использует отдельный `ClientRealtimeFrameV1`; internal
   `DurableEnvelopeV1` клиенту не выдаётся.
 - Обычный HTTP используется только для health/readiness, OAuth callbacks,

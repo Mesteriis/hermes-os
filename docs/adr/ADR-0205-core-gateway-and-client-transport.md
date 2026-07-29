@@ -52,8 +52,10 @@ PostgreSQL, PgBouncer, NATS, Event Hub, Scheduler, Clock, Blob, Telemetry и SSE
 Core components считаются healthy только потому, что authenticated snapshot
 успешно собран; platform runtime без отдельного live status proof получает
 `degraded` или `not_admitted`, а не optimistic healthy. Browser отдельно
-измеряет round-trip самого bootstrap RPC каждые 15 секунд; это client-observed
-network latency, она не подменяет server-side subsystem readiness.
+измеряет one-shot round-trip initial bootstrap RPC; это client-observed network
+latency, она не подменяет server-side subsystem readiness. Периодический
+polling всего bootstrap запрещён [ADR-0338](ADR-0338-client-system-status-over-shared-realtime.md):
+последующие system-status transitions идут через общий authenticated SSE.
 
 Зависит от:
 

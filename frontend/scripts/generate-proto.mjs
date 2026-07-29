@@ -111,6 +111,7 @@ const protoFiles = [
   join(zulipProtoRoot, 'hermes', 'zulip', 'operational', 'realtime', 'v1', 'client.proto'),
   join(zulipProtoRoot, 'hermes', 'zulip', 'v1', 'client.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_realtime.proto'),
+  join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_system_status_realtime.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'browser_session.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'client_bootstrap.proto'),
   join(gatewayProtoRoot, 'hermes', 'gateway', 'v1', 'owner_vault_provisioning.proto'),

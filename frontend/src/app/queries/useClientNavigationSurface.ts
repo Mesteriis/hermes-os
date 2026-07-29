@@ -19,6 +19,11 @@ import {
 	type ClientBootstrapSnapshot,
 } from '../../platform/gateway/clientBootstrap'
 import {
+	BrowserGatewayRealtime,
+	type BrowserGatewayRealtimeSubscription,
+} from '../../platform/gateway/browserGatewayRealtime'
+import { applyClientSystemStatusEvent } from '../../platform/gateway/browserGatewaySystemStatus'
+import {
 	isUiThemeFamily,
 	isUiThemeMode,
 	themeSelectionToName,
@@ -46,8 +51,6 @@ export type ClientNavigationHealthCheck = {
 	depth?: number
 }
 
-const BOOTSTRAP_REFRESH_MS = 15_000
-
 export function useClientNavigationSurface() {
 	const selectedRouteId = ref<ClientSurfaceRouteId>('settings')
 	// The recovery shell must preserve Hermes' established first impression even
@@ -59,7 +62,8 @@ export function useClientNavigationSurface() {
 	const bootstrapError = ref('bootstrap_unavailable')
 	const routeDowngradeReason = ref('')
 	const gatewayRoundTripMs = ref<number | null>(null)
-	let refreshTimer: number | undefined
+	let realtimeSubscription: BrowserGatewayRealtimeSubscription | undefined
+	let realtimeRecoveryActive = false
 
 	const currentTheme = computed<UiThemeName>(() => themeSelectionToName(
 		currentThemeFamily.value,
@@ -128,26 +132,42 @@ export function useClientNavigationSurface() {
 		try { window.localStorage.setItem('hermes.interface-language', value) } catch { /* preference remains memory-only */ }
 	}
 
-	function scheduleRefresh(): void {
-		window.clearTimeout(refreshTimer)
-		refreshTimer = window.setTimeout(() => {
-			void refreshBootstrap().finally(scheduleRefresh)
-		}, BOOTSTRAP_REFRESH_MS)
+	function openRealtime(): void {
+		realtimeSubscription?.close()
+		realtimeSubscription = new BrowserGatewayRealtime().subscribe({
+			onEvent: (event) => {
+				try {
+					const updated = applyClientSystemStatusEvent(bootstrap.value, event)
+					if (updated) bootstrap.value = updated
+				} catch {
+					void recoverRealtime()
+				}
+			},
+			onStreamState: () => undefined,
+			onReplayGap: () => void recoverRealtime(),
+			onProtocolError: () => void recoverRealtime(),
+		})
 	}
 
-	function handleReconnect(): void {
-		void refreshBootstrap()
+	async function recoverRealtime(): Promise<void> {
+		if (realtimeRecoveryActive) return
+		realtimeRecoveryActive = true
+		realtimeSubscription?.close()
+		realtimeSubscription = undefined
+		try {
+			await refreshBootstrap()
+			openRealtime()
+		} finally {
+			realtimeRecoveryActive = false
+		}
 	}
 
 	onMounted(() => {
 		document.documentElement.lang = currentLanguage.value
-		void refreshBootstrap()
-		scheduleRefresh()
-		window.addEventListener('online', handleReconnect)
+		void refreshBootstrap().finally(openRealtime)
 	})
 	onBeforeUnmount(() => {
-		window.clearTimeout(refreshTimer)
-		window.removeEventListener('online', handleReconnect)
+		realtimeSubscription?.close()
 	})
 
 	return {

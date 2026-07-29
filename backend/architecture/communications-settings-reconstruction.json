@@ -472,6 +472,13 @@
       "dependsOn": ["client_gateway_v1", "module_control_plane_v1"]
     },
     {
+      "gate": "client_system_status_realtime_v1",
+      "role": "platform",
+      "owner": "kernel_system_status",
+      "state": "implemented",
+      "dependsOn": ["client_gateway_v1"]
+    },
+    {
       "gate": "communication_delivery_intent_v1",
       "role": "workflow",
       "owner": "communication_delivery_intent",

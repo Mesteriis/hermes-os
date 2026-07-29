@@ -8,6 +8,7 @@ mod owner_settings;
 mod owner_vault;
 mod pairing;
 mod session;
+pub(crate) mod system_status;
 
 pub use auth::{BrowserAuthenticationRouter, SharedBrowserGatewaySessionService};
 pub use bootstrap::BrowserBootstrapRouter;

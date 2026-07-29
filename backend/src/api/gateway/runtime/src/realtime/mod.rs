@@ -1,5 +1,8 @@
 //! Authenticated, replayable SSE transport for client-safe Gateway frames.
 
+#[path = "system_status.rs"]
+mod system_status;
+
 use std::collections::{BTreeMap, VecDeque};
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
@@ -15,7 +18,9 @@ use hermes_gateway_protocol::{
     validation::validate_client_realtime_frame,
 };
 use hermes_gateway_session::BrowserSession;
-use hermes_gateway_session_contract::BrowserAuthenticationAuthority;
+use hermes_gateway_session_contract::{
+    BrowserAuthenticationAuthority, ClientSystemComponentStatusProjectionV1,
+};
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame as HttpFrame;
 use hyper::header::{CACHE_CONTROL, CONTENT_TYPE, COOKIE, HeaderName};
@@ -47,6 +52,8 @@ pub struct InMemoryBrowserRealtimeSource {
 struct OwnerRealtimeState {
     history: VecDeque<ClientRealtimeFrameV1>,
     live: broadcast::Sender<ClientRealtimeFrameV1>,
+    system_status_canonical: Vec<u8>,
+    system_status_revision: u64,
 }
 
 #[derive(Clone)]
@@ -106,9 +113,46 @@ impl InMemoryBrowserRealtimeSource {
         Ok(true)
     }
 
+    pub fn admitted_owner_ids(&self) -> Result<Vec<String>, String> {
+        self.owners
+            .lock()
+            .map_err(|_| "Gateway realtime state is unavailable".to_owned())
+            .map(|owners| owners.keys().cloned().collect())
+    }
+
+    pub fn reconcile_system_status(
+        &self,
+        owner_id: &str,
+        statuses: &[ClientSystemComponentStatusProjectionV1],
+        occurred_at_unix_millis: u64,
+    ) -> Result<bool, String> {
+        let mut owners = self
+            .owners
+            .lock()
+            .map_err(|_| "Gateway realtime state is unavailable".to_owned())?;
+        let state = owners
+            .get_mut(owner_id)
+            .ok_or_else(|| "Gateway realtime owner is not admitted".to_owned())?;
+        let next_revision = state
+            .system_status_revision
+            .checked_add(1)
+            .ok_or_else(|| "Gateway system status revision is exhausted".to_owned())?;
+        let canonical = system_status::encoded_payload(statuses, 0);
+        if canonical == state.system_status_canonical {
+            return Ok(false);
+        }
+        let payload = system_status::encoded_payload(statuses, next_revision);
+        let frame = system_status::frame(next_revision, occurred_at_unix_millis, payload);
+        validate_client_realtime_frame(&frame)?;
+        publish_event_into_state(state, frame, self.history_limit)?;
+        state.system_status_canonical = canonical;
+        state.system_status_revision = next_revision;
+        Ok(true)
+    }
+
     fn publish(&self, owner_id: &str, frame: ClientRealtimeFrameV1) -> Result<(), String> {
         validate_client_realtime_frame(&frame)?;
-        let Some(Frame::Event(event)) = frame.frame.as_ref() else {
+        let Some(Frame::Event(_)) = frame.frame.as_ref() else {
             return Err("Gateway realtime publisher accepts only owner events".to_owned());
         };
         let mut owners = self
@@ -118,21 +162,7 @@ impl InMemoryBrowserRealtimeSource {
         let state = owners
             .get_mut(owner_id)
             .ok_or_else(|| "Gateway realtime owner is not admitted".to_owned())?;
-        if let Some(existing) = state
-            .history
-            .iter()
-            .find(|candidate| frame_cursor(candidate) == Some(event.cursor.as_str()))
-        {
-            return (existing == &frame)
-                .then_some(())
-                .ok_or_else(|| "Gateway realtime cursor conflicts".to_owned());
-        }
-        if state.history.len() == self.history_limit {
-            state.history.pop_front();
-        }
-        state.history.push_back(frame.clone());
-        let _ = state.live.send(frame);
-        Ok(())
+        publish_event_into_state(state, frame, self.history_limit)
     }
 
     fn subscribe_owner(
@@ -215,8 +245,35 @@ fn ensure_owner_state(
         OwnerRealtimeState {
             history: VecDeque::with_capacity(history_limit),
             live,
+            system_status_canonical: Vec::new(),
+            system_status_revision: 0,
         }
     });
+}
+
+fn publish_event_into_state(
+    state: &mut OwnerRealtimeState,
+    frame: ClientRealtimeFrameV1,
+    history_limit: usize,
+) -> Result<(), String> {
+    let Some(Frame::Event(event)) = frame.frame.as_ref() else {
+        return Err("Gateway realtime publisher accepts only owner events".to_owned());
+    };
+    if let Some(existing) = state
+        .history
+        .iter()
+        .find(|candidate| frame_cursor(candidate) == Some(event.cursor.as_str()))
+    {
+        return (existing == &frame)
+            .then_some(())
+            .ok_or_else(|| "Gateway realtime cursor conflicts".to_owned());
+    }
+    if state.history.len() == history_limit {
+        state.history.pop_front();
+    }
+    state.history.push_back(frame.clone());
+    let _ = state.live.send(frame);
+    Ok(())
 }
 
 impl BrowserRealtimePublisherV1 {
@@ -456,11 +513,12 @@ fn response(status: StatusCode, body: &'static str) -> GatewayHttpResponse {
 
 #[cfg(test)]
 mod tests {
-    use hermes_gateway_protocol::v1::ClientRealtimeEventV1;
+    use hermes_gateway_protocol::v1::{ClientRealtimeEventV1, ClientSystemStatusChangedV1};
     use hermes_gateway_session::BrowserGatewaySessionService;
     use hermes_gateway_session_contract::{
         BrowserAssertionAuthority, BrowserAuthenticationAuthority, BrowserDeviceAuthority,
-        BrowserDeviceCredentialV1, BrowserDevicePrincipalV1, GatewayIdentityFenceV1,
+        BrowserDeviceCredentialV1, BrowserDevicePrincipalV1, ClientSystemComponentIdV1,
+        ClientSystemComponentStateV1, GatewayIdentityFenceV1,
     };
 
     use super::*;
@@ -596,6 +654,68 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn system_status_is_typed_change_only_and_replayable() {
+        let source = InMemoryBrowserRealtimeSource::new(4).expect("source");
+        source.admit_owner("owner-1").expect("owner");
+        let session = test_session();
+        let (_, mut live) = source
+            .subscribe(&session, None)
+            .expect("live subscription")
+            .into_parts();
+        let healthy = system_status(ClientSystemComponentStateV1::Healthy, "healthy");
+
+        assert!(
+            source
+                .reconcile_system_status("owner-1", &healthy, 1_000)
+                .expect("first snapshot")
+        );
+        let first = live.try_recv().expect("first status event");
+        let Some(Frame::Event(first_event)) = first.frame.as_ref() else {
+            panic!("system status must be an event");
+        };
+        assert_eq!(
+            first_event.contract_name,
+            system_status::SYSTEM_STATUS_CONTRACT_NAME
+        );
+        assert_eq!(
+            first_event.event_kind,
+            system_status::SYSTEM_STATUS_EVENT_KIND
+        );
+        let payload =
+            ClientSystemStatusChangedV1::decode(first_event.payload.as_slice()).expect("payload");
+        assert_eq!(payload.revision, 1);
+        assert_eq!(payload.statuses.len(), 15);
+
+        assert!(
+            !source
+                .reconcile_system_status("owner-1", &healthy, 2_000)
+                .expect("unchanged snapshot")
+        );
+        assert!(
+            live.try_recv().is_err(),
+            "unchanged status must stay silent"
+        );
+
+        let degraded = system_status(ClientSystemComponentStateV1::Degraded, "runtime_degraded");
+        assert!(
+            source
+                .reconcile_system_status("owner-1", &degraded, 3_000)
+                .expect("changed snapshot")
+        );
+        let second = live.try_recv().expect("changed status event");
+        assert_eq!(frame_cursor(&second), Some("gateway-system-status-2"));
+
+        let (replay, _) = source
+            .subscribe(&session, Some("gateway-system-status-1"))
+            .expect("status replay")
+            .into_parts();
+        assert!(matches!(
+            replay.get(1).and_then(|frame| frame.frame.as_ref()),
+            Some(Frame::Event(event)) if event.cursor == "gateway-system-status-2"
+        ));
+    }
+
     fn test_session() -> BrowserSession {
         BrowserGatewaySessionService::new_loopback_development(
             TestBrowserAuthority,
@@ -623,5 +743,37 @@ mod tests {
                 payload: vec![revision],
             })),
         }
+    }
+
+    fn system_status(
+        state: ClientSystemComponentStateV1,
+        reason: &str,
+    ) -> Vec<ClientSystemComponentStatusProjectionV1> {
+        [
+            ClientSystemComponentIdV1::Kernel,
+            ClientSystemComponentIdV1::ControlStore,
+            ClientSystemComponentIdV1::ModuleControlPlane,
+            ClientSystemComponentIdV1::Gateway,
+            ClientSystemComponentIdV1::Vault,
+            ClientSystemComponentIdV1::StorageControl,
+            ClientSystemComponentIdV1::Postgresql,
+            ClientSystemComponentIdV1::Pgbouncer,
+            ClientSystemComponentIdV1::Nats,
+            ClientSystemComponentIdV1::EventHub,
+            ClientSystemComponentIdV1::Scheduler,
+            ClientSystemComponentIdV1::Clock,
+            ClientSystemComponentIdV1::Blob,
+            ClientSystemComponentIdV1::Telemetry,
+            ClientSystemComponentIdV1::Sse,
+        ]
+        .into_iter()
+        .map(|component_id| {
+            ClientSystemComponentStatusProjectionV1::new(
+                component_id,
+                state,
+                Some(reason.to_owned()),
+            )
+        })
+        .collect()
     }
 }

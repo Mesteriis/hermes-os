@@ -19,6 +19,7 @@ use crate::platform::events::credential::{
 };
 use crate::platform::gateway::{self, BrowserGatewayConfigurationV1, BrowserPairingAdmissionV1};
 use crate::platform::scheduler::lifecycle as scheduler_lifecycle;
+use crate::platform::system_status_realtime;
 use crate::platform::vault::managed_route::KernelManagedVaultRouteHandler;
 use crate::platform::vault::owner_derived_key::OwnerDerivedKeyHandlerV1;
 use crate::platform::vault::provider_credential::ProviderCredentialHandlerV1;
@@ -195,7 +196,7 @@ fn start_workers(
         browser_pairing,
     } = input;
     let (completed, receiver) = mpsc::channel::<WorkerCompletionV1>();
-    let mut workers = Vec::with_capacity(6);
+    let mut workers = Vec::with_capacity(7);
     workers.extend(start_boot_workers(BootWorkerInputV1 {
         completed: completed.clone(),
         shutdown_requested: Arc::clone(&shutdown_requested),
@@ -227,6 +228,15 @@ fn start_workers(
         runtime_dir,
         managed_runtime_supervisor.clone(),
     ));
+    if browser_gateway.is_some() {
+        workers.push(start_system_status_realtime_worker(
+            completed.clone(),
+            &shutdown_requested,
+            Arc::clone(&store),
+            managed_runtime_supervisor.clone(),
+            client_realtime.clone(),
+        ));
+    }
     workers.extend(browser_gateway_worker(BrowserGatewayWorkerInputV1 {
         completed: completed.clone(),
         shutdown_requested: Arc::clone(&shutdown_requested),
@@ -238,6 +248,22 @@ fn start_workers(
         pairing: browser_pairing,
     }));
     (workers, receiver)
+}
+
+fn start_system_status_realtime_worker(
+    completed: mpsc::Sender<WorkerCompletionV1>,
+    shutdown_requested: &Arc<AtomicBool>,
+    store: Arc<SqliteControlStore>,
+    supervisor: ManagedRuntimeSupervisor,
+    realtime: InMemoryBrowserRealtimeSource,
+) -> std::thread::JoinHandle<()> {
+    spawn_worker(
+        completed,
+        WorkerClassV1::Restartable,
+        "system_status_realtime",
+        Arc::clone(shutdown_requested),
+        move |shutdown| system_status_realtime::run(&store, &supervisor, &realtime, &shutdown),
+    )
 }
 
 struct BootWorkerInputV1 {

@@ -42,6 +42,17 @@ export function recoveryClientBootstrap(): ClientBootstrapSnapshot {
 	), [], [])
 }
 
+export function withClientSystemStatus(
+	snapshot: ClientBootstrapSnapshot,
+	statuses: readonly ClientSystemComponentStatusV1[],
+): ClientBootstrapSnapshot {
+	return bootstrapSnapshot(
+		new Map(snapshot),
+		snapshot.modules,
+		validateSystemStatus(statuses),
+	)
+}
+
 export function validateClientBootstrap(response: ClientBootstrapResponseV1): ClientBootstrapSnapshot {
 	if (response.major !== CLIENT_SURFACE_CONTRACT_MAJOR) {
 		throw new Error('Unsupported client bootstrap contract major')
