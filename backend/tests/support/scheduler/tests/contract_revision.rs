@@ -14,7 +14,7 @@ fn scheduler_persists_an_exact_nonzero_owner_job_contract_revision() {
     assert_eq!(binding.contract_revision(), 3);
 
     let bundle = scheduler_storage_bundle_v1();
-    assert_eq!(bundle.revision, 7);
+    assert_eq!(bundle.revision, 8);
     let step = bundle
         .steps
         .iter()
@@ -25,4 +25,13 @@ fn scheduler_persists_an_exact_nonzero_owner_job_contract_revision() {
         String::from_utf8_lossy(&step.forward_sql_utf8).contains("contract_revision"),
         "migration must persist the exact owner job contract revision"
     );
+    let schedule_control = bundle
+        .steps
+        .iter()
+        .find(|step| step.revision == 8)
+        .expect("schedule control migration");
+    let sql = String::from_utf8_lossy(&schedule_control.forward_sql_utf8);
+    assert!(sql.contains("scheduler_schedule_control_inbox"));
+    assert!(sql.contains("scheduler_schedule_control_results"));
+    assert!(sql.contains("exact_envelope_bytes"));
 }

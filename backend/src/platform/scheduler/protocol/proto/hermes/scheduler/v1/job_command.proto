@@ -82,7 +82,7 @@ message EnsureOneShotScheduleV1 {
   string concurrency_key = 7;
   int64 due_at_unix_millis = 8;
   uint64 deadline_millis = 9;
-  uint32 max_retry_attempts = 10;
+  uint32 max_attempts = 10;
   uint64 retry_base_backoff_millis = 11;
 }
 

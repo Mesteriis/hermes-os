@@ -11,13 +11,15 @@ const RUN_ACCEPTANCES_SCHEMA: &[u8] =
 const RUN_RESULTS_SCHEMA: &[u8] = include_bytes!("../../migrations/0006_scheduler_run_results.sql");
 const JOB_CONTRACT_REVISION_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0007_scheduler_job_contract_revision.sql");
+const SCHEDULE_CONTROL_SCHEMA: &[u8] =
+    include_bytes!("../../migrations/0008_scheduler_schedule_control.sql");
 
 /// Canonical Scheduler state schema admitted through the existing Storage bundle path.
 #[must_use]
 pub fn scheduler_storage_bundle_v1() -> StorageBundleV1 {
     StorageBundleV1 {
         major: 1,
-        revision: 7,
+        revision: 8,
         bundle_id: "scheduler_state".to_owned(),
         owner_id: "scheduler".to_owned(),
         steps: vec![
@@ -32,6 +34,7 @@ pub fn scheduler_storage_bundle_v1() -> StorageBundleV1 {
                 "scheduler_job_contract_revision",
                 JOB_CONTRACT_REVISION_SCHEMA,
             ),
+            step(8, "scheduler_schedule_control", SCHEDULE_CONTROL_SCHEMA),
         ],
     }
 }

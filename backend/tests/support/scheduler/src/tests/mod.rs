@@ -2,14 +2,16 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use crate::runtime_cli::parse_recovery_arguments;
+use hermes_scheduler::{SchedulerApprovedJobV1, map_approved_one_shot_schedule_v1};
 use hermes_scheduler_protocol::v1::{
     CancelOneShotScheduleV1, EnsureOneShotScheduleV1, JobKindV1, SchedulerScheduleControlCommandV1,
     SchedulerScheduleControlOutcomeV1, SchedulerScheduleControlResultV1,
     scheduler_schedule_control_command_v1::Operation,
 };
 use hermes_scheduler_protocol::{
-    SchedulerScheduleControlValidationErrorV1, validate_scheduler_schedule_control_command_v1,
-    validate_scheduler_schedule_control_result_v1,
+    JobContractBindingV1, JobKindV1 as CanonicalJobKindV1, MisfirePolicyV1, OverlapPolicyV1,
+    ScheduleTriggerV1, SchedulerScheduleControlValidationErrorV1,
+    validate_scheduler_schedule_control_command_v1, validate_scheduler_schedule_control_result_v1,
 };
 
 #[test]
@@ -147,7 +149,7 @@ fn module_schedule_control_accepts_only_bounded_one_shot_contracts() {
     let Some(Operation::EnsureOneShot(request)) = foreign_policy.operation.as_mut() else {
         panic!("ensure operation");
     };
-    request.max_retry_attempts = 33;
+    request.max_attempts = 33;
     assert_eq!(
         validate_scheduler_schedule_control_command_v1(&foreign_policy),
         Err(SchedulerScheduleControlValidationErrorV1::InvalidPolicy)
@@ -198,6 +200,70 @@ fn module_schedule_cancel_and_result_are_exact_and_sanitized() {
     );
 }
 
+#[test]
+fn approved_one_shot_mapping_uses_exact_catalog_contract_and_bounded_policy() {
+    let command = ensure_command();
+    let Some(Operation::EnsureOneShot(request)) = command.operation.as_ref() else {
+        panic!("ensure operation");
+    };
+    let approved = approved_job();
+    let mapped =
+        map_approved_one_shot_schedule_v1(request, &approved).expect("approved one-shot schedule");
+
+    assert_eq!(mapped.spec().binding(), approved.binding());
+    assert_eq!(mapped.spec().schedule_id().bytes(), [9; 16]);
+    assert_eq!(mapped.spec().revision().value(), 1);
+    assert_eq!(mapped.spec().scope().value(), "delayed-operation-1");
+    assert_eq!(
+        mapped.spec().concurrency_key().value(),
+        "delayed-operation-1"
+    );
+    assert_eq!(mapped.spec().policy().overlap(), OverlapPolicyV1::Forbid);
+    assert_eq!(mapped.spec().policy().misfire(), MisfirePolicyV1::FireOnce);
+    assert_eq!(mapped.spec().policy().retry().max_attempts(), 3);
+    assert_eq!(
+        mapped.spec().policy().trigger(),
+        &ScheduleTriggerV1::At {
+            due_at: mapped.next_due_at()
+        }
+    );
+}
+
+#[test]
+fn one_shot_mapping_rejects_foreign_or_stale_catalog_contracts() {
+    let command = ensure_command();
+    let Some(Operation::EnsureOneShot(request)) = command.operation.as_ref() else {
+        panic!("ensure operation");
+    };
+    let approved = approved_job();
+
+    let mut foreign = request.clone();
+    foreign.job_kind.as_mut().expect("job kind").owner = "mail".to_owned();
+    assert!(map_approved_one_shot_schedule_v1(&foreign, &approved).is_err());
+
+    let mut stale = request.clone();
+    stale.job_contract_revision = 2;
+    assert!(map_approved_one_shot_schedule_v1(&stale, &approved).is_err());
+}
+
+fn approved_job() -> SchedulerApprovedJobV1 {
+    let kind = CanonicalJobKindV1::new(
+        "communication_delayed_delivery".to_owned(),
+        "execute".to_owned(),
+        1,
+    )
+    .expect("canonical job kind");
+    let binding = JobContractBindingV1::new(
+        kind,
+        "communication_delayed_delivery.execute".to_owned(),
+        1,
+        [5; 32],
+    )
+    .expect("catalog contract");
+    SchedulerApprovedJobV1::new("communication_delayed_delivery".to_owned(), binding)
+        .expect("owner-fenced job")
+}
+
 fn ensure_command() -> SchedulerScheduleControlCommandV1 {
     SchedulerScheduleControlCommandV1 {
         operation_id: vec![7; 16],
@@ -215,7 +281,7 @@ fn ensure_command() -> SchedulerScheduleControlCommandV1 {
             concurrency_key: "delayed-operation-1".to_owned(),
             due_at_unix_millis: 1_800_000_000_000,
             deadline_millis: 30_000,
-            max_retry_attempts: 3,
+            max_attempts: 3,
             retry_base_backoff_millis: 1_000,
         })),
     }

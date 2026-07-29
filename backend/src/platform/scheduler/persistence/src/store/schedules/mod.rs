@@ -6,6 +6,7 @@ mod request;
 mod write;
 
 pub(crate) use record::PersistedScheduleRowV1;
+pub(crate) use write::upsert_locked;
 
 pub use request::{
     SchedulerDueScheduleV1, SchedulerScheduleStoreErrorV1, SchedulerScheduleUpsertOutcomeV1,

@@ -2,6 +2,7 @@
 
 mod concurrency;
 mod connection;
+mod control;
 mod dispatch;
 mod materialization;
 mod materialization_contract;
@@ -14,6 +15,12 @@ mod schedules;
 pub use connection::{
     SchedulerPostgresEndpointV1, SchedulerRecoveryDatabaseV1, SchedulerStoreConnectionErrorV1,
     scheduler_storage_binding_from_runtime,
+};
+pub use control::{
+    SchedulerScheduleControlApplyErrorV1, SchedulerScheduleControlApplyOutcomeV1,
+    SchedulerScheduleControlDecisionV1, SchedulerScheduleControlMutationV1,
+    SchedulerScheduleControlRejectionV1, SchedulerScheduleControlRequestV1,
+    SchedulerScheduleControlResultOutboxV1,
 };
 pub use dispatch::{SchedulerDispatchClaimErrorV1, SchedulerDispatchClaimV1};
 pub use materialization_contract::{

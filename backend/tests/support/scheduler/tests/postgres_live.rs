@@ -1,9 +1,19 @@
 //! Disposable PostgreSQL proof for Scheduler concurrency slot fencing.
 
 use hermes_clock_protocol::UtcMillisV1;
+use hermes_events_protocol::{
+    delivery::{OutboxPublishReceiptV1, OutboxRecordV1, OwnerOutboxStorePortV1},
+    v1::{
+        ActorKindV1, ActorRefV1, CommandMetadataV1, ContractRefV1, DurableEnvelopeV1,
+        ResultMetadataV1, ResultOutcomeV1, SourceRefV1, durable_envelope_v1::Semantics,
+    },
+};
 use hermes_scheduler_persistence::{
     FixedDelayCompletionOutcomeV1, SchedulerPendingFireOutcomeV1, SchedulerPendingFireV1,
     SchedulerPostgresStoreV1, SchedulerRunClaimErrorV1, SchedulerRunClaimV1,
+    SchedulerScheduleControlApplyErrorV1, SchedulerScheduleControlApplyOutcomeV1,
+    SchedulerScheduleControlDecisionV1, SchedulerScheduleControlMutationV1,
+    SchedulerScheduleControlRequestV1, SchedulerScheduleControlResultOutboxV1,
     SchedulerScheduleStoreErrorV1, SchedulerScheduleUpsertOutcomeV1, SchedulerScheduleUpsertV1,
     scheduler_storage_bundle_v1,
 };
@@ -12,6 +22,8 @@ use hermes_scheduler_protocol::{
     OpaqueScheduleScopeV1, OverlapPolicyV1, RetryPolicyV1, ScheduleIdV1, SchedulePolicyV1,
     ScheduleRevisionV1, ScheduleRunLeaseV1, ScheduleSpecV1, ScheduleTriggerV1,
 };
+use prost::Message;
+use prost_types::Timestamp;
 use sqlx::{PgPool, Row, postgres::PgPoolOptions};
 
 const POSTGRES_URL: &str = "HERMES_SCHEDULER_POSTGRES_URL";
@@ -27,6 +39,7 @@ async fn shared_slots_serialize_one_resource_and_allow_independent_resources() {
         .expect("connect disposable Scheduler PostgreSQL");
     install_schema(&pool).await;
     let store = SchedulerPostgresStoreV1::new(pool.clone());
+    assert_schedule_control_is_atomic_and_cancel_is_race_safe(&pool, &store).await;
     assert_revisioned_schedule_configuration(&pool, &store).await;
     assert_pending_queue_and_coalescing(&pool, &store).await;
     assert_fixed_delay_rearms_at_terminal_completion(&pool, &store).await;
@@ -48,6 +61,267 @@ async fn shared_slots_serialize_one_resource_and_allow_independent_resources() {
     assert_shared_key_race(&pool, &store, &forbid_policy, &same, other).await;
     assert_expired_lease_releases_slot(&pool, &store, &forbid_policy, same).await;
     assert_bounded_parallelism(&pool, &store).await;
+}
+
+async fn assert_schedule_control_is_atomic_and_cancel_is_race_safe(
+    pool: &PgPool,
+    store: &SchedulerPostgresStoreV1,
+) {
+    let invalid_result_request = control_request(
+        58,
+        59,
+        SchedulerScheduleControlMutationV1::Ensure(Box::new(config_change(
+            59,
+            1,
+            1,
+            key("control:opaque_59"),
+            policy(OverlapPolicyV1::Forbid),
+            5_000,
+            1_000,
+        ))),
+    );
+    assert_eq!(
+        store
+            .apply_schedule_control(&invalid_result_request, |_| {
+                Ok(envelope_record(59, true, 0, b"not-a-result"))
+            })
+            .await,
+        Err(SchedulerScheduleControlApplyErrorV1::InvalidResult)
+    );
+    let rolled_back: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM hermes_platform.scheduler_schedules WHERE schedule_id = $1",
+    )
+    .bind(vec![59_u8; 16])
+    .fetch_one(pool)
+    .await
+    .expect("verify invalid result rollback");
+    assert_eq!(rolled_back, 0);
+
+    let schedule_key = key("control:opaque_60");
+    let change = config_change(
+        60,
+        1,
+        1,
+        schedule_key,
+        policy(OverlapPolicyV1::Forbid),
+        5_000,
+        1_000,
+    );
+    let ensure = control_request(
+        60,
+        60,
+        SchedulerScheduleControlMutationV1::Ensure(Box::new(change)),
+    );
+    let applied = store
+        .apply_schedule_control(&ensure, |decision| {
+            assert_eq!(decision, SchedulerScheduleControlDecisionV1::Ensured);
+            Ok(envelope_record(61, false, 60, b"ensured"))
+        })
+        .await
+        .expect("atomic ensure and result");
+    assert!(matches!(
+        applied,
+        SchedulerScheduleControlApplyOutcomeV1::Applied {
+            decision: SchedulerScheduleControlDecisionV1::Ensured,
+            ..
+        }
+    ));
+    let mut result_outbox = SchedulerScheduleControlResultOutboxV1::new(store);
+    let result_entry = result_outbox
+        .next_pending()
+        .await
+        .expect("read exact pending result")
+        .expect("pending result");
+    assert_eq!(result_entry.record().message_id(), &[61; 16]);
+    result_outbox
+        .mark_published(
+            &result_entry,
+            &OutboxPublishReceiptV1::new("SCHEDULER_RESULTS", 1, false).expect("publish receipt"),
+        )
+        .await
+        .expect("mark exact result published");
+    assert!(
+        result_outbox
+            .next_pending()
+            .await
+            .expect("read empty result outbox")
+            .is_none()
+    );
+    let duplicate = store
+        .apply_schedule_control(&ensure, |_| panic!("duplicate reuses exact result"))
+        .await
+        .expect("duplicate command");
+    assert!(matches!(
+        duplicate,
+        SchedulerScheduleControlApplyOutcomeV1::Duplicate {
+            decision: SchedulerScheduleControlDecisionV1::Ensured,
+            ..
+        }
+    ));
+
+    let conflicting = SchedulerScheduleControlRequestV1::new(
+        envelope_record(60, true, 0, b"different"),
+        [60; 16],
+        ensure.mutation().clone(),
+        UtcMillisV1::new(1_001),
+    )
+    .expect("same-ID conflicting command");
+    assert_eq!(
+        store
+            .apply_schedule_control(&conflicting, |_| {
+                Ok(envelope_record(62, false, 60, b"must-not-persist"))
+            })
+            .await,
+        Err(SchedulerScheduleControlApplyErrorV1::HashConflict)
+    );
+
+    let cancel = control_request(
+        62,
+        60,
+        SchedulerScheduleControlMutationV1::Cancel {
+            schedule_id: ScheduleIdV1::new([60; 16]).expect("schedule ID"),
+            expected_revision: ScheduleRevisionV1::new(1).expect("revision"),
+            cancelled_at: UtcMillisV1::new(1_100),
+        },
+    );
+    assert!(matches!(
+        store
+            .apply_schedule_control(&cancel, |decision| {
+                assert_eq!(decision, SchedulerScheduleControlDecisionV1::Cancelled);
+                Ok(envelope_record(63, false, 62, b"cancelled"))
+            })
+            .await,
+        Ok(SchedulerScheduleControlApplyOutcomeV1::Applied {
+            decision: SchedulerScheduleControlDecisionV1::Cancelled,
+            ..
+        })
+    ));
+
+    let race_key = key("control:opaque_61");
+    let race_policy = policy(OverlapPolicyV1::Forbid);
+    let race_change = config_change(
+        61,
+        1,
+        1,
+        race_key.clone(),
+        race_policy.clone(),
+        CLAIMED_AT,
+        CLAIMED_AT,
+    );
+    store
+        .apply_schedule_control(
+            &control_request(
+                64,
+                61,
+                SchedulerScheduleControlMutationV1::Ensure(Box::new(race_change)),
+            ),
+            |_| Ok(envelope_record(65, false, 64, b"ensured")),
+        )
+        .await
+        .expect("ensure race schedule");
+    store
+        .claim_due(&claim(81, 61, race_key, &race_policy))
+        .await
+        .expect("durably accept due run");
+    let too_late = control_request(
+        66,
+        61,
+        SchedulerScheduleControlMutationV1::Cancel {
+            schedule_id: ScheduleIdV1::new([61; 16]).expect("schedule ID"),
+            expected_revision: ScheduleRevisionV1::new(1).expect("revision"),
+            cancelled_at: UtcMillisV1::new(CLAIMED_AT + 1),
+        },
+    );
+    assert!(matches!(
+        store
+            .apply_schedule_control(&too_late, |decision| {
+                assert_eq!(decision, SchedulerScheduleControlDecisionV1::TooLate);
+                Ok(envelope_record(67, false, 66, b"too-late"))
+            })
+            .await,
+        Ok(SchedulerScheduleControlApplyOutcomeV1::Applied {
+            decision: SchedulerScheduleControlDecisionV1::TooLate,
+            ..
+        })
+    ));
+}
+
+fn control_request(
+    command_id: u8,
+    schedule_id: u8,
+    mutation: SchedulerScheduleControlMutationV1,
+) -> SchedulerScheduleControlRequestV1 {
+    SchedulerScheduleControlRequestV1::new(
+        envelope_record(command_id, true, 0, b"command"),
+        [schedule_id; 16],
+        mutation,
+        UtcMillisV1::new(1_000),
+    )
+    .expect("schedule control request")
+}
+
+fn envelope_record(
+    message_id: u8,
+    command: bool,
+    causation_message_id: u8,
+    payload: &[u8],
+) -> OutboxRecordV1 {
+    let timestamp = Timestamp {
+        seconds: 1,
+        nanos: 0,
+    };
+    let semantics = if command {
+        Semantics::Command(CommandMetadataV1 {
+            command_id: vec![message_id; 16],
+            target_capability: "scheduler_schedule_control".to_owned(),
+            idempotency_key: vec![message_id; 16],
+            deadline: Some(Timestamp {
+                seconds: 60,
+                nanos: 0,
+            }),
+            logical_attempt: 1,
+        })
+    } else {
+        Semantics::Result(ResultMetadataV1 {
+            command_id: vec![causation_message_id; 16],
+            command_message_id: vec![causation_message_id; 16],
+            outcome: ResultOutcomeV1::Succeeded.into(),
+            completed_at: Some(timestamp.clone()),
+            execution_attempt: 1,
+        })
+    };
+    let envelope = DurableEnvelopeV1 {
+        envelope_major: 1,
+        envelope_revision: 1,
+        message_id: vec![message_id; 16],
+        contract: Some(ContractRefV1 {
+            owner: "scheduler".to_owned(),
+            name: "schedule_control".to_owned(),
+            major: 1,
+            revision: 1,
+            schema_sha256: vec![7; 32],
+        }),
+        source: Some(SourceRefV1 {
+            module_id: "scheduler".to_owned(),
+            runtime_instance_id: vec![9; 16],
+            runtime_generation: 1,
+        }),
+        recorded_at: Some(timestamp),
+        partition_key: vec![message_id],
+        causation_message_id: (!command)
+            .then(|| vec![causation_message_id; 16])
+            .unwrap_or_default(),
+        correlation_id: vec![8; 16],
+        actor: Some(ActorRefV1 {
+            kind: ActorKindV1::System.into(),
+            actor_id: b"scheduler".to_vec(),
+        }),
+        trace: None,
+        source_fence: None,
+        semantics: Some(semantics),
+        payload: payload.to_vec(),
+    };
+    OutboxRecordV1::accept(envelope.encode_to_vec()).expect("valid exact envelope record")
 }
 
 async fn assert_shared_key_race(

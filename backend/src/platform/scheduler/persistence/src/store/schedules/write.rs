@@ -28,7 +28,7 @@ impl SchedulerPostgresStoreV1 {
     }
 }
 
-async fn upsert_locked(
+pub(crate) async fn upsert_locked(
     transaction: &mut Transaction<'_, Postgres>,
     change: &SchedulerScheduleUpsertV1,
 ) -> Result<SchedulerScheduleUpsertOutcomeV1, SchedulerScheduleStoreErrorV1> {

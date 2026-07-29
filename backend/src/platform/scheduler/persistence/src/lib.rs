@@ -15,6 +15,10 @@ pub use store::{
     SchedulerRunAcceptanceErrorV1, SchedulerRunAcceptanceOutcomeV1, SchedulerRunAcceptanceV1,
     SchedulerRunClaimErrorV1, SchedulerRunClaimV1, SchedulerRunTerminalResultErrorV1,
     SchedulerRunTerminalResultOutcomeV1, SchedulerRunTerminalResultV1,
-    SchedulerScheduleStoreErrorV1, SchedulerScheduleUpsertOutcomeV1, SchedulerScheduleUpsertV1,
-    SchedulerStoreConnectionErrorV1, scheduler_storage_binding_from_runtime,
+    SchedulerScheduleControlApplyErrorV1, SchedulerScheduleControlApplyOutcomeV1,
+    SchedulerScheduleControlDecisionV1, SchedulerScheduleControlMutationV1,
+    SchedulerScheduleControlRejectionV1, SchedulerScheduleControlRequestV1,
+    SchedulerScheduleControlResultOutboxV1, SchedulerScheduleStoreErrorV1,
+    SchedulerScheduleUpsertOutcomeV1, SchedulerScheduleUpsertV1, SchedulerStoreConnectionErrorV1,
+    scheduler_storage_binding_from_runtime,
 };

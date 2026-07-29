@@ -4,11 +4,13 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: protocol foundation реализован. Exact Protobuf
-command/result, structural validation и negative conformance существуют в
-`hermes-scheduler-protocol`. Durable Scheduler inbox/outbox, JetStream adapters,
-runtime bindings и managed live contour ещё не реализованы; platform gate
-`scheduler_module_schedule_control_v1` остаётся закрыт.
+Состояние реализации: protocol, pure admission mapping и persistence foundation
+реализованы. Exact Protobuf command/result, structural validation, mapping
+approved JobKind на canonical one-shot policy, transactional Scheduler
+inbox/result outbox, exact duplicate replay, same-ID hash conflict и cancellation
+race покрыты unit и disposable PostgreSQL conformance. JetStream adapters,
+runtime/grant/catalog bindings и managed live contour ещё не реализованы;
+platform gate `scheduler_module_schedule_control_v1` остаётся закрыт.
 
 Уточняет:
 

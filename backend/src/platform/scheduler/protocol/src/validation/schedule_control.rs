@@ -10,7 +10,7 @@ const MAX_TOKEN_BYTES: usize = 128;
 const MAX_SCOPE_BYTES: usize = 256;
 const MAX_CONCURRENCY_KEY_BYTES: usize = 256;
 const MAX_DEADLINE_MILLIS: u64 = 86_400_000;
-const MAX_RETRY_ATTEMPTS: u32 = 32;
+const MAX_ATTEMPTS: u32 = 32;
 const MAX_RETRY_BACKOFF_MILLIS: u64 = 86_400_000;
 const MAX_ERROR_CODE_BYTES: usize = 96;
 
@@ -96,10 +96,9 @@ fn validate_ensure(
     }
     if request.due_at_unix_millis <= 0
         || !(1..=MAX_DEADLINE_MILLIS).contains(&request.deadline_millis)
-        || request.max_retry_attempts > MAX_RETRY_ATTEMPTS
+        || !(1..=MAX_ATTEMPTS).contains(&request.max_attempts)
         || request.retry_base_backoff_millis > MAX_RETRY_BACKOFF_MILLIS
-        || (request.max_retry_attempts == 0 && request.retry_base_backoff_millis != 0)
-        || (request.max_retry_attempts > 0 && request.retry_base_backoff_millis == 0)
+        || request.retry_base_backoff_millis == 0
     {
         return Err(SchedulerScheduleControlValidationErrorV1::InvalidPolicy);
     }

@@ -1,12 +1,17 @@
 //! Owner-neutral reconciliation and lease checks for the Scheduler platform.
 
 pub mod catalog;
+pub mod control;
 pub mod delivery;
 pub mod overlap;
 pub mod planning;
 
 pub use catalog::{
     ScheduleCatalogErrorV1, ScheduleCatalogV1, ScheduleLeaseStateV1, ScheduleReconcileOutcomeV1,
+};
+pub use control::{
+    SchedulerApprovedJobV1, SchedulerOneShotScheduleErrorV1, SchedulerOneShotScheduleV1,
+    map_approved_one_shot_schedule_v1,
 };
 pub use delivery::{
     SchedulerDispatchIdentityV1, SchedulerJobEnvelopeBuildErrorV1, SchedulerReceiptEnvelopeErrorV1,
