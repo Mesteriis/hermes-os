@@ -8,8 +8,8 @@ use hermes_communication_delivery_intent_persistence::{
     DeliveryIntentPersistenceErrorV1,
 };
 use hermes_events_jetstream::{
-    JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
-    request_managed_runtime_event_access_v2,
+    JetStreamClient, ManagedRuntimeEventAccessErrorV1, RuntimeJetStreamConnection,
+    RuntimeNatsIdentity, RuntimePublishPermitV1, request_managed_runtime_event_access_v2,
 };
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, ManagedControlRequestDispatcherV2},
@@ -125,7 +125,7 @@ impl DeliveryIntentManagedRuntimeV1 {
             admission.grant_epoch,
             event_credential_revision,
         )
-        .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+        .map_err(event_access_error)?;
         let event_identity = RuntimeNatsIdentity::new(
             admission.runtime_instance_id.clone(),
             admission.runtime_generation,
@@ -222,6 +222,13 @@ impl DeliveryIntentManagedRuntimeV1 {
             )
             .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
         Ok(true)
+    }
+}
+
+fn event_access_error(error: ManagedRuntimeEventAccessErrorV1) -> DeliveryIntentRuntimeErrorV1 {
+    match error {
+        ManagedRuntimeEventAccessErrorV1::Rejected => DeliveryIntentRuntimeErrorV1::EventContract,
+        ManagedRuntimeEventAccessErrorV1::Unavailable => DeliveryIntentRuntimeErrorV1::Unavailable,
     }
 }
 
