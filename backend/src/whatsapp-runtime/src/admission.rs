@@ -19,6 +19,12 @@ use hermes_whatsapp_api::{
     },
     host_bridge::HOST_BRIDGE_CONTRACT_NAME,
 };
+use hermes_whatsapp_delivery_intent_contract::{
+    WHATSAPP_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1,
+    whatsapp_delivery_intent_execute_consume_request_v1,
+    whatsapp_delivery_intent_rejected_publish_request_v1,
+    whatsapp_delivery_intent_succeeded_publish_request_v1,
+};
 use sha2::{Digest, Sha256};
 
 use crate::settings::{
@@ -39,6 +45,7 @@ pub fn whatsapp_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
         whatsapp_blob_capability_v1(),
         whatsapp_client_capability_v1(WhatsAppClientContractV1::Command),
+        whatsapp_delivery_intent_capability_v1(),
         whatsapp_events_capability_v1(),
         whatsapp_host_bridge_capability_v1(),
         whatsapp_client_capability_v1(WhatsAppClientContractV1::OperationalQuery),
@@ -46,6 +53,20 @@ pub fn whatsapp_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         whatsapp_client_capability_v1(WhatsAppClientContractV1::Query),
         whatsapp_storage_capability_v1(),
     ]
+}
+
+fn whatsapp_delivery_intent_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: WHATSAPP_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![
+            whatsapp_delivery_intent_execute_consume_request_v1(),
+            whatsapp_delivery_intent_succeeded_publish_request_v1(),
+            whatsapp_delivery_intent_rejected_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
 }
 
 fn whatsapp_client_capability_v1(contract: WhatsAppClientContractV1) -> CapabilityDescriptorV1 {
@@ -193,6 +214,7 @@ mod tests {
             [
                 WHATSAPP_BLOB_CAPABILITY_ID,
                 WhatsAppClientContractV1::Command.capability_id(),
+                WHATSAPP_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1,
                 WHATSAPP_EVENTS_CAPABILITY_ID,
                 HOST_BRIDGE_CONTRACT_NAME,
                 WhatsAppClientContractV1::OperationalQuery.capability_id(),

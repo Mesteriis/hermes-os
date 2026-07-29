@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
-    request_managed_runtime_event_access_v2,
+    RuntimeSubscribePermitV1, request_managed_runtime_event_access_v2,
 };
 use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use hermes_runtime_protocol::v1::{
@@ -36,8 +36,20 @@ use hermes_storage_vault::{
 use crate::{
     WhatsAppCommandQueueError, WhatsAppOperationalQueryError, WhatsAppOperationalReplayError,
     WhatsAppRuntimeAdmission, WhatsAppRuntimeIdentity, accept_host_observation,
-    claim_provider_commands, enqueue_provider_command, provider_command_status,
-    relay_communications_outbox_once, settings::WhatsAppRuntimeSettingsV1,
+    claim_provider_commands,
+    delivery_intent_consumer::{
+        WhatsAppDeliveryIntentConsumeErrorV1, WhatsAppDeliveryIntentResultContextV1,
+        consume_next_whatsapp_delivery_intent_v1,
+    },
+    delivery_intent_outbox::{
+        WhatsAppDeliveryIntentOutboxRelayErrorV1, relay_whatsapp_delivery_intent_outbox_once_v1,
+    },
+    delivery_intent_worker::{
+        WhatsAppDeliveryIntentWorkerContextV1, WhatsAppDeliveryIntentWorkerErrorV1,
+        process_next_whatsapp_delivery_intent_v1,
+    },
+    enqueue_provider_command, provider_command_status, relay_communications_outbox_once,
+    settings::WhatsAppRuntimeSettingsV1,
 };
 use hermes_whatsapp_api::{
     WhatsAppProviderCommand, WhatsAppProviderCommandStatusV1,
@@ -49,6 +61,7 @@ use hermes_whatsapp_api::{
     provider_command_account_id, provider_command_operation_id,
     realtime::{WhatsAppOperationalReplayRequestV1, WhatsAppOperationalReplayResponseV1},
 };
+use hermes_whatsapp_delivery_intent_contract::whatsapp_delivery_intent_execute_contract_reference_v1;
 use hermes_whatsapp_persistence::WhatsAppDurablePersistence;
 use prost::Message;
 
@@ -59,7 +72,9 @@ pub struct WhatsAppAdmittedRuntime {
     pub durable: WhatsAppDurablePersistence,
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
+    delivery_intent_subscribe_permit: RuntimeSubscribePermitV1,
     identity: WhatsAppRuntimeIdentity,
+    logical_owner_id: String,
     account_id: String,
     host_bridge_socket_path: String,
     host_bridge_route_binding: [u8; 32],
@@ -90,7 +105,9 @@ pub async fn open_admitted_runtime(
 ) -> Result<WhatsAppAdmittedRuntime, WhatsAppBootstrapError> {
     if descriptor_bytes.is_empty()
         || settings_schema_bytes.is_empty()
-        || admission.logical_owner_id != "whatsapp"
+        || admission.logical_owner_id.trim().is_empty()
+        || admission.logical_owner_id.len() > 128
+        || !admission.logical_owner_id.is_ascii()
         || admission.runtime_instance_id.trim().is_empty()
         || settings.account_id.trim().is_empty()
         || event_hub_endpoint.trim().is_empty()
@@ -178,6 +195,16 @@ pub async fn open_admitted_runtime(
             admission.grant_epoch,
         )
         .map_err(|_| WhatsAppBootstrapError::EventHub)?;
+    let delivery_intent_subscribe_permit = bind_delivery_intent_subscribe_permit(
+        event_access
+            .subscribe_permits(
+                &admission.module_registration_id,
+                &admission.runtime_instance_id,
+                admission.runtime_generation,
+                admission.grant_epoch,
+            )
+            .map_err(|_| WhatsAppBootstrapError::EventHub)?,
+    )?;
     let event_connection = JetStreamClient::connect_runtime_with_jwt(
         event_hub_endpoint,
         identity,
@@ -203,17 +230,92 @@ pub async fn open_admitted_runtime(
         durable,
         event_connection,
         event_publish_permit,
+        delivery_intent_subscribe_permit,
         identity: WhatsAppRuntimeIdentity {
             runtime_instance_id: admission.runtime_instance_id.clone(),
             runtime_generation: admission.runtime_generation,
         },
+        logical_owner_id: admission.logical_owner_id.clone(),
         account_id: settings.account_id.clone(),
         host_bridge_socket_path,
         host_bridge_route_binding,
     })
 }
 
+fn bind_delivery_intent_subscribe_permit(
+    mut permits: Vec<RuntimeSubscribePermitV1>,
+) -> Result<RuntimeSubscribePermitV1, WhatsAppBootstrapError> {
+    if permits.len() != 1 {
+        return Err(WhatsAppBootstrapError::EventHub);
+    }
+    let permit = permits.pop().ok_or(WhatsAppBootstrapError::EventHub)?;
+    let expected = whatsapp_delivery_intent_execute_contract_reference_v1();
+    if permit.contract().is_none_or(|contract| {
+        contract.owner != expected.owner
+            || contract.name != expected.name
+            || contract.major != expected.major
+            || contract.revision != expected.revision
+            || contract.schema_sha256 != expected.schema_sha256
+    }) {
+        return Err(WhatsAppBootstrapError::EventHub);
+    }
+    Ok(permit)
+}
+
 impl WhatsAppAdmittedRuntime {
+    pub async fn consume_next_delivery_intent(
+        &self,
+        now_unix_seconds: i64,
+    ) -> Result<bool, WhatsAppDeliveryIntentConsumeErrorV1> {
+        let outcome = consume_next_whatsapp_delivery_intent_v1(
+            &self.durable.delivery_intent_store(),
+            &self.event_connection,
+            &self.delivery_intent_subscribe_permit,
+            &self.logical_owner_id,
+            &WhatsAppDeliveryIntentResultContextV1 {
+                runtime_instance_id: self.identity.runtime_instance_id.clone(),
+                runtime_generation: self.identity.runtime_generation,
+                completed_at_unix_seconds: now_unix_seconds,
+                completed_at_nanos: 0,
+            },
+        )
+        .await?;
+        Ok(matches!(
+            outcome,
+            hermes_whatsapp_persistence::WhatsAppDeliveryIntentInboxOutcomeV1::Pending
+                | hermes_whatsapp_persistence::WhatsAppDeliveryIntentInboxOutcomeV1::RouteNotFound
+        ))
+    }
+
+    pub async fn process_next_delivery_intent(
+        &mut self,
+        now_unix_seconds: i64,
+    ) -> Result<bool, WhatsAppDeliveryIntentWorkerErrorV1> {
+        process_next_whatsapp_delivery_intent_v1(
+            &mut self.control_channel,
+            &self.durable,
+            &WhatsAppDeliveryIntentWorkerContextV1 {
+                runtime_instance_id: self.identity.runtime_instance_id.clone(),
+                runtime_generation: self.identity.runtime_generation,
+            },
+            now_unix_seconds,
+        )
+        .await
+    }
+
+    pub async fn relay_delivery_intent_outbox(
+        &self,
+        now_unix_seconds: i64,
+    ) -> Result<usize, WhatsAppDeliveryIntentOutboxRelayErrorV1> {
+        relay_whatsapp_delivery_intent_outbox_once_v1(
+            &self.durable.delivery_intent_store(),
+            &self.event_connection,
+            &self.event_publish_permit,
+            now_unix_seconds,
+        )
+        .await
+    }
+
     pub async fn try_handle_client_delivery(
         &mut self,
         requested_at_unix_seconds: i64,

@@ -18,16 +18,21 @@ owner = "whatsapp"
 surface = "runtime"
 
 [dependencies]
+hermes-blob-client-contract = { path = "../platform/blob/client-contract" }
+hermes-blob-client = { path = "../platform/blob/client" }
 hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-events-protocol = { path = "../platform/events" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-storage-vault = { path = "../platform/storage/vault" }
 hermes-vault-protocol = { path = "../platform/vault/protocol" }
 hermes-whatsapp-api = { path = "../whatsapp-api" }
 hermes-whatsapp-core = { path = "../whatsapp-core" }
+hermes-whatsapp-delivery-intent-contract = { path = "../whatsapp-delivery-intent-contract" }
 hermes-whatsapp-persistence = { path = "../whatsapp-persistence" }
 libc = "=0.2.186"
 prost = "=0.14.4"
+prost-types = "=0.14.4"
 sha2 = { version = "=0.11.0", default-features = false }
 tokio = { version = "=1.52.4", default-features = false, features = ["rt-multi-thread"] }

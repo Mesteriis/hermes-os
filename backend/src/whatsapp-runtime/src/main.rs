@@ -107,6 +107,17 @@ where
         executor
             .block_on(admitted.try_handle_client_delivery(now))
             .map_err(|_| "WhatsApp runtime client delivery failed".to_owned())?;
+        match executor.block_on(admitted.consume_next_delivery_intent(now)) {
+            Ok(_) | Err(
+                hermes_whatsapp_runtime::delivery_intent_consumer::WhatsAppDeliveryIntentConsumeErrorV1::Unavailable,
+            ) => {}
+            Err(_) => {
+                return Err("WhatsApp delivery-intent consume failed".to_owned());
+            }
+        }
+        executor
+            .block_on(admitted.process_next_delivery_intent(now))
+            .map_err(|_| "WhatsApp delivery-intent worker failed".to_owned())?;
         admitted
             .try_serve_host_bridge_once(&listener, executor.handle())
             .map_err(|_| "WhatsApp host bridge delivery failed".to_owned())?;
@@ -118,6 +129,19 @@ where
                 _,
             )) => {
                 return Err("WhatsApp runtime outbox persistence failed".to_owned());
+            }
+        }
+        match executor.block_on(admitted.relay_delivery_intent_outbox(now)) {
+            Ok(_)
+            | Err(
+                hermes_whatsapp_runtime::delivery_intent_outbox::WhatsAppDeliveryIntentOutboxRelayErrorV1::Unavailable,
+            ) => {}
+            Err(
+                hermes_whatsapp_runtime::delivery_intent_outbox::WhatsAppDeliveryIntentOutboxRelayErrorV1::Persistence(
+                    _,
+                ),
+            ) => {
+                return Err("WhatsApp delivery-intent outbox persistence failed".to_owned());
             }
         }
         std::thread::sleep(Duration::from_millis(100));

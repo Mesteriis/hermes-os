@@ -7,6 +7,8 @@ use hermes_runtime_protocol::v1::{
 
 pub const PACKAGE: &str = "hermes-whatsapp-delivery-intent-contract";
 pub const WHATSAPP_DELIVERY_INTENT_OWNER_ID_V1: &str = "whatsapp";
+pub const WHATSAPP_DELIVERY_INTENT_SOURCE_MODULE_ID_V1: &str =
+    "hermes-communication-delivery-intent-runtime";
 pub const WHATSAPP_DELIVERY_INTENT_TARGET_MODULE_ID_V1: &str = "hermes-whatsapp-runtime";
 pub const WHATSAPP_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1: &str = "whatsapp.delivery-intent.v1";
 pub const WHATSAPP_DELIVERY_INTENT_TARGET_BLOB_CAPABILITY_ID_V1: &str = "whatsapp.blob.v1";

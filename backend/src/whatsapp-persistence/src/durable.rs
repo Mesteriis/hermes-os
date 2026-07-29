@@ -16,6 +16,8 @@ pub enum WhatsAppDurablePersistenceError {
     ObservationConflict,
     CommandConflict,
     ConflictingDeliveryRouteLocator,
+    ConflictingDeliveryIntentInbox,
+    InvalidDeliveryIntentTransition,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -71,6 +73,11 @@ pub struct WhatsAppProviderCommandStatusV1 {
 }
 
 impl WhatsAppDurablePersistence {
+    #[must_use]
+    pub fn delivery_intent_store(&self) -> crate::WhatsAppDeliveryIntentStoreV1 {
+        crate::WhatsAppDeliveryIntentStoreV1::new(self.pool.clone())
+    }
+
     pub async fn connect_runtime(
         binding: &StorageBindingV1,
         database_id: &str,
