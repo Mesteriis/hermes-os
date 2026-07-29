@@ -386,6 +386,22 @@ const COMMUNICATIONS_EXPORT_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_PRODUCTION_PACKAGES = [
+  ...COMMUNICATIONS_EXPORT_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communication-delivery-intent-api',
+    role: 'workflow',
+    owner: 'communication_delivery_intent',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-communication-delivery-intent-core',
+    role: 'workflow',
+    owner: 'communication_delivery_intent',
+    surface: 'implementation',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -1427,6 +1443,14 @@ const COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_EXPORT_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delivery-intent-api': [],
+  'hermes-communication-delivery-intent-core': [
+    { name: 'hermes-communications-api', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -1465,6 +1489,17 @@ const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
     { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
+};
+
+const COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delivery-intent-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communication-delivery-intent-core': [],
 };
 
 const FORBIDDEN_DEPENDENCIES = [
@@ -1898,6 +1933,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-sender-insights-api',
       'hermes-communications-evidence-export-source-api',
       'hermes-communications-export-api',
+      'hermes-communication-delivery-intent-api',
       'hermes-attachment-security-contract',
     ].includes(packageName);
     return hasExactKeys(target, ['primaryKind', 'customBuildAllowed'])
@@ -2100,6 +2136,19 @@ function expectedSlice(currentSlice) {
       packages: COMMUNICATIONS_EXPORT_PRODUCTION_PACKAGES,
       workspaceDependencies: COMMUNICATIONS_EXPORT_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_delivery_intent_contract_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATIONS_EXPORT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

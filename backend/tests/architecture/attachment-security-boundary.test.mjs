@@ -619,7 +619,10 @@ test('Attachment Security remains one exact engine after Mail integration admiss
   const policy = JSON.parse(await readFile(POLICY_PATH, 'utf8'));
   const productionPackages = policy.implementation.productionPackages;
 
-  assert.equal(policy.implementation.currentSlice, 'communications_export_v1');
+  assert.equal(
+    policy.implementation.currentSlice,
+    'communication_delivery_intent_contract_core_v1',
+  );
   assert.deepEqual(policy.implementation.ownerInventory.engines, ['attachment_security']);
   assert.deepEqual(
     productionPackages

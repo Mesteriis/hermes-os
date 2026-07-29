@@ -454,7 +454,7 @@
       "gate": "communications_export_v1",
       "role": "workflow",
       "owner": "communications_export",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["communications_content_read_v1", "blob_v1"]
     },
     {

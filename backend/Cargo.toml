@@ -48,6 +48,8 @@ members = [
   "src/communications-export-persistence",
   "src/communications-export-runtime",
   "src/communications-export-assembly",
+  "src/communication-delivery-intent-api",
+  "src/communication-delivery-intent-core",
   "src/communications-attachment-contract",
   "src/communications-domain",
   "src/communications-ingress",

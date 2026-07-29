@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communications_export_v1",
+    "currentSlice": "communication_delivery_intent_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -486,6 +486,18 @@
         "role": "workflow",
         "owner": "communications_export",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-communication-delivery-intent-api",
+        "role": "workflow",
+        "owner": "communication_delivery_intent",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-delivery-intent-core",
+        "role": "workflow",
+        "owner": "communication_delivery_intent",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1315,6 +1327,13 @@
       ],
       "hermes-communications-export-api": [],
       "hermes-communications-export-core": [],
+      "hermes-communication-delivery-intent-api": [],
+      "hermes-communication-delivery-intent-core": [
+        {
+          "name": "hermes-communications-api",
+          "kind": "normal"
+        }
+      ],
       "hermes-communications-export-persistence": [
         {
           "name": "hermes-communications-export-core",
@@ -3790,7 +3809,42 @@
           "defaultFeatures": true,
           "features": []
         }
-      ]
+      ],
+      "hermes-communication-delivery-intent-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communication-delivery-intent-core": []
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -4124,6 +4178,14 @@
       },
       "hermes-communications-export-assembly": {
         "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-delivery-intent-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communication-delivery-intent-core": {
+        "primaryKind": "lib",
         "customBuildAllowed": false
       }
     },

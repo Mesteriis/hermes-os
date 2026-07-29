@@ -108,7 +108,10 @@ test('Communications export is one exact workflow family with a public domain so
   ]);
   const policy = JSON.parse(policySource);
   const sourceSchema = sourceContract.replaceAll(/\/\/.*$/gm, '');
-  assert.equal(policy.implementation.currentSlice, 'communications_export_v1');
+  assert.equal(
+    policy.implementation.currentSlice,
+    'communication_delivery_intent_contract_core_v1',
+  );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, ['communications_export']);
   assert.deepEqual(
     policy.implementation.productionPackages

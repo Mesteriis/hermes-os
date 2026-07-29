@@ -1717,6 +1717,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-delivery-intent-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-communication-delivery-intent-core"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-api",
+]
+
+[[package]]
 name = "hermes-communications-api"
 version = "0.1.0"
 dependencies = [
