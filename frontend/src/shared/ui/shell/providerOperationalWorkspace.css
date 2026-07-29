@@ -15,40 +15,13 @@
 	box-shadow: var(--h-shadow-md);
 }
 
-:is(.mail-workspace-account, .telegram-workspace-account) {
-	box-sizing: border-box;
-	min-width: 11rem;
-	padding: var(--h-space-1) var(--h-space-2);
-	border: 1px solid var(--h-color-border);
-	border-radius: var(--h-radius-md);
-	background: var(--h-color-surface);
-	box-shadow: var(--h-shadow-xs);
-	transition:
-		border-color var(--h-motion-fast),
-		box-shadow var(--h-motion-fast);
-}
-
-:is(.mail-workspace-account, .telegram-workspace-account):focus-within {
-	border-color: var(--h-color-accent);
-	box-shadow: 0 0 0 2px color-mix(in srgb, var(--h-color-accent) 18%, transparent);
-}
-
-:is(.mail-workspace-account, .telegram-workspace-account) select {
-	width: 100%;
-	max-width: none;
-	min-height: 1.75rem;
-	padding: 0;
-	border: 0;
-	outline: 0;
-	background: transparent;
-}
-
 :is(.mail-workspace-shell, .telegram-workspace-grid) {
 	gap: var(--h-space-4);
 }
 
 :is(
-	.mail-workspace-list,
+	.mail-folder-strip,
+	.mail-list-view,
 	.mail-workspace-reader,
 	.mail-workspace-inspector,
 	.telegram-workspace-chat-list,
@@ -62,6 +35,21 @@
 	box-shadow: var(--h-shadow-md);
 }
 
+:is(.mail-list-view__items, .telegram-workspace-chat-list__items) {
+	display: grid;
+	grid-auto-rows: max-content;
+	align-content: start;
+	gap: var(--h-space-2);
+	padding: var(--h-space-2);
+}
+
+:is(.mail-list-item, .telegram-workspace-chat) {
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface-raised);
+	box-shadow: var(--h-shadow-xs);
+}
+
 @media (max-width: 900px) {
 	:is(.mail-operational-page, .telegram-operational-page) {
 		gap: var(--h-space-3);
@@ -72,11 +60,6 @@
 		gap: var(--h-space-3);
 	}
 
-	:is(.mail-workspace-account, .telegram-workspace-account) {
-		order: 2;
-		flex: 1 1 12rem;
-		min-width: min(12rem, 100%);
-	}
 }
 
 @media (max-width: 760px) {
@@ -107,13 +90,6 @@
 		max-width: none;
 	}
 
-	:is(.mail-workspace-account, .telegram-workspace-account) {
-		grid-column: 1 / -1;
-		grid-row: 3;
-		order: initial;
-		width: 100%;
-		max-width: none;
-	}
 }
 
 @media (max-width: 480px) {
@@ -137,9 +113,5 @@
 
 	:is(.mail-workspace-search, .telegram-workspace-search) {
 		grid-row: 3;
-	}
-
-	:is(.mail-workspace-account, .telegram-workspace-account) {
-		grid-row: 4;
 	}
 }

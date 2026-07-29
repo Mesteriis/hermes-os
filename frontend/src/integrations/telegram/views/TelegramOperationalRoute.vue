@@ -120,7 +120,6 @@ onMounted(() => {
 		@select-chat="selectChat"
 		@select-message="surface.selectMessage"
 		@send="surface.send"
-		@update-account-id="updateAccountId"
 		@update-authorization-password="accountAccess.updatePassword"
 		@update-draft="surface.updateDraft"
 		@update-search-query="discovery.updateQuery"

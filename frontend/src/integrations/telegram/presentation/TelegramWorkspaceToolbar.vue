@@ -15,7 +15,6 @@ const emit = defineEmits<{
 	load: []
 	openSearch: []
 	toggleInspector: []
-	updateAccountId: [value: string]
 	updateSearchQuery: [value: string]
 }>()
 </script>
@@ -36,20 +35,6 @@ const emit = defineEmits<{
 				@input="emit('updateSearchQuery', ($event.target as HTMLInputElement).value)"
 			>
 		</form>
-
-		<label class="telegram-workspace-account">
-			<span>Account</span>
-			<select
-				:value="model.accountId"
-				:disabled="accountAccess.accounts.length === 0"
-				@change="emit('updateAccountId', ($event.target as HTMLSelectElement).value)"
-			>
-				<option v-if="accountAccess.accounts.length === 0" value="">No account</option>
-				<option v-for="account in accountAccess.accounts" :key="account.id" :value="account.id">
-					{{ account.title }}
-				</option>
-			</select>
-		</label>
 
 		<div class="telegram-workspace-toolbar__actions">
 			<button

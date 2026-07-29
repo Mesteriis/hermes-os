@@ -143,15 +143,15 @@
 }
 
 .mail-workspace-list {
-	display: flex;
-	flex-direction: column;
-	border-right: 1px solid var(--h-color-border);
-	background: var(--h-color-surface);
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	gap: var(--h-space-3);
+	overflow: hidden;
+	background: transparent;
 }
 
 .mail-folder-strip {
 	padding: var(--h-space-3);
-	border-bottom: 1px solid var(--h-color-border);
 }
 
 .mail-folder-strip header,
@@ -714,10 +714,6 @@
 		order: 3;
 		max-width: none;
 		flex-basis: 100%;
-	}
-
-	.mail-workspace-account {
-		display: grid;
 	}
 
 	.mail-workspace-toolbar__compose {

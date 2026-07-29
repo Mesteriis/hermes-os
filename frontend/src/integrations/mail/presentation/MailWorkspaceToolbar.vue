@@ -12,7 +12,6 @@ defineProps<{
 const emit = defineEmits<{
 	compose: []
 	refresh: []
-	selectConnection: [connectionId: string]
 	showSyncHealth: []
 	sync: []
 	toggleInspector: []
@@ -35,20 +34,6 @@ const emit = defineEmits<{
 				autocomplete="off"
 				@input="emit('updateSearch', ($event.target as HTMLInputElement).value)"
 			>
-		</label>
-
-		<label class="mail-workspace-account">
-			<span>Account</span>
-			<select
-				:value="readModel.selectedConnectionId"
-				:disabled="!readModel.canQuery || readModel.connections.length === 0"
-				@change="emit('selectConnection', ($event.target as HTMLSelectElement).value)"
-			>
-				<option v-if="readModel.connections.length === 0" value="">No account</option>
-				<option v-for="connection in readModel.connections" :key="connection.id" :value="connection.id">
-					{{ connection.label }}
-				</option>
-			</select>
 		</label>
 
 		<div class="mail-workspace-toolbar__actions">

@@ -651,10 +651,6 @@
 		flex-basis: 100%;
 	}
 
-	.telegram-workspace-account {
-		display: grid;
-	}
-
 	.telegram-action-rail {
 		display: none;
 	}

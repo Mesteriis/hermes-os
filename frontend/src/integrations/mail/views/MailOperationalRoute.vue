@@ -136,13 +136,16 @@ async function reconcileAccountConsumers(): Promise<void> {
 	try {
 		await accountConnections.refresh()
 	} finally {
-		await Promise.all([
-			composition.reconcile(),
-			read.reconcile(),
-			syncHealth.reconcile(),
-		])
-		accountNavigationLoading = false
-		emitAccountNavigation()
+		try {
+			await Promise.all([
+				composition.reconcile(),
+				read.reconcile(),
+				syncHealth.reconcile(),
+			])
+		} finally {
+			accountNavigationLoading = false
+			emitAccountNavigation()
+		}
 	}
 }
 
@@ -219,7 +222,6 @@ watch(
 		@permanent-delete-refresh-status="messagePermanentDelete.refreshStatus"
 		@permanent-delete-set-confirmed="messagePermanentDelete.setConfirmed"
 		@refresh-status="delivery.refreshStatus"
-		@select-connection="read.selectConnection"
 		@select-folder="read.selectFolder"
 		@select-message="read.selectMessage"
 		@select-thread="read.selectThread"

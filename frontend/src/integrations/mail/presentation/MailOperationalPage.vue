@@ -73,7 +73,6 @@ const emit = defineEmits<{
 	loadMoreThreads: []
 	readRefresh: []
 	refreshStatus: []
-	selectConnection: [connectionId: string]
 	selectFolder: [folderId: string]
 	selectMessage: [messageId: string]
 	selectThread: [providerThreadId: string]
@@ -98,7 +97,6 @@ const syncHealthOpen = ref(false)
 			:sync-model="syncModel"
 			@compose="composeOpen = true"
 			@refresh="emit('readRefresh')"
-			@select-connection="emit('selectConnection', $event)"
 			@show-sync-health="syncHealthOpen = true"
 			@sync="emit('sync')"
 			@toggle-inspector="inspectorVisible = !inspectorVisible"

@@ -32,7 +32,6 @@ const emit = defineEmits<{
 	selectMessage: [messageId: string, providerMessageId: string]
 	send: []
 	submitAuthorizationPassword: []
-	updateAccountId: [value: string]
 	updateAuthorizationPassword: [value: string]
 	updateDraft: [value: string]
 	updateSearchQuery: [value: string]
@@ -62,7 +61,6 @@ function openDiscovery(): void {
 			@load="emit('load')"
 			@open-search="openDiscovery"
 			@toggle-inspector="inspectorVisible = !inspectorVisible"
-			@update-account-id="emit('updateAccountId', $event)"
 			@update-search-query="emit('updateSearchQuery', $event)"
 		/>
 

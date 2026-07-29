@@ -27,6 +27,14 @@ describe('provider operational workspace shell', () => {
 			new URL('../../../integrations/telegram/presentation/telegramMessageInspector.css', import.meta.url),
 			'utf8',
 		)
+		const mailToolbar = readFileSync(
+			new URL('../../../integrations/mail/presentation/MailWorkspaceToolbar.vue', import.meta.url),
+			'utf8',
+		)
+		const telegramToolbar = readFileSync(
+			new URL('../../../integrations/telegram/presentation/TelegramWorkspaceToolbar.vue', import.meta.url),
+			'utf8',
+		)
 
 		expect(styles).toContain('.mail-operational-page, .telegram-operational-page')
 		expect(styles).toContain('gap: var(--h-space-5)')
@@ -35,17 +43,18 @@ describe('provider operational workspace shell', () => {
 		expect(styles).toContain('background: var(--h-color-surface-raised)')
 		expect(styles).toContain('background: var(--h-color-surface)')
 		expect(styles).toContain('border: 1px solid var(--h-color-border-strong)')
-		expect(styles).toContain('.mail-workspace-account, .telegram-workspace-account')
-		expect(styles).toContain('flex: 1 1 12rem')
 		expect(styles).toContain('grid-template-columns: minmax(0, 1fr) auto')
 		expect(styles).toContain('grid-column: 1 / -1')
 		expect(styles).toContain('@media (max-width: 480px)')
-		expect(styles).toContain('grid-row: 4')
 		expect(styles).toContain('border-radius: var(--h-radius-lg)')
-		expect(styles).toContain('.mail-workspace-list')
+		expect(styles).toContain('.mail-folder-strip')
+		expect(styles).toContain('.mail-list-view')
 		expect(styles).toContain('.telegram-workspace-chat-list')
-		expect(mailStyles).not.toMatch(/\.mail-workspace-account\s*\{\s*display:\s*none/)
-		expect(telegramStyles).not.toMatch(/\.telegram-workspace-account\s*\{\s*display:\s*none/)
+		expect(styles).toContain('.mail-list-item, .telegram-workspace-chat')
+		expect(styles).toContain('grid-auto-rows: max-content')
+		expect(styles).toContain('box-shadow: var(--h-shadow-xs)')
+		expect(mailToolbar).not.toContain('mail-workspace-account')
+		expect(telegramToolbar).not.toContain('telegram-workspace-account')
 		expect(mailStyles).toMatch(/\.mail-workspace-toolbar__compose\s*\{\s*font-size:\s*0/)
 		expect(mailStyles).toContain('radial-gradient(')
 		expect(mailStyles).toContain('#bd4a21 10%')
