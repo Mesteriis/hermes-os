@@ -518,3 +518,9 @@ managed Blob write с exact target-bound custody proof. Workflow persistence
 ADR-0334 делает только receipt-bound Blob write идемпотентным при retry:
 существующий deterministic reference принимается лишь после полного SHA-256
 сравнения внутри Blob runtime, а обычный write остаётся create-only.
+ADR-0336 вводит недостающий owner-neutral managed `query_rpc`: caller объявляет
+exact contract dependency, Kernel разрешает единственный current approved
+provider и проверяет grants/runtime fences, не декодируя owner payload.
+Первым consumer становится delivery-intent route resolution через public
+Communications contract; `client_rpc`, durable events и replayable client
+realtime остаются отдельными interaction kinds.
