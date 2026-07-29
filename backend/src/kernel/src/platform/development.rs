@@ -5,8 +5,8 @@
 //! until their NATS and module-grant records are provisioned.
 
 use hermes_kernel_control_store::{
-    ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
-    ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
+    ModuleDescriptorRegistrationRequestsV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
+    ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
     ModuleEventSubscriptionRequirementV1, ModuleRegistration, ModuleRegistrationState,
     ModuleStorageRequestV1, PlatformEventHubTopologyV1, PlatformEventStreamBudgetV1,
     PlatformEventsAuthorityConfigurationV1, PlatformStorageBindingStateV1, PlatformStorageBundleV1,
@@ -14,6 +14,7 @@ use hermes_kernel_control_store::{
     StorageDeploymentProfileV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
+use hermes_scheduler_protocol::SCHEDULER_JOB_DESCRIPTOR_SET_V1;
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::process::Command;
@@ -89,12 +90,7 @@ fn restore_scheduler_developer_grants(
     store: &SqliteControlStore,
 ) -> Result<(), String> {
     const REGISTRATION_ID: &str = "scheduler_developer";
-    let capabilities = [
-        "events.scheduler.ack".to_owned(),
-        "events.scheduler.dispatch".to_owned(),
-        "events.scheduler.result".to_owned(),
-        "storage.scheduler".to_owned(),
-    ];
+    let capabilities = scheduler_capabilities();
     if store
         .module_registration(REGISTRATION_ID)
         .map_err(|_| "developer Scheduler registration is unavailable".to_owned())?
@@ -297,6 +293,7 @@ fn ensure_scheduler_registration(
     const REGISTRATION_ID: &str = "scheduler_developer";
     const STORAGE_CAPABILITY: &str = "storage.scheduler";
     let capabilities = scheduler_capabilities();
+    let descriptor_sha256: [u8; 32] = Sha256::digest(descriptor).into();
     let registration = store
         .module_registration(REGISTRATION_ID)
         .map_err(|_| "developer Scheduler registration is unavailable".to_owned())?;
@@ -305,7 +302,7 @@ fn ensure_scheduler_registration(
             REGISTRATION_ID,
             "scheduler",
             "scheduler",
-            Sha256::digest(descriptor).into(),
+            descriptor_sha256,
             ModuleRegistrationState::Pending,
             1,
         );
@@ -326,25 +323,66 @@ fn ensure_scheduler_registration(
             .map(|_| ())
             .map_err(|_| "developer Scheduler grants cannot be recorded".to_owned());
     }
-    registration
-        .is_some_and(|current| current.state() != ModuleRegistrationState::Approved)
+    let current = registration.expect("checked registration");
+    if current.state() == ModuleRegistrationState::Approved
+        && current.descriptor_sha256() != &descriptor_sha256
+    {
+        let next_epoch = current
+            .grant_epoch()
+            .checked_add(1)
+            .ok_or_else(|| "developer Scheduler grant epoch overflowed".to_owned())?;
+        let upgraded = ModuleRegistration::new(
+            REGISTRATION_ID,
+            "scheduler",
+            "scheduler",
+            descriptor_sha256,
+            ModuleRegistrationState::Approved,
+            next_epoch,
+        );
+        let storage =
+            ModuleStorageRequestV1::new(REGISTRATION_ID, STORAGE_CAPABILITY, "scheduler", 4, 5_000);
+        let routes = scheduler_event_routes();
+        return store
+            .upgrade_approved_registration_with_all_descriptor_requests(
+                &upgraded,
+                &capabilities,
+                ModuleDescriptorRegistrationRequestsV1 {
+                    storage: std::slice::from_ref(&storage),
+                    events: &routes,
+                    blobs: &[],
+                    scheduler: &[],
+                    vault_purposes: &[],
+                    client_rpc_routes: &[],
+                    client_blob_routes: &[],
+                    client_realtime_routes: &[],
+                    query_rpc_routes: &[],
+                    request_rpc_routes: &[],
+                    contract_dependencies: &[],
+                },
+            )
+            .map_err(|_| "developer Scheduler registration cannot be upgraded".to_owned());
+    }
+    (current.state() != ModuleRegistrationState::Approved)
         .then(|| store.approve_module_registration(REGISTRATION_ID, &capabilities))
         .transpose()
         .map(|_| ())
         .map_err(|_| "developer Scheduler grants cannot be restored".to_owned())
 }
 
-fn scheduler_capabilities() -> [String; 4] {
+fn scheduler_capabilities() -> [String; 6] {
     [
         "events.scheduler.ack",
         "events.scheduler.dispatch",
         "events.scheduler.result",
+        "events.scheduler.schedule_control.command",
+        "events.scheduler.schedule_control.result",
         "storage.scheduler",
     ]
     .map(str::to_owned)
 }
 
-fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 3] {
+fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 5] {
+    let schedule_control_schema: [u8; 32] = Sha256::digest(SCHEDULER_JOB_DESCRIPTOR_SET_V1).into();
     [
         scheduler_event_route(
             "events.scheduler.dispatch",
@@ -352,6 +390,7 @@ fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 3] {
             "platform",
             "maintenance",
             ModuleEventRouteDirectionV1::Publish,
+            [7; 32],
         ),
         scheduler_event_route(
             "events.scheduler.ack",
@@ -359,6 +398,7 @@ fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 3] {
             "scheduler",
             "job_receipt",
             ModuleEventRouteDirectionV1::Consume,
+            [7; 32],
         ),
         scheduler_event_route(
             "events.scheduler.result",
@@ -366,6 +406,23 @@ fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 3] {
             "scheduler",
             "job_receipt",
             ModuleEventRouteDirectionV1::Consume,
+            [7; 32],
+        ),
+        scheduler_event_route(
+            "events.scheduler.schedule_control.command",
+            ModuleEventEnvelopeKindV1::Command,
+            "scheduler",
+            "schedule_control",
+            ModuleEventRouteDirectionV1::Consume,
+            schedule_control_schema,
+        ),
+        scheduler_event_route(
+            "events.scheduler.schedule_control.result",
+            ModuleEventEnvelopeKindV1::Result,
+            "scheduler",
+            "schedule_control",
+            ModuleEventRouteDirectionV1::Publish,
+            schedule_control_schema,
         ),
     ]
 }
@@ -377,7 +434,7 @@ fn ensure_scheduler_storage_bundle(
 ) -> Result<[u8; 32], String> {
     let bytes = export_scheduler_storage_bundle(kernel, runtime_dir)?;
     let digest: [u8; 32] = Sha256::digest(&bytes).into();
-    let bundle = PlatformStorageBundleV1::new("scheduler", 7, digest, bytes)
+    let bundle = PlatformStorageBundleV1::new("scheduler", 9, digest, bytes)
         .map_err(|_| "developer Scheduler Storage bundle is invalid".to_owned())?;
     match store
         .platform_storage_bundle("scheduler", bundle.revision())
@@ -403,6 +460,7 @@ fn scheduler_event_route(
     owner: &str,
     contract: &str,
     direction: ModuleEventRouteDirectionV1,
+    schema_sha256: [u8; 32],
 ) -> ModuleEventRouteRequestV1 {
     ModuleEventRouteRequestV1::new(ModuleEventRouteRequestInputV1 {
         registration_id: "scheduler_developer".to_owned(),
@@ -412,7 +470,7 @@ fn scheduler_event_route(
         contract_name: contract.to_owned(),
         contract_major: 1,
         contract_revision: 1,
-        contract_schema_sha256: [7; 32],
+        contract_schema_sha256: schema_sha256,
         direction,
         max_in_flight: 16,
         delivery_policy: matches!(direction, ModuleEventRouteDirectionV1::Consume).then(|| {

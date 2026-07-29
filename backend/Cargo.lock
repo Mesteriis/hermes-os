@@ -2241,6 +2241,7 @@ dependencies = [
  "hermes-kernel-control-store",
  "hermes-kernel-control-store-sqlite",
  "hermes-runtime-protocol",
+ "hermes-scheduler-protocol",
  "hermes-secure-file",
  "hermes-storage-protocol",
  "hermes-vault-protocol",

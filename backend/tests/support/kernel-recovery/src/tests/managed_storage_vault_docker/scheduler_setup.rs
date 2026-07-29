@@ -80,7 +80,7 @@ fn record_scheduler_runtime_fixture(
     let digest: [u8; 32] = Sha256::digest(&canonical_bundle).into();
     store
         .record_platform_storage_bundle(
-            &PlatformStorageBundleV1::new("scheduler", 7, digest, canonical_bundle)
+            &PlatformStorageBundleV1::new("scheduler", 9, digest, canonical_bundle)
                 .expect("record Scheduler Storage bundle"),
         )
         .expect("persist Scheduler Storage bundle");

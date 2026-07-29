@@ -12,9 +12,11 @@ race покрыты unit и disposable PostgreSQL conformance. Exact runtime
 configuration, source/runtime/grant/catalog admission, canonical correlated
 result envelope, JetStream consumer/result-publisher adapters и Scheduler
 runtime worker с result-outbox-before-ACK recovery реализованы как закрытый
-foundation. Event Hub topology admission и managed live contour ещё не
-реализованы; platform gate `scheduler_module_schedule_control_v1` остаётся
-закрыт.
+foundation. Kernel теперь выводит runtime binding/grants только как пересечение
+Event Hub command/result topology, approved Scheduler JobKind catalog и current
+managed-runtime fence источника; stale или неполный источник не включает
+consumer. Managed live producer → Scheduler → result contour ещё не реализован;
+platform gate `scheduler_module_schedule_control_v1` остаётся закрыт.
 
 Уточняет:
 

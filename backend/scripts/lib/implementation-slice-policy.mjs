@@ -541,6 +541,10 @@ const BLOB_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
 
 const SCHEDULER_PROTOCOL_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...BLOB_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-kernel': [
+    ...BLOB_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST['hermes-kernel'],
+    { name: 'hermes-scheduler-protocol', kind: 'normal' },
+  ],
   'hermes-scheduler-protocol': [
     { name: 'hermes-clock-protocol', kind: 'normal' },
   ],

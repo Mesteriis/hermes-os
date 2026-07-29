@@ -39,14 +39,24 @@ pub(crate) fn start_from_reservation(
     let event_topology = events_status::current_topology(store)?;
     let contracts = catalog::resolve_contracts(store)?;
     let topology = topology::plan(&contracts, &event_topology)?;
+    let schedule_control = super::schedule_control::derive(
+        store,
+        &contracts,
+        &topology,
+        reservation.registration_id(),
+        reservation.grant_epoch(),
+    )?;
     let configuration = runtime_configuration(
         &reservation,
         storage_binding,
         &storage_topology,
         store.snapshot().instance_id(),
         &vault,
-        &event_topology,
-        &topology,
+        SchedulerRuntimeEventConfigurationV1 {
+            event_topology: &event_topology,
+            topology: &topology,
+            schedule_control,
+        },
     )?;
     start_staged_runtime(supervisor, kernel, runtime_dir, reservation, configuration)
 }
@@ -135,14 +145,19 @@ pub(crate) fn validate_storage_binding(
     .ok_or_else(|| "Scheduler Storage binding is stale".to_owned())
 }
 
+struct SchedulerRuntimeEventConfigurationV1<'a> {
+    event_topology: &'a hermes_kernel_control_store::PlatformEventHubTopologyV1,
+    topology: &'a topology::EventTopologyPlanV1,
+    schedule_control: super::schedule_control::SchedulerScheduleControlConfigurationV1,
+}
+
 fn runtime_configuration(
     reservation: &ManagedLaunchReservation,
     storage_binding: &PlatformStorageBindingV1,
     storage_topology: &hermes_kernel_control_store::PlatformStorageTopology,
     vault_instance_id: &str,
     vault: &vault_status::ManagedVaultStatus,
-    event_topology: &hermes_kernel_control_store::PlatformEventHubTopologyV1,
-    topology: &topology::EventTopologyPlanV1,
+    events: SchedulerRuntimeEventConfigurationV1<'_>,
 ) -> Result<Vec<u8>, String> {
     let configuration = SchedulerRuntimeConfigurationV1 {
         storage_binding: Some(SchedulerRuntimeStorageBindingV1 {
@@ -168,27 +183,27 @@ fn runtime_configuration(
         vault_instance_id: vault_instance_id.to_owned(),
         vault_runtime_generation: vault.runtime_generation(),
         vault_hpke_public_key_x25519: vault.hpke_public_key_x25519().to_vec(),
-        nats_endpoint: event_topology.nats_endpoint().to_owned(),
-        event_credential_revision: event_topology.credential_revision(),
+        nats_endpoint: events.event_topology.nats_endpoint().to_owned(),
+        event_credential_revision: events.event_topology.credential_revision(),
         dispatch_batch_limit: DISPATCH_BATCH_LIMIT,
         receipt_batch_limit: RECEIPT_BATCH_LIMIT,
         reconcile_interval_millis: RECONCILE_INTERVAL_MILLIS,
         receipt_consumers: topology::scheduler_receipt_bindings(
-            topology,
+            events.topology,
             reservation.registration_id(),
             reservation.grant_epoch(),
         )
         .map_err(|_| "Scheduler receipt topology is unavailable".to_owned())?,
         dispatch_publishers: topology::scheduler_dispatch_bindings(
-            topology,
+            events.topology,
             reservation.registration_id(),
             reservation.grant_epoch(),
         )
         .map_err(|_| "Scheduler dispatch topology is unavailable".to_owned())?,
         runtime_instance_id: reservation.runtime_instance_id().to_owned(),
         logical_owner_id: storage_binding.owner_id().to_owned(),
-        schedule_control: None,
-        schedule_control_grants: Vec::new(),
+        schedule_control: events.schedule_control.binding,
+        schedule_control_grants: events.schedule_control.grants,
     };
     validate_scheduler_runtime_configuration(&configuration)
         .map_err(|_| "Scheduler runtime configuration is invalid".to_owned())?;

@@ -27,6 +27,7 @@ hermes-gateway-session-contract = { path = "../api/gateway/session_contract" }
 hermes-kernel-control-store = { path = "control_store/contract" }
 hermes-kernel-control-store-sqlite = { path = "control_store/sqlite" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-scheduler-protocol = { path = "../platform/scheduler/protocol" }
 hermes-secure-file = { path = "../platform/secure_file" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-vault-protocol = { path = "../platform/vault/protocol" }

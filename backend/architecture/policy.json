@@ -624,6 +624,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-scheduler-protocol",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-gateway-session-contract",
           "kind": "normal"
         },

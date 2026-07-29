@@ -6,7 +6,7 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
 test('module-originated Scheduler control keeps its gate planned while protocol and persistence foundations are exact', async () => {
-  const [adr, inventorySource, proto, validation, runtimeContract, admission, mapping, resultEnvelope, migration, authorityMigration, persistence, jetstream, runtimeWorker, manifest] = await Promise.all([
+  const [adr, inventorySource, proto, validation, runtimeContract, admission, mapping, resultEnvelope, migration, authorityMigration, persistence, jetstream, runtimeWorker, kernelTopology, development, manifest] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0342-module-originated-scheduler-control-events.md',
@@ -100,6 +100,20 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
     ),
     readFile(
       new URL(
+        'src/kernel/src/platform/scheduler/schedule_control.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/kernel/src/platform/development.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/platform/scheduler/protocol/Cargo.toml',
         BACKEND_ROOT,
       ),
@@ -146,6 +160,12 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
   assert.match(runtimeWorker, /\.apply_schedule_control\(&request/);
   assert.match(runtimeWorker, /relay_results\(port, store\)\.await\?/);
   assert.match(runtimeWorker, /delivery\.acknowledge\(\)\.await/);
+  assert.match(kernelTopology, /current_managed_runtime_matches/);
+  assert.match(kernelTopology, /command_publishers\.contains/);
+  assert.match(kernelTopology, /result_consumers\.contains/);
+  assert.match(kernelTopology, /scheduler_catalog::resolve/);
+  assert.match(development, /events\.scheduler\.schedule_control\.command/);
+  assert.match(development, /events\.scheduler\.schedule_control\.result/);
   assert.match(manifest, /role = "platform"/);
   assert.match(manifest, /owner = "scheduler"/);
   assert.match(manifest, /surface = "contract"/);
