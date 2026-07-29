@@ -10,6 +10,8 @@ pub const COMMUNICATION_BULK_ACTION_QUERY_CONTRACT_NAME_V1: &str =
     "communication.bulk_action.query";
 pub const COMMUNICATION_BULK_ACTION_REALTIME_CONTRACT_NAME_V1: &str =
     "communication.bulk_action.status_changed";
+pub const COMMUNICATION_BULK_ACTION_REALTIME_EVENT_KIND_V1: &str =
+    "communication.bulk_action.status_changed";
 pub const COMMUNICATION_BULK_ACTION_COMMAND_CONNECT_PATH_V1: &str =
     "/hermes.communication_bulk_action.v1.CommunicationBulkDeliveryCommandService/Start";
 pub const COMMUNICATION_BULK_ACTION_QUERY_CONNECT_PATH_V1: &str =

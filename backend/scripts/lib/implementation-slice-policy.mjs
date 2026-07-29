@@ -1670,6 +1670,9 @@ const COMMUNICATION_BULK_ACTION_RUNTIME_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-communication-bulk-action-core', kind: 'normal' },
     { name: 'hermes-communication-bulk-action-persistence', kind: 'normal' },
     { name: 'hermes-communication-delivery-intent-api', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
   ],
 };
 
@@ -1820,7 +1823,11 @@ const COMMUNICATION_BULK_ACTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
 const COMMUNICATION_BULK_ACTION_RUNTIME_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATION_BULK_ACTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communication-bulk-action-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -2597,7 +2604,7 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'communication_bulk_action_runtime_core_v1') {
+  if (currentSlice === 'communication_bulk_action_managed_runtime_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,

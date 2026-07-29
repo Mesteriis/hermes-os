@@ -1,0 +1,45 @@
+use hermes_communication_bulk_action_api::{
+    COMMUNICATION_BULK_ACTION_COMMAND_CONTRACT_NAME_V1,
+    COMMUNICATION_BULK_ACTION_CONTRACT_MAJOR_V1, COMMUNICATION_BULK_ACTION_CONTRACT_REVISION_V1,
+    COMMUNICATION_BULK_ACTION_OWNER_V1, COMMUNICATION_BULK_ACTION_QUERY_CONTRACT_NAME_V1,
+    COMMUNICATION_BULK_ACTION_REALTIME_CONTRACT_NAME_V1, COMMUNICATION_BULK_ACTION_SCHEMA_SHA256,
+};
+use hermes_communication_delivery_intent_api::{
+    COMMUNICATION_DELIVERY_INTENT_COMMAND_CONTRACT_NAME_V1,
+    COMMUNICATION_DELIVERY_INTENT_CONTRACT_MAJOR_V1,
+    COMMUNICATION_DELIVERY_INTENT_CONTRACT_REVISION_V1, COMMUNICATION_DELIVERY_INTENT_OWNER_V1,
+    COMMUNICATION_DELIVERY_INTENT_SCHEMA_SHA256,
+};
+use hermes_runtime_protocol::v1::ContractReferenceV1;
+
+pub(crate) fn bulk_command_contract_v1() -> ContractReferenceV1 {
+    bulk_contract(COMMUNICATION_BULK_ACTION_COMMAND_CONTRACT_NAME_V1)
+}
+
+pub(crate) fn bulk_query_contract_v1() -> ContractReferenceV1 {
+    bulk_contract(COMMUNICATION_BULK_ACTION_QUERY_CONTRACT_NAME_V1)
+}
+
+pub(crate) fn bulk_realtime_contract_v1() -> ContractReferenceV1 {
+    bulk_contract(COMMUNICATION_BULK_ACTION_REALTIME_CONTRACT_NAME_V1)
+}
+
+pub(crate) fn delivery_intent_command_contract_v1() -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: COMMUNICATION_DELIVERY_INTENT_OWNER_V1.to_owned(),
+        name: COMMUNICATION_DELIVERY_INTENT_COMMAND_CONTRACT_NAME_V1.to_owned(),
+        major: COMMUNICATION_DELIVERY_INTENT_CONTRACT_MAJOR_V1,
+        revision: COMMUNICATION_DELIVERY_INTENT_CONTRACT_REVISION_V1,
+        schema_sha256: COMMUNICATION_DELIVERY_INTENT_SCHEMA_SHA256.to_vec(),
+    }
+}
+
+fn bulk_contract(name: &str) -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: COMMUNICATION_BULK_ACTION_OWNER_V1.to_owned(),
+        name: name.to_owned(),
+        major: COMMUNICATION_BULK_ACTION_CONTRACT_MAJOR_V1,
+        revision: COMMUNICATION_BULK_ACTION_CONTRACT_REVISION_V1,
+        schema_sha256: COMMUNICATION_BULK_ACTION_SCHEMA_SHA256.to_vec(),
+    }
+}

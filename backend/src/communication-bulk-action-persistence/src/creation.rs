@@ -3,8 +3,8 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 
 use crate::{
-    BulkDeliveryPersistenceErrorV1, CommunicationBulkActionPersistenceV1, valid_bounded_identity,
-    valid_timestamp,
+    BulkDeliveryPersistenceErrorV1, CommunicationBulkActionPersistenceV1,
+    realtime::insert_batch_transition, valid_bounded_identity, valid_timestamp,
 };
 
 const STATE_PENDING: i16 = 1;
@@ -85,6 +85,13 @@ impl CommunicationBulkActionPersistenceV1 {
                 .await
                 .map_err(|_| BulkDeliveryPersistenceErrorV1::StorageUnavailable)?;
             }
+            insert_batch_transition(
+                &mut transaction,
+                &command.logical_owner_id,
+                &draft.batch_id,
+                command.created_at_unix_seconds,
+            )
+            .await?;
         }
 
         let row = sqlx::query(

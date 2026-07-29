@@ -5,7 +5,7 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
-test('bulk delivery runtime core uses typed ports and remains separate from domains and integrations', async () => {
+test('bulk delivery managed runtime uses request RPC and safe replay without domain or integration coupling', async () => {
   const [
     adr,
     inventorySource,
@@ -19,8 +19,13 @@ test('bulk delivery runtime core uses typed ports and remains separate from doma
     contract,
     persistence,
     migration,
+    realtimeMigration,
     runtimeWorker,
     runtimeClient,
+    managedRuntime,
+    managedDeliveryPort,
+    clientRealtime,
+    admission,
   ] =
     await Promise.all([
     readFile(
@@ -88,6 +93,13 @@ test('bulk delivery runtime core uses typed ports and remains separate from doma
       ),
       readFile(
         new URL(
+          'src/communication-bulk-action-persistence/migrations/0002_client_realtime_replay.sql',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
           'src/communication-bulk-action-runtime/src/worker.rs',
           BACKEND_ROOT,
         ),
@@ -96,6 +108,34 @@ test('bulk delivery runtime core uses typed ports and remains separate from doma
       readFile(
         new URL(
           'src/communication-bulk-action-runtime/src/client_port.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-bulk-action-runtime/src/managed_runtime.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-bulk-action-runtime/src/managed_delivery_port.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-bulk-action-runtime/src/client_realtime.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-bulk-action-runtime/src/admission.rs',
           BACKEND_ROOT,
         ),
         'utf8',
@@ -125,7 +165,7 @@ test('bulk delivery runtime core uses typed ports and remains separate from doma
   assert.match(adr, /Принятый ADR сам по себе gate не открывает/);
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_bulk_action_runtime_core_v1',
+    'communication_bulk_action_managed_runtime_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages
@@ -161,6 +201,8 @@ test('bulk delivery runtime core uses typed ports and remains separate from doma
   assert.match(persistence, /claim_epoch/);
   assert.match(migration, /body_utf8 BYTEA/);
   assert.match(migration, /target_count BETWEEN 1 AND 100/);
+  assert.match(realtimeMigration, /communication_bulk_action_realtime/);
+  assert.match(realtimeMigration, /realtime_sequence/);
   assert.doesNotMatch(
     `${persistence}\n${migration}`,
     /communications_(?:messages|conversations)|mail_|telegram_|provider_/,
@@ -169,6 +211,13 @@ test('bulk delivery runtime core uses typed ports and remains separate from doma
   assert.match(runtimeWorker, /mark_target_retryable/);
   assert.match(runtimeClient, /start_bulk_delivery_payload_v1/);
   assert.match(runtimeClient, /get_status_payload_v1/);
+  assert.match(managedRuntime, /ManagedControlChannelV2/);
+  assert.match(managedRuntime, /process_next_target_v1/);
+  assert.match(managedDeliveryPort, /Operation::RouteModuleRequest/);
+  assert.match(managedDeliveryPort, /delivery_intent_command_contract_v1/);
+  assert.match(clientRealtime, /PublishClientRealtime/);
+  assert.match(clientRealtime, /BulkDeliveryStatusChangedV1/);
+  assert.match(admission, /dependencies: vec!\[delivery_intent_command_contract_v1\(\)\]/);
   assert.doesNotMatch(
     `${runtimeWorker}\n${runtimeClient}`,
     /body_utf8.*(?:log|event|status)|hermes-(?:mail|telegram|whatsapp|zulip)/,

@@ -2,22 +2,33 @@ use hermes_storage_protocol::v1::{StorageBundleV1, StorageMigrationStepV1};
 use sha2::{Digest, Sha256};
 
 pub const COMMUNICATION_BULK_ACTION_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
+pub const COMMUNICATION_BULK_ACTION_STORAGE_BUNDLE_REVISION_V2: u32 = 2;
 pub const COMMUNICATION_BULK_ACTION_SCHEMA_V1: &[u8] =
     include_bytes!("../migrations/0001_bulk_delivery_state.sql");
+pub const COMMUNICATION_BULK_ACTION_REALTIME_SCHEMA_V2: &[u8] =
+    include_bytes!("../migrations/0002_client_realtime_replay.sql");
 
 #[must_use]
 pub fn communication_bulk_action_storage_bundle_v1() -> StorageBundleV1 {
     StorageBundleV1 {
         major: 1,
-        revision: COMMUNICATION_BULK_ACTION_STORAGE_BUNDLE_REVISION_V1,
+        revision: COMMUNICATION_BULK_ACTION_STORAGE_BUNDLE_REVISION_V2,
         bundle_id: "communication_bulk_action_state".to_owned(),
         owner_id: "communication_bulk_action".to_owned(),
-        steps: vec![StorageMigrationStepV1 {
-            revision: COMMUNICATION_BULK_ACTION_STORAGE_BUNDLE_REVISION_V1,
-            migration_id: "communication_bulk_action_state_initial".to_owned(),
-            forward_sql_utf8: COMMUNICATION_BULK_ACTION_SCHEMA_V1.to_vec(),
-            sha256: Sha256::digest(COMMUNICATION_BULK_ACTION_SCHEMA_V1).to_vec(),
-        }],
+        steps: vec![
+            StorageMigrationStepV1 {
+                revision: COMMUNICATION_BULK_ACTION_STORAGE_BUNDLE_REVISION_V1,
+                migration_id: "communication_bulk_action_state_initial".to_owned(),
+                forward_sql_utf8: COMMUNICATION_BULK_ACTION_SCHEMA_V1.to_vec(),
+                sha256: Sha256::digest(COMMUNICATION_BULK_ACTION_SCHEMA_V1).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: COMMUNICATION_BULK_ACTION_STORAGE_BUNDLE_REVISION_V2,
+                migration_id: "communication_bulk_action_client_realtime_replay".to_owned(),
+                forward_sql_utf8: COMMUNICATION_BULK_ACTION_REALTIME_SCHEMA_V2.to_vec(),
+                sha256: Sha256::digest(COMMUNICATION_BULK_ACTION_REALTIME_SCHEMA_V2).to_vec(),
+            },
+        ],
     }
 }
 
@@ -32,12 +43,21 @@ mod tests {
         let bundle = communication_bulk_action_storage_bundle_v1();
         validate_storage_bundle(&bundle).expect("valid owner storage bundle");
         assert_eq!(bundle.owner_id, "communication_bulk_action");
-        let sql = std::str::from_utf8(COMMUNICATION_BULK_ACTION_SCHEMA_V1).expect("utf8");
+        assert_eq!(bundle.revision, 2);
+        assert_eq!(bundle.steps.len(), 2);
+        let sql = bundle
+            .steps
+            .iter()
+            .map(|step| std::str::from_utf8(&step.forward_sql_utf8).expect("utf8"))
+            .collect::<Vec<_>>()
+            .join("\n");
         assert!(sql.contains("communication_bulk_action_batches"));
         assert!(sql.contains("communication_bulk_action_targets"));
         assert!(sql.contains("target_count BETWEEN 1 AND 100"));
         assert!(sql.contains("attempt_count BETWEEN 0 AND 3"));
         assert!(sql.contains("body_utf8 BYTEA"));
+        assert!(sql.contains("communication_bulk_action_realtime"));
+        assert!(sql.contains("realtime_sequence"));
         assert!(!sql.contains("communications_"));
         assert!(!sql.contains("mail_"));
         assert!(!sql.contains("telegram_"));

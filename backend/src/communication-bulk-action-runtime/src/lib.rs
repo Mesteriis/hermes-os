@@ -1,7 +1,12 @@
 #![forbid(unsafe_code)]
 
+pub mod admission;
 mod client_port;
+mod client_realtime;
+mod contracts;
 mod delivery_port;
+mod managed_delivery_port;
+pub mod managed_runtime;
 mod worker;
 
 pub use client_port::{get_status_payload_v1, start_bulk_delivery_payload_v1};

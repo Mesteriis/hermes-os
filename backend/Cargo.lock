@@ -1749,7 +1749,14 @@ dependencies = [
  "hermes-communication-bulk-action-core",
  "hermes-communication-bulk-action-persistence",
  "hermes-communication-delivery-intent-api",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
  "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]

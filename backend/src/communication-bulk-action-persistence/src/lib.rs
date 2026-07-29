@@ -2,6 +2,7 @@
 
 mod creation;
 mod execution;
+mod realtime;
 pub mod schema;
 mod status;
 
@@ -11,6 +12,7 @@ pub use execution::{
     TARGET_LEASE_SECONDS_V1,
 };
 use hermes_storage_protocol::StorageBindingV1;
+pub use realtime::BulkDeliveryClientRealtimeTransitionV1;
 use sqlx::{
     PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},

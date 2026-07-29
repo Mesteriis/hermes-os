@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_bulk_action_runtime_core_v1",
+    "currentSlice": "communication_bulk_action_managed_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1577,6 +1577,18 @@
         },
         {
           "name": "hermes-communication-delivery-intent-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ],
@@ -4417,10 +4429,45 @@
       ],
       "hermes-communication-bulk-action-runtime": [
         {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
           "name": "prost",
           "kind": "normal",
           "source": "crates_io",
           "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
           "defaultFeatures": true,
           "features": []
         }

@@ -1,8 +1,8 @@
 use sqlx::Row;
 
 use crate::{
-    BulkDeliveryPersistenceErrorV1, CommunicationBulkActionPersistenceV1, valid_bounded_identity,
-    valid_id16, valid_timestamp,
+    BulkDeliveryPersistenceErrorV1, CommunicationBulkActionPersistenceV1,
+    realtime::insert_batch_transition, valid_bounded_identity, valid_id16, valid_timestamp,
 };
 
 const STATE_PENDING: i16 = 1;
@@ -59,7 +59,7 @@ impl CommunicationBulkActionPersistenceV1 {
             .await
             .map_err(|_| BulkDeliveryPersistenceErrorV1::StorageUnavailable)?;
 
-        sqlx::query(
+        let exhausted_batches = sqlx::query(
             "WITH exhausted AS (
                UPDATE hermes_data.communication_bulk_action_targets
                SET state = $1, error_code = $2, claimed_by = NULL,
@@ -77,7 +77,8 @@ impl CommunicationBulkActionPersistenceV1 {
                  updated_at_unix_seconds = $3
              FROM changed_batches
              WHERE batches.logical_owner_id = changed_batches.logical_owner_id
-               AND batches.batch_id = changed_batches.batch_id",
+               AND batches.batch_id = changed_batches.batch_id
+             RETURNING batches.batch_id",
         )
         .bind(STATE_REJECTED)
         .bind(ERROR_RETRY_EXHAUSTED)
@@ -85,9 +86,19 @@ impl CommunicationBulkActionPersistenceV1 {
         .bind(logical_owner_id)
         .bind(STATE_DISPATCHING)
         .bind(i16::try_from(MAX_TARGET_ATTEMPTS_V1).expect("bounded attempts"))
-        .execute(&mut *transaction)
+        .fetch_all(&mut *transaction)
         .await
         .map_err(|_| BulkDeliveryPersistenceErrorV1::StorageUnavailable)?;
+        for row in exhausted_batches {
+            let batch_id = id16(row.try_get("batch_id").map_err(row_error)?)?;
+            insert_batch_transition(
+                &mut transaction,
+                logical_owner_id,
+                &batch_id,
+                now_unix_seconds,
+            )
+            .await?;
+        }
 
         let row = sqlx::query(
             "WITH candidate AS (
@@ -136,6 +147,13 @@ impl CommunicationBulkActionPersistenceV1 {
         };
         let batch_id = id16(row.try_get("batch_id").map_err(row_error)?)?;
         increment_batch_revision(
+            &mut transaction,
+            logical_owner_id,
+            &batch_id,
+            now_unix_seconds,
+        )
+        .await?;
+        insert_batch_transition(
             &mut transaction,
             logical_owner_id,
             &batch_id,
@@ -290,6 +308,13 @@ impl CommunicationBulkActionPersistenceV1 {
             return Err(BulkDeliveryPersistenceErrorV1::ClaimLost);
         }
         increment_batch_revision(
+            &mut transaction,
+            &claim.logical_owner_id,
+            &claim.batch_id,
+            now_unix_seconds,
+        )
+        .await?;
+        insert_batch_transition(
             &mut transaction,
             &claim.logical_owner_id,
             &claim.batch_id,

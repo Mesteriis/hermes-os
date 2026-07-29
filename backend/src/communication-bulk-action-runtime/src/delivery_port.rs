@@ -28,12 +28,13 @@ pub enum DeliveryIntentRequestErrorV1 {
     Protocol,
 }
 
+#[allow(async_fn_in_trait)]
 pub trait DeliveryIntentRequestPortV1 {
-    fn request(
+    async fn request(
         &mut self,
         request_id: [u8; 16],
         payload: Vec<u8>,
-    ) -> impl Future<Output = Result<Vec<u8>, DeliveryIntentRequestErrorV1>> + Send;
+    ) -> Result<Vec<u8>, DeliveryIntentRequestErrorV1>;
 }
 
 impl DeliveryIntentRequestV1 {
