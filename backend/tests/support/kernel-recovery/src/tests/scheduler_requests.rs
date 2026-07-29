@@ -36,6 +36,7 @@ fn control_store_retains_owner_bound_scheduler_job_contracts_atomically() {
                 client_blob_routes: &[],
                 client_realtime_routes: &[],
                 query_rpc_routes: &[],
+                request_rpc_routes: &[],
                 contract_dependencies: &[],
             },
         )
@@ -98,6 +99,7 @@ fn control_store_rejects_foreign_or_duplicate_scheduler_job_contracts_atomically
                         client_blob_routes: &[],
                         client_realtime_routes: &[],
                         query_rpc_routes: &[],
+                        request_rpc_routes: &[],
                         contract_dependencies: &[],
                     },
                 )
@@ -167,6 +169,7 @@ fn scheduler_schedule_admission_requires_the_current_exact_approved_job_contract
                 client_blob_routes: &[],
                 client_realtime_routes: &[],
                 query_rpc_routes: &[],
+                request_rpc_routes: &[],
                 contract_dependencies: &[],
             },
         )

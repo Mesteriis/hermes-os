@@ -21,6 +21,7 @@ use super::{
         insert_module_contract_dependencies, insert_module_query_rpc_routes,
         validate_module_query_contracts,
     },
+    module_request_route::{insert_module_request_rpc_routes, validate_module_request_contracts},
     scheduler_request::{insert_scheduler_job_requests, validate_scheduler_job_requests},
     storage_request::{insert_storage_requests, validate_storage_requests},
     vault_purpose_request::{insert_vault_purpose_requests, validate_vault_purpose_requests},
@@ -62,6 +63,7 @@ impl SqliteControlStore {
                 client_blob_routes: &[],
                 client_realtime_routes: &[],
                 query_rpc_routes: &[],
+                request_rpc_routes: &[],
                 contract_dependencies: &[],
             },
         )
@@ -122,6 +124,11 @@ impl SqliteControlStore {
             requests.query_rpc_routes,
             true,
         )?;
+        validate_module_request_contracts(
+            registration,
+            requested_capability_ids,
+            requests.request_rpc_routes,
+        )?;
         validate_module_query_contracts(
             registration,
             requested_capability_ids,
@@ -139,6 +146,7 @@ impl SqliteControlStore {
         let client_blob_routes = requests.client_blob_routes.to_vec();
         let client_realtime_routes = requests.client_realtime_routes.to_vec();
         let query_rpc_routes = requests.query_rpc_routes.to_vec();
+        let request_rpc_routes = requests.request_rpc_routes.to_vec();
         let contract_dependencies = requests.contract_dependencies.to_vec();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
@@ -152,6 +160,7 @@ impl SqliteControlStore {
             insert_client_blob_routes(&transaction, &client_blob_routes)?;
             insert_client_realtime_routes(&transaction, &client_realtime_routes)?;
             insert_module_query_rpc_routes(&transaction, &query_rpc_routes)?;
+            insert_module_request_rpc_routes(&transaction, &request_rpc_routes)?;
             insert_module_contract_dependencies(&transaction, &contract_dependencies)?;
             transaction.commit()?;
             Ok(())
@@ -207,6 +216,11 @@ impl SqliteControlStore {
             requests.query_rpc_routes,
             true,
         )?;
+        validate_module_request_contracts(
+            registration,
+            requested_capability_ids,
+            requests.request_rpc_routes,
+        )?;
         validate_module_query_contracts(
             registration,
             requested_capability_ids,
@@ -224,6 +238,7 @@ impl SqliteControlStore {
         let client_blob_routes = requests.client_blob_routes.to_vec();
         let client_realtime_routes = requests.client_realtime_routes.to_vec();
         let query_rpc_routes = requests.query_rpc_routes.to_vec();
+        let request_rpc_routes = requests.request_rpc_routes.to_vec();
         let contract_dependencies = requests.contract_dependencies.to_vec();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
@@ -274,6 +289,10 @@ impl SqliteControlStore {
                 [registration.registration_id()],
             )?;
             transaction.execute(
+                "DELETE FROM hermes_kernel_module_request_rpc_route_request WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            transaction.execute(
                 "DELETE FROM hermes_kernel_module_contract_dependency WHERE registration_id = ?1",
                 [registration.registration_id()],
             )?;
@@ -313,6 +332,7 @@ impl SqliteControlStore {
             insert_client_blob_routes(&transaction, &client_blob_routes)?;
             insert_client_realtime_routes(&transaction, &client_realtime_routes)?;
             insert_module_query_rpc_routes(&transaction, &query_rpc_routes)?;
+            insert_module_request_rpc_routes(&transaction, &request_rpc_routes)?;
             insert_module_contract_dependencies(&transaction, &contract_dependencies)?;
             transaction.commit()?;
             Ok(())

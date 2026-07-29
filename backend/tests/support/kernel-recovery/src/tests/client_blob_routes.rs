@@ -31,6 +31,7 @@ fn control_store_exposes_only_approved_client_blob_routes() {
                 client_blob_routes: std::slice::from_ref(&route),
                 client_realtime_routes: &[],
                 query_rpc_routes: &[],
+                request_rpc_routes: &[],
                 contract_dependencies: &[],
             },
         )
@@ -91,6 +92,7 @@ fn control_store_rejects_client_blob_route_without_matching_read_quota_atomicall
                         client_blob_routes: std::slice::from_ref(&route),
                         client_realtime_routes: &[],
                         query_rpc_routes: &[],
+                        request_rpc_routes: &[],
                         contract_dependencies: &[],
                     },
                 )

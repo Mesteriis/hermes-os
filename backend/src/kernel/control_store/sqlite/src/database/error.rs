@@ -40,6 +40,7 @@ pub enum StoreError {
     InvalidModuleClientRealtimeRoute,
     InvalidModuleClientRpcRoute,
     InvalidModuleQueryContract,
+    InvalidModuleRequestContract,
     InvalidModuleSchedulerJobRequest,
     InvalidModuleVaultPurposeRequest,
     InvalidBundledManagedArtifactProposal,

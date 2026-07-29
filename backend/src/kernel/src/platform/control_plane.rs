@@ -11,6 +11,7 @@ use hermes_kernel_control_store_sqlite::SqliteControlStore;
 
 use crate::identity::owner_control;
 use crate::modules::capability::module_query::ModuleQueryRouteHandlerV1;
+use crate::modules::capability::module_request::ModuleRequestRouteHandlerV1;
 use crate::modules::registration::ipc as registration_ipc;
 use crate::platform::blob::session::BlobSessionHandlerV1;
 use crate::platform::client_realtime::ClientRealtimePublishHandlerV1;
@@ -117,6 +118,12 @@ fn configure_runtime(
     ))?;
     managed_runtime_supervisor.configure_module_query_handler(Arc::new(
         ModuleQueryRouteHandlerV1::new(Arc::clone(store), managed_runtime_supervisor.relay_port()),
+    ))?;
+    managed_runtime_supervisor.configure_module_request_handler(Arc::new(
+        ModuleRequestRouteHandlerV1::new(
+            Arc::clone(store),
+            managed_runtime_supervisor.relay_port(),
+        ),
     ))?;
     managed_runtime_supervisor.configure_client_realtime_handler(Arc::new(
         ClientRealtimePublishHandlerV1::new(Arc::clone(store), client_realtime),

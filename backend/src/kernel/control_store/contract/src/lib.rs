@@ -25,11 +25,11 @@ pub use modules::{
     ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
     ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
     ModuleEventSubscriptionRequirementV1, ModuleGrantSnapshot, ModuleQueryContractV1,
-    ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1, ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1,
-    SettingsApplyState, SettingsConfigurationTarget, SettingsConfigurationTargetInputV1,
-    SettingsDesiredSnapshot, SettingsInitialSnapshot, SettingsSchemaBinding,
-    SettingsSchemaBindingInputV1, SettingsSchemaTargetSuccessor,
+    ModuleRegistration, ModuleRegistrationState, ModuleRequestContractV1,
+    ModuleSchedulerJobRequestV1, ModuleStorageRequestV1, ModuleVaultPurposePolicyV1,
+    ModuleVaultPurposeRequestV1, SettingsApplyState, SettingsConfigurationTarget,
+    SettingsConfigurationTargetInputV1, SettingsDesiredSnapshot, SettingsInitialSnapshot,
+    SettingsSchemaBinding, SettingsSchemaBindingInputV1, SettingsSchemaTargetSuccessor,
 };
 pub use operation::{
     OperationAdmissionV1, OperationIdV1, OperationStatusV1, OperationTerminalOutcomeV1,

@@ -2713,6 +2713,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
                 client_blob_routes: std::slice::from_ref(&client_blob_route),
                 client_realtime_routes: &[],
                 query_rpc_routes: std::slice::from_ref(&query_rpc_route),
+                request_rpc_routes: &[],
                 contract_dependencies: &[],
             },
         )
@@ -2908,6 +2909,7 @@ fn record_communications_export_runtime_fixture(store: &SqliteControlStore) {
                 client_blob_routes: std::slice::from_ref(&client_blob_route),
                 client_realtime_routes: &[],
                 query_rpc_routes: &[],
+                request_rpc_routes: &[],
                 contract_dependencies: &[],
             },
         )

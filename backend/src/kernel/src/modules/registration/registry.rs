@@ -134,6 +134,7 @@ where
                 client_blob_routes: &bound.client_blob_routes,
                 client_realtime_routes: &bound.client_realtime_routes,
                 query_rpc_routes: &bound.query_rpc_routes,
+                request_rpc_routes: &bound.request_rpc_routes,
                 contract_dependencies: &bound.contract_dependencies,
             },
         ) {
@@ -201,6 +202,7 @@ where
                 client_blob_routes: &bound.client_blob_routes,
                 client_realtime_routes: &bound.client_realtime_routes,
                 query_rpc_routes: &bound.query_rpc_routes,
+                request_rpc_routes: &bound.request_rpc_routes,
                 contract_dependencies: &bound.contract_dependencies,
             },
         )
@@ -241,6 +243,7 @@ where
                 client_blob_routes: &bound.client_blob_routes,
                 client_realtime_routes: &bound.client_realtime_routes,
                 query_rpc_routes: &bound.query_rpc_routes,
+                request_rpc_routes: &bound.request_rpc_routes,
                 contract_dependencies: &bound.contract_dependencies,
             },
         ) {

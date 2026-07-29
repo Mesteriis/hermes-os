@@ -5,8 +5,19 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
-test('managed module request RPC foundation is typed bounded and separate from query RPC', async () => {
-  const [adr, inventorySource, protocol, validation, control, supervisor] =
+test('managed module request RPC routing is typed bounded and separate from query RPC', async () => {
+  const [
+    adr,
+    inventorySource,
+    protocol,
+    validation,
+    control,
+    supervisor,
+    descriptor,
+    routeStore,
+    router,
+    migration,
+  ] =
     await Promise.all([
       readFile(
         new URL(
@@ -47,6 +58,34 @@ test('managed module request RPC foundation is typed bounded and separate from q
         ),
         'utf8',
       ),
+      readFile(
+        new URL(
+          'src/kernel/src/modules/registration/descriptor/mod.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/kernel/control_store/sqlite/src/module_state/module_request_route.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/kernel/src/modules/capability/module_request.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/kernel/control_store/sqlite/src/schema/v46_to_v47.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
     ]);
   const inventory = JSON.parse(inventorySource);
   const platformGate = inventory.slices.find(
@@ -82,8 +121,24 @@ test('managed module request RPC foundation is typed bounded and separate from q
   );
   assert.match(control, /trait ManagedRuntimeModuleRequestHandler/);
   assert.match(supervisor, /configure_module_request_handler/);
+  assert.match(descriptor, /ProvidedSurfaceKindV1::RequestRpc/);
+  assert.match(descriptor, /bind_module_request_contracts/);
+  assert.match(
+    routeStore,
+    /approved_module_request_rpc_routes/,
+  );
+  assert.match(
+    migration,
+    /CREATE TABLE hermes_kernel_module_request_rpc_route_request/,
+  );
+  assert.match(router, /module_contract_dependencies/);
+  assert.match(router, /approved_module_request_rpc_routes/);
+  assert.match(router, /current_managed_runtime_matches/);
+  assert.match(router, /ensure_caller_fence\(&self\.store, expectation\)\?/);
+  assert.match(router, /ensure_provider_fence\(&self\.store, &provider, &provider_launch\)\?/);
+  assert.doesNotMatch(router, /retry|DeliverModuleQuery/);
   assert.doesNotMatch(
-    `${protocol}\n${validation}\n${control}\n${supervisor}`,
+    `${protocol}\n${validation}\n${control}\n${supervisor}\n${descriptor}\n${routeStore}\n${router}\n${migration}`,
     /hermes_(?:communications|mail|telegram|whatsapp|zulip)|Communications|Mail|Telegram|WhatsApp|Zulip/,
   );
 });

@@ -3,22 +3,22 @@ use std::sync::{Arc, Mutex};
 use hermes_kernel_control_store::{
     BundledManagedLaunchBinding, InitialOwnerIdentity, ManagedLaunchRecord,
     ModuleDescriptorRegistrationRequestsV1, ModuleQueryContractV1, ModuleRegistration,
-    ModuleRegistrationState,
+    ModuleRegistrationState, ModuleRequestContractV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::{
     CapabilityCriticalityV1, CapabilityDescriptorV1, ContractReferenceV1,
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
-    ManagedRuntimeModuleQueryRequestV1, ManagedRuntimeModuleQueryResponseV1, ModuleDescriptorV1,
-    ModuleKindV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, managed_runtime_control_request_v1,
-    managed_runtime_control_response_v1,
+    ManagedRuntimeModuleRequestRequestV1, ManagedRuntimeModuleRequestResponseV1,
+    ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
+    managed_runtime_control_request_v1, managed_runtime_control_response_v1,
 };
 use prost::Message;
 
-use crate::modules::capability::module_query::ModuleQueryRouteHandlerV1;
+use crate::modules::capability::module_request::ModuleRequestRouteHandlerV1;
 use crate::modules::registration::registry;
 use crate::runtime::lifecycle::control::{
-    ManagedRuntimeExpectation, ManagedRuntimeModuleQueryHandler,
+    ManagedRuntimeExpectation, ManagedRuntimeModuleRequestHandler,
 };
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelay;
 
@@ -29,8 +29,8 @@ const PROVIDER_CAPABILITY: &str = "notes.query";
 const CALLER_CAPABILITY: &str = "notes.compose";
 
 #[test]
-fn query_providers_are_approval_gated_and_dependencies_remain_capability_scoped() {
-    let root = unique_target_root("hermes-module-query-route");
+fn request_providers_are_approval_gated_and_dependencies_remain_capability_scoped() {
+    let root = unique_target_root("hermes-module-request-route");
     std::fs::create_dir_all(&root).expect("create fixture directory");
     let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
         .expect("create Control Store");
@@ -39,10 +39,10 @@ fn query_providers_are_approval_gated_and_dependencies_remain_capability_scoped(
         .expect("claim initial owner");
 
     let registration = registry::register(&store, &descriptor(OWNER).encode_to_vec())
-        .expect("register query contracts");
+        .expect("register request contracts");
     assert!(
         store
-            .approved_module_query_rpc_routes()
+            .approved_module_request_rpc_routes()
             .expect("read pending routes")
             .is_empty()
     );
@@ -50,7 +50,7 @@ fn query_providers_are_approval_gated_and_dependencies_remain_capability_scoped(
         store
             .module_contract_dependencies(registration.registration_id(), CALLER_CAPABILITY)
             .expect("read caller dependency"),
-        vec![contract_record(
+        vec![dependency_record(
             registration.registration_id(),
             CALLER_CAPABILITY
         )]
@@ -61,10 +61,10 @@ fn query_providers_are_approval_gated_and_dependencies_remain_capability_scoped(
             registration.registration_id(),
             &[CALLER_CAPABILITY.to_owned(), PROVIDER_CAPABILITY.to_owned()],
         )
-        .expect("approve query capabilities");
+        .expect("approve request capabilities");
     assert_eq!(
         store
-            .approved_module_query_rpc_routes()
+            .approved_module_request_rpc_routes()
             .expect("read approved route"),
         vec![contract_record(
             registration.registration_id(),
@@ -75,8 +75,8 @@ fn query_providers_are_approval_gated_and_dependencies_remain_capability_scoped(
 }
 
 #[test]
-fn query_provider_contract_must_be_owned_by_the_registered_module_owner() {
-    let root = unique_target_root("hermes-module-query-foreign-owner");
+fn request_provider_contract_must_be_owned_by_the_registered_module_owner() {
+    let root = unique_target_root("hermes-module-request-foreign-owner");
     std::fs::create_dir_all(&root).expect("create fixture directory");
     let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
         .expect("create Control Store");
@@ -90,7 +90,7 @@ fn query_provider_contract_must_be_owned_by_the_registered_module_owner() {
     );
     assert!(
         store
-            .approved_module_query_rpc_routes()
+            .approved_module_request_rpc_routes()
             .expect("read routes")
             .is_empty()
     );
@@ -99,43 +99,103 @@ fn query_provider_contract_must_be_owned_by_the_registered_module_owner() {
 
 #[test]
 fn kernel_routes_an_exact_dependency_without_exposing_module_coordinates() {
-    let fixture = QueryRouteFixture::new("hermes-module-query-success", 1);
-    let relay = QueryRelay::success(&fixture.provider_id);
-    let handler = ModuleQueryRouteHandlerV1::new(Arc::clone(&fixture.store), relay);
+    let fixture = RequestRouteFixture::new("hermes-module-request-success", 1);
+    let relay = RequestRelay::success(&fixture.provider_id);
+    let handler = ModuleRequestRouteHandlerV1::new(Arc::clone(&fixture.store), relay);
 
     let response = handler
-        .route_module_query(&fixture.caller_expectation, query_request())
-        .expect("route exact query dependency");
+        .route_module_request(&fixture.caller_expectation, request_request())
+        .expect("route exact request dependency");
     assert_eq!(response.response_payload, vec![9]);
     assert_eq!(response.error_code, "");
     std::fs::remove_dir_all(fixture.root).expect("remove fixture directory");
 }
 
 #[test]
-fn kernel_rejects_zero_or_ambiguous_query_providers_before_relay() {
-    let zero = QueryRouteFixture::new("hermes-module-query-zero", 0);
+fn kernel_rejects_zero_or_ambiguous_request_providers_before_relay() {
+    let zero = RequestRouteFixture::new("hermes-module-request-zero", 0);
     let zero_error =
-        ModuleQueryRouteHandlerV1::new(Arc::clone(&zero.store), QueryRelay::unreachable())
-            .route_module_query(&zero.caller_expectation, query_request())
+        ModuleRequestRouteHandlerV1::new(Arc::clone(&zero.store), RequestRelay::unreachable())
+            .route_module_request(&zero.caller_expectation, request_request())
             .expect_err("missing provider");
-    assert_eq!(zero_error, "managed module query provider is unavailable");
+    assert_eq!(zero_error, "managed module request provider is unavailable");
     std::fs::remove_dir_all(zero.root).expect("remove zero fixture");
 
-    let ambiguous = QueryRouteFixture::new("hermes-module-query-ambiguous", 2);
+    let ambiguous = RequestRouteFixture::new("hermes-module-request-ambiguous", 2);
     let ambiguous_error =
-        ModuleQueryRouteHandlerV1::new(Arc::clone(&ambiguous.store), QueryRelay::unreachable())
-            .route_module_query(&ambiguous.caller_expectation, query_request())
+        ModuleRequestRouteHandlerV1::new(Arc::clone(&ambiguous.store), RequestRelay::unreachable())
+            .route_module_request(&ambiguous.caller_expectation, request_request())
             .expect_err("ambiguous provider");
     assert_eq!(
         ambiguous_error,
-        "managed module query provider is ambiguous"
+        "managed module request provider is ambiguous"
     );
     std::fs::remove_dir_all(ambiguous.root).expect("remove ambiguous fixture");
 }
 
 #[test]
+fn kernel_does_not_route_a_request_to_a_query_only_provider() {
+    let fixture = RequestRouteFixture::new("hermes-module-request-query-only", 0);
+    let provider = registration(
+        "communications-query-only",
+        "communications_query_module",
+        "communications",
+        [2; 32],
+    );
+    let query_route = ModuleQueryContractV1::new(
+        provider.registration_id(),
+        PROVIDER_CAPABILITY,
+        "communications",
+        "communications.delivery-intent.submit",
+        1,
+        1,
+        [7; 32],
+    );
+    fixture
+        .store
+        .create_pending_registration_with_all_descriptor_requests(
+            &provider,
+            &[PROVIDER_CAPABILITY.to_owned()],
+            ModuleDescriptorRegistrationRequestsV1 {
+                storage: &[],
+                events: &[],
+                blobs: &[],
+                scheduler: &[],
+                vault_purposes: &[],
+                client_rpc_routes: &[],
+                client_blob_routes: &[],
+                client_realtime_routes: &[],
+                query_rpc_routes: std::slice::from_ref(&query_route),
+                request_rpc_routes: &[],
+                contract_dependencies: &[],
+            },
+        )
+        .expect("register query-only provider");
+    let grants = fixture
+        .store
+        .approve_module_registration(
+            provider.registration_id(),
+            &[PROVIDER_CAPABILITY.to_owned()],
+        )
+        .expect("approve query-only provider");
+    record_launch(
+        &fixture.store,
+        &provider,
+        "query-only-runtime",
+        grants.grant_epoch(),
+    );
+
+    let error =
+        ModuleRequestRouteHandlerV1::new(Arc::clone(&fixture.store), RequestRelay::unreachable())
+            .route_module_request(&fixture.caller_expectation, request_request())
+            .expect_err("query-only provider must not serve request RPC");
+    assert_eq!(error, "managed module request provider is unavailable");
+    std::fs::remove_dir_all(fixture.root).expect("remove fixture directory");
+}
+
+#[test]
 fn kernel_rejects_stale_caller_and_provider_fences_before_relay() {
-    let stale_caller = QueryRouteFixture::new("hermes-module-query-stale-caller", 1);
+    let stale_caller = RequestRouteFixture::new("hermes-module-request-stale-caller", 1);
     let stale_expectation = ManagedRuntimeExpectation::new(
         stale_caller.caller_id.clone(),
         "caller-runtime",
@@ -145,14 +205,16 @@ fn kernel_rejects_stale_caller_and_provider_fences_before_relay() {
         [1; 32],
         None,
     );
-    let caller_error =
-        ModuleQueryRouteHandlerV1::new(Arc::clone(&stale_caller.store), QueryRelay::unreachable())
-            .route_module_query(&stale_expectation, query_request())
-            .expect_err("stale caller");
-    assert_eq!(caller_error, "managed module query caller fence is stale");
+    let caller_error = ModuleRequestRouteHandlerV1::new(
+        Arc::clone(&stale_caller.store),
+        RequestRelay::unreachable(),
+    )
+    .route_module_request(&stale_expectation, request_request())
+    .expect_err("stale caller");
+    assert_eq!(caller_error, "managed module request caller fence is stale");
     std::fs::remove_dir_all(stale_caller.root).expect("remove caller fixture");
 
-    let stale_provider = QueryRouteFixture::new("hermes-module-query-stale-provider", 1);
+    let stale_provider = RequestRouteFixture::new("hermes-module-request-stale-provider", 1);
     stale_provider
         .store
         .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
@@ -165,54 +227,54 @@ fn kernel_rejects_stale_caller_and_provider_fences_before_relay() {
             None,
         ))
         .expect("replace provider binding");
-    let provider_error = ModuleQueryRouteHandlerV1::new(
+    let provider_error = ModuleRequestRouteHandlerV1::new(
         Arc::clone(&stale_provider.store),
-        QueryRelay::unreachable(),
+        RequestRelay::unreachable(),
     )
-    .route_module_query(&stale_provider.caller_expectation, query_request())
+    .route_module_request(&stale_provider.caller_expectation, request_request())
     .expect_err("stale provider");
     assert_eq!(
         provider_error,
-        "managed module query provider fence is stale"
+        "managed module request provider fence is stale"
     );
     std::fs::remove_dir_all(stale_provider.root).expect("remove provider fixture");
 }
 
 #[test]
 fn kernel_rejects_provider_response_mismatch() {
-    let fixture = QueryRouteFixture::new("hermes-module-query-response-mismatch", 1);
-    let error = ModuleQueryRouteHandlerV1::new(
+    let fixture = RequestRouteFixture::new("hermes-module-request-response-mismatch", 1);
+    let error = ModuleRequestRouteHandlerV1::new(
         Arc::clone(&fixture.store),
-        QueryRelay::mismatch(&fixture.provider_id),
+        RequestRelay::mismatch(&fixture.provider_id),
     )
-    .route_module_query(&fixture.caller_expectation, query_request())
+    .route_module_request(&fixture.caller_expectation, request_request())
     .expect_err("response mismatch");
     assert_eq!(
         error,
-        "managed module query provider response does not match request"
+        "managed module request provider response does not match request"
     );
     std::fs::remove_dir_all(fixture.root).expect("remove fixture directory");
 }
 
 #[test]
-fn kernel_rejects_a_revoked_query_provider_before_relay() {
-    let fixture = QueryRouteFixture::new("hermes-module-query-revoked-provider", 1);
+fn kernel_rejects_a_revoked_request_provider_before_relay() {
+    let fixture = RequestRouteFixture::new("hermes-module-request-revoked-provider", 1);
     fixture
         .store
         .transition_module_registration(&fixture.provider_id, ModuleRegistrationState::Revoked)
         .expect("revoke provider");
     let error =
-        ModuleQueryRouteHandlerV1::new(Arc::clone(&fixture.store), QueryRelay::unreachable())
-            .route_module_query(&fixture.caller_expectation, query_request())
+        ModuleRequestRouteHandlerV1::new(Arc::clone(&fixture.store), RequestRelay::unreachable())
+            .route_module_request(&fixture.caller_expectation, request_request())
             .expect_err("revoked provider");
-    assert_eq!(error, "managed module query provider is unavailable");
+    assert_eq!(error, "managed module request provider is unavailable");
     std::fs::remove_dir_all(fixture.root).expect("remove fixture directory");
 }
 
 fn descriptor(provider_owner: &str) -> ModuleDescriptorV1 {
     let contract = ContractReferenceV1 {
         owner: provider_owner.to_owned(),
-        name: "notes.canonical.query".to_owned(),
+        name: "notes.command.submit".to_owned(),
         major: 1,
         revision: 1,
         schema_sha256: vec![7; 32],
@@ -238,7 +300,7 @@ fn descriptor(provider_owner: &str) -> ModuleDescriptorV1 {
                 capability_revision: 1,
                 criticality: CapabilityCriticalityV1::Required as i32,
                 provides: vec![ProvidedSurfaceV1 {
-                    kind: ProvidedSurfaceKindV1::QueryRpc as i32,
+                    kind: ProvidedSurfaceKindV1::RequestRpc as i32,
                     contract: Some(contract.clone()),
                     client_rpc_route: None,
                     client_blob_route: None,
@@ -250,19 +312,31 @@ fn descriptor(provider_owner: &str) -> ModuleDescriptorV1 {
     }
 }
 
-fn contract_record(registration_id: &str, capability_id: &str) -> ModuleQueryContractV1 {
-    ModuleQueryContractV1::new(
+fn contract_record(registration_id: &str, capability_id: &str) -> ModuleRequestContractV1 {
+    ModuleRequestContractV1::new(
         registration_id,
         capability_id,
         OWNER,
-        "notes.canonical.query",
+        "notes.command.submit",
         1,
         1,
         [7; 32],
     )
 }
 
-struct QueryRouteFixture {
+fn dependency_record(registration_id: &str, capability_id: &str) -> ModuleQueryContractV1 {
+    ModuleQueryContractV1::new(
+        registration_id,
+        capability_id,
+        OWNER,
+        "notes.command.submit",
+        1,
+        1,
+        [7; 32],
+    )
+}
+
+struct RequestRouteFixture {
     root: std::path::PathBuf,
     store: Arc<SqliteControlStore>,
     caller_id: String,
@@ -270,7 +344,7 @@ struct QueryRouteFixture {
     caller_expectation: ManagedRuntimeExpectation,
 }
 
-impl QueryRouteFixture {
+impl RequestRouteFixture {
     fn new(prefix: &str, provider_count: usize) -> Self {
         let root = unique_target_root(prefix);
         std::fs::create_dir_all(&root).expect("create fixture directory");
@@ -296,7 +370,7 @@ impl QueryRouteFixture {
             caller.registration_id(),
             CALLER_CAPABILITY,
             "communications",
-            "communications.canonical.query",
+            "communications.delivery-intent.submit",
             1,
             1,
             [7; 32],
@@ -336,11 +410,11 @@ impl QueryRouteFixture {
                 "communications",
                 [2; 32],
             );
-            let route = ModuleQueryContractV1::new(
+            let route = ModuleRequestContractV1::new(
                 provider.registration_id(),
                 PROVIDER_CAPABILITY,
                 "communications",
-                "communications.canonical.query",
+                "communications.delivery-intent.submit",
                 1,
                 1,
                 [7; 32],
@@ -399,7 +473,7 @@ fn register_with_contracts(
     store: &SqliteControlStore,
     registration: &ModuleRegistration,
     capability_id: &str,
-    query_routes: &[ModuleQueryContractV1],
+    request_routes: &[ModuleRequestContractV1],
     dependencies: &[ModuleQueryContractV1],
 ) {
     store
@@ -415,12 +489,12 @@ fn register_with_contracts(
                 client_rpc_routes: &[],
                 client_blob_routes: &[],
                 client_realtime_routes: &[],
-                query_rpc_routes: query_routes,
-                request_rpc_routes: &[],
+                query_rpc_routes: &[],
+                request_rpc_routes: request_routes,
                 contract_dependencies: dependencies,
             },
         )
-        .expect("register query participant");
+        .expect("register request participant");
 }
 
 fn record_launch(
@@ -452,12 +526,12 @@ fn record_launch(
         .expect("record launch");
 }
 
-fn query_request() -> ManagedRuntimeModuleQueryRequestV1 {
-    ManagedRuntimeModuleQueryRequestV1 {
+fn request_request() -> ManagedRuntimeModuleRequestRequestV1 {
+    ManagedRuntimeModuleRequestRequestV1 {
         request_id: vec![1; 16],
         contract: Some(ContractReferenceV1 {
             owner: "communications".to_owned(),
-            name: "communications.canonical.query".to_owned(),
+            name: "communications.delivery-intent.submit".to_owned(),
             major: 1,
             revision: 1,
             schema_sha256: vec![7; 32],
@@ -467,13 +541,13 @@ fn query_request() -> ManagedRuntimeModuleQueryRequestV1 {
     }
 }
 
-struct QueryRelay {
+struct RequestRelay {
     expected_registration_id: Option<String>,
     mismatch: bool,
     calls: Mutex<usize>,
 }
 
-impl QueryRelay {
+impl RequestRelay {
     fn success(registration_id: &str) -> Self {
         Self {
             expected_registration_id: Some(registration_id.to_owned()),
@@ -499,7 +573,7 @@ impl QueryRelay {
     }
 }
 
-impl ManagedRuntimeRelay for QueryRelay {
+impl ManagedRuntimeRelay for RequestRelay {
     fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         let expected = self
             .expected_registration_id
@@ -509,7 +583,9 @@ impl ManagedRuntimeRelay for QueryRelay {
         let request =
             ManagedRuntimeControlRequestV1::decode(payload.as_slice()).expect("decode delivery");
         let delivery = match request.operation.expect("delivery operation") {
-            managed_runtime_control_request_v1::Operation::DeliverModuleQuery(delivery) => delivery,
+            managed_runtime_control_request_v1::Operation::DeliverModuleRequest(delivery) => {
+                delivery
+            }
             _ => panic!("unexpected relay operation"),
         };
         assert_eq!(delivery.logical_owner_id, "owner_local");
@@ -521,8 +597,8 @@ impl ManagedRuntimeRelay for QueryRelay {
         };
         Ok(ManagedRuntimeControlResponseV1 {
             result: Some(
-                managed_runtime_control_response_v1::Result::ModuleQueryDelivery(
-                    ManagedRuntimeModuleQueryResponseV1 {
+                managed_runtime_control_response_v1::Result::ModuleRequestDelivery(
+                    ManagedRuntimeModuleRequestResponseV1 {
                         request_id,
                         response_payload: vec![9],
                         error_code: String::new(),

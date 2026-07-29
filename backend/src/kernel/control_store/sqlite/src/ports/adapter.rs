@@ -8,9 +8,9 @@ use hermes_kernel_control_store::{
     InitialOwnerIdentity, ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleClientBlobRouteV1,
     ModuleClientRealtimeRouteV1, ModuleClientRpcRouteV1, ModuleEventRouteRequestV1,
     ModuleGrantSnapshot, ModuleQueryContractV1, ModuleRegistration, ModuleRegistrationState,
-    ModuleRegistryStore, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
-    ModuleVaultPurposeRequestV1, OwnerIdentityStore, OwnerPinnedArtifactBinding,
-    PlatformEventHubTopologyV1, PlatformEventsAuthorityConfigurationV1,
+    ModuleRegistryStore, ModuleRequestContractV1, ModuleSchedulerJobRequestV1,
+    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1, OwnerIdentityStore,
+    OwnerPinnedArtifactBinding, PlatformEventHubTopologyV1, PlatformEventsAuthorityConfigurationV1,
     PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageTopology,
     RuntimeTrustStore, ServerBootstrapPairing, SettingsApplyState, SettingsDesiredSnapshot,
     SettingsRegistryStore, SettingsSchemaBinding, StorageBindingStore, StorageBundleStore,
@@ -242,6 +242,11 @@ impl ModuleRegistryStore for SqliteControlStore {
     }
     fn approved_module_query_rpc_routes(&self) -> Result<Vec<ModuleQueryContractV1>, Self::Error> {
         SqliteControlStore::approved_module_query_rpc_routes(self)
+    }
+    fn approved_module_request_rpc_routes(
+        &self,
+    ) -> Result<Vec<ModuleRequestContractV1>, Self::Error> {
+        SqliteControlStore::approved_module_request_rpc_routes(self)
     }
     fn module_contract_dependencies(
         &self,

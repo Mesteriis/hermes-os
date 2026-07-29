@@ -5,9 +5,10 @@
 Дата: 2026-07-29
 
 Состояние реализации: private versioned request/delivery/response wire,
-hard bounds и managed-runtime control delivery foundation реализованы. Separate
-descriptor/Control Store provider inventory, Kernel authorization/relay и live
-conformance ещё не реализованы; platform gate остаётся `planned`.
+hard bounds, managed-runtime control delivery, separate descriptor/Control
+Store provider inventory и Kernel authorization/opaque relay реализованы.
+Live managed-process conformance и первый provider request port ещё не
+реализованы; platform gate остаётся `planned`.
 
 Уточняет:
 

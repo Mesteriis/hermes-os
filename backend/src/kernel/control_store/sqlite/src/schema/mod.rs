@@ -47,8 +47,9 @@ mod v42_to_v43;
 mod v43_to_v44;
 mod v44_to_v45;
 mod v45_to_v46;
+mod v46_to_v47;
 
-pub const SCHEMA_VERSION: i64 = 46;
+pub const SCHEMA_VERSION: i64 = 47;
 
 pub fn migrate_schema(connection: &Connection) -> Result<(), StoreError> {
     loop {
@@ -174,6 +175,7 @@ fn version_feature_exists(connection: &Connection, version: i64) -> Result<bool,
             connection,
             "hermes_kernel_module_client_realtime_route_request",
         ),
+        47 => table_exists(connection, "hermes_kernel_module_request_rpc_route_request"),
         _ => Ok(false),
     }
 }
@@ -362,6 +364,7 @@ fn apply_step(version: i64, transaction: &Transaction<'_>) -> Result<(), StoreEr
         43 => v43_to_v44::apply(transaction),
         44 => v44_to_v45::apply(transaction),
         45 => v45_to_v46::apply(transaction),
+        46 => v46_to_v47::apply(transaction),
         unsupported => Err(StoreError::UnsupportedSchema(unsupported)),
     }
 }

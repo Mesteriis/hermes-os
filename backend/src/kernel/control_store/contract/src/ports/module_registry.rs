@@ -1,8 +1,8 @@
 use crate::{
     GrantSet, ModuleBlobQuotaRequestV1, ModuleClientBlobRouteV1, ModuleClientRealtimeRouteV1,
     ModuleClientRpcRouteV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot, ModuleQueryContractV1,
-    ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
+    ModuleRegistration, ModuleRegistrationState, ModuleRequestContractV1,
+    ModuleSchedulerJobRequestV1, ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
 
 pub struct ModuleDescriptorRegistrationRequestsV1<'a> {
@@ -15,6 +15,7 @@ pub struct ModuleDescriptorRegistrationRequestsV1<'a> {
     pub client_blob_routes: &'a [ModuleClientBlobRouteV1],
     pub client_realtime_routes: &'a [ModuleClientRealtimeRouteV1],
     pub query_rpc_routes: &'a [ModuleQueryContractV1],
+    pub request_rpc_routes: &'a [ModuleRequestContractV1],
     pub contract_dependencies: &'a [ModuleQueryContractV1],
 }
 
@@ -90,6 +91,9 @@ pub trait ModuleRegistryStore {
         &self,
     ) -> Result<Vec<ModuleClientRealtimeRouteV1>, Self::Error>;
     fn approved_module_query_rpc_routes(&self) -> Result<Vec<ModuleQueryContractV1>, Self::Error>;
+    fn approved_module_request_rpc_routes(
+        &self,
+    ) -> Result<Vec<ModuleRequestContractV1>, Self::Error>;
     fn module_contract_dependencies(
         &self,
         registration_id: &str,

@@ -191,6 +191,7 @@ mod tests {
     mod module_grant_snapshot;
     mod module_query_routes;
     mod module_registration_upgrade;
+    mod module_request_routes;
     mod operation_journal;
     mod owner_module_settings;
     mod owner_vault_provisioning;

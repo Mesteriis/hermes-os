@@ -147,6 +147,7 @@ fn empty_descriptor_requests() -> ModuleDescriptorRegistrationRequestsV1<'static
         client_blob_routes: &[],
         client_realtime_routes: &[],
         query_rpc_routes: &[],
+        request_rpc_routes: &[],
         contract_dependencies: &[],
     }
 }
