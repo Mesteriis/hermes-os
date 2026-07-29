@@ -8,6 +8,7 @@ use hermes_runtime_protocol::v1::{
     ManagedRuntimeBlobSessionDeliveryV1, ManagedRuntimeBlobSessionRequestV1,
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
+    ManagedRuntimeModuleQueryRequestV1, ManagedRuntimeModuleQueryResponseV1,
     ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedRuntimeOwnerDerivedKeyRequestV1,
     ManagedRuntimeProviderCredentialDeliveryV1, ManagedRuntimeProviderCredentialRequestV1,
     ManagedRuntimeReadyRequestV1, ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1,
@@ -34,6 +35,7 @@ pub(crate) enum ManagedRuntimeInboundRequestV1 {
     ProviderCredential(ManagedRuntimeProviderCredentialRequestV1),
     OwnerDerivedKey(ManagedRuntimeOwnerDerivedKeyRequestV1),
     BlobSession(ManagedRuntimeBlobSessionRequestV1),
+    ModuleQuery(ManagedRuntimeModuleQueryRequestV1),
 }
 
 pub(crate) fn decode_typed_request(
@@ -64,7 +66,51 @@ pub(crate) fn decode_typed_request(
         {
             Ok(ManagedRuntimeInboundRequestV1::BlobSession(value))
         }
+        Some(Operation::RouteModuleQuery(value))
+            if hermes_runtime_protocol::validation::module_query::validate_module_query_request_v1(
+                &value,
+            )
+            .is_ok() =>
+        {
+            Ok(ManagedRuntimeInboundRequestV1::ModuleQuery(value))
+        }
         _ => Err("managed runtime control request is invalid".to_owned()),
+    }
+}
+
+pub(crate) fn module_query_response(
+    result: Result<ManagedRuntimeModuleQueryResponseV1, String>,
+) -> ManagedRuntimeControlResponseV1 {
+    match result {
+        Ok(response)
+            if hermes_runtime_protocol::validation::module_query::validate_module_query_response_v1(
+                &response,
+            )
+            .is_ok() =>
+        {
+            ManagedRuntimeControlResponseV1 {
+                result: Some(ControlResult::ModuleQueryRoute(response)),
+                error_code: String::new(),
+            }
+        }
+        Ok(_) => ManagedRuntimeControlResponseV1 {
+            result: None,
+            error_code: "managed_module_query_invalid_response".to_owned(),
+        },
+        Err(error) => ManagedRuntimeControlResponseV1 {
+            result: None,
+            error_code: module_query_error_code(&error).to_owned(),
+        },
+    }
+}
+
+fn module_query_error_code(error: &str) -> &'static str {
+    if error.ends_with(" is unavailable") {
+        "managed_module_query_unavailable"
+    } else if error.ends_with(" is ambiguous") {
+        "managed_module_query_ambiguous"
+    } else {
+        "managed_module_query_denied"
     }
 }
 

@@ -4,8 +4,11 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: решение принято; transport, Kernel authorization и
-первый delivery-intent adapter ещё не реализованы.
+Состояние реализации: private versioned request/delivery/response wire,
+structural bounds и отдельный optional Kernel supervisor handler slot
+реализованы. Control Store provider/dependency catalog, Kernel authorization,
+provider delivery и первый delivery-intent adapter ещё не реализованы; gate
+остаётся `planned`.
 
 Уточняет:
 

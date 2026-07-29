@@ -116,6 +116,29 @@ message ManagedRuntimeBlobSessionDeliveryV1 {
   bytes custody_transfer_source_proof = 3;
   BlobCustodyTransferGrantV1 custody_transfer_grant = 4;
 }
+// Caller-to-Kernel request for one descriptor-declared query dependency.
+// Target process identity and capability are deliberately absent: Kernel
+// resolves the single current approved provider of the exact contract.
+message ManagedRuntimeModuleQueryRequestV1 {
+  bytes request_id = 1;
+  ContractReferenceV1 contract = 2;
+  bytes request_payload = 3;
+  uint32 deadline_millis = 4;
+}
+// Kernel-to-provider delivery after caller dependency, same-owner and both
+// runtime fences have been authorized. The provider never sees caller process
+// coordinates or grants.
+message ManagedRuntimeModuleQueryDeliveryV1 {
+  bytes request_id = 1;
+  string logical_owner_id = 2;
+  ContractReferenceV1 contract = 3;
+  bytes request_payload = 4;
+}
+message ManagedRuntimeModuleQueryResponseV1 {
+  bytes request_id = 1;
+  bytes response_payload = 2;
+  string error_code = 15;
+}
 message ManagedRuntimeControlRequestV1 {
   oneof operation {
     DescribeManagedRuntimeRequestV1 describe = 1;
@@ -126,6 +149,8 @@ message ManagedRuntimeControlRequestV1 {
     ManagedRuntimeBlobSessionRequestV1 issue_blob_session = 6;
     ManagedRuntimeOwnerDerivedKeyRequestV1 issue_owner_derived_key = 7;
     ManagedRuntimeClientDeliveryRequestV1 client_delivery = 8;
+    ManagedRuntimeModuleQueryRequestV1 route_module_query = 9;
+    ManagedRuntimeModuleQueryDeliveryV1 deliver_module_query = 10;
   }
 }
 message ManagedRuntimeControlAckV1 {}
@@ -139,6 +164,8 @@ message ManagedRuntimeControlResponseV1 {
     ManagedRuntimeOwnerDerivedKeyDeliveryV1 owner_derived_key_delivery = 6;
     ManagedRuntimeControlAckV1 ack = 7;
     ManagedRuntimeClientDeliveryResponseV1 client_delivery = 8;
+    ManagedRuntimeModuleQueryResponseV1 module_query_route = 9;
+    ManagedRuntimeModuleQueryResponseV1 module_query_delivery = 10;
   }
   string error_code = 15;
 }

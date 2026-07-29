@@ -10,9 +10,9 @@ use crate::distribution::staged_contracts::StagedRuntimeContracts;
 pub use crate::modules::capability::router::ManagedRuntimeRelay;
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeBlobSessionHandler, ManagedRuntimeEventCredentialHandler,
-    ManagedRuntimeExpectation, ManagedRuntimeOwnerDerivedKeyHandler,
-    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeRelayRequest,
-    ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeExpectation, ManagedRuntimeModuleQueryHandler,
+    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeProviderCredentialHandler,
+    ManagedRuntimeRelayRequest, ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 use hermes_runtime_protocol::managed_control::ManagedControlTransportMajorV1;
@@ -31,6 +31,7 @@ type ConfiguredRequestHandlers = (
     Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>,
     Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>,
     Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>,
+    Option<Arc<dyn ManagedRuntimeModuleQueryHandler>>,
 );
 
 #[derive(Clone)]
@@ -51,6 +52,7 @@ struct Inner {
     provider_credential_handler: Mutex<Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>>,
     owner_derived_key_handler: Mutex<Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>>,
     blob_session_handler: Mutex<Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>>,
+    module_query_handler: Mutex<Option<Arc<dyn ManagedRuntimeModuleQueryHandler>>>,
     vault_route_handler: Mutex<Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>>,
 }
 
@@ -77,6 +79,7 @@ impl ManagedRuntimeSupervisor {
                 provider_credential_handler: Mutex::new(None),
                 owner_derived_key_handler: Mutex::new(None),
                 blob_session_handler: Mutex::new(None),
+                module_query_handler: Mutex::new(None),
                 vault_route_handler: Mutex::new(None),
             }),
         }
@@ -150,6 +153,17 @@ impl ManagedRuntimeSupervisor {
             &self.inner.blob_session_handler,
             handler,
             "managed runtime Blob session handler",
+        )
+    }
+
+    pub fn configure_module_query_handler(
+        &self,
+        handler: Arc<dyn ManagedRuntimeModuleQueryHandler>,
+    ) -> Result<(), String> {
+        self.configure_before_launch(
+            &self.inner.module_query_handler,
+            handler,
+            "managed runtime module query handler",
         )
     }
 
@@ -266,6 +280,7 @@ impl ManagedRuntimeSupervisor {
             provider_credential_handler,
             owner_derived_key_handler,
             blob_session_handler,
+            module_query_handler,
         ) = match self.configured_request_handlers() {
             Ok(handlers) => handlers,
             Err(error) => {
@@ -289,6 +304,7 @@ impl ManagedRuntimeSupervisor {
             provider_credential_handler,
             owner_derived_key_handler,
             blob_session_handler,
+            module_query_handler,
         });
         workers.insert(registration_id, worker);
         Ok(())
@@ -301,6 +317,7 @@ impl ManagedRuntimeSupervisor {
             self.provider_credential_handler()?,
             self.owner_derived_key_handler()?,
             self.blob_session_handler()?,
+            self.module_query_handler()?,
         ))
     }
 
@@ -349,6 +366,16 @@ impl ManagedRuntimeSupervisor {
     ) -> Result<Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>, String> {
         self.inner
             .blob_session_handler
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
+            .map(|handler| handler.clone())
+    }
+
+    fn module_query_handler(
+        &self,
+    ) -> Result<Option<Arc<dyn ManagedRuntimeModuleQueryHandler>>, String> {
+        self.inner
+            .module_query_handler
             .lock()
             .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
             .map(|handler| handler.clone())

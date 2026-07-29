@@ -9,9 +9,9 @@ use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeBlobSessionHandler, ManagedRuntimeEventCredentialHandler,
-    ManagedRuntimeExpectation, ManagedRuntimeOwnerDerivedKeyHandler,
-    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeRelayRequest,
-    ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeExpectation, ManagedRuntimeModuleQueryHandler,
+    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeProviderCredentialHandler,
+    ManagedRuntimeRelayRequest, ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 use crate::runtime::managed::supervisor as managed_child_supervisor;
@@ -43,6 +43,7 @@ pub(super) struct ActiveWorkerInput {
         Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>,
     pub(super) owner_derived_key_handler: Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>,
     pub(super) blob_session_handler: Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>,
+    pub(super) module_query_handler: Option<Arc<dyn ManagedRuntimeModuleQueryHandler>>,
 }
 
 pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
@@ -61,6 +62,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
         provider_credential_handler,
         owner_derived_key_handler,
         blob_session_handler,
+        module_query_handler,
     } = input;
     let shutdown_requested = Arc::clone(&inner.shutdown_requested);
     let stop_requested = Arc::new(AtomicBool::new(false));
@@ -90,6 +92,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
                             provider_credential: provider_credential_handler.as_deref(),
                             owner_derived_key: owner_derived_key_handler.as_deref(),
                             blob_session: blob_session_handler.as_deref(),
+                            module_query: module_query_handler.as_deref(),
                         },
                     ready_sender: &ready_sender,
                     ready_state: &worker_ready_state,

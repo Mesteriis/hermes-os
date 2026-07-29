@@ -458,11 +458,21 @@
       "dependsOn": ["communications_content_read_v1", "blob_v1"]
     },
     {
+      "gate": "capability_routed_module_query_rpc_v1",
+      "role": "platform",
+      "owner": "kernel_capability_router",
+      "state": "planned",
+      "dependsOn": ["module_control_plane_v1"]
+    },
+    {
       "gate": "communication_delivery_intent_v1",
       "role": "workflow",
       "owner": "communication_delivery_intent",
       "state": "planned",
-      "dependsOn": ["communications_canonical_read_v2"]
+      "dependsOn": [
+        "capability_routed_module_query_rpc_v1",
+        "communications_canonical_read_v2"
+      ]
     },
     {
       "gate": "communication_delayed_delivery_v1",

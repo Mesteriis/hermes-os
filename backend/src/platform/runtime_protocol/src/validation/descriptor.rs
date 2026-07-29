@@ -144,6 +144,10 @@ pub fn validate_descriptor_v1(
                 .any(|surface| !valid_provided_surface(surface))
             || capability.dependencies.len() > MAX_REFERENCES_PER_CAPABILITY
             || capability
+                .dependencies
+                .iter()
+                .any(|dependency| !valid_contract_reference(dependency))
+            || capability
                 .requests
                 .iter()
                 .any(|request| !valid_capability_request(request))
@@ -677,6 +681,22 @@ mod tests {
         surface.client_rpc_route = Some(ClientRpcRouteV1 {
             path: "/hermes.notes.v1.NotesQueryService/Query".to_owned(),
         });
+        assert!(validate_descriptor_v1(&descriptor).is_err());
+    }
+
+    #[test]
+    fn query_rpc_dependency_is_an_exact_contract_reference() {
+        let mut descriptor = client_rpc_descriptor();
+        let contract = descriptor.capabilities[0].provides[0]
+            .contract
+            .clone()
+            .expect("contract");
+        descriptor.capabilities[0].dependencies = vec![contract];
+        assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
+
+        descriptor.capabilities[0].dependencies[0]
+            .schema_sha256
+            .clear();
         assert!(validate_descriptor_v1(&descriptor).is_err());
     }
 
