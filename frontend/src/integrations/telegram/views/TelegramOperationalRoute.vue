@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import TelegramOperationalPage from '../presentation/TelegramOperationalPage.vue'
 import TelegramCommandWorkbench from '../presentation/TelegramCommandWorkbench.vue'
 import TelegramMessageInspector from '../presentation/TelegramMessageInspector.vue'
@@ -54,7 +55,11 @@ const operationRetry = useTelegramOperationRetry(() => props.canManageLifecycle)
 
 async function refreshAccounts(): Promise<void> {
 	await accountAccess.refresh()
-	updateAccountId(accountAccess.selectedAccountId.value)
+	const accountId = accountAccess.selectedAccountId.value
+	updateAccountId(accountId)
+	if (accountId && accountAccess.model.value.authorizationState === 'ready') {
+		await surface.loadChats()
+	}
 }
 
 async function selectAccount(accountId: string): Promise<void> {
@@ -71,6 +76,10 @@ function updateAccountId(accountId: string): void {
 	accountAccess.selectAccount(accountId)
 	surface.updateAccountId(accountId)
 }
+
+onMounted(() => {
+	void refreshAccounts()
+})
 </script>
 
 <template>
@@ -98,59 +107,64 @@ function updateAccountId(accountId: string): void {
 		@update-provision-account-id="accountAccess.updateProvisionAccountId"
 		@update-provision-display-name="accountAccess.updateProvisionDisplayName"
 		@update-provision-external-account-id="accountAccess.updateProvisionExternalAccountId"
-	/>
-	<TelegramMessageInspector
-		:model="messageInspector.model.value"
-		@inspect="messageInspector.inspect"
-	/>
-	<TelegramOperationRetryPanel
-		:model="operationRetry.model.value"
-		@retry="operationRetry.retry"
-		@update-operation-id="operationRetry.updateOperationId"
-	/>
-	<TelegramCommandWorkbench
-		:chat="chatCommands.model.value"
-		:media="mediaCommands.model.value"
-		:message="messageCommands.model.value"
-		:topic="topicCommands.model.value"
-		@chat-add-to-folder="chatCommands.addToFolder"
-		@chat-archive="chatCommands.archive"
-		@chat-join="chatCommands.join"
-		@chat-leave="chatCommands.leave"
-		@chat-mark-unread="chatCommands.markUnread"
-		@chat-mute="chatCommands.mute"
-		@chat-remove-from-folder="chatCommands.removeFromFolder"
-		@chat-reassign-folders="chatCommands.reassignFolders"
-		@media-download="mediaCommands.downloadFile"
-		@media-send="mediaCommands.sendMedia"
-		@message-delete="messageCommands.remove"
-		@message-edit="messageCommands.edit"
-		@message-forward="messageCommands.forward"
-		@message-pin="messageCommands.pin"
-		@message-react="messageCommands.react"
-		@message-reply="messageCommands.reply"
-		@message-restore="messageCommands.restore"
-		@topic-close="topicCommands.closeTopic"
-		@topic-create="topicCommands.createTopic"
-		@topic-participants="topicCommands.refreshParticipants"
-		@topic-refresh="topicCommands.refreshTopics"
-		@topic-search="topicCommands.searchMessages"
-		@update-chat-folder-id="chatCommands.updateFolderId"
-		@update-chat-target-folder-ids="chatCommands.updateTargetFolderIds"
-		@update-media-blob-ref="mediaCommands.updateBlobRef"
-		@update-media-backup-class="mediaCommands.updateBackupClass"
-		@update-media-caption="mediaCommands.updateCaption"
-		@update-media-declared-size="mediaCommands.updateDeclaredSize"
-		@update-media-filename="mediaCommands.updateFilename"
-		@update-media-kind="mediaCommands.updateMediaKind"
-		@update-media-provider-file-id="mediaCommands.updateProviderFileId"
-		@update-media-reference-id-hex="mediaCommands.updateReferenceIdHex"
-		@update-message-emoji="messageCommands.updateEmoji"
-		@update-message-restore-reason="messageCommands.updateRestoreReason"
-		@update-message-target-chat-id="messageCommands.updateTargetChatId"
-		@update-message-text="messageCommands.updateText"
-		@update-topic-id="topicCommands.updateTopicId"
-		@update-topic-search-query="topicCommands.updateProviderSearchQuery"
-		@update-topic-title="topicCommands.updateTopicTitle"
-	/>
+	>
+		<template #inspector>
+			<TelegramMessageInspector
+				:model="messageInspector.model.value"
+				@inspect="messageInspector.inspect"
+			/>
+			<TelegramOperationRetryPanel
+				:model="operationRetry.model.value"
+				@retry="operationRetry.retry"
+				@update-operation-id="operationRetry.updateOperationId"
+			/>
+		</template>
+		<template #commands>
+			<TelegramCommandWorkbench
+				:chat="chatCommands.model.value"
+				:media="mediaCommands.model.value"
+				:message="messageCommands.model.value"
+				:topic="topicCommands.model.value"
+				@chat-add-to-folder="chatCommands.addToFolder"
+				@chat-archive="chatCommands.archive"
+				@chat-join="chatCommands.join"
+				@chat-leave="chatCommands.leave"
+				@chat-mark-unread="chatCommands.markUnread"
+				@chat-mute="chatCommands.mute"
+				@chat-remove-from-folder="chatCommands.removeFromFolder"
+				@chat-reassign-folders="chatCommands.reassignFolders"
+				@media-download="mediaCommands.downloadFile"
+				@media-send="mediaCommands.sendMedia"
+				@message-delete="messageCommands.remove"
+				@message-edit="messageCommands.edit"
+				@message-forward="messageCommands.forward"
+				@message-pin="messageCommands.pin"
+				@message-react="messageCommands.react"
+				@message-reply="messageCommands.reply"
+				@message-restore="messageCommands.restore"
+				@topic-close="topicCommands.closeTopic"
+				@topic-create="topicCommands.createTopic"
+				@topic-participants="topicCommands.refreshParticipants"
+				@topic-refresh="topicCommands.refreshTopics"
+				@topic-search="topicCommands.searchMessages"
+				@update-chat-folder-id="chatCommands.updateFolderId"
+				@update-chat-target-folder-ids="chatCommands.updateTargetFolderIds"
+				@update-media-blob-ref="mediaCommands.updateBlobRef"
+				@update-media-backup-class="mediaCommands.updateBackupClass"
+				@update-media-caption="mediaCommands.updateCaption"
+				@update-media-declared-size="mediaCommands.updateDeclaredSize"
+				@update-media-filename="mediaCommands.updateFilename"
+				@update-media-kind="mediaCommands.updateMediaKind"
+				@update-media-provider-file-id="mediaCommands.updateProviderFileId"
+				@update-media-reference-id-hex="mediaCommands.updateReferenceIdHex"
+				@update-message-emoji="messageCommands.updateEmoji"
+				@update-message-restore-reason="messageCommands.updateRestoreReason"
+				@update-message-target-chat-id="messageCommands.updateTargetChatId"
+				@update-message-text="messageCommands.updateText"
+				@update-topic-id="topicCommands.updateTopicId"
+				@update-topic-search-query="topicCommands.updateProviderSearchQuery"
+				@update-topic-title="topicCommands.updateTopicTitle"
+			/>
+		</template>
+	</TelegramOperationalPage>
 </template>
