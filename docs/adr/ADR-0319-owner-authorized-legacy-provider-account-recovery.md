@@ -8,10 +8,12 @@
   исключены, Gmail требует current OAuth, Telegram показывает real TDLib QR.
   Owner-private versioned receipt хранит только opaque digests, stable operation
   IDs, target/revision checkpoints и sanitized terminal states. Restart proof
-  восстанавливает три completed candidates без повторных Settings/provider
-  mutations; pending step сначала становится `outcome_unknown`, а replay
-  допускается только explicit retry. Corrupt/unknown/changed-source receipts
-  fail closed до target mutation.
+  сверяет три terminal candidates с current provider state: существующие
+  accounts не мутируются, а потерянные provider bindings/accounts
+  восстанавливаются теми же stable operations и persisted public credential
+  revisions без повторной Vault mutation. Pending step сначала становится
+  `outcome_unknown`, а replay допускается только explicit retry.
+  Corrupt/unknown/changed-source receipts fail closed до target mutation.
 - Связанные решения: ADR-0200, ADR-0201, ADR-0204, ADR-0205, ADR-0213,
   ADR-0215, ADR-0222, ADR-0223, ADR-0240, ADR-0267, ADR-0278, ADR-0292,
   ADR-0293, ADR-0294, ADR-0295, ADR-0300, ADR-0303, ADR-0309, ADR-0310
@@ -212,6 +214,9 @@ recovery revision
 Secret bytes и raw identifiers в key не входят. Повторный apply:
 
 - не создаёт duplicate target account;
+- не принимает terminal receipt за доказательство current provider readiness;
+- восстанавливает отсутствующий provider binding/account только после current
+  provider query и с тем же stable operation ID;
 - продолжает с последнего подтверждённого provider-specific шага;
 - использует current CAS revisions;
 - не повторяет Vault mutation после ambiguous outcome;

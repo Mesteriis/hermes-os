@@ -9,7 +9,6 @@ import {
 import {
 	createLegacyProviderRecoveryHostV1,
 	hasLegacyProviderRecoveryHostV1,
-	type LegacyProviderRecoveryCandidateV1,
 	LegacyProviderRecoveryOutcomeUnknownErrorV1,
 	type LegacyProviderRecoveryPlanV1,
 } from '../../../platform/legacy-recovery'
@@ -17,6 +16,10 @@ import { fetchClientBootstrap } from '../../../platform/gateway/clientBootstrap'
 import type {
 	LegacyProviderCandidateProgressV1,
 } from './legacyProviderRecoveryPresentation'
+import {
+	legacyProviderRecoveryInitialProgressV1,
+	legacyProviderRecoveryQueueV1,
+} from './legacyProviderRecoveryReconciliation'
 
 export function useLegacyProviderRecovery(
 	mailModule: () => ClientModuleBootstrapV1 | null,
@@ -55,14 +58,7 @@ export function useLegacyProviderRecovery(
 			const next = await source.start()
 			plan.value = next
 			sessionActive = true
-			progress.value = Object.fromEntries(
-				next.candidates.map((candidate) => [
-					candidate.sourceHandle,
-					isCompletedTerminalState(candidate.receiptTerminalState)
-						? 'completed'
-						: 'pending',
-				]),
-			)
+			progress.value = legacyProviderRecoveryInitialProgressV1(next.candidates)
 			mailResults.value = []
 			telegramResult.value = undefined
 			oauthAccepted.value = false
@@ -77,16 +73,7 @@ export function useLegacyProviderRecovery(
 		const currentTelegram = telegramModule()
 		if (!currentPlan || !currentMail?.settings || !currentTelegram?.settings) return
 		await run(async () => {
-			const pendingCandidates = orderedCandidates(currentPlan.candidates).filter(
-				(candidate) => progress.value[candidate.sourceHandle] !== 'completed',
-			)
-			if (pendingCandidates.length === 0) {
-				await cancelActiveSession()
-				retryOutcomeUnknown.value = false
-				message.value = 'All three provider accounts are already recorded as recovered. No provider mutation was replayed.'
-				return
-			}
-			for (const candidate of pendingCandidates) {
+			for (const candidate of legacyProviderRecoveryQueueV1(currentPlan.candidates)) {
 				progress.value = { ...progress.value, [candidate.sourceHandle]: 'running' }
 				try {
 					if (candidate.kind === 'telegram_user') {
@@ -123,7 +110,7 @@ export function useLegacyProviderRecovery(
 			}
 			await cancelActiveSession()
 			retryOutcomeUnknown.value = false
-			message.value = 'Two Mail targets and one Telegram user target were recovered through their provider-owned contracts.'
+			message.value = 'Two Mail targets and one Telegram user target were reconciled through their provider-owned contracts.'
 		}, 'Recovery stopped at the current provider step. Completed idempotent steps are safe to retry.')
 	}
 
@@ -198,14 +185,6 @@ export function useLegacyProviderRecovery(
 	}
 }
 
-function isCompletedTerminalState(
-	state: LegacyProviderRecoveryCandidateV1['receiptTerminalState'],
-): boolean {
-	return state === 'completed'
-		|| state === 'reauthorization_required'
-		|| state === 'qr_authorization_required'
-}
-
 function safeFailureCode(error: unknown): string {
 	if (!(error instanceof Error)) return 'unexpected_error'
 	if (error.message === 'legacy provider recovery host response is invalid') {
@@ -257,11 +236,4 @@ function safeFailureCode(error: unknown): string {
 		return 'client_type_error'
 	}
 	return 'operation_rejected'
-}
-
-function orderedCandidates(
-	candidates: readonly LegacyProviderRecoveryCandidateV1[],
-): LegacyProviderRecoveryCandidateV1[] {
-	const order = { icloud: 0, gmail: 1, telegram_user: 2 } as const
-	return [...candidates].sort((left, right) => order[left.kind] - order[right.kind])
 }

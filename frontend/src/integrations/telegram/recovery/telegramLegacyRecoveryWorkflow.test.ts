@@ -200,6 +200,77 @@ describe('TelegramLegacyRecoveryWorkflowV1', () => {
 		expect(provision).not.toHaveBeenCalled()
 	})
 
+	it('reprovisions a missing account from persisted credential revisions', async () => {
+		const sourceHandle = 'c'.repeat(64)
+		const provisionCustodied = vi.fn()
+		const provision = vi.fn().mockResolvedValue({
+			accountId: 'telegram-account',
+			runtimeEpoch: 2n,
+		})
+		const apply = vi.fn()
+		const completedReceiptPort = {
+			beginStep: vi.fn().mockImplementation(async (input) => ({
+				disposition: 'completed',
+				operationId: new Uint8Array(16).fill(1),
+				targetConfigurationInstanceId: input.targetConfigurationInstanceId,
+				publicRevision: 1n,
+			})),
+			completeStep: vi.fn().mockResolvedValue(undefined),
+			finishCandidate: vi.fn().mockResolvedValue(undefined),
+			cancel: vi.fn().mockResolvedValue(undefined),
+		}
+		const workflow = new TelegramLegacyRecoveryWorkflowV1({
+			source: {
+				...completedReceiptPort,
+				source: vi.fn().mockResolvedValue({
+					kind: 'telegram_user',
+					sourceHandle,
+					accountId: 'telegram-account',
+					displayName: 'Personal Telegram',
+					externalAccountId: '',
+					apiId: 123n,
+				}),
+			},
+			configuration: { apply },
+			vault: { provisionCustodied },
+			lifecycle: { list: vi.fn().mockResolvedValue([]), provision },
+		} as never)
+
+		const result = await workflow.recover({
+			registrationId: 'telegram-registration',
+			expectedDesiredRevision: 2n,
+			plan: {
+				schemaRevision: 1,
+				recoverySessionId: 'a'.repeat(32),
+				bundleFingerprintSha256: 'b'.repeat(64),
+				counts: {
+					gmailActive: 1,
+					icloudActive: 1,
+					telegramUserActive: 1,
+					gmailDeleted: 2,
+				},
+				candidates: [],
+			},
+			candidate: {
+				sourceHandle,
+				kind: 'telegram_user',
+				state: 'qr_authorization_required',
+				receiptTerminalState: 'qr_authorization_required',
+			},
+		})
+
+		expect(result).toEqual({ state: 'qr_authorization_required' })
+		expect(apply).not.toHaveBeenCalled()
+		expect(provisionCustodied).not.toHaveBeenCalled()
+		expect(provision).toHaveBeenCalledWith(expect.objectContaining({
+			accountId: 'telegram-account',
+			credentials: [
+				{ purpose: 'telegram_api_hash', revision: 1n },
+				{ purpose: 'telegram_session_encryption_key', revision: 1n },
+			],
+		}))
+	})
+
 	it('binds Settings operation identities to the exact CAS revisions', async () => {
 		const apply = vi.fn().mockResolvedValue({})
 		const workflow = new TelegramLegacyRecoveryWorkflowV1({

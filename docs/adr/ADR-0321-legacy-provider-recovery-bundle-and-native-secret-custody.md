@@ -6,8 +6,10 @@
 bounded native source sessions, direct HPKE sealing в current Owner Vault host,
 provider-specific Mail/Telegram apply flows и owner-private resumable receipt
 ledger реализованы. Live evidence подтверждает два Mail targets, fresh Gmail
-OAuth boundary, real Telegram QR и restart resume трёх terminal candidates без
-повторных Settings/provider mutations. Atomic `0600` receipt, changed-source,
+OAuth boundary, real Telegram QR и restart reconciliation трёх terminal
+candidates. Существующий provider state не мутируется; потерянный binding или
+account восстанавливается stable operation и persisted public credential
+revisions без повторной Vault mutation. Atomic `0600` receipt, changed-source,
 corrupt/unknown schema и ambiguous-outcome/explicit-retry negatives проверены.
 
 Уточняет:
@@ -293,6 +295,9 @@ provider payload запрещены.
 
 - использует persisted target configuration instance;
 - reconciles current public query state;
+- не использует terminal receipt как substitute current provider readiness;
+- повторяет только отсутствующий idempotent provider lifecycle/binding step с
+  тем же stable operation ID и persisted public credential revisions;
 - не создаёт duplicate target;
 - не повторяет ambiguous Vault commit;
 - требует explicit retry для `outcome_unknown`;

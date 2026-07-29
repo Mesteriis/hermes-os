@@ -192,6 +192,74 @@ describe('MailLegacyRecoveryWorkflowV1', () => {
 		expect(apply).not.toHaveBeenCalled()
 		expect(oauthStart).toHaveBeenCalledOnce()
 	})
+
+	it('rebinds a persisted iCloud credential when provider binding state was lost', async () => {
+		const sourceHandle = 'e'.repeat(64)
+		const bind = vi.fn().mockResolvedValue({})
+		const provisionCustodied = vi.fn()
+		const status = vi.fn()
+			.mockResolvedValueOnce({ binding: [] })
+			.mockResolvedValueOnce({
+				binding: [{ purpose: 1, credentialRevision: 1n }],
+				readiness: MailAccountReadinessV1.MAIL_ACCOUNT_READINESS_READY,
+			})
+		const completedReceiptPort = {
+			beginStep: vi.fn().mockImplementation(async (input) => ({
+				disposition: 'completed',
+				operationId: new Uint8Array(16).fill(1),
+				targetConfigurationInstanceId: input.targetConfigurationInstanceId,
+				publicRevision: 1n,
+			})),
+			completeStep: vi.fn().mockResolvedValue(undefined),
+			finishCandidate: vi.fn().mockResolvedValue(undefined),
+			cancel: vi.fn().mockResolvedValue(undefined),
+		}
+		const workflow = new MailLegacyRecoveryWorkflowV1({
+			source: {
+				...completedReceiptPort,
+				source: vi.fn().mockResolvedValue({
+					kind: 'icloud',
+					sourceHandle,
+					accountId: 'mail-account',
+					displayName: 'Private',
+					email: 'owner@example.test',
+					imapHost: 'imap.mail.me.com',
+					imapPort: 993,
+					username: 'owner@example.test',
+				}),
+				sealSource: vi.fn(),
+			},
+			configuration: {
+				createTarget: vi.fn().mockResolvedValue({
+					configurationInstanceId: 'mail-target',
+					desiredRevision: 7n,
+					applyState: 'current',
+				}),
+				apply: vi.fn(),
+			},
+			vault: { provisionCustodied },
+			mail: { status, bind },
+			oauth: { start: vi.fn(), complete: vi.fn() },
+		} as never)
+
+		const result = await workflow.recover({
+			registrationId: 'mail-registration',
+			plan,
+			candidate: {
+				sourceHandle,
+				kind: 'icloud',
+				state: 'ready_to_apply',
+				receiptTerminalState: 'completed',
+			},
+		})
+
+		expect(result).toEqual({ kind: 'icloud', state: 'ready' })
+		expect(provisionCustodied).not.toHaveBeenCalled()
+		expect(bind).toHaveBeenCalledWith(expect.objectContaining({
+			connectionId: 'mail-account',
+			credentialRevision: 1n,
+		}))
+	})
 })
 
 function receiptPort() {

@@ -209,9 +209,6 @@ export class TelegramLegacyRecoveryWorkflowV1 {
 		})
 		const provisionStepId = 'telegram_provision_account'
 		const provisionStep = await journal.begin(provisionStepId, configurationInstanceId)
-		if (provisionStep.disposition === 'completed') {
-			throw new Error('Telegram account receipt contradicts account query state')
-		}
 		const account = await withTelegramConfigurationRuntimeV1(() =>
 			this.ports.lifecycle.provision({
 			accountId: source.accountId,
