@@ -1276,6 +1276,20 @@ mod tests {
         assert!(decode_message_attachments(message.as_bytes()).is_empty());
     }
 
+    #[test]
+    fn preview_bound_never_splits_a_multibyte_character() {
+        let body = format!(
+            "Subject: unicode\r\n\r\n{}",
+            "Почтовое сообщение ".repeat(SNAPSHOT_PREVIEW_BYTES)
+        );
+
+        let (_, snippet, has_plain_text) = decode_message_preview(body.as_bytes());
+
+        assert!(has_plain_text);
+        assert!(snippet.len() <= SNAPSHOT_PREVIEW_BYTES);
+        assert!(std::str::from_utf8(snippet.as_bytes()).is_ok());
+    }
+
     #[cfg(feature = "conformance-test-support")]
     #[test]
     fn plaintext_conformance_transport_is_loopback_only() {
@@ -1301,11 +1315,9 @@ fn decode_message_preview(body: &[u8]) -> (String, String, bool) {
     } else {
         String::new()
     };
-    if has_plain_text {
-        snippet.truncate(SNAPSHOT_PREVIEW_BYTES);
-    }
-    if snippet.len() > MAX_PLAIN_TEXT_BYTES {
-        snippet = snippet.chars().take(SNAPSHOT_PREVIEW_BYTES).collect();
+    if has_plain_text && snippet.len() > SNAPSHOT_PREVIEW_BYTES {
+        let boundary = floor_char_boundary(&snippet, SNAPSHOT_PREVIEW_BYTES);
+        snippet.truncate(boundary);
     }
     if snippet.is_empty() {
         snippet = subject.clone();
@@ -1315,6 +1327,17 @@ fn decode_message_preview(body: &[u8]) -> (String, String, bool) {
     }
     let has_plain_text = snippet.len() <= MAX_PLAIN_TEXT_BYTES && has_plain_text;
     (subject, snippet, has_plain_text)
+}
+
+fn floor_char_boundary(value: &str, maximum_bytes: usize) -> usize {
+    if value.len() <= maximum_bytes {
+        return value.len();
+    }
+    let mut boundary = maximum_bytes;
+    while !value.is_char_boundary(boundary) {
+        boundary -= 1;
+    }
+    boundary
 }
 
 fn split_subject_and_body(raw_message: &str) -> (String, String) {

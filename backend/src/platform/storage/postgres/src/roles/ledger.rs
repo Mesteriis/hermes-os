@@ -170,9 +170,8 @@ impl RoleLedgerBindingV1 {
             && requested.storage_generation >= self.storage_generation
             && requested.runtime_generation > self.runtime_generation
             && requested.grant_epoch >= self.grant_epoch
-            && Some(requested.role_epoch) == self.role_epoch.checked_add(1)
-            && Some(requested.credential_lease_revision)
-                == self.credential_lease_revision.checked_add(1)
+            && requested.role_epoch > self.role_epoch
+            && requested.credential_lease_revision > self.credential_lease_revision
             && requested.storage_bundle_revision >= self.storage_bundle_revision
     }
 }
@@ -263,4 +262,49 @@ impl StoredRoleLedgerBindingV1 {
 
 fn database_fence(value: u64) -> Result<i64, PostgresAdapterErrorV1> {
     i64::try_from(value).map_err(|_| PostgresAdapterErrorV1::RoleBinding)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RoleLedgerBindingV1;
+
+    fn binding(
+        runtime_principal: &str,
+        runtime_instance_id: &str,
+        runtime_generation: i64,
+        role_epoch: i64,
+        credential_lease_revision: i64,
+    ) -> RoleLedgerBindingV1 {
+        RoleLedgerBindingV1 {
+            owner_id: "platform.scheduler".to_owned(),
+            ddl_owner: "storage_ddl_platform_scheduler".to_owned(),
+            runtime_principal: runtime_principal.to_owned(),
+            registration_id: "scheduler".to_owned(),
+            runtime_instance_id: runtime_instance_id.to_owned(),
+            storage_generation: 1,
+            runtime_generation,
+            grant_epoch: 1,
+            role_epoch,
+            credential_lease_revision,
+            storage_bundle_revision: 1,
+        }
+    }
+
+    #[test]
+    fn successor_accepts_fence_gaps_left_by_failed_launch_reservations() {
+        let current = binding("runtime_scheduler_1", "scheduler-1", 1, 1, 1);
+        let successor = binding("runtime_scheduler_4", "scheduler-4", 4, 4, 4);
+
+        assert!(current.permits(&successor));
+    }
+
+    #[test]
+    fn successor_still_rejects_non_advancing_fences() {
+        let current = binding("runtime_scheduler_1", "scheduler-1", 1, 3, 3);
+        let stale_role = binding("runtime_scheduler_4", "scheduler-4", 4, 3, 4);
+        let stale_lease = binding("runtime_scheduler_4", "scheduler-4", 4, 4, 3);
+
+        assert!(!current.permits(&stale_role));
+        assert!(!current.permits(&stale_lease));
+    }
 }
