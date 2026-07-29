@@ -4,11 +4,13 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: typed public request/result contract, pure planning core
-и owner-local persistence реализованы. Persistence принимает только sealed
-ciphertext, хранит owner-scoped idempotency/state transitions и выдаёт
-lease/claim с epoch fencing. Managed runtime, provider command adapters,
-generated Gateway/client route и live admission ещё не реализованы;
+Состояние реализации: typed public request/result contract, pure planning core,
+owner-local persistence и independently managed runtime substrate реализованы.
+Persistence принимает только sealed ciphertext, хранит owner-scoped
+idempotency/state transitions и выдаёт lease/claim с epoch fencing. Runtime
+проходит Kernel handshake, поднимает owner-local Storage через Vault-fenced
+credential и пока предоставляет только Storage capability. Provider command
+adapters, client route, assembly и live admission ещё не реализованы;
 `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст
@@ -29,7 +31,7 @@ facade либо cross-provider owner.
 hermes-communication-delivery-intent-api
 hermes-communication-delivery-intent-core
 hermes-communication-delivery-intent-persistence
-hermes-communication-delivery-intent-runtime       (следующий slice)
+hermes-communication-delivery-intent-runtime
 hermes-communication-delivery-intent-assembly      (следующий slice)
 ```
 
@@ -79,6 +81,15 @@ canonical identity, opaque route metadata и `SealedDeliveryBodyV1`. Ключ
 идемпотентности scoped парой `(logical_owner_id, intent_id)`, а worker claim
 ограждён `claim_epoch`, owner id и сроком lease. Terminal transition удаляет
 ciphertext custody.
+
+Runtime unit принимает plaintext только как consumed planning object и передаёт
+его exact `DeliveryIntentBodySealerV1`; persistence command создаётся только
+после получения `SealedDeliveryBodyV1`. Текущий descriptor намеренно не
+объявляет client RPC, durable publisher/consumer или provider command surface:
+эти grants будут добавлены атомарно вместе с соответствующими typed adapters,
+а не как неработающие facade routes. Managed process уже реализует Kernel
+describe/ready handshake, runtime/grant fences, Vault-issued Storage credential,
+PgBouncer connection budget и fail-closed control-frame pump.
 
 ## Инварианты planning core
 

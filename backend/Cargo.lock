@@ -1744,6 +1744,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-delivery-intent-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-delivery-intent-api",
+ "hermes-communication-delivery-intent-core",
+ "hermes-communication-delivery-intent-persistence",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-communications-api"
 version = "0.1.0"
 dependencies = [

@@ -621,7 +621,7 @@ test('Attachment Security remains one exact engine after Mail integration admiss
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_delivery_intent_persistence_v1',
+    'communication_delivery_intent_runtime_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.engines, ['attachment_security']);
   assert.deepEqual(

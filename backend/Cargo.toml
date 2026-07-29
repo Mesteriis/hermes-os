@@ -51,6 +51,7 @@ members = [
   "src/communication-delivery-intent-api",
   "src/communication-delivery-intent-core",
   "src/communication-delivery-intent-persistence",
+  "src/communication-delivery-intent-runtime",
   "src/communications-attachment-contract",
   "src/communications-domain",
   "src/communications-ingress",

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delivery_intent_persistence_v1",
+    "currentSlice": "communication_delivery_intent_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -504,6 +504,12 @@
         "role": "workflow",
         "owner": "communication_delivery_intent",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-communication-delivery-intent-runtime",
+        "role": "workflow",
+        "owner": "communication_delivery_intent",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1347,6 +1353,32 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-delivery-intent-runtime": [
+        {
+          "name": "hermes-communication-delivery-intent-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delivery-intent-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delivery-intent-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ],
@@ -3882,6 +3914,52 @@
             "tls-rustls-ring"
           ]
         }
+      ],
+      "hermes-communication-delivery-intent-runtime": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt",
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -4228,6 +4306,10 @@
       },
       "hermes-communication-delivery-intent-persistence": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-delivery-intent-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       }
     },
