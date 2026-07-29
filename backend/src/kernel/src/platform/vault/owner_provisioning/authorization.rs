@@ -299,6 +299,7 @@ mod tests {
                     vault_purposes: std::slice::from_ref(&purpose),
                     client_rpc_routes: &[],
                     client_blob_routes: &[],
+                    client_realtime_routes: &[],
                     query_rpc_routes: &[],
                     contract_dependencies: &[],
                 },

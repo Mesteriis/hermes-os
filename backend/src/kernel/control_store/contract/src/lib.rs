@@ -20,9 +20,10 @@ pub use identity::{
 };
 pub use modules::{
     GrantSet, ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientBlobContractVersionV1,
-    ModuleClientBlobRouteV1, ModuleClientBlobTransportV1, ModuleClientRpcContractVersionV1,
-    ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
-    ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
+    ModuleClientBlobRouteV1, ModuleClientBlobTransportV1, ModuleClientRealtimeContractVersionV1,
+    ModuleClientRealtimeRouteV1, ModuleClientRpcContractVersionV1, ModuleClientRpcRouteV1,
+    ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
+    ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
     ModuleEventSubscriptionRequirementV1, ModuleGrantSnapshot, ModuleQueryContractV1,
     ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
     ModuleStorageRequestV1, ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1,

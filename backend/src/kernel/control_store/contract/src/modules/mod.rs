@@ -1,5 +1,6 @@
 mod blob_request;
 mod client_blob_route;
+mod client_realtime_route;
 mod client_rpc_route;
 mod event_request;
 mod grant;
@@ -14,6 +15,9 @@ mod vault_purpose_request;
 pub use blob_request::{ModuleBlobOperationV1, ModuleBlobQuotaRequestV1};
 pub use client_blob_route::{
     ModuleClientBlobContractVersionV1, ModuleClientBlobRouteV1, ModuleClientBlobTransportV1,
+};
+pub use client_realtime_route::{
+    ModuleClientRealtimeContractVersionV1, ModuleClientRealtimeRouteV1,
 };
 pub use client_rpc_route::{ModuleClientRpcContractVersionV1, ModuleClientRpcRouteV1};
 pub use event_request::{

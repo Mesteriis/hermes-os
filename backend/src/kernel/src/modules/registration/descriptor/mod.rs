@@ -2,10 +2,11 @@
 
 use hermes_kernel_control_store::{
     ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientBlobRouteV1,
-    ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
-    ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
-    ModuleEventSubscriptionRequirementV1, ModuleQueryContractV1, ModuleRegistration,
-    ModuleSchedulerJobRequestV1, ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
+    ModuleClientRealtimeRouteV1, ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1,
+    ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1,
+    ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1, ModuleQueryContractV1,
+    ModuleRegistration, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
+    ModuleVaultPurposeRequestV1,
 };
 use hermes_runtime_protocol::{
     v1::{
@@ -29,6 +30,7 @@ pub(super) struct DescriptorRegistrationRequests {
     vault_purposes: Vec<DescriptorVaultPurposeRequest>,
     client_rpc_routes: Vec<DescriptorClientRpcRoute>,
     client_blob_routes: Vec<DescriptorClientBlobRoute>,
+    client_realtime_routes: Vec<DescriptorClientRealtimeRoute>,
     query_rpc_routes: Vec<DescriptorModuleQueryContract>,
     contract_dependencies: Vec<DescriptorModuleQueryContract>,
 }
@@ -41,6 +43,7 @@ pub(super) struct BoundRegistrationRequests {
     pub(super) vault_purposes: Vec<ModuleVaultPurposeRequestV1>,
     pub(super) client_rpc_routes: Vec<ModuleClientRpcRouteV1>,
     pub(super) client_blob_routes: Vec<ModuleClientBlobRouteV1>,
+    pub(super) client_realtime_routes: Vec<ModuleClientRealtimeRouteV1>,
     pub(super) query_rpc_routes: Vec<ModuleQueryContractV1>,
     pub(super) contract_dependencies: Vec<ModuleQueryContractV1>,
 }
@@ -65,6 +68,7 @@ impl DescriptorRegistrationRequests {
             vault_purposes: vault_purpose_requests(&descriptor)?,
             client_rpc_routes: client_rpc_routes(&descriptor)?,
             client_blob_routes: client_blob_routes(&descriptor)?,
+            client_realtime_routes: client_realtime_routes(&descriptor)?,
             query_rpc_routes: query_rpc_routes(&descriptor)?,
             contract_dependencies: contract_dependencies(&descriptor)?,
         })
@@ -95,6 +99,10 @@ impl DescriptorRegistrationRequests {
             vault_purposes: bind_vault_purpose_requests(&self.vault_purposes, registration),
             client_rpc_routes: bind_client_rpc_routes(&self.client_rpc_routes, registration),
             client_blob_routes: bind_client_blob_routes(&self.client_blob_routes, registration),
+            client_realtime_routes: bind_client_realtime_routes(
+                &self.client_realtime_routes,
+                registration,
+            ),
             query_rpc_routes: bind_module_query_contracts(&self.query_rpc_routes, registration),
             contract_dependencies: bind_module_query_contracts(
                 &self.contract_dependencies,
@@ -257,6 +265,28 @@ fn bind_client_blob_routes(
         .collect()
 }
 
+fn bind_client_realtime_routes(
+    requests: &[DescriptorClientRealtimeRoute],
+    registration: &ModuleRegistration,
+) -> Vec<ModuleClientRealtimeRouteV1> {
+    requests
+        .iter()
+        .map(|request| {
+            ModuleClientRealtimeRouteV1::new(
+                registration.registration_id(),
+                &request.capability_id,
+                registration.owner_id(),
+                &request.contract_name,
+                hermes_kernel_control_store::ModuleClientRealtimeContractVersionV1 {
+                    major: request.contract_major,
+                    revision: request.contract_revision,
+                },
+                request.contract_schema_sha256,
+            )
+        })
+        .collect()
+}
+
 fn bind_module_query_contracts(
     requests: &[DescriptorModuleQueryContract],
     registration: &ModuleRegistration,
@@ -340,6 +370,14 @@ struct DescriptorClientBlobRoute {
     contract_schema_sha256: [u8; 32],
     path: String,
     max_response_bytes: u64,
+}
+
+struct DescriptorClientRealtimeRoute {
+    capability_id: String,
+    contract_name: String,
+    contract_major: u32,
+    contract_revision: u32,
+    contract_schema_sha256: [u8; 32],
 }
 
 struct DescriptorModuleQueryContract {
@@ -488,6 +526,50 @@ fn client_blob_routes(
                 contract_schema_sha256: schema_sha256,
                 path: route.path.clone(),
                 max_response_bytes: route.max_response_bytes,
+            });
+        }
+    }
+    Ok(routes)
+}
+
+fn client_realtime_routes(
+    descriptor: &hermes_runtime_protocol::v1::ModuleDescriptorV1,
+) -> Result<Vec<DescriptorClientRealtimeRoute>, String> {
+    let mut seen_contracts = std::collections::BTreeSet::new();
+    let mut routes = Vec::new();
+    for capability in &descriptor.capabilities {
+        for surface in &capability.provides {
+            if ProvidedSurfaceKindV1::try_from(surface.kind).ok()
+                != Some(ProvidedSurfaceKindV1::ClientRealtime)
+            {
+                continue;
+            }
+            let contract = surface
+                .contract
+                .as_ref()
+                .ok_or_else(|| "module ClientRealtime contract is invalid".to_owned())?;
+            let schema_sha256 = contract
+                .schema_sha256
+                .as_slice()
+                .try_into()
+                .map_err(|_| "module ClientRealtime contract is invalid".to_owned())?;
+            let identity = (
+                contract.name.clone(),
+                contract.major,
+                contract.revision,
+                schema_sha256,
+            );
+            if contract.owner != descriptor.owner_id || !seen_contracts.insert(identity) {
+                return Err(
+                    "module ClientRealtime contract owner or identity is invalid".to_owned(),
+                );
+            }
+            routes.push(DescriptorClientRealtimeRoute {
+                capability_id: capability.capability_id.clone(),
+                contract_name: contract.name.clone(),
+                contract_major: contract.major,
+                contract_revision: contract.revision,
+                contract_schema_sha256: schema_sha256,
             });
         }
     }

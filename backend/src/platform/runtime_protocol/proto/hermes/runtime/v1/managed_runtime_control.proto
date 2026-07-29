@@ -139,6 +139,24 @@ message ManagedRuntimeModuleQueryResponseV1 {
   bytes response_payload = 2;
   string error_code = 15;
 }
+// Client-safe owner event submitted by a current managed runtime. The Kernel
+// authorizes the exact descriptor contract and maps these generic fields to
+// the Gateway frame; it never decodes the owner payload.
+message ManagedRuntimeClientRealtimePublishRequestV1 {
+  ContractReferenceV1 contract = 1;
+  string logical_owner_id = 2;
+  bytes event_id = 3;
+  string cursor = 4;
+  string event_kind = 5;
+  uint64 occurred_at_unix_millis = 6;
+  string causation_id = 7;
+  string correlation_id = 8;
+  string trace_id = 9;
+  bytes payload = 10;
+}
+message ManagedRuntimeClientRealtimePublishResponseV1 {
+  string accepted_cursor = 1;
+}
 message ManagedRuntimeControlRequestV1 {
   oneof operation {
     DescribeManagedRuntimeRequestV1 describe = 1;
@@ -151,6 +169,7 @@ message ManagedRuntimeControlRequestV1 {
     ManagedRuntimeClientDeliveryRequestV1 client_delivery = 8;
     ManagedRuntimeModuleQueryRequestV1 route_module_query = 9;
     ManagedRuntimeModuleQueryDeliveryV1 deliver_module_query = 10;
+    ManagedRuntimeClientRealtimePublishRequestV1 publish_client_realtime = 11;
   }
 }
 message ManagedRuntimeControlAckV1 {}
@@ -166,6 +185,7 @@ message ManagedRuntimeControlResponseV1 {
     ManagedRuntimeClientDeliveryResponseV1 client_delivery = 8;
     ManagedRuntimeModuleQueryResponseV1 module_query_route = 9;
     ManagedRuntimeModuleQueryResponseV1 module_query_delivery = 10;
+    ManagedRuntimeClientRealtimePublishResponseV1 client_realtime_publish = 11;
   }
   string error_code = 15;
 }

@@ -1,4 +1,5 @@
 pub mod blob;
+pub mod client_realtime;
 pub mod deployment;
 pub mod descriptor;
 pub mod distribution;
