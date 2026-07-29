@@ -94,6 +94,22 @@ pub struct MailDeliveryIntentAdmissionV1 {
     pub custody_transfer_source_proof: Vec<u8>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailDeliveryIntentJobV1 {
+    pub intent_id: [u8; 16],
+    pub command_message_id: [u8; 16],
+    pub connection_id: String,
+    pub provider_thread_id: String,
+    pub reply_to_provider_message_id: Option<String>,
+    pub recipient: String,
+    pub subject: String,
+    pub body_reference_id: [u8; 16],
+    pub body_declared_bytes: u64,
+    pub body_sha256: [u8; 32],
+    pub custody_transfer_source_proof: Vec<u8>,
+    pub provider_operation_id: String,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailDeliveryIntentInboxOutcomeV1 {
     Pending,
