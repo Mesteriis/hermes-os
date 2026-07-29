@@ -21,6 +21,7 @@ use hermes_storage_protocol::{
 };
 use prost::Message;
 
+use super::admission::quarantine_invalid_desired_bindings;
 use super::apply::{apply_active_binding, error_code as apply_error_code};
 use super::framing::{read_frame, write_frame};
 use super::handshake::{ManagedStorageRuntimeIdentityV1, authenticate, authenticate_on_channel};
@@ -66,6 +67,7 @@ fn serve_bootstrapped(
     identity: ManagedStorageRuntimeIdentityV1,
     configuration: StorageRuntimeConfigurationV1,
 ) -> Result<(), String> {
+    let configuration = quarantine_invalid_desired_bindings(&configuration);
     let active_bindings = bootstrap_platform_services(&mut channel, &identity, &configuration)?;
     announce_ready(&mut channel, &identity)?;
     serve_authenticated(channel, identity, configuration, active_bindings)

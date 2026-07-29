@@ -247,34 +247,36 @@ fn managed_attachment_security_engine_starts_with_exact_signed_contracts() {
     assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::Threat), 1);
     assert_eq!(clamav.outcome_count(ClamAvFixtureOutcomeV1::HeldClean), 1);
 
-    let stale_source_blob = blob_source.write(
+    let successor_source_plaintext =
+        b"fixture-custody source generation successor before target-bound transfer";
+    let successor_source_blob = blob_source.write(
         &store,
         &supervisor,
         &data,
         [87; 16],
-        b"fixture-custody source generation stale before target-bound transfer",
+        successor_source_plaintext,
     );
-    let stale_source_attachment = prepare_communications_attachment_for_scan(
+    let successor_source_attachment = prepare_communications_attachment_for_scan(
         &store,
-        "source-stale",
-        stale_source_blob.declared_size,
-        stale_source_blob.receipt_sha256,
+        "source-successor",
+        successor_source_blob.declared_size,
+        successor_source_blob.receipt_sha256,
     );
     blob_source.advance_runtime_generation(&store, "72727272727272727272727272727272");
-    assert_attachment_security_custody_failure_is_fail_closed(
+    assert_clean_attachment_security_verdict_flow(
         &store,
-        &stale_source_attachment,
-        &stale_source_blob,
+        &successor_source_attachment,
+        &successor_source_blob,
         &clamav,
-        ClamAvFixtureOutcomeV1::CustodyProbe,
+        successor_source_plaintext,
     );
     assert_eq!(
         wait_for_attachment_state(
             &store,
             &supervisor,
-            stale_source_attachment.attachment_anchor_id
+            successor_source_attachment.attachment_anchor_id
         ),
-        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::BlobAdmitted
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
             as u32
     );
 

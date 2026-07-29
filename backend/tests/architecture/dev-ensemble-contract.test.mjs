@@ -17,6 +17,10 @@ const sources = {
   rootMakefile: new URL('Makefile', PROJECT_ROOT),
   backendMakefile: new URL('Makefile', BACKEND_ROOT),
   assembly: new URL('scripts/dev-ensemble.sh', BACKEND_ROOT),
+  authenticatedCompose: new URL(
+    'development/authenticated/compose.yaml',
+    BACKEND_ROOT,
+  ),
   release: new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT),
   developmentAssembly: new URL('development/assembly/src/main.rs', BACKEND_ROOT),
   probe: new URL('scripts/probe-dev-gateway.mjs', BACKEND_ROOT),
@@ -40,6 +44,7 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
     rootMakefile,
     backendMakefile,
     assembly,
+    authenticatedCompose,
     release,
     developmentAssembly,
     probe,
@@ -66,6 +71,14 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   assert.match(assembly, /materialize-dev-release\.sh/);
   assert.match(assembly, /development\/authenticated\/compose\.yaml/);
   assert.match(assembly, /run_compose up --detach --wait/);
+  assert.match(assembly, /PostgreSQL, PgBouncer, NATS and ClamAV infrastructure/);
+  assert.match(authenticatedCompose, /image: clamav\/clamav:1\.5\.3-debian13-slim/);
+  assert.match(
+    authenticatedCompose,
+    /127\.0\.0\.1:\$\{HERMES_ATTACHMENT_SECURITY_CLAMAV_PORT:-3310\}:3310/,
+  );
+  assert.match(authenticatedCompose, /test: \["CMD", "clamdscan", "--ping", "1"\]/);
+  assert.doesNotMatch(authenticatedCompose, /(?:^|\s)(?:0\.0\.0\.0|::):.*3310/m);
   assert.match(assembly, /provision-platform/);
   assert.match(assembly, /start-ensemble/);
   assert.match(assembly, /Admitting the exact Communications and provider module plan/);

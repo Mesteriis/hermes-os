@@ -89,7 +89,18 @@ test('Attachment Security core and ClamAV adapter remain separate engine units',
 });
 
 test('Attachment Security persistence owns the durable join, bounded jobs and exact outbox', async () => {
-  const [manifest, schema, custodySchema, observation, jobs] = await Promise.all([
+  const [
+    manifest,
+    schema,
+    custodySchema,
+    retryPolicySchema,
+    retryPolicyIndexSchema,
+    scannerRetryPolicyIndexSchema,
+    observation,
+    jobs,
+    recovery,
+    runtime,
+  ] = await Promise.all([
     readFile(new URL('src/attachment-security-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL(
@@ -106,10 +117,36 @@ test('Attachment Security persistence owns the durable join, bounded jobs and ex
       'utf8',
     ),
     readFile(
+      new URL(
+        'src/attachment-security-persistence/migrations/0003_attachment_security_custody_successor_retry_policy.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/attachment-security-persistence/migrations/0004_attachment_security_retry_policy_recovery_index.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/attachment-security-persistence/migrations/0005_attachment_security_scanner_retry_policy_recovery_index.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
       new URL('src/attachment-security-persistence/src/observation.rs', BACKEND_ROOT),
       'utf8',
     ),
     readFile(new URL('src/attachment-security-persistence/src/jobs.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL('src/attachment-security-persistence/src/recovery.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(new URL('src/attachment-security-runtime/src/runtime.rs', BACKEND_ROOT), 'utf8'),
   ]);
 
   assert.match(manifest, /surface = "persistence"/);
@@ -129,6 +166,35 @@ test('Attachment Security persistence owns the durable join, bounded jobs and ex
   assert.match(custodySchema, /octet_length\(custody_transfer_source_proof\) BETWEEN 1 AND 2048/);
   assert.match(custodySchema, /target_blob_reference_id BYTEA/);
   assert.match(custodySchema, /attachment_security_target_blob_receipt_complete/);
+  assert.match(retryPolicySchema, /retry_policy_revision SMALLINT NOT NULL DEFAULT 1/);
+  assert.doesNotMatch(retryPolicySchema, /\bUPDATE\b|ALTER COLUMN/);
+  assert.match(
+    retryPolicyIndexSchema,
+    /attachment_security_scan_jobs_retry_policy_recovery_idx/,
+  );
+  assert.match(retryPolicyIndexSchema, /retry_policy_revision/);
+  assert.match(retryPolicyIndexSchema, /WHERE state = 3/);
+  assert.match(
+    scannerRetryPolicyIndexSchema,
+    /attachment_security_scan_jobs_scanner_retry_policy_recovery_idx/,
+  );
+  assert.match(scannerRetryPolicyIndexSchema, /target_blob_reference_id IS NOT NULL/);
+  assert.match(scannerRetryPolicyIndexSchema, /target_blob_receipt_sha256 IS NOT NULL/);
+  assert.match(scannerRetryPolicyIndexSchema, /outbox_message_id IS NULL/);
+  assert.match(recovery, /WHERE state = 3/);
+  assert.match(recovery, /target_blob_reference_id IS NULL/);
+  assert.match(recovery, /target_blob_receipt_sha256 IS NULL/);
+  assert.match(recovery, /outbox_message_id IS NULL/);
+  assert.match(recovery, /attempt_count = 0/);
+  assert.match(recovery, /retry_policy_revision = \$1/);
+  assert.match(recovery, /retry_policy_revision = 1/);
+  assert.match(recovery, /target_blob_reference_id IS NOT NULL/);
+  assert.match(recovery, /target_blob_receipt_sha256 IS NOT NULL/);
+  assert.match(recovery, /retry_policy_revision = 2/);
+  assert.match(recovery, /ATTACHMENT_SECURITY_RETRY_POLICY_REVISION_V3/);
+  assert.match(jobs, /retry_policy_revision\) VALUES \([\s\S]*\$12\)/);
+  assert.match(jobs, /ATTACHMENT_SECURITY_RETRY_POLICY_REVISION_V3/);
+  assert.match(runtime, /reconcile_retry_policies_v3\(\)/);
   assert.match(observation, /attachment_security_join_locks/);
   assert.match(observation, /FOR UPDATE/);
   assert.match(observation, /decide_scan_join_v1/);
@@ -353,6 +419,13 @@ test('Cross-owner Blob custody binds a public module audience and current runtim
   assert.doesNotMatch(mailRuntime, /hermes-attachment-security-runtime|hermes-communications-runtime/);
   assert.match(kernelSession, /expectation\.module_id\(\)/);
   assert.match(kernelSession, /target_registration_id: expectation\.registration_id\(\)\.to_owned\(\)/);
+  const transferStart = kernelSession.indexOf('fn issue_custody_transfer(');
+  const transferEnd = kernelSession.indexOf('\npub(crate) fn valid_request(', transferStart);
+  const transfer = kernelSession.slice(transferStart, transferEnd);
+  assert.match(transfer, /catalog::resolve\(&\*self\.store\)/);
+  assert.match(transfer, /entry\.grant_epoch\(\) == source\.grant_epoch/);
+  assert.match(transfer, /entry\.request\(\)\.allows\(ModuleBlobOperationV1::Write\)/);
+  assert.doesNotMatch(transfer, /current_managed_runtime_matches/);
   assert.doesNotMatch(blobSession, /source\.owner_id != target_reference\.owner_id\(\)/);
   assert.match(blobSession, /kernel_signed_transfer_keeps_distinct_cross_owner_fences/);
 });

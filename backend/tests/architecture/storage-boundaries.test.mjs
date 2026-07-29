@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { validateStorageEntries } from '../../scripts/lib/storage-boundaries.mjs';
@@ -19,6 +20,27 @@ function storageEntry(content, overrides = {}) {
 function codes(violations) {
   return new Set(violations.map(({ code }) => code));
 }
+
+test('Storage quarantines policy-invalid owner bundles before bootstrap grants', async () => {
+  const [admission, runtime] = await Promise.all([
+    readFile(
+      new URL('../../src/platform/storage/runtime/src/control/admission.rs', import.meta.url),
+      'utf8',
+    ),
+    readFile(
+      new URL('../../src/platform/storage/runtime/src/control/runtime.rs', import.meta.url),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(admission, /admit_storage_bundle\(bundle\)\.is_ok\(\)/);
+  assert.match(admission, /desired_bindings[\s\S]*admissible_bundle_keys/);
+  assert.match(admission, /desired_bundles[\s\S]*referenced_bundle_keys/);
+  assert.match(
+    runtime,
+    /quarantine_invalid_desired_bindings\(&configuration\)[\s\S]*bootstrap_platform_services/,
+  );
+});
 
 test('allows schema-qualified owner-local SQL and additive migrations', () => {
   const violations = validateStorageEntries(policy(), [

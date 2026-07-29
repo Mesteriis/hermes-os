@@ -217,7 +217,7 @@ printf '%s\n' "$status_output" | grep -qx 'owner_device_signer=ready' \
 runtime_dir="$("$development_assembly_bin" --data-dir "$data_dir" runtime-directory)"
 require_absolute_directory_path "development runtime directory" "$runtime_dir"
 
-printf '%s\n' 'Starting authenticated PostgreSQL, PgBouncer and NATS infrastructure...'
+printf '%s\n' 'Starting authenticated PostgreSQL, PgBouncer, NATS and ClamAV infrastructure...'
 docker compose -f "$legacy_compose_file" down --remove-orphans >/dev/null 2>&1 || true
 run_compose up --detach --wait
 

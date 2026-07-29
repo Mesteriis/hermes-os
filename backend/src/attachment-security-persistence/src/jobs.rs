@@ -10,8 +10,9 @@ use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::{
-    AttachmentSecurityPersistenceErrorV1, AttachmentSecurityPersistenceV1,
-    AttachmentSecurityRetryPolicyV1, id16, id32, valid_id16, valid_sha256, valid_timestamp,
+    ATTACHMENT_SECURITY_RETRY_POLICY_REVISION_V3, AttachmentSecurityPersistenceErrorV1,
+    AttachmentSecurityPersistenceV1, AttachmentSecurityRetryPolicyV1, id16, id32, valid_id16,
+    valid_sha256, valid_timestamp,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -50,7 +51,7 @@ pub(crate) async fn enqueue_scan_job(
     let max_attempts = i32::try_from(retry_policy.max_attempts())
         .map_err(|_| AttachmentSecurityPersistenceErrorV1::InvalidInput)?;
     sqlx::query(
-        "INSERT INTO hermes_data.attachment_security_scan_jobs (job_id, candidate_message_id, canonical_state_message_id, attachment_anchor_id, blob_reference_id, declared_size, blob_receipt_sha256, causation_message_id, correlation_id, state, max_attempts, next_attempt_at_unix_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $11) ON CONFLICT (job_id) DO NOTHING",
+        "INSERT INTO hermes_data.attachment_security_scan_jobs (job_id, candidate_message_id, canonical_state_message_id, attachment_anchor_id, blob_reference_id, declared_size, blob_receipt_sha256, causation_message_id, correlation_id, state, max_attempts, next_attempt_at_unix_seconds, retry_policy_revision) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $11, $12) ON CONFLICT (job_id) DO NOTHING",
     )
     .bind(job_id.as_slice())
     .bind(job.candidate_message_id.as_slice())
@@ -63,6 +64,7 @@ pub(crate) async fn enqueue_scan_job(
     .bind(job.correlation_id.as_slice())
     .bind(max_attempts)
     .bind(created_at_unix_seconds)
+    .bind(ATTACHMENT_SECURITY_RETRY_POLICY_REVISION_V3)
     .execute(&mut **transaction)
     .await
     .map_err(|_| AttachmentSecurityPersistenceErrorV1::StorageUnavailable)?;

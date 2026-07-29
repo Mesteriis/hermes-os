@@ -1,5 +1,6 @@
 //! Storage-side authenticated inherited Kernel control transport.
 
+mod admission;
 mod apply;
 mod framing;
 mod handshake;

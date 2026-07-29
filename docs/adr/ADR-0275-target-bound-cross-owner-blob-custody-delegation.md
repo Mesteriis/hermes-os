@@ -23,6 +23,9 @@ wrong-target/current-runtime fences это закрывает stale/revoke/outag
 этого решения. Exact `attachment_security_engine_v1` inventory теперь
 допущен отдельным production phase gate; Communications остаётся доменом,
 Attachment Security — engine, а integrations в inventory не добавлены.
+ADR-0327 последующим live evidence уточняет source fence: exact current source
+registration/grant epoch сохраняются, а issuance runtime generation является
+provenance и не блокирует approved process successor.
 
 Зависит от:
 

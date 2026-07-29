@@ -177,6 +177,10 @@ impl AttachmentSecurityRuntimeV1 {
             .verify_storage_ready()
             .await
             .map_err(|_| AttachmentSecurityRuntimeErrorV1::Unavailable)?;
+        persistence
+            .reconcile_retry_policies_v3()
+            .await
+            .map_err(|_| AttachmentSecurityRuntimeErrorV1::Unavailable)?;
         let mut control_channel = leases.into_route_port().into_channel();
         signal_managed_runtime_ready(&mut control_channel, admission)?;
         control_channel

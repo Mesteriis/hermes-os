@@ -2,6 +2,7 @@
 
 mod jobs;
 mod observation;
+mod recovery;
 mod schema;
 
 use hermes_attachment_security_core::AttachmentSecurityQuarantineEvidenceV1;
@@ -14,6 +15,9 @@ use sqlx::{
 pub use jobs::{
     AttachmentSecurityTargetBlobReceiptV1, ClaimedAttachmentSecurityScanJobV1,
     RetryAttachmentSecurityScanJobOutcomeV1, attachment_security_scan_job_id_v1,
+};
+pub use recovery::{
+    ATTACHMENT_SECURITY_RETRY_POLICY_REVISION_V2, ATTACHMENT_SECURITY_RETRY_POLICY_REVISION_V3,
 };
 pub use schema::{
     ATTACHMENT_SECURITY_SCHEMA_V1, ATTACHMENT_SECURITY_SCHEMA_V2,

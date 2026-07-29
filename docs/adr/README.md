@@ -134,6 +134,10 @@ policy через ссылки из новых документов.
 - [ADR-0323: Gmail preauthorization with unresolved mailbox identity](ADR-0323-gmail-preauthorization-with-unresolved-mailbox-identity.md)
 - [ADR-0324: Empty Protobuf client RPC request semantics](ADR-0324-empty-protobuf-client-rpc-request-semantics.md)
 - [ADR-0325: Bounded asynchronous Mail sync execution](ADR-0325-bounded-asynchronous-mail-sync-execution.md)
+- [ADR-0326: Audience-scoped Vault request sequence](ADR-0326-vault-audience-sequenced-replay-fencing.md)
+- [ADR-0327: Durable target-bound Blob delegation across source successors](ADR-0327-durable-target-bound-blob-delegation-across-source-successors.md)
+- [ADR-0328: Storage bootstrap quarantine for policy-invalid owner bundles](ADR-0328-storage-bootstrap-quarantine-for-policy-invalid-owner-bundles.md)
+- [ADR-0329: Full-stack development Attachment scanner contour](ADR-0329-full-stack-development-attachment-scanner-contour.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -483,3 +487,16 @@ ADR-0326 заменяет исчерпаемый Vault replay set на audience-
 sequence high-watermark: owner-neutral runtime protocol владеет exact opaque
 request ID рядом с ciphertext route, private Vault хранит bounded число runtime
 sessions, а Mail/Blob/Communications не получают доступ к replay lifecycle.
+ADR-0327 сохраняет current source registration/grant fencing для target-bound
+Blob delegation, но разрешает durable event пережить benign successor
+generation source-процесса без hidden synchronous lease между integration и
+engine.
+ADR-0328 не позволяет policy-invalid owner bundle обрушить весь Storage:
+Storage Runtime до выдачи credentials/roles/pool исключает invalid binding из
+effective bootstrap, остальные owners продолжают работу, а replacement идёт
+через обычный immutable successor без reset Control Store или ослабления AST
+policy.
+ADR-0329 добавляет реальный ClamAV daemon в authenticated full-stack `make dev`
+как loopback-only scanner infrastructure, сохраняя engine build units и
+разрешая только одно exact owner-local восстановление jobs, исчерпанных до
+появления scanner contour.

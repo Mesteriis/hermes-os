@@ -36,6 +36,12 @@ fn admits_the_canonical_communications_bundle() {
 }
 
 #[test]
+fn admits_the_canonical_attachment_security_bundle() {
+    let bundle = hermes_attachment_security_persistence::attachment_security_storage_bundle_v1();
+    assert_eq!(admit_storage_bundle(&bundle), Ok(()));
+}
+
+#[test]
 fn admits_the_canonical_telegram_bundle() {
     let bundle = hermes_telegram_persistence::telegram_storage_bundle_v1();
     assert_eq!(admit_storage_bundle(&bundle), Ok(()));

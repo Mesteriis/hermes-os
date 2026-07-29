@@ -1,9 +1,10 @@
 name: hermes-storage-authenticated-development
 
-# Authenticated development Storage contour. The make dev lifecycle leaves these
-# services running across frontend/Kernel restarts so owner data is not silently
-# discarded. Passwords remain Docker secret files; never add secret values to
-# this directory or environment variables.
+# Authenticated development infrastructure contour. The make dev lifecycle
+# leaves these services running across frontend/Kernel restarts so owner data is
+# not silently discarded and scan jobs can resume. Passwords remain Docker
+# secret files; never add secret values to this directory or environment
+# variables.
 services:
   nats:
     image: nats:2.10-alpine
@@ -76,6 +77,22 @@ services:
         limits:
           cpus: "0.5"
           memory: 128M
+
+  clamav:
+    image: clamav/clamav:1.5.3-debian13-slim
+    ports:
+      - 127.0.0.1:${HERMES_ATTACHMENT_SECURITY_CLAMAV_PORT:-3310}:3310
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
 
 networks:
   platform: {}

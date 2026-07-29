@@ -24,6 +24,9 @@ fence. Exact `attachment_security_engine_v1` production inventory теперь
 никакой integration или Communications implementation package не добавлен в
 engine build unit.
 ADR-0275 определяет stable target-bound proof для этого cross-owner handoff.
+ADR-0327 уточняет successor semantics: current source registration/grant
+обязательны, но benign process generation successor не уничтожает уже
+опубликованную target-bound durable delegation.
 
 Зависит от:
 
