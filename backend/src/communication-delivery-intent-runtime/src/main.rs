@@ -156,11 +156,24 @@ where
             Err(error) => return Err(runtime_error(error)),
         }
         match executor.block_on(runtime.consume_next_terminal_result_v1(now)) {
-            Ok(_) | Err(DeliveryIntentRuntimeErrorV1::Unavailable) => {}
+            Ok(_) => {}
+            Err(error) if retryable_terminal_result_error(error) => {}
             Err(error) => return Err(runtime_error(error)),
         }
         std::thread::sleep(Duration::from_millis(25));
     }
+}
+
+fn retryable_terminal_result_error(error: DeliveryIntentRuntimeErrorV1) -> bool {
+    matches!(
+        error,
+        DeliveryIntentRuntimeErrorV1::Unavailable
+            | DeliveryIntentRuntimeErrorV1::Persistence(
+                DeliveryIntentPersistenceErrorV1::StorageUnavailable
+                    | DeliveryIntentPersistenceErrorV1::Conflict
+                    | DeliveryIntentPersistenceErrorV1::ClaimLost
+            )
+    )
 }
 
 fn runtime_error(error: DeliveryIntentRuntimeErrorV1) -> String {
@@ -244,4 +257,22 @@ fn read_contract(path: &Path) -> Result<Vec<u8>, String> {
     }
     std::fs::read(path)
         .map_err(|_| "Communication Delivery Intent contract is unavailable".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn orphan_terminal_result_is_retriable_without_acknowledgement() {
+        assert!(retryable_terminal_result_error(
+            DeliveryIntentRuntimeErrorV1::Persistence(DeliveryIntentPersistenceErrorV1::Conflict,),
+        ));
+        assert!(!retryable_terminal_result_error(
+            DeliveryIntentRuntimeErrorV1::Persistence(DeliveryIntentPersistenceErrorV1::InvalidRow,),
+        ));
+        assert!(!retryable_terminal_result_error(
+            DeliveryIntentRuntimeErrorV1::EventContract,
+        ));
+    }
 }
