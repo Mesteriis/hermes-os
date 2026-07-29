@@ -28,6 +28,10 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
     clientRealtime,
     admission,
     assembly,
+    managedSetup,
+    managedFlow,
+    conformanceRunner,
+    devRelease,
   ] =
     await Promise.all([
     readFile(
@@ -156,6 +160,28 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
         ),
         'utf8',
       ),
+      readFile(
+        new URL(
+          'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/bulk_action_managed_setup.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/bulk_action_managed_flow.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT),
+        'utf8',
+      ),
     ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -167,7 +193,7 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
     gate: 'communication_bulk_action_v1',
     role: 'workflow',
     owner: 'communication_bulk_action',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'communication_delivery_intent_v1',
       'capability_routed_module_request_rpc_v1',
@@ -181,7 +207,7 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
   assert.match(adr, /Принятый ADR сам по себе gate не открывает/);
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_bulk_action_assembly_v1',
+    'communication_bulk_action_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages
@@ -239,6 +265,28 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
   assert.match(assembly, /communication_bulk_action_module_descriptor_v1/);
   assert.match(assembly, /communication_bulk_action_storage_bundle_v1/);
   assert.match(assembly, /communication_bulk_action\.runtime\.v1/);
+  assert.match(
+    managedSetup,
+    /communication_delivery_intent_module_descriptor_v1/,
+  );
+  assert.match(managedSetup, /configure_bulk_action_request_route/);
+  assert.match(managedFlow, /managed_bulk_action_reaches_gateway_sse_and_replays_after_restart/);
+  assert.match(managedFlow, /admit_delivery_intent_runtime/);
+  assert.match(managedFlow, /COMMUNICATION_BULK_ACTION_QUERY_CONNECT_PATH_V1/);
+  assert.match(managedFlow, /last-event-id/);
+  assert.match(
+    managedFlow,
+    /BulkDeliveryBatchStateCompleted[\s\S]*restart_bulk_action_runtime/,
+  );
+  assert.match(
+    conformanceRunner,
+    /HERMES_COMMUNICATION_BULK_ACTION_RUNTIME_BIN/,
+  );
+  assert.match(
+    conformanceRunner,
+    /managed_bulk_action_reaches_gateway_sse_and_replays_after_restart/,
+  );
+  assert.match(devRelease, /hermes-communication-bulk-action-assembly/);
   assert.doesNotMatch(
     `${runtimeWorker}\n${runtimeClient}`,
     /body_utf8.*(?:log|event|status)|hermes-(?:mail|telegram|whatsapp|zulip)/,

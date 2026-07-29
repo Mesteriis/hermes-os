@@ -507,7 +507,7 @@
       "gate": "communication_bulk_action_v1",
       "role": "workflow",
       "owner": "communication_bulk_action",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "communication_delivery_intent_v1",
         "capability_routed_module_request_rpc_v1"

@@ -158,7 +158,16 @@ impl BulkDeliveryManagedRuntimeV1 {
             .request
             .filter(|request| validate_module_client_request_v1(request).is_ok())
         else {
-            return Err(BulkDeliveryManagedRuntimeErrorV1::Unavailable);
+            self.control_channel
+                .write_response(
+                    correlation_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: None,
+                        error_code: "managed_runtime_control_invalid_client_delivery".to_owned(),
+                    },
+                )
+                .map_err(|_| BulkDeliveryManagedRuntimeErrorV1::Unavailable)?;
+            return Ok(true);
         };
         self.control_channel
             .inner_mut()

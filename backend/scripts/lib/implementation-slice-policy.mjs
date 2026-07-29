@@ -2646,7 +2646,10 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'communication_bulk_action_assembly_v1') {
+  if (
+    currentSlice === 'communication_bulk_action_assembly_v1'
+    || currentSlice === 'communication_bulk_action_v1'
+  ) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,

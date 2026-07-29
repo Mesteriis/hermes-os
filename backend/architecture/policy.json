@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_bulk_action_assembly_v1",
+    "currentSlice": "communication_bulk_action_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {

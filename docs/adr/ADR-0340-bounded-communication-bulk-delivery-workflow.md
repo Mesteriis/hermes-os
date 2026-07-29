@@ -4,8 +4,12 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: не реализовано. Gate
-`communication_bulk_action_v1` остаётся `planned`.
+Состояние реализации: implemented. Gate
+`communication_bulk_action_v1` открыт атомарно вместе с отдельными contract,
+core, persistence, managed runtime и assembly units. Live managed contour
+доказывает Gateway Start/Status, replayable SSE `accepted -> completed`,
+capability-routed `request_rpc` в отдельный delivery-intent runtime и
+восстановление stable cursor после restart.
 
 Уточняет:
 
@@ -166,6 +170,7 @@ Gate открывается только вместе с:
 10. live managed contour через реальный delivery-intent runtime;
 11. architecture, SRP, Cargo, Clippy и full test gates.
 
+Gate открыт как `implemented` только после прохождения перечисленного evidence.
 Принятый ADR сам по себе gate не открывает.
 
 ## Отклонённые варианты
