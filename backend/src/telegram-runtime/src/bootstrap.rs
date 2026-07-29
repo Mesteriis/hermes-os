@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
-    request_managed_runtime_event_access_v2,
+    RuntimeSubscribePermitV1, request_managed_runtime_event_access_v2,
 };
 use hermes_managed_vault_client::{
     ManagedProviderCredentialClientV2, ManagedProviderCredentialContextV1,
@@ -30,6 +30,7 @@ use hermes_telegram_api::{
 use hermes_telegram_automation_persistence::TelegramAutomationPersistence;
 use hermes_telegram_calls_persistence::TelegramCallsPersistence;
 use hermes_telegram_core::credential_lease_purpose_for_purpose;
+use hermes_telegram_delivery_intent_contract::telegram_delivery_intent_execute_contract_reference_v1;
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{TdJsonLibrary, TdlibAuthorizationParameters, TdlibError};
 use hermes_vault_protocol::SecretClassV1;
@@ -103,6 +104,7 @@ pub struct TelegramAdmittedRuntime {
     pub(crate) reconfiguration_context: TelegramProviderReconfigurationContextV1,
     pub(crate) event_connection: RuntimeJetStreamConnection,
     pub(crate) event_publish_permit: RuntimePublishPermitV1,
+    pub(crate) delivery_intent_subscribe_permit: RuntimeSubscribePermitV1,
 }
 
 /// Resources owned by the long-lived provider polling loop after admission.
@@ -116,6 +118,7 @@ pub struct TelegramAdmittedProviderLoop {
     pub(crate) reconfiguration_context: TelegramProviderReconfigurationContextV1,
     pub(crate) event_connection: RuntimeJetStreamConnection,
     pub(crate) event_publish_permit: RuntimePublishPermitV1,
+    pub(crate) delivery_intent_subscribe_permit: RuntimeSubscribePermitV1,
 }
 
 #[derive(Clone)]
@@ -291,6 +294,16 @@ pub async fn open_admitted_runtime(
             identity.grant_epoch(),
         )
         .map_err(|_| TelegramBootstrapError::EventHub)?;
+    let delivery_intent_subscribe_permit = bind_delivery_intent_subscribe_permit(
+        event_access
+            .subscribe_permits(
+                identity.registration_id(),
+                identity.runtime_instance_id(),
+                identity.runtime_generation(),
+                identity.grant_epoch(),
+            )
+            .map_err(|_| TelegramBootstrapError::EventHub)?,
+    )?;
     let event_connection = JetStreamClient::connect_runtime_with_jwt(
         event_hub_endpoint,
         event_identity,
@@ -329,7 +342,28 @@ pub async fn open_admitted_runtime(
         },
         event_connection,
         event_publish_permit,
+        delivery_intent_subscribe_permit,
     })
+}
+
+fn bind_delivery_intent_subscribe_permit(
+    mut permits: Vec<RuntimeSubscribePermitV1>,
+) -> Result<RuntimeSubscribePermitV1, TelegramBootstrapError> {
+    if permits.len() != 1 {
+        return Err(TelegramBootstrapError::EventHub);
+    }
+    let permit = permits.pop().ok_or(TelegramBootstrapError::EventHub)?;
+    let expected = telegram_delivery_intent_execute_contract_reference_v1();
+    if permit.contract().is_none_or(|contract| {
+        contract.owner != expected.owner
+            || contract.name != expected.name
+            || contract.major != expected.major
+            || contract.revision != expected.revision
+            || contract.schema_sha256 != expected.schema_sha256
+    }) {
+        return Err(TelegramBootstrapError::EventHub);
+    }
+    Ok(permit)
 }
 
 pub(crate) fn credential_revisions(
@@ -394,6 +428,7 @@ impl TelegramAdmittedRuntime {
             reconfiguration_context: self.reconfiguration_context,
             event_connection: self.event_connection,
             event_publish_permit: self.event_publish_permit,
+            delivery_intent_subscribe_permit: self.delivery_intent_subscribe_permit,
         }
     }
 

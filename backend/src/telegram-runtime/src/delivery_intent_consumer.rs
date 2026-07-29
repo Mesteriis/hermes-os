@@ -4,6 +4,9 @@
 //! provider discriminator and imports no workflow or Communications domain
 //! implementation.
 
+use hermes_events_jetstream::{
+    RuntimeJetStreamConnection, RuntimeSubscribePermitV1, receive_runtime_pull_delivery,
+};
 use hermes_events_protocol::{
     delivery::{OutboxRecordError, OutboxRecordV1},
     v1::{
@@ -70,10 +73,40 @@ pub struct TelegramDeliveryIntentResultContextV1 {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TelegramDeliveryIntentConsumeErrorV1 {
+    Unavailable,
     Decode(TelegramDeliveryIntentDecodeErrorV1),
     InvalidResultContext,
     InvalidResultEnvelope,
     Persistence,
+}
+
+pub async fn consume_next_telegram_delivery_intent_v1(
+    store: &TelegramDeliveryIntentStoreV1,
+    connection: &RuntimeJetStreamConnection,
+    permit: &RuntimeSubscribePermitV1,
+    expected_logical_owner_id: &str,
+    result_context: &TelegramDeliveryIntentResultContextV1,
+) -> Result<TelegramDeliveryIntentInboxOutcomeV1, TelegramDeliveryIntentConsumeErrorV1> {
+    let delivery = receive_runtime_pull_delivery(connection, permit)
+        .await
+        .map_err(|_| TelegramDeliveryIntentConsumeErrorV1::Unavailable)?;
+    let record = OutboxRecordV1::accept(delivery.exact_bytes().to_vec()).map_err(|_| {
+        TelegramDeliveryIntentConsumeErrorV1::Decode(
+            TelegramDeliveryIntentDecodeErrorV1::InvalidEnvelope,
+        )
+    })?;
+    let outcome = accept_telegram_delivery_intent_v1(
+        store,
+        &record,
+        expected_logical_owner_id,
+        result_context,
+    )
+    .await?;
+    delivery
+        .acknowledge()
+        .await
+        .map_err(|_| TelegramDeliveryIntentConsumeErrorV1::Unavailable)?;
+    Ok(outcome)
 }
 
 pub async fn accept_telegram_delivery_intent_v1(

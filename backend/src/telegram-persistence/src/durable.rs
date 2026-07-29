@@ -254,6 +254,7 @@ pub enum TelegramDurablePersistenceError {
     InvalidReconfigurationTransition,
     ConflictingDeliveryRouteLocator,
     ConflictingDeliveryIntentInbox,
+    InvalidDeliveryIntentTransition,
 }
 
 impl TelegramDurablePersistence {

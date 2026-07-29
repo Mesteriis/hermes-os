@@ -27,6 +27,12 @@ use hermes_telegram_calls_api::contract::{
     TELEGRAM_CALLS_DESCRIPTOR_SET_V1, TelegramCallsContractV1,
 };
 use hermes_telegram_core::{TELEGRAM_API_HASH_PURPOSE_ID, TELEGRAM_SESSION_STORE_KEY_PURPOSE_ID};
+use hermes_telegram_delivery_intent_contract::{
+    TELEGRAM_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1,
+    telegram_delivery_intent_execute_consume_request_v1,
+    telegram_delivery_intent_rejected_publish_request_v1,
+    telegram_delivery_intent_succeeded_publish_request_v1,
+};
 use sha2::{Digest, Sha256};
 
 use crate::settings::{
@@ -69,6 +75,7 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         telegram_calls_client_capability_v1(TelegramCallsContractV1::Realtime),
         telegram_client_capability_v1(TelegramClientContractV1::Command),
         telegram_credentials_capability_v1(),
+        telegram_delivery_intent_capability_v1(),
         telegram_events_capability_v1(),
         telegram_client_capability_v1(TelegramClientContractV1::Lifecycle),
         telegram_client_capability_v1(TelegramClientContractV1::Query),
@@ -253,6 +260,20 @@ fn telegram_events_capability_v1() -> CapabilityDescriptorV1 {
     }
 }
 
+fn telegram_delivery_intent_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: TELEGRAM_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![
+            telegram_delivery_intent_execute_consume_request_v1(),
+            telegram_delivery_intent_succeeded_publish_request_v1(),
+            telegram_delivery_intent_rejected_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
+}
+
 fn telegram_runtime_capability_v1() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: TELEGRAM_RUNTIME_CAPABILITY_ID.to_owned(),
@@ -349,6 +370,7 @@ mod tests {
         TELEGRAM_RUNTIME_CAPABILITY_ID, TELEGRAM_SESSION_STORE_KEY_PROVISIONING_CAPABILITY_ID,
         TELEGRAM_STORAGE_CAPABILITY_ID, telegram_module_descriptor_v1,
     };
+    use hermes_telegram_delivery_intent_contract::TELEGRAM_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1;
 
     #[test]
     fn descriptor_is_valid_and_keeps_client_and_platform_capabilities_separate() {
@@ -373,6 +395,7 @@ mod tests {
                 "telegram.calls.realtime.v1",
                 "telegram.command.v1",
                 TELEGRAM_CREDENTIALS_CAPABILITY_ID,
+                TELEGRAM_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1,
                 TELEGRAM_EVENTS_CAPABILITY_ID,
                 "telegram.lifecycle.v1",
                 "telegram.query.v1",

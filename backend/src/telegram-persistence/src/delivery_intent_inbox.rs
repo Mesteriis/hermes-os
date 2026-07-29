@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS hermes_data.telegram_delivery_intent_result_outbox (
 );
 "#;
 
+pub const TELEGRAM_DELIVERY_INTENT_MAX_ATTEMPTS_V1: i32 = 12;
+
 #[derive(Clone)]
 pub struct TelegramDeliveryIntentStoreV1 {
     pool: PgPool,
@@ -97,6 +99,57 @@ pub struct TelegramDeliveryIntentAdmissionV1 {
     pub body_declared_bytes: u64,
     pub body_sha256: [u8; 32],
     pub custody_transfer_source_proof: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TelegramDeliveryIntentJobV1 {
+    pub intent_id: [u8; 16],
+    pub command_message_id: [u8; 16],
+    pub command_envelope_sha256: [u8; 32],
+    pub logical_owner_id: String,
+    pub account_id: String,
+    pub provider_chat_id: String,
+    pub reply_to_provider_message_id: Option<String>,
+    pub body_reference_id: [u8; 16],
+    pub body_declared_bytes: u64,
+    pub body_sha256: [u8; 32],
+    pub custody_transfer_source_proof: Vec<u8>,
+    pub provider_operation_id: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(i16)]
+pub enum TelegramDeliveryIntentJobStateV1 {
+    PendingCustody = 1,
+    BodyReady = 2,
+    DeliveryQueued = 3,
+    Succeeded = 4,
+    Rejected = 5,
+    OutcomeUnknown = 6,
+}
+
+impl TelegramDeliveryIntentJobStateV1 {
+    const fn from_i16(value: i16) -> Option<Self> {
+        match value {
+            1 => Some(Self::PendingCustody),
+            2 => Some(Self::BodyReady),
+            3 => Some(Self::DeliveryQueued),
+            4 => Some(Self::Succeeded),
+            5 => Some(Self::Rejected),
+            6 => Some(Self::OutcomeUnknown),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimedTelegramDeliveryIntentJobV1 {
+    pub job: TelegramDeliveryIntentJobV1,
+    pub state: TelegramDeliveryIntentJobStateV1,
+    pub target_body_reference_id: Option<[u8; 16]>,
+    pub target_body_receipt_sha256: Option<[u8; 32]>,
+    pub worker_id: String,
+    pub attempt_count: u32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -240,6 +293,378 @@ impl TelegramDeliveryIntentStoreV1 {
             .map_err(|_| TelegramDurablePersistenceError::Database)?;
         Ok(outcome)
     }
+
+    pub async fn claim_next_job(
+        &self,
+        worker_id: &str,
+        now_unix_seconds: i64,
+        lease_expires_at_unix_seconds: i64,
+    ) -> Result<Option<ClaimedTelegramDeliveryIntentJobV1>, TelegramDurablePersistenceError> {
+        if worker_id.trim().is_empty()
+            || worker_id.len() > 128
+            || now_unix_seconds <= 0
+            || lease_expires_at_unix_seconds <= now_unix_seconds
+        {
+            return Err(TelegramDurablePersistenceError::InvalidRow);
+        }
+        let row = sqlx::query(
+            "WITH next AS (
+                SELECT intent_id
+                FROM hermes_data.telegram_delivery_intent_jobs
+                WHERE state BETWEEN 1 AND 3
+                  AND next_attempt_at_unix_seconds <= $1
+                  AND (state = 3 OR attempt_count < $2)
+                  AND (
+                    claimed_by IS NULL OR
+                    lease_expires_at_unix_seconds IS NULL OR
+                    lease_expires_at_unix_seconds <= $1
+                  )
+                ORDER BY next_attempt_at_unix_seconds, intent_id
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+             )
+             UPDATE hermes_data.telegram_delivery_intent_jobs job
+             SET claimed_by = $3,
+                 lease_expires_at_unix_seconds = $4,
+                 attempt_count = CASE
+                    WHEN job.state = 3 THEN attempt_count
+                    ELSE attempt_count + 1
+                 END
+             FROM next, hermes_data.telegram_delivery_intent_inbox inbox
+             WHERE job.intent_id = next.intent_id
+               AND inbox.message_id = job.command_message_id
+             RETURNING job.*,
+                       inbox.envelope_sha256 AS command_envelope_sha256,
+                       inbox.logical_owner_id AS logical_owner_id",
+        )
+        .bind(now_unix_seconds)
+        .bind(TELEGRAM_DELIVERY_INTENT_MAX_ATTEMPTS_V1)
+        .bind(worker_id)
+        .bind(lease_expires_at_unix_seconds)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        row.map(|row| claimed_job_from_row(row, worker_id))
+            .transpose()
+    }
+
+    pub async fn record_target_body_receipt(
+        &self,
+        intent_id: [u8; 16],
+        worker_id: &str,
+        target_body_reference_id: [u8; 16],
+        target_body_receipt_sha256: [u8; 32],
+        now_unix_seconds: i64,
+    ) -> Result<(), TelegramDurablePersistenceError> {
+        if intent_id.iter().all(|byte| *byte == 0)
+            || worker_id.trim().is_empty()
+            || target_body_reference_id.iter().all(|byte| *byte == 0)
+            || target_body_receipt_sha256.iter().all(|byte| *byte == 0)
+            || now_unix_seconds <= 0
+        {
+            return Err(TelegramDurablePersistenceError::InvalidRow);
+        }
+        let updated = sqlx::query(
+            "UPDATE hermes_data.telegram_delivery_intent_jobs
+             SET state = $1,
+                 target_body_reference_id = $2,
+                 target_body_receipt_sha256 = $3,
+                 next_attempt_at_unix_seconds = $4,
+                 claimed_by = NULL,
+                 lease_expires_at_unix_seconds = NULL
+             WHERE intent_id = $5
+               AND state = $6
+               AND claimed_by = $7
+               AND lease_expires_at_unix_seconds > $4",
+        )
+        .bind(TelegramDeliveryIntentJobStateV1::BodyReady as i16)
+        .bind(target_body_reference_id.as_slice())
+        .bind(target_body_receipt_sha256.as_slice())
+        .bind(now_unix_seconds)
+        .bind(intent_id.as_slice())
+        .bind(TelegramDeliveryIntentJobStateV1::PendingCustody as i16)
+        .bind(worker_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        if updated.rows_affected() != 1 {
+            return Err(TelegramDurablePersistenceError::InvalidDeliveryIntentTransition);
+        }
+        Ok(())
+    }
+
+    pub async fn mark_delivery_queued(
+        &self,
+        intent_id: [u8; 16],
+        worker_id: &str,
+        now_unix_seconds: i64,
+    ) -> Result<(), TelegramDurablePersistenceError> {
+        if intent_id.iter().all(|byte| *byte == 0)
+            || worker_id.trim().is_empty()
+            || now_unix_seconds <= 0
+        {
+            return Err(TelegramDurablePersistenceError::InvalidRow);
+        }
+        let updated = sqlx::query(
+            "UPDATE hermes_data.telegram_delivery_intent_jobs
+             SET state = $1,
+                 next_attempt_at_unix_seconds = $2,
+                 claimed_by = NULL,
+                 lease_expires_at_unix_seconds = NULL
+             WHERE intent_id = $3
+               AND state = $4
+               AND claimed_by = $5
+               AND lease_expires_at_unix_seconds > $2
+               AND target_body_reference_id IS NOT NULL
+               AND target_body_receipt_sha256 IS NOT NULL",
+        )
+        .bind(TelegramDeliveryIntentJobStateV1::DeliveryQueued as i16)
+        .bind(now_unix_seconds)
+        .bind(intent_id.as_slice())
+        .bind(TelegramDeliveryIntentJobStateV1::BodyReady as i16)
+        .bind(worker_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        if updated.rows_affected() != 1 {
+            return Err(TelegramDurablePersistenceError::InvalidDeliveryIntentTransition);
+        }
+        Ok(())
+    }
+
+    pub async fn reschedule_claimed_job(
+        &self,
+        intent_id: [u8; 16],
+        worker_id: &str,
+        state: TelegramDeliveryIntentJobStateV1,
+        next_attempt_at_unix_seconds: i64,
+    ) -> Result<(), TelegramDurablePersistenceError> {
+        if intent_id.iter().all(|byte| *byte == 0)
+            || worker_id.trim().is_empty()
+            || !matches!(
+                state,
+                TelegramDeliveryIntentJobStateV1::PendingCustody
+                    | TelegramDeliveryIntentJobStateV1::BodyReady
+                    | TelegramDeliveryIntentJobStateV1::DeliveryQueued
+            )
+            || next_attempt_at_unix_seconds <= 0
+        {
+            return Err(TelegramDurablePersistenceError::InvalidRow);
+        }
+        let updated = sqlx::query(
+            "UPDATE hermes_data.telegram_delivery_intent_jobs
+             SET next_attempt_at_unix_seconds = $1,
+                 claimed_by = NULL,
+                 lease_expires_at_unix_seconds = NULL
+             WHERE intent_id = $2
+               AND state = $3
+               AND claimed_by = $4",
+        )
+        .bind(next_attempt_at_unix_seconds)
+        .bind(intent_id.as_slice())
+        .bind(state as i16)
+        .bind(worker_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        if updated.rows_affected() != 1 {
+            return Err(TelegramDurablePersistenceError::InvalidDeliveryIntentTransition);
+        }
+        Ok(())
+    }
+
+    pub async fn complete_claimed_job(
+        &self,
+        intent_id: [u8; 16],
+        worker_id: &str,
+        terminal_state: TelegramDeliveryIntentJobStateV1,
+        result: &OutboxRecordV1,
+        completed_at_unix_seconds: i64,
+    ) -> Result<(), TelegramDurablePersistenceError> {
+        if intent_id.iter().all(|byte| *byte == 0)
+            || worker_id.trim().is_empty()
+            || !matches!(
+                terminal_state,
+                TelegramDeliveryIntentJobStateV1::Succeeded
+                    | TelegramDeliveryIntentJobStateV1::Rejected
+                    | TelegramDeliveryIntentJobStateV1::OutcomeUnknown
+            )
+            || completed_at_unix_seconds <= 0
+        {
+            return Err(TelegramDurablePersistenceError::InvalidRow);
+        }
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        let updated = sqlx::query(
+            "UPDATE hermes_data.telegram_delivery_intent_jobs
+             SET state = $1,
+                 completed_at_unix_seconds = $2,
+                 claimed_by = NULL,
+                 lease_expires_at_unix_seconds = NULL
+             WHERE intent_id = $3
+               AND state BETWEEN 1 AND 3
+               AND claimed_by = $4
+               AND lease_expires_at_unix_seconds > $2",
+        )
+        .bind(terminal_state as i16)
+        .bind(completed_at_unix_seconds)
+        .bind(intent_id.as_slice())
+        .bind(worker_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        if updated.rows_affected() != 1 {
+            return Err(TelegramDurablePersistenceError::InvalidDeliveryIntentTransition);
+        }
+        insert_result_outbox(
+            &mut transaction,
+            intent_id,
+            result,
+            completed_at_unix_seconds,
+        )
+        .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)
+    }
+
+    pub async fn pending_result_outbox(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<OutboxRecordV1>, TelegramDurablePersistenceError> {
+        if !(1..=256).contains(&limit) {
+            return Err(TelegramDurablePersistenceError::InvalidRow);
+        }
+        let rows = sqlx::query(
+            "SELECT message_id, envelope_sha256, exact_envelope_bytes
+             FROM hermes_data.telegram_delivery_intent_result_outbox
+             WHERE published_at_unix_seconds IS NULL
+             ORDER BY created_at_unix_seconds, message_id
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter()
+            .map(|row| {
+                let message_id = required_id::<16>(&row, "message_id")?;
+                let envelope_sha256 = required_id::<32>(&row, "envelope_sha256")?;
+                let exact_bytes: Vec<u8> = row
+                    .try_get("exact_envelope_bytes")
+                    .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+                let record = OutboxRecordV1::accept(exact_bytes)
+                    .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+                if record.message_id() != &message_id
+                    || record.envelope_sha256() != &envelope_sha256
+                {
+                    return Err(TelegramDurablePersistenceError::InvalidRow);
+                }
+                Ok(record)
+            })
+            .collect()
+    }
+
+    pub async fn mark_result_outbox_published(
+        &self,
+        message_id: &[u8; 16],
+        published_at_unix_seconds: i64,
+    ) -> Result<(), TelegramDurablePersistenceError> {
+        if message_id.iter().all(|byte| *byte == 0) || published_at_unix_seconds <= 0 {
+            return Err(TelegramDurablePersistenceError::InvalidRow);
+        }
+        let updated = sqlx::query(
+            "UPDATE hermes_data.telegram_delivery_intent_result_outbox
+             SET published_at_unix_seconds = $1
+             WHERE message_id = $2
+               AND published_at_unix_seconds IS NULL",
+        )
+        .bind(published_at_unix_seconds)
+        .bind(message_id.as_slice())
+        .execute(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        if updated.rows_affected() > 1 {
+            return Err(TelegramDurablePersistenceError::InvalidRow);
+        }
+        Ok(())
+    }
+}
+
+fn claimed_job_from_row(
+    row: sqlx::postgres::PgRow,
+    worker_id: &str,
+) -> Result<ClaimedTelegramDeliveryIntentJobV1, TelegramDurablePersistenceError> {
+    let target_body_reference_id = optional_id::<16>(&row, "target_body_reference_id")?;
+    let target_body_receipt_sha256 = optional_id::<32>(&row, "target_body_receipt_sha256")?;
+    if target_body_reference_id.is_some() != target_body_receipt_sha256.is_some() {
+        return Err(TelegramDurablePersistenceError::InvalidRow);
+    }
+    Ok(ClaimedTelegramDeliveryIntentJobV1 {
+        job: TelegramDeliveryIntentJobV1 {
+            intent_id: required_id::<16>(&row, "intent_id")?,
+            command_message_id: required_id::<16>(&row, "command_message_id")?,
+            command_envelope_sha256: required_id::<32>(&row, "command_envelope_sha256")?,
+            logical_owner_id: required_string(&row, "logical_owner_id")?,
+            account_id: required_string(&row, "account_id")?,
+            provider_chat_id: required_string(&row, "provider_chat_id")?,
+            reply_to_provider_message_id: row
+                .try_get("reply_to_provider_message_id")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+            body_reference_id: required_id::<16>(&row, "body_reference_id")?,
+            body_declared_bytes: u64::try_from(
+                row.try_get::<i64, _>("body_declared_bytes")
+                    .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+            )
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+            body_sha256: required_id::<32>(&row, "body_sha256")?,
+            custody_transfer_source_proof: row
+                .try_get("custody_transfer_source_proof")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+            provider_operation_id: required_string(&row, "provider_operation_id")?,
+        },
+        state: TelegramDeliveryIntentJobStateV1::from_i16(
+            row.try_get("state")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )
+        .ok_or(TelegramDurablePersistenceError::InvalidRow)?,
+        target_body_reference_id,
+        target_body_receipt_sha256,
+        worker_id: worker_id.to_owned(),
+        attempt_count: u32::try_from(
+            row.try_get::<i32, _>("attempt_count")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )
+        .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+    })
+}
+
+fn required_id<const WIDTH: usize>(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<[u8; WIDTH], TelegramDurablePersistenceError> {
+    row.try_get::<Vec<u8>, _>(column)
+        .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?
+        .try_into()
+        .map_err(|_| TelegramDurablePersistenceError::InvalidRow)
+}
+
+fn optional_id<const WIDTH: usize>(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<Option<[u8; WIDTH]>, TelegramDurablePersistenceError> {
+    row.try_get::<Option<Vec<u8>>, _>(column)
+        .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?
+        .map(|value| {
+            value
+                .try_into()
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)
+        })
+        .transpose()
 }
 
 struct ResolvedTelegramDeliveryRouteV1 {

@@ -13,15 +13,17 @@ pub use communications_outbox::TelegramCommunicationsOutboxStoreV1;
 pub use conformance::TelegramPersistenceConformanceV1;
 pub use delivery_intent::{TELEGRAM_SCHEMA_V2, TelegramDeliveryRouteLocatorV1};
 pub use delivery_intent_inbox::{
+    ClaimedTelegramDeliveryIntentJobV1, TELEGRAM_DELIVERY_INTENT_MAX_ATTEMPTS_V1,
     TELEGRAM_SCHEMA_V3, TelegramDeliveryIntentAdmissionV1, TelegramDeliveryIntentInboxOutcomeV1,
-    TelegramDeliveryIntentStoreV1,
+    TelegramDeliveryIntentJobStateV1, TelegramDeliveryIntentJobV1, TelegramDeliveryIntentStoreV1,
 };
 pub use durable::{
     TELEGRAM_SCHEMA_V1, TelegramDurablePersistence, TelegramDurablePersistenceError,
 };
 pub use schema::{
-    TELEGRAM_STORAGE_BUNDLE_REVISION_V1, TELEGRAM_STORAGE_BUNDLE_REVISION_V2,
-    TELEGRAM_STORAGE_BUNDLE_REVISION_V3, telegram_storage_bundle_v1,
+    TELEGRAM_DELIVERY_INTENT_STORAGE_REVISION_V1, TELEGRAM_DELIVERY_ROUTE_STORAGE_REVISION_V1,
+    TELEGRAM_STORAGE_BUNDLE_REVISION_V1, telegram_delivery_intent_storage_migration_v1,
+    telegram_delivery_route_storage_migration_v1, telegram_storage_bundle_v1,
 };
 
 pub const PACKAGE: &str = "hermes-telegram-persistence";

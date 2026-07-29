@@ -52,6 +52,17 @@ use crate::{
     },
     calls_execution::TelegramCallExecutionError,
     client_transport::{self, TelegramClientTransportError},
+    delivery_intent_consumer::{
+        TelegramDeliveryIntentConsumeErrorV1, TelegramDeliveryIntentResultContextV1,
+        consume_next_telegram_delivery_intent_v1,
+    },
+    delivery_intent_outbox::{
+        TelegramDeliveryIntentOutboxRelayErrorV1, relay_telegram_delivery_intent_outbox_once_v1,
+    },
+    delivery_intent_worker::{
+        TelegramDeliveryIntentWorkerContextV1, TelegramDeliveryIntentWorkerErrorV1,
+        process_next_telegram_delivery_intent_v1,
+    },
 };
 
 #[derive(Debug)]
@@ -450,6 +461,7 @@ pub fn serve_admitted_provider_loop(
         mut reconfiguration_context,
         event_connection,
         event_publish_permit,
+        delivery_intent_subscribe_permit,
     } = admitted;
     let mut process = TelegramProcessLoop::new(composition);
 
@@ -463,6 +475,34 @@ pub fn serve_admitted_provider_loop(
             &mut reconfiguration_context,
             executor,
         )?;
+        if let Some(admission) = process.composition().runtime_admission() {
+            let consumed_at = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| "Telegram runtime clock is unavailable".to_owned())?;
+            let result_context = TelegramDeliveryIntentResultContextV1 {
+                runtime_instance_id: admission.runtime_instance_id.clone(),
+                runtime_generation: admission.runtime_generation,
+                completed_at_unix_seconds: i64::try_from(consumed_at.as_secs())
+                    .map_err(|_| "Telegram runtime clock is unavailable".to_owned())?,
+                completed_at_nanos: i32::try_from(consumed_at.subsec_nanos())
+                    .map_err(|_| "Telegram runtime clock is unavailable".to_owned())?,
+            };
+            match executor.block_on(consume_next_telegram_delivery_intent_v1(
+                &durable.delivery_intent_store(),
+                &event_connection,
+                &delivery_intent_subscribe_permit,
+                &admission.logical_owner_id,
+                &result_context,
+            )) {
+                Ok(_) | Err(TelegramDeliveryIntentConsumeErrorV1::Unavailable) => {}
+                Err(TelegramDeliveryIntentConsumeErrorV1::Persistence) => {
+                    return Err("Telegram delivery-intent inbox persistence failed".to_owned());
+                }
+                Err(_) => {
+                    return Err("Telegram delivery-intent delivery is invalid".to_owned());
+                }
+            }
+        }
         let poll = {
             let mut body_admitter =
                 |plaintext: &[u8]| admit_telegram_plaintext(&mut control_channel, plaintext);
@@ -491,11 +531,43 @@ pub fn serve_admitted_provider_loop(
                 })?;
             process.mark_durable_restore_complete();
         }
+        let delivery_intent_context = process.composition().runtime_admission().map(|admission| {
+            TelegramDeliveryIntentWorkerContextV1 {
+                runtime_instance_id: admission.runtime_instance_id.clone(),
+                runtime_generation: admission.runtime_generation,
+            }
+        });
         if let Some(runtime) = process.composition_mut().runtime_mut() {
             let now_unix_seconds = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_err(|_| "Telegram runtime clock is unavailable".to_owned())?
                 .as_secs();
+            let now_i64 = i64::try_from(now_unix_seconds)
+                .map_err(|_| "Telegram runtime clock is unavailable".to_owned())?;
+            let delivery_intent_context = delivery_intent_context
+                .as_ref()
+                .ok_or_else(|| "Telegram runtime admission is unavailable".to_owned())?;
+            match executor.block_on(process_next_telegram_delivery_intent_v1(
+                &mut control_channel,
+                runtime,
+                &durable,
+                delivery_intent_context,
+                now_i64,
+            )) {
+                Ok(_) => {}
+                Err(TelegramDeliveryIntentWorkerErrorV1::InvalidClock) => {
+                    return Err("Telegram delivery-intent worker clock is invalid".to_owned());
+                }
+                Err(TelegramDeliveryIntentWorkerErrorV1::InvalidRuntime) => {
+                    return Err("Telegram delivery-intent runtime identity is invalid".to_owned());
+                }
+                Err(TelegramDeliveryIntentWorkerErrorV1::Persistence) => {
+                    return Err("Telegram delivery-intent persistence failed".to_owned());
+                }
+                Err(TelegramDeliveryIntentWorkerErrorV1::ResultEnvelope) => {
+                    return Err("Telegram delivery-intent result is invalid".to_owned());
+                }
+            }
             executor
                 .block_on(runtime.execute_due_durable_operations(
                     &durable,
@@ -585,6 +657,17 @@ pub fn serve_admitted_provider_loop(
                 crate::communications_outbox::TelegramCommunicationsOutboxRelayError::Persistence,
             ) => {
                 return Err("Telegram runtime outbox persistence failed".to_owned());
+            }
+        }
+        match executor.block_on(relay_telegram_delivery_intent_outbox_once_v1(
+            &durable.delivery_intent_store(),
+            &event_connection,
+            &event_publish_permit,
+            published_at_unix_seconds,
+        )) {
+            Ok(_) | Err(TelegramDeliveryIntentOutboxRelayErrorV1::Unavailable) => {}
+            Err(TelegramDeliveryIntentOutboxRelayErrorV1::Persistence(_)) => {
+                return Err("Telegram delivery-intent outbox persistence failed".to_owned());
             }
         }
     }
