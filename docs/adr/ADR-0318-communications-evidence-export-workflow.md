@@ -2,8 +2,9 @@
 
 - Статус: принято
 - Дата: 2026-07-28
-- Состояние реализации: implementing. Production units и managed backend
-  contour реализованы, но gate остаётся закрыт до полного evidence ниже.
+- Состояние реализации: implemented. Production units, independently managed
+  backend contour, authenticated client delivery, live browser flow и полный
+  negative/race evidence ниже реализованы.
 - Связанные решения: ADR-0200, ADR-0201, ADR-0204, ADR-0205, ADR-0212,
   ADR-0213, ADR-0215, ADR-0220, ADR-0230, ADR-0231, ADR-0240, ADR-0253,
   ADR-0257, ADR-0275, ADR-0279, ADR-0282, ADR-0313, ADR-0314, ADR-0315
@@ -222,7 +223,7 @@ Gate становится `implemented` только атомарно при н�
 Наличие ADR, encoder unit test или frontend download button отдельно gate не
 открывает.
 
-### Текущее evidence и остаток gate
+### Текущее evidence
 
 На 2026-07-29 реализованы и проверены:
 
@@ -244,17 +245,13 @@ Gate становится `implemented` только атомарно при н�
 - atomic current-revision fence непосредственно перед Communications
   inbox/outbox commit: изменённая или удалённая canonical revision даёт typed
   `STALE_REVISION`, а не prepared result;
+- deterministic managed race перехватывает exact Communications source-Blob
+  write после snapshot, изменяет canonical revision в disposable owner
+  PostgreSQL до result commit и подтверждает terminal rejected workflow state
+  с сохранённым source code `STALE_REVISION`; production runtime и contracts не
+  содержат test hooks или process-global flags;
 - architecture/SRP/Cargo/Clippy, workspace/integration tests, dependency policy,
   SBOM и managed Storage/Vault/NATS/Blob/Gateway contour.
-
-Gate всё ещё не `implemented`, потому что отсутствует:
-
-1. детерминированный managed race test, который изменяет canonical revision
-   между source snapshot и result commit и наблюдает terminal
-   `STALE_REVISION`;
-
-Static architecture test, Storybook visual test и прямой managed Gateway route
-не заменяют оставшееся race-доказательство.
 
 ## Rollback
 

@@ -76,9 +76,9 @@ async function create_secret_files() {
 
 async function allocate_loopback_ports() {
   const reservations = await Promise.all(
-    ['nats', 'postgres', 'pgbouncer'].map(() => reserve_loopback_port()),
+    ['nats', 'postgres', 'pgbouncer', 'clamav'].map(() => reserve_loopback_port()),
   );
-  const [natsPort, postgresPort, pgbouncerPort] = reservations.map(
+  const [natsPort, postgresPort, pgbouncerPort, clamavPort] = reservations.map(
     ({ port }) => port,
   );
   await Promise.all(
@@ -89,7 +89,7 @@ async function allocate_loopback_ports() {
         }),
     ),
   );
-  return { natsPort, postgresPort, pgbouncerPort };
+  return { natsPort, postgresPort, pgbouncerPort, clamavPort };
 }
 
 async function reserve_loopback_port() {
@@ -124,6 +124,7 @@ function compose_environment(secrets) {
     HERMES_STORAGE_AUTHENTICATED_NATS_PORT: String(secrets.natsPort),
     HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT: String(secrets.postgresPort),
     HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PORT: String(secrets.pgbouncerPort),
+    HERMES_ATTACHMENT_SECURITY_CLAMAV_PORT: String(secrets.clamavPort),
   };
 }
 

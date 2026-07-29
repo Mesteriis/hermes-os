@@ -37,7 +37,7 @@ use hermes_communications_export_api::{
     COMMUNICATIONS_EXPORT_TICKET_CONTRACT_NAME_V1,
 };
 use hermes_communications_export_persistence::schema::{
-    COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V1, communications_export_storage_bundle_v1,
+    COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V2, communications_export_storage_bundle_v1,
 };
 use hermes_communications_export_runtime::admission::{
     COMMUNICATIONS_EXPORT_BLOB_CAPABILITY_ID_V1, COMMUNICATIONS_EXPORT_BLOB_CUSTODY_SCOPE_ID_V1,
@@ -138,7 +138,7 @@ pub(super) fn issue_initial_communications_export_storage_binding(store: &Sqlite
     let bundle = store
         .platform_storage_bundle(
             COMMUNICATIONS_EXPORT_OWNER_V1,
-            u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V1),
+            u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V2),
         )
         .expect("read Communications Export Storage bundle")
         .expect("Communications Export Storage bundle is present");
@@ -151,7 +151,7 @@ pub(super) fn issue_initial_communications_export_storage_binding(store: &Sqlite
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V1),
+            u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V2),
             *bundle.digest(),
         )
         .expect("initial Communications Export Storage issue"),
@@ -2860,7 +2860,7 @@ fn record_communications_export_runtime_fixture(store: &SqliteControlStore) {
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 COMMUNICATIONS_EXPORT_OWNER_V1,
-                u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V1),
+                u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V2),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )

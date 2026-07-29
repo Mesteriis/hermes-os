@@ -55,7 +55,8 @@ use crate::platform::{
     storage::successor as storage_successor,
 };
 use crate::runtime::lifecycle::control::{
-    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
+    ManagedRuntimeBlobSessionHandler, ManagedRuntimeEventCredentialHandler,
+    ManagedRuntimeExpectation,
 };
 
 #[path = "managed_storage_vault_docker/shared_fixture.rs"]
@@ -76,6 +77,9 @@ use scheduler_events::*;
 #[path = "managed_storage_vault_docker/communications_setup.rs"]
 mod communications_setup;
 use communications_setup::*;
+#[path = "managed_storage_vault_docker/communications_export_race.rs"]
+mod communications_export_race;
+use communications_export_race::*;
 #[path = "managed_storage_vault_docker/communications_backup.rs"]
 mod communications_backup;
 use communications_backup::*;
@@ -350,6 +354,7 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Blob and Communications Export workflow binaries"]
 fn managed_communications_export_workflow_starts_with_owner_local_storage_and_events() {
+    use hermes_communications_evidence_export_source_api::wire::EvidenceExportRejectCodeV1;
     use hermes_communications_export_api::{
         COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1, COMMUNICATIONS_EXPORT_MODULE_ID_V1,
         COMMUNICATIONS_EXPORT_OWNER_V1,
@@ -393,7 +398,14 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
-    configure_route_handler(&supervisor, &store, &data);
+    let revision_race = Arc::new(CommunicationsExportRevisionRaceV1::new());
+    let race_blob_session_handler = Arc::new(CommunicationsExportRaceBlobSessionHandlerV1::new(
+        Arc::clone(&store),
+        supervisor.relay_port(),
+        data.clone(),
+        Arc::clone(&revision_race),
+    ));
+    configure_route_handlers(&supervisor, &store, &data, race_blob_session_handler);
     supervisor
         .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
             Arc::clone(&store),
@@ -751,6 +763,69 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         );
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    let stale_revision_export_id = [18; 16];
+    let communications_database_id = crate::platform::storage::topology::current(&store)
+        .expect("read Communications Storage topology")
+        .database_id()
+        .to_owned();
+    revision_race.arm(&communications_database_id, &message_id);
+    let stale_revision_start = StartEvidenceExportResponseV1::decode(
+        route(
+            24,
+            communications_export_command_contract_reference_v1(),
+            StartEvidenceExportRequestV1 {
+                protocol_major: 1,
+                operation_id: stale_revision_export_id.to_vec(),
+                message_ids: vec![message_id.clone()],
+            }
+            .encode_to_vec(),
+        )
+        .as_slice(),
+    )
+    .expect("decode accepted stale-revision export command");
+    assert_eq!(stale_revision_start.export_id, stale_revision_export_id);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let status = GetEvidenceExportStatusResponseV1::decode(
+            route(
+                25,
+                communications_export_query_contract_reference_v1(),
+                GetEvidenceExportStatusRequestV1 {
+                    protocol_major: 1,
+                    export_id: stale_revision_export_id.to_vec(),
+                }
+                .encode_to_vec(),
+            )
+            .as_slice(),
+        )
+        .expect("decode stale-revision Communications Export status");
+        if status.status == EvidenceExportStatusV1::EvidenceExportStatusRejected as i32 {
+            assert_eq!(status.completed_items, 0);
+            assert_eq!(status.artifact_bytes, 0);
+            assert_eq!(
+                status.error,
+                CommunicationsExportErrorCodeV1::CommunicationsExportErrorCodePolicyRejected as i32,
+            );
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "canonical revision race must reach terminal rejected export status; status={status:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(
+        revision_race.fired_revision() > 1,
+        "managed source preparation must cross the injected canonical revision fence"
+    );
+    assert_eq!(
+        communications_export_rejection_code(
+            &communications_database_id,
+            &stale_revision_export_id,
+        ),
+        EvidenceExportRejectCodeV1::EvidenceExportRejectCodeStaleRevision as u16,
+        "workflow terminal state must preserve the typed STALE_REVISION source result",
+    );
     let invalid_utf8_body = vec![0xf0, 0x28, 0x8c, 0x28];
     assert_eq!(
         publish_and_wait_for_communications_message_edit(
@@ -1861,6 +1936,20 @@ fn configure_route_handler(
     store: &Arc<SqliteControlStore>,
     data: &Path,
 ) {
+    let blob_session_handler = Arc::new(BlobSessionHandlerV1::new(
+        Arc::clone(store),
+        supervisor.relay_port(),
+        data.to_path_buf(),
+    ));
+    configure_route_handlers(supervisor, store, data, blob_session_handler);
+}
+
+fn configure_route_handlers(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &Arc<SqliteControlStore>,
+    data: &Path,
+    blob_session_handler: Arc<dyn ManagedRuntimeBlobSessionHandler>,
+) {
     let vault_route = Arc::new(KernelManagedVaultRouteHandler::new(
         Arc::clone(store),
         data,
@@ -1887,11 +1976,7 @@ fn configure_route_handler(
         )))
         .expect("owner-derived key handler");
     supervisor
-        .configure_blob_session_handler(Arc::new(BlobSessionHandlerV1::new(
-            Arc::clone(store),
-            supervisor.relay_port(),
-            data.to_path_buf(),
-        )))
+        .configure_blob_session_handler(blob_session_handler)
         .expect("Blob session handler");
 }
 

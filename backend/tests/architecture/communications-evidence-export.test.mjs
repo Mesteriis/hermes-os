@@ -66,6 +66,18 @@ const paths = {
     PROJECT_ROOT,
   ),
   frontendViteConfig: new URL('frontend/vite.config.ts', PROJECT_ROOT),
+  managedExportTest: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker.rs',
+    BACKEND_ROOT,
+  ),
+  managedExportRace: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communications_export_race.rs',
+    BACKEND_ROOT,
+  ),
+  authenticatedStorageHarness: new URL(
+    'scripts/test-authenticated-storage.mjs',
+    BACKEND_ROOT,
+  ),
   adr: new URL(
     'docs/adr/ADR-0318-communications-evidence-export-workflow.md',
     PROJECT_ROOT,
@@ -199,4 +211,25 @@ test('Frontend composition passes canonical IDs into a generated workflow withou
   assert.match(workflow, /BrowserGatewayFetch/);
   assert.match(viteConfig, /'\/api\/blobs\/': developmentGatewayProxy\(developmentGateway\)/);
   assert.doesNotMatch(workflow, /integrations\/(?:mail|telegram|whatsapp|zulip)|provider/);
+});
+
+test('managed gate deterministically rejects a canonical revision race', async () => {
+  const [managedTest, race, harness, adr] = await Promise.all([
+    readFile(paths.managedExportTest, 'utf8'),
+    readFile(paths.managedExportRace, 'utf8'),
+    readFile(paths.authenticatedStorageHarness, 'utf8'),
+    readFile(paths.adr, 'utf8'),
+  ]);
+  assert.match(managedTest, /revision_race\.arm\(/);
+  assert.match(managedTest, /EvidenceExportRejectCodeStaleRevision/);
+  assert.match(managedTest, /communications_export_rejection_code/);
+  assert.match(race, /COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID/);
+  assert.match(
+    race,
+    /SET canonical_revision = canonical_revision \+ 1[\s\S]*RETURNING canonical_revision/,
+  );
+  assert.match(race, /impl ManagedRuntimeBlobSessionHandler/);
+  assert.match(harness, /HERMES_ATTACHMENT_SECURITY_CLAMAV_PORT: String\(secrets\.clamavPort\)/);
+  assert.match(adr, /Состояние реализации: implemented/);
+  assert.doesNotMatch(adr, /Gate всё ещё не `implemented`/);
 });
