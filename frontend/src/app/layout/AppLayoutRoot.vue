@@ -14,6 +14,11 @@ import WhatsAppOperationalRoute from '../../integrations/whatsapp/views/WhatsApp
 import MailOperationalRoute from '../../integrations/mail/views/MailOperationalRoute.vue'
 import ZulipOperationalRoute from '../../integrations/zulip/views/ZulipOperationalRoute.vue'
 import CommunicationsEvidenceExportWorkflow from '../../workflows/communications-export/CommunicationsEvidenceExportWorkflow.vue'
+import {
+	providerAccountIdFromRoute,
+	providerAccountNavigationLevel,
+	type ProviderAccountNavigationSnapshot,
+} from '../../shared/ui/shell/providerAccountNavigation'
 
 const props = defineProps<{ gatewayAccessMode: BrowserGatewayAccessModeV1 }>()
 
@@ -23,7 +28,20 @@ const currentTheme = navbar.currentTheme
 const currentThemeFamily = navbar.currentThemeFamily
 const currentThemeMode = navbar.currentThemeMode
 const healthChecks = navbar.healthChecks
-const navigationLevels = navbar.navigationLevels
+const mailAccountNavigation = ref<ProviderAccountNavigationSnapshot>()
+const telegramAccountNavigation = ref<ProviderAccountNavigationSnapshot>()
+const requestedMailAccountId = ref<string>()
+const requestedTelegramAccountId = ref<string>()
+const navigationLevels = computed(() => {
+	const levels = [...navbar.navigationLevels.value]
+	if (navbar.selectedRouteId.value === 'communications-mail') {
+		levels.push(providerAccountNavigationLevel('mail', mailAccountNavigation.value))
+	}
+	if (navbar.selectedRouteId.value === 'communications-telegram') {
+		levels.push(providerAccountNavigationLevel('telegram', telegramAccountNavigation.value))
+	}
+	return levels
+})
 const notifications = navbar.notifications
 const notificationsCount = navbar.notificationsCount
 const notificationToasts = navbar.notificationToasts
@@ -114,6 +132,32 @@ const zulipOperationalRealtimeAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'zulip.operational.realtime.v1'),
 )
 
+function selectNavigationItem(itemId: string): void {
+	const mailAccountId = providerAccountIdFromRoute('mail', itemId)
+	if (mailAccountId !== undefined) {
+		requestedMailAccountId.value = mailAccountId
+		if (mailAccountNavigation.value) {
+			mailAccountNavigation.value = {
+				...mailAccountNavigation.value,
+				selectedAccountId: mailAccountId,
+			}
+		}
+		return
+	}
+	const telegramAccountId = providerAccountIdFromRoute('telegram', itemId)
+	if (telegramAccountId !== undefined) {
+		requestedTelegramAccountId.value = telegramAccountId
+		if (telegramAccountNavigation.value) {
+			telegramAccountNavigation.value = {
+				...telegramAccountNavigation.value,
+				selectedAccountId: telegramAccountId,
+			}
+		}
+		return
+	}
+	navbar.selectNavigationItem(itemId)
+}
+
 watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mode]) => {
 	document.documentElement.setAttribute('data-ui-theme', theme)
 	document.documentElement.setAttribute('data-ui-theme-family', family)
@@ -150,7 +194,7 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 						:notifications-count="notificationsCount"
 						:theme-family-options="navbar.themeFamilyOptions"
 						:theme-mode-options="navbar.themeModeOptions"
-						@navigation-select="navbar.selectNavigationItem"
+						@navigation-select="selectNavigationItem"
 						@language-change="navbar.selectLanguage"
 						@notification-dismiss="navbar.dismissNotification"
 						@notification-select="navbar.selectNotification"
@@ -187,6 +231,8 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					:can-sync="mailSyncAvailable"
 					:can-sync-health="mailSyncHealthAvailable"
 					:modules="bootstrap.modules"
+					:navigation-account-id="requestedMailAccountId"
+					@account-navigation-change="mailAccountNavigation = $event"
 				/>
 				<TelegramOperationalRoute
 					v-else-if="selectedRouteId === 'communications-telegram'"
@@ -195,6 +241,8 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					:can-query="telegramQueryAvailable"
 					:can-reconfigure="telegramReconfigurationAvailable"
 					:can-send="telegramCommandAvailable"
+					:navigation-account-id="requestedTelegramAccountId"
+					@account-navigation-change="telegramAccountNavigation = $event"
 				/>
 				<WhatsAppOperationalRoute
 					v-else-if="selectedRouteId === 'communications-whatsapp'"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { watch } from 'vue'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
+import type { ProviderAccountNavigationSnapshot } from '../../../shared/ui/shell/providerAccountNavigation'
 import MailOperationalPage from '../presentation/MailOperationalPage.vue'
 import { useMailComposition } from '../queries/useMailComposition'
 import { useMailDelivery } from '../queries/useMailDelivery'
@@ -11,6 +12,7 @@ import { useMailMessageLocation } from '../queries/useMailMessageLocation'
 import { useMailMessagePermanentDelete } from '../queries/useMailMessagePermanentDelete'
 import { useMailSync } from '../queries/useMailSync'
 import { useMailSyncHealth } from '../queries/useMailSyncHealth'
+import { mailAccountNavigation } from '../presentation/mailAccountNavigation'
 
 const props = defineProps<{
 	canCompose: boolean
@@ -27,7 +29,12 @@ const props = defineProps<{
 	canSync: boolean
 	canSyncHealth: boolean
 	modules: readonly ClientModuleBootstrapV1[]
+	navigationAccountId?: string
 }>()
+const emit = defineEmits<{
+	accountNavigationChange: [snapshot: ProviderAccountNavigationSnapshot]
+}>()
+let accountNavigationLoading = true
 
 const accountConnections = useMailAccountConnections({
 	canQuery: () => props.canQueryAccounts,
@@ -124,6 +131,8 @@ watch(
 )
 
 async function reconcileAccountConsumers(): Promise<void> {
+	accountNavigationLoading = true
+	emitAccountNavigation()
 	try {
 		await accountConnections.refresh()
 	} finally {
@@ -132,8 +141,35 @@ async function reconcileAccountConsumers(): Promise<void> {
 			read.reconcile(),
 			syncHealth.reconcile(),
 		])
+		accountNavigationLoading = false
+		emitAccountNavigation()
 	}
 }
+
+function emitAccountNavigation(): void {
+	emit('accountNavigationChange', mailAccountNavigation(
+		accountConnections.connections.value,
+		read.model.value.selectedConnectionId,
+		accountNavigationLoading,
+	))
+}
+
+watch(
+	() => props.navigationAccountId,
+	(connectionId) => {
+		if (
+			connectionId === undefined
+			|| connectionId === read.model.value.selectedConnectionId
+			|| !connectionId
+		) return
+		void read.selectConnection(connectionId).finally(emitAccountNavigation)
+	},
+)
+
+watch(
+	() => read.model.value.selectedConnectionId,
+	() => emitAccountNavigation(),
+)
 </script>
 
 <template>

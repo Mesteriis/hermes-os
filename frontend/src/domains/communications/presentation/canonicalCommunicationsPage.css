@@ -106,6 +106,7 @@
 	display: grid;
 	grid-template-columns: minmax(12rem, 0.78fr) minmax(15rem, 1fr) minmax(20rem, 1.55fr);
 	gap: var(--h-space-3);
+	height: min(46rem, calc(100dvh - 14rem));
 	min-height: 26rem;
 }
 
@@ -162,11 +163,12 @@
 	width: 100%;
 	margin-top: var(--h-space-2);
 	padding: var(--h-space-3);
-	border: 1px solid transparent;
+	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-md);
 	color: inherit;
 	text-align: left;
-	background: transparent;
+	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-xs);
 }
 
 .canonical-communications-row:hover {
@@ -314,5 +316,6 @@
 
 	.canonical-communications-workbench {
 		grid-template-columns: 1fr;
+		height: auto;
 	}
 }
