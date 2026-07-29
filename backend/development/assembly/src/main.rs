@@ -1192,6 +1192,7 @@ fn read_state(path: &Path) -> Result<DevelopmentAssemblyStateV1, String> {
     if ![
         MODULE_PLAN.len(),
         PRE_EXPORT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3.len(),
+        PRE_DELIVERY_INTENT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3.len(),
     ]
     .contains(&module_count)
         || fields.len() != 4 + module_count * fields_per_module
@@ -1353,6 +1354,27 @@ mod tests {
         file.sync_all().unwrap();
     }
 
+    fn encode_state_v3(state: &DevelopmentAssemblyStateV1) -> Vec<u8> {
+        let mut bytes = format!(
+            "version=3\ndistribution_id={}\ndistribution_generation={}\nmodule_count={}\n",
+            state.distribution_id,
+            state.distribution_generation,
+            state.modules.len(),
+        );
+        for (index, module) in state.modules.iter().enumerate() {
+            bytes.push_str(&format!(
+                "module.{index}.runtime_artifact_id={}\nmodule.{index}.registration_id={}\nmodule.{index}.storage_capability_id={}\nmodule.{index}.storage_binding_revision={}\nmodule.{index}.role_epoch={}\nmodule.{index}.credential_lease_revision={}\n",
+                module.runtime_artifact_id,
+                module.registration_id,
+                module.storage_capability_id,
+                module.storage_binding_revision,
+                module.role_epoch,
+                module.credential_lease_revision,
+            ));
+        }
+        bytes.into_bytes()
+    }
+
     #[test]
     fn development_plan_keeps_domains_workflows_engines_and_integrations_as_distinct_artifacts() {
         assert_eq!(MODULE_PLAN.len(), 8);
@@ -1459,24 +1481,7 @@ mod tests {
             module.runtime_artifact_id != COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT
                 && module.runtime_artifact_id != COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT
         });
-        let mut bytes = format!(
-            "version=3\ndistribution_id={}\ndistribution_generation={}\nmodule_count={}\n",
-            legacy.distribution_id,
-            legacy.distribution_generation,
-            legacy.modules.len(),
-        );
-        for (index, module) in legacy.modules.iter().enumerate() {
-            bytes.push_str(&format!(
-                "module.{index}.runtime_artifact_id={}\nmodule.{index}.registration_id={}\nmodule.{index}.storage_capability_id={}\nmodule.{index}.storage_binding_revision={}\nmodule.{index}.role_epoch={}\nmodule.{index}.credential_lease_revision={}\n",
-                module.runtime_artifact_id,
-                module.registration_id,
-                module.storage_capability_id,
-                module.storage_binding_revision,
-                module.role_epoch,
-                module.credential_lease_revision,
-            ));
-        }
-        write_test_state(&path, bytes.as_bytes());
+        write_test_state(&path, &encode_state_v3(&legacy));
 
         let state = read_state(&path).unwrap();
         assert_eq!(state, legacy);
@@ -1487,13 +1492,18 @@ mod tests {
 
     #[test]
     fn pre_delivery_intent_state_v3_is_refreshable_but_not_current() {
+        let path = temporary_state_path("pre-delivery-intent-v3");
         let mut state = fixture_state(26);
         state.modules.retain(|module| {
             module.runtime_artifact_id != COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT
         });
+        write_test_state(&path, &encode_state_v3(&state));
 
-        assert!(validate_refreshable_state_plan(&state).is_ok());
-        assert!(validate_state_plan(&state).is_err());
+        let restored = read_state(&path).unwrap();
+        assert_eq!(restored, state);
+        assert!(validate_refreshable_state_plan(&restored).is_ok());
+        assert!(validate_state_plan(&restored).is_err());
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
