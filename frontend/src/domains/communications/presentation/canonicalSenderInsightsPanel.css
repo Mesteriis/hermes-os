@@ -1,7 +1,7 @@
 .canonical-sender-insights {
 	display: grid;
 	gap: var(--h-space-4);
-	margin: 0 var(--h-space-5) var(--h-space-5);
+	margin: 0;
 	padding: var(--h-space-4);
 	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-lg);
@@ -120,10 +120,6 @@
 }
 
 @media (max-width: 760px) {
-	.canonical-sender-insights {
-		margin-inline: var(--h-space-3);
-	}
-
 	.canonical-sender-insights > header {
 		align-items: start;
 		flex-direction: column;

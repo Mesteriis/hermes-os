@@ -1,7 +1,6 @@
 .canonical-saved-searches {
 	display: grid;
 	gap: var(--h-space-4);
-	margin-top: var(--h-space-5);
 	padding: var(--h-space-5);
 	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-lg);

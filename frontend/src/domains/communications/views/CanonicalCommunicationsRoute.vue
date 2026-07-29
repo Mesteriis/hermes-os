@@ -64,7 +64,7 @@ function closeMessage(): void {
 </script>
 
 <template>
-	<div>
+	<div class="canonical-communications-route">
 		<CanonicalCommunicationsPage
 			:model="surface.model.value"
 			@load-more-accounts="surface.loadMoreAccounts"
