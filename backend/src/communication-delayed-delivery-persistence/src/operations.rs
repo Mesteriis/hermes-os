@@ -12,6 +12,8 @@ use crate::{
 
 const STATE_SCHEDULE_PENDING: i16 = 2;
 const STATE_SCHEDULED: i16 = 3;
+const STATE_DISPATCHING: i16 = 5;
+const STATE_DELIVERY_ACCEPTED: i16 = 6;
 const STATE_CANCEL_REQUESTED: i16 = 7;
 const STATE_CANCELLED: i16 = 8;
 const STATE_FAILED: i16 = 9;
@@ -415,6 +417,31 @@ async fn apply_scheduler_transition(
         }
         return Ok(());
     }
+    if command.result == SchedulerScheduleResultV1::TooLate {
+        let affected = sqlx::query(
+            "UPDATE hermes_data.communication_delayed_delivery_operations
+             SET state = CASE WHEN state = $3 THEN $4 ELSE state END,
+                 state_revision = state_revision + 1,
+                 updated_at_unix_millis = $5
+             WHERE logical_owner_id = $1 AND delayed_operation_id = $2
+               AND state IN ($3, $6, $7)",
+        )
+        .bind(&command.logical_owner_id)
+        .bind(command.delayed_operation_id.as_slice())
+        .bind(STATE_CANCEL_REQUESTED)
+        .bind(STATE_SCHEDULED)
+        .bind(received_at)
+        .bind(STATE_DISPATCHING)
+        .bind(STATE_DELIVERY_ACCEPTED)
+        .execute(&mut **transaction)
+        .await
+        .map_err(|_| DelayedDeliveryPersistenceErrorV1::StorageUnavailable)?
+        .rows_affected();
+        if affected != 1 {
+            return Err(DelayedDeliveryPersistenceErrorV1::Conflict);
+        }
+        return Ok(());
+    }
     let (next_state, schedule_revision, error_code, allowed_states): (
         i16,
         Option<i64>,
@@ -425,9 +452,7 @@ async fn apply_scheduler_transition(
         SchedulerScheduleResultV1::Cancelled => {
             (STATE_CANCELLED, None, None, &[STATE_CANCEL_REQUESTED])
         }
-        SchedulerScheduleResultV1::TooLate => {
-            (STATE_SCHEDULED, None, None, &[STATE_CANCEL_REQUESTED])
-        }
+        SchedulerScheduleResultV1::TooLate => unreachable!("handled above"),
         SchedulerScheduleResultV1::Rejected { error_code } => (
             STATE_FAILED,
             None,

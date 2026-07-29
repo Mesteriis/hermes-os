@@ -18,7 +18,9 @@ test('delayed delivery admits separate contract and policy units while its runti
     persistenceManifest,
     persistenceSource,
     persistenceOperations,
+    persistenceExecution,
     persistenceMigration,
+    schedulerReceiptMigration,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -87,7 +89,21 @@ test('delayed delivery admits separate contract and policy units while its runti
     ),
     readFile(
       new URL(
+        'src/communication-delayed-delivery-persistence/src/execution.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-delayed-delivery-persistence/migrations/0001_delayed_delivery_state.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-persistence/migrations/0002_scheduler_receipt_outbox.sql',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -136,6 +152,15 @@ test('delayed delivery admits separate contract and policy units while its runti
   assert.match(persistenceOperations, /pub async fn apply_scheduler_result/);
   assert.match(persistenceOperations, /ON CONFLICT \(logical_owner_id, message_id\)/);
   assert.match(persistenceOperations, /state_revision = state_revision \+ 1/);
+  assert.match(persistenceExecution, /pub async fn claim_due_execution/);
+  assert.match(persistenceExecution, /pub async fn mark_delivery_accepted/);
+  assert.match(
+    persistenceExecution,
+    /scheduler_lease_expires_at_unix_millis > \$4/,
+  );
+  assert.match(schedulerReceiptMigration, /scheduler\.job_run\.acceptance\.v1/);
+  assert.match(schedulerReceiptMigration, /scheduler\.job_run\.result\.v1/);
+  assert.doesNotMatch(schedulerReceiptMigration, /body_utf8|provider_id|account_id/);
   assert.match(
     persistenceMigration,
     /communication_delayed_delivery_scheduler_inbox/,

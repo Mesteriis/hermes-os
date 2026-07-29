@@ -15,9 +15,12 @@ bounds, cancellation-race policy и owner-local Storage bundle. Persistence
 и execution fences; plaintext body в workflow SQL запрещён. Создание operation
 и Ensure outbox атомарно, Cancel revision-fenced и атомарен со своим outbox,
 Scheduler result дедуплицируется по inbox ID/hash до mutation. Encrypted Blob
-custody execution, due-run transitions, managed runtime, assembly, client
-routing и live end-to-end contour ещё не реализованы. Этот ADR не открывает
-workflow gate сам по себе.
+custody materialization ещё не подключён, но due command уже atomically проходит
+`scheduled|cancel_requested -> due -> dispatching`, сохраняет exact
+run/schedule/lease fence и acceptance receipt outbox. Delivery-intent acceptance
+может завершить operation и записать terminal Scheduler result только при живом
+exact lease. Managed runtime, assembly, client routing и live end-to-end contour
+ещё не реализованы. Этот ADR не открывает workflow gate сам по себе.
 
 Уточняет:
 

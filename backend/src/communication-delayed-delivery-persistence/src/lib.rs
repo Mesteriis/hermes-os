@@ -1,8 +1,13 @@
 #![forbid(unsafe_code)]
 
+mod execution;
 mod operations;
 pub mod schema;
 
+pub use execution::{
+    ClaimDueExecutionOutcomeV1, ClaimDueExecutionV1, DelayedDeliveryExecutionClaimV1,
+    MarkDeliveryAcceptedV1,
+};
 use hermes_storage_protocol::StorageBindingV1;
 pub use operations::{
     ApplySchedulerResultOutcomeV1, ApplySchedulerResultV1, CreateDelayedDeliveryOperationOutcomeV1,
@@ -113,7 +118,10 @@ pub fn valid_durable_message(message: &DelayedDeliveryDurableMessageV1) -> bool 
     valid_id16(&message.message_id)
         && matches!(
             message.contract_kind,
-            "scheduler.schedule.command.v1" | "communication.delayed_delivery.status_changed.v1"
+            "scheduler.schedule.command.v1"
+                | "communication.delayed_delivery.status_changed.v1"
+                | "scheduler.job_run.acceptance.v1"
+                | "scheduler.job_run.result.v1"
         )
         && message.envelope_sha256.iter().any(|byte| *byte != 0)
         && !message.envelope_bytes.is_empty()
@@ -127,7 +135,7 @@ pub fn valid_execution_fence(fence: &SchedulerExecutionFenceV1, now_unix_millis:
         && fence.lease_expires_at_unix_millis > now_unix_millis
 }
 
-fn valid_id16(value: &[u8; 16]) -> bool {
+pub(crate) fn valid_id16(value: &[u8; 16]) -> bool {
     value.iter().any(|byte| *byte != 0)
 }
 
