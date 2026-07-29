@@ -12,7 +12,8 @@ idempotency/state transitions и выдаёт lease/claim с epoch fencing. Runt
 credential и пока предоставляет только Storage capability. Отдельная assembly
 unit создаёт canonical descriptor/settings/Storage bundle и deterministic
 unsigned release fragment, не исполняя workflow. Provider command adapters,
-client route и live admission ещё не реализованы;
+client route и live admission ещё не реализованы. Четыре provider-owned
+command/result wire contracts и exact route requests реализованы по ADR-0331;
 `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст
@@ -121,3 +122,6 @@ business owner.
 6. live managed proof без content leakage и cross-owner storage access.
 
 До закрытия всех пунктов reconstruction matrix остаётся `planned`.
+
+Exact provider-owned event boundary и отсутствие generic provider facade
+зафиксированы ADR-0331.

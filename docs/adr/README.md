@@ -500,3 +500,10 @@ ADR-0329 добавляет реальный ClamAV daemon в authenticated full
 как loopback-only scanner infrastructure, сохраняя engine build units и
 разрешая только одно exact owner-local восстановление jobs, исчерпанных до
 появления scanner contour.
+ADR-0330 вводит отдельный provider-neutral delivery-intent workflow owner:
+canonical route planning, sealed owner-local body custody и runtime/assembly
+являются отдельными build units, а provider execution остаётся integration.
+ADR-0331 разделяет outbound delivery на четыре provider-owned event contract
+build units без общего facade: durable command несёт только opaque cursors и
+target-bound Blob receipt/proof, а terminal results остаются typed и
+provider-owned.

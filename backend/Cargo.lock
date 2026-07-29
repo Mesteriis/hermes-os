@@ -2330,6 +2330,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-mail-delivery-intent-contract"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-mail-gmail"
 version = "0.1.0"
 dependencies = [
@@ -2760,6 +2771,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-telegram-delivery-intent-contract"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-telegram-persistence"
 version = "0.1.0"
 dependencies = [
@@ -2956,6 +2978,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-whatsapp-delivery-intent-contract"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-whatsapp-persistence"
 version = "0.1.0"
 dependencies = [
@@ -3014,6 +3047,17 @@ dependencies = [
  "hermes-communications-ingress",
  "hermes-vault-protocol",
  "hermes-zulip-api",
+]
+
+[[package]]
+name = "hermes-zulip-delivery-intent-contract"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
 ]
 
 [[package]]

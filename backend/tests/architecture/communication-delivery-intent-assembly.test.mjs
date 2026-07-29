@@ -105,7 +105,7 @@ test('delivery intent assembly is an exact non-admitted workflow slice', async (
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_delivery_intent_assembly_v1',
+    'provider_delivery_intent_contracts_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, ['communications_export']);
   assert.deepEqual(
