@@ -21,6 +21,10 @@ const sources = {
     'development/authenticated/compose.yaml',
     BACKEND_ROOT,
   ),
+  authenticatedNats: new URL(
+    'development/authenticated/nats-server.conf',
+    BACKEND_ROOT,
+  ),
   release: new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT),
   developmentAssembly: new URL('development/assembly/src/main.rs', BACKEND_ROOT),
   probe: new URL('scripts/probe-dev-gateway.mjs', BACKEND_ROOT),
@@ -45,6 +49,7 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
     backendMakefile,
     assembly,
     authenticatedCompose,
+    authenticatedNats,
     release,
     developmentAssembly,
     probe,
@@ -73,6 +78,12 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   assert.match(assembly, /run_compose up --detach --wait/);
   assert.match(assembly, /PostgreSQL, PgBouncer, NATS and ClamAV infrastructure/);
   assert.match(authenticatedCompose, /image: clamav\/clamav:1\.5\.3-debian13-slim/);
+  assert.match(
+    authenticatedCompose,
+    /\.\/nats-server\.conf:\/etc\/nats\/hermes-development\.conf:ro/,
+  );
+  assert.match(authenticatedNats, /^max_control_line: 16384$/m);
+  assert.doesNotMatch(authenticatedNats, /authorization|password|token|users/i);
   assert.match(
     authenticatedCompose,
     /127\.0\.0\.1:\$\{HERMES_ATTACHMENT_SECURITY_CLAMAV_PORT:-3310\}:3310/,

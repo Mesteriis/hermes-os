@@ -8,7 +8,9 @@ name: hermes-storage-authenticated-development
 services:
   nats:
     image: nats:2.10-alpine
-    command: ["-js", "-sd", "/var/lib/hermes", "-m", "8222"]
+    command: ["-c", "/etc/nats/hermes-development.conf"]
+    volumes:
+      - ./nats-server.conf:/etc/nats/hermes-development.conf:ro
     ports:
       - 127.0.0.1:${HERMES_STORAGE_AUTHENTICATED_NATS_PORT:-43225}:4222
     healthcheck:
