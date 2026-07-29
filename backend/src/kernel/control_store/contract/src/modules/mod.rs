@@ -4,6 +4,7 @@ mod client_rpc_route;
 mod event_request;
 mod grant;
 mod grant_snapshot;
+mod module_query_route;
 mod registration;
 mod scheduler_request;
 mod settings;
@@ -22,6 +23,7 @@ pub use event_request::{
 };
 pub use grant::GrantSet;
 pub use grant_snapshot::ModuleGrantSnapshot;
+pub use module_query_route::ModuleQueryContractV1;
 pub use registration::{ModuleRegistration, ModuleRegistrationState};
 pub use scheduler_request::ModuleSchedulerJobRequestV1;
 pub use settings::{

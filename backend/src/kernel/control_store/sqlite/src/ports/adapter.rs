@@ -6,8 +6,8 @@ use hermes_kernel_control_store::{
     BundledManagedLaunchBinding, ControlStore, EventHubTopologyStore, EventsAuthorityStore,
     ExternalRuntimeAttestation, ExternalRuntimeIdentity, GrantSet, HealthRecoveryStore,
     InitialOwnerIdentity, ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleClientBlobRouteV1,
-    ModuleClientRpcRouteV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot, ModuleRegistration,
-    ModuleRegistrationState, ModuleRegistryStore, ModuleSchedulerJobRequestV1,
+    ModuleClientRpcRouteV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot, ModuleQueryContractV1,
+    ModuleRegistration, ModuleRegistrationState, ModuleRegistryStore, ModuleSchedulerJobRequestV1,
     ModuleStorageRequestV1, ModuleVaultPurposeRequestV1, OwnerIdentityStore,
     OwnerPinnedArtifactBinding, PlatformEventHubTopologyV1, PlatformEventsAuthorityConfigurationV1,
     PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageTopology,
@@ -233,6 +233,16 @@ impl ModuleRegistryStore for SqliteControlStore {
         &self,
     ) -> Result<Vec<ModuleClientBlobRouteV1>, Self::Error> {
         SqliteControlStore::approved_module_client_blob_routes(self)
+    }
+    fn approved_module_query_rpc_routes(&self) -> Result<Vec<ModuleQueryContractV1>, Self::Error> {
+        SqliteControlStore::approved_module_query_rpc_routes(self)
+    }
+    fn module_contract_dependencies(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<Vec<ModuleQueryContractV1>, Self::Error> {
+        SqliteControlStore::module_contract_dependencies(self, registration_id, capability_id)
     }
     fn module_blob_quota_request(
         &self,

@@ -16,6 +16,10 @@ use super::{
     client_blob_route::{insert_client_blob_routes, validate_client_blob_routes},
     client_rpc_route::{insert_client_rpc_routes, validate_client_rpc_routes},
     event_request::{insert_event_route_requests, validate_event_route_requests},
+    module_query_route::{
+        insert_module_contract_dependencies, insert_module_query_rpc_routes,
+        validate_module_query_contracts,
+    },
     scheduler_request::{insert_scheduler_job_requests, validate_scheduler_job_requests},
     storage_request::{insert_storage_requests, validate_storage_requests},
     vault_purpose_request::{insert_vault_purpose_requests, validate_vault_purpose_requests},
@@ -55,6 +59,8 @@ impl SqliteControlStore {
                 vault_purposes: &[],
                 client_rpc_routes: &[],
                 client_blob_routes: &[],
+                query_rpc_routes: &[],
+                contract_dependencies: &[],
             },
         )
     }
@@ -103,6 +109,18 @@ impl SqliteControlStore {
             requests.blobs,
             requests.client_blob_routes,
         )?;
+        validate_module_query_contracts(
+            registration,
+            requested_capability_ids,
+            requests.query_rpc_routes,
+            true,
+        )?;
+        validate_module_query_contracts(
+            registration,
+            requested_capability_ids,
+            requests.contract_dependencies,
+            false,
+        )?;
         let registration = registration.clone();
         let capabilities = requested_capability_ids.to_vec();
         let storage_requests = requests.storage.to_vec();
@@ -112,6 +130,8 @@ impl SqliteControlStore {
         let vault_purpose_requests = requests.vault_purposes.to_vec();
         let client_rpc_routes = requests.client_rpc_routes.to_vec();
         let client_blob_routes = requests.client_blob_routes.to_vec();
+        let query_rpc_routes = requests.query_rpc_routes.to_vec();
+        let contract_dependencies = requests.contract_dependencies.to_vec();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
             insert_pending_registration(&transaction, &registration, &capabilities)?;
@@ -122,6 +142,8 @@ impl SqliteControlStore {
             insert_vault_purpose_requests(&transaction, &vault_purpose_requests)?;
             insert_client_rpc_routes(&transaction, &client_rpc_routes)?;
             insert_client_blob_routes(&transaction, &client_blob_routes)?;
+            insert_module_query_rpc_routes(&transaction, &query_rpc_routes)?;
+            insert_module_contract_dependencies(&transaction, &contract_dependencies)?;
             transaction.commit()?;
             Ok(())
         })
@@ -165,6 +187,18 @@ impl SqliteControlStore {
             requests.blobs,
             requests.client_blob_routes,
         )?;
+        validate_module_query_contracts(
+            registration,
+            requested_capability_ids,
+            requests.query_rpc_routes,
+            true,
+        )?;
+        validate_module_query_contracts(
+            registration,
+            requested_capability_ids,
+            requests.contract_dependencies,
+            false,
+        )?;
         let registration = registration.clone();
         let capabilities = requested_capability_ids.to_vec();
         let storage_requests = requests.storage.to_vec();
@@ -174,6 +208,8 @@ impl SqliteControlStore {
         let vault_purpose_requests = requests.vault_purposes.to_vec();
         let client_rpc_routes = requests.client_rpc_routes.to_vec();
         let client_blob_routes = requests.client_blob_routes.to_vec();
+        let query_rpc_routes = requests.query_rpc_routes.to_vec();
+        let contract_dependencies = requests.contract_dependencies.to_vec();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
             let current =
@@ -215,6 +251,14 @@ impl SqliteControlStore {
                 [registration.registration_id()],
             )?;
             transaction.execute(
+                "DELETE FROM hermes_kernel_module_query_rpc_route_request WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            transaction.execute(
+                "DELETE FROM hermes_kernel_module_contract_dependency WHERE registration_id = ?1",
+                [registration.registration_id()],
+            )?;
+            transaction.execute(
                 "DELETE FROM hermes_kernel_module_registration_capability WHERE registration_id = ?1",
                 [registration.registration_id()],
             )?;
@@ -248,6 +292,8 @@ impl SqliteControlStore {
             insert_vault_purpose_requests(&transaction, &vault_purpose_requests)?;
             insert_client_rpc_routes(&transaction, &client_rpc_routes)?;
             insert_client_blob_routes(&transaction, &client_blob_routes)?;
+            insert_module_query_rpc_routes(&transaction, &query_rpc_routes)?;
+            insert_module_contract_dependencies(&transaction, &contract_dependencies)?;
             transaction.commit()?;
             Ok(())
         })

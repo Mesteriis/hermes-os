@@ -101,5 +101,7 @@ fn empty_requests() -> ModuleDescriptorRegistrationRequestsV1<'static> {
         vault_purposes: &[],
         client_rpc_routes: &[],
         client_blob_routes: &[],
+        query_rpc_routes: &[],
+        contract_dependencies: &[],
     }
 }

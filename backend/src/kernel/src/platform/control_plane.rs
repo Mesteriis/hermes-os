@@ -9,6 +9,7 @@ use std::time::Duration;
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 
 use crate::identity::owner_control;
+use crate::modules::capability::module_query::ModuleQueryRouteHandlerV1;
 use crate::modules::registration::ipc as registration_ipc;
 use crate::platform::blob::session::BlobSessionHandlerV1;
 use crate::platform::events::credential::{
@@ -101,6 +102,9 @@ fn configure_runtime(
             managed_runtime_supervisor.relay_port(),
             data_dir.to_path_buf(),
         ),
+    ))?;
+    managed_runtime_supervisor.configure_module_query_handler(Arc::new(
+        ModuleQueryRouteHandlerV1::new(Arc::clone(store), managed_runtime_supervisor.relay_port()),
     ))?;
     managed_runtime_supervisor.configure_event_credential_handler(Arc::new(
         EventCredentialHandlerV1::new(

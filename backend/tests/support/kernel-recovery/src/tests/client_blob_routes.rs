@@ -29,6 +29,8 @@ fn control_store_exposes_only_approved_client_blob_routes() {
                 vault_purposes: &[],
                 client_rpc_routes: &[],
                 client_blob_routes: std::slice::from_ref(&route),
+                query_rpc_routes: &[],
+                contract_dependencies: &[],
             },
         )
         .expect("create pending registration");
@@ -86,6 +88,8 @@ fn control_store_rejects_client_blob_route_without_matching_read_quota_atomicall
                         vault_purposes: &[],
                         client_rpc_routes: &[],
                         client_blob_routes: std::slice::from_ref(&route),
+                        query_rpc_routes: &[],
+                        contract_dependencies: &[],
                     },
                 )
                 .is_err()

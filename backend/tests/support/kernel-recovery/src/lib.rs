@@ -185,6 +185,7 @@ mod tests {
     mod managed_vault_binary;
     mod managed_vault_route;
     mod module_grant_snapshot;
+    mod module_query_routes;
     mod module_registration_upgrade;
     mod operation_journal;
     mod owner_module_settings;

@@ -132,6 +132,8 @@ where
                 vault_purposes: &bound.vault_purposes,
                 client_rpc_routes: &bound.client_rpc_routes,
                 client_blob_routes: &bound.client_blob_routes,
+                query_rpc_routes: &bound.query_rpc_routes,
+                contract_dependencies: &bound.contract_dependencies,
             },
         ) {
             Ok(receipt) => {
@@ -196,6 +198,8 @@ where
                 vault_purposes: &bound.vault_purposes,
                 client_rpc_routes: &bound.client_rpc_routes,
                 client_blob_routes: &bound.client_blob_routes,
+                query_rpc_routes: &bound.query_rpc_routes,
+                contract_dependencies: &bound.contract_dependencies,
             },
         )
         .map_err(|error| format!("{error:?}"))?;
@@ -233,6 +237,8 @@ where
                 vault_purposes: &bound.vault_purposes,
                 client_rpc_routes: &bound.client_rpc_routes,
                 client_blob_routes: &bound.client_blob_routes,
+                query_rpc_routes: &bound.query_rpc_routes,
+                contract_dependencies: &bound.contract_dependencies,
             },
         ) {
             Ok(()) => return Ok(registration),

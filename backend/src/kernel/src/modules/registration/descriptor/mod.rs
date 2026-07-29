@@ -4,8 +4,8 @@ use hermes_kernel_control_store::{
     ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientBlobRouteV1,
     ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
     ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
-    ModuleEventSubscriptionRequirementV1, ModuleRegistration, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
+    ModuleEventSubscriptionRequirementV1, ModuleQueryContractV1, ModuleRegistration,
+    ModuleSchedulerJobRequestV1, ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
 use hermes_runtime_protocol::{
     v1::{
@@ -29,6 +29,8 @@ pub(super) struct DescriptorRegistrationRequests {
     vault_purposes: Vec<DescriptorVaultPurposeRequest>,
     client_rpc_routes: Vec<DescriptorClientRpcRoute>,
     client_blob_routes: Vec<DescriptorClientBlobRoute>,
+    query_rpc_routes: Vec<DescriptorModuleQueryContract>,
+    contract_dependencies: Vec<DescriptorModuleQueryContract>,
 }
 
 pub(super) struct BoundRegistrationRequests {
@@ -39,6 +41,8 @@ pub(super) struct BoundRegistrationRequests {
     pub(super) vault_purposes: Vec<ModuleVaultPurposeRequestV1>,
     pub(super) client_rpc_routes: Vec<ModuleClientRpcRouteV1>,
     pub(super) client_blob_routes: Vec<ModuleClientBlobRouteV1>,
+    pub(super) query_rpc_routes: Vec<ModuleQueryContractV1>,
+    pub(super) contract_dependencies: Vec<ModuleQueryContractV1>,
 }
 
 impl DescriptorRegistrationRequests {
@@ -61,6 +65,8 @@ impl DescriptorRegistrationRequests {
             vault_purposes: vault_purpose_requests(&descriptor)?,
             client_rpc_routes: client_rpc_routes(&descriptor)?,
             client_blob_routes: client_blob_routes(&descriptor)?,
+            query_rpc_routes: query_rpc_routes(&descriptor)?,
+            contract_dependencies: contract_dependencies(&descriptor)?,
         })
     }
 
@@ -89,6 +95,11 @@ impl DescriptorRegistrationRequests {
             vault_purposes: bind_vault_purpose_requests(&self.vault_purposes, registration),
             client_rpc_routes: bind_client_rpc_routes(&self.client_rpc_routes, registration),
             client_blob_routes: bind_client_blob_routes(&self.client_blob_routes, registration),
+            query_rpc_routes: bind_module_query_contracts(&self.query_rpc_routes, registration),
+            contract_dependencies: bind_module_query_contracts(
+                &self.contract_dependencies,
+                registration,
+            ),
         }
     }
 }
@@ -246,6 +257,26 @@ fn bind_client_blob_routes(
         .collect()
 }
 
+fn bind_module_query_contracts(
+    requests: &[DescriptorModuleQueryContract],
+    registration: &ModuleRegistration,
+) -> Vec<ModuleQueryContractV1> {
+    requests
+        .iter()
+        .map(|request| {
+            ModuleQueryContractV1::new(
+                registration.registration_id(),
+                &request.capability_id,
+                &request.owner,
+                &request.name,
+                request.major,
+                request.revision,
+                request.schema_sha256,
+            )
+        })
+        .collect()
+}
+
 struct DescriptorStorageRequest {
     capability_id: String,
     owner_id: String,
@@ -309,6 +340,75 @@ struct DescriptorClientBlobRoute {
     contract_schema_sha256: [u8; 32],
     path: String,
     max_response_bytes: u64,
+}
+
+struct DescriptorModuleQueryContract {
+    capability_id: String,
+    owner: String,
+    name: String,
+    major: u32,
+    revision: u32,
+    schema_sha256: [u8; 32],
+}
+
+fn query_rpc_routes(
+    descriptor: &hermes_runtime_protocol::v1::ModuleDescriptorV1,
+) -> Result<Vec<DescriptorModuleQueryContract>, String> {
+    let mut routes = Vec::new();
+    for capability in &descriptor.capabilities {
+        for surface in &capability.provides {
+            if ProvidedSurfaceKindV1::try_from(surface.kind).ok()
+                != Some(ProvidedSurfaceKindV1::QueryRpc)
+            {
+                continue;
+            }
+            let contract = surface
+                .contract
+                .as_ref()
+                .ok_or_else(|| "module Query RPC contract is invalid".to_owned())?;
+            if contract.owner != descriptor.owner_id {
+                return Err("module Query RPC contract owner is invalid".to_owned());
+            }
+            routes.push(descriptor_query_contract(
+                &capability.capability_id,
+                contract,
+            )?);
+        }
+    }
+    Ok(routes)
+}
+
+fn contract_dependencies(
+    descriptor: &hermes_runtime_protocol::v1::ModuleDescriptorV1,
+) -> Result<Vec<DescriptorModuleQueryContract>, String> {
+    let mut dependencies = Vec::new();
+    for capability in &descriptor.capabilities {
+        for contract in &capability.dependencies {
+            dependencies.push(descriptor_query_contract(
+                &capability.capability_id,
+                contract,
+            )?);
+        }
+    }
+    Ok(dependencies)
+}
+
+fn descriptor_query_contract(
+    capability_id: &str,
+    contract: &hermes_runtime_protocol::v1::ContractReferenceV1,
+) -> Result<DescriptorModuleQueryContract, String> {
+    Ok(DescriptorModuleQueryContract {
+        capability_id: capability_id.to_owned(),
+        owner: contract.owner.clone(),
+        name: contract.name.clone(),
+        major: contract.major,
+        revision: contract.revision,
+        schema_sha256: contract
+            .schema_sha256
+            .as_slice()
+            .try_into()
+            .map_err(|_| "module contract dependency is invalid".to_owned())?,
+    })
 }
 
 fn client_rpc_routes(

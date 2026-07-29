@@ -6,7 +6,17 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
 test('managed module query RPC foundation is typed bounded and owner neutral', async () => {
-  const [adr, inventorySource, protocol, validation, control, supervisor] =
+  const [
+    adr,
+    inventorySource,
+    protocol,
+    validation,
+    control,
+    supervisor,
+    queryRouter,
+    queryStore,
+    migration,
+  ] =
     await Promise.all([
       readFile(
         new URL(
@@ -47,6 +57,27 @@ test('managed module query RPC foundation is typed bounded and owner neutral', a
         ),
         'utf8',
       ),
+      readFile(
+        new URL(
+          'src/kernel/src/modules/capability/module_query.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/kernel/control_store/sqlite/src/module_state/module_query_route.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/kernel/control_store/sqlite/src/schema/v44_to_v45.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
     ]);
   const inventory = JSON.parse(inventorySource);
   const platformGate = inventory.slices.find(
@@ -78,8 +109,16 @@ test('managed module query RPC foundation is typed bounded and owner neutral', a
   assert.match(validation, /response\.request_id/);
   assert.match(control, /trait ManagedRuntimeModuleQueryHandler/);
   assert.match(supervisor, /configure_module_query_handler/);
+  assert.match(queryRouter, /module_contract_dependencies/);
+  assert.match(queryRouter, /approved_module_query_rpc_routes/);
+  assert.match(queryRouter, /current_managed_runtime_matches/);
+  assert.match(queryRouter, /initial_owner_identity/);
+  assert.match(queryRouter, /provider is ambiguous/);
+  assert.match(queryStore, /validate_module_query_contracts/);
+  assert.match(migration, /hermes_kernel_module_query_rpc_route_request/);
+  assert.match(migration, /hermes_kernel_module_contract_dependency/);
   assert.doesNotMatch(
-    `${protocol}\n${validation}\n${control}\n${supervisor}`,
+    `${protocol}\n${validation}\n${control}\n${supervisor}\n${queryRouter}\n${queryStore}\n${migration}`,
     /hermes_(?:communications|mail|telegram|whatsapp|zulip)|Communications|Mail|Telegram|WhatsApp|Zulip/,
   );
 });

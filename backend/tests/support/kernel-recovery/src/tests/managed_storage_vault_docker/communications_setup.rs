@@ -2656,6 +2656,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
                 vault_purposes: std::slice::from_ref(&vault_purpose),
                 client_rpc_routes: &client_rpc_routes,
                 client_blob_routes: std::slice::from_ref(&client_blob_route),
+                query_rpc_routes: &[],
+                contract_dependencies: &[],
             },
         )
         .expect("record Communications registration");
@@ -2848,6 +2850,8 @@ fn record_communications_export_runtime_fixture(store: &SqliteControlStore) {
                 vault_purposes: &[],
                 client_rpc_routes: &client_rpc_routes,
                 client_blob_routes: std::slice::from_ref(&client_blob_route),
+                query_rpc_routes: &[],
+                contract_dependencies: &[],
             },
         )
         .expect("record Communications Export registration");

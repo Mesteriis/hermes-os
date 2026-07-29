@@ -1,7 +1,8 @@
 use crate::{
     GrantSet, ModuleBlobQuotaRequestV1, ModuleClientBlobRouteV1, ModuleClientRpcRouteV1,
-    ModuleEventRouteRequestV1, ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState,
-    ModuleSchedulerJobRequestV1, ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
+    ModuleEventRouteRequestV1, ModuleGrantSnapshot, ModuleQueryContractV1, ModuleRegistration,
+    ModuleRegistrationState, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
+    ModuleVaultPurposeRequestV1,
 };
 
 pub struct ModuleDescriptorRegistrationRequestsV1<'a> {
@@ -12,6 +13,8 @@ pub struct ModuleDescriptorRegistrationRequestsV1<'a> {
     pub vault_purposes: &'a [ModuleVaultPurposeRequestV1],
     pub client_rpc_routes: &'a [ModuleClientRpcRouteV1],
     pub client_blob_routes: &'a [ModuleClientBlobRouteV1],
+    pub query_rpc_routes: &'a [ModuleQueryContractV1],
+    pub contract_dependencies: &'a [ModuleQueryContractV1],
 }
 
 pub trait ModuleRegistryStore {
@@ -82,6 +85,12 @@ pub trait ModuleRegistryStore {
     fn approved_module_client_blob_routes(
         &self,
     ) -> Result<Vec<ModuleClientBlobRouteV1>, Self::Error>;
+    fn approved_module_query_rpc_routes(&self) -> Result<Vec<ModuleQueryContractV1>, Self::Error>;
+    fn module_contract_dependencies(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<Vec<ModuleQueryContractV1>, Self::Error>;
     fn module_blob_quota_request(
         &self,
         registration_id: &str,

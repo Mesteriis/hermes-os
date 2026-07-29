@@ -38,6 +38,7 @@ pub enum StoreError {
     InvalidModuleBlobQuotaRequest,
     InvalidModuleClientBlobRoute,
     InvalidModuleClientRpcRoute,
+    InvalidModuleQueryContract,
     InvalidModuleSchedulerJobRequest,
     InvalidModuleVaultPurposeRequest,
     InvalidBundledManagedArtifactProposal,
