@@ -18,8 +18,8 @@ export function useMailAccountConnections(input: {
 	)
 
 	async function refresh(): Promise<void> {
-		accounts.value = []
 		if (!input.canQuery()) {
+			accounts.value = []
 			return
 		}
 		const catalog = await listMailAccounts()
