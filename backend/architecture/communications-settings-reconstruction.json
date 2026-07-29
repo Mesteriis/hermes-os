@@ -461,7 +461,7 @@
       "gate": "capability_routed_module_query_rpc_v1",
       "role": "platform",
       "owner": "kernel_capability_router",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["module_control_plane_v1"]
     },
     {

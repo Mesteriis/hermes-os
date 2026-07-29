@@ -7,8 +7,10 @@
 Состояние реализации: private versioned request/delivery/response wire,
 structural bounds, Control Store schema v45 provider/dependency catalog,
 descriptor extraction и owner-neutral Kernel authorization/provider relay
-реализованы. Полный managed conformance для zero/ambiguous/stale/revoke/restart
-и первый delivery-intent adapter ещё не реализованы; gate остаётся `planned`.
+реализованы. Managed conformance покрывает success, zero/ambiguous provider,
+stale caller/provider binding, revoke и response mismatch. Platform gate
+`capability_routed_module_query_rpc_v1` реализован; первый delivery-intent
+adapter остаётся отдельным незакрытым gate.
 
 Уточняет:
 

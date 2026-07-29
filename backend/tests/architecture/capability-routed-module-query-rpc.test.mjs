@@ -91,7 +91,7 @@ test('managed module query RPC foundation is typed bounded and owner neutral', a
     gate: 'capability_routed_module_query_rpc_v1',
     role: 'platform',
     owner: 'kernel_capability_router',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['module_control_plane_v1'],
   });
   assert.equal(deliveryGate?.state, 'planned');
