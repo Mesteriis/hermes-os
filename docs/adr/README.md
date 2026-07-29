@@ -529,3 +529,13 @@ ADR-0337 вводит недостающий owner-neutral managed `client_realt
 exact descriptor capability/runtime fences, а общий Gateway SSE выполняет
 bounded replay/live fan-out без owner API, cross-owner SQL или выдачи
 `DurableEnvelopeV1` клиенту.
+ADR-0338 переводит client-safe system health на общий replayable Gateway SSE:
+Kernel вычисляет sanitized status, Gateway публикует change-only frame, а
+frontend выполняет один bootstrap без периодического polling.
+ADR-0339 вводит отдельный capability-routed managed `request_rpc` для typed
+mutation с immediate receipt: provider inventory, authorization, runtime
+delivery и no-retry semantics не смешиваются с `query_rpc` или `client_rpc`.
+ADR-0340 определяет отдельный `communication_bulk_action` workflow: batch и
+targets сохраняются до fan-out, каждая цель использует стабильный operation ID
+и public delivery-intent `request_rpc`, а provider completion остаётся вне
+bulk state.
