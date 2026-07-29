@@ -6,8 +6,10 @@
 
 Состояние реализации: workflow-owned Blob write adapter, exact provider target
 selection, Blob capability admission и receipt-only PostgreSQL persistence
-реализованы. Четыре provider runtime custody consumers, JetStream relay/result
-loops и live managed evidence остаются следующими production gates.
+реализованы. Четыре provider runtime custody consumers и provider-owned
+command/result relay loops реализованы по ADR-0335. Workflow Event Hub loops,
+его live managed admission и полное four-provider runtime evidence остаются
+следующими production gates.
 
 ## Контекст
 

@@ -15,8 +15,10 @@ unsigned release fragment, не исполняя workflow. Четыре provider
 command/result wire contracts и exact route requests реализованы по ADR-0331.
 Transactional workflow outbox, четыре exact event adapter, idempotent
 terminal-result inbox и runtime entry points реализованы по ADR-0332.
-Target-bound Blob worker, provider runtime consumers, client route и live
-admission ещё не реализованы;
+Target-bound Blob materialization и четыре provider-owned consumer/worker/result
+loop реализованы по ADR-0333 и ADR-0335. Workflow runtime пока не подключён к
+Event Hub publish/result-consume permits, не входит в managed development
+admission, а Gateway command/status/realtime closure ещё не реализован;
 `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст

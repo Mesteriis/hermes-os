@@ -8,8 +8,11 @@
 units, их generated Protobuf descriptors, schema hashes и exact
 publish/consume route requests реализованы. Четыре workflow publisher/result
 adapter, transactional outbox и idempotent terminal-result inbox реализованы
-по ADR-0332. Provider runtime consumers, target-bound Blob materialization,
-runtime descriptor routes и live delivery ещё не реализованы. Поэтому
+по ADR-0332. Target-bound Blob materialization, четыре provider runtime
+consumers, exact provider descriptor routes, operational execution и
+terminal-result outbox relay реализованы по ADR-0333 и ADR-0335. Workflow
+Event Hub loops, Gateway client closure и полное live managed evidence ещё не
+реализованы. Поэтому
 `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст

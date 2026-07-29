@@ -9,9 +9,11 @@ decoder adapter, transactional provider-command outbox и idempotent terminal
 result inbox реализованы. Runtime entry points сохраняют exact durable command
 bytes под current claim fence, а publish completion атомарно переводит intent
 в `submitted_to_provider`. Provider-owned terminal result применяется вместе с
-inbox identity/hash. Blob
-materialization, JetStream permits/consumer loop, provider runtime execution и
-live admission остаются отдельным следующим слайсом.
+inbox identity/hash. Blob materialization и четыре provider-owned
+consume/execute/result loops реализованы по ADR-0333 и ADR-0335. Workflow
+runtime пока не получает JetStream publish/result-consume permits и не входит
+в live managed admission; Gateway client closure также остаётся следующим
+слайсом.
 
 ## Контекст
 

@@ -4,10 +4,14 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: решение принято. Provider-owned locator projections,
-durable inbox/job lifecycle, Blob custody workers, operational adapters,
-terminal-result outbox и exact relay loops реализуются последующими
-provider-specific слайсами. До их live validation
+Состояние реализации: provider-owned locator projections, durable inbox/job
+lifecycle, Blob custody workers, operational adapters, terminal-result outbox
+и exact relay loops реализованы отдельно для Mail, Telegram, WhatsApp и Zulip.
+Exact contract/admission, duplicate decoding, custody integrity, generation
+fencing и provider-neutral result tests проходят. Completion gate остаётся
+открытым до полного outage/replay/ambiguity conformance и live managed
+validation всех четырёх integrations; workflow Event Hub и client closure
+принадлежат отдельным gates ADR-0330/ADR-0332. До их закрытия
 `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст
@@ -193,4 +197,3 @@ Outbox relay публикует сохранённые bytes без re-encode. P
 6. exact consume/publish/Blob descriptor permits and assembly admission;
 7. outage, replay, stale-generation and ambiguity conformance;
 8. live managed runtime evidence without private payload in logs/health.
-
