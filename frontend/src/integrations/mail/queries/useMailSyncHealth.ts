@@ -1,6 +1,5 @@
 import { computed, ref, shallowRef } from 'vue'
 
-import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import type {
 	MailSyncRunV1,
 	MailSyncStatusV1,
@@ -13,11 +12,11 @@ import {
 	buildMailSyncHealthModel,
 	type MailSyncHealthState,
 } from '../presentation/mailSyncHealthModel'
-import { mailSyncHealthConnections } from './mailSyncHealthConnections'
+import type { MailAccountConnection } from './mailAccountConnections'
 
 export function useMailSyncHealth(input: {
 	canQuery: () => boolean
-	modules: () => readonly ClientModuleBootstrapV1[]
+	connections: () => readonly MailAccountConnection[]
 }) {
 	const state = ref<MailSyncHealthState>('blocked')
 	const statusMessage = ref('')
@@ -27,7 +26,7 @@ export function useMailSyncHealth(input: {
 	const nextCursor = ref('')
 	let generation = 0
 
-	const connections = computed(() => mailSyncHealthConnections(input.modules()))
+	const connections = computed(input.connections)
 	const model = computed(() => buildMailSyncHealthModel({
 		canQuery: input.canQuery(),
 		state: state.value,

@@ -2,12 +2,6 @@ import { create } from '@bufbuild/protobuf'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-	ClientModuleBootstrapV1Schema,
-	ClientModuleSettingsBootstrapV1Schema,
-	ClientSettingValueEntryV1Schema,
-	ClientSettingValueV1Schema,
-} from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
-import {
 	MailSyncOutcomeV1,
 	MailSyncProviderPathReadinessV1,
 	MailSyncRunPageV1Schema,
@@ -45,7 +39,7 @@ describe('Mail sync health controller', () => {
 	it('loads status and paged restart-safe history for an admitted Mail connection', async () => {
 		const controller = useMailSyncHealth({
 			canQuery: () => true,
-			modules: () => [mailModule()],
+			connections: () => [mailConnection()],
 		})
 
 		await controller.reconcile()
@@ -79,14 +73,14 @@ describe('Mail sync health controller', () => {
 	it('fails closed before transport when capability or effective connection is absent', async () => {
 		const blocked = useMailSyncHealth({
 			canQuery: () => false,
-			modules: () => [mailModule()],
+			connections: () => [mailConnection()],
 		})
 		await blocked.reconcile()
 		expect(blocked.model.value.state).toBe('blocked')
 
 		const noConnection = useMailSyncHealth({
 			canQuery: () => true,
-			modules: () => [],
+			connections: () => [],
 		})
 		await noConnection.reconcile()
 		expect(noConnection.model.value.state).toBe('empty')
@@ -109,19 +103,11 @@ function run(operationId: string) {
 	})
 }
 
-function mailModule() {
-	return create(ClientModuleBootstrapV1Schema, {
+function mailConnection() {
+	return {
 		registrationId: 'mail-primary',
-		moduleId: 'hermes-mail-runtime',
-		sectionsEnabled: true,
-		capabilityIds: ['mail.sync.health.query.v1'],
-		settings: create(ClientModuleSettingsBootstrapV1Schema, {
-			values: [create(ClientSettingValueEntryV1Schema, {
-				settingId: 'mail.connection_id',
-				value: create(ClientSettingValueV1Schema, {
-					value: { case: 'stringValue', value: 'primary' },
-				}),
-			})],
-		}),
-	})
+		connectionId: 'primary',
+		deliveryReady: true,
+		syncReady: true,
+	}
 }

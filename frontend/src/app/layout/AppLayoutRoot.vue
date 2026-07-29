@@ -68,6 +68,9 @@ const whatsAppOperationalRealtimeAvailable = computed(() =>
 const mailDeliveryAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.delivery.v1'),
 )
+const mailAccountCatalogAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'mail.account.catalog.query.v1'),
+)
 const mailCompositionCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'mail.composition.command.v1'),
 )
@@ -176,6 +179,7 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					:can-mutate-flags="mailMessageFlagCommandAvailable"
 					:can-mutate-location="mailMessageLocationCommandAvailable"
 					:can-query="mailOperationalQueryAvailable"
+					:can-query-accounts="mailAccountCatalogAvailable"
 					:can-query-flag-status="mailMessageFlagQueryAvailable"
 					:can-query-location-status="mailMessageLocationQueryAvailable"
 					:can-permanently-delete="mailMessagePermanentDeleteCommandAvailable"

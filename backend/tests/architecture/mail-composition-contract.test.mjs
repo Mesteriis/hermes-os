@@ -53,7 +53,7 @@ const paths = {
     PROJECT_ROOT,
   ),
   frontendConnections: new URL(
-    'frontend/src/integrations/mail/queries/mailCompositionConnections.ts',
+    'frontend/src/integrations/mail/queries/mailAccountConnections.ts',
     PROJECT_ROOT,
   ),
   frontendWorkspace: new URL(
@@ -201,7 +201,9 @@ test('Mail composition is owner-local, independently admitted and cut over throu
   assert.match(frontendQueryClient, /MailCompositionQueryService/);
   assert.match(frontendGateway, /MailCompositionCommandV1Schema/);
   assert.match(frontendGateway, /MailCompositionQueryV1Schema/);
-  assert.match(frontendConnections, /mail\.composition\.query\.v1/);
+  assert.match(frontendConnections, /mail\.account\.catalog\.query\.v1/);
+  assert.match(frontendConnections, /deliveryReady/);
+  assert.match(frontendWorkspace, /MailAccountConnection/);
   assert.match(frontendWorkspace, /useMailDrafts/);
   assert.match(frontendWorkspace, /useMailTemplates/);
   assert.match(frontendWorkspace, /useMailSignatures/);

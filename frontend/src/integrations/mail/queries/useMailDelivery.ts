@@ -10,7 +10,10 @@ import {
 } from '../presentation/mailDeliveryModel'
 import type { MailDeliveryInput } from './useMailComposition'
 
-export function useMailDelivery(capabilities: { canDeliver: () => boolean }) {
+export function useMailDelivery(capabilities: {
+	canDeliver: () => boolean
+	connectionId: () => string
+}) {
 	const operationId = ref('')
 	const busy = ref(false)
 	const notice = ref('')
@@ -19,7 +22,7 @@ export function useMailDelivery(capabilities: { canDeliver: () => boolean }) {
 	const model = computed<MailDeliveryModel>(() => ({
 		operationId: operationId.value,
 		busy: busy.value,
-		canDeliver: capabilities.canDeliver(),
+		canDeliver: capabilities.canDeliver() && Boolean(capabilities.connectionId()),
 		notice: notice.value,
 		status: buildMailDeliveryStatusCard(status.value),
 	}))
@@ -31,6 +34,7 @@ export function useMailDelivery(capabilities: { canDeliver: () => boolean }) {
 		}
 		await run(async () => {
 			operationId.value = await sendMailMessage({
+				connectionId: input.connectionId,
 				operationId: crypto.randomUUID(),
 				providerConversationId: input.providerConversationId,
 				toRecipients: input.toRecipients,
@@ -45,7 +49,10 @@ export function useMailDelivery(capabilities: { canDeliver: () => boolean }) {
 
 	async function refreshStatus(): Promise<void> {
 		await run(async () => {
-			status.value = await getMailDeliveryStatus(operationId.value)
+			status.value = await getMailDeliveryStatus(
+				capabilities.connectionId(),
+				operationId.value,
+			)
 			if (!status.value) notice.value = 'No Mail delivery was found for this operation ID.'
 		})
 	}

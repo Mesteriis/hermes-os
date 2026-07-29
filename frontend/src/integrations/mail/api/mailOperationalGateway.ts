@@ -6,13 +6,18 @@ import { getMailDeliveryCommandConnectClient } from './mailDeliveryCommandClient
 import { getMailDeliveryQueryConnectClient } from './mailDeliveryQueryClient'
 import { getMailSyncConnectClient } from './mailSyncClient'
 
-export async function syncMailInbox(operationId: string): Promise<SyncInboxCompletedV1> {
+export async function syncMailInbox(
+	connectionId: string,
+	operationId: string,
+): Promise<SyncInboxCompletedV1> {
 	return getMailSyncConnectClient().sync({
+		connectionId: requireIdentifier('connection ID', connectionId),
 		operationId: requireIdentifier('operation ID', operationId),
 	})
 }
 
 export async function sendMailMessage(input: {
+	connectionId: string
 	operationId: string
 	providerConversationId: string
 	toRecipients: readonly string[]
@@ -32,6 +37,7 @@ export async function sendMailMessage(input: {
 		throw new RangeError('Mail body is required')
 	}
 	const response = await getMailDeliveryCommandConnectClient().send({
+		connectionId: requireIdentifier('connection ID', input.connectionId),
 		operationId: requireIdentifier('operation ID', input.operationId),
 		providerConversationId: input.providerConversationId.trim(),
 		recipient: toRecipients,
@@ -49,9 +55,11 @@ function normalizedRecipients(values: readonly string[]): string[] {
 }
 
 export async function getMailDeliveryStatus(
+	connectionId: string,
 	operationId: string,
 ): Promise<MailDeliveryOperationStatusV1 | null> {
 	const response = await getMailDeliveryQueryConnectClient().getOperationStatus({
+		connectionId: requireIdentifier('connection ID', connectionId),
 		operationId: requireIdentifier('operation ID', operationId),
 	})
 	return response.status ?? null

@@ -1,5 +1,4 @@
 import { computed, ref, shallowRef } from 'vue'
-import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import type {
 	MailFolderV1,
 	MailMessageSummaryV1,
@@ -21,11 +20,11 @@ import {
 	type MailOperationalReadModel,
 	type MailOperationalReadStatus,
 } from '../presentation/mailOperationalReadModel'
-import { mailOperationalConnections } from './mailOperationalConnections'
+import type { MailAccountConnection } from './mailAccountConnections'
 
 export function useMailOperationalRead(input: {
 	canQuery: () => boolean
-	modules: () => readonly ClientModuleBootstrapV1[]
+	connections: () => readonly MailAccountConnection[]
 }) {
 	const status = ref<MailOperationalReadStatus>('blocked')
 	const statusMessage = ref('')
@@ -42,7 +41,7 @@ export function useMailOperationalRead(input: {
 	const messageCursor = ref('')
 	let generation = 0
 
-	const connections = computed(() => mailOperationalConnections(input.modules()))
+	const connections = computed(input.connections)
 	const model = computed<MailOperationalReadModel>(() => ({
 		canQuery: input.canQuery(),
 		status: status.value,

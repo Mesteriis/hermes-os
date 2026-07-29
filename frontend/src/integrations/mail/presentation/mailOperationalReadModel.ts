@@ -5,7 +5,9 @@ import {
 	type MailMessageSummaryV1,
 	type MailThreadV1,
 } from '../../../gen/hermes/mail/operational/v1/client_pb'
-import type { MailOperationalConnection } from '../queries/mailOperationalConnections'
+import type {
+	MailAccountConnection as MailOperationalConnection,
+} from '../queries/mailAccountConnections'
 
 export type MailOperationalReadStatus = 'blocked' | 'empty' | 'error' | 'loading' | 'ready'
 

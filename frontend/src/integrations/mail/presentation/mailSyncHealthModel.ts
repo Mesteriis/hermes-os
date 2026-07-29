@@ -6,7 +6,9 @@ import {
 	type MailSyncRunV1,
 	type MailSyncStatusV1,
 } from '../../../gen/hermes/mail/sync_health/v1/client_pb'
-import type { MailSyncHealthConnection } from '../queries/mailSyncHealthConnections'
+import type {
+	MailAccountConnection as MailSyncHealthConnection,
+} from '../queries/mailAccountConnections'
 
 export type MailSyncHealthState = 'blocked' | 'empty' | 'error' | 'loading' | 'ready'
 

@@ -42,7 +42,12 @@ describe('Mail sync health presentation model', () => {
 			canQuery: true,
 			state: 'ready',
 			statusMessage: '',
-			connections: [{ connectionId: 'primary', registrationId: 'mail-primary' }],
+			connections: [{
+				connectionId: 'primary',
+				deliveryReady: true,
+				registrationId: 'mail-primary',
+				syncReady: true,
+			}],
 			selectedConnectionId: 'primary',
 			status,
 			runs: [run],

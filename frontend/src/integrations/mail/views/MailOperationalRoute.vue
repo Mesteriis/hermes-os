@@ -2,17 +2,9 @@
 import { watch } from 'vue'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import MailOperationalPage from '../presentation/MailOperationalPage.vue'
-import {
-	mailCompositionConnectionFingerprint,
-} from '../queries/mailCompositionConnections'
-import {
-	mailOperationalConnectionFingerprint,
-} from '../queries/mailOperationalConnections'
-import {
-	mailSyncHealthConnectionFingerprint,
-} from '../queries/mailSyncHealthConnections'
 import { useMailComposition } from '../queries/useMailComposition'
 import { useMailDelivery } from '../queries/useMailDelivery'
+import { useMailAccountConnections } from '../queries/useMailAccountConnections'
 import { useMailOperationalRead } from '../queries/useMailOperationalRead'
 import { useMailMessageFlags } from '../queries/useMailMessageFlags'
 import { useMailMessageLocation } from '../queries/useMailMessageLocation'
@@ -26,6 +18,7 @@ const props = defineProps<{
 	canDeliver: boolean
 	canMutateFlags: boolean
 	canQuery: boolean
+	canQueryAccounts: boolean
 	canQueryFlagStatus: boolean
 	canMutateLocation: boolean
 	canQueryLocationStatus: boolean
@@ -36,16 +29,34 @@ const props = defineProps<{
 	modules: readonly ClientModuleBootstrapV1[]
 }>()
 
+const accountConnections = useMailAccountConnections({
+	canQuery: () => props.canQueryAccounts,
+	modules: () => props.modules,
+})
 const composition = useMailComposition({
 	canMutate: () => props.canCompose,
 	canQuery: () => props.canComposeQuery,
-	modules: () => props.modules,
+	connections: () => accountConnections.connections.value,
 })
-const delivery = useMailDelivery({ canDeliver: () => props.canDeliver })
-const sync = useMailSync({ canSync: () => props.canSync })
+const delivery = useMailDelivery({
+	canDeliver: () => props.canDeliver,
+	connectionId: () => accountConnections.connections.value.find(
+		(connection) => connection.connectionId === composition.connectionId(),
+	)?.deliveryReady
+		? composition.connectionId()
+		: '',
+})
 const read = useMailOperationalRead({
 	canQuery: () => props.canQuery,
-	modules: () => props.modules,
+	connections: () => accountConnections.connections.value,
+})
+const sync = useMailSync({
+	canSync: () => props.canSync,
+	connectionId: () => accountConnections.connections.value.find(
+		(connection) => connection.connectionId === read.model.value.selectedConnectionId,
+	)?.syncReady
+		? read.model.value.selectedConnectionId
+		: '',
 })
 const messageFlags = useMailMessageFlags({
 	canMutate: () => props.canMutateFlags,
@@ -97,26 +108,32 @@ const messagePermanentDelete = useMailMessagePermanentDelete({
 })
 const syncHealth = useMailSyncHealth({
 	canQuery: () => props.canSyncHealth,
-	modules: () => props.modules,
+	connections: () => accountConnections.connections.value,
 })
 
 watch(
-	() => `${props.canComposeQuery}:${mailCompositionConnectionFingerprint(props.modules)}`,
-	() => { void composition.reconcile() },
+	() => [
+		props.canComposeQuery,
+		props.canQuery,
+		props.canQueryAccounts,
+		props.canSyncHealth,
+		props.modules,
+	] as const,
+	() => { void reconcileAccountConsumers() },
 	{ immediate: true },
 )
 
-watch(
-	() => `${props.canQuery}:${mailOperationalConnectionFingerprint(props.modules)}`,
-	() => { void read.reconcile() },
-	{ immediate: true },
-)
-
-watch(
-	() => `${props.canSyncHealth}:${mailSyncHealthConnectionFingerprint(props.modules)}`,
-	() => { void syncHealth.reconcile() },
-	{ immediate: true },
-)
+async function reconcileAccountConsumers(): Promise<void> {
+	try {
+		await accountConnections.refresh()
+	} finally {
+		await Promise.all([
+			composition.reconcile(),
+			read.reconcile(),
+			syncHealth.reconcile(),
+		])
+	}
+}
 </script>
 
 <template>

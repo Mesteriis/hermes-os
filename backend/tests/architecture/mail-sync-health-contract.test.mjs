@@ -50,7 +50,7 @@ const paths = {
     PROJECT_ROOT,
   ),
   frontendConnections: new URL(
-    'frontend/src/integrations/mail/queries/mailSyncHealthConnections.ts',
+    'frontend/src/integrations/mail/queries/mailAccountConnections.ts',
     PROJECT_ROOT,
   ),
   frontendController: new URL(
@@ -201,7 +201,12 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(frontendGateway, /GetMailSyncStatusQueryV1Schema/);
   assert.match(frontendGateway, /ListMailSyncRunsQueryV1Schema/);
   assert.match(frontendGateway, /GetMailSyncRunQueryV1Schema/);
-  assert.match(frontendConnections, /mail\.sync\.health\.query\.v1/);
+  assert.match(frontendConnections, /mail\.account\.catalog\.query\.v1/);
+  assert.match(
+    frontendConnections,
+    /syncReadiness[\s\S]*MailProviderPathReadinessV1\.MAIL_PROVIDER_PATH_READINESS_READY/,
+  );
+  assert.match(frontendConnections, /syncReady/);
   assert.match(frontendController, /getMailSyncStatus/);
   assert.match(frontendController, /listMailSyncRuns/);
   assert.match(frontendModel, /MailSyncFailureCodeV1/);

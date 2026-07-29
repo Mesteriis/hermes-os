@@ -29,13 +29,19 @@ describe('Mail operational Gateway adapter', () => {
 
 	it('runs bounded sync through the generated Mail sync contract', async () => {
 		sync.mockResolvedValue({ operationId: 'sync-1', observedMessages: 12 })
-		await expect(syncMailInbox(' sync-1 ')).resolves.toMatchObject({ observedMessages: 12 })
-		expect(sync).toHaveBeenCalledWith({ operationId: 'sync-1' })
+		await expect(syncMailInbox(' primary ', ' sync-1 ')).resolves.toMatchObject({
+			observedMessages: 12,
+		})
+		expect(sync).toHaveBeenCalledWith({
+			connectionId: 'primary',
+			operationId: 'sync-1',
+		})
 	})
 
 	it('dispatches generated delivery without invented attachment payloads', async () => {
 		send.mockResolvedValue({ operationId: 'delivery-1' })
 		await expect(sendMailMessage({
+			connectionId: 'primary',
 			operationId: 'delivery-1',
 			providerConversationId: '',
 			toRecipients: [' owner@example.com ', ''],
@@ -45,6 +51,7 @@ describe('Mail operational Gateway adapter', () => {
 			textBody: ' Ready ',
 		})).resolves.toBe('delivery-1')
 		expect(send).toHaveBeenCalledWith({
+			connectionId: 'primary',
 			operationId: 'delivery-1',
 			providerConversationId: '',
 			recipient: ['owner@example.com'],
@@ -58,10 +65,11 @@ describe('Mail operational Gateway adapter', () => {
 
 	it('reads delivery status and validates input before transport', async () => {
 		getOperationStatus.mockResolvedValue({ status: { operationId: 'delivery-1' } })
-		await expect(getMailDeliveryStatus('delivery-1')).resolves.toMatchObject({
+		await expect(getMailDeliveryStatus('primary', 'delivery-1')).resolves.toMatchObject({
 			operationId: 'delivery-1',
 		})
 		await expect(sendMailMessage({
+			connectionId: 'primary',
 			operationId: 'delivery-2',
 			providerConversationId: '',
 			toRecipients: [],
@@ -70,7 +78,10 @@ describe('Mail operational Gateway adapter', () => {
 			subject: '',
 			textBody: 'body',
 		})).rejects.toThrow('recipient is required')
-		expect(getOperationStatus).toHaveBeenCalledWith({ operationId: 'delivery-1' })
+		expect(getOperationStatus).toHaveBeenCalledWith({
+			connectionId: 'primary',
+			operationId: 'delivery-1',
+		})
 		expect(send).not.toHaveBeenCalled()
 	})
 })

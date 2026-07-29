@@ -20,12 +20,12 @@ describe('Mail operational active route boundary', () => {
 		const compositionGateway = read('../api/mailCompositionGateway.ts')
 		const compositionCommandClient = read('../api/mailCompositionCommandClient.ts')
 		const compositionQueryClient = read('../api/mailCompositionQueryClient.ts')
-		const compositionConnections = read('../queries/mailCompositionConnections.ts')
+		const accountConnections = read('../queries/mailAccountConnections.ts')
+		const accountConnectionController = read('../queries/useMailAccountConnections.ts')
 		const readGateway = read('../api/mailOperationalReadGateway.ts')
 		const readClient = read('../api/mailOperationalQueryClient.ts')
 		const healthClient = read('../api/mailSyncHealthClient.ts')
 		const healthGateway = read('../api/mailSyncHealthGateway.ts')
-		const healthConnections = read('../queries/mailSyncHealthConnections.ts')
 		const healthController = read('../queries/useMailSyncHealth.ts')
 		const healthModel = read('../presentation/mailSyncHealthModel.ts')
 		const healthPresentation = read('../presentation/MailSyncHealthPanel.vue')
@@ -57,12 +57,12 @@ describe('Mail operational active route boundary', () => {
 			compositionGateway,
 			compositionCommandClient,
 			compositionQueryClient,
-			compositionConnections,
+			accountConnections,
+			accountConnectionController,
 			readGateway,
 			readClient,
 			healthClient,
 			healthGateway,
-			healthConnections,
 			healthController,
 			healthModel,
 			healthPresentation,
@@ -92,7 +92,8 @@ describe('Mail operational active route boundary', () => {
 		expect(signatureController).toContain('upsertMailSignature')
 		expect(compositionCommandClient).toContain('MailCompositionCommandService')
 		expect(compositionQueryClient).toContain('MailCompositionQueryService')
-		expect(compositionConnections).toContain("'mail.composition.query.v1'")
+		expect(accountConnections).toContain("'mail.account.catalog.query.v1'")
+		expect(accountConnectionController).toContain('listMailAccounts')
 		expect(readClient).toContain('MailOperationalQueryService')
 		expect(readGateway).toContain('MailOperationalQueryV1Schema')
 		expect(flagGateway).toContain('MailMessageFlagCommandV1Schema')
@@ -103,7 +104,6 @@ describe('Mail operational active route boundary', () => {
 		expect(flagController).toContain('getMailMessageFlagStatus')
 		expect(healthClient).toContain('MailSyncHealthQueryService')
 		expect(healthGateway).toContain('MailSyncHealthQueryV1Schema')
-		expect(healthConnections).toContain("'mail.sync.health.query.v1'")
 		expect(presentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(compositionPresentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(draftPresentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
@@ -115,6 +115,7 @@ describe('Mail operational active route boundary', () => {
 		expect(healthPresentation).not.toMatch(/queries\/|api\/|connect\/|fetch\(/)
 		expect(appLayout).toContain('MailOperationalRoute')
 		expect(appLayout).toContain("'mail.delivery.v1'")
+		expect(appLayout).toContain("'mail.account.catalog.query.v1'")
 		expect(appLayout).toContain("'mail.composition.command.v1'")
 		expect(appLayout).toContain("'mail.composition.query.v1'")
 		expect(appLayout).toContain("'mail.operational.query.v1'")

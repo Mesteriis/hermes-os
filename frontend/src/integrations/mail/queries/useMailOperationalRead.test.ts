@@ -1,12 +1,5 @@
-import { create } from '@bufbuild/protobuf'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-	ClientModuleBootstrapV1Schema,
-	ClientModuleSettingsBootstrapV1Schema,
-	ClientSettingValueEntryV1Schema,
-	ClientSettingValueV1Schema,
-} from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import { MailFolderKindV1 } from '../../../gen/hermes/mail/operational/v1/client_pb'
 import {
 	getMailOperationalMessage,
@@ -69,7 +62,7 @@ describe('Mail operational read controller', () => {
 	it('loads folders, exact threads, messages, and detail from an admitted connection', async () => {
 		const controller = useMailOperationalRead({
 			canQuery: () => true,
-			modules: () => [mailModule()],
+			connections: () => [mailConnection()],
 		})
 
 		await controller.reconcile()
@@ -100,14 +93,14 @@ describe('Mail operational read controller', () => {
 	it('fails closed before transport when capability or effective connection is absent', async () => {
 		const blocked = useMailOperationalRead({
 			canQuery: () => false,
-			modules: () => [mailModule()],
+			connections: () => [mailConnection()],
 		})
 		await blocked.reconcile()
 		expect(blocked.model.value.status).toBe('blocked')
 
 		const noConnection = useMailOperationalRead({
 			canQuery: () => true,
-			modules: () => [],
+			connections: () => [],
 		})
 		await noConnection.reconcile()
 		expect(noConnection.model.value.status).toBe('empty')
@@ -115,19 +108,11 @@ describe('Mail operational read controller', () => {
 	})
 })
 
-function mailModule() {
-	return create(ClientModuleBootstrapV1Schema, {
+function mailConnection() {
+	return {
 		registrationId: 'mail-primary',
-		moduleId: 'hermes-mail-runtime',
-		sectionsEnabled: true,
-		capabilityIds: ['mail.operational.query.v1'],
-		settings: create(ClientModuleSettingsBootstrapV1Schema, {
-			values: [create(ClientSettingValueEntryV1Schema, {
-				settingId: 'mail.connection_id',
-				value: create(ClientSettingValueV1Schema, {
-					value: { case: 'stringValue', value: 'primary' },
-				}),
-			})],
-		}),
-	})
+		connectionId: 'primary',
+		deliveryReady: true,
+		syncReady: true,
+	}
 }

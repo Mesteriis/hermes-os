@@ -1,12 +1,12 @@
 import { computed, ref } from 'vue'
-import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import type { MailCompositionModel } from '../presentation/mailCompositionModel'
-import { mailCompositionConnections } from './mailCompositionConnections'
+import type { MailAccountConnection } from './mailAccountConnections'
 import { useMailDrafts } from './useMailDrafts'
 import { useMailSignatures } from './useMailSignatures'
 import { useMailTemplates } from './useMailTemplates'
 
 export type MailDeliveryInput = {
+	connectionId: string
 	providerConversationId: string
 	toRecipients: readonly string[]
 	ccRecipients: readonly string[]
@@ -18,7 +18,7 @@ export type MailDeliveryInput = {
 export function useMailComposition(input: {
 	canMutate: () => boolean
 	canQuery: () => boolean
-	modules: () => readonly ClientModuleBootstrapV1[]
+	connections: () => readonly MailAccountConnection[]
 }) {
 	const status = ref<MailCompositionModel['status']>('blocked')
 	const statusMessage = ref('')
@@ -26,7 +26,7 @@ export function useMailComposition(input: {
 	const refreshing = ref(false)
 	let generation = 0
 
-	const connections = computed(() => mailCompositionConnections(input.modules()))
+	const connections = computed(input.connections)
 	const connectionId = () => selectedConnectionId.value
 	const resourceInput = { canMutate: input.canMutate, connectionId }
 	const drafts = useMailDrafts(resourceInput)
@@ -66,6 +66,7 @@ export function useMailComposition(input: {
 			(candidate) => candidate.signatureId === draft.signatureId,
 		)
 		return {
+			connectionId: selectedConnectionId.value,
 			providerConversationId: draft.providerConversationId,
 			toRecipients: draft.toRecipients,
 			ccRecipients: draft.ccRecipients,
@@ -155,6 +156,7 @@ export function useMailComposition(input: {
 	return {
 		model,
 		deliveryInput,
+		connectionId,
 		reconcile,
 		refresh,
 		selectConnection,

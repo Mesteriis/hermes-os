@@ -50,6 +50,10 @@ const paths = {
     'frontend/src/integrations/mail/api/mailOperationalReadGateway.ts',
     PROJECT_ROOT,
   ),
+  frontendConnections: new URL(
+    'frontend/src/integrations/mail/queries/mailAccountConnections.ts',
+    PROJECT_ROOT,
+  ),
   frontendController: new URL(
     'frontend/src/integrations/mail/queries/useMailOperationalRead.ts',
     PROJECT_ROOT,
@@ -87,6 +91,7 @@ test('Mail operational read contract is typed, bounded and admitted with fronten
     generatedClient,
     frontendClient,
     frontendGateway,
+    frontendConnections,
     frontendController,
     frontendPresentation,
     frontendRoute,
@@ -204,7 +209,9 @@ test('Mail operational read contract is typed, bounded and admitted with fronten
     frontendGateway,
     /listFolders[\s\S]*listThreads[\s\S]*listMessages[\s\S]*getMessage/,
   );
-  assert.match(frontendController, /mailOperationalConnections/);
+  assert.match(frontendConnections, /mail\.account\.catalog\.query\.v1/);
+  assert.match(frontendConnections, /activeAccount\(account\.readiness\)/);
+  assert.match(frontendController, /MailAccountConnection/);
   assert.match(frontendController, /loadMoreFolders/);
   assert.match(frontendController, /loadMoreThreads/);
   assert.match(frontendController, /loadMoreMessages/);
@@ -217,7 +224,7 @@ test('Mail operational read contract is typed, bounded and admitted with fronten
     /hermes_communications|domains\/communications|mail-runtime|mail-persistence|hermes-kernel/i,
   );
   assert.doesNotMatch(
-    `${generatedClient}\n${frontendClient}\n${frontendGateway}\n${frontendController}\n${frontendPresentation}\n${frontendRoute}`,
+    `${generatedClient}\n${frontendClient}\n${frontendGateway}\n${frontendConnections}\n${frontendController}\n${frontendPresentation}\n${frontendRoute}`,
     /domains\/communications|integrations\/(?:telegram|whatsapp|zulip)/,
   );
 });
