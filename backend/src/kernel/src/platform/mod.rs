@@ -1,6 +1,7 @@
 //! Platform orchestration and target-specific launch trust.
 
 pub(crate) mod blob;
+pub(crate) mod client_realtime;
 pub(crate) mod control_plane;
 pub(crate) mod development;
 pub(crate) mod events;

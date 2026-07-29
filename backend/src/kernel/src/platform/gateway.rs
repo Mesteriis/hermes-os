@@ -280,6 +280,7 @@ pub(crate) fn serve(
     store: Arc<SqliteControlStore>,
     data_dir: PathBuf,
     supervisor: ManagedRuntimeSupervisor,
+    client_realtime: InMemoryBrowserRealtimeSource,
     configuration: BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
     shutdown_requested: Arc<AtomicBool>,
@@ -293,6 +294,7 @@ pub(crate) fn serve(
         store,
         data_dir,
         supervisor,
+        client_realtime,
         configuration,
         pairing,
         shutdown_requested,
@@ -303,11 +305,19 @@ async fn serve_async(
     store: Arc<SqliteControlStore>,
     data_dir: PathBuf,
     supervisor: ManagedRuntimeSupervisor,
+    client_realtime: InMemoryBrowserRealtimeSource,
     configuration: BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
     shutdown_requested: Arc<AtomicBool>,
 ) -> Result<(), String> {
-    let service = gateway_service(store, &data_dir, supervisor, &configuration, pairing)?;
+    let service = gateway_service(
+        store,
+        &data_dir,
+        supervisor,
+        client_realtime,
+        &configuration,
+        pairing,
+    )?;
     let (shutdown, receiver) = watch::channel(false);
     let watcher = shutdown_watcher(shutdown_requested, shutdown);
     let result = serve_configured_listener(configuration, service, receiver).await;
@@ -322,6 +332,7 @@ pub(crate) fn gateway_service(
     store: Arc<SqliteControlStore>,
     data_dir: &Path,
     supervisor: ManagedRuntimeSupervisor,
+    realtime: InMemoryBrowserRealtimeSource,
     configuration: &BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 ) -> Result<BrowserGatewayRouter, String> {
@@ -363,8 +374,6 @@ pub(crate) fn gateway_service(
     }
     .map(Arc::new)
     .map_err(|_| "browser Gateway session service is unavailable".to_owned())?;
-    let realtime = InMemoryBrowserRealtimeSource::new(1_024)
-        .map_err(|_| "browser Gateway realtime source is unavailable".to_owned())?;
     let request_id_sequence = Arc::new(AtomicU64::new(0));
     let client_rpc_routes = store
         .approved_module_client_rpc_routes()

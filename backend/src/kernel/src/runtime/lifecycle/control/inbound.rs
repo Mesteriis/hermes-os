@@ -6,6 +6,7 @@ use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeBlobSessionDeliveryV1, ManagedRuntimeBlobSessionRequestV1,
+    ManagedRuntimeClientRealtimePublishRequestV1, ManagedRuntimeClientRealtimePublishResponseV1,
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
     ManagedRuntimeModuleQueryRequestV1, ManagedRuntimeModuleQueryResponseV1,
@@ -36,6 +37,7 @@ pub(crate) enum ManagedRuntimeInboundRequestV1 {
     OwnerDerivedKey(ManagedRuntimeOwnerDerivedKeyRequestV1),
     BlobSession(ManagedRuntimeBlobSessionRequestV1),
     ModuleQuery(ManagedRuntimeModuleQueryRequestV1),
+    ClientRealtime(ManagedRuntimeClientRealtimePublishRequestV1),
 }
 
 pub(crate) fn decode_typed_request(
@@ -74,7 +76,40 @@ pub(crate) fn decode_typed_request(
         {
             Ok(ManagedRuntimeInboundRequestV1::ModuleQuery(value))
         }
+        Some(Operation::PublishClientRealtime(value))
+            if hermes_runtime_protocol::validation::client_realtime::validate_managed_client_realtime_publish_request_v1(
+                &value,
+            )
+            .is_ok() =>
+        {
+            Ok(ManagedRuntimeInboundRequestV1::ClientRealtime(value))
+        }
         _ => Err("managed runtime control request is invalid".to_owned()),
+    }
+}
+
+pub(crate) fn client_realtime_response(
+    result: Result<ManagedRuntimeClientRealtimePublishResponseV1, String>,
+) -> ManagedRuntimeControlResponseV1 {
+    match result {
+        Ok(response) => ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::ClientRealtimePublish(response)),
+            error_code: String::new(),
+        },
+        Err(error) => ManagedRuntimeControlResponseV1 {
+            result: None,
+            error_code: client_realtime_error_code(&error).to_owned(),
+        },
+    }
+}
+
+fn client_realtime_error_code(error: &str) -> &'static str {
+    if error.contains("unavailable") {
+        "UNAVAILABLE"
+    } else if error.contains("stale") || error.contains("prohibited") {
+        "REJECTED"
+    } else {
+        "INVALID"
     }
 }
 

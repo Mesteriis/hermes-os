@@ -6,12 +6,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
+use hermes_gateway_runtime::InMemoryBrowserRealtimeSource;
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 
 use crate::identity::owner_control;
 use crate::modules::capability::module_query::ModuleQueryRouteHandlerV1;
 use crate::modules::registration::ipc as registration_ipc;
 use crate::platform::blob::session::BlobSessionHandlerV1;
+use crate::platform::client_realtime::ClientRealtimePublishHandlerV1;
 use crate::platform::events::credential::{
     authority::EVENTS_AUTHORITY_REGISTRATION_ID, handler::EventCredentialHandlerV1,
 };
@@ -42,7 +44,14 @@ pub fn serve(
     let shutdown_requested = shutdown::install()?;
     let managed_runtime_supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown_requested));
     let store = Arc::new(store);
-    configure_runtime(&managed_runtime_supervisor, &store, data_dir)?;
+    let client_realtime = InMemoryBrowserRealtimeSource::new(1_024)
+        .map_err(|_| "browser Gateway realtime source is unavailable".to_owned())?;
+    configure_runtime(
+        &managed_runtime_supervisor,
+        &store,
+        data_dir,
+        client_realtime.clone(),
+    )?;
     start_development_foundation(
         &managed_runtime_supervisor,
         &store,
@@ -62,6 +71,7 @@ pub fn serve(
         store_path: store_path.to_path_buf(),
         shutdown_requested: Arc::clone(&shutdown_requested),
         managed_runtime_supervisor: managed_runtime_supervisor.clone(),
+        client_realtime,
         browser_gateway,
         browser_pairing,
     });
@@ -74,6 +84,7 @@ fn configure_runtime(
     managed_runtime_supervisor: &ManagedRuntimeSupervisor,
     store: &Arc<SqliteControlStore>,
     data_dir: &Path,
+    client_realtime: InMemoryBrowserRealtimeSource,
 ) -> Result<(), String> {
     let vault_route_handler: Arc<KernelManagedVaultRouteHandler> =
         Arc::new(KernelManagedVaultRouteHandler::new(
@@ -105,6 +116,9 @@ fn configure_runtime(
     ))?;
     managed_runtime_supervisor.configure_module_query_handler(Arc::new(
         ModuleQueryRouteHandlerV1::new(Arc::clone(store), managed_runtime_supervisor.relay_port()),
+    ))?;
+    managed_runtime_supervisor.configure_client_realtime_handler(Arc::new(
+        ClientRealtimePublishHandlerV1::new(Arc::clone(store), client_realtime),
     ))?;
     managed_runtime_supervisor.configure_event_credential_handler(Arc::new(
         EventCredentialHandlerV1::new(
@@ -158,6 +172,7 @@ struct ControlPlaneWorkerInputV1 {
     store_path: std::path::PathBuf,
     shutdown_requested: Arc<AtomicBool>,
     managed_runtime_supervisor: ManagedRuntimeSupervisor,
+    client_realtime: InMemoryBrowserRealtimeSource,
     browser_gateway: Option<BrowserGatewayConfigurationV1>,
     browser_pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 }
@@ -175,6 +190,7 @@ fn start_workers(
         store_path,
         shutdown_requested,
         managed_runtime_supervisor,
+        client_realtime,
         browser_gateway,
         browser_pairing,
     } = input;
@@ -217,6 +233,7 @@ fn start_workers(
         &store,
         data_dir,
         managed_runtime_supervisor,
+        client_realtime,
         browser_gateway,
         browser_pairing,
     ));
@@ -287,6 +304,7 @@ fn browser_gateway_worker(
     store: &Arc<SqliteControlStore>,
     data_dir: std::path::PathBuf,
     supervisor: ManagedRuntimeSupervisor,
+    client_realtime: InMemoryBrowserRealtimeSource,
     browser_gateway: Option<BrowserGatewayConfigurationV1>,
     browser_pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 ) -> Option<std::thread::JoinHandle<()>> {
@@ -297,6 +315,7 @@ fn browser_gateway_worker(
         Arc::clone(store),
         data_dir,
         supervisor,
+        client_realtime,
         configuration,
         browser_pairing,
     ))
@@ -346,6 +365,7 @@ fn start_browser_gateway_worker(
     store: Arc<SqliteControlStore>,
     data_dir: std::path::PathBuf,
     supervisor: ManagedRuntimeSupervisor,
+    client_realtime: InMemoryBrowserRealtimeSource,
     configuration: BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 ) -> std::thread::JoinHandle<()> {
@@ -359,6 +379,7 @@ fn start_browser_gateway_worker(
                 Arc::clone(&store),
                 data_dir.clone(),
                 supervisor.clone(),
+                client_realtime.clone(),
                 configuration.clone(),
                 pairing.clone(),
                 shutdown,

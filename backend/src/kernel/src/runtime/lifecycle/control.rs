@@ -14,7 +14,8 @@ use hermes_kernel_control_store::{
 use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeResponseV1, ManagedRuntimeBlobSessionDeliveryV1,
-    ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeClientRealtimePublishRequestV1,
+    ManagedRuntimeClientRealtimePublishResponseV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, ManagedRuntimeEventCredentialDeliveryV1,
     ManagedRuntimeEventCredentialRequestV1, ManagedRuntimeModuleQueryRequestV1,
     ManagedRuntimeModuleQueryResponseV1, ManagedRuntimeOwnerDerivedKeyDeliveryV1,
@@ -82,6 +83,14 @@ pub trait ManagedRuntimeModuleQueryHandler: Send + Sync {
     ) -> Result<ManagedRuntimeModuleQueryResponseV1, String>;
 }
 
+pub trait ManagedRuntimeClientRealtimeHandler: Send + Sync {
+    fn publish_client_realtime(
+        &self,
+        expectation: &ManagedRuntimeExpectation,
+        request: ManagedRuntimeClientRealtimePublishRequestV1,
+    ) -> Result<ManagedRuntimeClientRealtimePublishResponseV1, String>;
+}
+
 #[derive(Clone, Copy, Default)]
 pub(crate) struct ManagedRuntimeControlHandlers<'a> {
     pub vault_route: Option<&'a dyn ManagedRuntimeVaultRouteHandler>,
@@ -90,6 +99,7 @@ pub(crate) struct ManagedRuntimeControlHandlers<'a> {
     pub owner_derived_key: Option<&'a dyn ManagedRuntimeOwnerDerivedKeyHandler>,
     pub blob_session: Option<&'a dyn ManagedRuntimeBlobSessionHandler>,
     pub module_query: Option<&'a dyn ManagedRuntimeModuleQueryHandler>,
+    pub client_realtime: Option<&'a dyn ManagedRuntimeClientRealtimeHandler>,
 }
 
 pub(crate) fn dispatch_typed_request(
@@ -157,6 +167,16 @@ pub(crate) fn dispatch_typed_request(
                         "managed runtime module query handler is not available".to_owned()
                     })
                     .and_then(|handler| handler.route_module_query(expectation, request)),
+            ))
+        }
+        inbound::ManagedRuntimeInboundRequestV1::ClientRealtime(request) => {
+            Ok(inbound::client_realtime_response(
+                handlers
+                    .client_realtime
+                    .ok_or_else(|| {
+                        "managed runtime ClientRealtime handler is not available".to_owned()
+                    })
+                    .and_then(|handler| handler.publish_client_realtime(expectation, request)),
             ))
         }
     }
