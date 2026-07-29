@@ -15,6 +15,42 @@ pub struct DelayedDeliveryDraftV1 {
     pub deliver_at_unix_millis: u64,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DelayedDeliveryOperationV1 {
+    delayed_operation_id: [u8; 16],
+    delivery_operation_id: [u8; 16],
+    conversation_id: [u8; 16],
+    reply_to_message_id: Option<[u8; 16]>,
+    deliver_at_unix_millis: u64,
+}
+
+impl DelayedDeliveryOperationV1 {
+    #[must_use]
+    pub const fn delayed_operation_id(&self) -> &[u8; 16] {
+        &self.delayed_operation_id
+    }
+
+    #[must_use]
+    pub const fn delivery_operation_id(&self) -> &[u8; 16] {
+        &self.delivery_operation_id
+    }
+
+    #[must_use]
+    pub const fn conversation_id(&self) -> &[u8; 16] {
+        &self.conversation_id
+    }
+
+    #[must_use]
+    pub const fn reply_to_message_id(&self) -> Option<&[u8; 16]> {
+        self.reply_to_message_id.as_ref()
+    }
+
+    #[must_use]
+    pub const fn deliver_at_unix_millis(&self) -> u64 {
+        self.deliver_at_unix_millis
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DelayedDeliveryStateV1 {
     Accepted,
@@ -90,6 +126,20 @@ pub fn validate_delayed_delivery_v1(
     Ok(draft)
 }
 
+pub fn prepare_delayed_delivery_v1(
+    draft: DelayedDeliveryDraftV1,
+    authoritative_now_unix_millis: u64,
+) -> Result<DelayedDeliveryOperationV1, DelayedDeliveryPolicyErrorV1> {
+    let validated = validate_delayed_delivery_v1(draft, authoritative_now_unix_millis)?;
+    Ok(DelayedDeliveryOperationV1 {
+        delayed_operation_id: validated.delayed_operation_id,
+        delivery_operation_id: validated.delivery_operation_id,
+        conversation_id: validated.conversation_id,
+        reply_to_message_id: validated.reply_to_message_id,
+        deliver_at_unix_millis: validated.deliver_at_unix_millis,
+    })
+}
+
 pub fn request_cancellation_v1(
     lifecycle: DelayedDeliveryLifecycleV1,
     expected_revision: u64,
@@ -163,6 +213,9 @@ mod tests {
             validate_delayed_delivery_v1(draft(earliest), now),
             Ok(draft(earliest))
         );
+        let prepared = prepare_delayed_delivery_v1(draft(earliest), now).expect("valid operation");
+        assert_eq!(prepared.delayed_operation_id(), &[1; 16]);
+        assert_eq!(prepared.delivery_operation_id(), &[2; 16]);
         assert_eq!(
             validate_delayed_delivery_v1(draft(earliest - 1), now),
             Err(DelayedDeliveryPolicyErrorV1::DueTimeTooSoon)

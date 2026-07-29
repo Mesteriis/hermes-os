@@ -17,6 +17,7 @@ test('delayed delivery admits separate contract and policy units while its runti
     coreSource,
     persistenceManifest,
     persistenceSource,
+    persistenceOperations,
     persistenceMigration,
   ] = await Promise.all([
     readFile(
@@ -79,6 +80,13 @@ test('delayed delivery admits separate contract and policy units while its runti
     ),
     readFile(
       new URL(
+        'src/communication-delayed-delivery-persistence/src/operations.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-delayed-delivery-persistence/migrations/0001_delayed_delivery_state.sql',
         BACKEND_ROOT,
       ),
@@ -123,6 +131,11 @@ test('delayed delivery admits separate contract and policy units while its runti
   );
   assert.match(persistenceSource, /DelayedDeliveryBodyReceiptV1/);
   assert.match(persistenceSource, /SchedulerExecutionFenceV1/);
+  assert.match(persistenceOperations, /pub async fn create_operation/);
+  assert.match(persistenceOperations, /pub async fn request_cancellation/);
+  assert.match(persistenceOperations, /pub async fn apply_scheduler_result/);
+  assert.match(persistenceOperations, /ON CONFLICT \(logical_owner_id, message_id\)/);
+  assert.match(persistenceOperations, /state_revision = state_revision \+ 1/);
   assert.match(
     persistenceMigration,
     /communication_delayed_delivery_scheduler_inbox/,

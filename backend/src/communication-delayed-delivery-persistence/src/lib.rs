@@ -1,8 +1,14 @@
 #![forbid(unsafe_code)]
 
+mod operations;
 pub mod schema;
 
 use hermes_storage_protocol::StorageBindingV1;
+pub use operations::{
+    ApplySchedulerResultOutcomeV1, ApplySchedulerResultV1, CreateDelayedDeliveryOperationOutcomeV1,
+    CreateDelayedDeliveryOperationV1, DelayedDeliveryOperationStatusV1,
+    RequestDelayedDeliveryCancellationV1, SchedulerScheduleResultV1,
+};
 use sqlx::{
     PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},
