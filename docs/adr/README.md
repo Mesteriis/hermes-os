@@ -524,3 +524,8 @@ provider и проверяет grants/runtime fences, не декодируя ow
 Первым consumer становится delivery-intent route resolution через public
 Communications contract; `client_rpc`, durable events и replayable client
 realtime остаются отдельными interaction kinds.
+ADR-0337 вводит недостающий owner-neutral managed `client_realtime`: owner
+атомарно хранит client-safe transition и monotonic cursor, Kernel проверяет
+exact descriptor capability/runtime fences, а общий Gateway SSE выполняет
+bounded replay/live fan-out без owner API, cross-owner SQL или выдачи
+`DurableEnvelopeV1` клиенту.
