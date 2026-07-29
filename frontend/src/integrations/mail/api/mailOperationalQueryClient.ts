@@ -8,7 +8,7 @@ let mailOperationalQueryClient: Client<typeof MailOperationalQueryService> | nul
 function createMailOperationalQueryConnectClient(): Client<typeof MailOperationalQueryService> {
 	return createClient(
 		MailOperationalQueryService,
-		createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+		createBrowserGatewayConnectTransport(),
 	)
 }
 

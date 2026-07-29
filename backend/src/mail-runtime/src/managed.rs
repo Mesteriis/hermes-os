@@ -1740,16 +1740,27 @@ impl MailAdmittedRuntime {
         {
             Ok(payload) => ModuleClientResponseV1::decode(payload.as_slice())
                 .map_err(|_| MailBootstrapError::Provider)?,
-            Err(error) => ModuleClientResponseV1 {
-                protocol_major: 1,
-                request_id: request.request_id,
-                response_payload: Vec::new(),
-                error_code: match error {
-                    crate::client_port::MailClientPortErrorV1::Protocol => "INVALID_ARGUMENT",
-                    crate::client_port::MailClientPortErrorV1::Runtime => "REJECTED",
+            Err(error) => {
+                if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                    eprintln!(
+                        "developer_mail_client_request_error contract={} kind={error:?}",
+                        request
+                            .contract
+                            .as_ref()
+                            .map_or("missing", |contract| contract.name.as_str())
+                    );
                 }
-                .to_owned(),
-            },
+                ModuleClientResponseV1 {
+                    protocol_major: 1,
+                    request_id: request.request_id,
+                    response_payload: Vec::new(),
+                    error_code: match error {
+                        crate::client_port::MailClientPortErrorV1::Protocol => "INVALID_ARGUMENT",
+                        crate::client_port::MailClientPortErrorV1::Runtime => "REJECTED",
+                    }
+                    .to_owned(),
+                }
+            }
         };
         validate_module_client_response_v1(&response).map_err(|_| MailBootstrapError::Provider)?;
         write_client_delivery_response(&mut self.control_channel, correlation_id, response)?;
@@ -3491,7 +3502,12 @@ fn write_client_delivery_response(
                 error_code: String::new(),
             },
         )
-        .map_err(|_| MailBootstrapError::Control)
+        .map_err(|error| {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_mail_client_response_write_error={error:?}");
+            }
+            MailBootstrapError::Control
+        })
 }
 
 fn write_control_error(

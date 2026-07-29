@@ -8,7 +8,7 @@ let mailMessageFlagQueryClient: Client<typeof MailMessageFlagQueryService> | nul
 function createMailMessageFlagQueryConnectClient(): Client<typeof MailMessageFlagQueryService> {
 	return createClient(
 		MailMessageFlagQueryService,
-		createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+		createBrowserGatewayConnectTransport(),
 	)
 }
 

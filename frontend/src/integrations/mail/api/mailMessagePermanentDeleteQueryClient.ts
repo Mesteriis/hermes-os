@@ -9,7 +9,7 @@ export function getMailMessagePermanentDeleteQueryConnectClient(): Client<typeof
 	if (!client) {
 		client = createClient(
 			MailMessagePermanentDeleteQueryService,
-			createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+			createBrowserGatewayConnectTransport(),
 		)
 	}
 	return client

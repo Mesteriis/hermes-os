@@ -2,7 +2,10 @@ import type { Transport } from '@connectrpc/connect'
 import { createConnectTransport } from '@connectrpc/connect-web'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createBrowserGatewayConnectTransport } from './browserGatewayConnect'
+import {
+	BROWSER_GATEWAY_REQUEST_TIMEOUT_MS,
+	createBrowserGatewayConnectTransport,
+} from './browserGatewayConnect'
 
 vi.mock('@connectrpc/connect-web', () => ({
 	createConnectTransport: vi.fn(() => ({} as Transport)),
@@ -50,5 +53,17 @@ describe('createBrowserGatewayConnectTransport', () => {
 
 		expect(() => config.fetch?.('https://other.local/hermes.gateway.v1.SessionService/Status')).toThrow('same-origin')
 		expect(fetchImpl).not.toHaveBeenCalled()
+	})
+
+	it('owns the admitted Gateway deadline and rejects incompatible overrides', () => {
+		createBrowserGatewayConnectTransport({ origin: 'https://hub.local' })
+		expect(createConnectTransport).toHaveBeenLastCalledWith(expect.objectContaining({
+			defaultTimeoutMs: BROWSER_GATEWAY_REQUEST_TIMEOUT_MS,
+		}))
+
+		expect(() => createBrowserGatewayConnectTransport({
+			origin: 'https://hub.local',
+			defaultTimeoutMs: BROWSER_GATEWAY_REQUEST_TIMEOUT_MS + 1,
+		})).toThrow('exceeds the admitted transport deadline')
 	})
 })

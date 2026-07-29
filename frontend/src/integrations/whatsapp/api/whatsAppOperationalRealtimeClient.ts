@@ -10,7 +10,7 @@ export function getWhatsAppOperationalRealtimeConnectClient(): Client<
 > {
 	client ??= createClient(
 		WhatsAppOperationalRealtimeService,
-		createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+		createBrowserGatewayConnectTransport(),
 	)
 	return client
 }

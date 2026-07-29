@@ -9,7 +9,7 @@ export function getMailMessageLocationQueryConnectClient(): Client<typeof MailMe
 	if (!client) {
 		client = createClient(
 			MailMessageLocationQueryService,
-			createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+			createBrowserGatewayConnectTransport(),
 		)
 	}
 	return client

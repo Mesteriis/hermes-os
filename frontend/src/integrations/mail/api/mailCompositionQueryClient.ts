@@ -8,7 +8,7 @@ let mailCompositionQueryClient: Client<typeof MailCompositionQueryService> | nul
 function createMailCompositionQueryConnectClient(): Client<typeof MailCompositionQueryService> {
 	return createClient(
 		MailCompositionQueryService,
-		createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+		createBrowserGatewayConnectTransport(),
 	)
 }
 

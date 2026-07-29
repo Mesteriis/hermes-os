@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{ErrorKind, Read, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use prost::Message;
 
@@ -25,6 +26,8 @@ use crate::validation::managed_control::{
 
 pub const MAX_MANAGED_CONTROL_FRAME_BYTES_V2: usize = 512 * 1024;
 pub const MAX_MANAGED_CONTROL_PENDING_REQUESTS_V2: usize = 64;
+const MANAGED_CONTROL_WRITE_TIMEOUT_V2: Duration = Duration::from_secs(5);
+const MANAGED_CONTROL_WRITE_RETRY_INTERVAL_V2: Duration = Duration::from_millis(1);
 static NEXT_CORRELATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -486,19 +489,51 @@ fn write_length_delimited(
 ) -> Result<(), ManagedControlTransportErrorV2> {
     let mut length =
         u32::try_from(bytes.len()).map_err(|_| ManagedControlTransportErrorV2::FrameTooLarge)?;
+    let mut frame = Vec::with_capacity(bytes.len() + 5);
     while length >= 0x80 {
-        stream.write_all(&[(length as u8 & 0x7f) | 0x80])?;
+        frame.push((length as u8 & 0x7f) | 0x80);
         length >>= 7;
     }
-    stream.write_all(&[length as u8])?;
-    stream.write_all(bytes)?;
-    stream.flush()?;
+    frame.push(length as u8);
+    frame.extend_from_slice(bytes);
+
+    let deadline = Instant::now() + MANAGED_CONTROL_WRITE_TIMEOUT_V2;
+    let mut written = 0;
+    while written < frame.len() {
+        match stream.write(&frame[written..]) {
+            Ok(0) => {
+                return Err(std::io::Error::from(ErrorKind::WriteZero).into());
+            }
+            Ok(count) => written += count,
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(error) if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline => {
+                std::thread::sleep(MANAGED_CONTROL_WRITE_RETRY_INTERVAL_V2);
+            }
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                return Err(std::io::Error::from(ErrorKind::TimedOut).into());
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    loop {
+        match stream.flush() {
+            Ok(()) => break,
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(error) if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline => {
+                std::thread::sleep(MANAGED_CONTROL_WRITE_RETRY_INTERVAL_V2);
+            }
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                return Err(std::io::Error::from(ErrorKind::TimedOut).into());
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
+    use std::io::{Error, Write};
     use std::os::unix::net::UnixStream;
     use std::thread;
 
@@ -740,6 +775,42 @@ mod tests {
             .expect("request available");
         assert_eq!(correlation_id, [4; MANAGED_CONTROL_CORRELATION_ID_BYTES]);
         assert!(matches!(request.operation, Some(Operation::Ready(_))));
+    }
+
+    #[test]
+    fn resumes_a_partial_nonblocking_write_without_duplicating_frame_bytes() {
+        struct PartialWouldBlockWriter {
+            bytes: Vec<u8>,
+            writes: usize,
+        }
+
+        impl Write for PartialWouldBlockWriter {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.writes += 1;
+                if self.writes == 2 {
+                    return Err(Error::from(ErrorKind::WouldBlock));
+                }
+                let count = bytes.len().min(3);
+                self.bytes.extend_from_slice(&bytes[..count]);
+                Ok(count)
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let payload = b"nonblocking-control-frame";
+        let mut writer = PartialWouldBlockWriter {
+            bytes: Vec::new(),
+            writes: 0,
+        };
+
+        write_length_delimited(&mut writer, payload).expect("bounded nonblocking write");
+
+        assert_eq!(writer.bytes[0], payload.len() as u8);
+        assert_eq!(&writer.bytes[1..], payload);
+        assert!(writer.writes > 2);
     }
 
     #[test]

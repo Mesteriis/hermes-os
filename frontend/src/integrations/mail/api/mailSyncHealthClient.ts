@@ -8,7 +8,7 @@ let mailSyncHealthClient: Client<typeof MailSyncHealthQueryService> | null = nul
 function createMailSyncHealthConnectClient(): Client<typeof MailSyncHealthQueryService> {
 	return createClient(
 		MailSyncHealthQueryService,
-		createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+		createBrowserGatewayConnectTransport(),
 	)
 }
 

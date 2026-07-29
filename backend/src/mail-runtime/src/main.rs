@@ -41,6 +41,9 @@ struct InheritedPaths {
     runtime_instance_id: String,
 }
 
+const MAX_CLIENT_DELIVERIES_PER_TICK: usize = 32;
+const RUNTIME_TICK_INTERVAL: Duration = Duration::from_millis(100);
+
 fn main() -> Result<(), String> {
     let mut arguments = std::env::args_os();
     let _binary = arguments.next();
@@ -146,12 +149,7 @@ where
         tokio::task::JoinHandle<CompletedImapSyncProviderOperationV1>,
     > = None;
     loop {
-        runtime
-            .block_on(admitted.try_handle_client_delivery())
-            .map_err(|error| {
-                developer_diagnostic(&format!("developer_mail_client_delivery_error={error:?}"));
-                "Mail runtime client delivery failed".to_owned()
-            })?;
+        drain_client_deliveries(&runtime, &mut admitted)?;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
@@ -285,8 +283,25 @@ where
                 return Err("Mail runtime Attachment Security outbox persistence failed".to_owned());
             }
         }
-        std::thread::sleep(Duration::from_secs(1));
+        std::thread::sleep(RUNTIME_TICK_INTERVAL);
     }
+}
+
+fn drain_client_deliveries(
+    runtime: &tokio::runtime::Runtime,
+    admitted: &mut managed::MailAdmittedRuntime,
+) -> Result<(), String> {
+    for _ in 0..MAX_CLIENT_DELIVERIES_PER_TICK {
+        match runtime.block_on(admitted.try_handle_client_delivery()) {
+            Ok(true) => {}
+            Ok(false) => return Ok(()),
+            Err(error) => {
+                developer_diagnostic(&format!("developer_mail_client_delivery_error={error:?}"));
+                return Err("Mail runtime client delivery failed".to_owned());
+            }
+        }
+    }
+    Ok(())
 }
 
 fn execute_account_queues(

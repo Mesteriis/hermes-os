@@ -9,7 +9,7 @@ export function getMailMessageLocationCommandConnectClient(): Client<typeof Mail
 	if (!client) {
 		client = createClient(
 			MailMessageLocationCommandService,
-			createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+			createBrowserGatewayConnectTransport(),
 		)
 	}
 	return client

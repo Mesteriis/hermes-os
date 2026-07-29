@@ -8,7 +8,7 @@ let mailMessageFlagCommandClient: Client<typeof MailMessageFlagCommandService> |
 function createMailMessageFlagCommandConnectClient(): Client<typeof MailMessageFlagCommandService> {
 	return createClient(
 		MailMessageFlagCommandService,
-		createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+		createBrowserGatewayConnectTransport(),
 	)
 }
 

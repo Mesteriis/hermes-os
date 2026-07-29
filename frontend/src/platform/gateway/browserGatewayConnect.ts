@@ -8,6 +8,8 @@ export type BrowserGatewayConnectOptions = BrowserGatewayFetchOptions & {
 	defaultTimeoutMs?: number
 }
 
+export const BROWSER_GATEWAY_REQUEST_TIMEOUT_MS = 10_000
+
 /**
  * Typed Connect transport for the future browser-facing Core Gateway.
  *
@@ -18,7 +20,17 @@ export type BrowserGatewayConnectOptions = BrowserGatewayFetchOptions & {
 export function createBrowserGatewayConnectTransport(
 	options: BrowserGatewayConnectOptions = {},
 ): Transport {
-	const { defaultTimeoutMs, ...fetchOptions } = options
+	const {
+		defaultTimeoutMs = BROWSER_GATEWAY_REQUEST_TIMEOUT_MS,
+		...fetchOptions
+	} = options
+	if (
+		!Number.isInteger(defaultTimeoutMs)
+		|| defaultTimeoutMs < 1
+		|| defaultTimeoutMs > BROWSER_GATEWAY_REQUEST_TIMEOUT_MS
+	) {
+		throw new RangeError('Browser Gateway timeout exceeds the admitted transport deadline')
+	}
 	const browserFetch = new BrowserGatewayFetch(fetchOptions)
 
 	return createConnectTransport({

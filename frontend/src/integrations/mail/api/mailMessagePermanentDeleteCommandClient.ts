@@ -9,7 +9,7 @@ export function getMailMessagePermanentDeleteCommandConnectClient(): Client<type
 	if (!client) {
 		client = createClient(
 			MailMessagePermanentDeleteCommandService,
-			createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+			createBrowserGatewayConnectTransport(),
 		)
 	}
 	return client

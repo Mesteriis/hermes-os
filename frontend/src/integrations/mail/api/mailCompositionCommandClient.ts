@@ -8,7 +8,7 @@ let mailCompositionCommandClient: Client<typeof MailCompositionCommandService> |
 function createMailCompositionCommandConnectClient(): Client<typeof MailCompositionCommandService> {
 	return createClient(
 		MailCompositionCommandService,
-		createBrowserGatewayConnectTransport({ defaultTimeoutMs: 15_000 }),
+		createBrowserGatewayConnectTransport(),
 	)
 }
 
