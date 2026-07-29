@@ -2,6 +2,8 @@
 
 mod account;
 mod delivery_intent;
+mod delivery_intent_lifecycle;
+mod delivery_intent_result_outbox;
 mod operational;
 mod schema;
 
@@ -15,11 +17,19 @@ use sqlx::{
 
 pub use account::ZulipCredentialBindingV1;
 pub use delivery_intent::{ZULIP_DELIVERY_ROUTE_SCHEMA_V1, ZulipDeliveryRouteLocatorV1};
+pub use delivery_intent_lifecycle::{
+    ClaimedZulipDeliveryIntentJobV1, ZULIP_DELIVERY_INTENT_MAX_ATTEMPTS_V1,
+    ZULIP_DELIVERY_INTENT_SCHEMA_V1, ZulipDeliveryIntentAdmissionV1,
+    ZulipDeliveryIntentInboxOutcomeV1, ZulipDeliveryIntentJobStateV1, ZulipDeliveryIntentJobV1,
+    ZulipDeliveryIntentStoreV1,
+};
+pub use delivery_intent_result_outbox::ZULIP_DELIVERY_INTENT_RESULT_OUTBOX_SCHEMA_V1;
 pub use operational::ZulipOperationalIngestV1;
 pub use schema::{
     ZULIP_SCHEMA_V2, ZULIP_SCHEMA_V3, ZULIP_STORAGE_BUNDLE_REVISION_V1,
     ZULIP_STORAGE_BUNDLE_REVISION_V2, ZULIP_STORAGE_BUNDLE_REVISION_V3,
-    ZULIP_STORAGE_BUNDLE_REVISION_V4, zulip_storage_bundle_v1,
+    ZULIP_STORAGE_BUNDLE_REVISION_V4, ZULIP_STORAGE_BUNDLE_REVISION_V5,
+    ZULIP_STORAGE_BUNDLE_REVISION_V6, zulip_storage_bundle_v1,
 };
 
 pub const PACKAGE: &str = "hermes-zulip-persistence";
@@ -86,6 +96,8 @@ pub enum ZulipDurablePersistenceError {
     InvalidCursor,
     InvalidRow,
     ConflictingDeliveryRouteLocator,
+    ConflictingDeliveryIntentInbox,
+    InvalidDeliveryIntentTransition,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -150,6 +162,11 @@ impl ZulipDurablePersistence {
         Self { pool }
     }
 
+    #[must_use]
+    pub fn delivery_intent_store(&self) -> ZulipDeliveryIntentStoreV1 {
+        ZulipDeliveryIntentStoreV1::new(self.pool.clone())
+    }
+
     pub async fn initialize(&self) -> Result<(), ZulipDurablePersistenceError> {
         sqlx::raw_sql(ZULIP_SCHEMA_V1)
             .execute(&self.pool)
@@ -160,6 +177,18 @@ impl ZulipDurablePersistence {
             .await
             .map_err(|_| ZulipDurablePersistenceError::Database)?;
         sqlx::raw_sql(ZULIP_SCHEMA_V3)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| ZulipDurablePersistenceError::Database)?;
+        sqlx::raw_sql(ZULIP_DELIVERY_ROUTE_SCHEMA_V1)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| ZulipDurablePersistenceError::Database)?;
+        sqlx::raw_sql(ZULIP_DELIVERY_INTENT_SCHEMA_V1)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| ZulipDurablePersistenceError::Database)?;
+        sqlx::raw_sql(ZULIP_DELIVERY_INTENT_RESULT_OUTBOX_SCHEMA_V1)
             .execute(&self.pool)
             .await
             .map(|_| ())
@@ -386,6 +415,30 @@ impl ZulipDurablePersistence {
                     .map_err(|_| ZulipDurablePersistenceError::InvalidRow)?,
                 completed_at_unix_seconds,
             })
+        })
+        .transpose()
+    }
+
+    pub async fn command_operation_was_dispatched(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<bool>, ZulipDurablePersistenceError> {
+        if operation_id.trim().is_empty() {
+            return Err(ZulipDurablePersistenceError::InvalidRow);
+        }
+        sqlx::query(
+            "SELECT dispatched_at_unix_seconds
+             FROM hermes_data.zulip_command_queue
+             WHERE operation_id = $1",
+        )
+        .bind(operation_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| ZulipDurablePersistenceError::Database)?
+        .map(|row| {
+            row.try_get::<Option<i64>, _>("dispatched_at_unix_seconds")
+                .map(|value| value.is_some())
+                .map_err(|_| ZulipDurablePersistenceError::InvalidRow)
         })
         .transpose()
     }

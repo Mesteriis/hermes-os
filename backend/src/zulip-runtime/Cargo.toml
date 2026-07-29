@@ -26,11 +26,13 @@ hermes-blob-client = { path = "../platform/blob/client" }
 hermes-blob-client-contract = { path = "../platform/blob/client-contract" }
 hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-events-protocol = { path = "../platform/events" }
 hermes-managed-vault-client = { path = "../platform/vault/managed_client" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-zulip-api = { path = "../zulip-api" }
 hermes-zulip-core = { path = "../zulip-core" }
+hermes-zulip-delivery-intent-contract = { path = "../zulip-delivery-intent-contract" }
 hermes-zulip-http = { path = "../zulip-http" }
 hermes-zulip-persistence = { path = "../zulip-persistence" }
 hermes-storage-vault = { path = "../platform/storage/vault" }
@@ -38,6 +40,7 @@ hermes-vault-protocol = { path = "../platform/vault/protocol" }
 getrandom = { version = "=0.4.3", default-features = false }
 libc = "=0.2.186"
 prost = "=0.14.4"
+prost-types = "=0.14.4"
 sha2 = { version = "=0.11.0", default-features = false }
 tokio = { version = "=1.52.4", default-features = false, features = ["rt-multi-thread", "time"] }
 zeroize = "=1.9.0"

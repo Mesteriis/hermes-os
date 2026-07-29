@@ -7,6 +7,11 @@ pub mod admission;
 pub mod blob;
 pub mod client_port;
 mod communications_outbox;
+pub mod delivery_intent_consumer;
+pub mod delivery_intent_execution;
+pub mod delivery_intent_outbox;
+pub mod delivery_intent_result;
+pub mod delivery_intent_worker;
 pub mod managed;
 
 use hermes_communications_ingress::{

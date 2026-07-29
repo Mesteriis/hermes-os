@@ -17,7 +17,7 @@ use hermes_communications_ingress::{
 };
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
-    request_managed_runtime_event_access_v2,
+    RuntimeSubscribePermitV1, request_managed_runtime_event_access_v2,
 };
 use hermes_managed_vault_client::{
     ManagedProviderCredentialClientV2, ManagedProviderCredentialContextV1,
@@ -59,12 +59,24 @@ use hermes_zulip_api::{
     realtime::{ZulipOperationalReplayRequestV1, ZulipOperationalReplayResponseV1},
 };
 use hermes_zulip_core::credential_lease_purpose;
+use hermes_zulip_delivery_intent_contract::zulip_delivery_intent_execute_contract_reference_v1;
 use hermes_zulip_http::ZulipHttpConfigV1;
 use hermes_zulip_persistence::ZulipDurablePersistence;
 use prost::Message;
 use sha2::{Digest, Sha256};
 
 use crate::admission::{ZULIP_BLOB_CAPABILITY_ID, ZULIP_CREDENTIAL_LEASE_TTL_SECONDS};
+use crate::delivery_intent_consumer::{
+    ZulipDeliveryIntentConsumeErrorV1, ZulipDeliveryIntentResultContextV1,
+    consume_next_zulip_delivery_intent_v1,
+};
+use crate::delivery_intent_outbox::{
+    ZulipDeliveryIntentOutboxRelayErrorV1, relay_zulip_delivery_intent_outbox_once_v1,
+};
+use crate::delivery_intent_worker::{
+    ZulipDeliveryIntentWorkerContextV1, ZulipDeliveryIntentWorkerErrorV1,
+    process_next_zulip_delivery_intent_v1,
+};
 use crate::{
     ZulipCommunicationsOutboxRelayError, ZulipRuntimeAdmissionV1, ZulipRuntimeErrorV1,
     ZulipRuntimeIdentityV1, acquire_event_queue, execute_operational_query, poll_once,
@@ -82,7 +94,9 @@ pub struct ZulipAdmittedRuntimeV1 {
     http: Mutex<Option<Arc<ZulipHttpConfigV1>>>,
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
+    delivery_intent_subscribe_permit: RuntimeSubscribePermitV1,
     identity: ZulipRuntimeIdentityV1,
+    logical_owner_id: String,
     blob_materializer: Mutex<Option<crate::blob::ZulipBlobMaterializer<BlobDataClient>>>,
     blob_write_materializer: Mutex<Option<crate::blob::ZulipBlobWriteMaterializer<BlobDataClient>>>,
 }
@@ -93,6 +107,9 @@ pub struct ZulipRuntimeTickV1 {
     pub accepted_observations: usize,
     pub synced_history_page: bool,
     pub relayed_observations: usize,
+    pub consumed_delivery_intent: bool,
+    pub processed_delivery_intent: bool,
+    pub relayed_delivery_results: usize,
 }
 
 #[derive(Debug)]
@@ -111,6 +128,9 @@ pub enum ZulipRuntimeTickErrorV1 {
     Poll(super::ZulipRuntimeErrorV1),
     History(super::ZulipRuntimeErrorV1),
     Relay(ZulipCommunicationsOutboxRelayError),
+    DeliveryConsume(ZulipDeliveryIntentConsumeErrorV1),
+    DeliveryWorker(ZulipDeliveryIntentWorkerErrorV1),
+    DeliveryRelay(ZulipDeliveryIntentOutboxRelayErrorV1),
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -126,7 +146,9 @@ pub async fn open_admitted_runtime(
 ) -> Result<ZulipAdmittedRuntimeV1, ZulipBootstrapErrorV1> {
     if descriptor_bytes.is_empty()
         || settings_schema_bytes.is_empty()
-        || admission.logical_owner_id != "zulip"
+        || admission.logical_owner_id.trim().is_empty()
+        || admission.logical_owner_id.len() > 128
+        || !admission.logical_owner_id.is_ascii()
         || admission.configuration_instance_id.trim().is_empty()
         || admission.runtime_instance_id.trim().is_empty()
         || account.account_id.trim().is_empty()
@@ -269,6 +291,16 @@ pub async fn open_admitted_runtime(
             admission.grant_epoch,
         )
         .map_err(|_| ZulipBootstrapErrorV1::EventHub)?;
+    let delivery_intent_subscribe_permit = bind_delivery_intent_subscribe_permit(
+        event_access
+            .subscribe_permits(
+                &admission.module_registration_id,
+                &admission.runtime_instance_id,
+                admission.runtime_generation,
+                admission.grant_epoch,
+            )
+            .map_err(|_| ZulipBootstrapErrorV1::EventHub)?,
+    )?;
     let event_connection = JetStreamClient::connect_runtime_with_jwt(
         event_hub_endpoint,
         nats_identity,
@@ -297,13 +329,35 @@ pub async fn open_admitted_runtime(
         http: Mutex::new(http),
         event_connection,
         event_publish_permit,
+        delivery_intent_subscribe_permit,
         identity: ZulipRuntimeIdentityV1 {
             runtime_instance_id: admission.runtime_instance_id.clone(),
             runtime_generation: admission.runtime_generation,
         },
+        logical_owner_id: admission.logical_owner_id.clone(),
         blob_materializer: Mutex::new(None),
         blob_write_materializer: Mutex::new(None),
     })
+}
+
+fn bind_delivery_intent_subscribe_permit(
+    mut permits: Vec<RuntimeSubscribePermitV1>,
+) -> Result<RuntimeSubscribePermitV1, ZulipBootstrapErrorV1> {
+    if permits.len() != 1 {
+        return Err(ZulipBootstrapErrorV1::EventHub);
+    }
+    let permit = permits.pop().ok_or(ZulipBootstrapErrorV1::EventHub)?;
+    let expected = zulip_delivery_intent_execute_contract_reference_v1();
+    if permit.contract().is_none_or(|contract| {
+        contract.owner != expected.owner
+            || contract.name != expected.name
+            || contract.major != expected.major
+            || contract.revision != expected.revision
+            || contract.schema_sha256 != expected.schema_sha256
+    }) {
+        return Err(ZulipBootstrapErrorV1::EventHub);
+    }
+    Ok(permit)
 }
 
 fn provider_credential_context(
@@ -560,6 +614,24 @@ impl ZulipAdmittedRuntimeV1 {
         now_unix_seconds: i64,
         recorded_at_nanos: i32,
     ) -> Result<ZulipRuntimeTickV1, ZulipRuntimeTickErrorV1> {
+        let consumed_delivery_intent = match consume_next_zulip_delivery_intent_v1(
+            &self.durable.delivery_intent_store(),
+            &self.event_connection,
+            &self.delivery_intent_subscribe_permit,
+            &self.logical_owner_id,
+            &ZulipDeliveryIntentResultContextV1 {
+                runtime_instance_id: self.identity.runtime_instance_id.clone(),
+                runtime_generation: self.identity.runtime_generation,
+                completed_at_unix_seconds: now_unix_seconds,
+                completed_at_nanos: recorded_at_nanos,
+            },
+        )
+        .await
+        {
+            Ok(_) => true,
+            Err(ZulipDeliveryIntentConsumeErrorV1::Unavailable) => false,
+            Err(error) => return Err(ZulipRuntimeTickErrorV1::DeliveryConsume(error)),
+        };
         let provider_available = self
             .provider_http()
             .map_err(ZulipRuntimeTickErrorV1::Command)?
@@ -571,6 +643,17 @@ impl ZulipAdmittedRuntimeV1 {
         } else {
             false
         };
+        let processed_delivery_intent = process_next_zulip_delivery_intent_v1(
+            &mut self.control_channel,
+            &self.durable,
+            &ZulipDeliveryIntentWorkerContextV1 {
+                runtime_instance_id: self.identity.runtime_instance_id.clone(),
+                runtime_generation: self.identity.runtime_generation,
+            },
+            now_unix_seconds,
+        )
+        .await
+        .map_err(ZulipRuntimeTickErrorV1::DeliveryWorker)?;
         let accepted_observations = match (provider_available, queue.as_mut()) {
             (true, Some(queue)) => self
                 .poll_once(queue, now_unix_seconds, recorded_at_nanos)
@@ -601,11 +684,28 @@ impl ZulipAdmittedRuntimeV1 {
                 return Err(ZulipRuntimeTickErrorV1::Relay(error));
             }
         };
+        let relayed_delivery_results = match relay_zulip_delivery_intent_outbox_once_v1(
+            &self.durable.delivery_intent_store(),
+            &self.event_connection,
+            &self.event_publish_permit,
+            now_unix_seconds,
+        )
+        .await
+        {
+            Ok(relayed) => relayed,
+            Err(ZulipDeliveryIntentOutboxRelayErrorV1::Unavailable) => 0,
+            Err(error @ ZulipDeliveryIntentOutboxRelayErrorV1::Persistence(_)) => {
+                return Err(ZulipRuntimeTickErrorV1::DeliveryRelay(error));
+            }
+        };
         Ok(ZulipRuntimeTickV1 {
             dispatched_command,
             accepted_observations,
             synced_history_page,
             relayed_observations,
+            consumed_delivery_intent,
+            processed_delivery_intent,
+            relayed_delivery_results,
         })
     }
 

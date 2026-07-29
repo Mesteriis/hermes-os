@@ -7,6 +7,8 @@ use hermes_runtime_protocol::v1::{
 
 pub const PACKAGE: &str = "hermes-zulip-delivery-intent-contract";
 pub const ZULIP_DELIVERY_INTENT_OWNER_ID_V1: &str = "zulip";
+pub const ZULIP_DELIVERY_INTENT_SOURCE_MODULE_ID_V1: &str =
+    "hermes-communication-delivery-intent-runtime";
 pub const ZULIP_DELIVERY_INTENT_TARGET_MODULE_ID_V1: &str = "hermes-zulip-runtime";
 pub const ZULIP_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1: &str = "zulip.delivery-intent.v1";
 pub const ZULIP_DELIVERY_INTENT_TARGET_BLOB_CAPABILITY_ID_V1: &str = "zulip.blob.v1";

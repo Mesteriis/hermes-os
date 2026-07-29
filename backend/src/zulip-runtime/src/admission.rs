@@ -16,6 +16,12 @@ use hermes_zulip_api::client_contract::{
 };
 pub use hermes_zulip_api::client_contract::{ZULIP_MODULE_ID, ZULIP_OWNER_ID};
 use hermes_zulip_core::ZULIP_API_KEY_PURPOSE_ID;
+use hermes_zulip_delivery_intent_contract::{
+    ZULIP_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1,
+    zulip_delivery_intent_execute_consume_request_v1,
+    zulip_delivery_intent_rejected_publish_request_v1,
+    zulip_delivery_intent_succeeded_publish_request_v1,
+};
 use sha2::{Digest, Sha256};
 
 use crate::settings::{
@@ -43,12 +49,27 @@ pub fn zulip_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         zulip_blob_capability_v1(),
         zulip_client_capability_v1(ZulipClientContractV1::Command),
         zulip_credentials_capability_v1(),
+        zulip_delivery_intent_capability_v1(),
         zulip_events_capability_v1(),
         zulip_client_capability_v1(ZulipClientContractV1::OperationalQuery),
         zulip_client_capability_v1(ZulipClientContractV1::OperationalRealtime),
         zulip_client_capability_v1(ZulipClientContractV1::Query),
         zulip_storage_capability_v1(),
     ]
+}
+
+fn zulip_delivery_intent_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: ZULIP_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![
+            zulip_delivery_intent_execute_consume_request_v1(),
+            zulip_delivery_intent_succeeded_publish_request_v1(),
+            zulip_delivery_intent_rejected_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
 }
 
 fn zulip_api_key_provisioning_capability_v1() -> CapabilityDescriptorV1 {
@@ -224,6 +245,7 @@ mod tests {
                 ZULIP_BLOB_CAPABILITY_ID,
                 ZulipClientContractV1::Command.capability_id(),
                 ZULIP_CREDENTIALS_CAPABILITY_ID,
+                ZULIP_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1,
                 ZULIP_EVENTS_CAPABILITY_ID,
                 ZulipClientContractV1::OperationalQuery.capability_id(),
                 ZulipClientContractV1::OperationalRealtime.capability_id(),
