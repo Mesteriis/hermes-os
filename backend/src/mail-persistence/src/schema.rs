@@ -7,7 +7,7 @@ use crate::{
     MAIL_SCHEMA_V1, MAIL_SCHEMA_V2, MAIL_SCHEMA_V3, MAIL_SCHEMA_V4, MAIL_SCHEMA_V5, MAIL_SCHEMA_V6,
     MAIL_SCHEMA_V7, MAIL_SCHEMA_V8, MAIL_SCHEMA_V9, MAIL_SCHEMA_V10, MAIL_SCHEMA_V11,
     MAIL_SCHEMA_V12, MAIL_SCHEMA_V13, MAIL_SCHEMA_V14, MAIL_SCHEMA_V15, MAIL_SCHEMA_V16,
-    MAIL_SCHEMA_V17, MAIL_SCHEMA_V18, MAIL_SCHEMA_V19, MAIL_SCHEMA_V20, MAIL_SCHEMA_V21,
+    MAIL_SCHEMA_V17, MAIL_SCHEMA_V18, MAIL_SCHEMA_V19, MAIL_SCHEMA_V20,
 };
 
 pub const MAIL_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
@@ -30,7 +30,6 @@ pub const MAIL_STORAGE_BUNDLE_REVISION_V17: u32 = 17;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V18: u32 = 18;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V19: u32 = 19;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V20: u32 = 20;
-pub const MAIL_STORAGE_BUNDLE_REVISION_V21: u32 = 21;
 
 /// Returns the complete Mail schema as one immutable initial Storage bundle.
 ///
@@ -41,7 +40,7 @@ pub const MAIL_STORAGE_BUNDLE_REVISION_V21: u32 = 21;
 pub fn mail_storage_bundle_v1() -> StorageBundleV1 {
     StorageBundleV1 {
         major: 1,
-        revision: MAIL_STORAGE_BUNDLE_REVISION_V21,
+        revision: MAIL_STORAGE_BUNDLE_REVISION_V20,
         bundle_id: "mail_state".to_owned(),
         owner_id: "mail".to_owned(),
         steps: vec![
@@ -165,12 +164,6 @@ pub fn mail_storage_bundle_v1() -> StorageBundleV1 {
                 forward_sql_utf8: MAIL_SCHEMA_V20.as_bytes().to_vec(),
                 sha256: Sha256::digest(MAIL_SCHEMA_V20.as_bytes()).to_vec(),
             },
-            StorageMigrationStepV1 {
-                revision: MAIL_STORAGE_BUNDLE_REVISION_V21,
-                migration_id: "mail_delivery_intent_command_evidence_and_owner".to_owned(),
-                forward_sql_utf8: MAIL_SCHEMA_V21.as_bytes().to_vec(),
-                sha256: Sha256::digest(MAIL_SCHEMA_V21.as_bytes()).to_vec(),
-            },
         ],
     }
 }
@@ -187,9 +180,9 @@ mod tests {
 
         assert_eq!(bundle.owner_id, "mail");
         assert_eq!(bundle.bundle_id, "mail_state");
-        assert_eq!(bundle.revision, MAIL_STORAGE_BUNDLE_REVISION_V21);
+        assert_eq!(bundle.revision, MAIL_STORAGE_BUNDLE_REVISION_V20);
         assert_eq!(validate_storage_bundle(&bundle), Ok(()));
-        assert_eq!(bundle.steps.len(), 21);
+        assert_eq!(bundle.steps.len(), 20);
         let sql = bundle
             .steps
             .iter()

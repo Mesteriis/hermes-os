@@ -93,32 +93,6 @@ ALTER TABLE hermes_data.mail_delivery_intent_jobs
     );
 "#;
 
-pub const MAIL_SCHEMA_V21: &str = r#"
-ALTER TABLE hermes_data.mail_delivery_intent_jobs
-    ADD COLUMN command_envelope_sha256 BYTEA,
-    ADD COLUMN logical_owner_id TEXT;
-
-UPDATE hermes_data.mail_delivery_intent_jobs AS job
-SET command_envelope_sha256 = inbox.envelope_sha256,
-    logical_owner_id = inbox.logical_owner_id
-FROM hermes_data.mail_delivery_intent_inbox AS inbox
-WHERE inbox.message_id = job.command_message_id
-  AND (
-    job.command_envelope_sha256 IS NULL OR
-    job.logical_owner_id IS NULL
-  );
-
-ALTER TABLE hermes_data.mail_delivery_intent_jobs
-    ALTER COLUMN command_envelope_sha256 SET NOT NULL,
-    ALTER COLUMN logical_owner_id SET NOT NULL,
-    ADD CONSTRAINT mail_delivery_intent_command_envelope_sha256_width CHECK (
-        octet_length(command_envelope_sha256) = 32
-    ),
-    ADD CONSTRAINT mail_delivery_intent_logical_owner_id_width CHECK (
-        length(logical_owner_id) BETWEEN 1 AND 256
-    );
-"#;
-
 pub const MAIL_DELIVERY_INTENT_MAX_ATTEMPTS_V1: i32 = 12;
 
 #[derive(Clone)]
@@ -279,17 +253,14 @@ impl MailDeliveryIntentStoreV1 {
         let outcome = if let Some(route) = route {
             sqlx::query(
                 "INSERT INTO hermes_data.mail_delivery_intent_jobs
-                    (intent_id, command_message_id, command_envelope_sha256, logical_owner_id,
-                     connection_id, provider_thread_id, reply_to_provider_message_id, recipient,
-                     subject, body_reference_id, body_declared_bytes, body_sha256,
-                     custody_transfer_source_proof, provider_operation_id,
-                     next_attempt_at_unix_seconds)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+                    (intent_id, command_message_id, connection_id, provider_thread_id,
+                     reply_to_provider_message_id, recipient, subject, body_reference_id,
+                     body_declared_bytes, body_sha256, custody_transfer_source_proof,
+                     provider_operation_id, next_attempt_at_unix_seconds)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
             )
             .bind(admission.intent_id.as_slice())
             .bind(admission.command_message_id.as_slice())
-            .bind(admission.envelope_sha256.as_slice())
-            .bind(&admission.logical_owner_id)
             .bind(route.connection_id)
             .bind(route.provider_thread_id)
             .bind(route.reply_to_provider_message_id)
@@ -377,9 +348,12 @@ impl MailDeliveryIntentStoreV1 {
                     WHEN job.state = 3 THEN attempt_count
                     ELSE attempt_count + 1
                  END
-             FROM next
+             FROM next, hermes_data.mail_delivery_intent_inbox inbox
              WHERE job.intent_id = next.intent_id
-             RETURNING job.*",
+               AND inbox.message_id = job.command_message_id
+             RETURNING job.*,
+                       inbox.envelope_sha256 AS command_envelope_sha256,
+                       inbox.logical_owner_id AS logical_owner_id",
         )
         .bind(now_unix_seconds)
         .bind(MAIL_DELIVERY_INTENT_MAX_ATTEMPTS_V1)
@@ -832,14 +806,6 @@ mod tests {
         assert!(MAIL_SCHEMA_V20.contains("target_body_receipt_sha256 BYTEA"));
         assert!(MAIL_SCHEMA_V20.contains("mail_delivery_intent_target_body_receipt_complete"));
         assert!(!MAIL_SCHEMA_V20.contains("communications_"));
-    }
-
-    #[test]
-    fn command_evidence_and_owner_are_forward_migrated_into_the_mail_job() {
-        assert!(MAIL_SCHEMA_V21.contains("command_envelope_sha256 = inbox.envelope_sha256"));
-        assert!(MAIL_SCHEMA_V21.contains("logical_owner_id = inbox.logical_owner_id"));
-        assert!(MAIL_SCHEMA_V21.contains("ALTER COLUMN logical_owner_id SET NOT NULL"));
-        assert!(!MAIL_SCHEMA_V21.contains("communications_"));
     }
 
     #[test]
