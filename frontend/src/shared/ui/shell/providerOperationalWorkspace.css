@@ -9,10 +9,38 @@
 	.telegram-action-rail
 ) {
 	flex: 0 0 auto;
-	border: 1px solid var(--h-color-border);
+	border: 1px solid var(--h-color-border-strong);
 	border-radius: var(--h-radius-lg);
-	background: color-mix(in srgb, var(--h-color-surface) 94%, transparent);
-	box-shadow: var(--h-shadow-sm);
+	background: var(--h-color-surface-raised);
+	box-shadow: var(--h-shadow-md);
+}
+
+:is(.mail-workspace-account, .telegram-workspace-account) {
+	box-sizing: border-box;
+	min-width: 11rem;
+	padding: var(--h-space-1) var(--h-space-2);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-xs);
+	transition:
+		border-color var(--h-motion-fast),
+		box-shadow var(--h-motion-fast);
+}
+
+:is(.mail-workspace-account, .telegram-workspace-account):focus-within {
+	border-color: var(--h-color-accent);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--h-color-accent) 18%, transparent);
+}
+
+:is(.mail-workspace-account, .telegram-workspace-account) select {
+	width: 100%;
+	max-width: none;
+	min-height: 1.75rem;
+	padding: 0;
+	border: 0;
+	outline: 0;
+	background: transparent;
 }
 
 :is(.mail-workspace-shell, .telegram-workspace-grid) {
@@ -28,10 +56,10 @@
 	.telegram-workspace-inspector
 ) {
 	overflow: hidden;
-	border: 1px solid var(--h-color-border);
+	border: 1px solid var(--h-color-border-strong);
 	border-radius: var(--h-radius-lg);
-	background: color-mix(in srgb, var(--h-color-surface) 92%, transparent);
-	box-shadow: var(--h-shadow-sm);
+	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-md);
 }
 
 @media (max-width: 900px) {
@@ -42,5 +70,76 @@
 
 	:is(.mail-workspace-shell, .telegram-workspace-grid) {
 		gap: var(--h-space-3);
+	}
+
+	:is(.mail-workspace-account, .telegram-workspace-account) {
+		order: 2;
+		flex: 1 1 12rem;
+		min-width: min(12rem, 100%);
+	}
+}
+
+@media (max-width: 760px) {
+	:is(
+		.mail-operational-page .mail-workspace-toolbar,
+		.telegram-operational-page .telegram-workspace-toolbar
+	) {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+	}
+
+	:is(.mail-workspace-toolbar__title, .telegram-workspace-toolbar__title) {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	:is(.mail-workspace-toolbar__actions, .telegram-workspace-toolbar__actions) {
+		grid-column: 2;
+		grid-row: 1;
+	}
+
+	:is(.mail-workspace-search, .telegram-workspace-search) {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		order: initial;
+		width: 100%;
+		max-width: none;
+	}
+
+	:is(.mail-workspace-account, .telegram-workspace-account) {
+		grid-column: 1 / -1;
+		grid-row: 3;
+		order: initial;
+		width: 100%;
+		max-width: none;
+	}
+}
+
+@media (max-width: 480px) {
+	:is(
+		.mail-operational-page .mail-workspace-toolbar,
+		.telegram-operational-page .telegram-workspace-toolbar
+	) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	:is(.mail-workspace-toolbar__title, .telegram-workspace-toolbar__title) {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	:is(.mail-workspace-toolbar__actions, .telegram-workspace-toolbar__actions) {
+		grid-column: 1;
+		grid-row: 2;
+		justify-self: end;
+	}
+
+	:is(.mail-workspace-search, .telegram-workspace-search) {
+		grid-row: 3;
+	}
+
+	:is(.mail-workspace-account, .telegram-workspace-account) {
+		grid-row: 4;
 	}
 }

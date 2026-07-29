@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useResponsiveWorkspaceInspector } from '../../../shared/ui/shell/useResponsiveWorkspaceInspector'
 import TelegramAccountAccessPanel from './TelegramAccountAccessPanel.vue'
 import type { TelegramAccountAccessModel } from './telegramAccountAccessModel'
 import TelegramDiscoveryPanel from './TelegramDiscoveryPanel.vue'
@@ -43,7 +44,7 @@ const emit = defineEmits<{
 const accountDialogOpen = ref(false)
 const discoveryDialogOpen = ref(false)
 const inspectorTab = ref<'actions' | 'context'>('context')
-const inspectorVisible = ref(true)
+const inspectorVisible = useResponsiveWorkspaceInspector()
 
 function openDiscovery(): void {
 	discoveryDialogOpen.value = true

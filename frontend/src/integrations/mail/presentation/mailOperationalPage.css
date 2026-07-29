@@ -717,7 +717,11 @@
 	}
 
 	.mail-workspace-account {
-		display: none;
+		display: grid;
+	}
+
+	.mail-workspace-toolbar__compose {
+		font-size: 0;
 	}
 
 	.mail-workspace-shell,

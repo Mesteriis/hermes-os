@@ -646,7 +646,7 @@
 	}
 
 	.telegram-workspace-account {
-		display: none;
+		display: grid;
 	}
 
 	.telegram-action-rail {

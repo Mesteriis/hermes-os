@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useResponsiveWorkspaceInspector } from '../../../shared/ui/shell/useResponsiveWorkspaceInspector'
 import type {
 	MailCompositionModel,
 	MailDraftEditorPatch,
@@ -84,7 +85,7 @@ const emit = defineEmits<{
 }>()
 
 const composeOpen = ref(false)
-const inspectorVisible = ref(true)
+const inspectorVisible = useResponsiveWorkspaceInspector()
 const searchQuery = ref('')
 const syncHealthOpen = ref(false)
 </script>
