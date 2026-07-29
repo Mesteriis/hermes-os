@@ -252,6 +252,7 @@ pub enum TelegramDurablePersistenceError {
     ReconfigurationInProgress,
     ReconfigurationUnknown,
     InvalidReconfigurationTransition,
+    ConflictingDeliveryRouteLocator,
 }
 
 impl TelegramDurablePersistence {
@@ -1092,8 +1093,14 @@ impl TelegramDurablePersistence {
         &self,
         message: &TelegramMessageProjection,
     ) -> Result<(), TelegramDurablePersistenceError> {
+        let locator = crate::TelegramDeliveryRouteLocatorV1::from_message(message)?;
         let payload =
             serde_json::to_value(message).map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)?;
         sqlx::query(
             r#"
             INSERT INTO hermes_data.telegram_message_projections
@@ -1111,10 +1118,19 @@ impl TelegramDurablePersistence {
         .bind(&message.provider_chat_id)
         .bind(message.observed_at_unix_seconds)
         .bind(payload)
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await
-        .map(|_| ())
-        .map_err(|_| TelegramDurablePersistenceError::Database)
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        crate::delivery_intent::upsert_delivery_route_locator(
+            &mut transaction,
+            &locator,
+            message.observed_at_unix_seconds,
+        )
+        .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)
     }
 
     pub async fn list_messages(
