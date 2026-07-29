@@ -3,10 +3,11 @@
 use hermes_communication_delivery_intent_api::{
     COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1, COMMUNICATION_DELIVERY_INTENT_OWNER_V1,
 };
+use hermes_communications_api::COMMUNICATIONS_QUERY_SCHEMA_SHA256;
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
-    CapabilityRequestV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1, RuntimeBudgetRequestV1,
-    SettingsSchemaRefV1, SettingsSchemaV1, StorageNamespaceRequestV1,
+    CapabilityRequestV1, ContractReferenceV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1,
+    RuntimeBudgetRequestV1, SettingsSchemaRefV1, SettingsSchemaV1, StorageNamespaceRequestV1,
     capability_request_v1::Request,
 };
 use prost::Message;
@@ -21,6 +22,8 @@ pub const COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY_ID_V1: &str =
     "communication_delivery_intent.storage.v1";
 pub const COMMUNICATION_DELIVERY_INTENT_BLOB_CAPABILITY_ID_V1: &str =
     "communication_delivery_intent.blob.v1";
+pub const COMMUNICATION_DELIVERY_INTENT_COMMUNICATIONS_QUERY_CAPABILITY_ID_V1: &str =
+    "communication_delivery_intent.communications_query.v1";
 pub const COMMUNICATION_DELIVERY_INTENT_BLOB_CUSTODY_SCOPE_ID_V1: &str =
     "communication_delivery_intent.body.v1";
 pub const COMMUNICATION_DELIVERY_INTENT_BLOB_QUOTA_BYTES_V1: u64 = 16 * 1024 * 1024;
@@ -62,6 +65,25 @@ pub fn communication_delivery_intent_blob_capability_v1() -> CapabilityDescripto
 }
 
 #[must_use]
+pub fn communication_delivery_intent_communications_query_capability_v1() -> CapabilityDescriptorV1
+{
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATION_DELIVERY_INTENT_COMMUNICATIONS_QUERY_CAPABILITY_ID_V1
+            .to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        dependencies: vec![ContractReferenceV1 {
+            owner: "communications".to_owned(),
+            name: "communications.query".to_owned(),
+            major: 1,
+            revision: 1,
+            schema_sha256: COMMUNICATIONS_QUERY_SCHEMA_SHA256.to_vec(),
+        }],
+        ..Default::default()
+    }
+}
+
+#[must_use]
 pub fn communication_delivery_intent_settings_schema_v1() -> SettingsSchemaV1 {
     SettingsSchemaV1 {
         major: 1,
@@ -80,7 +102,7 @@ pub fn communication_delivery_intent_module_descriptor_v1(build_id: &str) -> Mod
     let settings_schema = communication_delivery_intent_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 1,
+        descriptor_revision: 2,
         module_id: COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1.to_owned(),
         owner_id: COMMUNICATION_DELIVERY_INTENT_OWNER_V1.to_owned(),
         module_kind: ModuleKindV1::Workflow as i32,
@@ -93,6 +115,7 @@ pub fn communication_delivery_intent_module_descriptor_v1(build_id: &str) -> Mod
         }),
         capabilities: vec![
             communication_delivery_intent_blob_capability_v1(),
+            communication_delivery_intent_communications_query_capability_v1(),
             delivery_intent_mail_events_capability_v1(),
             communication_delivery_intent_storage_capability_v1(),
             delivery_intent_telegram_events_capability_v1(),
@@ -124,21 +147,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn descriptor_admits_blob_storage_and_four_exact_provider_event_units() {
+    fn descriptor_admits_canonical_query_blob_storage_and_four_exact_provider_event_units() {
         let descriptor = communication_delivery_intent_module_descriptor_v1("test");
         validate_descriptor_v1(&descriptor).expect("descriptor");
         validate_settings_schema_v1(&communication_delivery_intent_settings_schema_v1())
             .expect("settings");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Workflow as i32);
-        assert_eq!(descriptor.capabilities.len(), 6);
+        assert_eq!(descriptor.capabilities.len(), 7);
         assert_eq!(
             descriptor.capabilities[0].capability_id,
             COMMUNICATION_DELIVERY_INTENT_BLOB_CAPABILITY_ID_V1
         );
         assert_eq!(
-            descriptor.capabilities[2].capability_id,
+            descriptor.capabilities[1].capability_id,
+            COMMUNICATION_DELIVERY_INTENT_COMMUNICATIONS_QUERY_CAPABILITY_ID_V1
+        );
+        assert_eq!(
+            descriptor.capabilities[3].capability_id,
             COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY_ID_V1
         );
         assert!(descriptor.capabilities[0].provides.is_empty());
+        assert_eq!(
+            descriptor.capabilities[1].dependencies,
+            vec![ContractReferenceV1 {
+                owner: "communications".to_owned(),
+                name: "communications.query".to_owned(),
+                major: 1,
+                revision: 1,
+                schema_sha256: COMMUNICATIONS_QUERY_SCHEMA_SHA256.to_vec(),
+            }]
+        );
     }
 }

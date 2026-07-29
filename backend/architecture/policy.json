@@ -1422,6 +1422,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communications-api",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-events-jetstream",
           "kind": "normal"
         },

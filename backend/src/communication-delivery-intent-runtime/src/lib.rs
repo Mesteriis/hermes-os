@@ -2,6 +2,7 @@
 
 pub mod admission;
 pub mod body_materializer;
+pub mod communications_query_client;
 pub mod coordinator;
 mod event_runtime;
 pub mod provider_event_admission;

@@ -1782,6 +1782,7 @@ dependencies = [
  "hermes-communication-delivery-intent-core",
  "hermes-communication-delivery-intent-event-adapters",
  "hermes-communication-delivery-intent-persistence",
+ "hermes-communications-api",
  "hermes-events-jetstream",
  "hermes-mail-delivery-intent-contract",
  "hermes-runtime-protocol",

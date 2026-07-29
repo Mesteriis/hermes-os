@@ -2,12 +2,23 @@
 
 use crate::{
     AttachmentDispositionV1, AttachmentSafetyStateV1, CommunicationAccountSummaryV1,
-    CommunicationAttachmentAnchorSummaryV1, CommunicationConversationSummaryV1,
-    CommunicationDirectionV1, CommunicationMessageLifecycleStateV1,
+    CommunicationAttachmentAnchorSummaryV1, CommunicationBodyStateV1,
+    CommunicationConversationIdV1, CommunicationConversationSummaryV1, CommunicationDirectionV1,
+    CommunicationMessageIdV1, CommunicationMessageLifecycleStateV1,
     CommunicationMessageReferenceKindV1, CommunicationMessageReferenceSummaryV1,
-    CommunicationMessageSummaryV1, CommunicationObservedParticipantSummaryV1,
-    CommunicationProviderProvenanceV1, query_wire,
+    CommunicationMessageSummaryV1, CommunicationObservationIdV1,
+    CommunicationObservedParticipantSummaryV1, CommunicationProviderProvenanceV1,
+    CommunicationSourceCursorV1, query_wire,
 };
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommunicationsQueryProjectionErrorV1 {
+    InvalidIdentifier,
+    InvalidProvider,
+    InvalidBodyState,
+    InvalidDirection,
+    InvalidLifecycleState,
+}
 
 impl From<&crate::CommunicationSummary> for query_wire::EvidenceSummaryV1 {
     fn from(value: &crate::CommunicationSummary) -> Self {
@@ -69,6 +80,42 @@ impl From<&CommunicationMessageSummaryV1> for query_wire::MessageSummaryV1 {
             last_observed_at_unix_seconds: value.last_observed_at_unix_seconds,
             last_evidence_id: value.last_evidence_id.bytes().to_vec(),
         }
+    }
+}
+
+impl TryFrom<query_wire::ConversationSummaryV1> for CommunicationConversationSummaryV1 {
+    type Error = CommunicationsQueryProjectionErrorV1;
+
+    fn try_from(value: query_wire::ConversationSummaryV1) -> Result<Self, Self::Error> {
+        Ok(Self {
+            conversation_id: CommunicationConversationIdV1::new(id16(&value.conversation_id)?),
+            account_cursor: CommunicationSourceCursorV1::new(id32(&value.account_cursor_sha256)?),
+            conversation_cursor: CommunicationSourceCursorV1::new(id32(
+                &value.conversation_cursor_sha256,
+            )?),
+            provider: provider_from_value(value.provider)?,
+            first_observed_at_unix_seconds: value.first_observed_at_unix_seconds,
+            last_observed_at_unix_seconds: value.last_observed_at_unix_seconds,
+            last_evidence_id: CommunicationObservationIdV1::new(id16(&value.last_evidence_id)?),
+        })
+    }
+}
+
+impl TryFrom<query_wire::MessageSummaryV1> for CommunicationMessageSummaryV1 {
+    type Error = CommunicationsQueryProjectionErrorV1;
+
+    fn try_from(value: query_wire::MessageSummaryV1) -> Result<Self, Self::Error> {
+        Ok(Self {
+            message_id: CommunicationMessageIdV1::new(id16(&value.message_id)?),
+            conversation_id: CommunicationConversationIdV1::new(id16(&value.conversation_id)?),
+            source_cursor: CommunicationSourceCursorV1::new(id32(&value.source_cursor_sha256)?),
+            body: body_state_from_value(value.body_state)?,
+            direction: direction_from_value(value.direction)?,
+            lifecycle_state: lifecycle_state_from_value(value.lifecycle_state)?,
+            first_observed_at_unix_seconds: value.first_observed_at_unix_seconds,
+            last_observed_at_unix_seconds: value.last_observed_at_unix_seconds,
+            last_evidence_id: CommunicationObservationIdV1::new(id16(&value.last_evidence_id)?),
+        })
     }
 }
 
@@ -160,11 +207,36 @@ const fn provider_value(value: CommunicationProviderProvenanceV1) -> u32 {
     }
 }
 
+const fn provider_from_value(
+    value: u32,
+) -> Result<CommunicationProviderProvenanceV1, CommunicationsQueryProjectionErrorV1> {
+    match value {
+        1 => Ok(CommunicationProviderProvenanceV1::MailImap),
+        2 => Ok(CommunicationProviderProvenanceV1::Telegram),
+        3 => Ok(CommunicationProviderProvenanceV1::WhatsAppWeb),
+        4 => Ok(CommunicationProviderProvenanceV1::MailSmtp),
+        5 => Ok(CommunicationProviderProvenanceV1::Zulip),
+        6 => Ok(CommunicationProviderProvenanceV1::MailGmail),
+        _ => Err(CommunicationsQueryProjectionErrorV1::InvalidProvider),
+    }
+}
+
 const fn direction_value(value: CommunicationDirectionV1) -> u32 {
     match value {
         CommunicationDirectionV1::Incoming => 1,
         CommunicationDirectionV1::Outgoing => 2,
         CommunicationDirectionV1::Unknown => 3,
+    }
+}
+
+const fn direction_from_value(
+    value: u32,
+) -> Result<CommunicationDirectionV1, CommunicationsQueryProjectionErrorV1> {
+    match value {
+        1 => Ok(CommunicationDirectionV1::Incoming),
+        2 => Ok(CommunicationDirectionV1::Outgoing),
+        3 => Ok(CommunicationDirectionV1::Unknown),
+        _ => Err(CommunicationsQueryProjectionErrorV1::InvalidDirection),
     }
 }
 
@@ -174,6 +246,18 @@ const fn body_state_value(value: crate::CommunicationBodyStateV1) -> u32 {
         crate::CommunicationBodyStateV1::PendingBlob => 2,
         crate::CommunicationBodyStateV1::Unavailable => 3,
         crate::CommunicationBodyStateV1::AdmittedBlob => 4,
+    }
+}
+
+const fn body_state_from_value(
+    value: u32,
+) -> Result<CommunicationBodyStateV1, CommunicationsQueryProjectionErrorV1> {
+    match value {
+        1 => Ok(CommunicationBodyStateV1::MetadataOnly),
+        2 => Ok(CommunicationBodyStateV1::PendingBlob),
+        3 => Ok(CommunicationBodyStateV1::Unavailable),
+        4 => Ok(CommunicationBodyStateV1::AdmittedBlob),
+        _ => Err(CommunicationsQueryProjectionErrorV1::InvalidBodyState),
     }
 }
 
@@ -210,6 +294,28 @@ const fn lifecycle_state_value(value: CommunicationMessageLifecycleStateV1) -> u
         CommunicationMessageLifecycleStateV1::Active => 1,
         CommunicationMessageLifecycleStateV1::Deleted => 2,
     }
+}
+
+const fn lifecycle_state_from_value(
+    value: u32,
+) -> Result<CommunicationMessageLifecycleStateV1, CommunicationsQueryProjectionErrorV1> {
+    match value {
+        1 => Ok(CommunicationMessageLifecycleStateV1::Active),
+        2 => Ok(CommunicationMessageLifecycleStateV1::Deleted),
+        _ => Err(CommunicationsQueryProjectionErrorV1::InvalidLifecycleState),
+    }
+}
+
+fn id16(value: &[u8]) -> Result<[u8; 16], CommunicationsQueryProjectionErrorV1> {
+    value
+        .try_into()
+        .map_err(|_| CommunicationsQueryProjectionErrorV1::InvalidIdentifier)
+}
+
+fn id32(value: &[u8]) -> Result<[u8; 32], CommunicationsQueryProjectionErrorV1> {
+    value
+        .try_into()
+        .map_err(|_| CommunicationsQueryProjectionErrorV1::InvalidIdentifier)
 }
 
 const fn reference_kind_value(value: CommunicationMessageReferenceKindV1) -> u32 {
@@ -285,5 +391,60 @@ mod tests {
         assert_eq!(wire.correlation_id, vec![4; 16]);
         assert_eq!(wire.recorded_at_unix_seconds, 9);
         assert_eq!(wire.recorded_at_nanos, 10);
+    }
+
+    #[test]
+    fn public_query_summaries_round_trip_through_strict_domain_values() {
+        let conversation = CommunicationConversationSummaryV1 {
+            conversation_id: CommunicationConversationIdV1::new([1; 16]),
+            account_cursor: CommunicationSourceCursorV1::new([2; 32]),
+            conversation_cursor: CommunicationSourceCursorV1::new([3; 32]),
+            provider: CommunicationProviderProvenanceV1::Telegram,
+            first_observed_at_unix_seconds: 10,
+            last_observed_at_unix_seconds: 20,
+            last_evidence_id: CommunicationObservationIdV1::new([4; 16]),
+        };
+        let wire = query_wire::ConversationSummaryV1::from(&conversation);
+        assert_eq!(
+            CommunicationConversationSummaryV1::try_from(wire),
+            Ok(conversation)
+        );
+
+        let message = CommunicationMessageSummaryV1 {
+            message_id: CommunicationMessageIdV1::new([5; 16]),
+            conversation_id: CommunicationConversationIdV1::new([1; 16]),
+            source_cursor: CommunicationSourceCursorV1::new([6; 32]),
+            body: CommunicationBodyStateV1::AdmittedBlob,
+            direction: CommunicationDirectionV1::Outgoing,
+            lifecycle_state: CommunicationMessageLifecycleStateV1::Active,
+            first_observed_at_unix_seconds: 11,
+            last_observed_at_unix_seconds: 21,
+            last_evidence_id: CommunicationObservationIdV1::new([7; 16]),
+        };
+        let wire = query_wire::MessageSummaryV1::from(&message);
+        assert_eq!(CommunicationMessageSummaryV1::try_from(wire), Ok(message));
+    }
+
+    #[test]
+    fn public_query_summary_decode_rejects_unknown_values_and_wrong_ids() {
+        let mut conversation = query_wire::ConversationSummaryV1 {
+            conversation_id: vec![1; 16],
+            account_cursor_sha256: vec![2; 32],
+            conversation_cursor_sha256: vec![3; 32],
+            provider: 99,
+            first_observed_at_unix_seconds: 10,
+            last_observed_at_unix_seconds: 20,
+            last_evidence_id: vec![4; 16],
+        };
+        assert_eq!(
+            CommunicationConversationSummaryV1::try_from(conversation.clone()),
+            Err(CommunicationsQueryProjectionErrorV1::InvalidProvider)
+        );
+        conversation.provider = 2;
+        conversation.conversation_id.clear();
+        assert_eq!(
+            CommunicationConversationSummaryV1::try_from(conversation),
+            Err(CommunicationsQueryProjectionErrorV1::InvalidIdentifier)
+        );
     }
 }

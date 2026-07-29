@@ -15,6 +15,7 @@ pub mod query_wire {
 
 mod attachment;
 mod query_projection;
+pub use query_projection::CommunicationsQueryProjectionErrorV1;
 
 pub use attachment::{
     AttachmentDescriptorV1, AttachmentDescriptorViolationV1, AttachmentDispositionV1,
