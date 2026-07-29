@@ -1,13 +1,21 @@
 //! Exact technical admission for the independently managed workflow runtime.
 
 use hermes_communication_delivery_intent_api::{
-    COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1, COMMUNICATION_DELIVERY_INTENT_OWNER_V1,
+    COMMUNICATION_DELIVERY_INTENT_CAPABILITY_ID_V1,
+    COMMUNICATION_DELIVERY_INTENT_COMMAND_CONNECT_PATH_V1,
+    COMMUNICATION_DELIVERY_INTENT_COMMAND_CONTRACT_NAME_V1,
+    COMMUNICATION_DELIVERY_INTENT_CONTRACT_MAJOR_V1,
+    COMMUNICATION_DELIVERY_INTENT_CONTRACT_REVISION_V1, COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1,
+    COMMUNICATION_DELIVERY_INTENT_OWNER_V1, COMMUNICATION_DELIVERY_INTENT_QUERY_CONNECT_PATH_V1,
+    COMMUNICATION_DELIVERY_INTENT_QUERY_CONTRACT_NAME_V1,
+    COMMUNICATION_DELIVERY_INTENT_SCHEMA_SHA256,
 };
 use hermes_communications_api::COMMUNICATIONS_QUERY_SCHEMA_SHA256;
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
-    CapabilityRequestV1, ContractReferenceV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1,
-    RuntimeBudgetRequestV1, SettingsSchemaRefV1, SettingsSchemaV1, StorageNamespaceRequestV1,
+    CapabilityRequestV1, ClientRpcRouteV1, ContractReferenceV1, ModuleDescriptorV1, ModuleKindV1,
+    ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1,
+    SettingsSchemaRefV1, SettingsSchemaV1, StorageNamespaceRequestV1,
     capability_request_v1::Request,
 };
 use prost::Message;
@@ -29,6 +37,43 @@ pub const COMMUNICATION_DELIVERY_INTENT_BLOB_CUSTODY_SCOPE_ID_V1: &str =
 pub const COMMUNICATION_DELIVERY_INTENT_BLOB_QUOTA_BYTES_V1: u64 = 16 * 1024 * 1024;
 pub const COMMUNICATION_DELIVERY_INTENT_STORAGE_CONNECTION_BUDGET_V1: u32 = 4;
 pub const COMMUNICATION_DELIVERY_INTENT_STORAGE_TIMEOUT_MILLIS_V1: u32 = 5_000;
+
+#[must_use]
+pub fn communication_delivery_intent_client_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATION_DELIVERY_INTENT_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            delivery_intent_client_surface(
+                COMMUNICATION_DELIVERY_INTENT_COMMAND_CONTRACT_NAME_V1,
+                COMMUNICATION_DELIVERY_INTENT_COMMAND_CONNECT_PATH_V1,
+            ),
+            delivery_intent_client_surface(
+                COMMUNICATION_DELIVERY_INTENT_QUERY_CONTRACT_NAME_V1,
+                COMMUNICATION_DELIVERY_INTENT_QUERY_CONNECT_PATH_V1,
+            ),
+        ],
+        ..Default::default()
+    }
+}
+
+fn delivery_intent_client_surface(contract_name: &str, path: &str) -> ProvidedSurfaceV1 {
+    ProvidedSurfaceV1 {
+        kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+        contract: Some(ContractReferenceV1 {
+            owner: COMMUNICATION_DELIVERY_INTENT_OWNER_V1.to_owned(),
+            name: contract_name.to_owned(),
+            major: COMMUNICATION_DELIVERY_INTENT_CONTRACT_MAJOR_V1,
+            revision: COMMUNICATION_DELIVERY_INTENT_CONTRACT_REVISION_V1,
+            schema_sha256: COMMUNICATION_DELIVERY_INTENT_SCHEMA_SHA256.to_vec(),
+        }),
+        client_rpc_route: Some(ClientRpcRouteV1 {
+            path: path.to_owned(),
+        }),
+        client_blob_route: None,
+    }
+}
 
 #[must_use]
 pub fn communication_delivery_intent_storage_capability_v1() -> CapabilityDescriptorV1 {
@@ -102,7 +147,7 @@ pub fn communication_delivery_intent_module_descriptor_v1(build_id: &str) -> Mod
     let settings_schema = communication_delivery_intent_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 2,
+        descriptor_revision: 3,
         module_id: COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1.to_owned(),
         owner_id: COMMUNICATION_DELIVERY_INTENT_OWNER_V1.to_owned(),
         module_kind: ModuleKindV1::Workflow as i32,
@@ -114,6 +159,7 @@ pub fn communication_delivery_intent_module_descriptor_v1(build_id: &str) -> Mod
             minimum_revision: 1,
         }),
         capabilities: vec![
+            communication_delivery_intent_client_capability_v1(),
             communication_delivery_intent_blob_capability_v1(),
             communication_delivery_intent_communications_query_capability_v1(),
             delivery_intent_mail_events_capability_v1(),
@@ -153,22 +199,33 @@ mod tests {
         validate_settings_schema_v1(&communication_delivery_intent_settings_schema_v1())
             .expect("settings");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Workflow as i32);
-        assert_eq!(descriptor.capabilities.len(), 7);
+        assert_eq!(descriptor.capabilities.len(), 8);
         assert_eq!(
             descriptor.capabilities[0].capability_id,
-            COMMUNICATION_DELIVERY_INTENT_BLOB_CAPABILITY_ID_V1
+            COMMUNICATION_DELIVERY_INTENT_CAPABILITY_ID_V1
         );
         assert_eq!(
             descriptor.capabilities[1].capability_id,
+            COMMUNICATION_DELIVERY_INTENT_BLOB_CAPABILITY_ID_V1
+        );
+        assert_eq!(
+            descriptor.capabilities[2].capability_id,
             COMMUNICATION_DELIVERY_INTENT_COMMUNICATIONS_QUERY_CAPABILITY_ID_V1
         );
         assert_eq!(
-            descriptor.capabilities[3].capability_id,
+            descriptor.capabilities[4].capability_id,
             COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY_ID_V1
         );
-        assert!(descriptor.capabilities[0].provides.is_empty());
+        assert_eq!(descriptor.capabilities[0].provides.len(), 2);
         assert_eq!(
-            descriptor.capabilities[1].dependencies,
+            descriptor.capabilities[0].provides[0]
+                .client_rpc_route
+                .as_ref()
+                .map(|route| route.path.as_str()),
+            Some(COMMUNICATION_DELIVERY_INTENT_COMMAND_CONNECT_PATH_V1)
+        );
+        assert_eq!(
+            descriptor.capabilities[2].dependencies,
             vec![ContractReferenceV1 {
                 owner: "communications".to_owned(),
                 name: "communications.query".to_owned(),

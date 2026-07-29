@@ -26,6 +26,7 @@ use hermes_runtime_protocol::{
     },
 };
 use prost::Message;
+use sha2::{Digest, Sha256};
 
 const QUERY_PROTOCOL_MAJOR: u32 = 1;
 const QUERY_DEADLINE_MILLIS: u32 = MODULE_QUERY_MAX_DEADLINE_MILLIS_V1;
@@ -54,6 +55,30 @@ pub struct ManagedCommunicationsQueryClientV1<'a> {
 }
 
 impl ManagedCommunicationsQueryClientV1<'_> {
+    pub fn resolve_route_sources(
+        &mut self,
+        operation_id: [u8; 16],
+        conversation_id: CommunicationConversationIdV1,
+        reply_to_message_id: Option<CommunicationMessageIdV1>,
+    ) -> Result<
+        (
+            CommunicationConversationSummaryV1,
+            Option<CommunicationMessageSummaryV1>,
+        ),
+        CommunicationsQueryClientErrorV1,
+    > {
+        let conversation = self.get_conversation(
+            derived_request_id(operation_id, b"conversation"),
+            conversation_id,
+        )?;
+        let reply = reply_to_message_id
+            .map(|message_id| {
+                self.get_message(derived_request_id(operation_id, b"reply"), message_id)
+            })
+            .transpose()?;
+        Ok((conversation, reply))
+    }
+
     pub fn get_conversation(
         &mut self,
         request_id: [u8; 16],
@@ -154,6 +179,17 @@ fn communications_query_contract() -> ContractReferenceV1 {
     }
 }
 
+fn derived_request_id(operation_id: [u8; 16], purpose: &[u8]) -> [u8; 16] {
+    let digest = Sha256::new()
+        .chain_update(b"hermes.communication-delivery-intent.query-request.v1\0")
+        .chain_update(operation_id)
+        .chain_update(purpose)
+        .finalize();
+    let mut request_id = [0_u8; 16];
+    request_id.copy_from_slice(&digest[..16]);
+    request_id
+}
+
 fn decode_response(
     request_id: [u8; 16],
     response: ManagedRuntimeModuleQueryResponseV1,
@@ -181,6 +217,15 @@ mod tests {
         assert_eq!(request.request_id, vec![1; 16]);
         assert_eq!(request.contract, Some(communications_query_contract()));
         assert_eq!(request.deadline_millis, MODULE_QUERY_MAX_DEADLINE_MILLIS_V1);
+    }
+
+    #[test]
+    fn per_operation_query_ids_are_stable_distinct_and_non_zero() {
+        let conversation = derived_request_id([1; 16], b"conversation");
+        let reply = derived_request_id([1; 16], b"reply");
+        assert_ne!(conversation, reply);
+        assert!(conversation.iter().any(|byte| *byte != 0));
+        assert_eq!(conversation, derived_request_id([1; 16], b"conversation"));
     }
 
     #[test]

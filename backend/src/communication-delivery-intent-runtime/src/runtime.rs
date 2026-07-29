@@ -2,20 +2,30 @@
 
 use std::os::unix::net::UnixStream;
 
-use hermes_communication_delivery_intent_core::PlannedDeliveryIntentV1;
+use hermes_communication_delivery_intent_core::{
+    DeliveryIntentDraftV1, DeliveryIntentPlanErrorV1, PlannedDeliveryIntentV1,
+    plan_delivery_intent_v1,
+};
 use hermes_communication_delivery_intent_persistence::{
     CommunicationDeliveryIntentPersistenceV1, CreateDeliveryIntentOutcomeV1,
-    DeliveryIntentPersistenceErrorV1,
+    DeliveryIntentPersistenceErrorV1, DeliveryIntentStatusRecordV1,
 };
 use hermes_events_jetstream::{
     JetStreamClient, ManagedRuntimeEventAccessErrorV1, RuntimeJetStreamConnection,
     RuntimeNatsIdentity, RuntimePublishPermitV1, request_managed_runtime_event_access_v2,
 };
 use hermes_runtime_protocol::{
-    managed_control::{ManagedControlChannelV2, ManagedControlRequestDispatcherV2},
+    managed_control::{
+        ManagedControlChannelV2, ManagedControlRequestDispatcherV2, RejectManagedControlRequestsV2,
+    },
     v1::{
-        ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
-        ManagedStorageRuntimeConfigurationV1,
+        ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlResponseV1,
+        ManagedRuntimeReadyRequestV1, ManagedStorageRuntimeConfigurationV1,
+        managed_runtime_control_request_v1::Operation,
+        managed_runtime_control_response_v1::Result as ControlResult,
+    },
+    validation::module_client::{
+        validate_module_client_request_v1, validate_module_client_response_v1,
     },
 };
 use hermes_storage_protocol::{
@@ -28,6 +38,10 @@ use hermes_storage_vault::{
 
 use crate::{
     body_materializer::ManagedDeliveryIntentBodyMaterializerV1,
+    client_port::dispatch_delivery_intent_client_request_v1,
+    communications_query_client::{
+        CommunicationsQueryClientErrorV1, ManagedCommunicationsQueryClientV1,
+    },
     coordinator::{DeliveryIntentCoordinatorErrorV1, prepare_create_delivery_intent_v1},
     event_runtime::{ProviderTerminalSubscriptionV1, bind_terminal_subscriptions},
 };
@@ -47,6 +61,8 @@ pub enum DeliveryIntentRuntimeErrorV1 {
     Coordinator(DeliveryIntentCoordinatorErrorV1),
     Persistence(DeliveryIntentPersistenceErrorV1),
     EventContract,
+    InvalidRequest,
+    RouteUnavailable,
     Unavailable,
 }
 
@@ -204,22 +220,110 @@ impl DeliveryIntentManagedRuntimeV1 {
             .map_err(DeliveryIntentRuntimeErrorV1::Persistence)
     }
 
-    pub fn pump_control_once(&mut self) -> Result<bool, DeliveryIntentRuntimeErrorV1> {
-        let Some((correlation_id, _request)) = self
+    pub async fn submit_delivery_intent_v1(
+        &mut self,
+        draft: DeliveryIntentDraftV1,
+        created_at_unix_seconds: i64,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+    ) -> Result<CreateDeliveryIntentOutcomeV1, DeliveryIntentRuntimeErrorV1> {
+        let (conversation, reply) = {
+            let mut query_client = ManagedCommunicationsQueryClientV1 {
+                control_channel: &mut self.control_channel,
+                dispatcher,
+            };
+            query_client
+                .resolve_route_sources(
+                    draft.operation_id,
+                    draft.conversation_id,
+                    draft.reply_to_message_id,
+                )
+                .map_err(query_error)?
+        };
+        let planned =
+            plan_delivery_intent_v1(draft, &conversation, reply.as_ref()).map_err(plan_error)?;
+        self.create_delivery_intent_v1(planned, created_at_unix_seconds, dispatcher)
+            .await
+    }
+
+    pub async fn delivery_intent_status_v1(
+        &self,
+        intent_id: [u8; 16],
+    ) -> Result<Option<DeliveryIntentStatusRecordV1>, DeliveryIntentRuntimeErrorV1> {
+        self.persistence
+            .status(&self.logical_owner_id, intent_id)
+            .await
+            .map_err(DeliveryIntentRuntimeErrorV1::Persistence)
+    }
+
+    pub async fn pump_control_once(
+        &mut self,
+        now_unix_seconds: i64,
+    ) -> Result<bool, DeliveryIntentRuntimeErrorV1> {
+        let Some((correlation_id, control_request)) = self
             .control_channel
             .try_receive_request()
             .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?
         else {
             return Ok(false);
         };
+        let Some(Operation::ClientDelivery(delivery)) = control_request.operation else {
+            self.control_channel
+                .write_response(
+                    correlation_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: None,
+                        error_code: "managed_runtime_control_unexpected_request".to_owned(),
+                    },
+                )
+                .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+            return Ok(true);
+        };
+        let Some(request) = delivery
+            .request
+            .filter(|request| validate_module_client_request_v1(request).is_ok())
+        else {
+            self.control_channel
+                .write_response(
+                    correlation_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: None,
+                        error_code: "managed_runtime_control_invalid_client_delivery".to_owned(),
+                    },
+                )
+                .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+            return Ok(true);
+        };
+        let mut dispatcher = RejectManagedControlRequestsV2;
         self.control_channel
-            .write_response(
-                correlation_id,
-                ManagedRuntimeControlResponseV1 {
-                    result: None,
-                    error_code: "managed_runtime_control_unexpected_request".to_owned(),
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+        let response = dispatch_delivery_intent_client_request_v1(
+            self,
+            &mut dispatcher,
+            &request,
+            now_unix_seconds,
+        )
+        .await;
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+        if validate_module_client_response_v1(&response).is_err()
+            || response.request_id != request.request_id
+        {
+            return Err(DeliveryIntentRuntimeErrorV1::Unavailable);
+        }
+        let response = ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::ClientDelivery(
+                ManagedRuntimeClientDeliveryResponseV1 {
+                    response: Some(response),
                 },
-            )
+            )),
+            error_code: String::new(),
+        };
+        self.control_channel
+            .write_response(correlation_id, response)
             .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
         Ok(true)
     }
@@ -361,6 +465,14 @@ fn storage_binding(
 
 fn persistence_error(_: DeliveryIntentPersistenceErrorV1) -> DeliveryIntentRuntimeErrorV1 {
     DeliveryIntentRuntimeErrorV1::Unavailable
+}
+
+const fn query_error(_: CommunicationsQueryClientErrorV1) -> DeliveryIntentRuntimeErrorV1 {
+    DeliveryIntentRuntimeErrorV1::RouteUnavailable
+}
+
+const fn plan_error(_: DeliveryIntentPlanErrorV1) -> DeliveryIntentRuntimeErrorV1 {
+    DeliveryIntentRuntimeErrorV1::InvalidRequest
 }
 
 #[cfg(test)]

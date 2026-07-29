@@ -9,17 +9,22 @@ owner-local persistence и independently managed runtime substrate реализ�
 Persistence принимает только sealed ciphertext, хранит owner-scoped
 idempotency/state transitions и выдаёт lease/claim с epoch fencing. Runtime
 проходит Kernel handshake, поднимает owner-local Storage через Vault-fenced
-credential и пока предоставляет только Storage capability. Отдельная assembly
+credential и предоставляет отдельные ClientRpc, Communications query, Blob,
+Storage и provider event capability units. Отдельная assembly
 unit создаёт canonical descriptor/settings/Storage bundle и deterministic
 unsigned release fragment, не исполняя workflow. Четыре provider-owned
 command/result wire contracts и exact route requests реализованы по ADR-0331.
 Transactional workflow outbox, четыре exact event adapter, idempotent
 terminal-result inbox и runtime entry points реализованы по ADR-0332.
 Target-bound Blob materialization и четыре provider-owned consumer/worker/result
-loop реализованы по ADR-0333 и ADR-0335. Workflow runtime пока не подключён к
-Event Hub publish/result-consume permits, не входит в managed development
-admission, а Gateway command/status/realtime closure ещё не реализован;
-`communication_delivery_intent_v1` остаётся `planned`.
+loop реализованы по ADR-0333 и ADR-0335. Workflow runtime подключён к Event Hub
+publish/result-consume permits. Capability-routed `communications.query`
+dependency, generated command и status ClientRpc closure реализованы по
+ADR-0336: Submit принимает только canonical conversation/reply identities,
+runtime сам получает provider provenance и opaque route cursors у
+Communications. Workflow пока не входит в managed development admission;
+replayable client realtime и live managed Gateway proof ещё не реализованы,
+поэтому `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст
 

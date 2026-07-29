@@ -141,19 +141,21 @@ where
         ))
         .map_err(runtime_error)?;
     loop {
-        runtime.pump_control_once().map_err(|error| match error {
-            DeliveryIntentRuntimeErrorV1::Unavailable => {
-                "Communication Delivery Intent runtime failed: control_channel_unavailable"
-                    .to_owned()
-            }
-            error => runtime_error(error),
-        })?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|_| "Communication Delivery Intent clock is invalid".to_owned())?
             .as_secs()
             .try_into()
             .map_err(|_| "Communication Delivery Intent clock is invalid".to_owned())?;
+        executor
+            .block_on(runtime.pump_control_once(now))
+            .map_err(|error| match error {
+                DeliveryIntentRuntimeErrorV1::Unavailable => {
+                    "Communication Delivery Intent runtime failed: control_channel_unavailable"
+                        .to_owned()
+                }
+                error => runtime_error(error),
+            })?;
         match executor.block_on(runtime.process_next_provider_command_v1(now)) {
             Ok(_) | Err(DeliveryIntentRuntimeErrorV1::Unavailable) => {}
             Err(DeliveryIntentRuntimeErrorV1::Persistence(
@@ -186,6 +188,8 @@ fn runtime_error(error: DeliveryIntentRuntimeErrorV1) -> String {
     let reason = match error {
         DeliveryIntentRuntimeErrorV1::Admission => "admission_rejected",
         DeliveryIntentRuntimeErrorV1::EventContract => "event_contract_rejected",
+        DeliveryIntentRuntimeErrorV1::InvalidRequest => "client_request_rejected",
+        DeliveryIntentRuntimeErrorV1::RouteUnavailable => "communications_route_unavailable",
         DeliveryIntentRuntimeErrorV1::Coordinator(
             hermes_communication_delivery_intent_runtime::coordinator::DeliveryIntentCoordinatorErrorV1::InvalidInput,
         ) => "coordinator_input_rejected",

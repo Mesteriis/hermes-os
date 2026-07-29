@@ -45,6 +45,14 @@ const paths = {
     'src/communication-delivery-intent-runtime/src/coordinator.rs',
     BACKEND_ROOT,
   ),
+  clientPort: new URL(
+    'src/communication-delivery-intent-runtime/src/client_port.rs',
+    BACKEND_ROOT,
+  ),
+  communicationsQueryClient: new URL(
+    'src/communication-delivery-intent-runtime/src/communications_query_client.rs',
+    BACKEND_ROOT,
+  ),
   runtimeProcess: new URL(
     'src/communication-delivery-intent-runtime/src/runtime.rs',
     BACKEND_ROOT,
@@ -81,6 +89,8 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
     providerEventAdmission,
     eventRuntime,
     runtimeCoordinator,
+    clientPort,
+    communicationsQueryClient,
     runtimeProcess,
     persistence,
     migration,
@@ -100,6 +110,8 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
       readFile(paths.providerEventAdmission, 'utf8'),
       readFile(paths.eventRuntime, 'utf8'),
       readFile(paths.runtimeCoordinator, 'utf8'),
+      readFile(paths.clientPort, 'utf8'),
+      readFile(paths.communicationsQueryClient, 'utf8'),
       readFile(paths.runtimeProcess, 'utf8'),
       readFile(paths.persistence, 'utf8'),
       readFile(paths.migration, 'utf8'),
@@ -162,15 +174,29 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
   assert.match(runtimeAdmission, /StorageNamespaceRequestV1/);
   assert.match(runtimeAdmission, /BlobQuotaRequestV1/);
   assert.match(runtimeAdmission, /BlobQuotaOperationV1::Write/);
-  assert.doesNotMatch(runtimeAdmission, /ClientRpcRouteV1/);
+  assert.match(runtimeAdmission, /ClientRpcRouteV1/);
+  assert.match(
+    runtimeAdmission,
+    /COMMUNICATION_DELIVERY_INTENT_COMMAND_CONNECT_PATH_V1/,
+  );
+  assert.match(
+    runtimeAdmission,
+    /COMMUNICATION_DELIVERY_INTENT_QUERY_CONNECT_PATH_V1/,
+  );
   assert.match(providerEventAdmission, /EventRouteDirectionV1::Publish/);
   assert.match(providerEventAdmission, /EventRouteDirectionV1::Consume/);
   assert.match(eventRuntime, /publish_exact/);
   assert.match(eventRuntime, /acknowledge\(\)/);
   assert.match(runtimeCoordinator, /DeliveryIntentBodyMaterializerV1/);
   assert.match(runtimeCoordinator, /DeliveryIntentBodyBlobReceiptV1/);
+  assert.match(clientPort, /SubmitDeliveryIntentRequestV1/);
+  assert.match(clientPort, /GetDeliveryIntentStatusRequestV1/);
+  assert.doesNotMatch(clientPort, /provider_id|account_id/);
+  assert.match(communicationsQueryClient, /RouteModuleQuery/);
+  assert.match(communicationsQueryClient, /COMMUNICATIONS_QUERY_SCHEMA_SHA256/);
   assert.match(runtimeProcess, /describe_managed_runtime/);
   assert.match(runtimeProcess, /signal_ready/);
+  assert.match(runtimeProcess, /dispatch_delivery_intent_client_request_v1/);
   assert.match(runtimeProcess, /StorageVaultLeaseAdapterV1/);
   assert.doesNotMatch(persistence, /PlannedDeliveryIntentV1|pub body_utf8/);
   assert.match(persistence, /DeliveryIntentBodyBlobReceiptV1/);
@@ -189,5 +215,6 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
   assert.doesNotMatch(contract, /\b(?:map|Any|provider_id|account_id)\b/);
   assert.match(adr, /Kernel[\s\S]*не декодирует request body/);
   assert.match(adr, /Persistence unit не принимает `PlannedDeliveryIntentV1`/);
+  assert.match(adr, /command и status ClientRpc closure реализованы/);
   assert.match(adr, /остаётся `planned`/);
 });
