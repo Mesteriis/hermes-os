@@ -4,12 +4,15 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: не реализовано. Gate
+Состояние реализации: частично реализовано. Gate
 `communication_delayed_delivery_v1` остаётся `planned`. `scheduler_v1`
-реализован с live restart/revoke и hot-reconciliation evidence, но
-module-originated schedule-control contract и delayed-delivery units ещё не
-реализованы. Этот ADR согласует owner boundaries и exact contracts до кода, но
-сам по себе не открывает workflow gate.
+реализован с live restart/revoke и hot-reconciliation evidence, а
+module-originated schedule-control transport принят Kernel и Scheduler.
+Реализованы отдельные `api` и `core` units delayed-delivery с generated
+Schedule/Cancel/Status/realtime contract, hard request/body/time bounds и
+cancellation-race policy. Persistence, encrypted Blob custody, managed runtime,
+assembly, client routing и live end-to-end contour ещё не реализованы. Этот ADR
+не открывает workflow gate сам по себе.
 
 Уточняет:
 

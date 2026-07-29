@@ -5,8 +5,17 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
-test('delayed delivery stays a planned workflow behind Scheduler and event-only schedule control', async () => {
-  const [adr, inventorySource, schedulerAdr] = await Promise.all([
+test('delayed delivery admits separate contract and policy units while its runtime gate stays planned', async () => {
+  const [
+    adr,
+    inventorySource,
+    schedulerAdr,
+    apiManifest,
+    apiSource,
+    apiProto,
+    coreManifest,
+    coreSource,
+  ] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0341-scheduled-communication-delivery-workflow.md',
@@ -28,6 +37,29 @@ test('delayed delivery stays a planned workflow behind Scheduler and event-only 
       ),
       'utf8',
     ),
+    readFile(
+      new URL('src/communication-delayed-delivery-api/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-delayed-delivery-api/src/lib.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-api/proto/hermes/communication_delayed_delivery/v1/delivery.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-delayed-delivery-core/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-delayed-delivery-core/src/lib.rs', BACKEND_ROOT),
+      'utf8',
+    ),
   ]);
 
   const inventory = JSON.parse(inventorySource);
@@ -45,7 +77,26 @@ test('delayed delivery stays a planned workflow behind Scheduler and event-only 
       'scheduler_module_schedule_control_v1',
     ],
   });
-  assert.match(adr, /Состояние реализации: не реализовано/);
+  assert.match(adr, /Состояние реализации: частично реализовано/);
+  assert.match(
+    apiManifest,
+    /owner = "communication_delayed_delivery"[\s\S]*surface = "contract"/,
+  );
+  assert.match(
+    coreManifest,
+    /owner = "communication_delayed_delivery"[\s\S]*surface = "implementation"/,
+  );
+  assert.match(apiSource, /COMMUNICATION_DELAYED_DELIVERY_MAX_REQUEST_BYTES_V1/);
+  assert.match(apiProto, /rpc Schedule/);
+  assert.match(apiProto, /rpc Cancel/);
+  assert.match(apiProto, /rpc GetStatus/);
+  assert.match(coreSource, /MIN_DELIVERY_DELAY_MILLIS_V1: u64 = 5_000/);
+  assert.match(coreSource, /MAX_DELIVERY_DELAY_MILLIS_V1/);
+  assert.match(coreSource, /SchedulerCancelOutcomeV1::TooLate/);
+  assert.doesNotMatch(apiProto, /provider_id|account_id|map</);
+  for (const source of [apiSource, coreSource]) {
+    assert.doesNotMatch(source, /async_nats|sqlx|kernel::/);
+  }
   assert.match(adr, /scheduler\.schedule\.command\.v1/);
   assert.match(adr, /scheduler\.schedule\.result\.v1/);
   assert.match(adr, /ScheduledJobCommandV1/);

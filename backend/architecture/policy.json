@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_bulk_action_v1",
+    "currentSlice": "communication_delayed_delivery_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -576,6 +576,18 @@
         "role": "workflow",
         "owner": "communication_bulk_action",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-communication-delayed-delivery-api",
+        "role": "workflow",
+        "owner": "communication_delayed_delivery",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-delayed-delivery-core",
+        "role": "workflow",
+        "owner": "communication_delayed_delivery",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1705,7 +1717,9 @@
           "name": "hermes-storage-protocol",
           "kind": "normal"
         }
-      ]
+      ],
+      "hermes-communication-delayed-delivery-api": [],
+      "hermes-communication-delayed-delivery-core": []
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-events-protocol": [
@@ -4536,7 +4550,42 @@
           "defaultFeatures": true,
           "features": []
         }
-      ]
+      ],
+      "hermes-communication-delayed-delivery-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communication-delayed-delivery-core": []
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -4930,6 +4979,14 @@
       },
       "hermes-communication-bulk-action-assembly": {
         "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-delayed-delivery-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communication-delayed-delivery-core": {
+        "primaryKind": "lib",
         "customBuildAllowed": false
       }
     },
