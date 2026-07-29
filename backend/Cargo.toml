@@ -57,6 +57,7 @@ members = [
   "src/communication-bulk-action-api",
   "src/communication-bulk-action-core",
   "src/communication-bulk-action-persistence",
+  "src/communication-bulk-action-runtime",
   "src/mail-delivery-intent-contract",
   "src/telegram-delivery-intent-contract",
   "src/whatsapp-delivery-intent-contract",

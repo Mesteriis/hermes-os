@@ -1742,6 +1742,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-bulk-action-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-bulk-action-api",
+ "hermes-communication-bulk-action-core",
+ "hermes-communication-bulk-action-persistence",
+ "hermes-communication-delivery-intent-api",
+ "prost 0.14.4",
+]
+
+[[package]]
 name = "hermes-communication-delivery-intent-api"
 version = "0.1.0"
 dependencies = [

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_bulk_action_persistence_v1",
+    "currentSlice": "communication_bulk_action_runtime_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -564,6 +564,12 @@
         "role": "workflow",
         "owner": "communication_bulk_action",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-communication-bulk-action-runtime",
+        "role": "workflow",
+        "owner": "communication_bulk_action",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1553,6 +1559,24 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-bulk-action-runtime": [
+        {
+          "name": "hermes-communication-bulk-action-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-bulk-action-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-bulk-action-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delivery-intent-api",
           "kind": "normal"
         }
       ],
@@ -4390,6 +4414,16 @@
             "tls-rustls-ring"
           ]
         }
+      ],
+      "hermes-communication-bulk-action-runtime": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -4776,6 +4810,10 @@
       },
       "hermes-communication-bulk-action-persistence": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-bulk-action-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       }
     },

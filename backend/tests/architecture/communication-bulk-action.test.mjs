@@ -5,7 +5,7 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
-test('bulk delivery persistence is bounded, owner-local, and separate from domains and integrations', async () => {
+test('bulk delivery runtime core uses typed ports and remains separate from domains and integrations', async () => {
   const [
     adr,
     inventorySource,
@@ -13,11 +13,14 @@ test('bulk delivery persistence is bounded, owner-local, and separate from domai
     apiManifest,
     coreManifest,
     persistenceManifest,
+    runtimeManifest,
     api,
     core,
     contract,
     persistence,
     migration,
+    runtimeWorker,
+    runtimeClient,
   ] =
     await Promise.all([
     readFile(
@@ -51,6 +54,10 @@ test('bulk delivery persistence is bounded, owner-local, and separate from domai
         'utf8',
       ),
       readFile(
+        new URL('src/communication-bulk-action-runtime/Cargo.toml', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
         new URL('src/communication-bulk-action-api/src/lib.rs', BACKEND_ROOT),
         'utf8',
       ),
@@ -75,6 +82,20 @@ test('bulk delivery persistence is bounded, owner-local, and separate from domai
       readFile(
         new URL(
           'src/communication-bulk-action-persistence/migrations/0001_bulk_delivery_state.sql',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-bulk-action-runtime/src/worker.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-bulk-action-runtime/src/client_port.rs',
           BACKEND_ROOT,
         ),
         'utf8',
@@ -104,7 +125,7 @@ test('bulk delivery persistence is bounded, owner-local, and separate from domai
   assert.match(adr, /Принятый ADR сам по себе gate не открывает/);
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_bulk_action_persistence_v1',
+    'communication_bulk_action_runtime_core_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages
@@ -114,6 +135,7 @@ test('bulk delivery persistence is bounded, owner-local, and separate from domai
       'hermes-communication-bulk-action-api:contract',
       'hermes-communication-bulk-action-core:implementation',
       'hermes-communication-bulk-action-persistence:persistence',
+      'hermes-communication-bulk-action-runtime:runtime',
     ],
   );
   assert.match(apiManifest, /role = "workflow"[\s\S]*surface = "contract"/);
@@ -122,8 +144,12 @@ test('bulk delivery persistence is bounded, owner-local, and separate from domai
     persistenceManifest,
     /role = "workflow"[\s\S]*surface = "persistence"/,
   );
+  assert.match(
+    runtimeManifest,
+    /role = "workflow"[\s\S]*surface = "runtime"/,
+  );
   assert.doesNotMatch(
-    `${apiManifest}\n${coreManifest}\n${persistenceManifest}`,
+    `${apiManifest}\n${coreManifest}\n${persistenceManifest}\n${runtimeManifest}`,
     /hermes-(?:communications-domain|mail|telegram|whatsapp|zulip|kernel)/,
   );
   assert.match(api, /COMMUNICATION_BULK_ACTION_MAX_TARGETS_V1: usize = 100/);
@@ -138,5 +164,13 @@ test('bulk delivery persistence is bounded, owner-local, and separate from domai
   assert.doesNotMatch(
     `${persistence}\n${migration}`,
     /communications_(?:messages|conversations)|mail_|telegram_|provider_/,
+  );
+  assert.match(runtimeWorker, /DeliveryIntentRequestPortV1/);
+  assert.match(runtimeWorker, /mark_target_retryable/);
+  assert.match(runtimeClient, /start_bulk_delivery_payload_v1/);
+  assert.match(runtimeClient, /get_status_payload_v1/);
+  assert.doesNotMatch(
+    `${runtimeWorker}\n${runtimeClient}`,
+    /body_utf8.*(?:log|event|status)|hermes-(?:mail|telegram|whatsapp|zulip)/,
   );
 });

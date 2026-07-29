@@ -1,0 +1,24 @@
+[package]
+name = "hermes-communication-bulk-action-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-communication-bulk-action-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "communication_bulk_action"
+surface = "runtime"
+
+[dependencies]
+hermes-communication-bulk-action-api = { path = "../communication-bulk-action-api" }
+hermes-communication-bulk-action-core = { path = "../communication-bulk-action-core" }
+hermes-communication-bulk-action-persistence = { path = "../communication-bulk-action-persistence" }
+hermes-communication-delivery-intent-api = { path = "../communication-delivery-intent-api" }
+prost = "=0.14.4"

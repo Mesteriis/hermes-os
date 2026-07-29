@@ -56,7 +56,9 @@ function isAllowedDependency(policy, source, target, targetPackageName) {
         || (target.role === 'domain'
           && policy.dependencies.integrationDomainContractPackages.includes(targetPackageName));
     case 'workflow':
-      return ['domain', 'integration', 'platform', 'engine', 'api'].includes(target.role);
+      return ['domain', 'integration', 'platform', 'engine', 'api', 'workflow'].includes(
+        target.role,
+      );
     case 'engine':
       return target.role === 'platform'
         || (target.role === 'domain'

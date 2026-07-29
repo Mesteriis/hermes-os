@@ -492,6 +492,16 @@ const COMMUNICATION_BULK_ACTION_PERSISTENCE_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATION_BULK_ACTION_RUNTIME_CORE_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_BULK_ACTION_PERSISTENCE_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communication-bulk-action-runtime',
+    role: 'workflow',
+    owner: 'communication_bulk_action',
+    surface: 'runtime',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -1653,6 +1663,16 @@ const COMMUNICATION_BULK_ACTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATION_BULK_ACTION_RUNTIME_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_BULK_ACTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-bulk-action-runtime': [
+    { name: 'hermes-communication-bulk-action-api', kind: 'normal' },
+    { name: 'hermes-communication-bulk-action-core', kind: 'normal' },
+    { name: 'hermes-communication-bulk-action-persistence', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-api', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -1794,6 +1814,13 @@ const COMMUNICATION_BULK_ACTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-communication-bulk-action-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
+const COMMUNICATION_BULK_ACTION_RUNTIME_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_BULK_ACTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-bulk-action-runtime': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -2567,6 +2594,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATION_BULK_ACTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATION_BULK_ACTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_bulk_action_runtime_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_BULK_ACTION_RUNTIME_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATION_BULK_ACTION_RUNTIME_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATION_BULK_ACTION_RUNTIME_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

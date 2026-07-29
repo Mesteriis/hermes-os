@@ -227,6 +227,25 @@ test('allows a workflow to use contracts but not implementations', () => {
   ];
   assert.deepEqual(validateCargoMetadata(canonicalPolicyForTests(), metadata(allowed)), []);
 
+  const workflowContract = workspacePackage('hermes-delivery-intent-contract', {
+    role: 'workflow',
+    owner: 'delivery_intent',
+    surface: 'contract',
+  });
+  const workflowToWorkflowContract = [
+    kernel(),
+    workflowContract,
+    workspacePackage(
+      'hermes-bulk-delivery-workflow',
+      { role: 'workflow', owner: 'bulk_delivery', surface: 'runtime' },
+      [dependency('hermes-delivery-intent-contract')],
+    ),
+  ];
+  assert.deepEqual(
+    validateCargoMetadata(canonicalPolicyForTests(), metadata(workflowToWorkflowContract)),
+    [],
+  );
+
   const forbidden = [
     kernel(),
     contactsRuntime,
