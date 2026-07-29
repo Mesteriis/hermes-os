@@ -3107,6 +3107,7 @@ dependencies = [
 name = "hermes-zulip-persistence"
 version = "0.1.0"
 dependencies = [
+ "hermes-communications-ingress",
  "hermes-events-protocol",
  "hermes-storage-protocol",
  "hermes-zulip-api",

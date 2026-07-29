@@ -8,6 +8,7 @@ use crate::ZULIP_SCHEMA_V1;
 pub const ZULIP_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
 pub const ZULIP_STORAGE_BUNDLE_REVISION_V2: u32 = 2;
 pub const ZULIP_STORAGE_BUNDLE_REVISION_V3: u32 = 3;
+pub const ZULIP_STORAGE_BUNDLE_REVISION_V4: u32 = 4;
 
 pub const ZULIP_SCHEMA_V2: &str = r#"
 CREATE TABLE IF NOT EXISTS hermes_data.zulip_operational_account_state (
@@ -167,7 +168,7 @@ CREATE TABLE IF NOT EXISTS hermes_data.zulip_account_credential_bindings (
 pub fn zulip_storage_bundle_v1() -> StorageBundleV1 {
     StorageBundleV1 {
         major: 1,
-        revision: ZULIP_STORAGE_BUNDLE_REVISION_V3,
+        revision: ZULIP_STORAGE_BUNDLE_REVISION_V4,
         bundle_id: "zulip_state".to_owned(),
         owner_id: "zulip".to_owned(),
         steps: vec![
@@ -189,6 +190,12 @@ pub fn zulip_storage_bundle_v1() -> StorageBundleV1 {
                 forward_sql_utf8: ZULIP_SCHEMA_V3.as_bytes().to_vec(),
                 sha256: Sha256::digest(ZULIP_SCHEMA_V3.as_bytes()).to_vec(),
             },
+            StorageMigrationStepV1 {
+                revision: ZULIP_STORAGE_BUNDLE_REVISION_V4,
+                migration_id: "zulip_delivery_route_locators".to_owned(),
+                forward_sql_utf8: crate::ZULIP_DELIVERY_ROUTE_SCHEMA_V1.as_bytes().to_vec(),
+                sha256: Sha256::digest(crate::ZULIP_DELIVERY_ROUTE_SCHEMA_V1.as_bytes()).to_vec(),
+            },
         ],
     }
 }
@@ -205,12 +212,16 @@ mod tests {
 
         assert_eq!(bundle.owner_id, "zulip");
         assert_eq!(bundle.bundle_id, "zulip_state");
-        assert_eq!(bundle.revision, ZULIP_STORAGE_BUNDLE_REVISION_V3);
-        assert_eq!(bundle.steps.len(), 3);
+        assert_eq!(bundle.revision, ZULIP_STORAGE_BUNDLE_REVISION_V4);
+        assert_eq!(bundle.steps.len(), 4);
         assert_eq!(validate_storage_bundle(&bundle), Ok(()));
         assert_eq!(bundle.steps[0].forward_sql_utf8, ZULIP_SCHEMA_V1.as_bytes());
         assert_eq!(bundle.steps[1].forward_sql_utf8, ZULIP_SCHEMA_V2.as_bytes());
         assert_eq!(bundle.steps[2].forward_sql_utf8, ZULIP_SCHEMA_V3.as_bytes());
+        assert_eq!(
+            bundle.steps[3].forward_sql_utf8,
+            crate::ZULIP_DELIVERY_ROUTE_SCHEMA_V1.as_bytes()
+        );
         let sql = std::str::from_utf8(&bundle.steps[1].forward_sql_utf8)
             .expect("Zulip Storage SQL is UTF-8");
         assert_eq!(sql.matches("CREATE TABLE IF NOT EXISTS ").count(), 7);

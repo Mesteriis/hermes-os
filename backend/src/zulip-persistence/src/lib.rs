@@ -1,6 +1,7 @@
 //! Owner-local Zulip cursor and exact-byte observation outbox persistence.
 
 mod account;
+mod delivery_intent;
 mod operational;
 mod schema;
 
@@ -13,10 +14,12 @@ use sqlx::{
 };
 
 pub use account::ZulipCredentialBindingV1;
+pub use delivery_intent::{ZULIP_DELIVERY_ROUTE_SCHEMA_V1, ZulipDeliveryRouteLocatorV1};
 pub use operational::ZulipOperationalIngestV1;
 pub use schema::{
     ZULIP_SCHEMA_V2, ZULIP_SCHEMA_V3, ZULIP_STORAGE_BUNDLE_REVISION_V1,
-    ZULIP_STORAGE_BUNDLE_REVISION_V2, ZULIP_STORAGE_BUNDLE_REVISION_V3, zulip_storage_bundle_v1,
+    ZULIP_STORAGE_BUNDLE_REVISION_V2, ZULIP_STORAGE_BUNDLE_REVISION_V3,
+    ZULIP_STORAGE_BUNDLE_REVISION_V4, zulip_storage_bundle_v1,
 };
 
 pub const PACKAGE: &str = "hermes-zulip-persistence";
@@ -82,6 +85,7 @@ pub enum ZulipDurablePersistenceError {
     Database,
     InvalidCursor,
     InvalidRow,
+    ConflictingDeliveryRouteLocator,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

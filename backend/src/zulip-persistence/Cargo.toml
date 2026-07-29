@@ -10,6 +10,7 @@ role = "integration"
 owner = "zulip"
 surface = "persistence"
 [dependencies]
+hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-events-protocol = { path = "../platform/events" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-zulip-api = { path = "../zulip-api" }

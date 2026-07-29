@@ -31,6 +31,7 @@ pub struct ZulipOperationalIngestV1<'a> {
     pub cursor: &'a ZulipQueueCursorV1,
     pub events: &'a [ZulipEventV1],
     pub communications_outbox: &'a [OutboxRecordV1],
+    pub delivery_route_locators: &'a [crate::ZulipDeliveryRouteLocatorV1],
     pub observed_at_unix_seconds: i64,
 }
 
@@ -102,6 +103,14 @@ impl ZulipDurablePersistence {
             .execute(&mut *transaction)
             .await
             .map_err(|_| ZulipDurablePersistenceError::Database)?;
+        }
+        for locator in ingest.delivery_route_locators {
+            crate::delivery_intent::upsert_delivery_route_locator(
+                &mut transaction,
+                locator,
+                ingest.observed_at_unix_seconds,
+            )
+            .await?;
         }
         sqlx::query(
             "INSERT INTO hermes_data.zulip_operational_account_state \

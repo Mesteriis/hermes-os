@@ -10,8 +10,8 @@ mod communications_outbox;
 pub mod managed;
 
 use hermes_communications_ingress::{
-    BodyAdmissionFailureV1, BodyAvailabilityV1, BodyBlobReceiptV1, CommunicationObservationDraft,
-    ObservationEnvelopeBuildErrorV1, ObservationEnvelopeContextV1,
+    BodyAdmissionFailureV1, BodyAvailabilityV1, BodyBlobReceiptV1, CommunicationEvidenceKindV1,
+    CommunicationObservationDraft, ObservationEnvelopeBuildErrorV1, ObservationEnvelopeContextV1,
     build_observation_outbox_record_v1, with_admitted_body_blob, with_body_admission_failure,
 };
 use hermes_runtime_protocol::v1::BlobDataOperationV1;
@@ -33,8 +33,8 @@ use hermes_zulip_http::{
     register_event_queue, upload_file,
 };
 use hermes_zulip_persistence::{
-    ZulipCommandOperationStateV1, ZulipDurablePersistence, ZulipDurablePersistenceError,
-    ZulipOperationalIngestV1, ZulipQueueCursorV1,
+    ZulipCommandOperationStateV1, ZulipDeliveryRouteLocatorV1, ZulipDurablePersistence,
+    ZulipDurablePersistenceError, ZulipOperationalIngestV1, ZulipQueueCursorV1,
 };
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
@@ -398,9 +398,30 @@ where
         last_event_id: context.event.event_id,
     };
     let mut records = Vec::new();
+    let mut delivery_route_locators = Vec::new();
     for observation in &context.event.observations {
         for draft in observation_drafts(observation).map_err(ZulipRuntimeErrorV1::Core)? {
             let draft = admit_message_body(draft, observation, body_admitter)?;
+            if draft.kind == CommunicationEvidenceKindV1::ChatMessage {
+                let scope = draft
+                    .source
+                    .scope
+                    .as_ref()
+                    .ok_or(ZulipRuntimeErrorV1::Persistence(
+                        ZulipDurablePersistenceError::InvalidRow,
+                    ))?;
+                let provider_chat_id = scope.external_conversation_id.as_deref().ok_or(
+                    ZulipRuntimeErrorV1::Persistence(ZulipDurablePersistenceError::InvalidRow),
+                )?;
+                delivery_route_locators.push(
+                    ZulipDeliveryRouteLocatorV1::new(
+                        &scope.external_account_id,
+                        provider_chat_id,
+                        &draft.source.external_record_id,
+                    )
+                    .map_err(ZulipRuntimeErrorV1::Persistence)?,
+                );
+            }
             records.push(
                 build_observation_outbox_record_v1(
                     &draft,
@@ -418,6 +439,7 @@ where
             cursor: &cursor,
             events: &context.event.observations,
             communications_outbox: &records,
+            delivery_route_locators: &delivery_route_locators,
             observed_at_unix_seconds: context.recorded_at_unix_seconds,
         })
         .await
