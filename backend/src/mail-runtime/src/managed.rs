@@ -26,7 +26,8 @@ use hermes_communications_attachment_contract::{
 use hermes_communications_ingress::{
     COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID, COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID,
     COMMUNICATIONS_BLOB_CUSTODY_TARGET_OWNER_ID, ObservationEnvelopeContextV1,
-    build_observation_outbox_record_v1,
+    account_source_cursor_v1, build_observation_outbox_record_v1, conversation_source_cursor_v1,
+    scoped_record_source_cursor_v1,
 };
 use hermes_events_jetstream::{
     DurableSubjectV1, JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity,
@@ -163,8 +164,8 @@ use hermes_mail_persistence::{
     MailAttachmentBlobAdmissionCompletionV1,
     MailAttachmentDispositionV1 as PersistedAttachmentDispositionV1,
     MailAttachmentMaterializationV1, MailCredentialBindingV1, MailDeliveryAttemptOutcomeV1,
-    MailDeliveryEnqueueRequestV1, MailDurablePersistence, MailDurablePersistenceError,
-    MailImapMessageLocatorV1, MailMessageLocationReconciliationV1,
+    MailDeliveryEnqueueRequestV1, MailDeliveryRouteLocatorV1, MailDurablePersistence,
+    MailDurablePersistenceError, MailImapMessageLocatorV1, MailMessageLocationReconciliationV1,
     MailMessagePermanentDeletePersistenceErrorV1, MailOperationalFolderSnapshotV1,
     MailOperationalMaterializationV1, MailOperationalMessageSnapshotV1, MailQueuedDeliveryV1,
     MailQueuedMessageFlagCommandV1, MailQueuedMessageLocationCommandV1,
@@ -2738,6 +2739,16 @@ impl MailAdmittedRuntime {
             )
             .map_err(|_| MailBootstrapError::Admission)?;
             let observation_anchor_id = *record.message_id();
+            let provider_thread_id = format!("imap-message:{message_id}");
+            let delivery_route_locator = mail_delivery_route_locator(
+                &observation,
+                connection_id,
+                &provider_thread_id,
+                &message_id,
+                message.sender.clone(),
+                message.recipients.clone(),
+                message.subject.clone(),
+            )?;
             let mut records = vec![record];
             for attachment in &message.attachments {
                 let source_id = message_id.clone();
@@ -2801,7 +2812,7 @@ impl MailAdmittedRuntime {
                     connection_id: connection_id.to_owned(),
                     message_id: message_id.clone(),
                     imap_locator: Some(locator),
-                    provider_thread_id: format!("imap-message:{message_id}"),
+                    provider_thread_id,
                     folders: vec![selected_folder.clone()],
                     subject: Some(message.subject.clone()),
                     sender: message.sender.clone(),
@@ -2826,6 +2837,7 @@ impl MailAdmittedRuntime {
                     has_attachments: !message.attachments.is_empty(),
                     observation_anchor_id,
                 },
+                delivery_route_locator,
                 communications_outbox: records,
             });
         }
@@ -2898,6 +2910,24 @@ impl MailAdmittedRuntime {
             )
             .map_err(|_| MailBootstrapError::Admission)?;
             let observation_anchor_id = *primary_record.message_id();
+            let subject = preview
+                .as_ref()
+                .and_then(|preview| preview.subject.clone())
+                .unwrap_or_default();
+            let sender = preview.as_ref().and_then(|preview| preview.sender.clone());
+            let recipients = preview
+                .as_ref()
+                .map(|preview| preview.recipients.clone())
+                .unwrap_or_default();
+            let delivery_route_locator = mail_delivery_route_locator(
+                &observation,
+                connection_id,
+                &provider_thread_id,
+                &provider_record_id,
+                sender.clone(),
+                recipients.clone(),
+                subject.clone(),
+            )?;
             let mut records = vec![primary_record];
             for attachment in attachment_metadata(&bytes) {
                 let attachment_bytes = extract_attachment_part(&bytes, attachment.part_id)
@@ -2962,12 +2992,9 @@ impl MailAdmittedRuntime {
                     imap_locator: None,
                     provider_thread_id,
                     folders: gmail_operational_folders(&label_ids),
-                    subject: preview.as_ref().and_then(|preview| preview.subject.clone()),
-                    sender: preview.as_ref().and_then(|preview| preview.sender.clone()),
-                    recipients: preview
-                        .as_ref()
-                        .map(|preview| preview.recipients.clone())
-                        .unwrap_or_default(),
+                    subject: Some(subject),
+                    sender,
+                    recipients,
                     snippet: preview.as_ref().and_then(|preview| preview.snippet.clone()),
                     sent_at_unix_seconds,
                     flags: gmail_operational_flags(&label_ids),
@@ -2977,6 +3004,7 @@ impl MailAdmittedRuntime {
                     has_attachments: records.len() > 1,
                     observation_anchor_id,
                 },
+                delivery_route_locator,
                 communications_outbox: records,
             });
         }
@@ -3844,6 +3872,51 @@ fn inbound_observation_id(
         hasher.update(part_id.to_be_bytes());
     }
     format!("mail-inbound:{}", hex_digest(&hasher.finalize()))
+}
+
+fn mail_delivery_route_locator(
+    observation: &CommunicationObservationDraft,
+    connection_id: &str,
+    provider_thread_id: &str,
+    provider_message_id: &str,
+    sender: Option<String>,
+    recipients: Vec<String>,
+    subject: String,
+) -> Result<MailDeliveryRouteLocatorV1, MailBootstrapError> {
+    let scope = observation
+        .source
+        .scope
+        .as_ref()
+        .ok_or(MailBootstrapError::Admission)?;
+    if scope.external_account_id != connection_id {
+        return Err(MailBootstrapError::Admission);
+    }
+    let external_conversation_id = scope
+        .external_conversation_id
+        .as_deref()
+        .ok_or(MailBootstrapError::Admission)?;
+    Ok(MailDeliveryRouteLocatorV1 {
+        account_cursor: account_source_cursor_v1(observation.source.provider, connection_id)
+            .map_err(|_| MailBootstrapError::Admission)?,
+        conversation_cursor: conversation_source_cursor_v1(
+            observation.source.provider,
+            connection_id,
+            external_conversation_id,
+        )
+        .map_err(|_| MailBootstrapError::Admission)?,
+        source_cursor: scoped_record_source_cursor_v1(
+            observation.source.provider,
+            connection_id,
+            &observation.source.external_record_id,
+        )
+        .map_err(|_| MailBootstrapError::Admission)?,
+        connection_id: connection_id.to_owned(),
+        provider_thread_id: provider_thread_id.to_owned(),
+        provider_message_id: provider_message_id.to_owned(),
+        sender,
+        recipients,
+        subject,
+    })
 }
 
 fn hex_digest(value: &[u8]) -> String {

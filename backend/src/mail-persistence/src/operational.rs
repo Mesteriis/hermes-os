@@ -138,6 +138,7 @@ pub struct MailOperationalMessageSnapshotV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailOperationalMaterializationV1 {
     pub message: MailOperationalMessageSnapshotV1,
+    pub delivery_route_locator: crate::MailDeliveryRouteLocatorV1,
     pub communications_outbox: Vec<OutboxRecordV1>,
 }
 
@@ -757,6 +758,12 @@ pub(crate) async fn record_operational_materializations_in_transaction(
             observed_at_unix_seconds,
         )
         .await?;
+        crate::delivery_intent::upsert_delivery_route_locator(
+            transaction,
+            &materialization.delivery_route_locator,
+            observed_at_unix_seconds,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -769,8 +776,15 @@ fn validate_materializations(
         || observed_at_unix_seconds <= 0
         || materializations.iter().any(|materialization| {
             let message = &materialization.message;
+            let locator = &materialization.delivery_route_locator;
             let public = public_message(message);
             validate_operational_message(&public).is_err()
+                || locator.connection_id != message.connection_id
+                || locator.provider_thread_id != message.provider_thread_id
+                || locator.provider_message_id != message.message_id
+                || locator.sender != message.sender
+                || locator.recipients != message.recipients
+                || locator.subject != message.subject.clone().unwrap_or_default()
                 || message
                     .imap_locator
                     .as_ref()

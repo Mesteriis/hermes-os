@@ -5,6 +5,7 @@ mod attachments;
 mod composition;
 #[cfg(feature = "conformance-test-support")]
 mod conformance;
+mod delivery_intent;
 mod durable;
 mod lifecycle;
 mod message_flags;
@@ -25,6 +26,7 @@ pub use attachments::{
 pub use composition::{MAIL_SCHEMA_V11, MailCompositionPersistenceErrorV1};
 #[cfg(feature = "conformance-test-support")]
 pub use conformance::MailPersistenceConformanceV1;
+pub use delivery_intent::{MAIL_SCHEMA_V18, MailDeliveryRouteLocatorV1};
 pub use durable::{
     MAIL_SCHEMA_V1, MAIL_SCHEMA_V2, MAIL_SCHEMA_V3, MAIL_SCHEMA_V6,
     MailAttachmentAnchorMappingOutcomeV1, MailAttachmentAnchorMappingV1,
@@ -66,7 +68,7 @@ pub use schema::{
     MAIL_STORAGE_BUNDLE_REVISION_V11, MAIL_STORAGE_BUNDLE_REVISION_V12,
     MAIL_STORAGE_BUNDLE_REVISION_V13, MAIL_STORAGE_BUNDLE_REVISION_V14,
     MAIL_STORAGE_BUNDLE_REVISION_V15, MAIL_STORAGE_BUNDLE_REVISION_V16,
-    MAIL_STORAGE_BUNDLE_REVISION_V17, mail_storage_bundle_v1,
+    MAIL_STORAGE_BUNDLE_REVISION_V17, MAIL_STORAGE_BUNDLE_REVISION_V18, mail_storage_bundle_v1,
 };
 pub use sync_health::{MAIL_SCHEMA_V10, MailSyncRunStartOutcomeV1};
 

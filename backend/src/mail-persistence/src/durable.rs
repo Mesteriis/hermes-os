@@ -173,6 +173,7 @@ pub enum MailDurablePersistenceError {
     InvalidAttachmentManifest,
     MissingSyncRun,
     ConflictingSyncOperation,
+    ConflictingDeliveryRouteLocator,
     SyncRunInProgress,
     InvalidSyncTransition,
 }
