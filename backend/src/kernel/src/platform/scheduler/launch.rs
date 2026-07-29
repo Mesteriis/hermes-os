@@ -187,6 +187,8 @@ fn runtime_configuration(
         .map_err(|_| "Scheduler dispatch topology is unavailable".to_owned())?,
         runtime_instance_id: reservation.runtime_instance_id().to_owned(),
         logical_owner_id: storage_binding.owner_id().to_owned(),
+        schedule_control: None,
+        schedule_control_grants: Vec::new(),
     };
     validate_scheduler_runtime_configuration(&configuration)
         .map_err(|_| "Scheduler runtime configuration is invalid".to_owned())?;

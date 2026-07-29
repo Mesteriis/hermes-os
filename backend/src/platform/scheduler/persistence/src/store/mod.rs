@@ -18,9 +18,9 @@ pub use connection::{
 };
 pub use control::{
     SchedulerScheduleControlApplyErrorV1, SchedulerScheduleControlApplyOutcomeV1,
-    SchedulerScheduleControlDecisionV1, SchedulerScheduleControlMutationV1,
-    SchedulerScheduleControlRejectionV1, SchedulerScheduleControlRequestV1,
-    SchedulerScheduleControlResultOutboxV1,
+    SchedulerScheduleControlAuthorityV1, SchedulerScheduleControlDecisionV1,
+    SchedulerScheduleControlMutationV1, SchedulerScheduleControlRejectionV1,
+    SchedulerScheduleControlRequestV1, SchedulerScheduleControlResultOutboxV1,
 };
 pub use dispatch::{SchedulerDispatchClaimErrorV1, SchedulerDispatchClaimV1};
 pub use materialization_contract::{

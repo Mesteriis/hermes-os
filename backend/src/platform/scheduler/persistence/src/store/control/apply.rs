@@ -6,8 +6,9 @@ use sqlx::{Postgres, Row, Transaction, query, query_scalar};
 
 use super::request::{
     SchedulerScheduleControlApplyErrorV1, SchedulerScheduleControlApplyOutcomeV1,
-    SchedulerScheduleControlDecisionV1, SchedulerScheduleControlMutationV1,
-    SchedulerScheduleControlRejectionV1, SchedulerScheduleControlRequestV1,
+    SchedulerScheduleControlAuthorityV1, SchedulerScheduleControlDecisionV1,
+    SchedulerScheduleControlMutationV1, SchedulerScheduleControlRejectionV1,
+    SchedulerScheduleControlRequestV1,
 };
 use crate::{
     SchedulerPostgresStoreV1, SchedulerScheduleStoreErrorV1,
@@ -41,7 +42,7 @@ impl SchedulerPostgresStoreV1 {
             return Ok(outcome);
         }
 
-        let decision = apply_mutation(&mut transaction, request.mutation()).await?;
+        let decision = apply_mutation(&mut transaction, request).await?;
         let result = result_factory(decision)?;
         validate_result_correlation(request.command(), &result)?;
         persist_acceptance(&mut transaction, request, decision, &result).await?;
@@ -121,10 +122,22 @@ async fn duplicate(
 
 async fn apply_mutation(
     transaction: &mut Transaction<'_, Postgres>,
-    mutation: &SchedulerScheduleControlMutationV1,
+    request: &SchedulerScheduleControlRequestV1,
 ) -> Result<SchedulerScheduleControlDecisionV1, SchedulerScheduleControlApplyErrorV1> {
-    match mutation {
+    match request.mutation() {
         SchedulerScheduleControlMutationV1::Ensure(change) => {
+            let authority = claim_authority(
+                transaction,
+                change.spec().schedule_id().bytes(),
+                request.authority(),
+                request.received_at().value(),
+            )
+            .await?;
+            if !authority.matches {
+                return Ok(SchedulerScheduleControlDecisionV1::Rejected(
+                    SchedulerScheduleControlRejectionV1::ForeignAuthority,
+                ));
+            }
             let slot = ensure_slot(
                 transaction,
                 change.spec().concurrency_key(),
@@ -135,6 +148,12 @@ async fn apply_mutation(
             match slot {
                 Ok(()) => {}
                 Err(crate::SchedulerRunClaimErrorV1::ConcurrencyBusy) => {
+                    rollback_new_authority(
+                        transaction,
+                        change.spec().schedule_id().bytes(),
+                        authority.inserted,
+                    )
+                    .await?;
                     return Ok(SchedulerScheduleControlDecisionV1::Rejected(
                         SchedulerScheduleControlRejectionV1::ConcurrencyBusy,
                     ));
@@ -146,7 +165,15 @@ async fn apply_mutation(
             }
             match upsert_locked(transaction, change).await {
                 Ok(_) => Ok(SchedulerScheduleControlDecisionV1::Ensured),
-                Err(error) => map_schedule_error(error),
+                Err(error) => {
+                    rollback_new_authority(
+                        transaction,
+                        change.spec().schedule_id().bytes(),
+                        authority.inserted,
+                    )
+                    .await?;
+                    map_schedule_error(error)
+                }
             }
         }
         SchedulerScheduleControlMutationV1::Cancel {
@@ -154,6 +181,11 @@ async fn apply_mutation(
             expected_revision,
             cancelled_at,
         } => {
+            if !load_authority(transaction, schedule_id.bytes(), request.authority()).await? {
+                return Ok(SchedulerScheduleControlDecisionV1::Rejected(
+                    SchedulerScheduleControlRejectionV1::ForeignAuthority,
+                ));
+            }
             cancel(
                 transaction,
                 schedule_id.bytes(),
@@ -163,6 +195,76 @@ async fn apply_mutation(
             .await
         }
     }
+}
+
+struct AuthorityClaimV1 {
+    matches: bool,
+    inserted: bool,
+}
+
+async fn claim_authority(
+    transaction: &mut Transaction<'_, Postgres>,
+    schedule_id: [u8; 16],
+    authority: &SchedulerScheduleControlAuthorityV1,
+    created_at: i64,
+) -> Result<AuthorityClaimV1, SchedulerScheduleControlApplyErrorV1> {
+    let inserted = query(
+        "INSERT INTO hermes_platform.scheduler_schedule_control_authorities (schedule_id, source_module_id, source_owner, job_owner, job_name, job_major, created_at_unix_ms) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (schedule_id) DO NOTHING",
+    )
+    .bind(schedule_id.to_vec())
+    .bind(authority.source_module_id())
+    .bind(authority.source_owner())
+    .bind(authority.job_owner())
+    .bind(authority.job_name())
+    .bind(i32::from(authority.job_major()))
+    .bind(created_at)
+    .execute(&mut **transaction)
+    .await
+    .map_err(|_| SchedulerScheduleControlApplyErrorV1::Unavailable)?
+    .rows_affected()
+        == 1;
+    let matches = load_authority(transaction, schedule_id, authority).await?;
+    Ok(AuthorityClaimV1 { matches, inserted })
+}
+
+async fn load_authority(
+    transaction: &mut Transaction<'_, Postgres>,
+    schedule_id: [u8; 16],
+    authority: &SchedulerScheduleControlAuthorityV1,
+) -> Result<bool, SchedulerScheduleControlApplyErrorV1> {
+    let row = query(
+        "SELECT source_module_id, source_owner, job_owner, job_name, job_major FROM hermes_platform.scheduler_schedule_control_authorities WHERE schedule_id = $1 FOR UPDATE",
+    )
+    .bind(schedule_id.to_vec())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(|_| SchedulerScheduleControlApplyErrorV1::Unavailable)?;
+    Ok(row.is_some_and(|row| {
+        row.try_get::<String, _>("source_module_id").ok().as_deref()
+            == Some(authority.source_module_id())
+            && row.try_get::<String, _>("source_owner").ok().as_deref()
+                == Some(authority.source_owner())
+            && row.try_get::<String, _>("job_owner").ok().as_deref() == Some(authority.job_owner())
+            && row.try_get::<String, _>("job_name").ok().as_deref() == Some(authority.job_name())
+            && row.try_get::<i32, _>("job_major").ok() == Some(i32::from(authority.job_major()))
+    }))
+}
+
+async fn rollback_new_authority(
+    transaction: &mut Transaction<'_, Postgres>,
+    schedule_id: [u8; 16],
+    inserted: bool,
+) -> Result<(), SchedulerScheduleControlApplyErrorV1> {
+    if inserted {
+        query(
+            "DELETE FROM hermes_platform.scheduler_schedule_control_authorities WHERE schedule_id = $1",
+        )
+        .bind(schedule_id.to_vec())
+        .execute(&mut **transaction)
+        .await
+        .map_err(|_| SchedulerScheduleControlApplyErrorV1::Unavailable)?;
+    }
+    Ok(())
 }
 
 async fn cancel(
@@ -282,6 +384,9 @@ fn encode_decision(decision: SchedulerScheduleControlDecisionV1) -> &'static str
         SchedulerScheduleControlDecisionV1::Cancelled => "cancelled",
         SchedulerScheduleControlDecisionV1::TooLate => "too_late",
         SchedulerScheduleControlDecisionV1::Rejected(
+            SchedulerScheduleControlRejectionV1::ForeignAuthority,
+        ) => "rejected_foreign_authority",
+        SchedulerScheduleControlDecisionV1::Rejected(
             SchedulerScheduleControlRejectionV1::UnknownSchedule,
         ) => "rejected_unknown_schedule",
         SchedulerScheduleControlDecisionV1::Rejected(
@@ -303,6 +408,9 @@ fn decode_decision(
         "ensured" => Ok(SchedulerScheduleControlDecisionV1::Ensured),
         "cancelled" => Ok(SchedulerScheduleControlDecisionV1::Cancelled),
         "too_late" => Ok(SchedulerScheduleControlDecisionV1::TooLate),
+        "rejected_foreign_authority" => Ok(SchedulerScheduleControlDecisionV1::Rejected(
+            SchedulerScheduleControlRejectionV1::ForeignAuthority,
+        )),
         "rejected_unknown_schedule" => Ok(SchedulerScheduleControlDecisionV1::Rejected(
             SchedulerScheduleControlRejectionV1::UnknownSchedule,
         )),

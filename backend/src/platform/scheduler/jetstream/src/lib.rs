@@ -11,3 +11,7 @@ pub use transport::receipt::{
     SchedulerJetStreamReceiptDeliveryV1, SchedulerJetStreamReceiptPortErrorV1,
     SchedulerJetStreamReceiptPortV1,
 };
+pub use transport::schedule_control::{
+    SchedulerJetStreamScheduleControlDeliveryV1, SchedulerJetStreamScheduleControlPortErrorV1,
+    SchedulerJetStreamScheduleControlPortV1,
+};

@@ -10,7 +10,10 @@ pub use catalog::{
     ScheduleCatalogErrorV1, ScheduleCatalogV1, ScheduleLeaseStateV1, ScheduleReconcileOutcomeV1,
 };
 pub use control::{
-    SchedulerApprovedJobV1, SchedulerOneShotScheduleErrorV1, SchedulerOneShotScheduleV1,
+    SchedulerAdmittedScheduleControlV1, SchedulerApprovedJobV1, SchedulerOneShotScheduleErrorV1,
+    SchedulerOneShotScheduleV1, SchedulerScheduleControlAdmissionErrorV1,
+    SchedulerScheduleControlContractV1, SchedulerScheduleControlGrantV1,
+    SchedulerScheduleControlOperationV1, admit_schedule_control_command_v1,
     map_approved_one_shot_schedule_v1,
 };
 pub use delivery::{

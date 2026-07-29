@@ -37,6 +37,7 @@ pub fn validate_scheduler_schedule_control_command_v1(
         Some(Operation::CancelOneShot(request)) => {
             if !fixed_nonzero(&request.schedule_id, ID_BYTES)
                 || request.expected_schedule_revision == 0
+                || !valid_job_kind(request.job_kind.as_ref())
             {
                 return Err(SchedulerScheduleControlValidationErrorV1::InvalidSchedule);
             }

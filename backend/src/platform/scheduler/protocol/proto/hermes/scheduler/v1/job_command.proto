@@ -91,6 +91,7 @@ message EnsureOneShotScheduleV1 {
 message CancelOneShotScheduleV1 {
   bytes schedule_id = 1;
   uint64 expected_schedule_revision = 2;
+  JobKindV1 job_kind = 3;
 }
 
 message SchedulerScheduleControlCommandV1 {

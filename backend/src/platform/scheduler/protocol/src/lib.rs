@@ -24,6 +24,8 @@ pub use contracts::schedule::{
 };
 pub use transport::{
     SchedulerReceiptDeliveryErrorV1, SchedulerReceiptDeliveryPortV1, SchedulerReceiptDeliveryV1,
+    SchedulerScheduleControlDeliveryErrorV1, SchedulerScheduleControlDeliveryPortV1,
+    SchedulerScheduleControlDeliveryV1,
 };
 pub use validation::{
     OwnerJobCommandValidationErrorV1, SchedulerCommandValidationErrorV1,

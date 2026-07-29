@@ -173,6 +173,11 @@ fn module_schedule_cancel_and_result_are_exact_and_sanitized() {
         operation: Some(Operation::CancelOneShot(CancelOneShotScheduleV1 {
             schedule_id: vec![9; 16],
             expected_schedule_revision: 2,
+            job_kind: Some(JobKindV1 {
+                owner: "communication_delayed_delivery".to_owned(),
+                name: "execute".to_owned(),
+                major: 1,
+            }),
         })),
     };
     assert_eq!(

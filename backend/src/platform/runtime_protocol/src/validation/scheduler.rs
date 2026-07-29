@@ -6,6 +6,7 @@ use crate::v1::{
     SchedulerRuntimeConfigurationV1, SchedulerRuntimeControlRequestV1,
     SchedulerRuntimeControlResponseV1, SchedulerRuntimeDispatchPublisherBindingV1,
     SchedulerRuntimeReceiptConsumerBindingV1, SchedulerRuntimeReceiptKindV1,
+    SchedulerRuntimeScheduleControlBindingV1, SchedulerRuntimeScheduleControlGrantV1,
     SchedulerRuntimeStateV1, SchedulerRuntimeStatusV1, SchedulerScheduleUpsertOutcomeV1,
     UpsertSchedulerScheduleRequestV1, UpsertSchedulerScheduleResponseV1,
     scheduler_runtime_control_request_v1::Operation as RequestOperation,
@@ -20,6 +21,7 @@ const MAX_DELIVER: u32 = 32;
 const MAX_ACK_PENDING: u32 = 4_096;
 const MAX_RECEIPT_CONSUMERS: usize = 256;
 const MAX_DISPATCH_PUBLISHERS: usize = 256;
+const MAX_SCHEDULE_CONTROL_GRANTS: usize = 256;
 const MAX_SCHEDULE_POLICY_BYTES: usize = 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -63,9 +65,29 @@ pub fn validate_scheduler_runtime_configuration(
         && valid_batch_limit(configuration.receipt_batch_limit)
         && valid_reconcile_interval(configuration.reconcile_interval_millis)
         && valid_dispatch_publishers(&configuration.dispatch_publishers)
-        && valid_receipt_consumers(&configuration.receipt_consumers))
+        && valid_receipt_consumers(&configuration.receipt_consumers)
+        && valid_schedule_control(
+            configuration.schedule_control.as_ref(),
+            &configuration.schedule_control_grants,
+        ))
     .then_some(())
     .ok_or(SchedulerRuntimeValidationErrorV1::InvalidConfiguration)
+}
+
+pub fn validate_scheduler_runtime_schedule_control_binding(
+    binding: &SchedulerRuntimeScheduleControlBindingV1,
+) -> Result<(), SchedulerRuntimeValidationErrorV1> {
+    valid_schedule_control_binding(binding)
+        .then_some(())
+        .ok_or(SchedulerRuntimeValidationErrorV1::InvalidConfiguration)
+}
+
+pub fn validate_scheduler_runtime_schedule_control_grant(
+    grant: &SchedulerRuntimeScheduleControlGrantV1,
+) -> Result<(), SchedulerRuntimeValidationErrorV1> {
+    valid_schedule_control_grant(grant)
+        .then_some(())
+        .ok_or(SchedulerRuntimeValidationErrorV1::InvalidConfiguration)
 }
 
 pub fn validate_scheduler_runtime_dispatch_publisher_binding(
@@ -254,6 +276,74 @@ fn valid_dispatch_publishers(values: &[SchedulerRuntimeDispatchPublisherBindingV
 
 fn valid_dispatch_publisher(value: &SchedulerRuntimeDispatchPublisherBindingV1) -> bool {
     value.subject.starts_with("hermes.command.v1.") && valid_exact_subject(&value.subject)
+}
+
+fn valid_schedule_control(
+    binding: Option<&SchedulerRuntimeScheduleControlBindingV1>,
+    grants: &[SchedulerRuntimeScheduleControlGrantV1],
+) -> bool {
+    match binding {
+        None => grants.is_empty(),
+        Some(binding) => {
+            !grants.is_empty()
+                && grants.len() <= MAX_SCHEDULE_CONTROL_GRANTS
+                && valid_schedule_control_binding(binding)
+                && grants.iter().all(valid_schedule_control_grant)
+                && grants
+                    .iter()
+                    .map(|grant| {
+                        (
+                            grant.source_module_id.as_str(),
+                            grant.source_runtime_instance_id.as_slice(),
+                            grant.source_runtime_generation,
+                            grant.source_grant_epoch,
+                            grant.job_owner.as_str(),
+                            grant.job_name.as_str(),
+                            grant.job_major,
+                        )
+                    })
+                    .collect::<BTreeSet<_>>()
+                    .len()
+                    == grants.len()
+        }
+    }
+}
+
+fn valid_schedule_control_binding(binding: &SchedulerRuntimeScheduleControlBindingV1) -> bool {
+    binding.stream_name == "HERMES_COMMAND_V1"
+        && binding.filter_subject == "hermes.command.v1.scheduler.schedule_control.v1"
+        && binding.result_subject == "hermes.result.v1.scheduler.schedule_control.v1"
+        && binding.command_contract_revision > 0
+        && nonzero_sha256(&binding.command_schema_sha256)
+        && binding.result_contract_revision > 0
+        && nonzero_sha256(&binding.result_schema_sha256)
+        && valid_durable_name(&binding.durable_name)
+        && (1..=MAX_ACK_WAIT_MILLIS).contains(&binding.ack_wait_millis)
+        && (1..=MAX_DELIVER).contains(&binding.max_deliver)
+        && (1..=MAX_ACK_PENDING).contains(&binding.max_ack_pending)
+}
+
+fn valid_schedule_control_grant(grant: &SchedulerRuntimeScheduleControlGrantV1) -> bool {
+    valid_id(&grant.source_module_id)
+        && grant.source_runtime_instance_id.len() == 16
+        && grant
+            .source_runtime_instance_id
+            .iter()
+            .any(|byte| *byte != 0)
+        && grant.source_runtime_generation > 0
+        && grant.source_grant_epoch > 0
+        && valid_owner(&grant.source_owner)
+        && valid_job_token(&grant.job_owner)
+        && grant.source_owner == grant.job_owner
+        && valid_job_token(&grant.job_name)
+        && u16::try_from(grant.job_major).is_ok_and(|major| major > 0)
+        && valid_contract_name(&grant.contract_name)
+        && grant.contract_revision > 0
+        && nonzero_sha256(&grant.contract_schema_sha256)
+}
+
+fn nonzero_sha256(value: &[u8]) -> bool {
+    value.len() == 32 && value.iter().any(|byte| *byte != 0)
 }
 
 fn valid_receipt_consumers(values: &[SchedulerRuntimeReceiptConsumerBindingV1]) -> bool {

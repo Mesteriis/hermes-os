@@ -7,6 +7,7 @@ mod request;
 pub use outbox::SchedulerScheduleControlResultOutboxV1;
 pub use request::{
     SchedulerScheduleControlApplyErrorV1, SchedulerScheduleControlApplyOutcomeV1,
-    SchedulerScheduleControlDecisionV1, SchedulerScheduleControlMutationV1,
-    SchedulerScheduleControlRejectionV1, SchedulerScheduleControlRequestV1,
+    SchedulerScheduleControlAuthorityV1, SchedulerScheduleControlDecisionV1,
+    SchedulerScheduleControlMutationV1, SchedulerScheduleControlRejectionV1,
+    SchedulerScheduleControlRequestV1,
 };

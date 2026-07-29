@@ -3,6 +3,7 @@ use hermes_runtime_protocol::{
         SchedulerRuntimeConfigurationV1, SchedulerRuntimeControlRequestV1,
         SchedulerRuntimeControlResponseV1, SchedulerRuntimeDispatchPublisherBindingV1,
         SchedulerRuntimeReceiptConsumerBindingV1, SchedulerRuntimeReceiptKindV1,
+        SchedulerRuntimeScheduleControlBindingV1, SchedulerRuntimeScheduleControlGrantV1,
         SchedulerRuntimeStateV1, SchedulerRuntimeStatusV1, SchedulerRuntimeStorageBindingV1,
         SchedulerScheduleUpsertOutcomeV1, UpsertSchedulerScheduleRequestV1,
         UpsertSchedulerScheduleResponseV1,
@@ -21,6 +22,10 @@ use hermes_scheduler_protocol::{
 #[test]
 fn scheduler_runtime_contract_requires_only_fenced_non_secret_dependencies() {
     assert!(validate_scheduler_runtime_configuration(&configuration()).is_ok());
+    let mut schedule_control = configuration();
+    schedule_control.schedule_control = Some(schedule_control_binding());
+    schedule_control.schedule_control_grants = vec![schedule_control_grant()];
+    assert!(validate_scheduler_runtime_configuration(&schedule_control).is_ok());
     assert!(
         validate_scheduler_runtime_control_response(&SchedulerRuntimeControlResponseV1 {
             result: Some(ResponseResult::Status(SchedulerRuntimeStatusV1 {
@@ -77,6 +82,17 @@ fn scheduler_runtime_contract_rejects_secret_bearing_or_unbounded_configuration(
     });
     assert_invalid_configuration(|value| {
         value.receipt_consumers.pop();
+    });
+    assert_invalid_configuration(|value| {
+        value.schedule_control = Some(schedule_control_binding());
+    });
+    assert_invalid_configuration(|value| {
+        value.schedule_control_grants = vec![schedule_control_grant()];
+    });
+    assert_invalid_configuration(|value| {
+        value.schedule_control = Some(schedule_control_binding());
+        value.schedule_control_grants = vec![schedule_control_grant()];
+        value.schedule_control_grants[0].source_owner = "mail".to_owned();
     });
 
     assert_extended_receipts_are_allowed();
@@ -221,6 +237,40 @@ fn configuration() -> SchedulerRuntimeConfigurationV1 {
                 "hermes.result.v1.mail.job_receipt.v1",
             ),
         ],
+        schedule_control: None,
+        schedule_control_grants: Vec::new(),
+    }
+}
+
+fn schedule_control_binding() -> SchedulerRuntimeScheduleControlBindingV1 {
+    SchedulerRuntimeScheduleControlBindingV1 {
+        stream_name: "HERMES_COMMAND_V1".to_owned(),
+        durable_name: "scheduler_schedule_control".to_owned(),
+        filter_subject: "hermes.command.v1.scheduler.schedule_control.v1".to_owned(),
+        ack_wait_millis: 30_000,
+        max_deliver: 8,
+        max_ack_pending: 32,
+        result_subject: "hermes.result.v1.scheduler.schedule_control.v1".to_owned(),
+        command_contract_revision: 1,
+        command_schema_sha256: vec![7; 32],
+        result_contract_revision: 1,
+        result_schema_sha256: vec![8; 32],
+    }
+}
+
+fn schedule_control_grant() -> SchedulerRuntimeScheduleControlGrantV1 {
+    SchedulerRuntimeScheduleControlGrantV1 {
+        source_module_id: "communication_delayed_delivery.runtime.v1".to_owned(),
+        source_runtime_instance_id: vec![4; 16],
+        source_runtime_generation: 3,
+        source_grant_epoch: 5,
+        source_owner: "communication_delayed_delivery".to_owned(),
+        job_owner: "communication_delayed_delivery".to_owned(),
+        job_name: "execute".to_owned(),
+        job_major: 1,
+        contract_name: "communication_delayed_delivery.execute".to_owned(),
+        contract_revision: 1,
+        contract_schema_sha256: vec![6; 32],
     }
 }
 

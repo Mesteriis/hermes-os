@@ -12,7 +12,8 @@ use hermes_scheduler_persistence::{
     FixedDelayCompletionOutcomeV1, SchedulerPendingFireOutcomeV1, SchedulerPendingFireV1,
     SchedulerPostgresStoreV1, SchedulerRunClaimErrorV1, SchedulerRunClaimV1,
     SchedulerScheduleControlApplyErrorV1, SchedulerScheduleControlApplyOutcomeV1,
-    SchedulerScheduleControlDecisionV1, SchedulerScheduleControlMutationV1,
+    SchedulerScheduleControlAuthorityV1, SchedulerScheduleControlDecisionV1,
+    SchedulerScheduleControlMutationV1, SchedulerScheduleControlRejectionV1,
     SchedulerScheduleControlRequestV1, SchedulerScheduleControlResultOutboxV1,
     SchedulerScheduleStoreErrorV1, SchedulerScheduleUpsertOutcomeV1, SchedulerScheduleUpsertV1,
     scheduler_storage_bundle_v1,
@@ -162,6 +163,7 @@ async fn assert_schedule_control_is_atomic_and_cancel_is_race_safe(
     let conflicting = SchedulerScheduleControlRequestV1::new(
         envelope_record(60, true, 0, b"different"),
         [60; 16],
+        ensure.authority().clone(),
         ensure.mutation().clone(),
         UtcMillisV1::new(1_001),
     )
@@ -174,6 +176,46 @@ async fn assert_schedule_control_is_atomic_and_cancel_is_race_safe(
             .await,
         Err(SchedulerScheduleControlApplyErrorV1::HashConflict)
     );
+
+    let foreign_authority = SchedulerScheduleControlAuthorityV1::new(
+        "foreign.runtime.v1".to_owned(),
+        "platform".to_owned(),
+        "platform".to_owned(),
+        "maintenance".to_owned(),
+        1,
+    )
+    .expect("foreign schedule authority");
+    let foreign_cancel = SchedulerScheduleControlRequestV1::new(
+        envelope_record(68, true, 0, b"foreign-cancel"),
+        [68; 16],
+        foreign_authority,
+        SchedulerScheduleControlMutationV1::Cancel {
+            schedule_id: ScheduleIdV1::new([60; 16]).expect("schedule ID"),
+            expected_revision: ScheduleRevisionV1::new(1).expect("revision"),
+            cancelled_at: UtcMillisV1::new(1_050),
+        },
+        UtcMillisV1::new(1_050),
+    )
+    .expect("foreign cancellation request");
+    assert!(matches!(
+        store
+            .apply_schedule_control(&foreign_cancel, |decision| {
+                assert_eq!(
+                    decision,
+                    SchedulerScheduleControlDecisionV1::Rejected(
+                        SchedulerScheduleControlRejectionV1::ForeignAuthority
+                    )
+                );
+                Ok(envelope_record(69, false, 68, b"foreign-authority"))
+            })
+            .await,
+        Ok(SchedulerScheduleControlApplyOutcomeV1::Applied {
+            decision: SchedulerScheduleControlDecisionV1::Rejected(
+                SchedulerScheduleControlRejectionV1::ForeignAuthority
+            ),
+            ..
+        })
+    ));
 
     let cancel = control_request(
         62,
@@ -254,10 +296,22 @@ fn control_request(
     SchedulerScheduleControlRequestV1::new(
         envelope_record(command_id, true, 0, b"command"),
         [schedule_id; 16],
+        control_authority(),
         mutation,
         UtcMillisV1::new(1_000),
     )
     .expect("schedule control request")
+}
+
+fn control_authority() -> SchedulerScheduleControlAuthorityV1 {
+    SchedulerScheduleControlAuthorityV1::new(
+        "communication_delayed_delivery.runtime.v1".to_owned(),
+        "platform".to_owned(),
+        "platform".to_owned(),
+        "maintenance".to_owned(),
+        1,
+    )
+    .expect("schedule control authority")
 }
 
 fn envelope_record(

@@ -8,9 +8,12 @@
 реализованы. Exact Protobuf command/result, structural validation, mapping
 approved JobKind на canonical one-shot policy, transactional Scheduler
 inbox/result outbox, exact duplicate replay, same-ID hash conflict и cancellation
-race покрыты unit и disposable PostgreSQL conformance. JetStream adapters,
-runtime/grant/catalog bindings и managed live contour ещё не реализованы;
-platform gate `scheduler_module_schedule_control_v1` остаётся закрыт.
+race покрыты unit и disposable PostgreSQL conformance. Exact runtime
+configuration, source/runtime/grant/catalog admission и JetStream
+consumer/result-publisher adapters реализованы как закрытый foundation.
+Scheduler runtime workers, Event Hub topology admission и managed live contour
+ещё не реализованы; platform gate `scheduler_module_schedule_control_v1`
+остаётся закрыт.
 
 Уточняет:
 
@@ -106,6 +109,13 @@ Cancel несёт:
 
 - exact non-zero 16-byte `schedule_id`;
 - positive expected schedule revision.
+- exact JobKind owner/name/major для выбора того же approved grant.
+
+При первом accepted Ensure Scheduler сохраняет отдельную durable authority
+`schedule_id → source module / logical owner / JobKind`. Повторный Ensure и
+Cancel обязаны совпасть с ней. Runtime generation и grant epoch остаются
+per-command fences и не становятся durable владельцем schedule: successor того
+же approved module может продолжить lifecycle, foreign module — нет.
 
 Result всегда коррелирует operation/schedule/revision и имеет outcome:
 
