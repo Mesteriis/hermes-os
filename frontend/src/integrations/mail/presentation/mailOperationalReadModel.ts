@@ -152,6 +152,19 @@ export function buildMailMessageDetail(
 	}
 }
 
+export function filterMailMessageRows(
+	messages: readonly MailMessageRow[],
+	searchQuery: string,
+): readonly MailMessageRow[] {
+	const query = searchQuery.trim().toLocaleLowerCase()
+	if (!query) return messages
+	return messages.filter((message) =>
+		[message.sender, message.subject, message.snippet].some((value) =>
+			value.toLocaleLowerCase().includes(query),
+		),
+	)
+}
+
 function folderKindLabel(kind: MailFolderKindV1): string {
 	if (kind === MailFolderKindV1.MAIL_FOLDER_KIND_INBOX) return 'Inbox'
 	if (kind === MailFolderKindV1.MAIL_FOLDER_KIND_SENT) return 'Sent'

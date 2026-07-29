@@ -13,6 +13,7 @@ import {
 	buildMailMessageDetail,
 	buildMailMessageRows,
 	buildMailThreadRows,
+	filterMailMessageRows,
 } from './mailOperationalReadModel'
 
 describe('Mail operational read presentation model', () => {
@@ -61,5 +62,26 @@ describe('Mail operational read presentation model', () => {
 		})
 		expect(JSON.stringify(detail)).not.toContain('7,7,7')
 		expect(detail?.contentState).toContain('Communications-owned')
+	})
+
+	it('filters rendered rows through the presentation model', () => {
+		const messages = buildMailMessageRows([
+			create(MailMessageSummaryV1Schema, {
+				messageId: 'message-1',
+				subject: 'Quarterly report',
+				sender: 'finance@example.test',
+				snippet: 'Attached is the report.',
+			}),
+			create(MailMessageSummaryV1Schema, {
+				messageId: 'message-2',
+				subject: 'Lunch',
+				sender: 'friend@example.test',
+				snippet: 'Tomorrow at noon?',
+			}),
+		], '')
+
+		expect(filterMailMessageRows(messages, 'report')).toHaveLength(1)
+		expect(filterMailMessageRows(messages, 'FINANCE')).toHaveLength(1)
+		expect(filterMailMessageRows(messages, '  ')).toBe(messages)
 	})
 })
