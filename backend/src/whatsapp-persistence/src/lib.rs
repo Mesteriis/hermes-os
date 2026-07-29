@@ -1,6 +1,7 @@
 //! WhatsApp-owned durable storage. Communications receives only exact envelopes.
 
 mod delivery_intent;
+mod delivery_intent_result_outbox;
 mod delivery_intent_store;
 mod durable;
 mod operational;

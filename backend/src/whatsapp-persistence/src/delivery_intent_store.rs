@@ -83,7 +83,7 @@ pub const WHATSAPP_DELIVERY_INTENT_MAX_ATTEMPTS_V1: i32 = 12;
 
 #[derive(Clone)]
 pub struct WhatsAppDeliveryIntentStoreV1 {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -270,7 +270,7 @@ impl WhatsAppDeliveryIntentStoreV1 {
             .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
             WhatsAppDeliveryIntentInboxOutcomeV1::Pending
         } else {
-            insert_result_outbox(
+            crate::delivery_intent_result_outbox::insert_result_outbox(
                 &mut transaction,
                 admission.intent_id,
                 route_not_found_result,
@@ -519,7 +519,7 @@ impl WhatsAppDeliveryIntentStoreV1 {
         if updated.rows_affected() != 1 {
             return Err(WhatsAppDurablePersistenceError::InvalidDeliveryIntentTransition);
         }
-        insert_result_outbox(
+        crate::delivery_intent_result_outbox::insert_result_outbox(
             &mut transaction,
             intent_id,
             result,
@@ -530,68 +530,6 @@ impl WhatsAppDeliveryIntentStoreV1 {
             .commit()
             .await
             .map_err(|_| WhatsAppDurablePersistenceError::Database)
-    }
-
-    pub async fn pending_result_outbox(
-        &self,
-        limit: i64,
-    ) -> Result<Vec<OutboxRecordV1>, WhatsAppDurablePersistenceError> {
-        if !(1..=256).contains(&limit) {
-            return Err(WhatsAppDurablePersistenceError::InvalidRow);
-        }
-        let rows = sqlx::query(
-            "SELECT message_id, envelope_sha256, exact_envelope_bytes
-             FROM hermes_data.whatsapp_delivery_intent_result_outbox
-             WHERE published_at_unix_seconds IS NULL
-             ORDER BY created_at_unix_seconds, message_id
-             LIMIT $1",
-        )
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        rows.into_iter()
-            .map(|row| {
-                let message_id = required_id::<16>(&row, "message_id")?;
-                let envelope_sha256 = required_id::<32>(&row, "envelope_sha256")?;
-                let exact_bytes: Vec<u8> = row
-                    .try_get("exact_envelope_bytes")
-                    .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
-                let record = OutboxRecordV1::accept(exact_bytes)
-                    .map_err(|_| WhatsAppDurablePersistenceError::InvalidRow)?;
-                if record.message_id() != &message_id
-                    || record.envelope_sha256() != &envelope_sha256
-                {
-                    return Err(WhatsAppDurablePersistenceError::InvalidRow);
-                }
-                Ok(record)
-            })
-            .collect()
-    }
-
-    pub async fn mark_result_outbox_published(
-        &self,
-        message_id: &[u8; 16],
-        published_at_unix_seconds: i64,
-    ) -> Result<(), WhatsAppDurablePersistenceError> {
-        if message_id.iter().all(|byte| *byte == 0) || published_at_unix_seconds <= 0 {
-            return Err(WhatsAppDurablePersistenceError::InvalidRow);
-        }
-        let updated = sqlx::query(
-            "UPDATE hermes_data.whatsapp_delivery_intent_result_outbox
-             SET published_at_unix_seconds = $1
-             WHERE message_id = $2
-               AND published_at_unix_seconds IS NULL",
-        )
-        .bind(published_at_unix_seconds)
-        .bind(message_id.as_slice())
-        .execute(&self.pool)
-        .await
-        .map_err(|_| WhatsAppDurablePersistenceError::Database)?;
-        if updated.rows_affected() > 1 {
-            return Err(WhatsAppDurablePersistenceError::InvalidRow);
-        }
-        Ok(())
     }
 }
 
@@ -724,29 +662,6 @@ async fn resolve_route(
         })
     })
     .transpose()
-}
-
-async fn insert_result_outbox(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    intent_id: [u8; 16],
-    record: &OutboxRecordV1,
-    created_at_unix_seconds: i64,
-) -> Result<(), WhatsAppDurablePersistenceError> {
-    sqlx::query(
-        "INSERT INTO hermes_data.whatsapp_delivery_intent_result_outbox
-            (message_id, envelope_sha256, exact_envelope_bytes, intent_id,
-             created_at_unix_seconds)
-         VALUES ($1, $2, $3, $4, $5)",
-    )
-    .bind(record.message_id().as_slice())
-    .bind(record.envelope_sha256().as_slice())
-    .bind(record.exact_bytes())
-    .bind(intent_id.as_slice())
-    .bind(created_at_unix_seconds)
-    .execute(&mut **transaction)
-    .await
-    .map(|_| ())
-    .map_err(|_| WhatsAppDurablePersistenceError::Database)
 }
 
 fn valid_admission(value: &WhatsAppDeliveryIntentAdmissionV1) -> bool {
