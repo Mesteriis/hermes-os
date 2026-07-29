@@ -79,10 +79,13 @@ writes отсутствуют и не advertised in descriptor/capabilities.
 
 One protocol step has a 10-second deadline; entire sync has a 5-minute
 deadline. Each configuration has at most one concurrent sync, and this applies
-globally. Each sync uses a configurable window of up to 1,000,000 UIDs per window,
-with up to 1,000,000 windows per sync (default 5,000). Retry is bounded to 255
-attempts per adapter request. Mail owns cursor, retry, provider locator/source
-mapping and its outbox.
+globally. Historical first-slice bounds allowed a configurable window of up to
+1,000,000 UIDs, up to 1,000,000 windows and 255 retries per adapter request.
+Эти параметры и synchronous client wait заменены
+[ADR-0325](ADR-0325-bounded-asynchronous-mail-sync-execution.md): provider
+fetch выполняется bounded chunks/pages, имеет не более трёх transient retries,
+hard 300-second run deadline и отдельные durable acceptance/terminal contracts.
+Mail owns cursor, retry, provider locator/source mapping and its outbox.
 
 Raw message is bounded to 1 MiB; only decoded `text/plain` up to 256 KiB may
 be persisted. HTML and raw MIME are neither stored nor emitted. Attachment
@@ -96,7 +99,8 @@ created.
 Retry execution is driven by an adapter-local retry policy object inside
 `hermes-mail-imap`, not by ad-hoc hardcoded literals in the loop. This keeps
 `max_attempts` and per-attempt delay independently tunable and test-covered.
-Current implementation uses `MAX_SYNC_ATTEMPTS = 255` and `RETRY_DELAY_MILLIS = 120`.
+The historical implementation used `MAX_SYNC_ATTEMPTS = 255` and
+`RETRY_DELAY_MILLIS = 120`; ADR-0325 supersedes that implementation contract.
 
 ### Communications and Blob boundary
 

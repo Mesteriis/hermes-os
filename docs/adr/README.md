@@ -130,6 +130,10 @@ policy через ссылки из новых документов.
 - [ADR-0319: Owner-authorized legacy provider account recovery](ADR-0319-owner-authorized-legacy-provider-account-recovery.md)
 - [ADR-0320: Mail multi-account configuration instances and runtime multiplexing](ADR-0320-mail-multi-account-configuration-instances-and-runtime-multiplexing.md)
 - [ADR-0321: Legacy provider recovery bundle and native secret custody](ADR-0321-legacy-provider-recovery-bundle-and-native-secret-custody.md)
+- [ADR-0322: Loopback native Owner device-proof host](ADR-0322-loopback-native-owner-device-proof-host.md)
+- [ADR-0323: Gmail preauthorization with unresolved mailbox identity](ADR-0323-gmail-preauthorization-with-unresolved-mailbox-identity.md)
+- [ADR-0324: Empty Protobuf client RPC request semantics](ADR-0324-empty-protobuf-client-rpc-request-semantics.md)
+- [ADR-0325: Bounded asynchronous Mail sync execution](ADR-0325-bounded-asynchronous-mail-sync-execution.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также

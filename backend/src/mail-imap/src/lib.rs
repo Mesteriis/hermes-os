@@ -40,7 +40,7 @@ mod retry {
 
     // Retry policy is explicitly defined as policy data to make future timeout/attempt tuning
     // visible and testable without changing IMAP parsing/fetching logic.
-    pub const MAX_SYNC_ATTEMPTS: u8 = 255;
+    pub const MAX_SYNC_ATTEMPTS: u8 = 3;
     pub const RETRY_DELAY_MILLIS: u64 = 120;
     pub const IMAP_SYNC_RETRY_POLICY: ImapRetryPolicy = ImapRetryPolicy {
         max_attempts: MAX_SYNC_ATTEMPTS,
@@ -50,8 +50,9 @@ mod retry {
 
 pub const MAX_ATTEMPTS: u8 = retry::IMAP_SYNC_RETRY_POLICY.max_attempts;
 
-const IMAP_UID_FETCH_CHUNK_SIZE: usize = MAX_WINDOW as usize;
+const IMAP_UID_FETCH_CHUNK_SIZE: usize = 25;
 const IMAP_UID_FETCH_TIMEOUT_SECONDS: u64 = WINDOW_DEADLINE_SECONDS;
+const IMAP_SYNC_TIMEOUT_SECONDS: u64 = 300;
 const SNAPSHOT_PREVIEW_BYTES: usize = 160;
 const MAX_DISCOVERED_MAILBOXES: usize = 256;
 
@@ -215,6 +216,10 @@ impl ImapError {
     #[must_use]
     pub fn is_unsupported(&self) -> bool {
         self.kind == "unsupported"
+    }
+
+    fn is_retryable(&self) -> bool {
+        matches!(self.kind, "network" | "timeout")
     }
 }
 
@@ -508,7 +513,7 @@ fn sync_inbox_with_retry<F>(
     attempt: F,
 ) -> Result<ImapSyncResult, String>
 where
-    F: FnMut(&str, u16, &str, &str, usize) -> Result<ImapSyncResult, ImapError>,
+    F: FnMut(&str, u16, &str, &str, usize, Duration) -> Result<ImapSyncResult, ImapError>,
 {
     let attempted_limit = usize::try_from(limit)
         .map_err(|_| "imap requested window does not fit runtime limits".to_owned())?;
@@ -533,12 +538,19 @@ fn sync_inbox_with_retry_policy<F>(
     mut attempt: F,
 ) -> Result<ImapSyncResult, String>
 where
-    F: FnMut(&str, u16, &str, &str, usize) -> Result<ImapSyncResult, ImapError>,
+    F: FnMut(&str, u16, &str, &str, usize, Duration) -> Result<ImapSyncResult, ImapError>,
 {
     let mut attempts = 0u8;
+    let started_at = std::time::Instant::now();
+    let sync_deadline = Duration::from_secs(IMAP_SYNC_TIMEOUT_SECONDS);
     while attempts < policy.max_attempts {
+        let Some(remaining) = sync_deadline.checked_sub(started_at.elapsed()) else {
+            return Err(format!(
+                "imap sync exceeded {IMAP_SYNC_TIMEOUT_SECONDS}s deadline"
+            ));
+        };
         attempts += 1;
-        match attempt(host, port, username, password, limit) {
+        match attempt(host, port, username, password, limit, remaining) {
             Ok(result) => {
                 return Ok(ImapSyncResult {
                     attempts,
@@ -551,8 +563,14 @@ where
             }
             Err(error) => {
                 eprintln!("imap sync attempt {attempts} failed: {error}");
-                if attempts < policy.max_attempts {
-                    std::thread::sleep(Duration::from_millis(policy.delay_millis));
+                if error.is_retryable() && attempts < policy.max_attempts {
+                    let delay = Duration::from_millis(policy.delay_millis);
+                    if started_at.elapsed().saturating_add(delay) >= sync_deadline {
+                        return Err(format!(
+                            "imap sync exceeded {IMAP_SYNC_TIMEOUT_SECONDS}s deadline"
+                        ));
+                    }
+                    std::thread::sleep(delay);
                     continue;
                 }
                 return Err(format!("imap sync failed: {error}"));
@@ -583,11 +601,18 @@ fn run_imap_sync(
     username: &str,
     password: &str,
     requested: usize,
+    deadline: Duration,
 ) -> Result<ImapSyncResult, ImapError> {
-    let result =
-        task::block_on(
-            async move { imap_sync_once(host, port, username, password, requested).await },
-        )?;
+    let result = task::block_on(future::timeout(
+        deadline,
+        imap_sync_once(host, port, username, password, requested),
+    ))
+    .map_err(|_| {
+        ImapError::new(
+            "timeout",
+            format!("imap sync exceeded {IMAP_SYNC_TIMEOUT_SECONDS}s deadline"),
+        )
+    })??;
 
     Ok(result)
 }
@@ -928,9 +953,21 @@ mod tests {
     }
 
     #[test]
+    fn uid_fetch_chunk_is_transport_bounded() {
+        assert_eq!(IMAP_UID_FETCH_CHUNK_SIZE, 25);
+        assert!(IMAP_UID_FETCH_CHUNK_SIZE < MAX_WINDOW as usize);
+    }
+
+    #[test]
+    fn whole_sync_deadline_is_five_minutes() {
+        assert_eq!(IMAP_SYNC_TIMEOUT_SECONDS, 300);
+    }
+
+    #[test]
     fn default_retry_policy_max_attempts_match_public_constant() {
         assert_eq!(MAX_ATTEMPTS, retry::MAX_SYNC_ATTEMPTS);
         assert_eq!(retry::IMAP_SYNC_RETRY_POLICY.max_attempts, MAX_ATTEMPTS);
+        assert_eq!(MAX_ATTEMPTS, 3);
     }
 
     #[test]
@@ -942,9 +979,9 @@ mod tests {
             "alice",
             "secret",
             1,
-            |_host, _port, _username, _password, _limit| {
+            |_host, _port, _username, _password, _limit, _deadline| {
                 attempts += 1;
-                Err(ImapError::new("protocol", "temporary sync failure"))
+                Err(ImapError::new("timeout", "temporary sync failure"))
             },
         );
 
@@ -966,9 +1003,9 @@ mod tests {
             "secret",
             1,
             policy,
-            |_host, _port, _username, _password, _limit| {
+            |_host, _port, _username, _password, _limit, _deadline| {
                 attempts += 1;
-                Err(ImapError::new("protocol", "temporary sync failure"))
+                Err(ImapError::new("network", "temporary sync failure"))
             },
         );
 
@@ -985,10 +1022,10 @@ mod tests {
             "alice",
             "secret",
             1,
-            |_host, _port, _username, _password, _limit| {
+            |_host, _port, _username, _password, _limit, _deadline| {
                 attempts += 1;
                 if attempts < 3 {
-                    return Err(ImapError::new("protocol", "temporary sync failure"));
+                    return Err(ImapError::new("timeout", "temporary sync failure"));
                 }
                 Ok(ImapSyncResult {
                     attempts: 1,
@@ -1023,7 +1060,7 @@ mod tests {
             "alice",
             "secret",
             1,
-            |_host, _port, _username, _password, _limit| {
+            |_host, _port, _username, _password, _limit, _deadline| {
                 attempts += 1;
                 if attempts == MAX_ATTEMPTS {
                     return Ok(ImapSyncResult {
@@ -1042,7 +1079,7 @@ mod tests {
                         has_more: false,
                     });
                 }
-                Err(ImapError::new("protocol", "temporary sync failure"))
+                Err(ImapError::new("network", "temporary sync failure"))
             },
         );
 
@@ -1069,15 +1106,34 @@ mod tests {
                 max_attempts: 1,
                 delay_millis: 0,
             },
-            |_host, _port, _username, _password, limit| {
+            |_host, _port, _username, _password, limit, _deadline| {
                 observed_attempts += 1;
                 observed_limit = limit;
-                Err(ImapError::new("protocol", "temporary sync failure"))
+                Err(ImapError::new("timeout", "temporary sync failure"))
             },
         );
 
         assert_eq!(observed_attempts, 1);
         assert_eq!(observed_limit, expected_limit);
+        assert!(matches!(result, Err(error) if error.contains("imap sync failed")));
+    }
+
+    #[test]
+    fn definite_provider_rejection_is_not_retried() {
+        let mut attempts = 0u8;
+        let result = sync_inbox_with_retry(
+            "mail.example.com",
+            IMAP_PORT,
+            "alice",
+            "secret",
+            1,
+            |_host, _port, _username, _password, _limit, _deadline| {
+                attempts += 1;
+                Err(ImapError::new("auth", "credentials rejected"))
+            },
+        );
+
+        assert_eq!(attempts, 1);
         assert!(matches!(result, Err(error) if error.contains("imap sync failed")));
     }
 
