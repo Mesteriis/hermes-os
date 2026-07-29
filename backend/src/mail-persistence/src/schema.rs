@@ -30,6 +30,12 @@ pub const MAIL_STORAGE_BUNDLE_REVISION_V17: u32 = 17;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V18: u32 = 18;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V19: u32 = 19;
 pub const MAIL_STORAGE_BUNDLE_REVISION_V20: u32 = 20;
+/// Recovery successor for an admitted-but-never-applied development revision 21.
+///
+/// Migration steps remain the immutable admitted sequence 1..=20. Storage
+/// bundle revisions fence release identity and do not require a same-numbered
+/// migration step.
+pub const MAIL_STORAGE_BUNDLE_REVISION_V22: u32 = 22;
 
 /// Returns the complete Mail schema as one immutable initial Storage bundle.
 ///
@@ -40,7 +46,7 @@ pub const MAIL_STORAGE_BUNDLE_REVISION_V20: u32 = 20;
 pub fn mail_storage_bundle_v1() -> StorageBundleV1 {
     StorageBundleV1 {
         major: 1,
-        revision: MAIL_STORAGE_BUNDLE_REVISION_V20,
+        revision: MAIL_STORAGE_BUNDLE_REVISION_V22,
         bundle_id: "mail_state".to_owned(),
         owner_id: "mail".to_owned(),
         steps: vec![
@@ -180,7 +186,7 @@ mod tests {
 
         assert_eq!(bundle.owner_id, "mail");
         assert_eq!(bundle.bundle_id, "mail_state");
-        assert_eq!(bundle.revision, MAIL_STORAGE_BUNDLE_REVISION_V20);
+        assert_eq!(bundle.revision, MAIL_STORAGE_BUNDLE_REVISION_V22);
         assert_eq!(validate_storage_bundle(&bundle), Ok(()));
         assert_eq!(bundle.steps.len(), 20);
         let sql = bundle
