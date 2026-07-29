@@ -955,8 +955,10 @@ mod tests {
     #[test]
     fn uid_fetch_chunk_is_transport_bounded() {
         assert_eq!(IMAP_UID_FETCH_CHUNK_SIZE, 10);
-        assert!(IMAP_UID_FETCH_CHUNK_SIZE <= 25);
-        assert!(IMAP_UID_FETCH_CHUNK_SIZE < MAX_WINDOW as usize);
+        const {
+            assert!(IMAP_UID_FETCH_CHUNK_SIZE <= 25);
+            assert!(IMAP_UID_FETCH_CHUNK_SIZE < MAX_WINDOW as usize);
+        }
     }
 
     #[test]
