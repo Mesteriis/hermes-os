@@ -86,6 +86,8 @@ use communications_backup::*;
 #[path = "managed_storage_vault_docker/delivery_intent_managed_setup.rs"]
 mod delivery_intent_managed_setup;
 use delivery_intent_managed_setup::*;
+#[path = "managed_storage_vault_docker/delivery_intent_module_request_flow.rs"]
+mod delivery_intent_module_request_flow;
 #[path = "managed_storage_vault_docker/delivery_intent_realtime_flow.rs"]
 mod delivery_intent_realtime_flow;
 #[path = "managed_storage_vault_docker/telegram_event_flow.rs"]

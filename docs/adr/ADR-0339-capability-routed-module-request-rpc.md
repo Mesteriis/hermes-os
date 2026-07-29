@@ -4,11 +4,12 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: private versioned request/delivery/response wire,
-hard bounds, managed-runtime control delivery, separate descriptor/Control
-Store provider inventory и Kernel authorization/opaque relay реализованы.
-Live managed-process conformance и первый provider request port ещё не
-реализованы; platform gate остаётся `planned`.
+Состояние реализации: реализовано полностью. Private versioned
+request/delivery/response wire, hard bounds, managed-runtime control delivery,
+separate descriptor/Control Store provider inventory, Kernel
+authorization/opaque relay и delivery-intent provider request port прошли
+unit, architecture и live managed-process conformance. Platform gate
+`capability_routed_module_request_rpc_v1` открыт.
 
 Уточняет:
 

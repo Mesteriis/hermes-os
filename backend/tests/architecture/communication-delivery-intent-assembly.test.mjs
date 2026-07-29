@@ -49,6 +49,10 @@ const paths = {
     'src/communication-delivery-intent-runtime/src/client_port.rs',
     BACKEND_ROOT,
   ),
+  submitPort: new URL(
+    'src/communication-delivery-intent-runtime/src/submit_port.rs',
+    BACKEND_ROOT,
+  ),
   communicationsQueryClient: new URL(
     'src/communication-delivery-intent-runtime/src/communications_query_client.rs',
     BACKEND_ROOT,
@@ -90,6 +94,7 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
     eventRuntime,
     runtimeCoordinator,
     clientPort,
+    submitPort,
     communicationsQueryClient,
     runtimeProcess,
     persistence,
@@ -111,6 +116,7 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
       readFile(paths.eventRuntime, 'utf8'),
       readFile(paths.runtimeCoordinator, 'utf8'),
       readFile(paths.clientPort, 'utf8'),
+      readFile(paths.submitPort, 'utf8'),
       readFile(paths.communicationsQueryClient, 'utf8'),
       readFile(paths.runtimeProcess, 'utf8'),
       readFile(paths.persistence, 'utf8'),
@@ -189,9 +195,10 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
   assert.match(eventRuntime, /acknowledge\(\)/);
   assert.match(runtimeCoordinator, /DeliveryIntentBodyMaterializerV1/);
   assert.match(runtimeCoordinator, /DeliveryIntentBodyBlobReceiptV1/);
-  assert.match(clientPort, /SubmitDeliveryIntentRequestV1/);
+  assert.match(clientPort, /submit_delivery_intent_payload_v1/);
+  assert.match(submitPort, /SubmitDeliveryIntentRequestV1/);
   assert.match(clientPort, /GetDeliveryIntentStatusRequestV1/);
-  assert.doesNotMatch(clientPort, /provider_id|account_id/);
+  assert.doesNotMatch(`${clientPort}\n${submitPort}`, /provider_id|account_id/);
   assert.match(communicationsQueryClient, /RouteModuleQuery/);
   assert.match(communicationsQueryClient, /COMMUNICATIONS_QUERY_SCHEMA_SHA256/);
   assert.match(runtimeProcess, /describe_managed_runtime/);

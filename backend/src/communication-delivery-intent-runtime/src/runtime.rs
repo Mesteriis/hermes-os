@@ -27,6 +27,7 @@ use hermes_runtime_protocol::{
     validation::module_client::{
         validate_module_client_request_v1, validate_module_client_response_v1,
     },
+    validation::module_request::validate_module_request_response_v1,
 };
 use hermes_storage_protocol::{
     StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1, StorageBindingV1,
@@ -47,6 +48,7 @@ use crate::{
     },
     coordinator::{DeliveryIntentCoordinatorErrorV1, prepare_create_delivery_intent_v1},
     event_runtime::{ProviderTerminalSubscriptionV1, bind_terminal_subscriptions},
+    module_request_port::handle_module_request_delivery_v1,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -282,17 +284,54 @@ impl DeliveryIntentManagedRuntimeV1 {
         else {
             return Ok(false);
         };
-        let Some(Operation::ClientDelivery(delivery)) = control_request.operation else {
-            self.control_channel
-                .write_response(
-                    correlation_id,
-                    ManagedRuntimeControlResponseV1 {
-                        result: None,
-                        error_code: "managed_runtime_control_unexpected_request".to_owned(),
-                    },
+        let delivery = match control_request.operation {
+            Some(Operation::DeliverModuleRequest(delivery)) => {
+                let request_id = delivery.request_id.clone();
+                let mut dispatcher = RejectManagedControlRequestsV2;
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(false)
+                    .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+                let response = handle_module_request_delivery_v1(
+                    self,
+                    &mut dispatcher,
+                    delivery,
+                    now_unix_seconds,
                 )
-                .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
-            return Ok(true);
+                .await;
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(true)
+                    .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+                if validate_module_request_response_v1(&response).is_err()
+                    || response.request_id != request_id
+                {
+                    return Err(DeliveryIntentRuntimeErrorV1::Unavailable);
+                }
+                self.control_channel
+                    .write_response(
+                        correlation_id,
+                        ManagedRuntimeControlResponseV1 {
+                            result: Some(ControlResult::ModuleRequestDelivery(response)),
+                            error_code: String::new(),
+                        },
+                    )
+                    .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+                return Ok(true);
+            }
+            Some(Operation::ClientDelivery(delivery)) => delivery,
+            _ => {
+                self.control_channel
+                    .write_response(
+                        correlation_id,
+                        ManagedRuntimeControlResponseV1 {
+                            result: None,
+                            error_code: "managed_runtime_control_unexpected_request".to_owned(),
+                        },
+                    )
+                    .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+                return Ok(true);
+            }
         };
         let Some(request) = delivery
             .request

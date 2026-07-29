@@ -121,7 +121,7 @@ fn managed_delivery_intent_reaches_gateway_sse_and_replays_after_restart() {
                     SubmitDeliveryIntentRequestV1 {
                         protocol_major: 1,
                         operation_id: intent_id.clone(),
-                        conversation_id,
+                        conversation_id: conversation_id.clone(),
                         reply_to_message_id: None,
                         body_utf8: private_body.to_vec(),
                     }
@@ -179,6 +179,11 @@ fn managed_delivery_intent_reaches_gateway_sse_and_replays_after_restart() {
     assert_eq!(
         replayed.cursor, cursor,
         "runtime restart must reconstruct the exact stable owner cursor"
+    );
+    super::delivery_intent_module_request_flow::assert_live_delivery_intent_module_request(
+        &store,
+        &supervisor,
+        conversation_id,
     );
 
     supervisor.shutdown().expect("stop managed processes");

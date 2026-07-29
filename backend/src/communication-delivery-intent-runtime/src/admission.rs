@@ -54,9 +54,25 @@ pub fn communication_delivery_intent_client_capability_v1() -> CapabilityDescrip
                 COMMUNICATION_DELIVERY_INTENT_QUERY_CONTRACT_NAME_V1,
                 COMMUNICATION_DELIVERY_INTENT_QUERY_CONNECT_PATH_V1,
             ),
+            delivery_intent_module_request_surface(),
             delivery_intent_realtime_surface(),
         ],
         ..Default::default()
+    }
+}
+
+fn delivery_intent_module_request_surface() -> ProvidedSurfaceV1 {
+    ProvidedSurfaceV1 {
+        kind: ProvidedSurfaceKindV1::RequestRpc as i32,
+        contract: Some(ContractReferenceV1 {
+            owner: COMMUNICATION_DELIVERY_INTENT_OWNER_V1.to_owned(),
+            name: COMMUNICATION_DELIVERY_INTENT_COMMAND_CONTRACT_NAME_V1.to_owned(),
+            major: COMMUNICATION_DELIVERY_INTENT_CONTRACT_MAJOR_V1,
+            revision: COMMUNICATION_DELIVERY_INTENT_CONTRACT_REVISION_V1,
+            schema_sha256: COMMUNICATION_DELIVERY_INTENT_SCHEMA_SHA256.to_vec(),
+        }),
+        client_rpc_route: None,
+        client_blob_route: None,
     }
 }
 
@@ -164,7 +180,7 @@ pub fn communication_delivery_intent_module_descriptor_v1(build_id: &str) -> Mod
     let settings_schema = communication_delivery_intent_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 4,
+        descriptor_revision: 5,
         module_id: COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1.to_owned(),
         owner_id: COMMUNICATION_DELIVERY_INTENT_OWNER_V1.to_owned(),
         module_kind: ModuleKindV1::Workflow as i32,
@@ -233,7 +249,7 @@ mod tests {
             descriptor.capabilities[4].capability_id,
             COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY_ID_V1
         );
-        assert_eq!(descriptor.capabilities[0].provides.len(), 3);
+        assert_eq!(descriptor.capabilities[0].provides.len(), 4);
         assert_eq!(
             descriptor.capabilities[0].provides[0]
                 .client_rpc_route
@@ -243,10 +259,21 @@ mod tests {
         );
         assert_eq!(
             descriptor.capabilities[0].provides[2].kind,
-            ProvidedSurfaceKindV1::ClientRealtime as i32
+            ProvidedSurfaceKindV1::RequestRpc as i32
         );
         assert_eq!(
             descriptor.capabilities[0].provides[2]
+                .contract
+                .as_ref()
+                .map(|contract| contract.name.as_str()),
+            Some(COMMUNICATION_DELIVERY_INTENT_COMMAND_CONTRACT_NAME_V1)
+        );
+        assert_eq!(
+            descriptor.capabilities[0].provides[3].kind,
+            ProvidedSurfaceKindV1::ClientRealtime as i32
+        );
+        assert_eq!(
+            descriptor.capabilities[0].provides[3]
                 .contract
                 .as_ref()
                 .map(|contract| contract.name.as_str()),

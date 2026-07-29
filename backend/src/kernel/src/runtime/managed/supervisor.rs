@@ -278,6 +278,7 @@ fn dispatch_correlated_relay(
 enum CorrelatedRelayResponseKindV1 {
     ClientDelivery,
     ModuleQueryDelivery,
+    ModuleRequestDelivery,
 }
 
 impl CorrelatedRelayResponseKindV1 {
@@ -287,6 +288,7 @@ impl CorrelatedRelayResponseKindV1 {
         match request.operation.as_ref() {
             Some(Operation::ClientDelivery(_)) => Ok(Self::ClientDelivery),
             Some(Operation::DeliverModuleQuery(_)) => Ok(Self::ModuleQueryDelivery),
+            Some(Operation::DeliverModuleRequest(_)) => Ok(Self::ModuleRequestDelivery),
             _ => Err("managed runtime V2 relay operation is prohibited".to_owned()),
         }
     }
@@ -298,6 +300,10 @@ impl CorrelatedRelayResponseKindV1 {
                 | (
                     Self::ModuleQueryDelivery,
                     Some(ControlResult::ModuleQueryDelivery(_))
+                )
+                | (
+                    Self::ModuleRequestDelivery,
+                    Some(ControlResult::ModuleRequestDelivery(_))
                 )
         )
     }

@@ -13,10 +13,15 @@ test('managed module request RPC routing is typed bounded and separate from quer
     validation,
     control,
     supervisor,
+    managedSupervisor,
     descriptor,
     routeStore,
     router,
     migration,
+    providerAdmission,
+    providerPort,
+    providerRuntime,
+    liveConformance,
   ] =
     await Promise.all([
       readFile(
@@ -60,6 +65,13 @@ test('managed module request RPC routing is typed bounded and separate from quer
       ),
       readFile(
         new URL(
+          'src/kernel/src/runtime/managed/supervisor.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
           'src/kernel/src/modules/registration/descriptor/mod.rs',
           BACKEND_ROOT,
         ),
@@ -86,6 +98,34 @@ test('managed module request RPC routing is typed bounded and separate from quer
         ),
         'utf8',
       ),
+      readFile(
+        new URL(
+          'src/communication-delivery-intent-runtime/src/admission.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-delivery-intent-runtime/src/module_request_port.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-delivery-intent-runtime/src/runtime.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/delivery_intent_module_request_flow.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
     ]);
   const inventory = JSON.parse(inventorySource);
   const platformGate = inventory.slices.find(
@@ -99,7 +139,7 @@ test('managed module request RPC routing is typed bounded and separate from quer
     gate: 'capability_routed_module_request_rpc_v1',
     role: 'platform',
     owner: 'kernel_capability_router',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['module_control_plane_v1'],
   });
   assert.ok(
@@ -121,6 +161,8 @@ test('managed module request RPC routing is typed bounded and separate from quer
   );
   assert.match(control, /trait ManagedRuntimeModuleRequestHandler/);
   assert.match(supervisor, /configure_module_request_handler/);
+  assert.match(managedSupervisor, /Operation::DeliverModuleRequest/);
+  assert.match(managedSupervisor, /ControlResult::ModuleRequestDelivery/);
   assert.match(descriptor, /ProvidedSurfaceKindV1::RequestRpc/);
   assert.match(descriptor, /bind_module_request_contracts/);
   assert.match(
@@ -137,6 +179,13 @@ test('managed module request RPC routing is typed bounded and separate from quer
   assert.match(router, /ensure_caller_fence\(&self\.store, expectation\)\?/);
   assert.match(router, /ensure_provider_fence\(&self\.store, &provider, &provider_launch\)\?/);
   assert.doesNotMatch(router, /retry|DeliverModuleQuery/);
+  assert.match(providerAdmission, /ProvidedSurfaceKindV1::RequestRpc/);
+  assert.match(providerPort, /validate_module_request_delivery_v1/);
+  assert.match(providerPort, /submit_delivery_intent_payload_v1/);
+  assert.match(providerRuntime, /Operation::DeliverModuleRequest/);
+  assert.match(providerRuntime, /ControlResult::ModuleRequestDelivery/);
+  assert.match(liveConformance, /ModuleRequestRouteHandlerV1/);
+  assert.match(liveConformance, /DeliveryIntentStatusAccepted/);
   assert.doesNotMatch(
     `${protocol}\n${validation}\n${control}\n${supervisor}\n${descriptor}\n${routeStore}\n${router}\n${migration}`,
     /hermes_(?:communications|mail|telegram|whatsapp|zulip)|Communications|Mail|Telegram|WhatsApp|Zulip/,
