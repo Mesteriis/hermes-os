@@ -81,6 +81,11 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
       > assembly.indexOf('Hermes development ensemble is ready'),
   );
   assert.match(assembly, /trap cleanup EXIT/);
+  assert.doesNotMatch(
+    assembly,
+    /run_compose down/,
+    'the authenticated development storage contour must survive normal make dev shutdown',
+  );
   assert.doesNotMatch(assembly, /wait -n|0\.0\.0\.0|--browser-gateway-development-proxy-proof [^"-]/);
   assert.doesNotMatch(assembly, /rm -rf .*kernel-dev|rm -rf .*control|reset/);
 

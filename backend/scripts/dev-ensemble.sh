@@ -27,7 +27,6 @@ owner_vault_host_pid=""
 frontend_pid=""
 temporary_dir=""
 proof_file=""
-compose_started=false
 
 fail() {
 	printf 'Hermes development assembly failed: %s\n' "$1" >&2
@@ -125,9 +124,6 @@ cleanup() {
 	if test -n "$proof_file"; then
 		rm -f -- "$proof_file"
 	fi
-	if test "$compose_started" = true; then
-		run_compose down --remove-orphans >/dev/null 2>&1 || true
-	fi
 	if test -n "$temporary_dir"; then
 		rmdir -- "$temporary_dir" 2>/dev/null || true
 	fi
@@ -223,7 +219,6 @@ require_absolute_directory_path "development runtime directory" "$runtime_dir"
 
 printf '%s\n' 'Starting authenticated PostgreSQL, PgBouncer and NATS infrastructure...'
 docker compose -f "$legacy_compose_file" down --remove-orphans >/dev/null 2>&1 || true
-compose_started=true
 run_compose up --detach --wait
 
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/hermes-dev-assembly.XXXXXX")"

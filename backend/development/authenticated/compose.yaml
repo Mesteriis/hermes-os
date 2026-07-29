@@ -1,8 +1,9 @@
 name: hermes-storage-authenticated-development
 
-# Disposable authenticated Storage contour. Its password is supplied only as a
-# Docker secret file by scripts/test-authenticated-storage.mjs; never add a
-# secret file to this directory or use environment variables for it.
+# Authenticated development Storage contour. The make dev lifecycle leaves these
+# services running across frontend/Kernel restarts so owner data is not silently
+# discarded. Passwords remain Docker secret files; never add secret values to
+# this directory or environment variables.
 services:
   nats:
     image: nats:2.10-alpine
