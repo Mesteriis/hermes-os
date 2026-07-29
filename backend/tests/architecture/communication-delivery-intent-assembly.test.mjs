@@ -105,7 +105,7 @@ test('delivery intent assembly is an exact non-admitted workflow slice', async (
 
   assert.equal(
     policy.implementation.currentSlice,
-    'provider_delivery_intent_contracts_v1',
+    'delivery_intent_transactional_event_adapters_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, ['communications_export']);
   assert.deepEqual(
@@ -118,6 +118,7 @@ test('delivery intent assembly is an exact non-admitted workflow slice', async (
       'hermes-communication-delivery-intent-persistence:persistence',
       'hermes-communication-delivery-intent-runtime:runtime',
       'hermes-communication-delivery-intent-assembly:assembly',
+      'hermes-communication-delivery-intent-event-adapters:implementation',
     ],
   );
   assert.equal(deliverySlice?.state, 'planned');

@@ -11,9 +11,12 @@ idempotency/state transitions и выдаёт lease/claim с epoch fencing. Runt
 проходит Kernel handshake, поднимает owner-local Storage через Vault-fenced
 credential и пока предоставляет только Storage capability. Отдельная assembly
 unit создаёт canonical descriptor/settings/Storage bundle и deterministic
-unsigned release fragment, не исполняя workflow. Provider command adapters,
-client route и live admission ещё не реализованы. Четыре provider-owned
-command/result wire contracts и exact route requests реализованы по ADR-0331;
+unsigned release fragment, не исполняя workflow. Четыре provider-owned
+command/result wire contracts и exact route requests реализованы по ADR-0331.
+Transactional workflow outbox, четыре exact event adapter, idempotent
+terminal-result inbox и runtime entry points реализованы по ADR-0332.
+Target-bound Blob worker, provider runtime consumers, client route и live
+admission ещё не реализованы;
 `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст
@@ -124,4 +127,4 @@ business owner.
 До закрытия всех пунктов reconstruction matrix остаётся `planned`.
 
 Exact provider-owned event boundary и отсутствие generic provider facade
-зафиксированы ADR-0331.
+зафиксированы ADR-0331, а transactional workflow event boundary — ADR-0332.

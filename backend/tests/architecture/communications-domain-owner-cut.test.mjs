@@ -58,7 +58,7 @@ test('Communications remains the exact domain owner after Mail integration admis
 
   assert.equal(
     policy.implementation.currentSlice,
-    'provider_delivery_intent_contracts_v1',
+    'delivery_intent_transactional_event_adapters_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications'],
@@ -122,8 +122,12 @@ test('Communications remains the exact domain owner after Mail integration admis
       'hermes-mail-persistence',
       'hermes-mail-runtime',
       'hermes-mail-assembly',
+      'hermes-mail-delivery-intent-contract',
+      'hermes-telegram-delivery-intent-contract',
+      'hermes-whatsapp-delivery-intent-contract',
+      'hermes-zulip-delivery-intent-contract',
     ],
-    'Mail admission must add exactly one integration build-unit family',
+    'Mail admission plus provider delivery contracts must remain exact integration build units',
   );
 
   for (const source of [

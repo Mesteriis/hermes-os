@@ -70,7 +70,10 @@ test('provider delivery intents are four separate integration-owned contract bui
     ),
   );
 
-  assert.equal(policy.implementation.currentSlice, 'provider_delivery_intent_contracts_v1');
+  assert.equal(
+    policy.implementation.currentSlice,
+    'delivery_intent_transactional_event_adapters_v1',
+  );
   assert.equal(
     reconstruction.slices.find(({ gate }) => gate === 'communication_delivery_intent_v1')
       ?.state,
@@ -81,7 +84,7 @@ test('provider delivery intents are four separate integration-owned contract bui
     policy.implementation.productionPackages
       .filter(({ name }) => name.endsWith('-delivery-intent-contract'))
       .map(({ name }) => name),
-    [],
+    providers.map(({ owner }) => `hermes-${owner}-delivery-intent-contract`),
   );
 
   for (const provider of providers) {
@@ -149,8 +152,8 @@ test('provider delivery intents are four separate integration-owned contract bui
   );
 });
 
-test('ADR keeps core owner-neutral and defers admission until real adapters exist', async () => {
-  const [adr, workflowAdr] = await Promise.all([
+test('ADR keeps core owner-neutral while admission waits for provider runtime consumers', async () => {
+  const [adr, workflowAdr, adapterAdr] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0331-provider-owned-delivery-intent-event-contracts.md',
@@ -165,6 +168,13 @@ test('ADR keeps core owner-neutral and defers admission until real adapters exis
       ),
       'utf8',
     ),
+    readFile(
+      new URL(
+        'docs/adr/ADR-0332-delivery-intent-transactional-provider-event-adapters.md',
+        PROJECT_ROOT,
+      ),
+      'utf8',
+    ),
   ]);
 
   assert.match(adr, /четыре самостоятельные единицы сборки/);
@@ -172,4 +182,6 @@ test('ADR keeps core owner-neutral and defers admission until real adapters exis
   assert.match(adr, /Kernel\/Core[\s\S]*не декодирует body/);
   assert.match(adr, /остаётся `planned`/);
   assert.match(workflowAdr, /ADR-0331/);
+  assert.match(workflowAdr, /ADR-0332/);
+  assert.match(adapterAdr, /provider runtime inbox consumers/);
 });

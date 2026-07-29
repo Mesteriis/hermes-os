@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod intents;
+mod provider_events;
 pub mod schema;
 
 use hermes_storage_protocol::StorageBindingV1;
@@ -8,6 +9,10 @@ pub use intents::{
     CreateDeliveryIntentOutcomeV1, CreateDeliveryIntentV1, DeliveryIntentClaimV1,
     DeliveryIntentPersistenceErrorV1, DeliveryIntentStateV1, DeliveryIntentStatusRecordV1,
     SealedDeliveryBodyV1,
+};
+pub use provider_events::{
+    ApplyTerminalDeliveryResultOutcomeV1, EnqueueProviderCommandOutcomeV1,
+    ProviderCommandOutboxEntryV1, TerminalDeliveryResultV1, TerminalDeliveryResultValueV1,
 };
 use sqlx::{
     PgPool,

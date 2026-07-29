@@ -507,3 +507,7 @@ ADR-0331 разделяет outbound delivery на четыре provider-owned e
 build units без общего facade: durable command несёт только opaque cursors и
 target-bound Blob receipt/proof, а terminal results остаются typed и
 provider-owned.
+ADR-0332 добавляет workflow-owned transactional event boundary: четыре exact
+provider command encoder/result decoder adapter, owner-local outbox и
+idempotent terminal-result inbox работают без provider facade, cross-owner
+storage или payload decode в Kernel/Core.

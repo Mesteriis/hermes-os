@@ -53,6 +53,7 @@ members = [
   "src/communication-delivery-intent-persistence",
   "src/communication-delivery-intent-runtime",
   "src/communication-delivery-intent-assembly",
+  "src/communication-delivery-intent-event-adapters",
   "src/mail-delivery-intent-contract",
   "src/telegram-delivery-intent-contract",
   "src/whatsapp-delivery-intent-contract",

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "provider_delivery_intent_contracts_v1",
+    "currentSlice": "delivery_intent_transactional_event_adapters_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -516,6 +516,36 @@
         "role": "workflow",
         "owner": "communication_delivery_intent",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-mail-delivery-intent-contract",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-telegram-delivery-intent-contract",
+        "role": "integration",
+        "owner": "telegram",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-whatsapp-delivery-intent-contract",
+        "role": "integration",
+        "owner": "whatsapp",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-zulip-delivery-intent-contract",
+        "role": "integration",
+        "owner": "zulip",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-delivery-intent-event-adapters",
+        "role": "workflow",
+        "owner": "communication_delivery_intent",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1358,6 +1388,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-storage-protocol",
           "kind": "normal"
         }
@@ -1369,6 +1403,10 @@
         },
         {
           "name": "hermes-communication-delivery-intent-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delivery-intent-event-adapters",
           "kind": "normal"
         },
         {
@@ -1403,6 +1441,56 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-delivery-intent-contract": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-telegram-delivery-intent-contract": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-whatsapp-delivery-intent-contract": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-zulip-delivery-intent-contract": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-delivery-intent-event-adapters": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-delivery-intent-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-telegram-delivery-intent-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-whatsapp-delivery-intent-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-zulip-delivery-intent-contract",
           "kind": "normal"
         }
       ],
@@ -4013,6 +4101,168 @@
           "defaultFeatures": true,
           "features": []
         }
+      ],
+      "hermes-mail-delivery-intent-contract": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-telegram-delivery-intent-contract": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-whatsapp-delivery-intent-contract": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-zulip-delivery-intent-contract": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communication-delivery-intent-event-adapters": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -4367,6 +4617,26 @@
       },
       "hermes-communication-delivery-intent-assembly": {
         "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-mail-delivery-intent-contract": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-telegram-delivery-intent-contract": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-whatsapp-delivery-intent-contract": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-zulip-delivery-intent-contract": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communication-delivery-intent-event-adapters": {
+        "primaryKind": "lib",
         "customBuildAllowed": false
       }
     },

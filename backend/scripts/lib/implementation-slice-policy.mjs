@@ -432,6 +432,40 @@ const COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_PRODUCTION_PACKAGES = [
   },
 ];
 
+const DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-mail-delivery-intent-contract',
+    role: 'integration',
+    owner: 'mail',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-telegram-delivery-intent-contract',
+    role: 'integration',
+    owner: 'telegram',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-whatsapp-delivery-intent-contract',
+    role: 'integration',
+    owner: 'whatsapp',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-zulip-delivery-intent-contract',
+    role: 'integration',
+    owner: 'zulip',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-communication-delivery-intent-event-adapters',
+    role: 'workflow',
+    owner: 'communication_delivery_intent',
+    surface: 'implementation',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -1485,6 +1519,7 @@ const COMMUNICATION_DELIVERY_INTENT_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST =
   ...COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-communication-delivery-intent-persistence': [
     { name: 'hermes-communication-delivery-intent-core', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
 };
@@ -1494,6 +1529,7 @@ const COMMUNICATION_DELIVERY_INTENT_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-communication-delivery-intent-runtime': [
     { name: 'hermes-communication-delivery-intent-api', kind: 'normal' },
     { name: 'hermes-communication-delivery-intent-core', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-event-adapters', kind: 'normal' },
     { name: 'hermes-communication-delivery-intent-persistence', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
@@ -1508,6 +1544,30 @@ const COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-communication-delivery-intent-runtime', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
+const DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-delivery-intent-contract': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-telegram-delivery-intent-contract': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-whatsapp-delivery-intent-contract': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-zulip-delivery-intent-contract': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-communication-delivery-intent-event-adapters': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-mail-delivery-intent-contract', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-telegram-delivery-intent-contract', kind: 'normal' },
+    { name: 'hermes-whatsapp-delivery-intent-contract', kind: 'normal' },
+    { name: 'hermes-zulip-delivery-intent-contract', kind: 'normal' },
   ],
 };
 
@@ -1587,6 +1647,39 @@ const COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = 
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
     { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
+};
+
+const DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-delivery-intent-contract': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-telegram-delivery-intent-contract': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-whatsapp-delivery-intent-contract': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-zulip-delivery-intent-contract': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communication-delivery-intent-event-adapters': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
 };
 
@@ -2022,6 +2115,10 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-evidence-export-source-api',
       'hermes-communications-export-api',
       'hermes-communication-delivery-intent-api',
+      'hermes-mail-delivery-intent-contract',
+      'hermes-telegram-delivery-intent-contract',
+      'hermes-whatsapp-delivery-intent-contract',
+      'hermes-zulip-delivery-intent-contract',
       'hermes-attachment-security-contract',
     ].includes(packageName);
     return hasExactKeys(target, ['primaryKind', 'customBuildAllowed'])
@@ -2289,6 +2386,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'delivery_intent_transactional_event_adapters_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATIONS_EXPORT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

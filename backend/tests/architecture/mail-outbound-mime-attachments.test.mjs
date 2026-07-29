@@ -16,6 +16,13 @@ const MAIL_PACKAGES = [
   'hermes-mail-assembly',
 ];
 
+const PROVIDER_DELIVERY_CONTRACT_PACKAGES = [
+  'hermes-mail-delivery-intent-contract',
+  'hermes-telegram-delivery-intent-contract',
+  'hermes-whatsapp-delivery-intent-contract',
+  'hermes-zulip-delivery-intent-contract',
+];
+
 const MAIL_CAPABILITIES = [
   'mail.attachment-anchor.consume.v1',
   'mail.attachment-blob-admission.publish.v1',
@@ -65,13 +72,13 @@ const MAIL_CARGO_FEATURES = {
   },
 };
 
-test('Mail outbound attachments admit exactly one integration build-unit family', async () => {
+test('Mail outbound attachments keep provider delivery contracts as separate integration units', async () => {
   const policy = JSON.parse(await readFile(POLICY_PATH, 'utf8'));
   const inventory = policy.implementation.ownerInventory;
 
   assert.equal(
     policy.implementation.currentSlice,
-    'provider_delivery_intent_contracts_v1',
+    'delivery_intent_transactional_event_adapters_v1',
   );
   assert.deepEqual(inventory.domains, ['communications']);
   assert.deepEqual(inventory.integrations, ['mail']);
@@ -81,7 +88,7 @@ test('Mail outbound attachments admit exactly one integration build-unit family'
     policy.implementation.productionPackages
       .filter(({ role }) => role === 'integration')
       .map(({ name }) => name),
-    MAIL_PACKAGES,
+    [...MAIL_PACKAGES, ...PROVIDER_DELIVERY_CONTRACT_PACKAGES],
   );
   assert.deepEqual(
     inventory.businessCapabilities.filter((capability) => capability.startsWith('mail.')),

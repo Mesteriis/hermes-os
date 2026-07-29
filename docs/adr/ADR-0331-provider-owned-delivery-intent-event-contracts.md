@@ -6,9 +6,10 @@
 
 Состояние реализации: четыре независимые integration-owned contract build
 units, их generated Protobuf descriptors, schema hashes и exact
-publish/consume route requests реализованы. Workflow publisher adapters,
-provider consumers, target-bound Blob materialization, runtime descriptor
-routes и terminal result persistence ещё не реализованы. Поэтому
+publish/consume route requests реализованы. Четыре workflow publisher/result
+adapter, transactional outbox и idempotent terminal-result inbox реализованы
+по ADR-0332. Provider runtime consumers, target-bound Blob materialization,
+runtime descriptor routes и live delivery ещё не реализованы. Поэтому
 `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст

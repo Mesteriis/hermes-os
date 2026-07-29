@@ -10,10 +10,10 @@ use crate::{
 };
 
 const STATE_ACCEPTED: i16 = 1;
-const STATE_RESOLVING_ROUTE: i16 = 2;
-const STATE_SUBMITTED_TO_PROVIDER: i16 = 3;
-const STATE_PROVIDER_CONFIRMED: i16 = 4;
-const STATE_REJECTED: i16 = 5;
+pub(crate) const STATE_RESOLVING_ROUTE: i16 = 2;
+pub(crate) const STATE_SUBMITTED_TO_PROVIDER: i16 = 3;
+pub(crate) const STATE_PROVIDER_CONFIRMED: i16 = 4;
+pub(crate) const STATE_REJECTED: i16 = 5;
 const MAX_SEALED_BODY_BYTES: usize = 65_584;
 const MIN_SEALED_BODY_BYTES: usize = 17;
 
@@ -45,7 +45,7 @@ pub enum DeliveryIntentStateV1 {
     Rejected,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeliveryIntentStatusRecordV1 {
     pub intent_id: [u8; 16],
     pub state: DeliveryIntentStateV1,
@@ -503,7 +503,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
     }
 }
 
-async fn insert_transition(
+pub(crate) async fn insert_transition(
     transaction: &mut Transaction<'_, Postgres>,
     logical_owner_id: &str,
     intent_id: &[u8; 16],
@@ -551,7 +551,7 @@ fn valid_create(command: &CreateDeliveryIntentV1) -> bool {
         && valid_timestamp(command.created_at_unix_seconds)
 }
 
-fn valid_claim(claim: &DeliveryIntentClaimV1) -> bool {
+pub(crate) fn valid_claim(claim: &DeliveryIntentClaimV1) -> bool {
     valid_bounded_identity(&claim.logical_owner_id)
         && valid_bounded_identity(&claim.worker_id)
         && valid_id16(&claim.intent_id)
@@ -606,7 +606,7 @@ fn claim_from_row(
     })
 }
 
-fn status_from_row(
+pub(crate) fn status_from_row(
     row: &sqlx::postgres::PgRow,
 ) -> Result<DeliveryIntentStatusRecordV1, DeliveryIntentPersistenceErrorV1> {
     let state_code: i16 = row.try_get("state").map_err(row_error)?;
@@ -625,7 +625,7 @@ fn status_from_row(
     })
 }
 
-const fn provider_code(provider: CommunicationProviderProvenanceV1) -> i16 {
+pub(crate) const fn provider_code(provider: CommunicationProviderProvenanceV1) -> i16 {
     match provider {
         CommunicationProviderProvenanceV1::MailImap => 1,
         CommunicationProviderProvenanceV1::Telegram => 2,
