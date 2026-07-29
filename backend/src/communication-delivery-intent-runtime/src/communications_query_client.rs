@@ -146,6 +146,7 @@ impl ManagedCommunicationsQueryClientV1<'_> {
             self.dispatcher,
         )?;
         if !response.error_code.is_empty() {
+            developer_log_route_error(&response.error_code);
             return Err(CommunicationsQueryClientErrorV1::Unavailable);
         }
         let Some(managed_runtime_control_response_v1::Result::ModuleQueryRoute(response)) =
@@ -154,6 +155,12 @@ impl ManagedCommunicationsQueryClientV1<'_> {
             return Err(CommunicationsQueryClientErrorV1::Protocol);
         };
         decode_response(request_id, response)
+    }
+}
+
+fn developer_log_route_error(error_code: &str) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_delivery_intent_query_route_error={error_code}");
     }
 }
 

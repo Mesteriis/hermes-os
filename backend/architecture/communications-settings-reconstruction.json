@@ -468,14 +468,14 @@
       "gate": "capability_routed_managed_client_realtime_v1",
       "role": "platform",
       "owner": "kernel_capability_router",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["client_gateway_v1", "module_control_plane_v1"]
     },
     {
       "gate": "communication_delivery_intent_v1",
       "role": "workflow",
       "owner": "communication_delivery_intent",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "capability_routed_module_query_rpc_v1",
         "capability_routed_managed_client_realtime_v1",

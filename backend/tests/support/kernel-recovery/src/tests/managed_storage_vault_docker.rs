@@ -83,6 +83,11 @@ use communications_export_race::*;
 #[path = "managed_storage_vault_docker/communications_backup.rs"]
 mod communications_backup;
 use communications_backup::*;
+#[path = "managed_storage_vault_docker/delivery_intent_managed_setup.rs"]
+mod delivery_intent_managed_setup;
+use delivery_intent_managed_setup::*;
+#[path = "managed_storage_vault_docker/delivery_intent_realtime_flow.rs"]
+mod delivery_intent_realtime_flow;
 #[path = "managed_storage_vault_docker/telegram_event_flow.rs"]
 mod telegram_event_flow;
 use telegram_event_flow::*;

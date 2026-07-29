@@ -132,10 +132,15 @@ pub(crate) fn module_query_response(
             result: None,
             error_code: "managed_module_query_invalid_response".to_owned(),
         },
-        Err(error) => ManagedRuntimeControlResponseV1 {
-            result: None,
-            error_code: module_query_error_code(&error).to_owned(),
-        },
+        Err(error) => {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_managed_module_query_error={error}");
+            }
+            ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: module_query_error_code(&error).to_owned(),
+            }
+        }
     }
 }
 

@@ -78,13 +78,7 @@ impl InMemoryBrowserRealtimeSource {
             .owners
             .lock()
             .map_err(|_| "Gateway realtime state is unavailable".to_owned())?;
-        owners.entry(owner_id.clone()).or_insert_with(|| {
-            let (live, _) = broadcast::channel(self.history_limit);
-            OwnerRealtimeState {
-                history: VecDeque::with_capacity(self.history_limit),
-                live,
-            }
-        });
+        ensure_owner_state(&mut owners, &owner_id, self.history_limit);
         Ok(BrowserRealtimePublisherV1 {
             owner_id,
             source: self.clone(),
@@ -146,13 +140,14 @@ impl InMemoryBrowserRealtimeSource {
         owner_id: &str,
         after_cursor: Option<&str>,
     ) -> Result<ClientRealtimeSubscriptionV1, String> {
-        let owners = self
+        let mut owners = self
             .owners
             .lock()
             .map_err(|_| "Gateway realtime state is unavailable".to_owned())?;
+        ensure_owner_state(&mut owners, owner_id, self.history_limit);
         let state = owners
             .get(owner_id)
-            .ok_or_else(|| "client realtime owner is not admitted".to_owned())?;
+            .ok_or_else(|| "client realtime owner is unavailable".to_owned())?;
         let live = state.live.subscribe();
         let latest_cursor = state
             .history
@@ -160,10 +155,15 @@ impl InMemoryBrowserRealtimeSource {
             .and_then(frame_cursor)
             .unwrap_or_default();
         let replay = match after_cursor {
-            None => vec![stream_state(
-                ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindOpen,
-                latest_cursor,
-            )],
+            None => {
+                let mut replay = Vec::with_capacity(state.history.len() + 1);
+                replay.extend(state.history.iter().cloned());
+                replay.push(stream_state(
+                    ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindOpen,
+                    latest_cursor,
+                ));
+                replay
+            }
             Some(cursor) => {
                 let Some(position) = state
                     .history
@@ -203,6 +203,20 @@ impl InMemoryBrowserRealtimeSource {
         };
         ClientRealtimeSubscriptionV1::new(replay, live)
     }
+}
+
+fn ensure_owner_state(
+    owners: &mut BTreeMap<String, OwnerRealtimeState>,
+    owner_id: &str,
+    history_limit: usize,
+) {
+    owners.entry(owner_id.to_owned()).or_insert_with(|| {
+        let (live, _) = broadcast::channel(history_limit);
+        OwnerRealtimeState {
+            history: VecDeque::with_capacity(history_limit),
+            live,
+        }
+    });
 }
 
 impl BrowserRealtimePublisherV1 {
@@ -416,6 +430,30 @@ fn frame_cursor(frame: &ClientRealtimeFrameV1) -> Option<&str> {
     }
 }
 
+fn valid_cursor(cursor: &str) -> bool {
+    !cursor.is_empty()
+        && cursor.len() <= MAX_CURSOR_BYTES
+        && cursor
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic() && byte != b'\\' && byte != b'\"')
+}
+
+fn valid_owner_id(owner_id: &str) -> bool {
+    !owner_id.is_empty()
+        && owner_id.len() <= 96
+        && owner_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+fn response(status: StatusCode, body: &'static str) -> GatewayHttpResponse {
+    Response::builder()
+        .status(status)
+        .header(CACHE_CONTROL, "no-store")
+        .body(full_gateway_body(body))
+        .expect("Gateway realtime response is valid")
+}
+
 #[cfg(test)]
 mod tests {
     use hermes_gateway_protocol::v1::ClientRealtimeEventV1;
@@ -471,18 +509,37 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_owner_can_subscribe_before_the_first_publication() {
+        let source = InMemoryBrowserRealtimeSource::new(2).expect("source");
+        let session = test_session();
+        let (replay, mut live) = source
+            .subscribe(&session, None)
+            .expect("empty owner stream")
+            .into_parts();
+        assert!(matches!(
+            replay.as_slice(),
+            [ClientRealtimeFrameV1 {
+                frame: Some(Frame::StreamState(state)),
+            }] if state.state
+                == ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindOpen as i32
+        ));
+
+        source
+            .admit_owner("owner-1")
+            .expect("publisher")
+            .publish(event("cursor/1", 1))
+            .expect("first publication");
+        assert!(matches!(
+            live.try_recv().expect("live event").frame,
+            Some(Frame::Event(event)) if event.cursor == "cursor/1"
+        ));
+    }
+
+    #[test]
     fn exact_duplicates_replay_live_delivery_and_bounded_gap_are_deterministic() {
         let source = InMemoryBrowserRealtimeSource::new(2).expect("source");
         let publisher = source.admit_owner("owner-1").expect("publisher");
-        let session = BrowserGatewaySessionService::new_loopback_development(
-            TestBrowserAuthority,
-            "http://127.0.0.1:5173",
-            "owner-1",
-            "device-1",
-        )
-        .expect("service")
-        .authorize_request(None)
-        .expect("session");
+        let session = test_session();
         let first = event("cursor/1", 1);
         publisher.publish(first.clone()).expect("first");
         publisher.publish(first).expect("exact duplicate");
@@ -491,6 +548,20 @@ mod tests {
             "same cursor with different bytes must fail closed"
         );
         publisher.publish(event("cursor/2", 2)).expect("second");
+
+        let (initial_replay, _) = source
+            .subscribe(&session, None)
+            .expect("initial bounded replay")
+            .into_parts();
+        assert_eq!(initial_replay.len(), 3);
+        assert!(matches!(
+            initial_replay[0].frame.as_ref(),
+            Some(Frame::Event(event)) if event.cursor == "cursor/1"
+        ));
+        assert!(matches!(
+            initial_replay[1].frame.as_ref(),
+            Some(Frame::Event(event)) if event.cursor == "cursor/2"
+        ));
 
         let (replay, _) = source
             .subscribe(&session, Some("cursor/1"))
@@ -525,6 +596,18 @@ mod tests {
         ));
     }
 
+    fn test_session() -> BrowserSession {
+        BrowserGatewaySessionService::new_loopback_development(
+            TestBrowserAuthority,
+            "http://127.0.0.1:5173",
+            "owner-1",
+            "device-1",
+        )
+        .expect("service")
+        .authorize_request(None)
+        .expect("session")
+    }
+
     fn event(cursor: &str, revision: u8) -> ClientRealtimeFrameV1 {
         ClientRealtimeFrameV1 {
             frame: Some(Frame::Event(ClientRealtimeEventV1 {
@@ -541,28 +624,4 @@ mod tests {
             })),
         }
     }
-}
-
-fn valid_cursor(cursor: &str) -> bool {
-    !cursor.is_empty()
-        && cursor.len() <= MAX_CURSOR_BYTES
-        && cursor
-            .bytes()
-            .all(|byte| byte.is_ascii_graphic() && byte != b'\\' && byte != b'\"')
-}
-
-fn valid_owner_id(owner_id: &str) -> bool {
-    !owner_id.is_empty()
-        && owner_id.len() <= 96
-        && owner_id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
-}
-
-fn response(status: StatusCode, body: &'static str) -> GatewayHttpResponse {
-    Response::builder()
-        .status(status)
-        .header(CACHE_CONTROL, "no-store")
-        .body(full_gateway_body(body))
-        .expect("Gateway realtime response is valid")
 }

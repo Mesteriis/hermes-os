@@ -8,6 +8,9 @@ import "hermes/runtime/v1/managed_storage_runtime.proto";
 // integration configuration, host bridge, provider state or domain identity.
 message ManagedWorkflowRuntimeConfigurationV1 {
   uint32 major = 1;
+  // Logical human owner authenticated by Kernel owner control. This is the
+  // workflow business/realtime scope, not the module registration or Storage
+  // owner namespace.
   string logical_owner_id = 2;
   string registration_id = 3;
   string runtime_instance_id = 4;

@@ -461,10 +461,10 @@ fn start_reserved_workflow_runtime(
     request: StartReservedWorkflowRuntimeRequestV1,
 ) -> Result<OwnerResult, String> {
     (|| {
-        sessions.authorize(store, &request.owner_session_id)?;
+        let logical_owner = sessions.authorized_owner(store, &request.owner_session_id)?;
         let reservation =
             macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
-        let registration = store
+        let _registration = store
             .module_registration(&request.registration_id)
             .map_err(|_| "managed workflow registration is unavailable".to_owned())?
             .ok_or_else(|| "managed workflow registration is unavailable".to_owned())?;
@@ -488,7 +488,7 @@ fn start_reserved_workflow_runtime(
             .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
         let configuration = ManagedWorkflowRuntimeConfigurationV1 {
             major: 1,
-            logical_owner_id: registration.owner_id().to_owned(),
+            logical_owner_id: logical_owner.owner_id().to_owned(),
             registration_id: request.registration_id.clone(),
             runtime_instance_id: reservation.runtime_instance_id().to_owned(),
             runtime_generation: reservation.runtime_generation(),

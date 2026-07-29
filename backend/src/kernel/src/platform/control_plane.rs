@@ -227,16 +227,16 @@ fn start_workers(
         runtime_dir,
         managed_runtime_supervisor.clone(),
     ));
-    workers.extend(browser_gateway_worker(
-        &completed,
-        &shutdown_requested,
-        &store,
+    workers.extend(browser_gateway_worker(BrowserGatewayWorkerInputV1 {
+        completed: completed.clone(),
+        shutdown_requested: Arc::clone(&shutdown_requested),
+        store,
         data_dir,
-        managed_runtime_supervisor,
+        supervisor: managed_runtime_supervisor,
         client_realtime,
-        browser_gateway,
-        browser_pairing,
-    ));
+        configuration: browser_gateway,
+        pairing: browser_pairing,
+    }));
     (workers, receiver)
 }
 
@@ -298,26 +298,37 @@ fn start_scheduler_worker(
     )
 }
 
-fn browser_gateway_worker(
-    completed: &mpsc::Sender<WorkerCompletionV1>,
-    shutdown_requested: &Arc<AtomicBool>,
-    store: &Arc<SqliteControlStore>,
+struct BrowserGatewayWorkerInputV1 {
+    completed: mpsc::Sender<WorkerCompletionV1>,
+    shutdown_requested: Arc<AtomicBool>,
+    store: Arc<SqliteControlStore>,
     data_dir: std::path::PathBuf,
     supervisor: ManagedRuntimeSupervisor,
     client_realtime: InMemoryBrowserRealtimeSource,
-    browser_gateway: Option<BrowserGatewayConfigurationV1>,
-    browser_pairing: Option<Arc<BrowserPairingAdmissionV1>>,
+    configuration: Option<BrowserGatewayConfigurationV1>,
+    pairing: Option<Arc<BrowserPairingAdmissionV1>>,
+}
+
+fn browser_gateway_worker(
+    input: BrowserGatewayWorkerInputV1,
 ) -> Option<std::thread::JoinHandle<()>> {
-    let configuration = browser_gateway?;
-    Some(start_browser_gateway_worker(
-        completed.clone(),
-        shutdown_requested,
-        Arc::clone(store),
-        data_dir,
-        supervisor,
-        client_realtime,
-        configuration,
-        browser_pairing,
+    let configuration = input.configuration?;
+    Some(spawn_worker(
+        input.completed,
+        WorkerClassV1::Restartable,
+        "browser_gateway",
+        input.shutdown_requested,
+        move |shutdown| {
+            gateway::serve(
+                Arc::clone(&input.store),
+                input.data_dir.clone(),
+                input.supervisor.clone(),
+                input.client_realtime.clone(),
+                configuration.clone(),
+                input.pairing.clone(),
+                shutdown,
+            )
+        },
     ))
 }
 
@@ -353,35 +364,6 @@ fn start_recovery_worker(
                 &runtime_dir,
                 &store_path,
                 Some(Arc::clone(&store)),
-                shutdown,
-            )
-        },
-    )
-}
-
-fn start_browser_gateway_worker(
-    completed: mpsc::Sender<WorkerCompletionV1>,
-    shutdown_requested: &Arc<AtomicBool>,
-    store: Arc<SqliteControlStore>,
-    data_dir: std::path::PathBuf,
-    supervisor: ManagedRuntimeSupervisor,
-    client_realtime: InMemoryBrowserRealtimeSource,
-    configuration: BrowserGatewayConfigurationV1,
-    pairing: Option<Arc<BrowserPairingAdmissionV1>>,
-) -> std::thread::JoinHandle<()> {
-    spawn_worker(
-        completed,
-        WorkerClassV1::Restartable,
-        "browser_gateway",
-        Arc::clone(shutdown_requested),
-        move |shutdown| {
-            gateway::serve(
-                Arc::clone(&store),
-                data_dir.clone(),
-                supervisor.clone(),
-                client_realtime.clone(),
-                configuration.clone(),
-                pairing.clone(),
                 shutdown,
             )
         },

@@ -24,5 +24,8 @@ message ManagedStorageRuntimeConfigurationV1 {
   uint64 vault_runtime_generation = 16;
   bytes vault_hpke_public_key_x25519 = 17;
   string runtime_instance_id = 18;
+  // Storage owner namespace copied from the admitted binding identity. A
+  // workflow may serve a distinct logical human owner without changing its
+  // module-owned database namespace.
   string logical_owner_id = 19;
 }

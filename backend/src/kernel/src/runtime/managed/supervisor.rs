@@ -249,14 +249,7 @@ fn dispatch_correlated_relay(
     let response = (|| {
         let request = ManagedRuntimeControlRequestV1::decode(payload.as_slice())
             .map_err(|_| "managed runtime V2 relay request is invalid".to_owned())?;
-        if !matches!(
-            request.operation,
-            Some(
-                hermes_runtime_protocol::v1::managed_runtime_control_request_v1::Operation::ClientDelivery(_)
-            )
-        ) {
-            return Err("managed runtime V2 relay is not an owner client delivery".to_owned());
-        }
+        let response_kind = CorrelatedRelayResponseKindV1::from_request(&request)?;
         channel
             .inner_mut()
             .set_nonblocking(false)
@@ -273,11 +266,41 @@ fn dispatch_correlated_relay(
         restore?;
         let response =
             response.map_err(|_| "managed runtime V2 relay response is invalid".to_owned())?;
-        matches!(response.result, Some(ControlResult::ClientDelivery(_)))
+        response_kind
+            .matches(&response)
             .then_some(response.encode_to_vec())
-            .ok_or_else(|| "managed runtime V2 client delivery response is invalid".to_owned())
+            .ok_or_else(|| "managed runtime V2 relay response kind is invalid".to_owned())
     })();
     let _ = response_sender.send(response);
+}
+
+#[derive(Clone, Copy)]
+enum CorrelatedRelayResponseKindV1 {
+    ClientDelivery,
+    ModuleQueryDelivery,
+}
+
+impl CorrelatedRelayResponseKindV1 {
+    fn from_request(request: &ManagedRuntimeControlRequestV1) -> Result<Self, String> {
+        use hermes_runtime_protocol::v1::managed_runtime_control_request_v1::Operation;
+
+        match request.operation.as_ref() {
+            Some(Operation::ClientDelivery(_)) => Ok(Self::ClientDelivery),
+            Some(Operation::DeliverModuleQuery(_)) => Ok(Self::ModuleQueryDelivery),
+            _ => Err("managed runtime V2 relay operation is prohibited".to_owned()),
+        }
+    }
+
+    fn matches(self, response: &ManagedRuntimeControlResponseV1) -> bool {
+        matches!(
+            (self, response.result.as_ref()),
+            (Self::ClientDelivery, Some(ControlResult::ClientDelivery(_)))
+                | (
+                    Self::ModuleQueryDelivery,
+                    Some(ControlResult::ModuleQueryDelivery(_))
+                )
+        )
+    }
 }
 
 fn dispatch_v2_typed_request(

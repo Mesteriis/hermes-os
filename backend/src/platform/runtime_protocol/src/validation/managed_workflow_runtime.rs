@@ -23,7 +23,6 @@ pub fn validate_managed_workflow_runtime_configuration(
         || configuration.grant_epoch == 0
         || !valid_event_hub_endpoint(&configuration.event_hub_endpoint)
         || configuration.event_credential_revision == 0
-        || storage.logical_owner_id != configuration.logical_owner_id
         || storage.runtime_instance_id != configuration.runtime_instance_id
         || !valid_storage_configuration(storage)
     {
@@ -41,6 +40,8 @@ fn valid_storage_configuration(storage: &crate::v1::ManagedStorageRuntimeConfigu
         && storage.credential_revision != 0
         && valid_identifier(&storage.storage_instance_id)
         && valid_identifier(&storage.owner)
+        && valid_identifier(&storage.logical_owner_id)
+        && storage.logical_owner_id == storage.owner
         && storage.role_epoch != 0
         && valid_identifier(&storage.pool_alias)
         && storage.max_connections != 0
@@ -77,7 +78,7 @@ mod tests {
     fn configuration() -> ManagedWorkflowRuntimeConfigurationV1 {
         ManagedWorkflowRuntimeConfigurationV1 {
             major: 1,
-            logical_owner_id: "communications_export".to_owned(),
+            logical_owner_id: "owner-1".to_owned(),
             registration_id: "communications-export-runtime".to_owned(),
             runtime_instance_id: "runtime-1".to_owned(),
             runtime_generation: 1,
@@ -109,10 +110,24 @@ mod tests {
     }
 
     #[test]
-    fn accepts_exact_workflow_runtime_fences() {
+    fn accepts_distinct_human_and_storage_owner_scopes() {
         assert_eq!(
             validate_managed_workflow_runtime_configuration(&configuration()),
             Ok(())
+        );
+    }
+
+    #[test]
+    fn rejects_storage_namespace_that_differs_from_binding_owner() {
+        let mut configuration = configuration();
+        configuration
+            .storage
+            .as_mut()
+            .expect("storage configuration")
+            .logical_owner_id = "another_workflow".to_owned();
+        assert_eq!(
+            validate_managed_workflow_runtime_configuration(&configuration),
+            Err(ManagedWorkflowRuntimeValidationErrorV1::InvalidConfiguration)
         );
     }
 

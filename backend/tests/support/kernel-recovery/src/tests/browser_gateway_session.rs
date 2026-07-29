@@ -189,6 +189,14 @@ pub(super) fn authenticate_gateway_router(
     router: &GatewayApplicationRouter<ControlStoreBrowserAuthority, InMemoryBrowserRealtimeSource>,
     runtime: &tokio::runtime::Runtime,
 ) -> String {
+    authenticate_gateway_router_with_sign_count(router, runtime, 1)
+}
+
+pub(super) fn authenticate_gateway_router_with_sign_count(
+    router: &GatewayApplicationRouter<ControlStoreBrowserAuthority, InMemoryBrowserRealtimeSource>,
+    runtime: &tokio::runtime::Runtime,
+    sign_count: u32,
+) -> String {
     let begin = runtime.block_on(router.route(begin_authentication_request("https://hub.local")));
     assert_eq!(begin.status(), StatusCode::OK);
     let begin_body = runtime
@@ -207,7 +215,7 @@ pub(super) fn authenticate_gateway_router(
         .expect("browser key challenge");
     let response = runtime.block_on(router.route(finish_authentication_request(
         authentication_id,
-        &signed_browser_assertion(challenge, 1),
+        &signed_browser_assertion(challenge, sign_count),
         browser_key_challenge,
     )));
     assert_eq!(response.status(), StatusCode::OK);

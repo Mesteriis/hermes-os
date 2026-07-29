@@ -25,9 +25,11 @@ runtime сам получает provider provenance и opaque route cursors у
 Communications. Workflow входит в managed development assembly как отдельная
 `Workflow` unit. Exact client-safe status event, owner-local monotonic replay
 ledger, managed publication adapter, Gateway replay semantics и Kernel fences
-реализованы по ADR-0337; полный live managed runtime -> Gateway -> SSE
-restart-прогон ещё не выполнен, поэтому `communication_delivery_intent_v1`
-остаётся `planned`.
+реализованы по ADR-0337. Live disposable managed contour проходит generated
+Gateway command, public Communications query, owner-local persistence,
+client-safe SSE и восстановление exact cursor после смены runtime и Storage
+generation без утечки body или cross-owner storage access.
+`communication_delivery_intent_v1` реализован.
 
 ## Контекст
 
@@ -134,7 +136,8 @@ business owner.
 5. outage replay, duplicate suppression и terminal provider evidence tests;
 6. live managed proof без content leakage и cross-owner storage access.
 
-До закрытия всех пунктов reconstruction matrix остаётся `planned`.
+Все пункты gate закрыты; reconstruction matrix помечает slice как
+`implemented`.
 
 Exact provider-owned event boundary и отсутствие generic provider facade
 зафиксированы ADR-0331, а transactional workflow event boundary — ADR-0332.

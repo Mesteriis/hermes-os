@@ -80,7 +80,7 @@ test('provider delivery intents are four separate integration-owned contract bui
   assert.equal(
     reconstruction.slices.find(({ gate }) => gate === 'communication_delivery_intent_v1')
       ?.state,
-    'planned',
+    'implemented',
   );
   assert.deepEqual(policy.implementation.ownerInventory.integrations, ['mail']);
   assert.deepEqual(

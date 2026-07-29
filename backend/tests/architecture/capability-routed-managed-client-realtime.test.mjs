@@ -19,6 +19,7 @@ test('managed client realtime keeps transport owner neutral and replay owner loc
     ownerAdapter,
     gatewayRealtime,
     kernelRealtimeConformance,
+    managedRealtimeLive,
     developmentAssembly,
     materializeDevelopmentRelease,
   ] = await Promise.all([
@@ -101,6 +102,13 @@ test('managed client realtime keeps transport owner neutral and replay owner loc
       'utf8',
     ),
     readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/delivery_intent_realtime_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
       new URL('development/assembly/src/main.rs', BACKEND_ROOT),
       'utf8',
     ),
@@ -124,10 +132,10 @@ test('managed client realtime keeps transport owner neutral and replay owner loc
     gate: 'capability_routed_managed_client_realtime_v1',
     role: 'platform',
     owner: 'kernel_capability_router',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['client_gateway_v1', 'module_control_plane_v1'],
   });
-  assert.equal(deliveryGate?.state, 'planned');
+  assert.equal(deliveryGate?.state, 'implemented');
   assert.ok(
     deliveryGate?.dependsOn.includes(
       'capability_routed_managed_client_realtime_v1',
@@ -156,6 +164,12 @@ test('managed client realtime keeps transport owner neutral and replay owner loc
     /managed_realtime_publication_is_exact_owner_fenced_and_idempotent/,
   );
   assert.match(kernelRealtimeConformance, /revoked publisher must fail closed/);
+  assert.match(
+    managedRealtimeLive,
+    /managed_delivery_intent_reaches_gateway_sse_and_replays_after_restart/,
+  );
+  assert.match(managedRealtimeLive, /private_body/);
+  assert.match(managedRealtimeLive, /replayed\.cursor, cursor/);
   assert.match(
     developmentAssembly,
     /runtime_artifact_id: COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT,[\s\S]*?runtime_kind: ModuleRuntimeKindV1::Workflow/,

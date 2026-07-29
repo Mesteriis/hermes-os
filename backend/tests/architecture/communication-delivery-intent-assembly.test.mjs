@@ -148,7 +148,7 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
       'hermes-communication-delivery-intent-event-adapters:implementation',
     ],
   );
-  assert.equal(deliverySlice?.state, 'planned');
+  assert.equal(deliverySlice?.state, 'implemented');
   assert.equal(exportSlice?.state, 'implemented');
   assert.match(apiManifest, /role = "workflow"[\s\S]*surface = "contract"/);
   assert.match(coreManifest, /role = "workflow"[\s\S]*surface = "implementation"/);
@@ -216,5 +216,6 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
   assert.match(adr, /Kernel[\s\S]*не декодирует request body/);
   assert.match(adr, /Persistence unit не принимает `PlannedDeliveryIntentV1`/);
   assert.match(adr, /command и status ClientRpc closure реализованы/);
-  assert.match(adr, /остаётся `planned`/);
+  assert.match(adr, /Live disposable managed contour/);
+  assert.match(adr, /`communication_delivery_intent_v1` реализован/);
 });

@@ -11,9 +11,11 @@ adapter `communication_delivery_intent` реализованы. Owner adapter а
 восстанавливает bounded replay window и после запуска публикует новые записи.
 Workflow включён в managed development assembly как отдельная `Workflow` unit.
 Детерминированные Gateway replay/live/duplicate/gap semantics и Kernel
-owner/runtime/grant/revoke fences покрыты conformance tests. Полный live
-managed runtime -> Gateway -> SSE restart-прогон ещё не выполнен, поэтому phase
-gate остаётся `planned`.
+owner/runtime/grant/revoke fences покрыты conformance tests. Live disposable
+managed contour доказывает generated Gateway command -> capability-routed
+Communications query -> owner-local durable transition -> shared SSE, отсутствие
+private body в client frame и восстановление exact stable cursor после смены
+managed runtime и Storage generation. Phase gate реализован.
 
 Уточняет:
 
@@ -78,8 +80,10 @@ exact capability granted и descriptor предоставляет exact
 fences; owner payload остаётся opaque. Module id, registration, generation,
 grant epoch, NATS metadata и provider cursor клиенту не выдаются.
 
-Gateway realtime source динамически допускает logical owner только после
-успешной Kernel authorization. Повтор exact cursor + exact bytes идемпотентен;
+Аутентифицированная Gateway session может открыть пустой owner stream до первой
+публикации. Publisher для этого owner допускается только после успешной Kernel
+authorization. Первичная подписка получает bounded cache snapshot, затем
+`open` и live fan-out. Повтор exact cursor + exact bytes идемпотентен;
 тот же cursor с другими bytes fail closed. Revoke закрывает owner stream и
 следующая publication требует current grant/runtime binding.
 
@@ -113,7 +117,7 @@ event envelope отсутствуют.
 - duplicate delivery дедуплицируется по stable cursor/event id;
 - публикация не является canonical business event и не заменяет provider
   result/outbox contracts ADR-0332;
-- отсутствие admitted publisher оставляет SSE fail closed.
+- неаутентифицированный owner не может открыть SSE или создать publisher state.
 
 ## Units и SRP
 
@@ -154,8 +158,8 @@ Gate считается реализованным только когда до�
 8. one Gateway SSE stream without owner-specific Kernel/Gateway imports;
 9. architecture, SRP, Cargo, Clippy and managed live conformance.
 
-`communication_delivery_intent_v1` остаётся `planned`, пока его exact event
-contract, durable ledger adapter и live Gateway proof не пройдут этот gate.
+`communication_delivery_intent` проходит этот gate: exact event contract,
+durable ledger adapter и live Gateway restart proof реализованы.
 
 ## Отклонённые варианты
 

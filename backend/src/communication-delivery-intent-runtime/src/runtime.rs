@@ -138,7 +138,7 @@ impl DeliveryIntentManagedRuntimeV1 {
         let mut control_channel = leases.into_route_port().into_channel();
         let event_access = request_managed_runtime_event_access_v2(
             &mut control_channel,
-            &admission.logical_owner_id,
+            &storage_configuration.logical_owner_id,
             &admission.registration_id,
             &admission.runtime_instance_id,
             admission.runtime_generation,

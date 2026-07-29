@@ -38,6 +38,9 @@ hermes-communications-export-persistence = { path = "../../../src/communications
 hermes-communications-export-runtime = { path = "../../../src/communications-export-runtime" }
 hermes-communications-saved-query-api = { path = "../../../src/communications-saved-query-api" }
 hermes-communications-sender-insights-api = { path = "../../../src/communications-sender-insights-api" }
+hermes-communication-delivery-intent-api = { path = "../../../src/communication-delivery-intent-api" }
+hermes-communication-delivery-intent-persistence = { path = "../../../src/communication-delivery-intent-persistence" }
+hermes-communication-delivery-intent-runtime = { path = "../../../src/communication-delivery-intent-runtime" }
 hermes-mail-api = { path = "../../../src/mail-api" }
 hermes-mail-core = { path = "../../../src/mail-core" }
 hermes-mail-gmail = { path = "../../../src/mail-gmail", features = ["conformance-test-support"] }
