@@ -19,7 +19,8 @@ use hermes_runtime_protocol::{
     },
 };
 use hermes_scheduler_jetstream::{
-    SchedulerJetStreamDispatchPortV1, SchedulerJetStreamReceiptPortV1, request_runtime_credential,
+    SchedulerJetStreamDispatchPortV1, SchedulerJetStreamReceiptPortV1,
+    SchedulerJetStreamScheduleControlPortV1, request_runtime_credential,
 };
 use hermes_scheduler_persistence::{
     SchedulerDispatchAdmissionV1, SchedulerMaterializationSourceV1, SchedulerPostgresEndpointV1,
@@ -31,6 +32,7 @@ use prost::Message;
 use super::{
     framing::{read_frame, write_frame},
     handshake::{SchedulerRuntimeIdentity, authenticate},
+    schedule_control::SchedulerScheduleControlWorkerConfigV1,
     schedules,
     vault_route::InheritedSchedulerVaultRouteV1,
     workers::{SchedulerWorkerLaunchInputV1, launch_workers},
@@ -57,11 +59,22 @@ pub(crate) fn serve_inherited(
         &configuration,
     ))?;
     let control_store = dependencies.store.clone();
+    let runtime_instance_id = runtime_instance_id(&configuration.runtime_instance_id)?;
+    let schedule_control_configuration = SchedulerScheduleControlWorkerConfigV1::from_runtime(
+        identity.registration_id(),
+        runtime_instance_id,
+        identity.runtime_generation(),
+        configuration.schedule_control.as_ref(),
+        &configuration.schedule_control_grants,
+    )?;
     let failures = launch_workers(SchedulerWorkerLaunchInputV1 {
         runtime: &runtime,
         store: dependencies.store,
         dispatch: dependencies.dispatch,
         ports: dependencies.ports,
+        schedule_control: dependencies
+            .schedule_control
+            .zip(schedule_control_configuration),
         dispatch_batch_limit: configuration.dispatch_batch_limit,
         reconcile_interval_millis: configuration.reconcile_interval_millis,
         source: materialization_source(&identity, &configuration)?,
@@ -82,6 +95,7 @@ struct SchedulerDependenciesV1 {
     store: SchedulerPostgresStoreV1,
     dispatch: SchedulerJetStreamDispatchPortV1,
     ports: Vec<SchedulerJetStreamReceiptPortV1>,
+    schedule_control: Option<SchedulerJetStreamScheduleControlPortV1>,
 }
 
 async fn connect_dependencies(
@@ -92,11 +106,41 @@ async fn connect_dependencies(
     let store = connect_storage(channel, identity, configuration).await?;
     let dispatch = connect_dispatch_port(channel, identity, configuration).await?;
     let ports = connect_receipt_ports(channel, identity, configuration).await?;
+    let schedule_control = connect_schedule_control_port(channel, identity, configuration).await?;
     Ok(SchedulerDependenciesV1 {
         store,
         dispatch,
         ports,
+        schedule_control,
     })
+}
+
+async fn connect_schedule_control_port(
+    channel: &mut UnixStream,
+    identity: &SchedulerRuntimeIdentity,
+    configuration: &SchedulerRuntimeConfigurationV1,
+) -> Result<Option<SchedulerJetStreamScheduleControlPortV1>, String> {
+    let Some(binding) = configuration.schedule_control.as_ref() else {
+        return Ok(None);
+    };
+    let credential = request_runtime_credential(
+        channel,
+        &configuration.logical_owner_id,
+        identity.registration_id(),
+        &configuration.runtime_instance_id,
+        identity.runtime_generation(),
+        identity.grant_epoch(),
+        configuration.event_credential_revision,
+    )
+    .map_err(|_| "Scheduler Event credential is unavailable".to_owned())?;
+    SchedulerJetStreamScheduleControlPortV1::connect(
+        &configuration.nats_endpoint,
+        credential,
+        binding,
+    )
+    .await
+    .map(Some)
+    .map_err(|_| "Scheduler schedule-control transport is unavailable".to_owned())
 }
 
 async fn connect_storage(
@@ -212,8 +256,17 @@ fn materialization_source(
     identity: &SchedulerRuntimeIdentity,
     configuration: &SchedulerRuntimeConfigurationV1,
 ) -> Result<SchedulerMaterializationSourceV1, String> {
-    let instance_id = configuration
-        .runtime_instance_id
+    let instance_id = runtime_instance_id(&configuration.runtime_instance_id)?;
+    SchedulerMaterializationSourceV1::new(
+        identity.registration_id().to_owned(),
+        instance_id,
+        identity.runtime_generation(),
+    )
+    .map_err(|_| "Scheduler runtime identity is invalid".to_owned())
+}
+
+fn runtime_instance_id(value: &str) -> Result<[u8; 16], String> {
+    value
         .as_bytes()
         .chunks_exact(2)
         .map(|pair| {
@@ -223,13 +276,7 @@ fn materialization_source(
         })
         .collect::<Option<Vec<_>>>()
         .and_then(|bytes| bytes.try_into().ok())
-        .ok_or_else(|| "Scheduler runtime instance identity is invalid".to_owned())?;
-    SchedulerMaterializationSourceV1::new(
-        identity.registration_id().to_owned(),
-        instance_id,
-        identity.runtime_generation(),
-    )
-    .map_err(|_| "Scheduler runtime identity is invalid".to_owned())
+        .ok_or_else(|| "Scheduler runtime instance identity is invalid".to_owned())
 }
 
 fn dispatch_admission(

@@ -2,6 +2,7 @@
 
 mod admission;
 mod one_shot;
+mod result;
 
 pub use admission::{
     SchedulerAdmittedScheduleControlV1, SchedulerScheduleControlAdmissionErrorV1,
@@ -11,4 +12,7 @@ pub use admission::{
 pub use one_shot::{
     SchedulerApprovedJobV1, SchedulerOneShotScheduleErrorV1, SchedulerOneShotScheduleV1,
     map_approved_one_shot_schedule_v1,
+};
+pub use result::{
+    SchedulerScheduleControlResultBuildErrorV1, build_schedule_control_result_envelope_v1,
 };

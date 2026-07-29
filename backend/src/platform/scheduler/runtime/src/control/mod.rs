@@ -4,6 +4,7 @@ mod clock;
 mod framing;
 mod handshake;
 mod runtime;
+mod schedule_control;
 mod schedules;
 mod vault_route;
 mod workers;

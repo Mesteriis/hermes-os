@@ -2582,7 +2582,9 @@ name = "hermes-scheduler-runtime"
 version = "0.1.0"
 dependencies = [
  "hermes-clock-protocol",
+ "hermes-events-protocol",
  "hermes-runtime-protocol",
+ "hermes-scheduler",
  "hermes-scheduler-jetstream",
  "hermes-scheduler-persistence",
  "hermes-scheduler-protocol",

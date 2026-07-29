@@ -596,7 +596,9 @@ const SCHEDULER_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...SCHEDULER_JETSTREAM_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-scheduler-runtime': [
     { name: 'hermes-clock-protocol', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-scheduler', kind: 'normal' },
     { name: 'hermes-scheduler-jetstream', kind: 'normal' },
     { name: 'hermes-scheduler-persistence', kind: 'normal' },
     { name: 'hermes-scheduler-protocol', kind: 'normal' },

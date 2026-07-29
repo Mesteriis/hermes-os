@@ -6,19 +6,27 @@ use std::time::Duration;
 use hermes_clock_protocol::{ClockDiscontinuityV1, ClockPolicyV1};
 use hermes_scheduler_jetstream::{
     SchedulerJetStreamDispatchPortV1, SchedulerJetStreamReceiptPortV1,
+    SchedulerJetStreamScheduleControlPortV1,
 };
 use hermes_scheduler_persistence::{
     SchedulerDispatchAdmissionV1, SchedulerMaterializationSourceV1, SchedulerPostgresStoreV1,
     SchedulerReceiptConsumerV1,
 };
 
-use super::clock::SchedulerSystemClockV1;
+use super::{
+    clock::SchedulerSystemClockV1,
+    schedule_control::{SchedulerScheduleControlWorkerConfigV1, run_schedule_control_worker},
+};
 
 pub(super) struct SchedulerWorkerLaunchInputV1<'a> {
     pub(super) runtime: &'a tokio::runtime::Runtime,
     pub(super) store: SchedulerPostgresStoreV1,
     pub(super) dispatch: SchedulerJetStreamDispatchPortV1,
     pub(super) ports: Vec<SchedulerJetStreamReceiptPortV1>,
+    pub(super) schedule_control: Option<(
+        SchedulerJetStreamScheduleControlPortV1,
+        SchedulerScheduleControlWorkerConfigV1,
+    )>,
     pub(super) dispatch_batch_limit: u32,
     pub(super) reconcile_interval_millis: u32,
     pub(super) source: SchedulerMaterializationSourceV1,
@@ -31,6 +39,7 @@ pub(super) fn launch_workers(input: SchedulerWorkerLaunchInputV1<'_>) -> Receive
         store,
         dispatch,
         ports,
+        schedule_control,
         dispatch_batch_limit,
         reconcile_interval_millis,
         source,
@@ -41,6 +50,13 @@ pub(super) fn launch_workers(input: SchedulerWorkerLaunchInputV1<'_>) -> Receive
         let sender = sender.clone();
         let store = store.clone();
         runtime.spawn(async move { receive_receipts(port, store, sender).await });
+    }
+    if let Some((port, configuration)) = schedule_control {
+        let sender = sender.clone();
+        let store = store.clone();
+        runtime.spawn(async move {
+            run_schedule_control_worker(port, store, configuration, sender).await;
+        });
     }
     let sender = sender.clone();
     runtime.spawn(async move {

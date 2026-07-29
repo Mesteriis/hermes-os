@@ -32,6 +32,16 @@ impl SchedulerScheduleControlContractV1 {
             })
             .ok_or(SchedulerScheduleControlAdmissionErrorV1::InvalidContract)
     }
+
+    #[must_use]
+    pub const fn revision(&self) -> u32 {
+        self.revision
+    }
+
+    #[must_use]
+    pub const fn schema_sha256(&self) -> &[u8; 32] {
+        &self.schema_sha256
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,6 +78,11 @@ impl SchedulerScheduleControlGrantV1 {
     #[must_use]
     pub fn source_module_id(&self) -> &str {
         &self.source_module_id
+    }
+
+    #[must_use]
+    pub fn source_owner(&self) -> &str {
+        self.approved_job.source_owner()
     }
 
     #[must_use]

@@ -9,11 +9,12 @@
 approved JobKind на canonical one-shot policy, transactional Scheduler
 inbox/result outbox, exact duplicate replay, same-ID hash conflict и cancellation
 race покрыты unit и disposable PostgreSQL conformance. Exact runtime
-configuration, source/runtime/grant/catalog admission и JetStream
-consumer/result-publisher adapters реализованы как закрытый foundation.
-Scheduler runtime workers, Event Hub topology admission и managed live contour
-ещё не реализованы; platform gate `scheduler_module_schedule_control_v1`
-остаётся закрыт.
+configuration, source/runtime/grant/catalog admission, canonical correlated
+result envelope, JetStream consumer/result-publisher adapters и Scheduler
+runtime worker с result-outbox-before-ACK recovery реализованы как закрытый
+foundation. Event Hub topology admission и managed live contour ещё не
+реализованы; platform gate `scheduler_module_schedule_control_v1` остаётся
+закрыт.
 
 Уточняет:
 

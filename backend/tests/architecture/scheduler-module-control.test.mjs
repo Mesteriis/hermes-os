@@ -6,7 +6,7 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
 test('module-originated Scheduler control keeps its gate planned while protocol and persistence foundations are exact', async () => {
-  const [adr, inventorySource, proto, validation, runtimeContract, admission, mapping, migration, authorityMigration, persistence, jetstream, manifest] = await Promise.all([
+  const [adr, inventorySource, proto, validation, runtimeContract, admission, mapping, resultEnvelope, migration, authorityMigration, persistence, jetstream, runtimeWorker, manifest] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0342-module-originated-scheduler-control-events.md',
@@ -58,6 +58,13 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
     ),
     readFile(
       new URL(
+        'src/platform/scheduler/implementation/src/control/result.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/platform/scheduler/persistence/migrations/0008_scheduler_schedule_control.sql',
         BACKEND_ROOT,
       ),
@@ -80,6 +87,13 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
     readFile(
       new URL(
         'src/platform/scheduler/jetstream/src/transport/schedule_control.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/platform/scheduler/runtime/src/control/schedule_control.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -116,6 +130,8 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
   assert.match(runtimeContract, /SchedulerRuntimeScheduleControlGrantV1/);
   assert.match(admission, /source_runtime_generation/);
   assert.match(admission, /source_grant_epoch/);
+  assert.match(resultEnvelope, /ResultMetadataV1/);
+  assert.match(resultEnvelope, /command_message_id: command\.message_id\(\)/);
   assert.match(mapping, /ScheduleTriggerV1::At/);
   assert.match(mapping, /OverlapPolicyV1::Forbid/);
   assert.match(mapping, /MisfirePolicyV1::FireOnce/);
@@ -127,6 +143,9 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
   assert.match(persistence, /SchedulerScheduleControlDecisionV1::TooLate/);
   assert.match(persistence, /ForeignAuthority/);
   assert.match(jetstream, /SchedulerJetStreamScheduleControlPortV1/);
+  assert.match(runtimeWorker, /\.apply_schedule_control\(&request/);
+  assert.match(runtimeWorker, /relay_results\(port, store\)\.await\?/);
+  assert.match(runtimeWorker, /delivery\.acknowledge\(\)\.await/);
   assert.match(manifest, /role = "platform"/);
   assert.match(manifest, /owner = "scheduler"/);
   assert.match(manifest, /surface = "contract"/);

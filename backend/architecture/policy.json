@@ -984,7 +984,15 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-scheduler",
           "kind": "normal"
         },
         {
