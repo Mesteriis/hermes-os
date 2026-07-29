@@ -50,7 +50,7 @@ mod retry {
 
 pub const MAX_ATTEMPTS: u8 = retry::IMAP_SYNC_RETRY_POLICY.max_attempts;
 
-const IMAP_UID_FETCH_CHUNK_SIZE: usize = 25;
+const IMAP_UID_FETCH_CHUNK_SIZE: usize = 10;
 const IMAP_UID_FETCH_TIMEOUT_SECONDS: u64 = WINDOW_DEADLINE_SECONDS;
 const IMAP_SYNC_TIMEOUT_SECONDS: u64 = 300;
 const SNAPSHOT_PREVIEW_BYTES: usize = 160;
@@ -954,7 +954,8 @@ mod tests {
 
     #[test]
     fn uid_fetch_chunk_is_transport_bounded() {
-        assert_eq!(IMAP_UID_FETCH_CHUNK_SIZE, 25);
+        assert_eq!(IMAP_UID_FETCH_CHUNK_SIZE, 10);
+        assert!(IMAP_UID_FETCH_CHUNK_SIZE <= 25);
         assert!(IMAP_UID_FETCH_CHUNK_SIZE < MAX_WINDOW as usize);
     }
 
