@@ -31,7 +31,7 @@ export function useMailSync(capabilities: {
 		notice.value = ''
 		try {
 			const result = await syncMailInbox(connectionId, crypto.randomUUID())
-			summary.value = `${result.observedMessages} messages observed by ${result.operationId}.`
+			summary.value = `Sync ${result.operationId} accepted. Progress is available in sync health.`
 		} catch (error) {
 			notice.value = error instanceof Error ? error.message : 'Mail sync failed.'
 		} finally {

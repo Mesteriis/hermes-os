@@ -1,6 +1,6 @@
 import type {
 	MailDeliveryOperationStatusV1,
-	SyncInboxCompletedV1,
+	SyncInboxAcceptedV1,
 } from '../../../gen/hermes/mail/v1/client_pb'
 import { getMailDeliveryCommandConnectClient } from './mailDeliveryCommandClient'
 import { getMailDeliveryQueryConnectClient } from './mailDeliveryQueryClient'
@@ -9,7 +9,7 @@ import { getMailSyncConnectClient } from './mailSyncClient'
 export async function syncMailInbox(
 	connectionId: string,
 	operationId: string,
-): Promise<SyncInboxCompletedV1> {
+): Promise<SyncInboxAcceptedV1> {
 	return getMailSyncConnectClient().sync({
 		connectionId: requireIdentifier('connection ID', connectionId),
 		operationId: requireIdentifier('operation ID', operationId),

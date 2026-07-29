@@ -28,9 +28,9 @@ describe('Mail operational Gateway adapter', () => {
 	})
 
 	it('runs bounded sync through the generated Mail sync contract', async () => {
-		sync.mockResolvedValue({ operationId: 'sync-1', observedMessages: 12 })
+		sync.mockResolvedValue({ operationId: 'sync-1' })
 		await expect(syncMailInbox(' primary ', ' sync-1 ')).resolves.toMatchObject({
-			observedMessages: 12,
+			operationId: 'sync-1',
 		})
 		expect(sync).toHaveBeenCalledWith({
 			connectionId: 'primary',

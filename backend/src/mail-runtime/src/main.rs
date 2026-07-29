@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_mail_runtime::managed::{
-    MailDeliveryDispatchErrorV1, MailMessageFlagDispatchErrorV1,
-    MailMessageLocationDispatchErrorV1, MailMessagePermanentDeleteDispatchErrorV1,
+    CompletedImapSyncProviderOperationV1, MailDeliveryDispatchErrorV1,
+    MailMessageFlagDispatchErrorV1, MailMessageLocationDispatchErrorV1,
+    MailMessagePermanentDeleteDispatchErrorV1, execute_imap_sync_provider_operation,
 };
 use hermes_mail_runtime::{
     MailRuntimeAdmission,
@@ -141,6 +142,9 @@ where
     let mut gmail_oauth_provider_operation: Option<
         tokio::task::JoinHandle<CompletedGmailOAuthProviderOperationV1>,
     > = None;
+    let mut imap_sync_provider_operation: Option<
+        tokio::task::JoinHandle<CompletedImapSyncProviderOperationV1>,
+    > = None;
     loop {
         runtime
             .block_on(admitted.try_handle_client_delivery())
@@ -187,6 +191,57 @@ where
                     }
                     Ok(None) => {}
                     Err(error) => handle_gmail_oauth_dispatch_result(Err(error))?,
+                }
+            }
+        }
+        if imap_sync_provider_operation
+            .as_ref()
+            .is_some_and(tokio::task::JoinHandle::is_finished)
+        {
+            let completed = runtime
+                .block_on(
+                    imap_sync_provider_operation
+                        .take()
+                        .expect("finished IMAP sync provider operation"),
+                )
+                .map_err(|_| "Mail runtime IMAP sync provider worker failed".to_owned())?;
+            let connection_id = completed.connection_id().to_owned();
+            admitted
+                .select_account(&connection_id)
+                .map_err(|_| "Mail runtime IMAP sync account selection failed".to_owned())?;
+            if let Err(error) =
+                runtime.block_on(admitted.finalize_imap_sync_provider_operation(completed, now))
+            {
+                developer_diagnostic(&format!("developer_mail_imap_sync_error={error:?}"));
+            }
+        }
+        if imap_sync_provider_operation.is_none() {
+            for connection_id in admitted.connection_ids() {
+                admitted
+                    .select_account(&connection_id)
+                    .map_err(|_| "Mail runtime sync account selection failed".to_owned())?;
+                match admitted.prepare_pending_imap_sync() {
+                    Ok(Some(prepared)) => {
+                        imap_sync_provider_operation = Some(runtime.spawn_blocking(move || {
+                            execute_imap_sync_provider_operation(prepared)
+                        }));
+                        break;
+                    }
+                    Ok(None) => {
+                        if let Err(error) =
+                            runtime.block_on(admitted.execute_pending_gmail_sync(now))
+                        {
+                            developer_diagnostic(&format!(
+                                "developer_mail_gmail_sync_error={error:?}"
+                            ));
+                        }
+                    }
+                    Err(error) => {
+                        developer_diagnostic(&format!(
+                            "developer_mail_imap_sync_prepare_error={error:?}"
+                        ));
+                        return Err("Mail runtime IMAP sync preparation failed".to_owned());
+                    }
                 }
             }
         }

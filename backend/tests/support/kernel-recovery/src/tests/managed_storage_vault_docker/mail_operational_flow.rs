@@ -1136,9 +1136,8 @@ pub(super) fn sync_mail(
         .expect("decode Mail sync for cursor invalidation");
     assert_eq!(
         response,
-        MailClientResponseV1::SyncInboxCompleted {
+        MailClientResponseV1::SyncInboxAccepted {
             operation_id: operation_id.to_owned(),
-            observed_messages: 1,
         }
     );
 }

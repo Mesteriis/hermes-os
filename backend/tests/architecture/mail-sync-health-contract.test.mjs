@@ -180,7 +180,7 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(managedFlow, /assert_mail_sync_replay_and_health/);
   assert.match(
     managedFlow,
-    /MailClientContractV1::Sync[\s\S]*MailClientResponseV1::SyncInboxCompleted/,
+    /MailClientContractV1::Sync[\s\S]*MailClientResponseV1::SyncInboxAccepted/,
   );
   assert.match(managedFlow, /assert_stale_generation_is_interrupted/);
   assert.match(managedFlow, /MailSyncOutcomeV1::Interrupted/);

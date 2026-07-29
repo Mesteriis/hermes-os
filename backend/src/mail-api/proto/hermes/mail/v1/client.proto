@@ -20,7 +20,7 @@ message GetMailDeliveryStatusRequestV1 {
   string operation_id = 1;
   string connection_id = 2;
 }
-message SyncInboxCompletedV1 { string operation_id = 1; uint32 observed_messages = 2; }
+message SyncInboxAcceptedV1 { string operation_id = 1; }
 message MailAcceptedV1 { string operation_id = 1; }
 enum MailDeliveryOutcomeV1 {
   MAIL_DELIVERY_OUTCOME_UNSPECIFIED = 0;
@@ -97,7 +97,7 @@ message GetGmailOAuthStatusResponseV1 {
 // Provider-specific operational contracts. Core Gateway authenticates and
 // routes each exact contract but does not translate its payload.
 service MailSyncService {
-  rpc Sync(SyncInboxRequestV1) returns (SyncInboxCompletedV1);
+  rpc Sync(SyncInboxRequestV1) returns (SyncInboxAcceptedV1);
 }
 
 service MailDeliveryCommandService {

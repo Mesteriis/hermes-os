@@ -139,7 +139,7 @@ use hermes_mail_api::{
         MailSyncOutcomeV1, MailSyncProviderPathReadinessV1, MailSyncTriggerV1,
         sync_health_query_connection_id,
     },
-    valid_account_configuration, valid_port,
+    valid_account_configuration,
 };
 use hermes_mail_core::rfc822::{
     AttachmentDispositionV1 as Rfc822AttachmentDispositionV1, attachment_metadata,
@@ -191,6 +191,7 @@ pub struct MailAdmittedRuntime {
     pub(crate) configuration_instance_id: String,
     pub(crate) gmail_oauth: Option<hermes_mail_api::GmailOAuthConfigurationV1>,
     pub(crate) gmail_oauth_operation_in_flight: Option<String>,
+    pending_sync_operation_id: Option<String>,
     pub(crate) provider_credential_context: ManagedProviderCredentialContextV1,
     pub(crate) settings_revision: u64,
     parked_accounts: BTreeMap<String, MailRuntimeAccountSlotV1>,
@@ -206,6 +207,7 @@ struct MailRuntimeAccountSlotV1 {
     configuration_instance_id: String,
     gmail_oauth: Option<hermes_mail_api::GmailOAuthConfigurationV1>,
     gmail_oauth_operation_in_flight: Option<String>,
+    pending_sync_operation_id: Option<String>,
     provider_credential_context: ManagedProviderCredentialContextV1,
     settings_revision: u64,
 }
@@ -225,12 +227,31 @@ enum GmailHistorySyncError {
 
 struct ImapInboxSyncRequestV1<'a> {
     connection_id: &'a str,
-    operation_id: &'a str,
-    host: &'a str,
+    sync: &'a hermes_mail_imap::ImapSyncResult,
+}
+
+pub struct PreparedImapSyncProviderOperationV1 {
+    connection_id: String,
+    operation_id: String,
+    host: String,
     port: u16,
-    username: &'a str,
+    username: String,
+    password: Zeroizing<Vec<u8>>,
     window: u32,
     windows: u32,
+}
+
+pub struct CompletedImapSyncProviderOperationV1 {
+    connection_id: String,
+    operation_id: String,
+    result: Result<hermes_mail_imap::ImapSyncResult, MailBootstrapError>,
+}
+
+impl CompletedImapSyncProviderOperationV1 {
+    #[must_use]
+    pub fn connection_id(&self) -> &str {
+        &self.connection_id
+    }
 }
 
 struct GmailHistorySyncRequestV1<'a> {
@@ -489,6 +510,7 @@ pub async fn open_admitted_runtime_catalog(
             configuration_instance_id: admission.configuration_instance_id.clone(),
             gmail_oauth: admission.gmail_oauth.clone(),
             gmail_oauth_operation_in_flight: None,
+            pending_sync_operation_id: None,
             provider_credential_context: provider_context,
             settings_revision: admission.settings_revision,
         });
@@ -569,6 +591,7 @@ pub async fn open_admitted_runtime_catalog(
         configuration_instance_id,
         gmail_oauth,
         gmail_oauth_operation_in_flight,
+        pending_sync_operation_id,
         provider_credential_context,
         settings_revision,
     } = active_slot;
@@ -588,6 +611,7 @@ pub async fn open_admitted_runtime_catalog(
         configuration_instance_id,
         gmail_oauth,
         gmail_oauth_operation_in_flight,
+        pending_sync_operation_id,
         provider_credential_context,
         settings_revision,
         parked_accounts,
@@ -621,6 +645,7 @@ impl MailAdmittedRuntime {
             configuration_instance_id,
             gmail_oauth,
             gmail_oauth_operation_in_flight,
+            pending_sync_operation_id,
             provider_credential_context,
             settings_revision,
         } = next;
@@ -637,6 +662,10 @@ impl MailAdmittedRuntime {
             gmail_oauth_operation_in_flight: std::mem::replace(
                 &mut self.gmail_oauth_operation_in_flight,
                 gmail_oauth_operation_in_flight,
+            ),
+            pending_sync_operation_id: std::mem::replace(
+                &mut self.pending_sync_operation_id,
+                pending_sync_operation_id,
             ),
             provider_credential_context: std::mem::replace(
                 &mut self.provider_credential_context,
@@ -2199,11 +2228,14 @@ impl MailAdmittedRuntime {
         .map_err(|_| MailAttachmentSecurityOutboxRelayError::Unavailable)?
     }
 
-    pub async fn execute_sync_operation(
+    pub async fn accept_sync_operation(
         &mut self,
         operation_id: &str,
         started_at_unix_seconds: i64,
-    ) -> Result<usize, MailBootstrapError> {
+    ) -> Result<(), MailBootstrapError> {
+        if !self.provider_io_permitted() {
+            return Err(MailBootstrapError::Credential);
+        }
         let begin = self
             .durable
             .begin_sync_run(
@@ -2215,19 +2247,101 @@ impl MailAdmittedRuntime {
             )
             .await
             .map_err(map_sync_persistence_error)?;
-        if let MailSyncRunStartOutcomeV1::ExistingTerminal(run) = begin {
-            return match run.outcome {
-                MailSyncOutcomeV1::Succeeded => usize::try_from(run.observed_messages)
-                    .map_err(|_| MailBootstrapError::Persistence),
-                MailSyncOutcomeV1::Failed | MailSyncOutcomeV1::Interrupted => Err(run
-                    .failure_code
-                    .map(sync_failure_to_bootstrap_error)
-                    .unwrap_or(MailBootstrapError::Provider)),
-                MailSyncOutcomeV1::Running => Err(MailBootstrapError::Admission),
-            };
+        if matches!(begin, MailSyncRunStartOutcomeV1::Started(_)) {
+            self.pending_sync_operation_id = Some(operation_id.to_owned());
         }
-        let result = self.sync_configured_inbox(operation_id).await;
-        let completed_at_unix_seconds = current_unix_seconds().unwrap_or(started_at_unix_seconds);
+        Ok(())
+    }
+
+    pub fn prepare_pending_imap_sync(
+        &mut self,
+    ) -> Result<Option<PreparedImapSyncProviderOperationV1>, MailBootstrapError> {
+        let MailInboundTransportV1::Imap(configuration) = &self.account.inbound else {
+            return Ok(None);
+        };
+        let Some(operation_id) = self.pending_sync_operation_id.take() else {
+            return Ok(None);
+        };
+        validate_sync_request(&configuration.host, configuration.port, 0)
+            .map_err(|_| MailBootstrapError::Admission)?;
+        bounded_window(self.account.sync_window, self.account.sync_windows)
+            .map_err(|_| MailBootstrapError::Admission)?;
+        let password = self
+            .imap_password
+            .as_ref()
+            .ok_or(MailBootstrapError::Credential)?
+            .clone();
+        Ok(Some(PreparedImapSyncProviderOperationV1 {
+            connection_id: self.account.connection_id.clone(),
+            operation_id,
+            host: configuration.host.clone(),
+            port: configuration.port,
+            username: configuration.username.clone(),
+            password,
+            window: self.account.sync_window,
+            windows: self.account.sync_windows,
+        }))
+    }
+
+    pub async fn execute_pending_gmail_sync(
+        &mut self,
+        completed_at_fallback_unix_seconds: i64,
+    ) -> Result<bool, MailBootstrapError> {
+        let MailInboundTransportV1::Gmail(configuration) = self.account.inbound.clone() else {
+            return Ok(false);
+        };
+        let Some(operation_id) = self.pending_sync_operation_id.take() else {
+            return Ok(false);
+        };
+        let result = self
+            .sync_gmail_inbox(
+                &self.account.connection_id.clone(),
+                &operation_id,
+                &configuration,
+                self.account.sync_window,
+                self.account.sync_windows,
+            )
+            .await;
+        self.complete_sync_operation(&operation_id, result, completed_at_fallback_unix_seconds)
+            .await?;
+        Ok(true)
+    }
+
+    pub async fn finalize_imap_sync_provider_operation(
+        &mut self,
+        completed: CompletedImapSyncProviderOperationV1,
+        completed_at_fallback_unix_seconds: i64,
+    ) -> Result<(), MailBootstrapError> {
+        if completed.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        let result = match completed.result {
+            Ok(sync) => {
+                self.apply_imap_sync_result(ImapInboxSyncRequestV1 {
+                    connection_id: &completed.connection_id,
+                    sync: &sync,
+                })
+                .await
+            }
+            Err(error) => Err(error),
+        };
+        self.complete_sync_operation(
+            &completed.operation_id,
+            result,
+            completed_at_fallback_unix_seconds,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    async fn complete_sync_operation(
+        &mut self,
+        operation_id: &str,
+        result: Result<usize, MailBootstrapError>,
+        completed_at_fallback_unix_seconds: i64,
+    ) -> Result<usize, MailBootstrapError> {
+        let completed_at_unix_seconds =
+            current_unix_seconds().unwrap_or(completed_at_fallback_unix_seconds);
         match result {
             Ok(observed_messages) => {
                 self.durable
@@ -2259,77 +2373,17 @@ impl MailAdmittedRuntime {
         }
     }
 
-    async fn sync_configured_inbox(
-        &mut self,
-        operation_id: &str,
-    ) -> Result<usize, MailBootstrapError> {
-        if !self.provider_io_permitted() {
-            return Err(MailBootstrapError::Credential);
-        }
-        let account = self.account.clone();
-        match account.inbound {
-            MailInboundTransportV1::Imap(configuration) => {
-                self.sync_inbox(ImapInboxSyncRequestV1 {
-                    connection_id: &account.connection_id,
-                    operation_id,
-                    host: &configuration.host,
-                    port: configuration.port,
-                    username: &configuration.username,
-                    window: account.sync_window,
-                    windows: account.sync_windows,
-                })
-                .await
-            }
-            MailInboundTransportV1::Gmail(configuration) => {
-                self.sync_gmail_inbox(
-                    &account.connection_id,
-                    operation_id,
-                    &configuration,
-                    account.sync_window,
-                    account.sync_windows,
-                )
-                .await
-            }
-        }
-    }
-
-    async fn sync_inbox(
+    async fn apply_imap_sync_result(
         &mut self,
         request: ImapInboxSyncRequestV1<'_>,
     ) -> Result<usize, MailBootstrapError> {
         let ImapInboxSyncRequestV1 {
             connection_id,
-            operation_id,
-            host,
-            port,
-            username,
-            window,
-            windows,
+            sync,
         } = request;
-        if connection_id.trim().is_empty()
-            || operation_id.trim().is_empty()
-            || username.trim().is_empty()
-            || !valid_port(port)
-        {
+        if connection_id.trim().is_empty() {
             return Err(MailBootstrapError::Admission);
         }
-        validate_sync_request(host, port, 0).map_err(|_| MailBootstrapError::Admission)?;
-        let plan = bounded_window(window, windows).map_err(|_| MailBootstrapError::Admission)?;
-        let Some(password) = self.imap_password.as_ref() else {
-            return Err(MailBootstrapError::Credential);
-        };
-        let password = Zeroizing::new(password.to_vec());
-        let password =
-            std::str::from_utf8(&password).map_err(|_| MailBootstrapError::Credential)?;
-        let sync = hermes_mail_imap::sync_inbox(
-            host,
-            port,
-            username,
-            Some(password),
-            plan.window,
-            plan.windows,
-        )
-        .map_err(|_| MailBootstrapError::Provider)?;
         let observed_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| MailBootstrapError::Provider)?;
@@ -3159,6 +3213,33 @@ impl MailAdmittedRuntime {
     }
 }
 
+#[must_use]
+pub fn execute_imap_sync_provider_operation(
+    prepared: PreparedImapSyncProviderOperationV1,
+) -> CompletedImapSyncProviderOperationV1 {
+    let PreparedImapSyncProviderOperationV1 {
+        connection_id,
+        operation_id,
+        host,
+        port,
+        username,
+        password,
+        window,
+        windows,
+    } = prepared;
+    let result = std::str::from_utf8(&password)
+        .map_err(|_| MailBootstrapError::Credential)
+        .and_then(|password| {
+            hermes_mail_imap::sync_inbox(&host, port, &username, Some(password), window, windows)
+                .map_err(|_| MailBootstrapError::Provider)
+        });
+    CompletedImapSyncProviderOperationV1 {
+        connection_id,
+        operation_id,
+        result,
+    }
+}
+
 fn gmail_internal_date_unix_seconds(value: &str) -> Option<i64> {
     value
         .parse::<i64>()
@@ -3545,22 +3626,6 @@ const fn bootstrap_error_to_sync_failure(error: &MailBootstrapError) -> MailSync
         MailBootstrapError::AttachmentAnchorMapping => {
             MailSyncFailureCodeV1::AttachmentAnchorUnavailable
         }
-    }
-}
-
-const fn sync_failure_to_bootstrap_error(failure: MailSyncFailureCodeV1) -> MailBootstrapError {
-    match failure {
-        MailSyncFailureCodeV1::AdmissionRejected => MailBootstrapError::Admission,
-        MailSyncFailureCodeV1::ControlUnavailable => MailBootstrapError::Control,
-        MailSyncFailureCodeV1::StorageUnavailable => MailBootstrapError::Storage,
-        MailSyncFailureCodeV1::CredentialUnavailable => MailBootstrapError::Credential,
-        MailSyncFailureCodeV1::PersistenceUnavailable => MailBootstrapError::Persistence,
-        MailSyncFailureCodeV1::ProviderUnavailable => MailBootstrapError::Provider,
-        MailSyncFailureCodeV1::EventHubUnavailable => MailBootstrapError::EventHub,
-        MailSyncFailureCodeV1::AttachmentAnchorUnavailable => {
-            MailBootstrapError::AttachmentAnchorMapping
-        }
-        MailSyncFailureCodeV1::RuntimeRestarted => MailBootstrapError::Provider,
     }
 }
 

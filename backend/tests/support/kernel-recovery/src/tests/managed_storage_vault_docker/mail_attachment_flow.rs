@@ -398,9 +398,8 @@ fn assert_mail_sync(
     assert_eq!(response_id, request_id);
     assert_eq!(
         response,
-        MailClientResponseV1::SyncInboxCompleted {
+        MailClientResponseV1::SyncInboxAccepted {
             operation_id: operation_id.to_owned(),
-            observed_messages: 1,
         }
     );
 }

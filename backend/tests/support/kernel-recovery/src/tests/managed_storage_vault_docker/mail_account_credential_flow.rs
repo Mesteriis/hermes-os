@@ -229,10 +229,7 @@ fn managed_mail_credential_rotation_quiesces_until_settings_successor() {
     );
     assert!(matches!(
         sync,
-        MailClientResponseV1::SyncInboxCompleted {
-            observed_messages: 1,
-            ..
-        }
+        MailClientResponseV1::SyncInboxAccepted { .. }
     ));
     let accepted = route_mail_client(
         &store,

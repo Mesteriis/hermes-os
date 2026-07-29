@@ -138,25 +138,23 @@ pub fn decode_delivery_status_request(
 }
 
 #[must_use]
-pub fn encode_sync_response(operation_id: &str, observed_messages: u32) -> Vec<u8> {
-    wire::SyncInboxCompletedV1 {
+pub fn encode_sync_response(operation_id: &str) -> Vec<u8> {
+    wire::SyncInboxAcceptedV1 {
         operation_id: operation_id.to_owned(),
-        observed_messages,
     }
     .encode_to_vec()
 }
 
 pub fn decode_sync_response(bytes: &[u8]) -> Result<MailClientResponseV1, MailClientWireErrorV1> {
-    let response = wire::SyncInboxCompletedV1::decode(bytes)
+    let response = wire::SyncInboxAcceptedV1::decode(bytes)
         .map_err(|_| MailClientWireErrorV1::InvalidPayload)?;
     if response.operation_id.trim().is_empty()
-        || encode_sync_response(&response.operation_id, response.observed_messages) != bytes
+        || encode_sync_response(&response.operation_id) != bytes
     {
         return Err(MailClientWireErrorV1::InvalidPayload);
     }
-    Ok(MailClientResponseV1::SyncInboxCompleted {
+    Ok(MailClientResponseV1::SyncInboxAccepted {
         operation_id: response.operation_id,
-        observed_messages: response.observed_messages,
     })
 }
 
@@ -331,6 +329,12 @@ mod tests {
         assert_eq!(
             decode_delivery_status_response(&encode_delivery_status_response(Some(&status))),
             Ok(MailClientResponseV1::DeliveryStatus(Some(status)))
+        );
+        assert_eq!(
+            decode_sync_response(&encode_sync_response("sync-operation")),
+            Ok(MailClientResponseV1::SyncInboxAccepted {
+                operation_id: "sync-operation".to_owned(),
+            })
         );
     }
 

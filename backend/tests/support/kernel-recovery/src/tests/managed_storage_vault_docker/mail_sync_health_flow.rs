@@ -41,10 +41,8 @@ pub(super) fn assert_mail_sync_replay_and_health(
         .expect("decode replayed Mail sync operation");
     assert_eq!(
         replay,
-        MailClientResponseV1::SyncInboxCompleted {
+        MailClientResponseV1::SyncInboxAccepted {
             operation_id: operation_id.to_owned(),
-            observed_messages: u32::try_from(expected_observed_messages)
-                .expect("bounded observed messages"),
         }
     );
 

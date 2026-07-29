@@ -2,9 +2,10 @@
 
 - Статус: принято
 - Дата: 2026-07-29
-- Состояние реализации: не реализовано. Решение принято до изменения
-  provider/runtime/client contracts; gate остаётся закрытым до полного
-  admission evidence из этого ADR.
+- Состояние реализации: частично реализовано. Public `SyncInboxAcceptedV1`,
+  idempotent durable acceptance и отдельный IMAP provider worker реализованы;
+  Gmail provider I/O пока ещё выполняется в runtime loop, а page-level
+  checkpoint admission и полный live evidence gate остаются открытыми.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0213, ADR-0214, ADR-0220,
   ADR-0239, ADR-0298, ADR-0299, ADR-0320
 

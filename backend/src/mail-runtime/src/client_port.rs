@@ -362,14 +362,12 @@ pub async fn handle_client_request(
             .map(MailClientResponseV1::AccountLifecycle)
             .map_err(|_| MailClientPortErrorV1::Runtime)?,
         MailClientRequestV1::SyncInbox(value) => {
-            let observed_messages = runtime
-                .execute_sync_operation(&value.operation_id, requested_at_unix_seconds)
+            runtime
+                .accept_sync_operation(&value.operation_id, requested_at_unix_seconds)
                 .await
                 .map_err(|_| MailClientPortErrorV1::Runtime)?;
-            MailClientResponseV1::SyncInboxCompleted {
+            MailClientResponseV1::SyncInboxAccepted {
                 operation_id: value.operation_id,
-                observed_messages: u32::try_from(observed_messages)
-                    .map_err(|_| MailClientPortErrorV1::Runtime)?,
             }
         }
         MailClientRequestV1::SendMail(value) => runtime
@@ -528,13 +526,9 @@ fn encode_module_response(
             MailClientResponseV1::AccountLifecycle(receipt),
         ) => account_lifecycle_wire::encode_receipt(receipt)
             .map_err(|_| MailClientPortErrorV1::Protocol)?,
-        (
-            MailClientContractV1::Sync,
-            MailClientResponseV1::SyncInboxCompleted {
-                operation_id,
-                observed_messages,
-            },
-        ) => client_wire::encode_sync_response(operation_id, *observed_messages),
+        (MailClientContractV1::Sync, MailClientResponseV1::SyncInboxAccepted { operation_id }) => {
+            client_wire::encode_sync_response(operation_id)
+        }
         (MailClientContractV1::Delivery, MailClientResponseV1::MailAccepted { operation_id }) => {
             client_wire::encode_delivery_response(operation_id)
         }

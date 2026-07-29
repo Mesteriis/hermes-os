@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS hermes_data.mail_sync_status (
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MailSyncRunStartOutcomeV1 {
     Started(MailSyncRunV1),
+    ExistingRunning(MailSyncRunV1),
     ExistingTerminal(MailSyncRunV1),
 }
 
@@ -103,7 +104,7 @@ impl MailDurablePersistence {
                 return Err(MailDurablePersistenceError::ConflictingSyncOperation);
             }
             return if existing.outcome == MailSyncOutcomeV1::Running {
-                Err(MailDurablePersistenceError::SyncRunInProgress)
+                Ok(MailSyncRunStartOutcomeV1::ExistingRunning(existing))
             } else {
                 Ok(MailSyncRunStartOutcomeV1::ExistingTerminal(existing))
             };

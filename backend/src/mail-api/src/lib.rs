@@ -134,9 +134,8 @@ pub enum MailClientResponseV1 {
     AccountCatalog(account::MailAccountCatalogV1),
     AccountStatus(account::MailAccountStatusV1),
     AccountLifecycle(account_lifecycle::MailAccountLifecycleReceiptV1),
-    SyncInboxCompleted {
+    SyncInboxAccepted {
         operation_id: String,
-        observed_messages: u32,
     },
     MailAccepted {
         operation_id: String,
