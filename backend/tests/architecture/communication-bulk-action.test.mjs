@@ -32,6 +32,7 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
     managedFlow,
     conformanceRunner,
     devRelease,
+    developmentAssembly,
   ] =
     await Promise.all([
     readFile(
@@ -182,6 +183,10 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
         new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT),
         'utf8',
       ),
+      readFile(
+        new URL('development/assembly/src/main.rs', BACKEND_ROOT),
+        'utf8',
+      ),
     ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -287,6 +292,14 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
     /managed_bulk_action_reaches_gateway_sse_and_replays_after_restart/,
   );
   assert.match(devRelease, /hermes-communication-bulk-action-assembly/);
+  assert.match(
+    developmentAssembly,
+    /COMMUNICATION_BULK_ACTION_RUNTIME_ARTIFACT/,
+  );
+  assert.match(
+    developmentAssembly,
+    /runtime_kind: ModuleRuntimeKindV1::Workflow/,
+  );
   assert.doesNotMatch(
     `${runtimeWorker}\n${runtimeClient}`,
     /body_utf8.*(?:log|event|status)|hermes-(?:mail|telegram|whatsapp|zulip)/,

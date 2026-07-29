@@ -28,6 +28,9 @@ const COMMUNICATION_DELIVERY_INTENT_STORAGE_ARTIFACT: &str =
     "communication_delivery_intent.storage.v1";
 const COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY: &str =
     "communication_delivery_intent.storage.v1";
+const COMMUNICATION_BULK_ACTION_RUNTIME_ARTIFACT: &str = "communication_bulk_action.runtime.v1";
+const COMMUNICATION_BULK_ACTION_STORAGE_ARTIFACT: &str = "communication_bulk_action.storage.v1";
+const COMMUNICATION_BULK_ACTION_STORAGE_CAPABILITY: &str = "communication_bulk_action.storage.v1";
 const ATTACHMENT_SECURITY_RUNTIME_ARTIFACT: &str = "attachment_security.runtime.v1";
 const ATTACHMENT_SECURITY_STORAGE_ARTIFACT: &str = "attachment_security.storage.v1";
 const ATTACHMENT_SECURITY_STORAGE_CAPABILITY: &str = "attachment_security.storage.v1";
@@ -83,7 +86,7 @@ struct ModulePlanV1 {
     request_host_bridge: bool,
 }
 
-const MODULE_PLAN: [ModulePlanV1; 8] = [
+const MODULE_PLAN: [ModulePlanV1; 9] = [
     ModulePlanV1 {
         runtime_artifact_id: COMMUNICATIONS_RUNTIME_ARTIFACT,
         storage_artifact_id: COMMUNICATIONS_STORAGE_ARTIFACT,
@@ -102,6 +105,13 @@ const MODULE_PLAN: [ModulePlanV1; 8] = [
         runtime_artifact_id: COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT,
         storage_artifact_id: COMMUNICATION_DELIVERY_INTENT_STORAGE_ARTIFACT,
         storage_capability_id: COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY,
+        runtime_kind: ModuleRuntimeKindV1::Workflow,
+        request_host_bridge: false,
+    },
+    ModulePlanV1 {
+        runtime_artifact_id: COMMUNICATION_BULK_ACTION_RUNTIME_ARTIFACT,
+        storage_artifact_id: COMMUNICATION_BULK_ACTION_STORAGE_ARTIFACT,
+        storage_capability_id: COMMUNICATION_BULK_ACTION_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Workflow,
         request_host_bridge: false,
     },
@@ -152,6 +162,16 @@ const PRE_EXPORT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3: [&str; 6] = [
 const PRE_DELIVERY_INTENT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3: [&str; 7] = [
     COMMUNICATIONS_RUNTIME_ARTIFACT,
     COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT,
+    ATTACHMENT_SECURITY_RUNTIME_ARTIFACT,
+    MAIL_RUNTIME_ARTIFACT,
+    TELEGRAM_RUNTIME_ARTIFACT,
+    WHATSAPP_RUNTIME_ARTIFACT,
+    ZULIP_RUNTIME_ARTIFACT,
+];
+const PRE_BULK_ACTION_MODULE_PLAN_RUNTIME_ARTIFACTS_V3: [&str; 8] = [
+    COMMUNICATIONS_RUNTIME_ARTIFACT,
+    COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT,
+    COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT,
     ATTACHMENT_SECURITY_RUNTIME_ARTIFACT,
     MAIL_RUNTIME_ARTIFACT,
     TELEGRAM_RUNTIME_ARTIFACT,
@@ -776,6 +796,10 @@ fn validate_refreshable_state_plan(state: &DevelopmentAssemblyStateV1) -> Result
             state,
             &PRE_DELIVERY_INTENT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3,
         )
+        || state_matches_runtime_artifact_plan(
+            state,
+            &PRE_BULK_ACTION_MODULE_PLAN_RUNTIME_ARTIFACTS_V3,
+        )
     {
         return Ok(());
     }
@@ -1193,6 +1217,7 @@ fn read_state(path: &Path) -> Result<DevelopmentAssemblyStateV1, String> {
         MODULE_PLAN.len(),
         PRE_EXPORT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3.len(),
         PRE_DELIVERY_INTENT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3.len(),
+        PRE_BULK_ACTION_MODULE_PLAN_RUNTIME_ARTIFACTS_V3.len(),
     ]
     .contains(&module_count)
         || fields.len() != 4 + module_count * fields_per_module
@@ -1377,7 +1402,7 @@ mod tests {
 
     #[test]
     fn development_plan_keeps_domains_workflows_engines_and_integrations_as_distinct_artifacts() {
-        assert_eq!(MODULE_PLAN.len(), 8);
+        assert_eq!(MODULE_PLAN.len(), 9);
         assert_eq!(
             MODULE_PLAN
                 .iter()
@@ -1387,6 +1412,7 @@ mod tests {
                 COMMUNICATIONS_RUNTIME_ARTIFACT,
                 COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT,
                 COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT,
+                COMMUNICATION_BULK_ACTION_RUNTIME_ARTIFACT,
                 ATTACHMENT_SECURITY_RUNTIME_ARTIFACT,
                 MAIL_RUNTIME_ARTIFACT,
                 TELEGRAM_RUNTIME_ARTIFACT,
@@ -1402,12 +1428,16 @@ mod tests {
             MODULE_PLAN[2].runtime_kind,
             ModuleRuntimeKindV1::Workflow
         ));
+        assert!(matches!(
+            MODULE_PLAN[3].runtime_kind,
+            ModuleRuntimeKindV1::Workflow
+        ));
         assert_eq!(
-            MODULE_PLAN[3].runtime_artifact_id,
+            MODULE_PLAN[4].runtime_artifact_id,
             "attachment_security.runtime.v1",
         );
         assert_eq!(
-            MODULE_PLAN[3].storage_artifact_id,
+            MODULE_PLAN[4].storage_artifact_id,
             "attachment_security.storage.v1",
         );
     }
@@ -1480,6 +1510,7 @@ mod tests {
         legacy.modules.retain(|module| {
             module.runtime_artifact_id != COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT
                 && module.runtime_artifact_id != COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT
+                && module.runtime_artifact_id != COMMUNICATION_BULK_ACTION_RUNTIME_ARTIFACT
         });
         write_test_state(&path, &encode_state_v3(&legacy));
 
@@ -1496,6 +1527,23 @@ mod tests {
         let mut state = fixture_state(26);
         state.modules.retain(|module| {
             module.runtime_artifact_id != COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT
+                && module.runtime_artifact_id != COMMUNICATION_BULK_ACTION_RUNTIME_ARTIFACT
+        });
+        write_test_state(&path, &encode_state_v3(&state));
+
+        let restored = read_state(&path).unwrap();
+        assert_eq!(restored, state);
+        assert!(validate_refreshable_state_plan(&restored).is_ok());
+        assert!(validate_state_plan(&restored).is_err());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn pre_bulk_action_state_v3_is_refreshable_but_not_current() {
+        let path = temporary_state_path("pre-bulk-action-v3");
+        let mut state = fixture_state(27);
+        state.modules.retain(|module| {
+            module.runtime_artifact_id != COMMUNICATION_BULK_ACTION_RUNTIME_ARTIFACT
         });
         write_test_state(&path, &encode_state_v3(&state));
 
