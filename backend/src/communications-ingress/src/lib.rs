@@ -500,13 +500,10 @@ fn source_scope_cursors(draft: &CommunicationObservationDraft) -> SourceScopeCur
         draft.source.provider,
         &scope.external_account_id,
     );
-    let conversation = scope.external_conversation_id.as_ref().map(|value| {
-        let mut hasher = Sha256::new();
-        hasher.update(b"hermes.communications.conversation-cursor.v1\0");
-        hasher.update(account);
-        hasher.update(value.as_bytes());
-        hasher.finalize().into()
-    });
+    let conversation = scope
+        .external_conversation_id
+        .as_ref()
+        .map(|value| conversation_source_cursor_from_account(account, value));
     let participant = scope.external_participant_id.as_ref().map(|value| {
         let mut hasher = Sha256::new();
         hasher.update(b"hermes.communications.participant-cursor.v1\0");
@@ -544,6 +541,74 @@ fn source_scope_cursors(draft: &CommunicationObservationDraft) -> SourceScopeCur
     }
 }
 
+/// Derives the exact opaque account cursor emitted in Communications evidence.
+///
+/// Provider integrations use this public contract to maintain their own
+/// reverse locator projection. The raw provider locator never crosses the
+/// integration boundary.
+pub fn account_source_cursor_v1(
+    provider: ProviderProvenanceV1,
+    external_account_id: &str,
+) -> Result<[u8; 32], IngressDraftError> {
+    validate_source_identifier(
+        external_account_id,
+        MAX_SOURCE_SCOPE_ID_LEN,
+        IngressDraftError::EmptyExternalAccountId,
+        IngressDraftError::ExternalAccountIdTooLong,
+    )?;
+    Ok(scope_identifier(
+        b"hermes.communications.account-cursor.v1\0",
+        provider,
+        external_account_id,
+    ))
+}
+
+/// Derives the exact opaque conversation cursor emitted in Communications
+/// evidence for a provider-owned account and conversation locator.
+pub fn conversation_source_cursor_v1(
+    provider: ProviderProvenanceV1,
+    external_account_id: &str,
+    external_conversation_id: &str,
+) -> Result<[u8; 32], IngressDraftError> {
+    let account = account_source_cursor_v1(provider, external_account_id)?;
+    validate_source_identifier(
+        external_conversation_id,
+        MAX_SOURCE_SCOPE_ID_LEN,
+        IngressDraftError::EmptyExternalConversationId,
+        IngressDraftError::ExternalConversationIdTooLong,
+    )?;
+    Ok(conversation_source_cursor_from_account(
+        account,
+        external_conversation_id,
+    ))
+}
+
+/// Derives the exact opaque source-record cursor emitted in Communications
+/// evidence for a provider-owned account and record locator.
+pub fn scoped_record_source_cursor_v1(
+    provider: ProviderProvenanceV1,
+    external_account_id: &str,
+    external_record_id: &str,
+) -> Result<[u8; 32], IngressDraftError> {
+    validate_source_identifier(
+        external_account_id,
+        MAX_SOURCE_SCOPE_ID_LEN,
+        IngressDraftError::EmptyExternalAccountId,
+        IngressDraftError::ExternalAccountIdTooLong,
+    )?;
+    validate_source_identifier(
+        external_record_id,
+        MAX_EXTERNAL_RECORD_ID_LEN,
+        IngressDraftError::EmptyExternalRecordId,
+        IngressDraftError::ExternalRecordIdTooLong,
+    )?;
+    Ok(source_cursor_for_scoped_record(
+        provider,
+        external_account_id,
+        external_record_id,
+    ))
+}
+
 fn source_cursor_for_scoped_record(
     provider: ProviderProvenanceV1,
     account_id: &str,
@@ -566,6 +631,112 @@ fn scope_identifier(domain: &[u8], provider: ProviderProvenanceV1, value: &str) 
     hasher.update(b"\0");
     hasher.update(value.as_bytes());
     hasher.finalize().into()
+}
+
+fn conversation_source_cursor_from_account(
+    account_cursor: [u8; 32],
+    external_conversation_id: &str,
+) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"hermes.communications.conversation-cursor.v1\0");
+    hasher.update(account_cursor);
+    hasher.update(external_conversation_id.as_bytes());
+    hasher.finalize().into()
+}
+
+fn validate_source_identifier(
+    value: &str,
+    max_len: usize,
+    empty: IngressDraftError,
+    too_long: IngressDraftError,
+) -> Result<(), IngressDraftError> {
+    if value.is_empty() {
+        return Err(empty);
+    }
+    if value.len() > max_len {
+        return Err(too_long);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod source_cursor_contract_tests {
+    use super::*;
+
+    #[test]
+    fn public_locator_derivation_matches_observation_scope_cursors() {
+        let draft = new_scoped_communication_observation_draft(
+            "observation-1".to_owned(),
+            SourceEnvelope {
+                provider: ProviderProvenanceV1::Telegram,
+                external_record_id: "message-1".to_owned(),
+                scope: Some(SourceScopeEnvelope {
+                    external_account_id: "account-1".to_owned(),
+                    external_conversation_id: Some("chat-1".to_owned()),
+                    external_participant_id: None,
+                    external_media_id: None,
+                    external_reply_to_record_id: Some("message-0".to_owned()),
+                    external_forward_origin_record_id: None,
+                }),
+            },
+            CommunicationEvidenceKindV1::ChatMessage,
+            BodyAvailabilityV1::MetadataOnly,
+            CommunicationDirectionV1::Incoming,
+            Some(1_700_000_000),
+        )
+        .expect("valid draft");
+
+        let cursors = source_scope_cursors(&draft);
+        assert_eq!(
+            cursors.account,
+            Some(
+                account_source_cursor_v1(ProviderProvenanceV1::Telegram, "account-1")
+                    .expect("account cursor"),
+            )
+        );
+        assert_eq!(
+            cursors.conversation,
+            Some(
+                conversation_source_cursor_v1(
+                    ProviderProvenanceV1::Telegram,
+                    "account-1",
+                    "chat-1",
+                )
+                .expect("conversation cursor"),
+            )
+        );
+        assert_eq!(
+            cursors.reply_to_source,
+            Some(
+                scoped_record_source_cursor_v1(
+                    ProviderProvenanceV1::Telegram,
+                    "account-1",
+                    "message-0",
+                )
+                .expect("record cursor"),
+            )
+        );
+    }
+
+    #[test]
+    fn public_locator_derivation_rejects_unbounded_provider_identity() {
+        assert_eq!(
+            account_source_cursor_v1(ProviderProvenanceV1::MailImap, ""),
+            Err(IngressDraftError::EmptyExternalAccountId)
+        );
+        assert_eq!(
+            conversation_source_cursor_v1(
+                ProviderProvenanceV1::Zulip,
+                "account-1",
+                &"x".repeat(MAX_SOURCE_SCOPE_ID_LEN + 1),
+            ),
+            Err(IngressDraftError::ExternalConversationIdTooLong)
+        );
+        assert_eq!(
+            scoped_record_source_cursor_v1(ProviderProvenanceV1::WhatsAppWeb, "account-1", "",),
+            Err(IngressDraftError::EmptyExternalRecordId)
+        );
+    }
 }
 
 fn validate_source_scope(scope: &SourceScopeEnvelope) -> Result<(), IngressDraftError> {
