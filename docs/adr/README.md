@@ -511,3 +511,10 @@ ADR-0332 добавляет workflow-owned transactional event boundary: чет�
 provider command encoder/result decoder adapter, owner-local outbox и
 idempotent terminal-result inbox работают без provider facade, cross-owner
 storage или payload decode в Kernel/Core.
+ADR-0333 заменяет неисполняемое workflow-local sealing тела delivery intent на
+managed Blob write с exact target-bound custody proof. Workflow persistence
+хранит только receipt/proof и canonical route; четыре integration runtimes
+остаются независимыми target owners.
+ADR-0334 делает только receipt-bound Blob write идемпотентным при retry:
+существующий deterministic reference принимается лишь после полного SHA-256
+сравнения внутри Blob runtime, а обычный write остаётся create-only.

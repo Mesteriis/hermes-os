@@ -105,7 +105,7 @@ test('delivery intent assembly is an exact non-admitted workflow slice', async (
 
   assert.equal(
     policy.implementation.currentSlice,
-    'delivery_intent_transactional_event_adapters_v1',
+    'delivery_intent_target_bound_blob_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, ['communications_export']);
   assert.deepEqual(
@@ -133,32 +133,40 @@ test('delivery intent assembly is an exact non-admitted workflow slice', async (
   assert.match(assemblyManifest, /role = "workflow"[\s\S]*surface = "assembly"/);
   assert.match(coreManifest, /hermes-communications-api/);
   assert.doesNotMatch(
-    `${apiManifest}\n${coreManifest}\n${persistenceManifest}\n${runtimeManifest}\n${assemblyManifest}`,
+    `${apiManifest}\n${coreManifest}\n${persistenceManifest}\n${assemblyManifest}`,
     /hermes-(?:mail|telegram|whatsapp|zulip|communications-domain|communications-persistence)/,
+  );
+  assert.doesNotMatch(
+    runtimeManifest,
+    /hermes-(?:mail|telegram|whatsapp|zulip)-(?:runtime|persistence)/,
   );
   assert.match(assembly, /validate_descriptor_v1/);
   assert.match(assembly, /validate_storage_bundle/);
   assert.match(assembly, /create_new\(true\)/);
   assert.doesNotMatch(assembly, /ClientRpcRouteV1|async_nats|sqlx|provider command/);
   assert.match(runtimeAdmission, /StorageNamespaceRequestV1/);
+  assert.match(runtimeAdmission, /BlobQuotaRequestV1/);
+  assert.match(runtimeAdmission, /BlobQuotaOperationV1::Write/);
   assert.doesNotMatch(
     runtimeAdmission,
     /ClientRpcRouteV1|DurablePublisher|DurableConsumer|provider/,
   );
-  assert.match(runtimeCoordinator, /DeliveryIntentBodySealerV1/);
-  assert.match(runtimeCoordinator, /SealedDeliveryBodyV1/);
+  assert.match(runtimeCoordinator, /DeliveryIntentBodyMaterializerV1/);
+  assert.match(runtimeCoordinator, /DeliveryIntentBodyBlobReceiptV1/);
   assert.match(runtimeProcess, /describe_managed_runtime/);
   assert.match(runtimeProcess, /signal_ready/);
   assert.match(runtimeProcess, /StorageVaultLeaseAdapterV1/);
   assert.doesNotMatch(persistence, /PlannedDeliveryIntentV1|pub body_utf8/);
-  assert.match(persistence, /SealedDeliveryBodyV1/);
+  assert.match(persistence, /DeliveryIntentBodyBlobReceiptV1/);
   assert.match(persistence, /ON CONFLICT \(logical_owner_id, intent_id\)/);
   assert.match(
     persistence,
     /jobs\.logical_owner_id = candidate\.logical_owner_id/,
   );
   assert.match(migration, /PRIMARY KEY \(logical_owner_id, intent_id\)/);
-  assert.match(migration, /body_ciphertext/);
+  assert.match(migration, /body_reference_id/);
+  assert.match(migration, /body_custody_source_proof/);
+  assert.doesNotMatch(migration, /body_ciphertext|body_nonce|body_key_epoch/);
   assert.doesNotMatch(migration, /body_utf8|communications_messages|mail_|telegram_/);
   assert.match(contract, /bytes conversation_id/);
   assert.match(contract, /optional bytes reply_to_message_id/);

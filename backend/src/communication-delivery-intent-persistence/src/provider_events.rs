@@ -388,9 +388,6 @@ impl CommunicationDeliveryIntentPersistenceV1 {
                  state_revision = state_revision + 1,
                  provider_operation_id = $2,
                  rejection_code = $3,
-                 body_ciphertext = NULL,
-                 body_nonce = NULL,
-                 body_key_epoch = NULL,
                  updated_at_unix_seconds = $4
              WHERE logical_owner_id = $5 AND intent_id = $6 AND state = $7
              RETURNING intent_id, state, state_revision,

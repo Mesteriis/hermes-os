@@ -98,17 +98,24 @@ where
                 if !exact_plaintext_binding(session.expected_plaintext_sha256(), &write.plaintext) {
                     return Err(());
                 }
-                self.store
-                    .write_new(BlobContentWriteRequestV1 {
-                        reference: session.reference(),
-                        access: session.access(),
-                        custody: session.custody(),
-                        quota: session.quota(),
-                        lease: &lease,
-                        plaintext: &write.plaintext,
-                        now_unix_ms: now,
-                    })
-                    .map_err(|_| developer_denied("write"))?;
+                let request = BlobContentWriteRequestV1 {
+                    reference: session.reference(),
+                    access: session.access(),
+                    custody: session.custody(),
+                    quota: session.quota(),
+                    lease: &lease,
+                    plaintext: &write.plaintext,
+                    now_unix_ms: now,
+                };
+                if let Some(expected_sha256) = session.expected_plaintext_sha256() {
+                    self.store
+                        .write_receipt_bound(request, expected_sha256)
+                        .map_err(|_| developer_denied("write"))?;
+                } else {
+                    self.store
+                        .write_new(request)
+                        .map_err(|_| developer_denied("write"))?;
+                }
                 Ok(BlobDataResponseV1 {
                     plaintext: Vec::new(),
                     accepted: true,

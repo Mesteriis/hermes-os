@@ -1571,6 +1571,24 @@ const DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIS
   ],
 };
 
+const DELIVERY_INTENT_TARGET_BOUND_BLOB_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delivery-intent-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-api', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-core', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-event-adapters', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-persistence', kind: 'normal' },
+    { name: 'hermes-mail-delivery-intent-contract', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+    { name: 'hermes-telegram-delivery-intent-contract', kind: 'normal' },
+    { name: 'hermes-whatsapp-delivery-intent-contract', kind: 'normal' },
+    { name: 'hermes-zulip-delivery-intent-contract', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2397,6 +2415,19 @@ function expectedSlice(currentSlice) {
       packages: DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_PRODUCTION_PACKAGES,
       workspaceDependencies:
         DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'delivery_intent_target_bound_blob_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATIONS_EXPORT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        DELIVERY_INTENT_TARGET_BOUND_BLOB_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,

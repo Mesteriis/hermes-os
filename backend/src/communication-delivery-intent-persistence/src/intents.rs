@@ -14,15 +14,15 @@ pub(crate) const STATE_RESOLVING_ROUTE: i16 = 2;
 pub(crate) const STATE_SUBMITTED_TO_PROVIDER: i16 = 3;
 pub(crate) const STATE_PROVIDER_CONFIRMED: i16 = 4;
 pub(crate) const STATE_REJECTED: i16 = 5;
-const MAX_SEALED_BODY_BYTES: usize = 65_584;
-const MIN_SEALED_BODY_BYTES: usize = 17;
+const MAX_BODY_BYTES: u64 = 64 * 1024;
+const MAX_CUSTODY_SOURCE_PROOF_BYTES: usize = 2_048;
 
-#[derive(Clone, PartialEq, Eq)]
-pub struct SealedDeliveryBodyV1 {
-    pub ciphertext: Vec<u8>,
-    pub nonce: [u8; 12],
-    pub key_epoch: u64,
-    pub request_fingerprint: [u8; 32],
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeliveryIntentBodyBlobReceiptV1 {
+    pub reference_id: [u8; 16],
+    pub declared_bytes: u64,
+    pub sha256: [u8; 32],
+    pub custody_transfer_source_proof: Vec<u8>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -32,7 +32,8 @@ pub struct CreateDeliveryIntentV1 {
     pub canonical_conversation_id: CommunicationConversationIdV1,
     pub canonical_reply_message_id: Option<CommunicationMessageIdV1>,
     pub route: CommunicationDeliveryRouteV1,
-    pub sealed_body: SealedDeliveryBodyV1,
+    pub body_receipt: DeliveryIntentBodyBlobReceiptV1,
+    pub request_fingerprint: [u8; 32],
     pub created_at_unix_seconds: i64,
 }
 
@@ -61,7 +62,7 @@ pub struct DeliveryIntentClaimV1 {
     pub canonical_conversation_id: CommunicationConversationIdV1,
     pub canonical_reply_message_id: Option<CommunicationMessageIdV1>,
     pub route: CommunicationDeliveryRouteV1,
-    pub sealed_body: SealedDeliveryBodyV1,
+    pub body_receipt: DeliveryIntentBodyBlobReceiptV1,
     pub worker_id: String,
     pub claim_epoch: u64,
     pub lease_expires_at_unix_seconds: i64,
@@ -102,33 +103,35 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             .route
             .reply_to_source_cursor
             .map(|cursor| cursor.bytes().to_vec());
-        let key_epoch = i64::try_from(command.sealed_body.key_epoch)
+        let declared_bytes = i64::try_from(command.body_receipt.declared_bytes)
             .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidInput)?;
         let inserted = sqlx::query(
             "INSERT INTO hermes_data.communication_delivery_intent_jobs (
                intent_id, logical_owner_id, request_fingerprint,
                canonical_conversation_id, canonical_reply_message_id,
                provider_kind, account_cursor, conversation_cursor,
-               reply_source_cursor, body_ciphertext, body_nonce, body_key_epoch,
+               reply_source_cursor, body_reference_id, body_declared_bytes,
+               body_sha256, body_custody_source_proof,
                state, state_revision, created_at_unix_seconds,
                updated_at_unix_seconds
              ) VALUES (
                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-               $13, 1, $14, $14
+               $13, $14, 1, $15, $15
              ) ON CONFLICT (logical_owner_id, intent_id) DO NOTHING",
         )
         .bind(command.intent_id.as_slice())
         .bind(&command.logical_owner_id)
-        .bind(command.sealed_body.request_fingerprint.as_slice())
+        .bind(command.request_fingerprint.as_slice())
         .bind(command.canonical_conversation_id.bytes().as_slice())
         .bind(reply_message_id)
         .bind(provider_code(command.route.provider))
         .bind(command.route.account_cursor.bytes().as_slice())
         .bind(command.route.conversation_cursor.bytes().as_slice())
         .bind(reply_source_cursor)
-        .bind(&command.sealed_body.ciphertext)
-        .bind(command.sealed_body.nonce.as_slice())
-        .bind(key_epoch)
+        .bind(command.body_receipt.reference_id.as_slice())
+        .bind(declared_bytes)
+        .bind(command.body_receipt.sha256.as_slice())
+        .bind(&command.body_receipt.custody_transfer_source_proof)
         .bind(STATE_ACCEPTED)
         .bind(command.created_at_unix_seconds)
         .execute(&mut *transaction)
@@ -166,7 +169,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             .try_get("request_fingerprint")
             .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidRow)?;
         if stored_owner != command.logical_owner_id
-            || stored_fingerprint.as_slice() != command.sealed_body.request_fingerprint
+            || stored_fingerprint.as_slice() != command.request_fingerprint
         {
             return Err(DeliveryIntentPersistenceErrorV1::Conflict);
         }
@@ -374,7 +377,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
         target_state: i16,
         provider_operation_id: Option<&[u8]>,
         rejection_code: Option<u16>,
-        clear_body: bool,
+        _clear_body: bool,
         now_unix_seconds: i64,
     ) -> Result<DeliveryIntentStatusRecordV1, DeliveryIntentPersistenceErrorV1> {
         let claim_epoch = i64::try_from(claim.claim_epoch)
@@ -390,15 +393,12 @@ impl CommunicationDeliveryIntentPersistenceV1 {
                  state_revision = state_revision + 1,
                  provider_operation_id = $2,
                  rejection_code = $3,
-                 body_ciphertext = CASE WHEN $4 THEN NULL ELSE body_ciphertext END,
-                 body_nonce = CASE WHEN $4 THEN NULL ELSE body_nonce END,
-                 body_key_epoch = CASE WHEN $4 THEN NULL ELSE body_key_epoch END,
                  claimed_by = NULL,
                  lease_expires_at_unix_seconds = NULL,
-                 updated_at_unix_seconds = $5
-             WHERE logical_owner_id = $6 AND intent_id = $7
-               AND state = $8 AND claimed_by = $9 AND claim_epoch = $10
-               AND lease_expires_at_unix_seconds >= $5
+                 updated_at_unix_seconds = $4
+             WHERE logical_owner_id = $5 AND intent_id = $6
+               AND state = $7 AND claimed_by = $8 AND claim_epoch = $9
+               AND lease_expires_at_unix_seconds >= $4
              RETURNING intent_id, state, state_revision,
                        provider_operation_id, rejection_code",
         )
@@ -410,7 +410,6 @@ impl CommunicationDeliveryIntentPersistenceV1 {
                 .transpose()
                 .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidInput)?,
         )
-        .bind(clear_body)
         .bind(now_unix_seconds)
         .bind(&claim.logical_owner_id)
         .bind(claim.intent_id.as_slice())
@@ -462,9 +461,6 @@ impl CommunicationDeliveryIntentPersistenceV1 {
              SET state = $1,
                  state_revision = state_revision + 1,
                  rejection_code = $2,
-                 body_ciphertext = NULL,
-                 body_nonce = NULL,
-                 body_key_epoch = NULL,
                  updated_at_unix_seconds = $3
              WHERE logical_owner_id = $4 AND intent_id = $5 AND state = $6
              RETURNING intent_id, state, state_revision,
@@ -543,11 +539,16 @@ fn valid_create(command: &CreateDeliveryIntentV1) -> bool {
             .route
             .reply_to_source_cursor
             .is_none_or(|cursor| valid_id32(&cursor.bytes()))
-        && command.sealed_body.ciphertext.len() >= MIN_SEALED_BODY_BYTES
-        && command.sealed_body.ciphertext.len() <= MAX_SEALED_BODY_BYTES
-        && command.sealed_body.nonce.iter().any(|byte| *byte != 0)
-        && command.sealed_body.key_epoch > 0
-        && valid_id32(&command.sealed_body.request_fingerprint)
+        && valid_id16(&command.body_receipt.reference_id)
+        && (1..=MAX_BODY_BYTES).contains(&command.body_receipt.declared_bytes)
+        && valid_id32(&command.body_receipt.sha256)
+        && !command
+            .body_receipt
+            .custody_transfer_source_proof
+            .is_empty()
+        && command.body_receipt.custody_transfer_source_proof.len()
+            <= MAX_CUSTODY_SOURCE_PROOF_BYTES
+        && valid_id32(&command.request_fingerprint)
         && valid_timestamp(command.created_at_unix_seconds)
 }
 
@@ -573,7 +574,6 @@ fn claim_from_row(
             .map_err(row_error)?,
     )?
     .map(CommunicationSourceCursorV1::new);
-    let nonce = id12(row.try_get("body_nonce").map_err(row_error)?)?;
     Ok(DeliveryIntentClaimV1 {
         logical_owner_id: row.try_get("logical_owner_id").map_err(row_error)?,
         intent_id: id16(row.try_get("intent_id").map_err(row_error)?)?,
@@ -592,11 +592,13 @@ fn claim_from_row(
             )?),
             reply_to_source_cursor: reply_source_cursor,
         },
-        sealed_body: SealedDeliveryBodyV1 {
-            ciphertext: row.try_get("body_ciphertext").map_err(row_error)?,
-            nonce,
-            key_epoch: positive_u64(row.try_get("body_key_epoch").map_err(row_error)?)?,
-            request_fingerprint: id32(row.try_get("request_fingerprint").map_err(row_error)?)?,
+        body_receipt: DeliveryIntentBodyBlobReceiptV1 {
+            reference_id: id16(row.try_get("body_reference_id").map_err(row_error)?)?,
+            declared_bytes: positive_u64(row.try_get("body_declared_bytes").map_err(row_error)?)?,
+            sha256: id32(row.try_get("body_sha256").map_err(row_error)?)?,
+            custody_transfer_source_proof: row
+                .try_get("body_custody_source_proof")
+                .map_err(row_error)?,
         },
         worker_id: row.try_get("claimed_by").map_err(row_error)?,
         claim_epoch: positive_u64(row.try_get("claim_epoch").map_err(row_error)?)?,
@@ -661,12 +663,6 @@ fn state_from_code(state: i16) -> Result<DeliveryIntentStateV1, DeliveryIntentPe
     }
 }
 
-fn id12(bytes: Vec<u8>) -> Result<[u8; 12], DeliveryIntentPersistenceErrorV1> {
-    bytes
-        .try_into()
-        .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidRow)
-}
-
 fn id16(bytes: Vec<u8>) -> Result<[u8; 16], DeliveryIntentPersistenceErrorV1> {
     bytes
         .try_into()
@@ -725,7 +721,7 @@ mod tests {
     }
 
     #[test]
-    fn sealed_body_validation_rejects_plain_or_unfenced_material() {
+    fn blob_receipt_validation_rejects_unbound_material() {
         let command = CreateDeliveryIntentV1 {
             logical_owner_id: "owner:test".to_owned(),
             intent_id: [1; 16],
@@ -737,17 +733,18 @@ mod tests {
                 conversation_cursor: CommunicationSourceCursorV1::new([4; 32]),
                 reply_to_source_cursor: None,
             },
-            sealed_body: SealedDeliveryBodyV1 {
-                ciphertext: vec![5; MIN_SEALED_BODY_BYTES],
-                nonce: [6; 12],
-                key_epoch: 1,
-                request_fingerprint: [7; 32],
+            body_receipt: DeliveryIntentBodyBlobReceiptV1 {
+                reference_id: [5; 16],
+                declared_bytes: 12,
+                sha256: [6; 32],
+                custody_transfer_source_proof: vec![7; 48],
             },
+            request_fingerprint: [8; 32],
             created_at_unix_seconds: 1,
         };
         assert!(valid_create(&command));
         let mut invalid = command;
-        invalid.sealed_body.key_epoch = 0;
+        invalid.body_receipt.custody_transfer_source_proof.clear();
         assert!(!valid_create(&invalid));
     }
 

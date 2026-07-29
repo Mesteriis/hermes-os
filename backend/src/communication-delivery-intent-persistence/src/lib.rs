@@ -6,9 +6,9 @@ pub mod schema;
 
 use hermes_storage_protocol::StorageBindingV1;
 pub use intents::{
-    CreateDeliveryIntentOutcomeV1, CreateDeliveryIntentV1, DeliveryIntentClaimV1,
-    DeliveryIntentPersistenceErrorV1, DeliveryIntentStateV1, DeliveryIntentStatusRecordV1,
-    SealedDeliveryBodyV1,
+    CreateDeliveryIntentOutcomeV1, CreateDeliveryIntentV1, DeliveryIntentBodyBlobReceiptV1,
+    DeliveryIntentClaimV1, DeliveryIntentPersistenceErrorV1, DeliveryIntentStateV1,
+    DeliveryIntentStatusRecordV1,
 };
 pub use provider_events::{
     ApplyTerminalDeliveryResultOutcomeV1, EnqueueProviderCommandOutcomeV1,

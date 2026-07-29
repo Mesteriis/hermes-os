@@ -23,7 +23,6 @@ impl DeliveryIntentManagedRuntimeV1 {
     pub async fn enqueue_mail_command_v1(
         &self,
         claim: &DeliveryIntentClaimV1,
-        body_source: &DeliveryIntentBodySourceV1,
         context: &DeliveryIntentCommandContextV1,
         now_unix_seconds: i64,
     ) -> Result<EnqueueProviderCommandOutcomeV1, DeliveryIntentProviderEventRuntimeErrorV1> {
@@ -44,7 +43,7 @@ impl DeliveryIntentManagedRuntimeV1 {
                 .route
                 .reply_to_source_cursor
                 .map(|cursor| cursor.bytes()),
-            body_source,
+            &body_source_v1(claim),
             context,
         )
         .map_err(DeliveryIntentProviderEventRuntimeErrorV1::Adapter)?;
@@ -57,7 +56,6 @@ impl DeliveryIntentManagedRuntimeV1 {
     pub async fn enqueue_telegram_command_v1(
         &self,
         claim: &DeliveryIntentClaimV1,
-        body_source: &DeliveryIntentBodySourceV1,
         context: &DeliveryIntentCommandContextV1,
         now_unix_seconds: i64,
     ) -> Result<EnqueueProviderCommandOutcomeV1, DeliveryIntentProviderEventRuntimeErrorV1> {
@@ -73,7 +71,7 @@ impl DeliveryIntentManagedRuntimeV1 {
                 .route
                 .reply_to_source_cursor
                 .map(|cursor| cursor.bytes()),
-            body_source,
+            &body_source_v1(claim),
             context,
         )
         .map_err(DeliveryIntentProviderEventRuntimeErrorV1::Adapter)?;
@@ -86,7 +84,6 @@ impl DeliveryIntentManagedRuntimeV1 {
     pub async fn enqueue_whatsapp_command_v1(
         &self,
         claim: &DeliveryIntentClaimV1,
-        body_source: &DeliveryIntentBodySourceV1,
         context: &DeliveryIntentCommandContextV1,
         now_unix_seconds: i64,
     ) -> Result<EnqueueProviderCommandOutcomeV1, DeliveryIntentProviderEventRuntimeErrorV1> {
@@ -102,7 +99,7 @@ impl DeliveryIntentManagedRuntimeV1 {
                 .route
                 .reply_to_source_cursor
                 .map(|cursor| cursor.bytes()),
-            body_source,
+            &body_source_v1(claim),
             context,
         )
         .map_err(DeliveryIntentProviderEventRuntimeErrorV1::Adapter)?;
@@ -115,7 +112,6 @@ impl DeliveryIntentManagedRuntimeV1 {
     pub async fn enqueue_zulip_command_v1(
         &self,
         claim: &DeliveryIntentClaimV1,
-        body_source: &DeliveryIntentBodySourceV1,
         context: &DeliveryIntentCommandContextV1,
         now_unix_seconds: i64,
     ) -> Result<EnqueueProviderCommandOutcomeV1, DeliveryIntentProviderEventRuntimeErrorV1> {
@@ -131,7 +127,7 @@ impl DeliveryIntentManagedRuntimeV1 {
                 .route
                 .reply_to_source_cursor
                 .map(|cursor| cursor.bytes()),
-            body_source,
+            &body_source_v1(claim),
             context,
         )
         .map_err(DeliveryIntentProviderEventRuntimeErrorV1::Adapter)?;
@@ -352,5 +348,14 @@ impl DeliveryIntentManagedRuntimeV1 {
             .mark_provider_command_published(claim, message_id, published_at_unix_seconds)
             .await
             .map_err(DeliveryIntentProviderEventRuntimeErrorV1::Persistence)
+    }
+}
+
+fn body_source_v1(claim: &DeliveryIntentClaimV1) -> DeliveryIntentBodySourceV1 {
+    DeliveryIntentBodySourceV1 {
+        reference_id: claim.body_receipt.reference_id,
+        declared_bytes: claim.body_receipt.declared_bytes,
+        sha256: claim.body_receipt.sha256,
+        custody_transfer_source_proof: claim.body_receipt.custody_transfer_source_proof.clone(),
     }
 }

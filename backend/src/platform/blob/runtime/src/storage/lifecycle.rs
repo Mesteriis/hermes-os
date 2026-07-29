@@ -111,6 +111,42 @@ impl BlobContentLifecycleStore {
         }
     }
 
+    /// Accepts an exact retry only when the existing encrypted object matches
+    /// the full receipt. Ordinary writes remain create-only through `write_new`.
+    pub fn write_receipt_bound(
+        &self,
+        request: BlobContentWriteRequestV1<'_>,
+        expected_plaintext_sha256: &[u8; 32],
+    ) -> Result<(), BlobLifecycleError> {
+        if Sha256::digest(request.plaintext).as_slice() != expected_plaintext_sha256 {
+            return Err(BlobLifecycleError::Integrity);
+        }
+        match self.write_new(request) {
+            Ok(()) => Ok(()),
+            Err(BlobLifecycleError::Metadata(BlobMetadataError::AlreadyExists))
+            | Err(BlobLifecycleError::Storage(BlobStorageError::AlreadyExists)) => {
+                let full = BlobRangeV1::new(
+                    0,
+                    request.reference.declared_size(),
+                    request.reference.declared_size(),
+                )
+                .map_err(|_| BlobLifecycleError::Integrity)?;
+                let existing = self.read_range(
+                    request.reference,
+                    request.access,
+                    request.custody,
+                    request.lease,
+                    full,
+                    request.now_unix_ms,
+                )?;
+                (Sha256::digest(existing).as_slice() == expected_plaintext_sha256)
+                    .then_some(())
+                    .ok_or(BlobLifecycleError::Integrity)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     pub fn read_range(
         &self,
         reference: &BlobRefV1,
@@ -161,38 +197,18 @@ impl BlobContentLifecycleStore {
         if Sha256::digest(&plaintext).as_slice() != expected_plaintext_sha256 {
             return Err(BlobLifecycleError::Integrity);
         }
-        match self.write_new(BlobContentWriteRequestV1 {
-            reference: target_reference,
-            access: target_access,
-            custody: target_custody,
-            quota: target_quota,
-            lease: target_lease,
-            plaintext: &plaintext,
-            now_unix_ms,
-        }) {
-            Ok(()) => Ok(()),
-            Err(BlobLifecycleError::Metadata(BlobMetadataError::AlreadyExists))
-            | Err(BlobLifecycleError::Storage(BlobStorageError::AlreadyExists)) => {
-                let full_target = BlobRangeV1::new(
-                    0,
-                    target_reference.declared_size(),
-                    target_reference.declared_size(),
-                )
-                .map_err(|_| BlobLifecycleError::Integrity)?;
-                let existing = self.read_range(
-                    target_reference,
-                    target_access,
-                    target_custody,
-                    target_lease,
-                    full_target,
-                    now_unix_ms,
-                )?;
-                (Sha256::digest(existing).as_slice() == expected_plaintext_sha256)
-                    .then_some(())
-                    .ok_or(BlobLifecycleError::Integrity)
-            }
-            Err(error) => Err(error),
-        }
+        self.write_receipt_bound(
+            BlobContentWriteRequestV1 {
+                reference: target_reference,
+                access: target_access,
+                custody: target_custody,
+                quota: target_quota,
+                lease: target_lease,
+                plaintext: &plaintext,
+                now_unix_ms,
+            },
+            expected_plaintext_sha256,
+        )
     }
 
     pub fn reserve_deletion(
@@ -292,6 +308,7 @@ impl BlobContentLifecycleStore {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct BlobContentWriteRequestV1<'a> {
     pub reference: &'a BlobRefV1,
     pub access: &'a BlobAccessFenceV1,

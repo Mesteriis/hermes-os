@@ -2,11 +2,13 @@
 
 use std::os::unix::net::UnixStream;
 
+use hermes_communication_delivery_intent_core::PlannedDeliveryIntentV1;
 use hermes_communication_delivery_intent_persistence::{
-    CommunicationDeliveryIntentPersistenceV1, DeliveryIntentPersistenceErrorV1,
+    CommunicationDeliveryIntentPersistenceV1, CreateDeliveryIntentOutcomeV1,
+    DeliveryIntentPersistenceErrorV1,
 };
 use hermes_runtime_protocol::{
-    managed_control::ManagedControlChannelV2,
+    managed_control::{ManagedControlChannelV2, ManagedControlRequestDispatcherV2},
     v1::{
         ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
         ManagedStorageRuntimeConfigurationV1,
@@ -18,6 +20,11 @@ use hermes_storage_protocol::{
 };
 use hermes_storage_vault::{
     InheritedKernelVaultRouteV2, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
+};
+
+use crate::{
+    body_materializer::ManagedDeliveryIntentBodyMaterializerV1,
+    coordinator::{DeliveryIntentCoordinatorErrorV1, prepare_create_delivery_intent_v1},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -32,10 +39,13 @@ pub struct DeliveryIntentRuntimeAdmissionV1 {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DeliveryIntentRuntimeErrorV1 {
     Admission,
+    Coordinator(DeliveryIntentCoordinatorErrorV1),
+    Persistence(DeliveryIntentPersistenceErrorV1),
     Unavailable,
 }
 
 pub struct DeliveryIntentManagedRuntimeV1 {
+    logical_owner_id: String,
     control_channel: ManagedControlChannelV2<UnixStream>,
     persistence: CommunicationDeliveryIntentPersistenceV1,
 }
@@ -95,6 +105,7 @@ impl DeliveryIntentManagedRuntimeV1 {
             .set_nonblocking(true)
             .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
         Ok(Self {
+            logical_owner_id: admission.logical_owner_id.clone(),
             control_channel,
             persistence,
         })
@@ -102,6 +113,31 @@ impl DeliveryIntentManagedRuntimeV1 {
 
     pub fn persistence(&self) -> &CommunicationDeliveryIntentPersistenceV1 {
         &self.persistence
+    }
+
+    pub async fn create_delivery_intent_v1(
+        &mut self,
+        planned: PlannedDeliveryIntentV1,
+        created_at_unix_seconds: i64,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+    ) -> Result<CreateDeliveryIntentOutcomeV1, DeliveryIntentRuntimeErrorV1> {
+        let command = {
+            let mut materializer = ManagedDeliveryIntentBodyMaterializerV1 {
+                control_channel: &mut self.control_channel,
+                dispatcher,
+            };
+            prepare_create_delivery_intent_v1(
+                self.logical_owner_id.clone(),
+                planned,
+                created_at_unix_seconds,
+                &mut materializer,
+            )
+            .map_err(DeliveryIntentRuntimeErrorV1::Coordinator)?
+        };
+        self.persistence
+            .create_intent(&command)
+            .await
+            .map_err(DeliveryIntentRuntimeErrorV1::Persistence)
     }
 
     pub fn pump_control_once(&mut self) -> Result<bool, DeliveryIntentRuntimeErrorV1> {

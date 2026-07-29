@@ -58,7 +58,7 @@ test('Communications remains the exact domain owner after Mail integration admis
 
   assert.equal(
     policy.implementation.currentSlice,
-    'delivery_intent_transactional_event_adapters_v1',
+    'delivery_intent_target_bound_blob_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications'],

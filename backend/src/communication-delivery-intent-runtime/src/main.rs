@@ -145,7 +145,9 @@ where
 fn runtime_error(error: DeliveryIntentRuntimeErrorV1) -> String {
     let reason = match error {
         DeliveryIntentRuntimeErrorV1::Admission => "admission_rejected",
-        DeliveryIntentRuntimeErrorV1::Unavailable => "dependency_unavailable",
+        DeliveryIntentRuntimeErrorV1::Coordinator(_)
+        | DeliveryIntentRuntimeErrorV1::Persistence(_)
+        | DeliveryIntentRuntimeErrorV1::Unavailable => "dependency_unavailable",
     };
     format!("Communication Delivery Intent runtime failed: {reason}")
 }

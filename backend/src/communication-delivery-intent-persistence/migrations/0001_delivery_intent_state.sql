@@ -21,15 +21,17 @@ CREATE TABLE hermes_data.communication_delivery_intent_jobs (
   reply_source_cursor BYTEA CHECK (
     reply_source_cursor IS NULL OR octet_length(reply_source_cursor) = 32
   ),
-  body_ciphertext BYTEA CHECK (
-    body_ciphertext IS NULL
-    OR octet_length(body_ciphertext) BETWEEN 17 AND 65584
+  body_reference_id BYTEA NOT NULL CHECK (
+    octet_length(body_reference_id) = 16
   ),
-  body_nonce BYTEA CHECK (
-    body_nonce IS NULL OR octet_length(body_nonce) = 12
+  body_declared_bytes BIGINT NOT NULL CHECK (
+    body_declared_bytes BETWEEN 1 AND 65536
   ),
-  body_key_epoch BIGINT CHECK (
-    body_key_epoch IS NULL OR body_key_epoch > 0
+  body_sha256 BYTEA NOT NULL CHECK (
+    octet_length(body_sha256) = 32
+  ),
+  body_custody_source_proof BYTEA NOT NULL CHECK (
+    octet_length(body_custody_source_proof) BETWEEN 1 AND 2048
   ),
   state SMALLINT NOT NULL CHECK (state BETWEEN 1 AND 5),
   state_revision BIGINT NOT NULL DEFAULT 1 CHECK (state_revision > 0),
@@ -59,19 +61,13 @@ CREATE TABLE hermes_data.communication_delivery_intent_jobs (
       AND lease_expires_at_unix_seconds IS NULL)
   ),
   CHECK (
-    (body_ciphertext IS NULL AND body_nonce IS NULL AND body_key_epoch IS NULL)
-    OR (body_ciphertext IS NOT NULL AND body_nonce IS NOT NULL
-      AND body_key_epoch IS NOT NULL)
-  ),
-  CHECK (
-    (state IN (1, 2) AND body_ciphertext IS NOT NULL
-      AND provider_operation_id IS NULL AND rejection_code IS NULL)
-    OR (state = 3 AND body_ciphertext IS NOT NULL
+    (state IN (1, 2) AND provider_operation_id IS NULL
+      AND rejection_code IS NULL)
+    OR (state = 3
       AND provider_operation_id IS NOT NULL AND rejection_code IS NULL)
-    OR (state = 4 AND body_ciphertext IS NULL
+    OR (state = 4
       AND provider_operation_id IS NOT NULL AND rejection_code IS NULL)
-    OR (state = 5 AND body_ciphertext IS NULL
-      AND rejection_code IS NOT NULL)
+    OR (state = 5 AND rejection_code IS NOT NULL)
   )
 );
 

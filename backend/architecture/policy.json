@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "delivery_intent_transactional_event_adapters_v1",
+    "currentSlice": "delivery_intent_target_bound_blob_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1398,6 +1398,10 @@
       ],
       "hermes-communication-delivery-intent-runtime": [
         {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-communication-delivery-intent-api",
           "kind": "normal"
         },
@@ -1414,6 +1418,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-mail-delivery-intent-contract",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-runtime-protocol",
           "kind": "normal"
         },
@@ -1423,6 +1431,18 @@
         },
         {
           "name": "hermes-storage-vault",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-telegram-delivery-intent-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-whatsapp-delivery-intent-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-zulip-delivery-intent-contract",
           "kind": "normal"
         }
       ],

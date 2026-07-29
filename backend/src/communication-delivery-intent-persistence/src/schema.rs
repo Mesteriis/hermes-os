@@ -40,7 +40,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bundle_is_valid_owner_scoped_and_ciphertext_only() {
+    fn bundle_is_valid_owner_scoped_and_blob_receipt_only() {
         let bundle = communication_delivery_intent_storage_bundle_v1();
         validate_storage_bundle(&bundle).expect("valid owner storage bundle");
         assert_eq!(bundle.owner_id, "communication_delivery_intent");
@@ -56,13 +56,17 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         assert!(sql.contains("hermes_data.communication_delivery_intent_jobs"));
-        assert!(sql.contains("body_ciphertext"));
+        assert!(sql.contains("body_reference_id"));
+        assert!(sql.contains("body_custody_source_proof"));
         assert!(sql.contains("claim_epoch"));
         assert!(sql.contains("PRIMARY KEY (logical_owner_id, intent_id)"));
         assert!(sql.contains("communication_delivery_intent_provider_outbox"));
         assert!(sql.contains("communication_delivery_intent_result_inbox"));
         assert!(sql.contains("exact_envelope_bytes"));
         assert!(!sql.contains("body_utf8"));
+        assert!(!sql.contains("body_ciphertext"));
+        assert!(!sql.contains("body_nonce"));
+        assert!(!sql.contains("body_key_epoch"));
         assert!(!sql.contains("communications_messages"));
         assert!(!sql.contains("mail_"));
         assert!(!sql.contains("telegram_"));

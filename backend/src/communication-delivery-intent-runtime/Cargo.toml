@@ -17,13 +17,18 @@ owner = "communication_delivery_intent"
 surface = "runtime"
 
 [dependencies]
+hermes-blob-client = { path = "../platform/blob/client" }
 hermes-communication-delivery-intent-api = { path = "../communication-delivery-intent-api" }
 hermes-communication-delivery-intent-core = { path = "../communication-delivery-intent-core" }
 hermes-communication-delivery-intent-event-adapters = { path = "../communication-delivery-intent-event-adapters" }
 hermes-communication-delivery-intent-persistence = { path = "../communication-delivery-intent-persistence" }
+hermes-mail-delivery-intent-contract = { path = "../mail-delivery-intent-contract" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-storage-vault = { path = "../platform/storage/vault" }
+hermes-telegram-delivery-intent-contract = { path = "../telegram-delivery-intent-contract" }
+hermes-whatsapp-delivery-intent-contract = { path = "../whatsapp-delivery-intent-contract" }
+hermes-zulip-delivery-intent-contract = { path = "../zulip-delivery-intent-contract" }
 libc = "=0.2.186"
 prost = "=0.14.4"
 sha2 = { version = "=0.11.0", default-features = false }

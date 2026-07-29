@@ -9,6 +9,7 @@ use hermes_blob_runtime::metadata::{BlobMetadataError, BlobMetadataLedger};
 use hermes_blob_runtime::storage::{
     BlobContentLifecycleStore, BlobContentWriteRequestV1, BlobLifecycleError, EncryptedBlobStore,
 };
+use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 #[test]
@@ -242,6 +243,39 @@ fn lifecycle_store_reserves_aggregate_quota_before_persisting_encrypted_content(
         Err(BlobLifecycleError::Metadata(
             BlobMetadataError::QuotaExceeded
         ))
+    ));
+}
+
+#[test]
+fn receipt_bound_write_accepts_exact_retry_and_rejects_existing_content_mismatch() {
+    let directory = private_directory();
+    let store = BlobContentLifecycleStore::open(directory.path(), 1024).expect("lifecycle store");
+    let reference = reference(8, 13);
+    let access = access();
+    let custody = custody();
+    let quota = quota(64);
+    let lease = lease(&reference, access.clone());
+    let expected: [u8; 32] = Sha256::digest(b"private bytes").into();
+    let different: [u8; 32] = Sha256::digest(b"other content").into();
+    let request = |plaintext| BlobContentWriteRequestV1 {
+        reference: &reference,
+        access: &access,
+        custody: &custody,
+        quota: &quota,
+        lease: &lease,
+        plaintext,
+        now_unix_ms: 2,
+    };
+
+    store
+        .write_receipt_bound(request(b"private bytes"), &expected)
+        .expect("first exact write");
+    store
+        .write_receipt_bound(request(b"private bytes"), &expected)
+        .expect("same receipt retry");
+    assert!(matches!(
+        store.write_receipt_bound(request(b"other content"), &different),
+        Err(BlobLifecycleError::Integrity)
     ));
 }
 

@@ -55,12 +55,15 @@ test('provider delivery intents are four separate integration-owned contract bui
     ),
   );
   const workspace = await readFile(new URL('Cargo.toml', BACKEND_ROOT), 'utf8');
+  const runtimeManifest = await readFile(
+    new URL('src/communication-delivery-intent-runtime/Cargo.toml', BACKEND_ROOT),
+    'utf8',
+  );
   const workflowManifests = await Promise.all(
     [
       'api',
       'core',
       'persistence',
-      'runtime',
       'assembly',
     ].map((surface) =>
       readFile(
@@ -72,7 +75,7 @@ test('provider delivery intents are four separate integration-owned contract bui
 
   assert.equal(
     policy.implementation.currentSlice,
-    'delivery_intent_transactional_event_adapters_v1',
+    'delivery_intent_target_bound_blob_v1',
   );
   assert.equal(
     reconstruction.slices.find(({ gate }) => gate === 'communication_delivery_intent_v1')
@@ -149,6 +152,16 @@ test('provider delivery intents are four separate integration-owned contract bui
   assert.doesNotMatch(
     workflowManifests.join('\n'),
     /hermes-(?:mail|telegram|whatsapp|zulip)-delivery-intent-contract/,
+  );
+  for (const provider of providers) {
+    assert.match(
+      runtimeManifest,
+      new RegExp(`hermes-${provider.owner}-delivery-intent-contract`),
+    );
+  }
+  assert.doesNotMatch(
+    runtimeManifest,
+    /hermes-(?:mail|telegram|whatsapp|zulip)-(?:runtime|persistence)/,
   );
 });
 
