@@ -93,7 +93,33 @@ ALTER TABLE hermes_data.mail_delivery_intent_jobs
     );
 "#;
 
-const MAIL_DELIVERY_INTENT_MAX_ATTEMPTS_V1: i32 = 12;
+pub const MAIL_SCHEMA_V21: &str = r#"
+ALTER TABLE hermes_data.mail_delivery_intent_jobs
+    ADD COLUMN command_envelope_sha256 BYTEA,
+    ADD COLUMN logical_owner_id TEXT;
+
+UPDATE hermes_data.mail_delivery_intent_jobs AS job
+SET command_envelope_sha256 = inbox.envelope_sha256,
+    logical_owner_id = inbox.logical_owner_id
+FROM hermes_data.mail_delivery_intent_inbox AS inbox
+WHERE inbox.message_id = job.command_message_id
+  AND (
+    job.command_envelope_sha256 IS NULL OR
+    job.logical_owner_id IS NULL
+  );
+
+ALTER TABLE hermes_data.mail_delivery_intent_jobs
+    ALTER COLUMN command_envelope_sha256 SET NOT NULL,
+    ALTER COLUMN logical_owner_id SET NOT NULL,
+    ADD CONSTRAINT mail_delivery_intent_command_envelope_sha256_width CHECK (
+        octet_length(command_envelope_sha256) = 32
+    ),
+    ADD CONSTRAINT mail_delivery_intent_logical_owner_id_width CHECK (
+        length(logical_owner_id) BETWEEN 1 AND 256
+    );
+"#;
+
+pub const MAIL_DELIVERY_INTENT_MAX_ATTEMPTS_V1: i32 = 12;
 
 #[derive(Clone)]
 pub struct MailDeliveryIntentStoreV1 {
@@ -119,6 +145,8 @@ pub struct MailDeliveryIntentAdmissionV1 {
 pub struct MailDeliveryIntentJobV1 {
     pub intent_id: [u8; 16],
     pub command_message_id: [u8; 16],
+    pub command_envelope_sha256: [u8; 32],
+    pub logical_owner_id: String,
     pub connection_id: String,
     pub provider_thread_id: String,
     pub reply_to_provider_message_id: Option<String>,
@@ -251,14 +279,17 @@ impl MailDeliveryIntentStoreV1 {
         let outcome = if let Some(route) = route {
             sqlx::query(
                 "INSERT INTO hermes_data.mail_delivery_intent_jobs
-                    (intent_id, command_message_id, connection_id, provider_thread_id,
-                     reply_to_provider_message_id, recipient, subject, body_reference_id,
-                     body_declared_bytes, body_sha256, custody_transfer_source_proof,
-                     provider_operation_id, next_attempt_at_unix_seconds)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+                    (intent_id, command_message_id, command_envelope_sha256, logical_owner_id,
+                     connection_id, provider_thread_id, reply_to_provider_message_id, recipient,
+                     subject, body_reference_id, body_declared_bytes, body_sha256,
+                     custody_transfer_source_proof, provider_operation_id,
+                     next_attempt_at_unix_seconds)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
             )
             .bind(admission.intent_id.as_slice())
             .bind(admission.command_message_id.as_slice())
+            .bind(admission.envelope_sha256.as_slice())
+            .bind(&admission.logical_owner_id)
             .bind(route.connection_id)
             .bind(route.provider_thread_id)
             .bind(route.reply_to_provider_message_id)
@@ -329,7 +360,7 @@ impl MailDeliveryIntentStoreV1 {
                 FROM hermes_data.mail_delivery_intent_jobs
                 WHERE state BETWEEN 1 AND 3
                   AND next_attempt_at_unix_seconds <= $1
-                  AND attempt_count < $2
+                  AND (state = 3 OR attempt_count < $2)
                   AND (
                     claimed_by IS NULL OR
                     lease_expires_at_unix_seconds IS NULL OR
@@ -342,7 +373,10 @@ impl MailDeliveryIntentStoreV1 {
              UPDATE hermes_data.mail_delivery_intent_jobs job
              SET claimed_by = $3,
                  lease_expires_at_unix_seconds = $4,
-                 attempt_count = attempt_count + 1
+                 attempt_count = CASE
+                    WHEN job.state = 3 THEN attempt_count
+                    ELSE attempt_count + 1
+                 END
              FROM next
              WHERE job.intent_id = next.intent_id
              RETURNING job.*",
@@ -441,6 +475,106 @@ impl MailDeliveryIntentStoreV1 {
         }
         Ok(())
     }
+
+    pub async fn reschedule_claimed_job(
+        &self,
+        intent_id: [u8; 16],
+        worker_id: &str,
+        state: MailDeliveryIntentJobStateV1,
+        next_attempt_at_unix_seconds: i64,
+    ) -> Result<(), MailDurablePersistenceError> {
+        if intent_id.iter().all(|byte| *byte == 0)
+            || worker_id.trim().is_empty()
+            || !matches!(
+                state,
+                MailDeliveryIntentJobStateV1::PendingCustody
+                    | MailDeliveryIntentJobStateV1::BodyReady
+                    | MailDeliveryIntentJobStateV1::DeliveryQueued
+            )
+            || next_attempt_at_unix_seconds <= 0
+        {
+            return Err(MailDurablePersistenceError::InvalidRow);
+        }
+        let updated = sqlx::query(
+            "UPDATE hermes_data.mail_delivery_intent_jobs
+             SET next_attempt_at_unix_seconds = $1,
+                 claimed_by = NULL,
+                 lease_expires_at_unix_seconds = NULL
+             WHERE intent_id = $2
+               AND state = $3
+               AND claimed_by = $4",
+        )
+        .bind(next_attempt_at_unix_seconds)
+        .bind(intent_id.as_slice())
+        .bind(state as i16)
+        .bind(worker_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| MailDurablePersistenceError::Database)?;
+        if updated.rows_affected() != 1 {
+            return Err(MailDurablePersistenceError::InvalidDeliveryIntentTransition);
+        }
+        Ok(())
+    }
+
+    pub async fn complete_claimed_job(
+        &self,
+        intent_id: [u8; 16],
+        worker_id: &str,
+        terminal_state: MailDeliveryIntentJobStateV1,
+        result: &OutboxRecordV1,
+        completed_at_unix_seconds: i64,
+    ) -> Result<(), MailDurablePersistenceError> {
+        if intent_id.iter().all(|byte| *byte == 0)
+            || worker_id.trim().is_empty()
+            || !matches!(
+                terminal_state,
+                MailDeliveryIntentJobStateV1::Succeeded
+                    | MailDeliveryIntentJobStateV1::Rejected
+                    | MailDeliveryIntentJobStateV1::OutcomeUnknown
+            )
+            || completed_at_unix_seconds <= 0
+        {
+            return Err(MailDurablePersistenceError::InvalidRow);
+        }
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        let updated = sqlx::query(
+            "UPDATE hermes_data.mail_delivery_intent_jobs
+             SET state = $1,
+                 completed_at_unix_seconds = $2,
+                 claimed_by = NULL,
+                 lease_expires_at_unix_seconds = NULL
+             WHERE intent_id = $3
+               AND state BETWEEN 1 AND 3
+               AND claimed_by = $4
+               AND lease_expires_at_unix_seconds > $2",
+        )
+        .bind(terminal_state as i16)
+        .bind(completed_at_unix_seconds)
+        .bind(intent_id.as_slice())
+        .bind(worker_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| MailDurablePersistenceError::Database)?;
+        if updated.rows_affected() != 1 {
+            return Err(MailDurablePersistenceError::InvalidDeliveryIntentTransition);
+        }
+        insert_result_outbox(
+            &mut transaction,
+            intent_id,
+            result,
+            completed_at_unix_seconds,
+        )
+        .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)
+    }
 }
 
 fn claimed_job_from_row(
@@ -456,6 +590,8 @@ fn claimed_job_from_row(
         job: MailDeliveryIntentJobV1 {
             intent_id: required_id::<16>(&row, "intent_id")?,
             command_message_id: required_id::<16>(&row, "command_message_id")?,
+            command_envelope_sha256: required_id::<32>(&row, "command_envelope_sha256")?,
+            logical_owner_id: required_string(&row, "logical_owner_id")?,
             connection_id: required_string(&row, "connection_id")?,
             provider_thread_id: required_string(&row, "provider_thread_id")?,
             reply_to_provider_message_id: row
@@ -696,6 +832,14 @@ mod tests {
         assert!(MAIL_SCHEMA_V20.contains("target_body_receipt_sha256 BYTEA"));
         assert!(MAIL_SCHEMA_V20.contains("mail_delivery_intent_target_body_receipt_complete"));
         assert!(!MAIL_SCHEMA_V20.contains("communications_"));
+    }
+
+    #[test]
+    fn command_evidence_and_owner_are_forward_migrated_into_the_mail_job() {
+        assert!(MAIL_SCHEMA_V21.contains("command_envelope_sha256 = inbox.envelope_sha256"));
+        assert!(MAIL_SCHEMA_V21.contains("logical_owner_id = inbox.logical_owner_id"));
+        assert!(MAIL_SCHEMA_V21.contains("ALTER COLUMN logical_owner_id SET NOT NULL"));
+        assert!(!MAIL_SCHEMA_V21.contains("communications_"));
     }
 
     #[test]

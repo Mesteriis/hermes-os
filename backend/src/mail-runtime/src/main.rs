@@ -16,6 +16,9 @@ use hermes_mail_runtime::{
     MailRuntimeAdmission,
     attachment_security_outbox::MailAttachmentSecurityOutboxRelayError,
     communications_outbox::MailCommunicationsOutboxRelayError,
+    delivery_intent_worker::{
+        MailDeliveryIntentWorkerErrorV1, process_next_mail_delivery_intent_v1,
+    },
     gmail_oauth::{
         CompletedGmailOAuthProviderOperationV1, MailGmailOAuthDispatchErrorV1,
         execute_gmail_oauth_provider_operation,
@@ -497,6 +500,24 @@ fn execute_account_queues(
     admitted: &mut managed::MailAdmittedRuntime,
     now: i64,
 ) -> Result<(), String> {
+    match runtime.block_on(process_next_mail_delivery_intent_v1(admitted, now)) {
+        Ok(_) => {}
+        Err(MailDeliveryIntentWorkerErrorV1::InvalidClock) => {
+            return Err("Mail delivery-intent worker clock is invalid".to_owned());
+        }
+        Err(MailDeliveryIntentWorkerErrorV1::Persistence) => {
+            developer_diagnostic("developer_mail_delivery_intent_persistence_failed");
+            return Err("Mail delivery-intent persistence failed".to_owned());
+        }
+        Err(MailDeliveryIntentWorkerErrorV1::Runtime) => {
+            developer_diagnostic("developer_mail_delivery_intent_runtime_failed");
+            return Err("Mail delivery-intent runtime status failed".to_owned());
+        }
+        Err(MailDeliveryIntentWorkerErrorV1::ResultEnvelope) => {
+            developer_diagnostic("developer_mail_delivery_intent_result_invalid");
+            return Err("Mail delivery-intent result envelope is invalid".to_owned());
+        }
+    }
     match runtime.block_on(admitted.execute_next_delivery(now, now)) {
         Ok(_) => {}
         Err(MailDeliveryDispatchErrorV1::ProviderRejected) => {

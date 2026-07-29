@@ -213,8 +213,8 @@ pub struct MailAdmittedRuntime {
     pub(crate) provider_credential_context: ManagedProviderCredentialContextV1,
     pub(crate) settings_revision: u64,
     parked_accounts: BTreeMap<String, MailRuntimeAccountSlotV1>,
-    runtime_instance_id: String,
-    runtime_generation: u64,
+    pub(crate) runtime_instance_id: String,
+    pub(crate) runtime_generation: u64,
 }
 
 struct MailRuntimeAccountSlotV1 {

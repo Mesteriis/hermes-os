@@ -29,9 +29,10 @@ pub use composition::{MAIL_SCHEMA_V11, MailCompositionPersistenceErrorV1};
 pub use conformance::MailPersistenceConformanceV1;
 pub use delivery_intent::{MAIL_SCHEMA_V18, MailDeliveryRouteLocatorV1};
 pub use delivery_intent_inbox::{
-    ClaimedMailDeliveryIntentJobV1, MAIL_SCHEMA_V19, MAIL_SCHEMA_V20,
-    MailDeliveryIntentAdmissionV1, MailDeliveryIntentInboxOutcomeV1, MailDeliveryIntentJobStateV1,
-    MailDeliveryIntentJobV1, MailDeliveryIntentStoreV1,
+    ClaimedMailDeliveryIntentJobV1, MAIL_DELIVERY_INTENT_MAX_ATTEMPTS_V1, MAIL_SCHEMA_V19,
+    MAIL_SCHEMA_V20, MAIL_SCHEMA_V21, MailDeliveryIntentAdmissionV1,
+    MailDeliveryIntentInboxOutcomeV1, MailDeliveryIntentJobStateV1, MailDeliveryIntentJobV1,
+    MailDeliveryIntentStoreV1,
 };
 pub use durable::{
     MAIL_SCHEMA_V1, MAIL_SCHEMA_V2, MAIL_SCHEMA_V3, MAIL_SCHEMA_V6,
