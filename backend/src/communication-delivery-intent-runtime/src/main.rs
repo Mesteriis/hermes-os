@@ -141,7 +141,13 @@ where
         ))
         .map_err(runtime_error)?;
     loop {
-        runtime.pump_control_once().map_err(runtime_error)?;
+        runtime.pump_control_once().map_err(|error| match error {
+            DeliveryIntentRuntimeErrorV1::Unavailable => {
+                "Communication Delivery Intent runtime failed: control_channel_unavailable"
+                    .to_owned()
+            }
+            error => runtime_error(error),
+        })?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|_| "Communication Delivery Intent clock is invalid".to_owned())?
