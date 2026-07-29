@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "delivery_intent_target_bound_blob_v1",
+    "currentSlice": "communication_bulk_action_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -545,6 +545,18 @@
         "name": "hermes-communication-delivery-intent-event-adapters",
         "role": "workflow",
         "owner": "communication_delivery_intent",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-communication-bulk-action-api",
+        "role": "workflow",
+        "owner": "communication_bulk_action",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-bulk-action-core",
+        "role": "workflow",
+        "owner": "communication_bulk_action",
         "surface": "implementation"
       }
     ],
@@ -1526,6 +1538,8 @@
           "kind": "normal"
         }
       ],
+      "hermes-communication-bulk-action-api": [],
+      "hermes-communication-bulk-action-core": [],
       "hermes-communications-export-persistence": [
         {
           "name": "hermes-communications-export-core",
@@ -4303,7 +4317,42 @@
           "defaultFeatures": false,
           "features": []
         }
-      ]
+      ],
+      "hermes-communication-bulk-action-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communication-bulk-action-core": []
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -4676,6 +4725,14 @@
         "customBuildAllowed": true
       },
       "hermes-communication-delivery-intent-event-adapters": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-bulk-action-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communication-bulk-action-core": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       }

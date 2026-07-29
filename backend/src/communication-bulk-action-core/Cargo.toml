@@ -1,0 +1,15 @@
+[package]
+name = "hermes-communication-bulk-action-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "communication_bulk_action"
+surface = "implementation"
+
+[dependencies]

@@ -1718,6 +1718,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-bulk-action-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-communication-bulk-action-core"
+version = "0.1.0"
+
+[[package]]
 name = "hermes-communication-delivery-intent-api"
 version = "0.1.0"
 dependencies = [
