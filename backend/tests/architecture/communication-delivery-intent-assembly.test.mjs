@@ -21,6 +21,14 @@ const paths = {
     'src/communication-delivery-intent-runtime/Cargo.toml',
     BACKEND_ROOT,
   ),
+  assemblyManifest: new URL(
+    'src/communication-delivery-intent-assembly/Cargo.toml',
+    BACKEND_ROOT,
+  ),
+  assembly: new URL(
+    'src/communication-delivery-intent-assembly/src/lib.rs',
+    BACKEND_ROOT,
+  ),
   runtimeAdmission: new URL(
     'src/communication-delivery-intent-runtime/src/admission.rs',
     BACKEND_ROOT,
@@ -51,7 +59,7 @@ const paths = {
   ),
 };
 
-test('delivery intent runtime is an exact non-admitted workflow slice', async () => {
+test('delivery intent assembly is an exact non-admitted workflow slice', async () => {
   const [
     policySource,
     reconstructionSource,
@@ -59,6 +67,8 @@ test('delivery intent runtime is an exact non-admitted workflow slice', async ()
     coreManifest,
     persistenceManifest,
     runtimeManifest,
+    assemblyManifest,
+    assembly,
     runtimeAdmission,
     runtimeCoordinator,
     runtimeProcess,
@@ -74,6 +84,8 @@ test('delivery intent runtime is an exact non-admitted workflow slice', async ()
       readFile(paths.coreManifest, 'utf8'),
       readFile(paths.persistenceManifest, 'utf8'),
       readFile(paths.runtimeManifest, 'utf8'),
+      readFile(paths.assemblyManifest, 'utf8'),
+      readFile(paths.assembly, 'utf8'),
       readFile(paths.runtimeAdmission, 'utf8'),
       readFile(paths.runtimeCoordinator, 'utf8'),
       readFile(paths.runtimeProcess, 'utf8'),
@@ -93,7 +105,7 @@ test('delivery intent runtime is an exact non-admitted workflow slice', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_delivery_intent_runtime_v1',
+    'communication_delivery_intent_assembly_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, ['communications_export']);
   assert.deepEqual(
@@ -105,6 +117,7 @@ test('delivery intent runtime is an exact non-admitted workflow slice', async ()
       'hermes-communication-delivery-intent-core:implementation',
       'hermes-communication-delivery-intent-persistence:persistence',
       'hermes-communication-delivery-intent-runtime:runtime',
+      'hermes-communication-delivery-intent-assembly:assembly',
     ],
   );
   assert.equal(deliverySlice?.state, 'planned');
@@ -116,11 +129,16 @@ test('delivery intent runtime is an exact non-admitted workflow slice', async ()
     /role = "workflow"[\s\S]*surface = "persistence"/,
   );
   assert.match(runtimeManifest, /role = "workflow"[\s\S]*surface = "runtime"/);
+  assert.match(assemblyManifest, /role = "workflow"[\s\S]*surface = "assembly"/);
   assert.match(coreManifest, /hermes-communications-api/);
   assert.doesNotMatch(
-    `${apiManifest}\n${coreManifest}\n${persistenceManifest}\n${runtimeManifest}`,
+    `${apiManifest}\n${coreManifest}\n${persistenceManifest}\n${runtimeManifest}\n${assemblyManifest}`,
     /hermes-(?:mail|telegram|whatsapp|zulip|communications-domain|communications-persistence)/,
   );
+  assert.match(assembly, /validate_descriptor_v1/);
+  assert.match(assembly, /validate_storage_bundle/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.doesNotMatch(assembly, /ClientRpcRouteV1|async_nats|sqlx|provider command/);
   assert.match(runtimeAdmission, /StorageNamespaceRequestV1/);
   assert.doesNotMatch(
     runtimeAdmission,

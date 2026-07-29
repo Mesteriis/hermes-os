@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delivery_intent_runtime_v1",
+    "currentSlice": "communication_delivery_intent_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -510,6 +510,12 @@
         "role": "workflow",
         "owner": "communication_delivery_intent",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-communication-delivery-intent-assembly",
+        "role": "workflow",
+        "owner": "communication_delivery_intent",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1379,6 +1385,24 @@
         },
         {
           "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-delivery-intent-assembly": [
+        {
+          "name": "hermes-communication-delivery-intent-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delivery-intent-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -3960,6 +3984,35 @@
           "defaultFeatures": true,
           "features": []
         }
+      ],
+      "hermes-communication-delivery-intent-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -4309,6 +4362,10 @@
         "customBuildAllowed": false
       },
       "hermes-communication-delivery-intent-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-delivery-intent-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       }

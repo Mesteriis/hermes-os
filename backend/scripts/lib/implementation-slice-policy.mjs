@@ -422,6 +422,16 @@ const COMMUNICATION_DELIVERY_INTENT_RUNTIME_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_DELIVERY_INTENT_RUNTIME_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communication-delivery-intent-assembly',
+    role: 'workflow',
+    owner: 'communication_delivery_intent',
+    surface: 'assembly',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -1491,6 +1501,16 @@ const COMMUNICATION_DELIVERY_INTENT_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELIVERY_INTENT_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delivery-intent-assembly': [
+    { name: 'hermes-communication-delivery-intent-persistence', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -1558,6 +1578,15 @@ const COMMUNICATION_DELIVERY_INTENT_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt', 'rt-multi-thread', 'time'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
+const COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELIVERY_INTENT_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delivery-intent-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -2234,6 +2263,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATION_DELIVERY_INTENT_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATION_DELIVERY_INTENT_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_delivery_intent_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATIONS_EXPORT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATION_DELIVERY_INTENT_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

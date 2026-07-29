@@ -9,8 +9,10 @@ owner-local persistence и independently managed runtime substrate реализ�
 Persistence принимает только sealed ciphertext, хранит owner-scoped
 idempotency/state transitions и выдаёт lease/claim с epoch fencing. Runtime
 проходит Kernel handshake, поднимает owner-local Storage через Vault-fenced
-credential и пока предоставляет только Storage capability. Provider command
-adapters, client route, assembly и live admission ещё не реализованы;
+credential и пока предоставляет только Storage capability. Отдельная assembly
+unit создаёт canonical descriptor/settings/Storage bundle и deterministic
+unsigned release fragment, не исполняя workflow. Provider command adapters,
+client route и live admission ещё не реализованы;
 `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст
@@ -32,7 +34,7 @@ hermes-communication-delivery-intent-api
 hermes-communication-delivery-intent-core
 hermes-communication-delivery-intent-persistence
 hermes-communication-delivery-intent-runtime
-hermes-communication-delivery-intent-assembly      (следующий slice)
+hermes-communication-delivery-intent-assembly
 ```
 
 Публичный V1 request принимает только:
@@ -90,6 +92,13 @@ Runtime unit принимает plaintext только как consumed planning 
 а не как неработающие facade routes. Managed process уже реализует Kernel
 describe/ready handshake, runtime/grant fences, Vault-issued Storage credential,
 PgBouncer connection budget и fail-closed control-frame pump.
+
+Assembly unit зависит только от runtime/persistence и общих release contracts.
+Она принимает exact runtime executable, запрещает relative, missing, empty и
+symlink input, никогда не перезаписывает output и публикует только unsigned
+sorted artifact fragment. Подпись и distribution admission остаются generic
+platform responsibility; assembly не является runtime, integration или
+business owner.
 
 ## Инварианты planning core
 
