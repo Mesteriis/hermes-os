@@ -61,6 +61,7 @@ members = [
   "src/communication-bulk-action-assembly",
   "src/communication-delayed-delivery-api",
   "src/communication-delayed-delivery-core",
+  "src/communication-delayed-delivery-persistence",
   "src/mail-delivery-intent-contract",
   "src/telegram-delivery-intent-contract",
   "src/whatsapp-delivery-intent-contract",

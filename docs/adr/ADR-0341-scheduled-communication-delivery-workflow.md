@@ -8,11 +8,14 @@
 `communication_delayed_delivery_v1` остаётся `planned`. `scheduler_v1`
 реализован с live restart/revoke и hot-reconciliation evidence, а
 module-originated schedule-control transport принят Kernel и Scheduler.
-Реализованы отдельные `api` и `core` units delayed-delivery с generated
-Schedule/Cancel/Status/realtime contract, hard request/body/time bounds и
-cancellation-race policy. Persistence, encrypted Blob custody, managed runtime,
-assembly, client routing и live end-to-end contour ещё не реализованы. Этот ADR
-не открывает workflow gate сам по себе.
+Реализованы отдельные `api`, `core` и persistence units delayed-delivery с
+generated Schedule/Cancel/Status/realtime contract, hard request/body/time
+bounds, cancellation-race policy и owner-local Storage bundle. Persistence
+сохраняет только bounded Blob custody receipt, Scheduler inbox/outbox correlation
+и execution fences; plaintext body в workflow SQL запрещён. Atomic operation
+methods, encrypted Blob custody execution, managed runtime, assembly, client
+routing и live end-to-end contour ещё не реализованы. Этот ADR не открывает
+workflow gate сам по себе.
 
 Уточняет:
 
