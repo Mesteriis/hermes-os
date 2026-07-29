@@ -128,6 +128,8 @@ fn owner_vault_provisioning_survives_vault_restart_with_durable_idempotency() {
         Arc::clone(&store),
         &data,
         supervisor.clone(),
+        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(1_024)
+            .expect("test realtime source"),
         &configuration,
         None,
     )
@@ -501,6 +503,7 @@ fn admit_owner_browser_and_mail(store: &Arc<SqliteControlStore>) -> SigningKey {
                 vault_purposes: std::slice::from_ref(&purpose),
                 client_rpc_routes: &[],
                 client_blob_routes: &[],
+                client_realtime_routes: &[],
                 query_rpc_routes: &[],
                 contract_dependencies: &[],
             },

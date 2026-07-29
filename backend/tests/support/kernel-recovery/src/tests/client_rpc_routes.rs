@@ -86,6 +86,7 @@ fn control_store_rejects_foreign_or_duplicate_client_rpc_routes_atomically() {
                         vault_purposes: &[],
                         client_rpc_routes: &routes,
                         client_blob_routes: &[],
+                        client_realtime_routes: &[],
                         query_rpc_routes: &[],
                         contract_dependencies: &[],
                     },

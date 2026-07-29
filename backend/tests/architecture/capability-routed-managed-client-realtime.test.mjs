@@ -17,6 +17,10 @@ test('managed client realtime keeps transport owner neutral and replay owner loc
     ownerContract,
     ownerLedger,
     ownerAdapter,
+    gatewayRealtime,
+    kernelRealtimeConformance,
+    developmentAssembly,
+    materializeDevelopmentRelease,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -85,6 +89,25 @@ test('managed client realtime keeps transport owner neutral and replay owner loc
       ),
       'utf8',
     ),
+    readFile(
+      new URL('src/api/gateway/runtime/src/realtime/mod.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/client_realtime_routes.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('development/assembly/src/main.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT),
+      'utf8',
+    ),
   ]);
   const inventory = JSON.parse(inventorySource);
   const platformGate = inventory.slices.find(
@@ -123,6 +146,28 @@ test('managed client realtime keeps transport owner neutral and replay owner loc
   assert.match(ownerLedger, /ORDER BY realtime_sequence ASC/);
   assert.match(ownerAdapter, /request_next_with_dispatch/);
   assert.match(ownerAdapter, /communication-delivery-intent\/\{\}/);
+  assert.match(
+    gatewayRealtime,
+    /exact_duplicates_replay_live_delivery_and_bounded_gap_are_deterministic/,
+  );
+  assert.match(gatewayRealtime, /same cursor with different bytes must fail closed/);
+  assert.match(
+    kernelRealtimeConformance,
+    /managed_realtime_publication_is_exact_owner_fenced_and_idempotent/,
+  );
+  assert.match(kernelRealtimeConformance, /revoked publisher must fail closed/);
+  assert.match(
+    developmentAssembly,
+    /runtime_artifact_id: COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT,[\s\S]*?runtime_kind: ModuleRuntimeKindV1::Workflow/,
+  );
+  assert.match(
+    materializeDevelopmentRelease,
+    /--package hermes-communication-delivery-intent-runtime/,
+  );
+  assert.match(
+    materializeDevelopmentRelease,
+    /--package hermes-communication-delivery-intent-assembly/,
+  );
   assert.ok(clientEvent);
   assert.doesNotMatch(
     clientEvent,

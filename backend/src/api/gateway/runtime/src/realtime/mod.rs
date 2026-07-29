@@ -416,6 +416,133 @@ fn frame_cursor(frame: &ClientRealtimeFrameV1) -> Option<&str> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use hermes_gateway_protocol::v1::ClientRealtimeEventV1;
+    use hermes_gateway_session::BrowserGatewaySessionService;
+    use hermes_gateway_session_contract::{
+        BrowserAssertionAuthority, BrowserAuthenticationAuthority, BrowserDeviceAuthority,
+        BrowserDeviceCredentialV1, BrowserDevicePrincipalV1, GatewayIdentityFenceV1,
+    };
+
+    use super::*;
+
+    struct TestBrowserAuthority;
+
+    impl BrowserDeviceAuthority for TestBrowserAuthority {
+        fn current_identity_fence(&self) -> Result<GatewayIdentityFenceV1, String> {
+            Err("unused test authority".to_owned())
+        }
+
+        fn active_browser_device(
+            &self,
+            _device_id: &str,
+        ) -> Result<BrowserDevicePrincipalV1, String> {
+            Err("unused test authority".to_owned())
+        }
+
+        fn active_browser_device_by_credential(
+            &self,
+            _credential_id: &[u8],
+        ) -> Result<BrowserDevicePrincipalV1, String> {
+            Err("unused test authority".to_owned())
+        }
+    }
+
+    impl BrowserAssertionAuthority for TestBrowserAuthority {
+        fn accept_verified_browser_assertion(
+            &self,
+            _credential_id: &[u8],
+            _sign_count: u32,
+            _backup_eligible: bool,
+            _backup_state: bool,
+        ) -> Result<BrowserDevicePrincipalV1, String> {
+            Err("unused test authority".to_owned())
+        }
+    }
+
+    impl BrowserAuthenticationAuthority for TestBrowserAuthority {
+        fn active_browser_credential(
+            &self,
+            _credential_id: &[u8],
+        ) -> Result<BrowserDeviceCredentialV1, String> {
+            Err("unused test authority".to_owned())
+        }
+    }
+
+    #[test]
+    fn exact_duplicates_replay_live_delivery_and_bounded_gap_are_deterministic() {
+        let source = InMemoryBrowserRealtimeSource::new(2).expect("source");
+        let publisher = source.admit_owner("owner-1").expect("publisher");
+        let session = BrowserGatewaySessionService::new_loopback_development(
+            TestBrowserAuthority,
+            "http://127.0.0.1:5173",
+            "owner-1",
+            "device-1",
+        )
+        .expect("service")
+        .authorize_request(None)
+        .expect("session");
+        let first = event("cursor/1", 1);
+        publisher.publish(first.clone()).expect("first");
+        publisher.publish(first).expect("exact duplicate");
+        assert!(
+            publisher.publish(event("cursor/1", 2)).is_err(),
+            "same cursor with different bytes must fail closed"
+        );
+        publisher.publish(event("cursor/2", 2)).expect("second");
+
+        let (replay, _) = source
+            .subscribe(&session, Some("cursor/1"))
+            .expect("replay")
+            .into_parts();
+        assert_eq!(replay.len(), 3);
+        assert!(matches!(
+            replay[1].frame.as_ref(),
+            Some(Frame::Event(event)) if event.cursor == "cursor/2"
+        ));
+
+        let (_, mut live) = source
+            .subscribe(&session, Some("cursor/2"))
+            .expect("live")
+            .into_parts();
+        publisher.publish(event("cursor/3", 3)).expect("third");
+        assert!(matches!(
+            live.try_recv().expect("live event").frame,
+            Some(Frame::Event(event)) if event.cursor == "cursor/3"
+        ));
+
+        let (gap, _) = source
+            .subscribe(&session, Some("cursor/1"))
+            .expect("gap")
+            .into_parts();
+        assert!(matches!(
+            gap.as_slice(),
+            [ClientRealtimeFrameV1 {
+                frame: Some(Frame::ReplayGap(gap)),
+            }] if gap.requested_cursor == "cursor/1"
+                && gap.earliest_available_cursor == "cursor/2"
+        ));
+    }
+
+    fn event(cursor: &str, revision: u8) -> ClientRealtimeFrameV1 {
+        ClientRealtimeFrameV1 {
+            frame: Some(Frame::Event(ClientRealtimeEventV1 {
+                event_id: vec![revision; 16],
+                cursor: cursor.to_owned(),
+                contract_name: "communication.delivery_intent.status_changed".to_owned(),
+                contract_version: 1,
+                event_kind: "delivery_intent_status_changed".to_owned(),
+                occurred_at_unix_millis: u64::from(revision) * 1_000,
+                causation_id: String::new(),
+                correlation_id: String::new(),
+                trace_id: String::new(),
+                payload: vec![revision],
+            })),
+        }
+    }
+}
+
 fn valid_cursor(cursor: &str) -> bool {
     !cursor.is_empty()
         && cursor.len() <= MAX_CURSOR_BYTES

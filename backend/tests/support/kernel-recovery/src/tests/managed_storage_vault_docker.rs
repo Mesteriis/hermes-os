@@ -1096,6 +1096,8 @@ fn assert_communications_export_gateway_delivery(
         Arc::clone(store),
         kernel_data,
         supervisor.clone(),
+        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(1_024)
+            .expect("test realtime source"),
         &configuration,
         None,
     )
@@ -1290,6 +1292,8 @@ fn assert_communications_export_gateway_rejects_revoked_ticket(
         Arc::clone(store),
         kernel_data,
         supervisor.clone(),
+        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(1_024)
+            .expect("test realtime source"),
         &configuration,
         None,
     )
@@ -1346,6 +1350,8 @@ fn assert_communications_gateway_query_delivery(
         Arc::clone(store),
         kernel_data,
         supervisor.clone(),
+        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(1_024)
+            .expect("test realtime source"),
         &configuration,
         None,
     )

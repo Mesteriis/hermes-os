@@ -261,6 +261,8 @@ fn owner_settings_gateway_requires_authenticated_same_origin_and_denies_lan_mode
         Arc::clone(&fixture.store),
         &fixture.data,
         fixture.supervisor.clone(),
+        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(1_024)
+            .expect("test realtime source"),
         &configuration,
         None,
     )
@@ -314,6 +316,8 @@ fn owner_settings_gateway_requires_authenticated_same_origin_and_denies_lan_mode
         Arc::clone(&fixture.store),
         &fixture.data,
         fixture.supervisor.clone(),
+        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(1_024)
+            .expect("test realtime source"),
         &loopback_configuration,
         None,
     )
@@ -381,6 +385,8 @@ fn owner_settings_gateway_requires_authenticated_same_origin_and_denies_lan_mode
         Arc::clone(&fixture.store),
         &fixture.data,
         fixture.supervisor.clone(),
+        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(1_024)
+            .expect("test realtime source"),
         &lan_configuration,
         None,
     )

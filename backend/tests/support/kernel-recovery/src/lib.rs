@@ -53,6 +53,9 @@ mod modules {
 mod platform {
     pub(crate) mod blob;
 
+    #[path = "../../../../../src/kernel/src/platform/client_realtime.rs"]
+    pub(crate) mod client_realtime;
+
     #[path = "../../../../../src/kernel/src/platform/gateway.rs"]
     pub(crate) mod gateway;
 
@@ -159,6 +162,7 @@ mod tests {
     mod bundled_artifact_proposal;
     mod capture_coordinator;
     mod client_blob_routes;
+    mod client_realtime_routes;
     mod client_rpc_routes;
     mod common;
     mod control_plane_worker;

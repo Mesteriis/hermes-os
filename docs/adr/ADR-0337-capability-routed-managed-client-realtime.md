@@ -9,8 +9,11 @@ Store admission, Kernel fence route, shared Gateway source и первый owner
 adapter `communication_delivery_intent` реализованы. Owner adapter атомарно
 сохраняет monotonic transition sequence рядом с state mutation, до `ready`
 восстанавливает bounded replay window и после запуска публикует новые записи.
-Managed development admission и live Gateway/SSE conformance ещё не доказаны,
-поэтому phase gate остаётся `planned`.
+Workflow включён в managed development assembly как отдельная `Workflow` unit.
+Детерминированные Gateway replay/live/duplicate/gap semantics и Kernel
+owner/runtime/grant/revoke fences покрыты conformance tests. Полный live
+managed runtime -> Gateway -> SSE restart-прогон ещё не выполнен, поэтому phase
+gate остаётся `planned`.
 
 Уточняет:
 
