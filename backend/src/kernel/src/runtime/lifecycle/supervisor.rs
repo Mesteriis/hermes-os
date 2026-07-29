@@ -628,4 +628,13 @@ impl ManagedRuntimeRelay for ManagedRuntimeRelayPort {
     fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         Self::relay(self, registration_id, payload)
     }
+
+    fn relay_with_timeout(
+        &self,
+        registration_id: &str,
+        payload: Vec<u8>,
+        timeout: std::time::Duration,
+    ) -> Result<Vec<u8>, String> {
+        Self::relay_with_timeout(self, registration_id, payload, timeout)
+    }
 }

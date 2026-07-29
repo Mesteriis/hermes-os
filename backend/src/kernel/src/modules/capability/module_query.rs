@@ -22,21 +22,27 @@ use prost::Message;
 use crate::runtime::lifecycle::{
     control::{ManagedRuntimeExpectation, ManagedRuntimeModuleQueryHandler},
     fence::current_managed_runtime_matches,
-    supervisor::ManagedRuntimeRelayPort,
+    supervisor::ManagedRuntimeRelay,
 };
 
-pub(crate) struct ModuleQueryRouteHandlerV1 {
+pub(crate) struct ModuleQueryRouteHandlerV1<R> {
     store: Arc<SqliteControlStore>,
-    relay: ManagedRuntimeRelayPort,
+    relay: R,
 }
 
-impl ModuleQueryRouteHandlerV1 {
-    pub(crate) fn new(store: Arc<SqliteControlStore>, relay: ManagedRuntimeRelayPort) -> Self {
+impl<R> ModuleQueryRouteHandlerV1<R>
+where
+    R: ManagedRuntimeRelay,
+{
+    pub(crate) fn new(store: Arc<SqliteControlStore>, relay: R) -> Self {
         Self { store, relay }
     }
 }
 
-impl ManagedRuntimeModuleQueryHandler for ModuleQueryRouteHandlerV1 {
+impl<R> ManagedRuntimeModuleQueryHandler for ModuleQueryRouteHandlerV1<R>
+where
+    R: ManagedRuntimeRelay,
+{
     fn route_module_query(
         &self,
         expectation: &ManagedRuntimeExpectation,
@@ -100,7 +106,8 @@ impl ManagedRuntimeModuleQueryHandler for ModuleQueryRouteHandlerV1 {
         };
         validate_module_query_delivery_v1(&delivery)
             .map_err(|_| "managed module query delivery is denied".to_owned())?;
-        let response_bytes = self.relay.relay_with_timeout(
+        let response_bytes = ManagedRuntimeRelay::relay_with_timeout(
+            &self.relay,
             provider.registration_id(),
             ManagedRuntimeControlRequestV1 {
                 operation: Some(

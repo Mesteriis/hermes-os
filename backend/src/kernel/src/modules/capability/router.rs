@@ -19,6 +19,15 @@ use crate::runtime::lifecycle::fence::current_managed_runtime_matches;
 /// Delivers a capability request to the exact fenced managed runtime.
 pub trait ManagedRuntimeRelay: Send + Sync {
     fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String>;
+
+    fn relay_with_timeout(
+        &self,
+        registration_id: &str,
+        payload: Vec<u8>,
+        _timeout: std::time::Duration,
+    ) -> Result<Vec<u8>, String> {
+        self.relay(registration_id, payload)
+    }
 }
 
 pub struct ExternalCapabilityRouteRequest<'a> {
