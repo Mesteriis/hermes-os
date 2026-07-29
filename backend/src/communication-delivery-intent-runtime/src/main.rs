@@ -180,9 +180,28 @@ fn runtime_error(error: DeliveryIntentRuntimeErrorV1) -> String {
     let reason = match error {
         DeliveryIntentRuntimeErrorV1::Admission => "admission_rejected",
         DeliveryIntentRuntimeErrorV1::EventContract => "event_contract_rejected",
-        DeliveryIntentRuntimeErrorV1::Coordinator(_)
-        | DeliveryIntentRuntimeErrorV1::Persistence(_)
-        | DeliveryIntentRuntimeErrorV1::Unavailable => "dependency_unavailable",
+        DeliveryIntentRuntimeErrorV1::Coordinator(
+            hermes_communication_delivery_intent_runtime::coordinator::DeliveryIntentCoordinatorErrorV1::InvalidInput,
+        ) => "coordinator_input_rejected",
+        DeliveryIntentRuntimeErrorV1::Coordinator(
+            hermes_communication_delivery_intent_runtime::coordinator::DeliveryIntentCoordinatorErrorV1::BlobUnavailable,
+        ) => "blob_unavailable",
+        DeliveryIntentRuntimeErrorV1::Persistence(
+            DeliveryIntentPersistenceErrorV1::InvalidInput,
+        ) => "persistence_input_rejected",
+        DeliveryIntentRuntimeErrorV1::Persistence(
+            DeliveryIntentPersistenceErrorV1::InvalidRow,
+        ) => "persistence_row_rejected",
+        DeliveryIntentRuntimeErrorV1::Persistence(
+            DeliveryIntentPersistenceErrorV1::StorageUnavailable,
+        ) => "storage_unavailable",
+        DeliveryIntentRuntimeErrorV1::Persistence(DeliveryIntentPersistenceErrorV1::Conflict) => {
+            "persistence_conflict"
+        }
+        DeliveryIntentRuntimeErrorV1::Persistence(DeliveryIntentPersistenceErrorV1::ClaimLost) => {
+            "claim_lost"
+        }
+        DeliveryIntentRuntimeErrorV1::Unavailable => "event_hub_unavailable",
     };
     format!("Communication Delivery Intent runtime failed: {reason}")
 }
