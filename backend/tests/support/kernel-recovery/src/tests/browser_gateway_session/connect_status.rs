@@ -2,12 +2,13 @@ use super::*;
 
 use hermes_gateway_protocol::v1::{
     BrowserGatewayAccessModeV1, BrowserSessionStatusResponseV1, ClientBootstrapResponseV1,
-    ClientSurfaceAvailabilityStateV1, ClientSurfaceIdV1, ClientSystemComponentIdV1,
-    ClientSystemComponentStateV1, client_setting_value_v1::Value as GatewayValue,
+    ClientSettingsApplyStateV1, ClientSurfaceAvailabilityStateV1, ClientSurfaceIdV1,
+    ClientSystemComponentIdV1, ClientSystemComponentStateV1,
+    client_setting_value_v1::Value as GatewayValue,
 };
 use hermes_kernel_control_store::{
     ModuleRegistration, ModuleRegistrationState, SettingsApplyState, SettingsDesiredSnapshot,
-    SettingsSchemaBinding,
+    SettingsInitialSnapshot, SettingsSchemaBinding,
 };
 use hermes_runtime_protocol::v1::{
     SettingApplyModeV1, SettingClientVisibilityV1, SettingDefinitionV1, SettingMutationAuthorityV1,
@@ -230,7 +231,7 @@ fn browser_bootstrap_contains_the_logical_owners_approved_module_composition() {
 }
 
 fn assert_current_owner_bootstrap(bootstrap: &ClientBootstrapResponseV1) {
-    assert_eq!(bootstrap.modules.len(), 2);
+    assert_eq!(bootstrap.modules.len(), 3);
     let module = bootstrap
         .modules
         .iter()
@@ -270,6 +271,16 @@ fn assert_current_owner_bootstrap(bootstrap: &ClientBootstrapResponseV1) {
 
 fn assert_current_surface_availability(bootstrap: &ClientBootstrapResponseV1) {
     assert_eq!(bootstrap.surfaces.len(), 13);
+    let catalog_module = bootstrap
+        .modules
+        .iter()
+        .find(|module| module.module_id == "module-catalog")
+        .expect("catalog module");
+    assert!(
+        catalog_module.sections_enabled,
+        "current account-scoped target must enable catalog-backed sections; capabilities={:?}, settings={:?}",
+        catalog_module.capability_ids, catalog_module.settings
+    );
     let settings_surface = bootstrap
         .surfaces
         .iter()
@@ -291,11 +302,22 @@ fn assert_current_surface_availability(bootstrap: &ClientBootstrapResponseV1) {
         ClientSurfaceAvailabilityStateV1::Available as i32
     );
     assert!(personas_surface.sanitized_reason_code.is_empty());
+    let mail_surface = bootstrap
+        .surfaces
+        .iter()
+        .find(|surface| surface.surface_id == ClientSurfaceIdV1::Mail as i32)
+        .expect("Mail surface");
+    assert_eq!(
+        mail_surface.state,
+        ClientSurfaceAvailabilityStateV1::Available as i32
+    );
+    assert!(mail_surface.sanitized_reason_code.is_empty());
     for surface in bootstrap.surfaces.iter().filter(|surface| {
         !matches!(
             surface.surface_id,
             value if value == ClientSurfaceIdV1::Settings as i32
                 || value == ClientSurfaceIdV1::Personas as i32
+                || value == ClientSurfaceIdV1::Mail as i32
         )
     }) {
         assert_eq!(
@@ -347,6 +369,28 @@ fn assert_pending_owner_bootstrap(pending: &ClientBootstrapResponseV1) {
         pending_personas_surface.sanitized_reason_code,
         "surface_settings_not_current"
     );
+    let catalog_module = pending
+        .modules
+        .iter()
+        .find(|module| module.module_id == "module-catalog")
+        .expect("catalog module");
+    assert!(catalog_module.sections_enabled);
+    let settings = catalog_module.settings.as_ref().expect("settings package");
+    assert_eq!(
+        settings.apply_state,
+        ClientSettingsApplyStateV1::BlockedConfig as i32
+    );
+    assert!(settings.values.is_empty());
+    let mail_surface = pending
+        .surfaces
+        .iter()
+        .find(|surface| surface.surface_id == ClientSurfaceIdV1::Mail as i32)
+        .expect("Mail surface");
+    assert_eq!(
+        mail_surface.state,
+        ClientSurfaceAvailabilityStateV1::Available as i32
+    );
+    assert!(mail_surface.sanitized_reason_code.is_empty());
 }
 
 fn assert_bootstrap_requires_session(fixture: &AuthenticationHttpFixture) {
@@ -408,14 +452,18 @@ fn admit_owner_scoped_modules(fixture: &AuthenticationHttpFixture) {
     for (registration_id, module_id, owner_id) in [
         ("registration-visible", "module-visible", "owner-1"),
         ("registration-other", "module-other", "owner-2"),
+        ("registration-catalog", "module-catalog", "owner-1"),
     ] {
-        let capability_ids = if registration_id == "registration-visible" {
-            vec![
+        let capability_ids = match registration_id {
+            "registration-visible" => vec![
                 "client.surface.personas.v1".to_owned(),
                 "sections.read".to_owned(),
-            ]
-        } else {
-            vec!["sections.read".to_owned()]
+            ],
+            "registration-catalog" => vec![
+                "mail.delivery.query.v1".to_owned(),
+                hermes_runtime_protocol::SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID.to_owned(),
+            ],
+            _ => vec!["sections.read".to_owned()],
         };
         fixture
             .store
@@ -490,6 +538,72 @@ fn admit_current_visible_settings(fixture: &AuthenticationHttpFixture) {
         .store
         .confirm_effective_settings_revision("registration-visible", 1)
         .expect("settings current");
+    admit_current_catalog_target(fixture);
+}
+
+fn admit_current_catalog_target(fixture: &AuthenticationHttpFixture) {
+    let bytes = visible_schema().encode_to_vec();
+    fixture
+        .store
+        .admit_settings_schema(
+            &SettingsSchemaBinding::new(
+                hermes_kernel_control_store::SettingsSchemaBindingInputV1 {
+                    registration_id: "registration-catalog".to_owned(),
+                    schema_major: 1,
+                    schema_revision: 1,
+                    schema_sha256: Sha256::digest(&bytes).into(),
+                    desired_revision: 0,
+                    effective_revision: 0,
+                    apply_state: SettingsApplyState::Current,
+                    sanitized_reason_code: None,
+                },
+            ),
+            &bytes,
+        )
+        .expect("admit catalog settings schema");
+    fixture
+        .store
+        .materialize_initial_settings_snapshot(&SettingsInitialSnapshot {
+            registration_id: "registration-catalog".to_owned(),
+            configuration_instance_id: "registration-catalog".to_owned(),
+            created_operation_id: None,
+            snapshot_bytes: vec![0],
+            complete: false,
+        })
+        .expect("block compatibility target");
+    fixture
+        .store
+        .materialize_initial_settings_snapshot(&SettingsInitialSnapshot {
+            registration_id: "registration-catalog".to_owned(),
+            configuration_instance_id: "configuration-current".to_owned(),
+            created_operation_id: Some([7; 16]),
+            snapshot_bytes: vec![1],
+            complete: true,
+        })
+        .expect("materialize catalog target");
+    for state in [
+        SettingsApplyState::PendingApply,
+        SettingsApplyState::Applying,
+    ] {
+        fixture
+            .store
+            .transition_settings_apply_state_for_target(
+                "registration-catalog",
+                "configuration-current",
+                1,
+                state,
+                None,
+            )
+            .expect("advance catalog target");
+    }
+    fixture
+        .store
+        .confirm_effective_settings_revision_for_target(
+            "registration-catalog",
+            "configuration-current",
+            1,
+        )
+        .expect("catalog target current");
 }
 
 fn visible_schema() -> SettingsSchemaV1 {

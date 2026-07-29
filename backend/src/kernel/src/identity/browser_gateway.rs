@@ -16,6 +16,7 @@ use hermes_kernel_control_store::{
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
+    SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID,
     v1::{SettingClientVisibilityV1, SettingsSchemaV1, setting_value_v1::Value},
     validation::descriptor::{
         decode_settings_schema_v1, decode_settings_snapshot_v1,
@@ -292,7 +293,14 @@ fn project_module(
     if grants.capability_ids().len() > 256 {
         return Err("client bootstrap is unavailable".to_owned());
     }
-    let (sections_enabled, settings) = project_settings(store, registration.registration_id())?;
+    let (default_target_current, settings) =
+        project_settings(store, registration.registration_id())?;
+    let sections_enabled = default_target_current
+        || catalog_has_current_configuration(
+            store,
+            registration.registration_id(),
+            grants.capability_ids(),
+        )?;
     Ok(ClientModuleProjectionV1::new(
         registration.registration_id().to_owned(),
         registration.module_id().to_owned(),
@@ -301,6 +309,28 @@ fn project_module(
         sections_enabled,
         settings,
     ))
+}
+
+fn catalog_has_current_configuration(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    capability_ids: &[String],
+) -> Result<bool, String> {
+    if !capability_ids
+        .iter()
+        .any(|capability_id| capability_id == SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID)
+    {
+        return Ok(false);
+    }
+    Ok(store
+        .settings_configuration_targets(registration_id)
+        .map_err(store_error)?
+        .iter()
+        .any(|target| {
+            target.effective_revision() > 0
+                && target.desired_revision() == target.effective_revision()
+                && target.apply_state() == SettingsApplyState::Current
+        }))
 }
 
 fn project_settings(
