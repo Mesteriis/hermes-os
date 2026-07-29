@@ -2,14 +2,12 @@
 	--module-settings-accent: var(--h-color-accent);
 	display: grid;
 	align-content: start;
-	gap: var(--h-space-4);
-	padding: var(--h-space-5);
-	border: 1px solid var(--h-color-border);
-	border-radius: var(--h-radius-lg);
+	gap: var(--h-space-3);
+	padding: 0;
+	border: 0;
+	border-radius: 0;
 	color: var(--h-color-text);
-	background:
-		radial-gradient(circle at 0 0, color-mix(in srgb, var(--module-settings-accent) 12%, transparent), transparent 28rem),
-		var(--h-color-bg-muted);
+	background: transparent;
 }
 
 .module-settings-panel[data-provider-tone='mail'] {
@@ -34,9 +32,11 @@
 	align-items: start;
 	gap: var(--h-space-4);
 	padding: var(--h-space-5);
-	border: 1px solid var(--h-color-border);
+	border: 1px solid var(--h-color-border-strong);
 	border-radius: var(--h-radius-lg);
-	background: var(--h-color-surface);
+	background:
+		radial-gradient(circle at 0 0, color-mix(in srgb, var(--module-settings-accent) 10%, transparent), transparent 28rem),
+		var(--h-color-surface-raised);
 	box-shadow: var(--h-shadow-sm);
 }
 
@@ -101,6 +101,7 @@
 	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-md);
 	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-xs);
 }
 
 .module-settings-panel__metadata small,
@@ -116,7 +117,7 @@
 
 .module-settings-panel__list {
 	display: grid;
-	gap: var(--h-space-2);
+	gap: var(--h-space-3);
 }
 
 .module-settings-panel__list article {
@@ -128,6 +129,7 @@
 	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-md);
 	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-xs);
 }
 
 .module-settings-panel__list article.blocked {
@@ -159,7 +161,7 @@
 
 @media (max-width: 720px) {
 	.module-settings-panel {
-		padding: var(--h-space-3);
+		gap: var(--h-space-3);
 	}
 
 	.module-settings-panel__header {
