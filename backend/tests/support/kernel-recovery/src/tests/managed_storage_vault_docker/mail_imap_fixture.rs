@@ -7,11 +7,12 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
 };
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const FIXTURE_USERNAME: &str = "owner@example.test";
 const FIXTURE_PASSWORD: &str = "managed-mail-imap-password";
 const FIXTURE_UID: u32 = 42;
+const STREAMING_FIRST_UID: u32 = 41;
 const FIXTURE_UID_VALIDITY: u32 = 1;
 const ARCHIVE_UID_VALIDITY: u32 = 7;
 const ARCHIVE_UID: u32 = 84;
@@ -47,6 +48,9 @@ struct MailImapFixtureState {
     move_supported: Arc<AtomicBool>,
     uid_validity: Arc<AtomicU32>,
     delete_marked: Arc<AtomicBool>,
+    streaming_sync_pages: Arc<AtomicBool>,
+    second_page_requested: Arc<AtomicBool>,
+    release_second_page: Arc<AtomicBool>,
 }
 
 pub(super) struct MailImapFixture {
@@ -78,6 +82,9 @@ impl MailImapFixture {
             move_supported: Arc::new(AtomicBool::new(true)),
             uid_validity: Arc::new(AtomicU32::new(FIXTURE_UID_VALIDITY)),
             delete_marked: Arc::new(AtomicBool::new(false)),
+            streaming_sync_pages: Arc::new(AtomicBool::new(false)),
+            second_page_requested: Arc::new(AtomicBool::new(false)),
+            release_second_page: Arc::new(AtomicBool::new(false)),
         };
         let worker_shutdown = Arc::clone(&shutdown);
         let worker_connections = Arc::clone(&accepted_connections);
@@ -114,6 +121,28 @@ impl MailImapFixture {
 
     pub(super) fn accepted_connections(&self) -> usize {
         self.accepted_connections.load(Ordering::Acquire)
+    }
+
+    pub(super) fn enable_streaming_sync_pages(&self) {
+        self.state
+            .second_page_requested
+            .store(false, Ordering::Release);
+        self.state
+            .release_second_page
+            .store(false, Ordering::Release);
+        self.state
+            .streaming_sync_pages
+            .store(true, Ordering::Release);
+    }
+
+    pub(super) fn second_page_requested(&self) -> bool {
+        self.state.second_page_requested.load(Ordering::Acquire)
+    }
+
+    pub(super) fn release_second_page(&self) {
+        self.state
+            .release_second_page
+            .store(true, Ordering::Release);
     }
 
     pub(super) fn message_flag_mutations(&self) -> usize {
@@ -177,6 +206,9 @@ fn serve_connection(mut stream: TcpStream, state: MailImapFixtureState) {
         move_supported,
         uid_validity,
         delete_marked,
+        streaming_sync_pages,
+        second_page_requested,
+        release_second_page,
     } = state;
     stream
         .set_nonblocking(false)
@@ -248,15 +280,40 @@ fn serve_connection(mut stream: TcpStream, state: MailImapFixtureState) {
             .expect("write IMAP SELECT response");
         } else if upper.contains(" UID SEARCH ") {
             let current_uid = message_uid.load(Ordering::Acquire);
-            write!(
-                stream,
-                "* SEARCH {current_uid}\r\n{tag} OK UID SEARCH completed\r\n"
-            )
-            .expect("write IMAP UID SEARCH response");
+            if streaming_sync_pages.load(Ordering::Acquire) {
+                write!(
+                    stream,
+                    "* SEARCH {STREAMING_FIRST_UID} {current_uid}\r\n\
+                     {tag} OK UID SEARCH completed\r\n"
+                )
+                .expect("write streaming IMAP UID SEARCH response");
+            } else {
+                write!(
+                    stream,
+                    "* SEARCH {current_uid}\r\n{tag} OK UID SEARCH completed\r\n"
+                )
+                .expect("write IMAP UID SEARCH response");
+            }
         } else if upper.contains(" UID FETCH ") {
+            let requested_uid = command
+                .split_whitespace()
+                .nth(3)
+                .and_then(|value| value.parse::<u32>().ok())
+                .expect("exact fixture UID FETCH");
+            if streaming_sync_pages.load(Ordering::Acquire) && requested_uid == FIXTURE_UID {
+                second_page_requested.store(true, Ordering::Release);
+                let deadline = Instant::now() + Duration::from_secs(10);
+                while !release_second_page.load(Ordering::Acquire) && Instant::now() < deadline {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                assert!(
+                    release_second_page.load(Ordering::Acquire),
+                    "managed test did not release the second IMAP page"
+                );
+            }
             write!(
                 stream,
-                "* 1 FETCH (UID {FIXTURE_UID} RFC822.SIZE {} INTERNALDATE \
+                "* 1 FETCH (UID {requested_uid} RFC822.SIZE {} INTERNALDATE \
                  \"24-Jul-2026 12:00:00 +0000\" BODY[] {{{}}}\r\n",
                 FIXTURE_MESSAGE.len(),
                 FIXTURE_MESSAGE.len(),

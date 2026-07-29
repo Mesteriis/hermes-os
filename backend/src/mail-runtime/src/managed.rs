@@ -174,7 +174,8 @@ use hermes_mail_smtp::SmtpAdapterErrorV1;
 
 use crate::gmail_sync_worker::{
     CompletedGmailSyncProviderOperationV1, GmailSyncProviderCursorV1, GmailSyncProviderFailureV1,
-    GmailSyncProviderOutcomeV1, GmailSyncProviderPageV1, PreparedGmailSyncProviderOperationV1,
+    GmailSyncProviderOutcomeV1, GmailSyncProviderPageDeliveryV1, GmailSyncProviderPageV1,
+    PreparedGmailSyncProviderOperationV1,
 };
 
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
@@ -244,10 +245,24 @@ pub struct PreparedImapSyncProviderOperationV1 {
 pub struct CompletedImapSyncProviderOperationV1 {
     connection_id: String,
     operation_id: String,
-    result: Result<hermes_mail_imap::ImapSyncResult, MailBootstrapError>,
+    result: Result<usize, MailBootstrapError>,
 }
 
 impl CompletedImapSyncProviderOperationV1 {
+    #[must_use]
+    pub fn connection_id(&self) -> &str {
+        &self.connection_id
+    }
+}
+
+pub struct ImapSyncProviderPageDeliveryV1 {
+    connection_id: String,
+    operation_id: String,
+    sync: hermes_mail_imap::ImapSyncResult,
+    acknowledgment: std::sync::mpsc::Sender<bool>,
+}
+
+impl ImapSyncProviderPageDeliveryV1 {
     #[must_use]
     pub fn connection_id(&self) -> &str {
         &self.connection_id
@@ -380,6 +395,7 @@ pub async fn open_admitted_runtime_catalog(
         || event_hub_endpoint.trim().is_empty()
         || event_credential_revision == 0
     {
+        developer_admission_diagnostic("initial_contract");
         return Err(MailBootstrapError::Admission);
     }
     let mut configuration_instance_ids = std::collections::BTreeSet::new();
@@ -395,6 +411,7 @@ pub async fn open_admitted_runtime_catalog(
             || !configuration_instance_ids.insert(candidate.configuration_instance_id.as_str())
             || !connection_ids.insert(candidate.account.connection_id.as_str())
     }) {
+        developer_admission_diagnostic("account_catalog");
         return Err(MailBootstrapError::Admission);
     }
     control_channel
@@ -412,6 +429,7 @@ pub async fn open_admitted_runtime_catalog(
         || runtime_generation != admission.runtime_generation
         || grant_epoch != admission.grant_epoch
     {
+        developer_admission_diagnostic("runtime_identity");
         return Err(MailBootstrapError::Admission);
     }
 
@@ -2344,6 +2362,122 @@ impl MailAdmittedRuntime {
         }))
     }
 
+    pub async fn finalize_gmail_sync_provider_page(
+        &mut self,
+        delivery: GmailSyncProviderPageDeliveryV1,
+    ) -> Result<usize, MailBootstrapError> {
+        let GmailSyncProviderPageDeliveryV1 {
+            connection_id,
+            operation_id,
+            page,
+            observed_at_unix_seconds,
+            observed_at_nanos,
+            acknowledgment,
+        } = delivery;
+        let result = self
+            .finalize_gmail_sync_provider_page_inner(
+                &connection_id,
+                &operation_id,
+                page,
+                observed_at_unix_seconds,
+                observed_at_nanos,
+            )
+            .await;
+        let _ = acknowledgment.send(result.is_ok());
+        result
+    }
+
+    async fn finalize_gmail_sync_provider_page_inner(
+        &mut self,
+        connection_id: &str,
+        operation_id: &str,
+        page: GmailSyncProviderPageV1,
+        observed_at_unix_seconds: i64,
+        observed_at_nanos: i32,
+    ) -> Result<usize, MailBootstrapError> {
+        if connection_id != self.account.connection_id || operation_id.trim().is_empty() {
+            return Err(MailBootstrapError::Admission);
+        }
+        match page {
+            GmailSyncProviderPageV1::Full {
+                messages,
+                next_page_token,
+            } => {
+                let observed_messages = messages.len();
+                let mut observed_history_id = self
+                    .durable
+                    .gmail_sync_progress(connection_id)
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?
+                    .and_then(|(_, history_id)| history_id);
+                let records = self.gmail_message_records(
+                    connection_id,
+                    messages.into_iter(),
+                    observed_at_unix_seconds,
+                    observed_at_nanos,
+                )?;
+                observed_history_id = newer_gmail_history_id(
+                    observed_history_id.as_deref(),
+                    records.observed_history_id.as_deref(),
+                )
+                .map(str::to_owned);
+                self.durable
+                    .record_operational_materializations_and_store_gmail_sync_progress(
+                        &records.materializations,
+                        connection_id,
+                        next_page_token.as_deref(),
+                        observed_history_id.as_deref(),
+                        observed_at_unix_seconds,
+                    )
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?;
+                self.admit_owned_attachments(
+                    records.attachment_admissions,
+                    observed_at_unix_seconds,
+                    observed_at_nanos,
+                )
+                .await?;
+                Ok(observed_messages)
+            }
+            GmailSyncProviderPageV1::History {
+                messages,
+                start_history_id,
+                checkpoint_history_id,
+                next_page_token,
+            } => {
+                let observed_messages = messages.len();
+                let records = self.gmail_message_records(
+                    connection_id,
+                    messages.into_iter(),
+                    observed_at_unix_seconds,
+                    observed_at_nanos,
+                )?;
+                let next_checkpoint = if next_page_token.is_some() {
+                    &start_history_id
+                } else {
+                    &checkpoint_history_id
+                };
+                self.durable
+                    .record_operational_materializations_and_store_gmail_history_checkpoint(
+                        &records.materializations,
+                        connection_id,
+                        next_checkpoint,
+                        next_page_token.as_deref(),
+                        observed_at_unix_seconds,
+                    )
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?;
+                self.admit_owned_attachments(
+                    records.attachment_admissions,
+                    observed_at_unix_seconds,
+                    observed_at_nanos,
+                )
+                .await?;
+                Ok(observed_messages)
+            }
+        }
+    }
+
     pub async fn finalize_gmail_sync_provider_operation(
         &mut self,
         completed: CompletedGmailSyncProviderOperationV1,
@@ -2352,87 +2486,8 @@ impl MailAdmittedRuntime {
         if completed.connection_id != self.account.connection_id {
             return Err(MailBootstrapError::Admission);
         }
-        let mut observed_messages = 0_usize;
-        let mut observed_history_id = self
-            .durable
-            .gmail_sync_progress(&completed.connection_id)
-            .await
-            .map_err(|_| MailBootstrapError::Persistence)?
-            .and_then(|(_, history_id)| history_id);
-        for page in completed.pages {
-            match page {
-                GmailSyncProviderPageV1::Full {
-                    messages,
-                    next_page_token,
-                } => {
-                    observed_messages = observed_messages.saturating_add(messages.len());
-                    let records = self.gmail_message_records(
-                        &completed.connection_id,
-                        messages.into_iter(),
-                        completed.observed_at_unix_seconds,
-                        completed.observed_at_nanos,
-                    )?;
-                    observed_history_id = newer_gmail_history_id(
-                        observed_history_id.as_deref(),
-                        records.observed_history_id.as_deref(),
-                    )
-                    .map(str::to_owned);
-                    self.durable
-                        .record_operational_materializations_and_store_gmail_sync_progress(
-                            &records.materializations,
-                            &completed.connection_id,
-                            next_page_token.as_deref(),
-                            observed_history_id.as_deref(),
-                            completed.observed_at_unix_seconds,
-                        )
-                        .await
-                        .map_err(|_| MailBootstrapError::Persistence)?;
-                    self.admit_owned_attachments(
-                        records.attachment_admissions,
-                        completed.observed_at_unix_seconds,
-                        completed.observed_at_nanos,
-                    )
-                    .await?;
-                }
-                GmailSyncProviderPageV1::History {
-                    messages,
-                    start_history_id,
-                    checkpoint_history_id,
-                    next_page_token,
-                } => {
-                    observed_messages = observed_messages.saturating_add(messages.len());
-                    let records = self.gmail_message_records(
-                        &completed.connection_id,
-                        messages.into_iter(),
-                        completed.observed_at_unix_seconds,
-                        completed.observed_at_nanos,
-                    )?;
-                    let next_checkpoint = if next_page_token.is_some() {
-                        &start_history_id
-                    } else {
-                        &checkpoint_history_id
-                    };
-                    self.durable
-                        .record_operational_materializations_and_store_gmail_history_checkpoint(
-                            &records.materializations,
-                            &completed.connection_id,
-                            next_checkpoint,
-                            next_page_token.as_deref(),
-                            completed.observed_at_unix_seconds,
-                        )
-                        .await
-                        .map_err(|_| MailBootstrapError::Persistence)?;
-                    self.admit_owned_attachments(
-                        records.attachment_admissions,
-                        completed.observed_at_unix_seconds,
-                        completed.observed_at_nanos,
-                    )
-                    .await?;
-                }
-            }
-        }
         let result = match completed.outcome {
-            GmailSyncProviderOutcomeV1::Complete => Ok(observed_messages),
+            GmailSyncProviderOutcomeV1::Complete => Ok(completed.observed_messages),
             GmailSyncProviderOutcomeV1::HistoryExpired => {
                 self.durable
                     .clear_gmail_history_checkpoint(&completed.connection_id)
@@ -2444,6 +2499,7 @@ impl MailAdmittedRuntime {
             GmailSyncProviderOutcomeV1::Failed(failure) => Err(match failure {
                 GmailSyncProviderFailureV1::Credential => MailBootstrapError::Credential,
                 GmailSyncProviderFailureV1::Provider => MailBootstrapError::Provider,
+                GmailSyncProviderFailureV1::Finalization => MailBootstrapError::Persistence,
             }),
         };
         self.complete_sync_operation(
@@ -2463,23 +2519,37 @@ impl MailAdmittedRuntime {
         if completed.connection_id != self.account.connection_id {
             return Err(MailBootstrapError::Admission);
         }
-        let result = match completed.result {
-            Ok(sync) => {
-                self.apply_imap_sync_result(ImapInboxSyncRequestV1 {
-                    connection_id: &completed.connection_id,
-                    sync: &sync,
-                })
-                .await
-            }
-            Err(error) => Err(error),
-        };
         self.complete_sync_operation(
             &completed.operation_id,
-            result,
+            completed.result,
             completed_at_fallback_unix_seconds,
         )
         .await
         .map(|_| ())
+    }
+
+    pub async fn finalize_imap_sync_provider_page(
+        &mut self,
+        delivery: ImapSyncProviderPageDeliveryV1,
+    ) -> Result<usize, MailBootstrapError> {
+        let ImapSyncProviderPageDeliveryV1 {
+            connection_id,
+            operation_id,
+            sync,
+            acknowledgment,
+        } = delivery;
+        let result =
+            if connection_id == self.account.connection_id && !operation_id.trim().is_empty() {
+                self.apply_imap_sync_result(ImapInboxSyncRequestV1 {
+                    connection_id: &connection_id,
+                    sync: &sync,
+                })
+                .await
+            } else {
+                Err(MailBootstrapError::Admission)
+            };
+        let _ = acknowledgment.send(result.is_ok());
+        result
     }
 
     async fn complete_sync_operation(
@@ -2554,6 +2624,8 @@ impl MailAdmittedRuntime {
             .find(|mailbox| mailbox.mailbox_id == sync.selected_mailbox.mailbox_id)
             .map(imap_operational_folder)
             .ok_or(MailBootstrapError::Provider)?;
+        let mut materializations = Vec::with_capacity(sync.messages.len());
+        let mut attachment_admissions = Vec::new();
         for message in &sync.messages {
             let locator = MailImapMessageLocatorV1 {
                 mailbox_id: sync.selected_mailbox.mailbox_id.clone(),
@@ -2593,7 +2665,6 @@ impl MailAdmittedRuntime {
             .map_err(|_| MailBootstrapError::Admission)?;
             let observation_anchor_id = *record.message_id();
             let mut records = vec![record];
-            let mut attachment_observation_ids = Vec::with_capacity(message.attachments.len());
             for attachment in &message.attachments {
                 let source_id = message_id.clone();
                 let media_id = format!("{message_id}:{}", attachment.part_id);
@@ -2634,57 +2705,10 @@ impl MailAdmittedRuntime {
                     ),
                 )
                 .map_err(|_| MailBootstrapError::Admission)?;
-                attachment_observation_ids.push(*record.message_id());
-                records.push(record);
-            }
-            self.durable
-                .record_operational_materializations(
-                    &[MailOperationalMaterializationV1 {
-                        message: MailOperationalMessageSnapshotV1 {
-                            connection_id: connection_id.to_owned(),
-                            message_id: message_id.clone(),
-                            imap_locator: Some(locator),
-                            provider_thread_id: format!("imap-message:{message_id}"),
-                            folders: vec![selected_folder.clone()],
-                            subject: Some(message.subject.clone()),
-                            sender: message.sender.clone(),
-                            recipients: message.recipients.clone(),
-                            snippet: Some(message.snippet.clone()),
-                            sent_at_unix_seconds: message.sent_at_unix_seconds,
-                            flags: message
-                                .flags
-                                .iter()
-                                .map(|flag| match flag {
-                                    hermes_mail_imap::ImapMessageFlag::Read => {
-                                        MailMessageFlagV1::Read
-                                    }
-                                    hermes_mail_imap::ImapMessageFlag::Starred => {
-                                        MailMessageFlagV1::Starred
-                                    }
-                                    hermes_mail_imap::ImapMessageFlag::Draft => {
-                                        MailMessageFlagV1::Draft
-                                    }
-                                    hermes_mail_imap::ImapMessageFlag::Trashed => {
-                                        MailMessageFlagV1::Trashed
-                                    }
-                                })
-                                .collect(),
-                            has_plain_text: message.has_plain_text,
-                            has_attachments: !message.attachments.is_empty(),
-                            observation_anchor_id,
-                        },
-                        communications_outbox: records,
-                    }],
-                    observed_at_unix_seconds,
-                )
-                .await
-                .map_err(|_| MailBootstrapError::Persistence)?;
-            for (attachment, source_observation_id) in
-                message.attachments.iter().zip(attachment_observation_ids)
-            {
-                self.try_admit_attachment_blob(MailAttachmentBlobAdmissionRequestV1 {
+                let source_observation_id = *record.message_id();
+                attachment_admissions.push(OwnedAttachmentBlobAdmissionV1 {
                     source_observation_id,
-                    bytes: attachment.bytes(),
+                    bytes: attachment.bytes().to_vec(),
                     filename: attachment.filename.clone(),
                     media_type: attachment.media_type.clone(),
                     disposition: match attachment.disposition {
@@ -2695,12 +2719,52 @@ impl MailAdmittedRuntime {
                             PersistedAttachmentDispositionV1::Inline
                         }
                     },
-                    observed_at_unix_seconds,
-                    observed_at_nanos,
-                })
-                .await?;
+                });
+                records.push(record);
             }
+            materializations.push(MailOperationalMaterializationV1 {
+                message: MailOperationalMessageSnapshotV1 {
+                    connection_id: connection_id.to_owned(),
+                    message_id: message_id.clone(),
+                    imap_locator: Some(locator),
+                    provider_thread_id: format!("imap-message:{message_id}"),
+                    folders: vec![selected_folder.clone()],
+                    subject: Some(message.subject.clone()),
+                    sender: message.sender.clone(),
+                    recipients: message.recipients.clone(),
+                    snippet: Some(message.snippet.clone()),
+                    sent_at_unix_seconds: message.sent_at_unix_seconds,
+                    flags: message
+                        .flags
+                        .iter()
+                        .map(|flag| match flag {
+                            hermes_mail_imap::ImapMessageFlag::Read => MailMessageFlagV1::Read,
+                            hermes_mail_imap::ImapMessageFlag::Starred => {
+                                MailMessageFlagV1::Starred
+                            }
+                            hermes_mail_imap::ImapMessageFlag::Draft => MailMessageFlagV1::Draft,
+                            hermes_mail_imap::ImapMessageFlag::Trashed => {
+                                MailMessageFlagV1::Trashed
+                            }
+                        })
+                        .collect(),
+                    has_plain_text: message.has_plain_text,
+                    has_attachments: !message.attachments.is_empty(),
+                    observation_anchor_id,
+                },
+                communications_outbox: records,
+            });
         }
+        self.durable
+            .record_operational_materializations(&materializations, observed_at_unix_seconds)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?;
+        self.admit_owned_attachments(
+            attachment_admissions,
+            observed_at_unix_seconds,
+            observed_at_nanos,
+        )
+        .await?;
         Ok(sync.messages.len())
     }
 
@@ -3167,6 +3231,7 @@ impl MailAdmittedRuntime {
 #[must_use]
 pub fn execute_imap_sync_provider_operation(
     prepared: PreparedImapSyncProviderOperationV1,
+    page_sender: std::sync::mpsc::SyncSender<ImapSyncProviderPageDeliveryV1>,
 ) -> CompletedImapSyncProviderOperationV1 {
     let PreparedImapSyncProviderOperationV1 {
         connection_id,
@@ -3178,12 +3243,44 @@ pub fn execute_imap_sync_provider_operation(
         window,
         windows,
     } = prepared;
-    let result = std::str::from_utf8(&password)
-        .map_err(|_| MailBootstrapError::Credential)
-        .and_then(|password| {
-            hermes_mail_imap::sync_inbox(&host, port, &username, Some(password), window, windows)
-                .map_err(|_| MailBootstrapError::Provider)
-        });
+    let result = match std::str::from_utf8(&password) {
+        Err(_) => Err(MailBootstrapError::Credential),
+        Ok(password) => {
+            let mut finalization_rejected = false;
+            let provider_result = hermes_mail_imap::sync_inbox(
+                &host,
+                port,
+                &username,
+                Some(password),
+                window,
+                windows,
+                |sync| {
+                    let (acknowledgment, committed) = std::sync::mpsc::channel();
+                    page_sender
+                        .send(ImapSyncProviderPageDeliveryV1 {
+                            connection_id: connection_id.clone(),
+                            operation_id: operation_id.clone(),
+                            sync,
+                            acknowledgment,
+                        })
+                        .map_err(|_| {
+                            finalization_rejected = true;
+                        })?;
+                    if committed.recv().is_ok_and(|committed| committed) {
+                        Ok(())
+                    } else {
+                        finalization_rejected = true;
+                        Err(())
+                    }
+                },
+            );
+            if finalization_rejected {
+                Err(MailBootstrapError::Persistence)
+            } else {
+                provider_result.map_err(|_| MailBootstrapError::Provider)
+            }
+        }
+    };
     CompletedImapSyncProviderOperationV1 {
         connection_id,
         operation_id,
@@ -3557,6 +3654,12 @@ fn map_account_lifecycle_error(error: MailAccountLifecycleRuntimeErrorV1) -> Mai
     match error {
         MailAccountLifecycleRuntimeErrorV1::Admission => MailBootstrapError::Admission,
         MailAccountLifecycleRuntimeErrorV1::Persistence(_) => MailBootstrapError::Persistence,
+    }
+}
+
+fn developer_admission_diagnostic(stage: &str) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_mail_admission_stage={stage}");
     }
 }
 

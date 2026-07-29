@@ -4,6 +4,7 @@ use hermes_mail_gmail::{
     GmailAdapterErrorV1, GmailApiClientV1, GmailListMessagesRequestV1, GmailRawMessageV1,
     history_message_ids,
 };
+use tokio::sync::{mpsc, oneshot};
 use zeroize::Zeroizing;
 
 pub struct PreparedGmailSyncProviderOperationV1 {
@@ -31,13 +32,27 @@ pub(crate) enum GmailSyncProviderCursorV1 {
 pub struct CompletedGmailSyncProviderOperationV1 {
     pub(crate) connection_id: String,
     pub(crate) operation_id: String,
-    pub(crate) pages: Vec<GmailSyncProviderPageV1>,
+    pub(crate) observed_messages: usize,
     pub(crate) outcome: GmailSyncProviderOutcomeV1,
-    pub(crate) observed_at_unix_seconds: i64,
-    pub(crate) observed_at_nanos: i32,
 }
 
 impl CompletedGmailSyncProviderOperationV1 {
+    #[must_use]
+    pub fn connection_id(&self) -> &str {
+        &self.connection_id
+    }
+}
+
+pub struct GmailSyncProviderPageDeliveryV1 {
+    pub(crate) connection_id: String,
+    pub(crate) operation_id: String,
+    pub(crate) page: GmailSyncProviderPageV1,
+    pub(crate) observed_at_unix_seconds: i64,
+    pub(crate) observed_at_nanos: i32,
+    pub(crate) acknowledgment: oneshot::Sender<bool>,
+}
+
+impl GmailSyncProviderPageDeliveryV1 {
     #[must_use]
     pub fn connection_id(&self) -> &str {
         &self.connection_id
@@ -66,10 +81,12 @@ pub(crate) enum GmailSyncProviderOutcomeV1 {
 pub(crate) enum GmailSyncProviderFailureV1 {
     Credential,
     Provider,
+    Finalization,
 }
 
 pub async fn execute_gmail_sync_provider_operation(
     prepared: PreparedGmailSyncProviderOperationV1,
+    page_sender: mpsc::Sender<GmailSyncProviderPageDeliveryV1>,
 ) -> CompletedGmailSyncProviderOperationV1 {
     let PreparedGmailSyncProviderOperationV1 {
         connection_id,
@@ -88,30 +105,51 @@ pub async fn execute_gmail_sync_provider_operation(
             return CompletedGmailSyncProviderOperationV1 {
                 connection_id,
                 operation_id,
-                pages: Vec::new(),
+                observed_messages: 0,
                 outcome: GmailSyncProviderOutcomeV1::Failed(GmailSyncProviderFailureV1::Credential),
-                observed_at_unix_seconds,
-                observed_at_nanos,
             };
         }
     };
-    let (pages, outcome) = match cursor {
+    let delivery = GmailSyncProviderPageDeliveryContextV1 {
+        connection_id: &connection_id,
+        operation_id: &operation_id,
+        observed_at_unix_seconds,
+        observed_at_nanos,
+        page_sender: &page_sender,
+    };
+    let (observed_messages, outcome) = match cursor {
         GmailSyncProviderCursorV1::Full { page_token } => {
-            fetch_full_pages(&client, token, page_token, max_results, windows).await
+            fetch_full_pages(&client, token, page_token, max_results, windows, &delivery).await
         }
         GmailSyncProviderCursorV1::History {
             start_history_id,
             page_token,
-        } => fetch_history_pages(&client, token, start_history_id, page_token, windows).await,
+        } => {
+            fetch_history_pages(
+                &client,
+                token,
+                start_history_id,
+                page_token,
+                windows,
+                &delivery,
+            )
+            .await
+        }
     };
     CompletedGmailSyncProviderOperationV1 {
         connection_id,
         operation_id,
-        pages,
+        observed_messages,
         outcome,
-        observed_at_unix_seconds,
-        observed_at_nanos,
     }
+}
+
+struct GmailSyncProviderPageDeliveryContextV1<'a> {
+    connection_id: &'a str,
+    operation_id: &'a str,
+    observed_at_unix_seconds: i64,
+    observed_at_nanos: i32,
+    page_sender: &'a mpsc::Sender<GmailSyncProviderPageDeliveryV1>,
 }
 
 async fn fetch_full_pages(
@@ -120,8 +158,9 @@ async fn fetch_full_pages(
     mut page_token: Option<String>,
     max_results: u16,
     windows: u32,
-) -> (Vec<GmailSyncProviderPageV1>, GmailSyncProviderOutcomeV1) {
-    let mut pages = Vec::new();
+    delivery: &GmailSyncProviderPageDeliveryContextV1<'_>,
+) -> (usize, GmailSyncProviderOutcomeV1) {
+    let mut observed_messages = 0_usize;
     for _ in 0..windows {
         let page = match client
             .list_messages(
@@ -138,7 +177,7 @@ async fn fetch_full_pages(
             Ok(page) => page,
             Err(_) => {
                 return (
-                    pages,
+                    observed_messages,
                     GmailSyncProviderOutcomeV1::Failed(GmailSyncProviderFailureV1::Provider),
                 );
             }
@@ -152,19 +191,31 @@ async fn fetch_full_pages(
         .await
         {
             Ok(messages) => messages,
-            Err(error) => return (pages, error),
+            Err(error) => return (observed_messages, error),
         };
         let has_next_page = next_page_token.is_some();
-        pages.push(GmailSyncProviderPageV1::Full {
-            messages,
-            next_page_token: next_page_token.clone(),
-        });
+        let page_messages = messages.len();
+        if !deliver_page(
+            delivery,
+            GmailSyncProviderPageV1::Full {
+                messages,
+                next_page_token: next_page_token.clone(),
+            },
+        )
+        .await
+        {
+            return (
+                observed_messages,
+                GmailSyncProviderOutcomeV1::Failed(GmailSyncProviderFailureV1::Finalization),
+            );
+        }
+        observed_messages = observed_messages.saturating_add(page_messages);
         page_token = next_page_token;
         if !has_next_page {
             break;
         }
     }
-    (pages, GmailSyncProviderOutcomeV1::Complete)
+    (observed_messages, GmailSyncProviderOutcomeV1::Complete)
 }
 
 async fn fetch_history_pages(
@@ -173,8 +224,9 @@ async fn fetch_history_pages(
     start_history_id: String,
     mut page_token: Option<String>,
     windows: u32,
-) -> (Vec<GmailSyncProviderPageV1>, GmailSyncProviderOutcomeV1) {
-    let mut pages = Vec::new();
+    delivery: &GmailSyncProviderPageDeliveryContextV1<'_>,
+) -> (usize, GmailSyncProviderOutcomeV1) {
+    let mut observed_messages = 0_usize;
     for _ in 0..windows {
         let page = match client
             .list_history(token, &start_history_id, page_token.as_deref())
@@ -182,11 +234,14 @@ async fn fetch_history_pages(
         {
             Ok(page) => page,
             Err(GmailAdapterErrorV1::ProviderStatus(404)) => {
-                return (pages, GmailSyncProviderOutcomeV1::HistoryExpired);
+                return (
+                    observed_messages,
+                    GmailSyncProviderOutcomeV1::HistoryExpired,
+                );
             }
             Err(_) => {
                 return (
-                    pages,
+                    observed_messages,
                     GmailSyncProviderOutcomeV1::Failed(GmailSyncProviderFailureV1::Provider),
                 );
             }
@@ -199,28 +254,63 @@ async fn fetch_history_pages(
             .map(str::to_owned)
         else {
             return (
-                pages,
+                observed_messages,
                 GmailSyncProviderOutcomeV1::Failed(GmailSyncProviderFailureV1::Provider),
             );
         };
         let messages = match fetch_raw_messages(client, token, message_ids.into_iter()).await {
             Ok(messages) => messages,
-            Err(error) => return (pages, error),
+            Err(error) => return (observed_messages, error),
         };
         let next_page_token = page.next_page_token;
         let has_next_page = next_page_token.is_some();
-        pages.push(GmailSyncProviderPageV1::History {
-            messages,
-            start_history_id: start_history_id.clone(),
-            checkpoint_history_id,
-            next_page_token: next_page_token.clone(),
-        });
+        let page_messages = messages.len();
+        if !deliver_page(
+            delivery,
+            GmailSyncProviderPageV1::History {
+                messages,
+                start_history_id: start_history_id.clone(),
+                checkpoint_history_id,
+                next_page_token: next_page_token.clone(),
+            },
+        )
+        .await
+        {
+            return (
+                observed_messages,
+                GmailSyncProviderOutcomeV1::Failed(GmailSyncProviderFailureV1::Finalization),
+            );
+        }
+        observed_messages = observed_messages.saturating_add(page_messages);
         page_token = next_page_token;
         if !has_next_page {
             break;
         }
     }
-    (pages, GmailSyncProviderOutcomeV1::Complete)
+    (observed_messages, GmailSyncProviderOutcomeV1::Complete)
+}
+
+async fn deliver_page(
+    delivery: &GmailSyncProviderPageDeliveryContextV1<'_>,
+    page: GmailSyncProviderPageV1,
+) -> bool {
+    let (acknowledgment, committed) = oneshot::channel();
+    if delivery
+        .page_sender
+        .send(GmailSyncProviderPageDeliveryV1 {
+            connection_id: delivery.connection_id.to_owned(),
+            operation_id: delivery.operation_id.to_owned(),
+            page,
+            observed_at_unix_seconds: delivery.observed_at_unix_seconds,
+            observed_at_nanos: delivery.observed_at_nanos,
+            acknowledgment,
+        })
+        .await
+        .is_err()
+    {
+        return false;
+    }
+    matches!(committed.await, Ok(true))
 }
 
 async fn fetch_raw_messages(
@@ -247,7 +337,10 @@ fn valid_history_id(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::valid_history_id;
+    use super::{
+        GmailSyncProviderPageDeliveryContextV1, GmailSyncProviderPageV1, deliver_page,
+        valid_history_id,
+    };
 
     #[test]
     fn history_cursor_accepts_only_nonempty_decimal_ids() {
@@ -255,5 +348,35 @@ mod tests {
         assert!(!valid_history_id(""));
         assert!(!valid_history_id("12a"));
         assert!(!valid_history_id("-1"));
+    }
+
+    #[tokio::test]
+    async fn page_delivery_waits_for_mail_finalization_acknowledgment() {
+        let (page_sender, mut pages) = tokio::sync::mpsc::channel(1);
+        let context = GmailSyncProviderPageDeliveryContextV1 {
+            connection_id: "mail-account-1",
+            operation_id: "sync-operation-1",
+            observed_at_unix_seconds: 42,
+            observed_at_nanos: 7,
+            page_sender: &page_sender,
+        };
+        let mut delivery = Box::pin(deliver_page(
+            &context,
+            GmailSyncProviderPageV1::Full {
+                messages: Vec::new(),
+                next_page_token: None,
+            },
+        ));
+        let page = tokio::select! {
+            result = &mut delivery => panic!("page completed before acknowledgment: {result}"),
+            page = pages.recv() => page.expect("bounded Gmail page delivery"),
+        };
+
+        assert_eq!(page.connection_id, "mail-account-1");
+        assert_eq!(page.operation_id, "sync-operation-1");
+        page.acknowledgment
+            .send(true)
+            .expect("acknowledge Gmail page");
+        assert!(delivery.await);
     }
 }

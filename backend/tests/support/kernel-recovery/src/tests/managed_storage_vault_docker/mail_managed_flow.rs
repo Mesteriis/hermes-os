@@ -110,6 +110,32 @@ fn managed_mail_runtime_uses_kernel_leases_and_route_specific_admission() {
         accepted_connections,
         "an exact replayed IMAP sync operation must not reach the provider twice"
     );
+    let streaming_operation_id = "managed-mail-streaming-pages";
+    imap.enable_streaming_sync_pages();
+    sync_mail(&store, &supervisor, &mail, 120, streaming_operation_id);
+    let second_page_deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !imap.second_page_requested() {
+        assert!(
+            std::time::Instant::now() < second_page_deadline,
+            "managed IMAP worker did not request the second bounded page"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert_sync_run_running(&store, &supervisor, &mail, streaming_operation_id, 121);
+    assert_eq!(
+        mail_operational_message_count(&store, &supervisor, &mail, 122),
+        2,
+        "the first IMAP page must be queryable before the second provider page completes"
+    );
+    imap.release_second_page();
+    wait_for_successful_sync_run(&store, &supervisor, &mail, streaming_operation_id, 2, 123);
+    let accepted_streaming_connections = imap.accepted_connections();
+    sync_mail(&store, &supervisor, &mail, 150, streaming_operation_id);
+    assert_eq!(
+        imap.accepted_connections(),
+        accepted_streaming_connections,
+        "replaying the streamed IMAP operation must not reopen the provider"
+    );
     mail = restart_mail_runtime_without_smtp(
         &supervisor,
         &store,

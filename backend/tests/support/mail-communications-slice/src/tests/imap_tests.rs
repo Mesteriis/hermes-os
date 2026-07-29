@@ -4,7 +4,15 @@ use hermes_mail_imap::{ImapMessage, supports_read_only_sync, sync_inbox};
 
 #[test]
 fn sync_requires_password() {
-    let result = sync_inbox("mail.example.com", IMAP_PORT, "user", None, MAX_WINDOW, 1);
+    let result = sync_inbox(
+        "mail.example.com",
+        IMAP_PORT,
+        "user",
+        None,
+        MAX_WINDOW,
+        1,
+        |_| Ok(()),
+    );
     assert!(matches!(result, Err(error) if error == "imap password is required"));
 }
 

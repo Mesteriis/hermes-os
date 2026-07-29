@@ -31,6 +31,11 @@ use imap_proto::{
 
 pub const PACKAGE: &str = "hermes-mail-imap";
 
+#[cfg(not(feature = "conformance-test-support"))]
+type ImapTransport = async_native_tls::TlsStream<TcpStream>;
+#[cfg(feature = "conformance-test-support")]
+type ImapTransport = TcpStream;
+
 mod retry {
     #[derive(Clone, Copy)]
     pub struct ImapRetryPolicy {
@@ -223,20 +228,40 @@ impl ImapError {
     }
 }
 
-pub fn sync_inbox(
+pub fn sync_inbox<F>(
     host: &str,
     port: u16,
     username: &str,
     password: Option<&str>,
     window: u32,
     windows: u32,
-) -> Result<ImapSyncResult, String> {
+    mut finalize_page: F,
+) -> Result<usize, String>
+where
+    F: FnMut(ImapSyncResult) -> Result<(), ()>,
+{
     let password = password.ok_or_else(|| "imap password is required".to_owned())?;
     if !supports_read_only_sync(window) || !supports_read_only_windows(windows) {
         return Err("window unsupported for read-only sync".to_owned());
     }
-    let limit = window as u64 * windows as u64;
-    sync_inbox_with_retry(host, port, username, password, limit, run_imap_sync)
+    let limit = usize::try_from(window as u64 * windows as u64)
+        .map_err(|_| "imap requested window does not fit runtime limits".to_owned())?;
+    let page_size =
+        usize::try_from(window).map_err(|_| "imap page window does not fit runtime limits")?;
+    task::block_on(future::timeout(
+        Duration::from_secs(IMAP_SYNC_TIMEOUT_SECONDS),
+        imap_sync_pages_once(
+            host,
+            port,
+            username,
+            password,
+            limit,
+            page_size,
+            &mut finalize_page,
+        ),
+    ))
+    .map_err(|_| format!("imap sync exceeded {IMAP_SYNC_TIMEOUT_SECONDS}s deadline"))?
+    .map_err(|error| format!("imap sync failed: {error}"))
 }
 
 pub fn set_message_flag(
@@ -504,6 +529,7 @@ where
     }
 }
 
+#[cfg(test)]
 fn sync_inbox_with_retry<F>(
     host: &str,
     port: u16,
@@ -528,6 +554,7 @@ where
     )
 }
 
+#[cfg(test)]
 fn sync_inbox_with_retry_policy<F>(
     host: &str,
     port: u16,
@@ -595,35 +622,135 @@ fn supports_read_only_sync_uses_mail_window_limit_only() {
     assert!(!supports_read_only_sync(MAX_WINDOW + 1));
 }
 
-fn run_imap_sync(
-    host: &str,
-    port: u16,
-    username: &str,
-    password: &str,
-    requested: usize,
-    deadline: Duration,
-) -> Result<ImapSyncResult, ImapError> {
-    let result = task::block_on(future::timeout(
-        deadline,
-        imap_sync_once(host, port, username, password, requested),
-    ))
-    .map_err(|_| {
-        ImapError::new(
-            "timeout",
-            format!("imap sync exceeded {IMAP_SYNC_TIMEOUT_SECONDS}s deadline"),
-        )
-    })??;
-
-    Ok(result)
+struct ImapSyncPlanV1 {
+    session: Session<ImapTransport>,
+    mailboxes: Vec<ImapMailboxV1>,
+    selected_mailbox: ImapSelectedMailboxV1,
+    fetch_uids: Vec<u32>,
+    has_more: bool,
 }
 
-async fn imap_sync_once(
+async fn imap_sync_pages_once<F>(
     host: &str,
     port: u16,
     username: &str,
     password: &str,
     requested: usize,
-) -> Result<ImapSyncResult, ImapError> {
+    page_size: usize,
+    finalize_page: &mut F,
+) -> Result<usize, ImapError>
+where
+    F: FnMut(ImapSyncResult) -> Result<(), ()>,
+{
+    let ImapSyncPlanV1 {
+        session,
+        mailboxes,
+        selected_mailbox,
+        fetch_uids,
+        has_more,
+    } = discover_sync_plan(host, port, username, password, requested).await?;
+    let mut active_session = Some(session);
+    let page_count = fetch_uids.len().div_ceil(page_size);
+    let mut observed_messages = 0_usize;
+    for (page_index, page_uids) in fetch_uids.chunks(page_size).enumerate() {
+        let mut attempts = 0_u8;
+        let messages = loop {
+            attempts = attempts.saturating_add(1);
+            if active_session.is_none() {
+                match reopen_selected_session(host, port, username, password, &selected_mailbox)
+                    .await
+                {
+                    Ok(session) => active_session = Some(session),
+                    Err(error) => {
+                        if error.is_retryable() && attempts < retry::MAX_SYNC_ATTEMPTS {
+                            task::sleep(Duration::from_millis(
+                                retry::IMAP_SYNC_RETRY_POLICY.delay_millis,
+                            ))
+                            .await;
+                            continue;
+                        }
+                        return Err(error);
+                    }
+                }
+            }
+            let result = fetch_messages(
+                active_session
+                    .as_mut()
+                    .expect("IMAP page session must be available"),
+                page_uids,
+            )
+            .await;
+            match result {
+                Ok(messages) => break messages,
+                Err(error) => {
+                    active_session = None;
+                    if error.is_retryable() && attempts < retry::MAX_SYNC_ATTEMPTS {
+                        task::sleep(Duration::from_millis(
+                            retry::IMAP_SYNC_RETRY_POLICY.delay_millis,
+                        ))
+                        .await;
+                        continue;
+                    }
+                    return Err(error);
+                }
+            }
+        };
+        let page_messages = messages.len();
+        finalize_page(ImapSyncResult {
+            messages,
+            mailboxes: mailboxes.clone(),
+            selected_mailbox: selected_mailbox.clone(),
+            attempts,
+            window: uids_window(page_uids.len()),
+            has_more: has_more || page_index.saturating_add(1) < page_count,
+        })
+        .map_err(|()| {
+            ImapError::new("page_finalization", "Mail rejected IMAP page finalization")
+        })?;
+        observed_messages = observed_messages.saturating_add(page_messages);
+    }
+    if let Some(mut session) = active_session {
+        session
+            .logout()
+            .await
+            .map_err(|error| ImapError::new("protocol", format!("imap logout failed: {error}")))?;
+    }
+    Ok(observed_messages)
+}
+
+async fn discover_sync_plan(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+    requested: usize,
+) -> Result<ImapSyncPlanV1, ImapError> {
+    let mut attempts = 0_u8;
+    loop {
+        attempts = attempts.saturating_add(1);
+        match discover_sync_plan_once(host, port, username, password, requested).await {
+            Ok(plan) => return Ok(plan),
+            Err(error) => {
+                if error.is_retryable() && attempts < retry::MAX_SYNC_ATTEMPTS {
+                    task::sleep(Duration::from_millis(
+                        retry::IMAP_SYNC_RETRY_POLICY.delay_millis,
+                    ))
+                    .await;
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+    }
+}
+
+async fn discover_sync_plan_once(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+    requested: usize,
+) -> Result<ImapSyncPlanV1, ImapError> {
     let mut session = open_session(host, port, username, password).await?;
     let mailboxes = discover_mailboxes(&mut session).await?;
     let inbox = mailboxes
@@ -638,42 +765,58 @@ async fn imap_sync_once(
         .filter(|value| *value > 0)
         .ok_or_else(|| ImapError::new("protocol", "imap mailbox omitted UIDVALIDITY"))?;
     let selected_mailbox_id = inbox.mailbox_id.clone();
-
     let all_uids = if requested == 0 {
         Vec::new()
     } else {
         let ids = session.uid_search("UID 1:*").await.map_err(|error| {
             ImapError::new("protocol", format!("imap uid search failed: {error}"))
         })?;
-
-        let mut sorted = ids.into_iter().collect::<Vec<_>>();
-        sorted.sort_unstable();
-        sorted
+        ids.into_iter().collect::<Vec<_>>()
     };
-
-    let has_more = all_uids.len() > requested;
-    let fetch_uids = if all_uids.len() > requested {
-        &all_uids[all_uids.len() - requested..]
-    } else {
-        &all_uids[..]
-    };
-    let messages = fetch_messages(&mut session, fetch_uids).await?;
-    session
-        .logout()
-        .await
-        .map_err(|error| ImapError::new("protocol", format!("imap logout failed: {error}")))?;
-
-    Ok(ImapSyncResult {
-        messages,
+    let (fetch_uids, has_more) = select_latest_uids(all_uids, requested);
+    Ok(ImapSyncPlanV1 {
+        session,
         mailboxes,
         selected_mailbox: ImapSelectedMailboxV1 {
             mailbox_id: selected_mailbox_id,
             uid_validity,
         },
-        attempts: 1,
-        window: uids_window(fetch_uids.len()),
+        fetch_uids,
         has_more,
     })
+}
+
+fn select_latest_uids(mut all_uids: Vec<u32>, requested: usize) -> (Vec<u32>, bool) {
+    all_uids.sort_unstable();
+    let has_more = all_uids.len() > requested;
+    if has_more {
+        (all_uids.split_off(all_uids.len() - requested), true)
+    } else {
+        (all_uids, false)
+    }
+}
+
+async fn reopen_selected_session(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+    selected_mailbox: &ImapSelectedMailboxV1,
+) -> Result<Session<ImapTransport>, ImapError> {
+    let mut session = open_session(host, port, username, password).await?;
+    let selected = session
+        .examine(&selected_mailbox.mailbox_id)
+        .await
+        .map_err(|error| {
+            ImapError::new("protocol", format!("imap EXAMINE mailbox failed: {error}"))
+        })?;
+    if selected.uid_validity != Some(selected_mailbox.uid_validity) {
+        return Err(ImapError::new(
+            "protocol",
+            "imap UIDVALIDITY changed during sync",
+        ));
+    }
+    Ok(session)
 }
 
 async fn discover_mailboxes<T>(session: &mut Session<T>) -> Result<Vec<ImapMailboxV1>, ImapError>
@@ -959,6 +1102,15 @@ mod tests {
             assert!(IMAP_UID_FETCH_CHUNK_SIZE <= 25);
             assert!(IMAP_UID_FETCH_CHUNK_SIZE < MAX_WINDOW as usize);
         }
+    }
+
+    #[test]
+    fn latest_uids_are_partitioned_deterministically_into_bounded_pages() {
+        let (uids, has_more) = select_latest_uids(vec![8, 2, 7, 4, 6, 5, 3, 1], 6);
+        let pages = uids.chunks(2).map(<[u32]>::to_vec).collect::<Vec<_>>();
+
+        assert!(has_more);
+        assert_eq!(pages, vec![vec![3, 4], vec![5, 6], vec![7, 8]]);
     }
 
     #[test]

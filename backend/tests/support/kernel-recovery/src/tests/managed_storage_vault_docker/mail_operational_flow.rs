@@ -131,6 +131,14 @@ pub(super) fn assert_mail_operational_read(
         77,
         "managed-mail-operational-cursor-stale",
     );
+    wait_for_successful_sync_run(
+        store,
+        supervisor,
+        mail,
+        "managed-mail-operational-cursor-stale",
+        1,
+        78,
+    );
     assert_stale_cursor_is_rejected(store, supervisor, mail, &cursor);
 }
 
@@ -1140,6 +1148,31 @@ pub(super) fn sync_mail(
             operation_id: operation_id.to_owned(),
         }
     );
+}
+
+pub(super) fn mail_operational_message_count(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    request_id: u64,
+) -> usize {
+    let response = query_operational(
+        store,
+        supervisor,
+        mail,
+        request_id,
+        MailOperationalQueryV1::ListMessages {
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            folder_id: Some("INBOX".to_owned()),
+            provider_thread_id: None,
+            cursor: None,
+            limit: 200,
+        },
+    );
+    let MailOperationalQueryResponseV1::Messages(messages) = response else {
+        panic!("Mail operational message count returned the wrong response")
+    };
+    messages.items.len()
 }
 
 fn route(

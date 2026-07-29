@@ -4,9 +4,10 @@
 - Дата: 2026-07-29
 - Состояние реализации: частично реализовано. Public `SyncInboxAcceptedV1`,
   idempotent durable acceptance и отдельные IMAP/Gmail provider workers
-  реализованы. Gmail HTTP list/history/raw fetch больше не выполняется в
-  control loop; streaming page finalization, полный live evidence gate и
-  `make pre-push` остаются открытыми.
+  реализованы. IMAP и Gmail передают pages через bounded owner-local channels
+  и не получают следующую page до подтверждённой Mail finalization. Gmail HTTP
+  list/history/raw fetch и IMAP provider I/O больше не выполняются в control
+  loop. Полный live iCloud evidence gate остаётся открытым.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0213, ADR-0214, ADR-0220,
   ADR-0239, ADR-0298, ADR-0299, ADR-0320
 
@@ -99,13 +100,14 @@ Runtime:
 6. фиксирует terminal run и sanitized failure code;
 7. relays сохранённые exact observation bytes обычным outbox worker.
 
-Gmail worker получает только bounded provider plan, cloned API client и
-`Zeroizing` access token. Он не получает Mail persistence, control channel,
-Blob client или Communications contract. Worker возвращает raw pages и
-sanitized terminal outcome; Mail runtime отдельно строит observations,
-атомарно сохраняет projection/outbox, выполняет Blob admission и завершает
-durable run. Истёкший history cursor очищается owner-local runtime и повторно
-планируется как full sync с тем же operation ID, без второго acceptance.
+Gmail worker получает только bounded provider plan, cloned API client,
+`Zeroizing` access token и bounded page sender. Он не получает Mail
+persistence, control channel, Blob client или Communications contract. Worker
+передаёт одну raw page и ждёт owner-local acknowledgment; Mail runtime отдельно
+строит observations, атомарно сохраняет projection/outbox, выполняет Blob
+admission и только после этого подтверждает page. Истёкший history cursor
+очищается owner-local runtime и повторно планируется как full sync с тем же
+operation ID, без второго acceptance.
 
 Restart помечает незавершённую работу predecessor generation как
 `INTERRUPTED`. Successor не переиспользует process-bound credential material и
@@ -208,3 +210,27 @@ radius, а уже подтверждённые pages остаются materializ
 Старый synchronous response и параметры retry из ADR-0239 считаются
 историческим состоянием реализации и заменяются только атомарным cutover этого
 ADR.
+
+## Текущее implementation evidence
+
+На 2026-07-29 реализованы и проверены:
+
+- bounded Gmail page delivery с acknowledgment после Mail finalization;
+- bounded IMAP page delivery с тем же acknowledgment boundary;
+- deterministic latest-first IMAP pages, transport chunks не более 10 UIDs,
+  не более трёх transient attempts и hard 300-second run timeout;
+- одна Mail persistence transaction на все operational rows и exact outbox
+  records одной IMAP page;
+- managed PostgreSQL conformance: первая IMAP page доступна для query, пока
+  fixture удерживает вторую, run остаётся `RUNNING`, после release завершается
+  `SUCCEEDED` с двумя observations;
+- replay exact operation ID без повторного открытия IMAP provider;
+- managed Gmail runtime conformance;
+- корректное сопоставление Settings Registry snapshot с
+  `configuration_instance_id`: registry target остаётся registration-scoped,
+  provider credential binding остаётся configuration-instance-scoped.
+
+Пункт 8 admission evidence остаётся открытым: успешная цепочка реального
+iCloud account до Communications evidence export в текущем runtime ещё не
+доказана. Остальные результаты validation фиксируются выводом команд и не
+выводятся из наличия этого ADR.

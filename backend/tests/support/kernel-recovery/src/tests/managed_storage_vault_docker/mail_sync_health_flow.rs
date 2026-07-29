@@ -129,6 +129,66 @@ pub(super) fn assert_mail_sync_replay_and_health(
     assert_stale_generation_is_interrupted(mail);
 }
 
+pub(super) fn assert_sync_run_running(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    operation_id: &str,
+    request_id: u64,
+) {
+    let response = query_sync_health(
+        store,
+        supervisor,
+        mail,
+        request_id,
+        MailSyncHealthQueryV1::GetRun {
+            connection_id: MAIL_ACCOUNT_ID.to_owned(),
+            operation_id: operation_id.to_owned(),
+        },
+    );
+    let MailSyncHealthQueryResponseV1::Run(Some(run)) = response else {
+        panic!("running Mail sync query returned the wrong response")
+    };
+    assert_eq!(run.outcome, MailSyncOutcomeV1::Running);
+    assert_eq!(run.observed_messages, 0);
+}
+
+pub(super) fn wait_for_successful_sync_run(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    mail: &StartedMailRuntime,
+    operation_id: &str,
+    expected_observed_messages: u64,
+    request_id: u64,
+) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let mut attempt = 0_u64;
+    loop {
+        let response = query_sync_health(
+            store,
+            supervisor,
+            mail,
+            request_id + attempt,
+            MailSyncHealthQueryV1::GetRun {
+                connection_id: MAIL_ACCOUNT_ID.to_owned(),
+                operation_id: operation_id.to_owned(),
+            },
+        );
+        if let MailSyncHealthQueryResponseV1::Run(Some(run)) = response
+            && run.outcome == MailSyncOutcomeV1::Succeeded
+        {
+            assert_successful_run(&run, mail, operation_id, expected_observed_messages);
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Mail sync did not reach a successful terminal state"
+        );
+        attempt = attempt.saturating_add(1);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
 fn query_sync_health(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,

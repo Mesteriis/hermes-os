@@ -7,9 +7,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_mail_runtime::managed::{
-    CompletedImapSyncProviderOperationV1, MailDeliveryDispatchErrorV1,
-    MailMessageFlagDispatchErrorV1, MailMessageLocationDispatchErrorV1,
-    MailMessagePermanentDeleteDispatchErrorV1, execute_imap_sync_provider_operation,
+    CompletedImapSyncProviderOperationV1, ImapSyncProviderPageDeliveryV1,
+    MailDeliveryDispatchErrorV1, MailMessageFlagDispatchErrorV1,
+    MailMessageLocationDispatchErrorV1, MailMessagePermanentDeleteDispatchErrorV1,
+    execute_imap_sync_provider_operation,
 };
 use hermes_mail_runtime::{
     MailRuntimeAdmission,
@@ -20,7 +21,8 @@ use hermes_mail_runtime::{
         execute_gmail_oauth_provider_operation,
     },
     gmail_sync_worker::{
-        CompletedGmailSyncProviderOperationV1, execute_gmail_sync_provider_operation,
+        CompletedGmailSyncProviderOperationV1, GmailSyncProviderPageDeliveryV1,
+        execute_gmail_sync_provider_operation,
     },
     managed, settings,
 };
@@ -46,6 +48,16 @@ struct InheritedPaths {
 
 const MAX_CLIENT_DELIVERIES_PER_TICK: usize = 32;
 const RUNTIME_TICK_INTERVAL: Duration = Duration::from_millis(100);
+
+struct ActiveGmailSyncProviderOperationV1 {
+    completion: tokio::task::JoinHandle<CompletedGmailSyncProviderOperationV1>,
+    pages: tokio::sync::mpsc::Receiver<GmailSyncProviderPageDeliveryV1>,
+}
+
+struct ActiveImapSyncProviderOperationV1 {
+    completion: tokio::task::JoinHandle<CompletedImapSyncProviderOperationV1>,
+    pages: std::sync::mpsc::Receiver<ImapSyncProviderPageDeliveryV1>,
+}
 
 fn main() -> Result<(), String> {
     let mut arguments = std::env::args_os();
@@ -81,8 +93,11 @@ where
     if configuration.runtime_instance_id != paths.runtime_instance_id {
         return Err("Mail runtime configuration is stale".to_owned());
     }
-    let snapshots = if configuration.configuration_instances.is_empty() {
-        vec![selected_snapshot]
+    let configuration_snapshots = if configuration.configuration_instances.is_empty() {
+        vec![(
+            configuration.configuration_instance_id.clone(),
+            selected_snapshot,
+        )]
     } else {
         let selected = configuration
             .configuration_instances
@@ -102,7 +117,7 @@ where
                     .map_err(|_| "Mail runtime settings catalog is invalid".to_owned())?;
                 validate_settings_snapshot_against_schema_v1(&schema, &snapshot)
                     .map_err(|_| "Mail runtime settings catalog is invalid".to_owned())?;
-                Ok(snapshot)
+                Ok((instance.configuration_instance_id.clone(), snapshot))
             })
             .collect::<Result<Vec<_>, String>>()?
     };
@@ -110,13 +125,13 @@ where
         .storage
         .clone()
         .ok_or_else(|| "Mail runtime configuration is invalid".to_owned())?;
-    let admissions = snapshots
+    let admissions = configuration_snapshots
         .into_iter()
-        .map(|snapshot| {
+        .map(|(configuration_instance_id, snapshot)| {
             let settings = settings::decode(&snapshot)?;
             Ok(MailRuntimeAdmission {
                 logical_owner_id: configuration.logical_owner_id.clone(),
-                configuration_instance_id: snapshot.target_id,
+                configuration_instance_id,
                 module_registration_id: configuration.registration_id.clone(),
                 runtime_instance_id: configuration.runtime_instance_id.clone(),
                 runtime_generation: configuration.runtime_generation,
@@ -148,12 +163,8 @@ where
     let mut gmail_oauth_provider_operation: Option<
         tokio::task::JoinHandle<CompletedGmailOAuthProviderOperationV1>,
     > = None;
-    let mut imap_sync_provider_operation: Option<
-        tokio::task::JoinHandle<CompletedImapSyncProviderOperationV1>,
-    > = None;
-    let mut gmail_sync_provider_operation: Option<
-        tokio::task::JoinHandle<CompletedGmailSyncProviderOperationV1>,
-    > = None;
+    let mut imap_sync_provider_operation: Option<ActiveImapSyncProviderOperationV1> = None;
+    let mut gmail_sync_provider_operation: Option<ActiveGmailSyncProviderOperationV1> = None;
     loop {
         drain_client_deliveries(&runtime, &mut admitted)?;
         let now = SystemTime::now()
@@ -198,16 +209,28 @@ where
                 }
             }
         }
+        if let Some(operation) = imap_sync_provider_operation.as_mut() {
+            while let Ok(delivery) = operation.pages.try_recv() {
+                let connection_id = delivery.connection_id().to_owned();
+                admitted
+                    .select_account(&connection_id)
+                    .map_err(|_| "Mail runtime IMAP sync account selection failed".to_owned())?;
+                if let Err(error) =
+                    runtime.block_on(admitted.finalize_imap_sync_provider_page(delivery))
+                {
+                    developer_diagnostic(&format!("developer_mail_imap_sync_page_error={error:?}"));
+                }
+            }
+        }
         if imap_sync_provider_operation
             .as_ref()
-            .is_some_and(tokio::task::JoinHandle::is_finished)
+            .is_some_and(|operation| operation.completion.is_finished())
         {
+            let operation = imap_sync_provider_operation
+                .take()
+                .expect("finished IMAP sync provider operation");
             let completed = runtime
-                .block_on(
-                    imap_sync_provider_operation
-                        .take()
-                        .expect("finished IMAP sync provider operation"),
-                )
+                .block_on(operation.completion)
                 .map_err(|_| "Mail runtime IMAP sync provider worker failed".to_owned())?;
             let connection_id = completed.connection_id().to_owned();
             admitted
@@ -226,9 +249,13 @@ where
                     .map_err(|_| "Mail runtime sync account selection failed".to_owned())?;
                 match admitted.prepare_pending_imap_sync() {
                     Ok(Some(prepared)) => {
-                        imap_sync_provider_operation = Some(runtime.spawn_blocking(move || {
-                            execute_imap_sync_provider_operation(prepared)
-                        }));
+                        let (page_sender, pages) = std::sync::mpsc::sync_channel(1);
+                        imap_sync_provider_operation = Some(ActiveImapSyncProviderOperationV1 {
+                            completion: runtime.spawn_blocking(move || {
+                                execute_imap_sync_provider_operation(prepared, page_sender)
+                            }),
+                            pages,
+                        });
                         break;
                     }
                     Ok(None) => {}
@@ -241,16 +268,30 @@ where
                 }
             }
         }
+        if let Some(operation) = gmail_sync_provider_operation.as_mut() {
+            while let Ok(delivery) = operation.pages.try_recv() {
+                let connection_id = delivery.connection_id().to_owned();
+                admitted
+                    .select_account(&connection_id)
+                    .map_err(|_| "Mail runtime Gmail sync account selection failed".to_owned())?;
+                if let Err(error) =
+                    runtime.block_on(admitted.finalize_gmail_sync_provider_page(delivery))
+                {
+                    developer_diagnostic(&format!(
+                        "developer_mail_gmail_sync_page_error={error:?}"
+                    ));
+                }
+            }
+        }
         if gmail_sync_provider_operation
             .as_ref()
-            .is_some_and(tokio::task::JoinHandle::is_finished)
+            .is_some_and(|operation| operation.completion.is_finished())
         {
+            let operation = gmail_sync_provider_operation
+                .take()
+                .expect("finished Gmail sync provider operation");
             let completed = runtime
-                .block_on(
-                    gmail_sync_provider_operation
-                        .take()
-                        .expect("finished Gmail sync provider operation"),
-                )
+                .block_on(operation.completion)
                 .map_err(|_| "Mail runtime Gmail sync provider worker failed".to_owned())?;
             let connection_id = completed.connection_id().to_owned();
             admitted
@@ -269,8 +310,14 @@ where
                     .map_err(|_| "Mail runtime Gmail sync account selection failed".to_owned())?;
                 match runtime.block_on(admitted.prepare_pending_gmail_sync()) {
                     Ok(Some(prepared)) => {
-                        gmail_sync_provider_operation =
-                            Some(runtime.spawn(execute_gmail_sync_provider_operation(prepared)));
+                        let (page_sender, pages) = tokio::sync::mpsc::channel(1);
+                        gmail_sync_provider_operation = Some(ActiveGmailSyncProviderOperationV1 {
+                            completion: runtime.spawn(execute_gmail_sync_provider_operation(
+                                prepared,
+                                page_sender,
+                            )),
+                            pages,
+                        });
                         break;
                     }
                     Ok(None) => {}

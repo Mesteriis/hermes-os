@@ -861,7 +861,7 @@ fn mail_settings_snapshot(
             Value::StringValue(MAIL_ACCOUNT_ID.to_owned()),
         ),
         entry("mail.sync.window", Value::UnsignedIntegerValue(1)),
-        entry("mail.sync.windows", Value::UnsignedIntegerValue(1)),
+        entry("mail.sync.windows", Value::UnsignedIntegerValue(2)),
     ];
     match profile {
         MailSettingsProfileV1::Imap { port, smtp } => {

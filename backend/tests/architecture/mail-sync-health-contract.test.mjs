@@ -29,6 +29,7 @@ const paths = {
     'src/mail-runtime/src/gmail_sync_worker.rs',
     BACKEND_ROOT,
   ),
+  imapAdapter: new URL('src/mail-imap/src/lib.rs', BACKEND_ROOT),
   clientPort: new URL('src/mail-runtime/src/client_port.rs', BACKEND_ROOT),
   admission: new URL('src/mail-runtime/src/admission.rs', BACKEND_ROOT),
   managedSetup: new URL(
@@ -90,6 +91,7 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
     runtime,
     runtimeRoot,
     gmailWorker,
+    imapAdapter,
     clientPort,
     admission,
     managedSetup,
@@ -175,17 +177,57 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(runtime, /complete_sync_run/);
   assert.match(runtime, /MailSyncTriggerV1::Manual/);
   assert.match(runtime, /prepare_pending_gmail_sync/);
+  assert.match(runtime, /finalize_imap_sync_provider_page/);
+  assert.match(runtime, /finalize_gmail_sync_provider_page/);
   assert.match(runtime, /finalize_gmail_sync_provider_operation/);
-  assert.match(runtimeRoot, /JoinHandle<CompletedGmailSyncProviderOperationV1>/);
   assert.match(
     runtimeRoot,
-    /runtime\.spawn\(execute_gmail_sync_provider_operation\(prepared\)\)/,
+    /ActiveGmailSyncProviderOperationV1[\s\S]*mpsc::Receiver<GmailSyncProviderPageDeliveryV1>/,
+  );
+  assert.match(
+    runtimeRoot,
+    /tokio::sync::mpsc::channel\(1\)[\s\S]*execute_gmail_sync_provider_operation\([\s\S]*page_sender/,
+  );
+  assert.match(
+    runtimeRoot,
+    /std::sync::mpsc::sync_channel\(1\)[\s\S]*execute_imap_sync_provider_operation\([\s\S]*page_sender/,
+  );
+  assert.match(
+    runtimeRoot,
+    /configuration\.configuration_instance_id\.clone\(\),\s*selected_snapshot/,
+  );
+  assert.match(
+    runtimeRoot,
+    /instance\.configuration_instance_id\.clone\(\), snapshot/,
+  );
+  assert.doesNotMatch(
+    runtimeRoot,
+    /configuration_instance_id:\s*snapshot\.target_id/,
   );
   assert.doesNotMatch(runtimeRoot, /execute_pending_gmail_sync/);
   assert.match(gmailWorker, /list_messages/);
   assert.match(gmailWorker, /list_history/);
   assert.match(gmailWorker, /fetch_raw_message/);
   assert.match(gmailWorker, /Zeroizing<Vec<u8>>/);
+  assert.match(gmailWorker, /mpsc::Sender<GmailSyncProviderPageDeliveryV1>/);
+  assert.match(gmailWorker, /oneshot::channel\(\)/);
+  assert.match(gmailWorker, /matches!\(committed\.await, Ok\(true\)\)/);
+  assert.doesNotMatch(
+    gmailWorker,
+    /pages:\s*Vec<GmailSyncProviderPageV1>/,
+  );
+  assert.match(imapAdapter, /FnMut\(ImapSyncResult\) -> Result<\(\), \(\)>/);
+  assert.match(imapAdapter, /fetch_uids\.chunks\(page_size\)/);
+  assert.match(imapAdapter, /finalize_page\(ImapSyncResult/);
+  assert.match(imapAdapter, /select_latest_uids/);
+  assert.match(
+    imapAdapter,
+    /attempts < retry::MAX_SYNC_ATTEMPTS/,
+  );
+  assert.match(
+    runtime,
+    /record_operational_materializations\(&materializations,\s*observed_at_unix_seconds\)/,
+  );
   assert.doesNotMatch(
     gmailWorker,
     /MailBootstrapError|crate::managed|MailDurablePersistence|ManagedControlChannel|BlobDataClient|communications_outbox|hermes_communications/,
