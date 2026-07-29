@@ -4,9 +4,11 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: typed public request/result contract и pure planning core
-реализованы. Owner-local persistence, managed runtime, provider command
-adapters, generated Gateway/client route и live admission ещё не реализованы;
+Состояние реализации: typed public request/result contract, pure planning core
+и owner-local persistence реализованы. Persistence принимает только sealed
+ciphertext, хранит owner-scoped idempotency/state transitions и выдаёт
+lease/claim с epoch fencing. Managed runtime, provider command adapters,
+generated Gateway/client route и live admission ещё не реализованы;
 `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст
@@ -26,7 +28,7 @@ facade либо cross-provider owner.
 ```text
 hermes-communication-delivery-intent-api
 hermes-communication-delivery-intent-core
-hermes-communication-delivery-intent-persistence   (следующий slice)
+hermes-communication-delivery-intent-persistence
 hermes-communication-delivery-intent-runtime       (следующий slice)
 hermes-communication-delivery-intent-assembly      (следующий slice)
 ```
@@ -70,6 +72,13 @@ Durable workflow events содержат identity, causation, correlation и sta
 не body. Private body хранится только в owner-local encrypted custody,
 материализуется по scoped lease и не попадает в subjects, logs, health или
 errors.
+
+Persistence unit не принимает `PlannedDeliveryIntentV1`, потому что planning
+object содержит plaintext body. Граница persistence принимает отдельно
+canonical identity, opaque route metadata и `SealedDeliveryBodyV1`. Ключ
+идемпотентности scoped парой `(logical_owner_id, intent_id)`, а worker claim
+ограждён `claim_epoch`, owner id и сроком lease. Terminal transition удаляет
+ciphertext custody.
 
 ## Инварианты planning core
 

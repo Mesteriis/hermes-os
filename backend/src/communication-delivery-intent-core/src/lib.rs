@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use hermes_communications_api::{
+pub use hermes_communications_api::{
     CommunicationConversationIdV1, CommunicationConversationSummaryV1, CommunicationMessageIdV1,
     CommunicationMessageLifecycleStateV1, CommunicationMessageSummaryV1,
     CommunicationProviderProvenanceV1, CommunicationSourceCursorV1,
@@ -24,6 +24,22 @@ impl ValidatedDeliveryBodyV1 {
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl TryFrom<Vec<u8>> for ValidatedDeliveryBodyV1 {
+    type Error = DeliveryIntentPlanErrorV1;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        if value.len() > MAX_DELIVERY_BODY_BYTES_V1 {
+            return Err(DeliveryIntentPlanErrorV1::BodyLimitExceeded);
+        }
+        let body =
+            std::str::from_utf8(&value).map_err(|_| DeliveryIntentPlanErrorV1::InvalidBody)?;
+        if body.trim().is_empty() {
+            return Err(DeliveryIntentPlanErrorV1::InvalidBody);
+        }
+        Ok(Self(value))
     }
 }
 
@@ -64,14 +80,7 @@ pub fn plan_delivery_intent_v1(
     if draft.operation_id.iter().all(|byte| *byte == 0) {
         return Err(DeliveryIntentPlanErrorV1::InvalidOperationId);
     }
-    if draft.body_utf8.len() > MAX_DELIVERY_BODY_BYTES_V1 {
-        return Err(DeliveryIntentPlanErrorV1::BodyLimitExceeded);
-    }
-    let body = std::str::from_utf8(&draft.body_utf8)
-        .map_err(|_| DeliveryIntentPlanErrorV1::InvalidBody)?;
-    if body.trim().is_empty() {
-        return Err(DeliveryIntentPlanErrorV1::InvalidBody);
-    }
+    let body = ValidatedDeliveryBodyV1::try_from(draft.body_utf8)?;
     if draft.conversation_id != conversation.conversation_id {
         return Err(DeliveryIntentPlanErrorV1::ConversationMismatch);
     }
@@ -112,7 +121,7 @@ pub fn plan_delivery_intent_v1(
             conversation_cursor: conversation.conversation_cursor,
             reply_to_source_cursor,
         },
-        body: ValidatedDeliveryBodyV1(draft.body_utf8),
+        body,
     })
 }
 

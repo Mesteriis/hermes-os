@@ -1,0 +1,19 @@
+[package]
+name = "hermes-communication-delivery-intent-persistence"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "communication_delivery_intent"
+surface = "persistence"
+
+[dependencies]
+hermes-communication-delivery-intent-core = { path = "../communication-delivery-intent-core" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+sha2 = { version = "=0.11.0", default-features = false }
+sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }

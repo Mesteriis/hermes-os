@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delivery_intent_contract_core_v1",
+    "currentSlice": "communication_delivery_intent_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -498,6 +498,12 @@
         "role": "workflow",
         "owner": "communication_delivery_intent",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-communication-delivery-intent-persistence",
+        "role": "workflow",
+        "owner": "communication_delivery_intent",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1331,6 +1337,16 @@
       "hermes-communication-delivery-intent-core": [
         {
           "name": "hermes-communications-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-delivery-intent-persistence": [
+        {
+          "name": "hermes-communication-delivery-intent-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -3844,7 +3860,29 @@
           "features": []
         }
       ],
-      "hermes-communication-delivery-intent-core": []
+      "hermes-communication-delivery-intent-core": [],
+      "hermes-communication-delivery-intent-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ]
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -4185,6 +4223,10 @@
         "customBuildAllowed": true
       },
       "hermes-communication-delivery-intent-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-delivery-intent-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       }

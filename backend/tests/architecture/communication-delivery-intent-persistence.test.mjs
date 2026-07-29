@@ -13,6 +13,18 @@ const paths = {
   ),
   apiManifest: new URL('src/communication-delivery-intent-api/Cargo.toml', BACKEND_ROOT),
   coreManifest: new URL('src/communication-delivery-intent-core/Cargo.toml', BACKEND_ROOT),
+  persistenceManifest: new URL(
+    'src/communication-delivery-intent-persistence/Cargo.toml',
+    BACKEND_ROOT,
+  ),
+  persistence: new URL(
+    'src/communication-delivery-intent-persistence/src/intents.rs',
+    BACKEND_ROOT,
+  ),
+  migration: new URL(
+    'src/communication-delivery-intent-persistence/migrations/0001_delivery_intent_state.sql',
+    BACKEND_ROOT,
+  ),
   contract: new URL(
     'src/communication-delivery-intent-api/proto/hermes/communication_delivery_intent/v1/delivery.proto',
     BACKEND_ROOT,
@@ -23,13 +35,26 @@ const paths = {
   ),
 };
 
-test('delivery intent contract/core is an exact non-admitted workflow slice', async () => {
-  const [policySource, reconstructionSource, apiManifest, coreManifest, contract, adr] =
+test('delivery intent persistence is an exact non-admitted workflow slice', async () => {
+  const [
+    policySource,
+    reconstructionSource,
+    apiManifest,
+    coreManifest,
+    persistenceManifest,
+    persistence,
+    migration,
+    contract,
+    adr,
+  ] =
     await Promise.all([
       readFile(paths.policy, 'utf8'),
       readFile(paths.reconstruction, 'utf8'),
       readFile(paths.apiManifest, 'utf8'),
       readFile(paths.coreManifest, 'utf8'),
+      readFile(paths.persistenceManifest, 'utf8'),
+      readFile(paths.persistence, 'utf8'),
+      readFile(paths.migration, 'utf8'),
       readFile(paths.contract, 'utf8'),
       readFile(paths.adr, 'utf8'),
     ]);
@@ -44,7 +69,7 @@ test('delivery intent contract/core is an exact non-admitted workflow slice', as
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_delivery_intent_contract_core_v1',
+    'communication_delivery_intent_persistence_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, ['communications_export']);
   assert.deepEqual(
@@ -54,20 +79,36 @@ test('delivery intent contract/core is an exact non-admitted workflow slice', as
     [
       'hermes-communication-delivery-intent-api:contract',
       'hermes-communication-delivery-intent-core:implementation',
+      'hermes-communication-delivery-intent-persistence:persistence',
     ],
   );
   assert.equal(deliverySlice?.state, 'planned');
   assert.equal(exportSlice?.state, 'implemented');
   assert.match(apiManifest, /role = "workflow"[\s\S]*surface = "contract"/);
   assert.match(coreManifest, /role = "workflow"[\s\S]*surface = "implementation"/);
+  assert.match(
+    persistenceManifest,
+    /role = "workflow"[\s\S]*surface = "persistence"/,
+  );
   assert.match(coreManifest, /hermes-communications-api/);
   assert.doesNotMatch(
-    `${apiManifest}\n${coreManifest}`,
+    `${apiManifest}\n${coreManifest}\n${persistenceManifest}`,
     /hermes-(?:mail|telegram|whatsapp|zulip|communications-domain|communications-persistence)/,
   );
+  assert.doesNotMatch(persistence, /PlannedDeliveryIntentV1|pub body_utf8/);
+  assert.match(persistence, /SealedDeliveryBodyV1/);
+  assert.match(persistence, /ON CONFLICT \(logical_owner_id, intent_id\)/);
+  assert.match(
+    persistence,
+    /jobs\.logical_owner_id = candidate\.logical_owner_id/,
+  );
+  assert.match(migration, /PRIMARY KEY \(logical_owner_id, intent_id\)/);
+  assert.match(migration, /body_ciphertext/);
+  assert.doesNotMatch(migration, /body_utf8|communications_messages|mail_|telegram_/);
   assert.match(contract, /bytes conversation_id/);
   assert.match(contract, /optional bytes reply_to_message_id/);
   assert.doesNotMatch(contract, /\b(?:map|Any|provider_id|account_id)\b/);
   assert.match(adr, /Kernel[\s\S]*не декодирует request body/);
+  assert.match(adr, /Persistence unit не принимает `PlannedDeliveryIntentV1`/);
   assert.match(adr, /остаётся `planned`/);
 });

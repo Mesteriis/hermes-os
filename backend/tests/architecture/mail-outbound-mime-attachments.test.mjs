@@ -71,7 +71,7 @@ test('Mail outbound attachments admit exactly one integration build-unit family'
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_delivery_intent_contract_core_v1',
+    'communication_delivery_intent_persistence_v1',
   );
   assert.deepEqual(inventory.domains, ['communications']);
   assert.deepEqual(inventory.integrations, ['mail']);

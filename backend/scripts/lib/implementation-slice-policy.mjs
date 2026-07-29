@@ -402,6 +402,16 @@ const COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATION_DELIVERY_INTENT_PERSISTENCE_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communication-delivery-intent-persistence',
+    role: 'workflow',
+    owner: 'communication_delivery_intent',
+    surface: 'persistence',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -1451,6 +1461,14 @@ const COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST
   ],
 };
 
+const COMMUNICATION_DELIVERY_INTENT_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delivery-intent-persistence': [
+    { name: 'hermes-communication-delivery-intent-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -1500,6 +1518,14 @@ const COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLI
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
   'hermes-communication-delivery-intent-core': [],
+};
+
+const COMMUNICATION_DELIVERY_INTENT_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delivery-intent-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
 };
 
 const FORBIDDEN_DEPENDENCIES = [
@@ -2149,6 +2175,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATION_DELIVERY_INTENT_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_delivery_intent_persistence_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATIONS_EXPORT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_DELIVERY_INTENT_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATION_DELIVERY_INTENT_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATION_DELIVERY_INTENT_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
