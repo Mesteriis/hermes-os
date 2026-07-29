@@ -8,6 +8,7 @@ pub mod attachment_security_outbox;
 pub mod client_port;
 pub mod communications_outbox;
 pub mod gmail_oauth;
+pub mod gmail_sync_worker;
 pub mod managed;
 pub mod settings;
 

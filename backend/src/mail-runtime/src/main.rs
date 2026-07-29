@@ -19,6 +19,9 @@ use hermes_mail_runtime::{
         CompletedGmailOAuthProviderOperationV1, MailGmailOAuthDispatchErrorV1,
         execute_gmail_oauth_provider_operation,
     },
+    gmail_sync_worker::{
+        CompletedGmailSyncProviderOperationV1, execute_gmail_sync_provider_operation,
+    },
     managed, settings,
 };
 use hermes_runtime_protocol::{
@@ -148,6 +151,9 @@ where
     let mut imap_sync_provider_operation: Option<
         tokio::task::JoinHandle<CompletedImapSyncProviderOperationV1>,
     > = None;
+    let mut gmail_sync_provider_operation: Option<
+        tokio::task::JoinHandle<CompletedGmailSyncProviderOperationV1>,
+    > = None;
     loop {
         drain_client_deliveries(&runtime, &mut admitted)?;
         let now = SystemTime::now()
@@ -225,20 +231,54 @@ where
                         }));
                         break;
                     }
-                    Ok(None) => {
-                        if let Err(error) =
-                            runtime.block_on(admitted.execute_pending_gmail_sync(now))
-                        {
-                            developer_diagnostic(&format!(
-                                "developer_mail_gmail_sync_error={error:?}"
-                            ));
-                        }
-                    }
+                    Ok(None) => {}
                     Err(error) => {
                         developer_diagnostic(&format!(
                             "developer_mail_imap_sync_prepare_error={error:?}"
                         ));
                         return Err("Mail runtime IMAP sync preparation failed".to_owned());
+                    }
+                }
+            }
+        }
+        if gmail_sync_provider_operation
+            .as_ref()
+            .is_some_and(tokio::task::JoinHandle::is_finished)
+        {
+            let completed = runtime
+                .block_on(
+                    gmail_sync_provider_operation
+                        .take()
+                        .expect("finished Gmail sync provider operation"),
+                )
+                .map_err(|_| "Mail runtime Gmail sync provider worker failed".to_owned())?;
+            let connection_id = completed.connection_id().to_owned();
+            admitted
+                .select_account(&connection_id)
+                .map_err(|_| "Mail runtime Gmail sync account selection failed".to_owned())?;
+            if let Err(error) =
+                runtime.block_on(admitted.finalize_gmail_sync_provider_operation(completed, now))
+            {
+                developer_diagnostic(&format!("developer_mail_gmail_sync_error={error:?}"));
+            }
+        }
+        if gmail_sync_provider_operation.is_none() {
+            for connection_id in admitted.connection_ids() {
+                admitted
+                    .select_account(&connection_id)
+                    .map_err(|_| "Mail runtime Gmail sync account selection failed".to_owned())?;
+                match runtime.block_on(admitted.prepare_pending_gmail_sync()) {
+                    Ok(Some(prepared)) => {
+                        gmail_sync_provider_operation =
+                            Some(runtime.spawn(execute_gmail_sync_provider_operation(prepared)));
+                        break;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        developer_diagnostic(&format!(
+                            "developer_mail_gmail_sync_prepare_error={error:?}"
+                        ));
+                        return Err("Mail runtime Gmail sync preparation failed".to_owned());
                     }
                 }
             }

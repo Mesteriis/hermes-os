@@ -3,9 +3,10 @@
 - Статус: принято
 - Дата: 2026-07-29
 - Состояние реализации: частично реализовано. Public `SyncInboxAcceptedV1`,
-  idempotent durable acceptance и отдельный IMAP provider worker реализованы;
-  Gmail provider I/O пока ещё выполняется в runtime loop, а page-level
-  checkpoint admission и полный live evidence gate остаются открытыми.
+  idempotent durable acceptance и отдельные IMAP/Gmail provider workers
+  реализованы. Gmail HTTP list/history/raw fetch больше не выполняется в
+  control loop; streaming page finalization, полный live evidence gate и
+  `make pre-push` остаются открытыми.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0213, ADR-0214, ADR-0220,
   ADR-0239, ADR-0298, ADR-0299, ADR-0320
 
@@ -97,6 +98,14 @@ Runtime:
 5. применяет завершённые pages в Mail-owned transaction;
 6. фиксирует terminal run и sanitized failure code;
 7. relays сохранённые exact observation bytes обычным outbox worker.
+
+Gmail worker получает только bounded provider plan, cloned API client и
+`Zeroizing` access token. Он не получает Mail persistence, control channel,
+Blob client или Communications contract. Worker возвращает raw pages и
+sanitized terminal outcome; Mail runtime отдельно строит observations,
+атомарно сохраняет projection/outbox, выполняет Blob admission и завершает
+durable run. Истёкший history cursor очищается owner-local runtime и повторно
+планируется как full sync с тем же operation ID, без второго acceptance.
 
 Restart помечает незавершённую работу predecessor generation как
 `INTERRUPTED`. Successor не переиспользует process-bound credential material и

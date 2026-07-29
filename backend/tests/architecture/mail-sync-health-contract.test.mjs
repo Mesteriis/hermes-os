@@ -24,6 +24,11 @@ const paths = {
   persistence: new URL('src/mail-persistence/src/sync_health.rs', BACKEND_ROOT),
   schema: new URL('src/mail-persistence/src/schema.rs', BACKEND_ROOT),
   runtime: new URL('src/mail-runtime/src/managed.rs', BACKEND_ROOT),
+  runtimeRoot: new URL('src/mail-runtime/src/main.rs', BACKEND_ROOT),
+  gmailWorker: new URL(
+    'src/mail-runtime/src/gmail_sync_worker.rs',
+    BACKEND_ROOT,
+  ),
   clientPort: new URL('src/mail-runtime/src/client_port.rs', BACKEND_ROOT),
   admission: new URL('src/mail-runtime/src/admission.rs', BACKEND_ROOT),
   managedSetup: new URL(
@@ -83,6 +88,8 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
     persistence,
     schema,
     runtime,
+    runtimeRoot,
+    gmailWorker,
     clientPort,
     admission,
     managedSetup,
@@ -167,6 +174,26 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(runtime, /begin_sync_run/);
   assert.match(runtime, /complete_sync_run/);
   assert.match(runtime, /MailSyncTriggerV1::Manual/);
+  assert.match(runtime, /prepare_pending_gmail_sync/);
+  assert.match(runtime, /finalize_gmail_sync_provider_operation/);
+  assert.match(runtimeRoot, /JoinHandle<CompletedGmailSyncProviderOperationV1>/);
+  assert.match(
+    runtimeRoot,
+    /runtime\.spawn\(execute_gmail_sync_provider_operation\(prepared\)\)/,
+  );
+  assert.doesNotMatch(runtimeRoot, /execute_pending_gmail_sync/);
+  assert.match(gmailWorker, /list_messages/);
+  assert.match(gmailWorker, /list_history/);
+  assert.match(gmailWorker, /fetch_raw_message/);
+  assert.match(gmailWorker, /Zeroizing<Vec<u8>>/);
+  assert.doesNotMatch(
+    gmailWorker,
+    /MailBootstrapError|crate::managed|MailDurablePersistence|ManagedControlChannel|BlobDataClient|communications_outbox|hermes_communications/,
+  );
+  assert.doesNotMatch(
+    runtime,
+    /\.list_messages\(|\.list_history\(|\.fetch_raw_message\(/,
+  );
   assert.match(
     runtime,
     /sync_health_query_connection_id\(query\)[\s\S]*self\.account\.connection_id/,

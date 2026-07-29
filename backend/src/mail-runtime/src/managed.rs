@@ -152,8 +152,8 @@ use hermes_mail_core::{
     draft_ingress_observation_with_sender_body, validate_sync_request,
 };
 use hermes_mail_gmail::{
-    GmailAdapterErrorV1, GmailApiClientV1, GmailListMessagesRequestV1, GmailMutableMessageFlagV1,
-    decode_raw_rfc822, history_message_ids,
+    GmailAdapterErrorV1, GmailApiClientV1, GmailMutableMessageFlagV1, GmailRawMessageV1,
+    decode_raw_rfc822,
 };
 use hermes_mail_imap::{
     ImapMailboxKindV1, ImapMessageFlagAccessV1, ImapMessageLocationAccessV1, ImapMessageLocatorV1,
@@ -171,6 +171,11 @@ use hermes_mail_persistence::{
     MailQueuedMessagePermanentDeleteCommandV1, MailSyncRunStartOutcomeV1, initial_imap_message_id,
 };
 use hermes_mail_smtp::SmtpAdapterErrorV1;
+
+use crate::gmail_sync_worker::{
+    CompletedGmailSyncProviderOperationV1, GmailSyncProviderCursorV1, GmailSyncProviderFailureV1,
+    GmailSyncProviderOutcomeV1, GmailSyncProviderPageV1, PreparedGmailSyncProviderOperationV1,
+};
 
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
 const OUTBOX_RELAY_TIMEOUT: Duration = Duration::from_secs(2);
@@ -220,11 +225,6 @@ struct MailAttachmentBlobWriteV1 {
     declared_size: u64,
 }
 
-enum GmailHistorySyncError {
-    Expired,
-    Runtime(MailBootstrapError),
-}
-
 struct ImapInboxSyncRequestV1<'a> {
     connection_id: &'a str,
     sync: &'a hermes_mail_imap::ImapSyncResult,
@@ -254,17 +254,6 @@ impl CompletedImapSyncProviderOperationV1 {
     }
 }
 
-struct GmailHistorySyncRequestV1<'a> {
-    connection_id: &'a str,
-    token: &'a str,
-    client: &'a GmailApiClientV1,
-    start_history_id: &'a str,
-    page_token: Option<String>,
-    windows: u32,
-    observed_at_unix_seconds: i64,
-    observed_at_nanos: i32,
-}
-
 struct MailProviderDeliveryRequestV1<'a> {
     message: &'a OutgoingMailV1,
     attachments: &'a [OutboundAttachmentV1],
@@ -290,6 +279,12 @@ struct OwnedAttachmentBlobAdmissionV1 {
     filename: Option<String>,
     media_type: String,
     disposition: PersistedAttachmentDispositionV1,
+}
+
+struct GmailMessageRecordsV1 {
+    materializations: Vec<MailOperationalMaterializationV1>,
+    attachment_admissions: Vec<OwnedAttachmentBlobAdmissionV1>,
+    observed_history_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -2294,28 +2289,170 @@ impl MailAdmittedRuntime {
         }))
     }
 
-    pub async fn execute_pending_gmail_sync(
+    pub async fn prepare_pending_gmail_sync(
         &mut self,
-        completed_at_fallback_unix_seconds: i64,
-    ) -> Result<bool, MailBootstrapError> {
+    ) -> Result<Option<PreparedGmailSyncProviderOperationV1>, MailBootstrapError> {
         let MailInboundTransportV1::Gmail(configuration) = self.account.inbound.clone() else {
-            return Ok(false);
+            return Ok(None);
         };
         let Some(operation_id) = self.pending_sync_operation_id.take() else {
-            return Ok(false);
+            return Ok(None);
         };
-        let result = self
-            .sync_gmail_inbox(
-                &self.account.connection_id.clone(),
-                &operation_id,
-                &configuration,
-                self.account.sync_window,
-                self.account.sync_windows,
-            )
-            .await;
-        self.complete_sync_operation(&operation_id, result, completed_at_fallback_unix_seconds)
-            .await?;
-        Ok(true)
+        let plan = bounded_window(self.account.sync_window, self.account.sync_windows)
+            .map_err(|_| MailBootstrapError::Admission)?;
+        let access_token = self.resolve_gmail_access_token().await?;
+        let client = gmail_api_client(&configuration).map_err(|_| MailBootstrapError::Admission)?;
+        let observed_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| MailBootstrapError::Provider)?;
+        let observed_at_unix_seconds =
+            i64::try_from(observed_at.as_secs()).map_err(|_| MailBootstrapError::Provider)?;
+        let observed_at_nanos =
+            i32::try_from(observed_at.subsec_nanos()).map_err(|_| MailBootstrapError::Provider)?;
+        let connection_id = self.account.connection_id.clone();
+        let cursor = if let Some((start_history_id, page_token)) = self
+            .durable
+            .gmail_history_checkpoint(&connection_id)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?
+        {
+            GmailSyncProviderCursorV1::History {
+                start_history_id,
+                page_token,
+            }
+        } else {
+            GmailSyncProviderCursorV1::Full {
+                page_token: self
+                    .durable
+                    .gmail_sync_progress(&connection_id)
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?
+                    .map(|(page_token, _)| page_token),
+            }
+        };
+        Ok(Some(PreparedGmailSyncProviderOperationV1 {
+            connection_id,
+            operation_id,
+            client,
+            access_token,
+            cursor,
+            max_results: u16::try_from(plan.window.min(500))
+                .map_err(|_| MailBootstrapError::Admission)?,
+            windows: plan.windows,
+            observed_at_unix_seconds,
+            observed_at_nanos,
+        }))
+    }
+
+    pub async fn finalize_gmail_sync_provider_operation(
+        &mut self,
+        completed: CompletedGmailSyncProviderOperationV1,
+        completed_at_fallback_unix_seconds: i64,
+    ) -> Result<(), MailBootstrapError> {
+        if completed.connection_id != self.account.connection_id {
+            return Err(MailBootstrapError::Admission);
+        }
+        let mut observed_messages = 0_usize;
+        let mut observed_history_id = self
+            .durable
+            .gmail_sync_progress(&completed.connection_id)
+            .await
+            .map_err(|_| MailBootstrapError::Persistence)?
+            .and_then(|(_, history_id)| history_id);
+        for page in completed.pages {
+            match page {
+                GmailSyncProviderPageV1::Full {
+                    messages,
+                    next_page_token,
+                } => {
+                    observed_messages = observed_messages.saturating_add(messages.len());
+                    let records = self.gmail_message_records(
+                        &completed.connection_id,
+                        messages.into_iter(),
+                        completed.observed_at_unix_seconds,
+                        completed.observed_at_nanos,
+                    )?;
+                    observed_history_id = newer_gmail_history_id(
+                        observed_history_id.as_deref(),
+                        records.observed_history_id.as_deref(),
+                    )
+                    .map(str::to_owned);
+                    self.durable
+                        .record_operational_materializations_and_store_gmail_sync_progress(
+                            &records.materializations,
+                            &completed.connection_id,
+                            next_page_token.as_deref(),
+                            observed_history_id.as_deref(),
+                            completed.observed_at_unix_seconds,
+                        )
+                        .await
+                        .map_err(|_| MailBootstrapError::Persistence)?;
+                    self.admit_owned_attachments(
+                        records.attachment_admissions,
+                        completed.observed_at_unix_seconds,
+                        completed.observed_at_nanos,
+                    )
+                    .await?;
+                }
+                GmailSyncProviderPageV1::History {
+                    messages,
+                    start_history_id,
+                    checkpoint_history_id,
+                    next_page_token,
+                } => {
+                    observed_messages = observed_messages.saturating_add(messages.len());
+                    let records = self.gmail_message_records(
+                        &completed.connection_id,
+                        messages.into_iter(),
+                        completed.observed_at_unix_seconds,
+                        completed.observed_at_nanos,
+                    )?;
+                    let next_checkpoint = if next_page_token.is_some() {
+                        &start_history_id
+                    } else {
+                        &checkpoint_history_id
+                    };
+                    self.durable
+                        .record_operational_materializations_and_store_gmail_history_checkpoint(
+                            &records.materializations,
+                            &completed.connection_id,
+                            next_checkpoint,
+                            next_page_token.as_deref(),
+                            completed.observed_at_unix_seconds,
+                        )
+                        .await
+                        .map_err(|_| MailBootstrapError::Persistence)?;
+                    self.admit_owned_attachments(
+                        records.attachment_admissions,
+                        completed.observed_at_unix_seconds,
+                        completed.observed_at_nanos,
+                    )
+                    .await?;
+                }
+            }
+        }
+        let result = match completed.outcome {
+            GmailSyncProviderOutcomeV1::Complete => Ok(observed_messages),
+            GmailSyncProviderOutcomeV1::HistoryExpired => {
+                self.durable
+                    .clear_gmail_history_checkpoint(&completed.connection_id)
+                    .await
+                    .map_err(|_| MailBootstrapError::Persistence)?;
+                self.pending_sync_operation_id = Some(completed.operation_id);
+                return Ok(());
+            }
+            GmailSyncProviderOutcomeV1::Failed(failure) => Err(match failure {
+                GmailSyncProviderFailureV1::Credential => MailBootstrapError::Credential,
+                GmailSyncProviderFailureV1::Provider => MailBootstrapError::Provider,
+            }),
+        };
+        self.complete_sync_operation(
+            &completed.operation_id,
+            result,
+            completed_at_fallback_unix_seconds,
+        )
+        .await
+        .map(|_| ())
     }
 
     pub async fn finalize_imap_sync_provider_operation(
@@ -2567,218 +2704,17 @@ impl MailAdmittedRuntime {
         Ok(sync.messages.len())
     }
 
-    async fn sync_gmail_inbox(
+    fn gmail_message_records(
         &mut self,
         connection_id: &str,
-        operation_id: &str,
-        configuration: &MailGmailConfigurationV1,
-        window: u32,
-        windows: u32,
-    ) -> Result<usize, MailBootstrapError> {
-        if connection_id.trim().is_empty() || operation_id.trim().is_empty() {
-            return Err(MailBootstrapError::Admission);
-        }
-        let plan = bounded_window(window, windows).map_err(|_| MailBootstrapError::Admission)?;
-        let token = self.resolve_gmail_access_token().await?;
-        let token = std::str::from_utf8(&token).map_err(|_| MailBootstrapError::Credential)?;
-        let max_results =
-            u16::try_from(plan.window.min(500)).map_err(|_| MailBootstrapError::Admission)?;
-        let client = gmail_api_client(configuration).map_err(|_| MailBootstrapError::Admission)?;
-        let observed_at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| MailBootstrapError::Provider)?;
-        let observed_at_unix_seconds =
-            i64::try_from(observed_at.as_secs()).map_err(|_| MailBootstrapError::Provider)?;
-        let observed_at_nanos =
-            i32::try_from(observed_at.subsec_nanos()).map_err(|_| MailBootstrapError::Provider)?;
-        if let Some((start_history_id, page_token)) = self
-            .durable
-            .gmail_history_checkpoint(connection_id)
-            .await
-            .map_err(|_| MailBootstrapError::Persistence)?
-        {
-            match self
-                .sync_gmail_history_pages(GmailHistorySyncRequestV1 {
-                    connection_id,
-                    token,
-                    client: &client,
-                    start_history_id: &start_history_id,
-                    page_token,
-                    windows: plan.windows,
-                    observed_at_unix_seconds,
-                    observed_at_nanos,
-                })
-                .await
-            {
-                Ok(observed_messages) => return Ok(observed_messages),
-                Err(GmailHistorySyncError::Expired) => self
-                    .durable
-                    .clear_gmail_history_checkpoint(connection_id)
-                    .await
-                    .map_err(|_| MailBootstrapError::Persistence)?,
-                Err(GmailHistorySyncError::Runtime(error)) => return Err(error),
-            }
-        }
-        let mut observed_messages = 0_usize;
-        let (mut page_token, mut observed_history_id) = self
-            .durable
-            .gmail_sync_progress(connection_id)
-            .await
-            .map_err(|_| MailBootstrapError::Persistence)?
-            .map(|(page_token, observed_history_id)| (Some(page_token), observed_history_id))
-            .unwrap_or((None, None));
-        for _ in 0..plan.windows {
-            let page = client
-                .list_messages(
-                    token,
-                    &GmailListMessagesRequestV1 {
-                        max_results,
-                        page_token: page_token.clone(),
-                        query: None,
-                        label_ids: Vec::new(),
-                    },
-                )
-                .await
-                .map_err(|_| MailBootstrapError::Provider)?;
-            let next_page_token = page.next_page_token.clone();
-            let listed_messages = page.messages;
-            let page_message_count = listed_messages.len();
-            let (materializations, attachment_admissions, page_history_id) = self
-                .gmail_message_records(
-                    connection_id,
-                    token,
-                    &client,
-                    listed_messages.into_iter().map(|message| message.id),
-                    observed_at_unix_seconds,
-                    observed_at_nanos,
-                )
-                .await?;
-            observed_messages = observed_messages.saturating_add(page_message_count);
-            observed_history_id =
-                newer_gmail_history_id(observed_history_id.as_deref(), page_history_id.as_deref())
-                    .map(str::to_owned);
-            self.durable
-                .record_operational_materializations_and_store_gmail_sync_progress(
-                    &materializations,
-                    connection_id,
-                    next_page_token.as_deref(),
-                    observed_history_id.as_deref(),
-                    observed_at_unix_seconds,
-                )
-                .await
-                .map_err(|_| MailBootstrapError::Persistence)?;
-            self.admit_owned_attachments(
-                attachment_admissions,
-                observed_at_unix_seconds,
-                observed_at_nanos,
-            )
-            .await?;
-            let has_next_page = next_page_token.is_some();
-            page_token = next_page_token;
-            if !has_next_page {
-                break;
-            }
-        }
-        Ok(observed_messages)
-    }
-
-    async fn sync_gmail_history_pages(
-        &mut self,
-        request: GmailHistorySyncRequestV1<'_>,
-    ) -> Result<usize, GmailHistorySyncError> {
-        let GmailHistorySyncRequestV1 {
-            connection_id,
-            token,
-            client,
-            start_history_id,
-            mut page_token,
-            windows,
-            observed_at_unix_seconds,
-            observed_at_nanos,
-        } = request;
-        let mut observed_messages = 0_usize;
-        for _ in 0..windows {
-            let page = match client
-                .list_history(token, start_history_id, page_token.as_deref())
-                .await
-            {
-                Ok(page) => page,
-                Err(GmailAdapterErrorV1::ProviderStatus(404)) => {
-                    return Err(GmailHistorySyncError::Expired);
-                }
-                Err(_) => return Err(GmailHistorySyncError::Runtime(MailBootstrapError::Provider)),
-            };
-            let checkpoint_history_id = valid_gmail_history_id(page.history_id.as_deref())
-                .ok_or(GmailHistorySyncError::Runtime(MailBootstrapError::Provider))?;
-            let message_ids = history_message_ids(&page);
-            let (materializations, attachment_admissions, _) = self
-                .gmail_message_records(
-                    connection_id,
-                    token,
-                    client,
-                    message_ids.clone().into_iter(),
-                    observed_at_unix_seconds,
-                    observed_at_nanos,
-                )
-                .await
-                .map_err(GmailHistorySyncError::Runtime)?;
-            observed_messages = observed_messages.saturating_add(message_ids.len());
-            let next_page_token = page.next_page_token;
-            let next_checkpoint = if next_page_token.is_some() {
-                start_history_id
-            } else {
-                checkpoint_history_id
-            };
-            self.durable
-                .record_operational_materializations_and_store_gmail_history_checkpoint(
-                    &materializations,
-                    connection_id,
-                    next_checkpoint,
-                    next_page_token.as_deref(),
-                    observed_at_unix_seconds,
-                )
-                .await
-                .map_err(|_| GmailHistorySyncError::Runtime(MailBootstrapError::Persistence))?;
-            self.admit_owned_attachments(
-                attachment_admissions,
-                observed_at_unix_seconds,
-                observed_at_nanos,
-            )
-            .await
-            .map_err(GmailHistorySyncError::Runtime)?;
-            let has_next_page = next_page_token.is_some();
-            page_token = next_page_token;
-            if !has_next_page {
-                break;
-            }
-        }
-        Ok(observed_messages)
-    }
-
-    async fn gmail_message_records(
-        &mut self,
-        connection_id: &str,
-        token: &str,
-        client: &GmailApiClientV1,
-        message_ids: impl Iterator<Item = String>,
+        messages: impl Iterator<Item = (String, GmailRawMessageV1)>,
         observed_at_unix_seconds: i64,
         observed_at_nanos: i32,
-    ) -> Result<
-        (
-            Vec<MailOperationalMaterializationV1>,
-            Vec<OwnedAttachmentBlobAdmissionV1>,
-            Option<String>,
-        ),
-        MailBootstrapError,
-    > {
+    ) -> Result<GmailMessageRecordsV1, MailBootstrapError> {
         let mut materializations = Vec::new();
         let mut attachment_admissions = Vec::new();
         let mut observed_history_id = None;
-        for message_id in message_ids {
-            let raw = client
-                .fetch_raw_message(token, &message_id)
-                .await
-                .map_err(|_| MailBootstrapError::Provider)?;
+        for (message_id, raw) in messages {
             let bytes = raw
                 .raw
                 .as_deref()
@@ -2906,7 +2842,11 @@ impl MailAdmittedRuntime {
                 communications_outbox: records,
             });
         }
-        Ok((materializations, attachment_admissions, observed_history_id))
+        Ok(GmailMessageRecordsV1 {
+            materializations,
+            attachment_admissions,
+            observed_history_id,
+        })
     }
 
     async fn admit_owned_attachments(
