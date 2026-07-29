@@ -23,6 +23,10 @@ describe('provider operational workspace shell', () => {
 			new URL('../../../integrations/telegram/presentation/telegramOperationalPage.css', import.meta.url),
 			'utf8',
 		)
+		const telegramInspectorStyles = readFileSync(
+			new URL('../../../integrations/telegram/presentation/telegramMessageInspector.css', import.meta.url),
+			'utf8',
+		)
 
 		expect(styles).toContain('.mail-operational-page, .telegram-operational-page')
 		expect(styles).toContain('gap: var(--h-space-5)')
@@ -47,6 +51,18 @@ describe('provider operational workspace shell', () => {
 		expect(mailStyles).toContain('#bd4a21 10%')
 		expect(telegramStyles).toContain('radial-gradient(')
 		expect(telegramStyles).toContain('#229ed9 10%')
+		expect(telegramStyles).toMatch(
+			/\.telegram-workspace-inspector__body\s*\{[^}]*display:\s*grid[^}]*gap:\s*var\(--h-space-3\)/s,
+		)
+		expect(telegramStyles).toMatch(
+			/\.telegram-workspace-inspector__body \.telegram-message-inspector,[^{]*\{[^}]*margin:\s*0[^}]*background:\s*var\(--h-color-surface-raised\)/s,
+		)
+		expect(telegramInspectorStyles).toContain(
+			'grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr))',
+		)
+		expect(telegramInspectorStyles).not.toContain(
+			'grid-template-columns: repeat(3, minmax(0, 1fr))',
+		)
 		expect(mail).toContain("providerOperationalWorkspace.css")
 		expect(telegram).toContain("providerOperationalWorkspace.css")
 		expect(mail).toContain('useResponsiveWorkspaceInspector()')

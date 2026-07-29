@@ -56,17 +56,21 @@
 
 .telegram-message-inspector__sections {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
 	gap: var(--h-space-3);
 }
 
 .telegram-message-inspector details {
-	padding: var(--h-space-2);
-	border: 1px solid var(--h-color-border);
+	min-width: 0;
+	padding: var(--h-space-3);
+	border: 1px solid var(--h-color-border-strong);
 	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface-raised);
+	box-shadow: var(--h-shadow-xs);
 }
 
 .telegram-message-inspector summary {
+	overflow-wrap: anywhere;
 	cursor: pointer;
 	font-weight: 700;
 }
@@ -75,12 +79,6 @@
 	display: grid;
 	gap: var(--h-space-1);
 	margin-top: var(--h-space-2);
-}
-
-@media (max-width: 980px) {
-	.telegram-message-inspector__sections {
-		grid-template-columns: 1fr;
-	}
 }
 
 @media (max-width: 760px) {

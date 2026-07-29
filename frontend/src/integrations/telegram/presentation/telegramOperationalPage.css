@@ -539,6 +539,9 @@
 }
 
 .telegram-workspace-inspector__body {
+	display: grid;
+	align-content: start;
+	gap: var(--h-space-3);
 	flex: 1;
 	padding: var(--h-space-3);
 	overflow: auto;
@@ -547,7 +550,10 @@
 .telegram-workspace-inspector__body .telegram-message-inspector,
 .telegram-workspace-inspector__body .telegram-operation-retry,
 .telegram-workspace-inspector__body .telegram-command-workbench {
-	margin-bottom: var(--h-space-3);
+	margin: 0;
+	border-color: var(--h-color-border-strong);
+	background: var(--h-color-surface-raised);
+	box-shadow: var(--h-shadow-xs);
 }
 
 .telegram-workspace-inspector__body .telegram-command-workbench__grid {
