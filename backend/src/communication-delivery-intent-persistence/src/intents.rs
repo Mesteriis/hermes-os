@@ -147,6 +147,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
                 &command.intent_id,
                 1,
                 STATE_ACCEPTED,
+                None,
                 command.created_at_unix_seconds,
             )
             .await?;
@@ -253,6 +254,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             &intent_id,
             revision,
             STATE_RESOLVING_ROUTE,
+            None,
             now_unix_seconds,
         )
         .await?;
@@ -427,6 +429,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             &status.intent_id,
             status.state_revision,
             target_state,
+            rejection_code,
             now_unix_seconds,
         )
         .await?;
@@ -488,6 +491,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             &status.intent_id,
             status.state_revision,
             target_state,
+            rejection_code,
             now_unix_seconds,
         )
         .await?;
@@ -505,6 +509,7 @@ pub(crate) async fn insert_transition(
     intent_id: &[u8; 16],
     state_revision: u64,
     state: i16,
+    rejection_code: Option<u16>,
     occurred_at_unix_seconds: i64,
 ) -> Result<(), DeliveryIntentPersistenceErrorV1> {
     let revision = i64::try_from(state_revision)
@@ -512,14 +517,20 @@ pub(crate) async fn insert_transition(
     sqlx::query(
         "INSERT INTO hermes_data.communication_delivery_intent_transitions (
            logical_owner_id, intent_id, state_revision, state,
-           occurred_at_unix_seconds
-         ) VALUES ($1, $2, $3, $4, $5)",
+           occurred_at_unix_seconds, rejection_code
+         ) VALUES ($1, $2, $3, $4, $5, $6)",
     )
     .bind(logical_owner_id)
     .bind(intent_id.as_slice())
     .bind(revision)
     .bind(state)
     .bind(occurred_at_unix_seconds)
+    .bind(
+        rejection_code
+            .map(i16::try_from)
+            .transpose()
+            .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidInput)?,
+    )
     .execute(&mut **transaction)
     .await
     .map(|_| ())
@@ -652,7 +663,9 @@ fn provider_from_code(
     }
 }
 
-fn state_from_code(state: i16) -> Result<DeliveryIntentStateV1, DeliveryIntentPersistenceErrorV1> {
+pub(crate) fn state_from_code(
+    state: i16,
+) -> Result<DeliveryIntentStateV1, DeliveryIntentPersistenceErrorV1> {
     match state {
         STATE_ACCEPTED => Ok(DeliveryIntentStateV1::Accepted),
         STATE_RESOLVING_ROUTE => Ok(DeliveryIntentStateV1::ResolvingRoute),

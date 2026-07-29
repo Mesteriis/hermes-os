@@ -39,6 +39,9 @@ use hermes_storage_vault::{
 use crate::{
     body_materializer::ManagedDeliveryIntentBodyMaterializerV1,
     client_port::dispatch_delivery_intent_client_request_v1,
+    client_realtime::{
+        DeliveryIntentClientRealtimeErrorV1, DeliveryIntentClientRealtimePublisherV1,
+    },
     communications_query_client::{
         CommunicationsQueryClientErrorV1, ManagedCommunicationsQueryClientV1,
     },
@@ -76,6 +79,7 @@ pub struct DeliveryIntentManagedRuntimeV1 {
     pub(crate) event_publish_permit: RuntimePublishPermitV1,
     pub(crate) terminal_subscriptions: Vec<ProviderTerminalSubscriptionV1>,
     pub(crate) next_terminal_subscription: usize,
+    client_realtime: DeliveryIntentClientRealtimePublisherV1,
 }
 
 impl DeliveryIntentManagedRuntimeV1 {
@@ -173,6 +177,17 @@ impl DeliveryIntentManagedRuntimeV1 {
         )
         .await
         .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+        let mut client_realtime = DeliveryIntentClientRealtimePublisherV1::default();
+        let mut bootstrap_dispatcher = RejectManagedControlRequestsV2;
+        client_realtime
+            .publish_pending(
+                &persistence,
+                &mut control_channel,
+                &mut bootstrap_dispatcher,
+                &admission.logical_owner_id,
+            )
+            .await
+            .map_err(client_realtime_error)?;
         signal_managed_runtime_ready(&mut control_channel, admission)?;
         control_channel
             .inner_mut()
@@ -188,6 +203,7 @@ impl DeliveryIntentManagedRuntimeV1 {
             event_publish_permit,
             terminal_subscriptions,
             next_terminal_subscription: 0,
+            client_realtime,
         })
     }
 
@@ -327,6 +343,31 @@ impl DeliveryIntentManagedRuntimeV1 {
             .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
         Ok(true)
     }
+
+    pub async fn pump_client_realtime_once(
+        &mut self,
+    ) -> Result<bool, DeliveryIntentRuntimeErrorV1> {
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let result = self
+            .client_realtime
+            .publish_pending(
+                &self.persistence,
+                &mut self.control_channel,
+                &mut dispatcher,
+                &self.logical_owner_id,
+            )
+            .await
+            .map_err(client_realtime_error);
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+        result
+    }
 }
 
 fn event_access_error(error: ManagedRuntimeEventAccessErrorV1) -> DeliveryIntentRuntimeErrorV1 {
@@ -465,6 +506,22 @@ fn storage_binding(
 
 fn persistence_error(_: DeliveryIntentPersistenceErrorV1) -> DeliveryIntentRuntimeErrorV1 {
     DeliveryIntentRuntimeErrorV1::Unavailable
+}
+
+const fn client_realtime_error(
+    error: DeliveryIntentClientRealtimeErrorV1,
+) -> DeliveryIntentRuntimeErrorV1 {
+    match error {
+        DeliveryIntentClientRealtimeErrorV1::InvalidTransition => {
+            DeliveryIntentRuntimeErrorV1::EventContract
+        }
+        DeliveryIntentClientRealtimeErrorV1::Persistence(error) => {
+            DeliveryIntentRuntimeErrorV1::Persistence(error)
+        }
+        DeliveryIntentClientRealtimeErrorV1::Unavailable => {
+            DeliveryIntentRuntimeErrorV1::Unavailable
+        }
+    }
 }
 
 const fn query_error(_: CommunicationsQueryClientErrorV1) -> DeliveryIntentRuntimeErrorV1 {

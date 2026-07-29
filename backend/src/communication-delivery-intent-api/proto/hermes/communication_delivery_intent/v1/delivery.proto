@@ -31,6 +31,17 @@ message GetDeliveryIntentStatusResponseV1 {
   DeliveryIntentErrorCodeV1 error = 15;
 }
 
+// Client-safe state invalidation and terminal result. Private body, provider
+// identity, provider operation ID, route cursors and internal envelope metadata
+// are deliberately absent.
+message DeliveryIntentStatusChangedV1 {
+  bytes intent_id = 1;
+  DeliveryIntentStatusV1 status = 2;
+  uint64 state_revision = 3;
+  uint64 occurred_at_unix_millis = 4;
+  DeliveryIntentErrorCodeV1 rejection = 5;
+}
+
 service CommunicationDeliveryIntentCommandService {
   rpc Submit(SubmitDeliveryIntentRequestV1)
       returns (SubmitDeliveryIntentResponseV1);

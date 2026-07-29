@@ -156,6 +156,13 @@ where
                 }
                 error => runtime_error(error),
             })?;
+        match executor.block_on(runtime.pump_client_realtime_once()) {
+            Ok(_) | Err(DeliveryIntentRuntimeErrorV1::Unavailable) => {}
+            Err(DeliveryIntentRuntimeErrorV1::Persistence(
+                DeliveryIntentPersistenceErrorV1::StorageUnavailable,
+            )) => {}
+            Err(error) => return Err(runtime_error(error)),
+        }
         match executor.block_on(runtime.process_next_provider_command_v1(now)) {
             Ok(_) | Err(DeliveryIntentRuntimeErrorV1::Unavailable) => {}
             Err(DeliveryIntentRuntimeErrorV1::Persistence(

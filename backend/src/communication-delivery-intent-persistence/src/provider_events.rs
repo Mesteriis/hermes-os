@@ -318,6 +318,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             &claim.intent_id,
             status.state_revision,
             STATE_SUBMITTED_TO_PROVIDER,
+            None,
             published_at_unix_seconds,
         )
         .await?;
@@ -445,6 +446,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             &result.intent_id,
             status.state_revision,
             target_state,
+            status.rejection_code,
             consumed_at_unix_seconds,
         )
         .await?;

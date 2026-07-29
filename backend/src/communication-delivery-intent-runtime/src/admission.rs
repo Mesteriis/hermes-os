@@ -8,6 +8,7 @@ use hermes_communication_delivery_intent_api::{
     COMMUNICATION_DELIVERY_INTENT_CONTRACT_REVISION_V1, COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1,
     COMMUNICATION_DELIVERY_INTENT_OWNER_V1, COMMUNICATION_DELIVERY_INTENT_QUERY_CONNECT_PATH_V1,
     COMMUNICATION_DELIVERY_INTENT_QUERY_CONTRACT_NAME_V1,
+    COMMUNICATION_DELIVERY_INTENT_REALTIME_CONTRACT_NAME_V1,
     COMMUNICATION_DELIVERY_INTENT_SCHEMA_SHA256,
 };
 use hermes_communications_api::COMMUNICATIONS_QUERY_SCHEMA_SHA256;
@@ -53,8 +54,24 @@ pub fn communication_delivery_intent_client_capability_v1() -> CapabilityDescrip
                 COMMUNICATION_DELIVERY_INTENT_QUERY_CONTRACT_NAME_V1,
                 COMMUNICATION_DELIVERY_INTENT_QUERY_CONNECT_PATH_V1,
             ),
+            delivery_intent_realtime_surface(),
         ],
         ..Default::default()
+    }
+}
+
+fn delivery_intent_realtime_surface() -> ProvidedSurfaceV1 {
+    ProvidedSurfaceV1 {
+        kind: ProvidedSurfaceKindV1::ClientRealtime as i32,
+        contract: Some(ContractReferenceV1 {
+            owner: COMMUNICATION_DELIVERY_INTENT_OWNER_V1.to_owned(),
+            name: COMMUNICATION_DELIVERY_INTENT_REALTIME_CONTRACT_NAME_V1.to_owned(),
+            major: COMMUNICATION_DELIVERY_INTENT_CONTRACT_MAJOR_V1,
+            revision: COMMUNICATION_DELIVERY_INTENT_CONTRACT_REVISION_V1,
+            schema_sha256: COMMUNICATION_DELIVERY_INTENT_SCHEMA_SHA256.to_vec(),
+        }),
+        client_rpc_route: None,
+        client_blob_route: None,
     }
 }
 
@@ -147,7 +164,7 @@ pub fn communication_delivery_intent_module_descriptor_v1(build_id: &str) -> Mod
     let settings_schema = communication_delivery_intent_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 3,
+        descriptor_revision: 4,
         module_id: COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1.to_owned(),
         owner_id: COMMUNICATION_DELIVERY_INTENT_OWNER_V1.to_owned(),
         module_kind: ModuleKindV1::Workflow as i32,
@@ -193,7 +210,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn descriptor_admits_canonical_query_blob_storage_and_four_exact_provider_event_units() {
+    fn descriptor_admits_client_realtime_query_blob_storage_and_provider_event_units() {
         let descriptor = communication_delivery_intent_module_descriptor_v1("test");
         validate_descriptor_v1(&descriptor).expect("descriptor");
         validate_settings_schema_v1(&communication_delivery_intent_settings_schema_v1())
@@ -216,13 +233,24 @@ mod tests {
             descriptor.capabilities[4].capability_id,
             COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY_ID_V1
         );
-        assert_eq!(descriptor.capabilities[0].provides.len(), 2);
+        assert_eq!(descriptor.capabilities[0].provides.len(), 3);
         assert_eq!(
             descriptor.capabilities[0].provides[0]
                 .client_rpc_route
                 .as_ref()
                 .map(|route| route.path.as_str()),
             Some(COMMUNICATION_DELIVERY_INTENT_COMMAND_CONNECT_PATH_V1)
+        );
+        assert_eq!(
+            descriptor.capabilities[0].provides[2].kind,
+            ProvidedSurfaceKindV1::ClientRealtime as i32
+        );
+        assert_eq!(
+            descriptor.capabilities[0].provides[2]
+                .contract
+                .as_ref()
+                .map(|contract| contract.name.as_str()),
+            Some(COMMUNICATION_DELIVERY_INTENT_REALTIME_CONTRACT_NAME_V1)
         );
         assert_eq!(
             descriptor.capabilities[2].dependencies,

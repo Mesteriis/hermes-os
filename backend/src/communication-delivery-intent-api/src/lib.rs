@@ -9,6 +9,10 @@ pub const COMMUNICATION_DELIVERY_INTENT_COMMAND_CONTRACT_NAME_V1: &str =
     "communication.delivery_intent.command";
 pub const COMMUNICATION_DELIVERY_INTENT_QUERY_CONTRACT_NAME_V1: &str =
     "communication.delivery_intent.query";
+pub const COMMUNICATION_DELIVERY_INTENT_REALTIME_CONTRACT_NAME_V1: &str =
+    "communication.delivery_intent.status_changed";
+pub const COMMUNICATION_DELIVERY_INTENT_REALTIME_EVENT_KIND_V1: &str =
+    "delivery_intent_status_changed";
 pub const COMMUNICATION_DELIVERY_INTENT_CONTRACT_MAJOR_V1: u32 = 1;
 pub const COMMUNICATION_DELIVERY_INTENT_CONTRACT_REVISION_V1: u32 = 1;
 pub const COMMUNICATION_DELIVERY_INTENT_COMMAND_CONNECT_PATH_V1: &str =

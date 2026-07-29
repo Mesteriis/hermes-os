@@ -3,6 +3,8 @@
 pub mod admission;
 pub mod body_materializer;
 pub mod client_port;
+mod client_realtime;
+mod client_status;
 pub mod communications_query_client;
 pub mod coordinator;
 mod event_runtime;

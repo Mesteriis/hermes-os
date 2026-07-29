@@ -1,9 +1,11 @@
 #![forbid(unsafe_code)]
 
+mod client_realtime;
 mod intents;
 mod provider_events;
 pub mod schema;
 
+pub use client_realtime::DeliveryIntentClientRealtimeTransitionV1;
 use hermes_storage_protocol::StorageBindingV1;
 pub use intents::{
     CreateDeliveryIntentOutcomeV1, CreateDeliveryIntentV1, DeliveryIntentBodyBlobReceiptV1,

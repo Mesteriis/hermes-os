@@ -4,10 +4,13 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: решение принято, implementation ещё не завершена.
-Существующий Gateway уже предоставляет authenticated multiplexed SSE и
-bounded in-memory delivery cache, но managed module publisher, descriptor
-admission и owner-local durable replay пока отсутствуют.
+Состояние реализации: generic managed publication wire, descriptor/Control
+Store admission, Kernel fence route, shared Gateway source и первый owner
+adapter `communication_delivery_intent` реализованы. Owner adapter атомарно
+сохраняет monotonic transition sequence рядом с state mutation, до `ready`
+восстанавливает bounded replay window и после запуска публикует новые записи.
+Managed development admission и live Gateway/SSE conformance ещё не доказаны,
+поэтому phase gate остаётся `planned`.
 
 Уточняет:
 
@@ -84,9 +87,11 @@ Gateway history остаётся bounded delivery cache, а не canonical stora
 state mutation и выдаёт monotonic owner-local cursor. Runtime:
 
 1. до `ready` публикует bounded durable replay window из owner-local ledger;
-2. после каждой mutation дренирует realtime outbox;
-3. помечает запись delivered только после положительного Kernel response;
-4. безопасно повторяет publication после ambiguous failure.
+2. после каждой mutation дренирует новые transition records;
+3. продвигает process-local checkpoint только после положительного Kernel
+   response;
+4. безопасно повторяет publication после ambiguous failure, а после restart
+   заново публикует bounded durable window.
 
 После Kernel/Gateway restart managed runtime заново наполняет delivery cache из
 durable ledger. Если requested cursor старше восстановленного bounded window,
@@ -100,7 +105,7 @@ event envelope отсутствуют.
 ### Отказоустойчивость
 
 - недоступный Gateway не откатывает уже принятую business mutation;
-- unpublished outbox остаётся retryable;
+- unpublished transition остаётся retryable;
 - invalid contract/frame или stale runtime/grant отклоняются без publication;
 - duplicate delivery дедуплицируется по stable cursor/event id;
 - публикация не является canonical business event и не заменяет provider
@@ -123,7 +128,7 @@ Gateway realtime source
   bounded replay cache, live fan-out and gap semantics
 
 owner persistence
-  durable monotonic transition ledger and outbox
+  durable monotonic transition ledger
 
 owner runtime adapter
   client-safe payload mapping and publication retry

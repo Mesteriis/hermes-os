@@ -18,7 +18,7 @@ use hermes_communication_delivery_intent_core::{
     CommunicationConversationIdV1, CommunicationMessageIdV1, DeliveryIntentDraftV1,
 };
 use hermes_communication_delivery_intent_persistence::{
-    CreateDeliveryIntentOutcomeV1, DeliveryIntentStateV1, DeliveryIntentStatusRecordV1,
+    CreateDeliveryIntentOutcomeV1, DeliveryIntentStatusRecordV1,
 };
 use hermes_runtime_protocol::{
     managed_control::ManagedControlRequestDispatcherV2,
@@ -26,7 +26,10 @@ use hermes_runtime_protocol::{
 };
 use prost::Message;
 
-use crate::runtime::{DeliveryIntentManagedRuntimeV1, DeliveryIntentRuntimeErrorV1};
+use crate::{
+    client_status::{rejection_value, status_value},
+    runtime::{DeliveryIntentManagedRuntimeV1, DeliveryIntentRuntimeErrorV1},
+};
 
 const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
 
@@ -167,10 +170,7 @@ fn status_response(status: DeliveryIntentStatusRecordV1) -> Vec<u8> {
         intent_id: status.intent_id.to_vec(),
         status: status_value(status.state),
         provider_operation_id: status.provider_operation_id,
-        error: status.rejection_code.map_or(
-            DeliveryIntentErrorCodeV1::DeliveryIntentErrorCodeUnspecified,
-            |_| DeliveryIntentErrorCodeV1::DeliveryIntentErrorCodeProviderRejected,
-        ) as i32,
+        error: rejection_value(status.rejection_code),
     }
     .encode_to_vec()
 }
@@ -192,26 +192,6 @@ fn status_error(intent_id: Vec<u8>, error: DeliveryIntentErrorCodeV1) -> Vec<u8>
         error: error as i32,
     }
     .encode_to_vec()
-}
-
-const fn status_value(state: DeliveryIntentStateV1) -> i32 {
-    match state {
-        DeliveryIntentStateV1::Accepted => {
-            DeliveryIntentStatusV1::DeliveryIntentStatusAccepted as i32
-        }
-        DeliveryIntentStateV1::ResolvingRoute => {
-            DeliveryIntentStatusV1::DeliveryIntentStatusResolvingRoute as i32
-        }
-        DeliveryIntentStateV1::SubmittedToProvider => {
-            DeliveryIntentStatusV1::DeliveryIntentStatusSubmittedToProvider as i32
-        }
-        DeliveryIntentStateV1::ProviderConfirmed => {
-            DeliveryIntentStatusV1::DeliveryIntentStatusProviderConfirmed as i32
-        }
-        DeliveryIntentStateV1::Rejected => {
-            DeliveryIntentStatusV1::DeliveryIntentStatusRejected as i32
-        }
-    }
 }
 
 const fn runtime_error(error: DeliveryIntentRuntimeErrorV1) -> DeliveryIntentErrorCodeV1 {
@@ -279,18 +259,6 @@ mod tests {
         assert_eq!(
             command_contract().schema_sha256,
             COMMUNICATION_DELIVERY_INTENT_SCHEMA_SHA256
-        );
-    }
-
-    #[test]
-    fn status_mapping_preserves_every_durable_state() {
-        assert_eq!(
-            status_value(DeliveryIntentStateV1::ProviderConfirmed),
-            DeliveryIntentStatusV1::DeliveryIntentStatusProviderConfirmed as i32
-        );
-        assert_eq!(
-            status_value(DeliveryIntentStateV1::Rejected),
-            DeliveryIntentStatusV1::DeliveryIntentStatusRejected as i32
         );
     }
 

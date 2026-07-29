@@ -22,9 +22,10 @@ publish/result-consume permits. Capability-routed `communications.query`
 dependency, generated command и status ClientRpc closure реализованы по
 ADR-0336: Submit принимает только canonical conversation/reply identities,
 runtime сам получает provider provenance и opaque route cursors у
-Communications. Workflow пока не входит в managed development admission;
-replayable client realtime и live managed Gateway proof ещё не реализованы,
-поэтому `communication_delivery_intent_v1` остаётся `planned`.
+Communications. Workflow пока не входит в managed development admission. Exact
+client-safe status event, owner-local monotonic replay ledger и managed
+publication adapter реализованы по ADR-0337; live managed Gateway/SSE proof ещё
+не выполнен, поэтому `communication_delivery_intent_v1` остаётся `planned`.
 
 ## Контекст
 

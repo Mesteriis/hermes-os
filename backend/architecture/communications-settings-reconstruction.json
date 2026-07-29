@@ -465,12 +465,20 @@
       "dependsOn": ["module_control_plane_v1"]
     },
     {
+      "gate": "capability_routed_managed_client_realtime_v1",
+      "role": "platform",
+      "owner": "kernel_capability_router",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1", "module_control_plane_v1"]
+    },
+    {
       "gate": "communication_delivery_intent_v1",
       "role": "workflow",
       "owner": "communication_delivery_intent",
       "state": "planned",
       "dependsOn": [
         "capability_routed_module_query_rpc_v1",
+        "capability_routed_managed_client_realtime_v1",
         "communications_canonical_read_v2"
       ]
     },
