@@ -497,11 +497,21 @@
       ]
     },
     {
+      "gate": "scheduler_module_schedule_control_v1",
+      "role": "platform",
+      "owner": "scheduler",
+      "state": "planned",
+      "dependsOn": ["scheduler_v1", "nats_data_plane_v1"]
+    },
+    {
       "gate": "communication_delayed_delivery_v1",
       "role": "workflow",
       "owner": "communication_delayed_delivery",
       "state": "planned",
-      "dependsOn": ["communication_delivery_intent_v1", "scheduler_v1"]
+      "dependsOn": [
+        "communication_delivery_intent_v1",
+        "scheduler_module_schedule_control_v1"
+      ]
     },
     {
       "gate": "communication_bulk_action_v1",

@@ -40,7 +40,10 @@ test('delayed delivery stays a planned workflow behind Scheduler and event-only 
     role: 'workflow',
     owner: 'communication_delayed_delivery',
     state: 'planned',
-    dependsOn: ['communication_delivery_intent_v1', 'scheduler_v1'],
+    dependsOn: [
+      'communication_delivery_intent_v1',
+      'scheduler_module_schedule_control_v1',
+    ],
   });
   assert.match(adr, /Состояние реализации: не реализовано/);
   assert.match(adr, /scheduler\.schedule\.command\.v1/);

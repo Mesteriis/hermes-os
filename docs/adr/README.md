@@ -546,3 +546,8 @@ command/result через event spine, due execution получает станд
 а cancellation race решает Scheduler. `scheduler_v1` уже подтверждён live
 managed evidence; workflow gate остаётся закрыт до module-originated
 schedule-control contract и отдельных delayed-delivery units.
+ADR-0342 вводит недостающий durable module-to-Scheduler seam: module может
+создать или отменить только one-shot schedule собственного approved JobKind,
+Scheduler сохраняет command/result до ACK, а Kernel/Event Hub проверяют
+topology и fences без decode business payload. Protocol foundation реализован;
+durable runtime gate остаётся закрыт до persistence/JetStream/live evidence.

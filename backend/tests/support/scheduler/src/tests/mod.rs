@@ -2,6 +2,15 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use crate::runtime_cli::parse_recovery_arguments;
+use hermes_scheduler_protocol::v1::{
+    CancelOneShotScheduleV1, EnsureOneShotScheduleV1, JobKindV1, SchedulerScheduleControlCommandV1,
+    SchedulerScheduleControlOutcomeV1, SchedulerScheduleControlResultV1,
+    scheduler_schedule_control_command_v1::Operation,
+};
+use hermes_scheduler_protocol::{
+    SchedulerScheduleControlValidationErrorV1, validate_scheduler_schedule_control_command_v1,
+    validate_scheduler_schedule_control_result_v1,
+};
 
 #[test]
 fn scheduler_recovery_cli_accepts_only_fixed_non_secret_arguments() {
@@ -124,4 +133,90 @@ fn scheduler_recovery_cli_rejects_passwords_and_relative_files() {
     .map(OsString::from)
     .peekable();
     assert!(parse_recovery_arguments(&mut relative).is_err());
+}
+
+#[test]
+fn module_schedule_control_accepts_only_bounded_one_shot_contracts() {
+    let command = ensure_command();
+    assert_eq!(
+        validate_scheduler_schedule_control_command_v1(&command),
+        Ok(())
+    );
+
+    let mut foreign_policy = command.clone();
+    let Some(Operation::EnsureOneShot(request)) = foreign_policy.operation.as_mut() else {
+        panic!("ensure operation");
+    };
+    request.max_retry_attempts = 33;
+    assert_eq!(
+        validate_scheduler_schedule_control_command_v1(&foreign_policy),
+        Err(SchedulerScheduleControlValidationErrorV1::InvalidPolicy)
+    );
+
+    let mut secret_scope = command;
+    let Some(Operation::EnsureOneShot(request)) = secret_scope.operation.as_mut() else {
+        panic!("ensure operation");
+    };
+    request.scope_id = "mailbox@example.com".to_owned();
+    assert_eq!(
+        validate_scheduler_schedule_control_command_v1(&secret_scope),
+        Err(SchedulerScheduleControlValidationErrorV1::InvalidScope)
+    );
+}
+
+#[test]
+fn module_schedule_cancel_and_result_are_exact_and_sanitized() {
+    let cancel = SchedulerScheduleControlCommandV1 {
+        operation_id: vec![8; 16],
+        operation: Some(Operation::CancelOneShot(CancelOneShotScheduleV1 {
+            schedule_id: vec![9; 16],
+            expected_schedule_revision: 2,
+        })),
+    };
+    assert_eq!(
+        validate_scheduler_schedule_control_command_v1(&cancel),
+        Ok(())
+    );
+
+    let result = SchedulerScheduleControlResultV1 {
+        operation_id: vec![8; 16],
+        schedule_id: vec![9; 16],
+        schedule_revision: 2,
+        outcome: SchedulerScheduleControlOutcomeV1::Rejected.into(),
+        error_code: "stale_revision".to_owned(),
+    };
+    assert_eq!(
+        validate_scheduler_schedule_control_result_v1(&result),
+        Ok(())
+    );
+
+    let mut raw_error = result;
+    raw_error.error_code = "provider secret leaked".to_owned();
+    assert_eq!(
+        validate_scheduler_schedule_control_result_v1(&raw_error),
+        Err(SchedulerScheduleControlValidationErrorV1::InvalidErrorCode)
+    );
+}
+
+fn ensure_command() -> SchedulerScheduleControlCommandV1 {
+    SchedulerScheduleControlCommandV1 {
+        operation_id: vec![7; 16],
+        operation: Some(Operation::EnsureOneShot(EnsureOneShotScheduleV1 {
+            schedule_id: vec![9; 16],
+            schedule_revision: 1,
+            job_kind: Some(JobKindV1 {
+                owner: "communication_delayed_delivery".to_owned(),
+                name: "execute".to_owned(),
+                major: 1,
+            }),
+            job_contract_revision: 1,
+            job_schema_sha256: vec![5; 32],
+            scope_id: "delayed-operation-1".to_owned(),
+            concurrency_key: "delayed-operation-1".to_owned(),
+            due_at_unix_millis: 1_800_000_000_000,
+            deadline_millis: 30_000,
+            max_retry_attempts: 3,
+            retry_base_backoff_millis: 1_000,
+        })),
+    }
 }

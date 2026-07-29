@@ -27,6 +27,7 @@ pub use transport::{
 };
 pub use validation::{
     OwnerJobCommandValidationErrorV1, SchedulerCommandValidationErrorV1,
-    SchedulerReceiptValidationErrorV1, validate_job_run_receipt_v1, validate_owner_job_command_v1,
-    validate_scheduled_job_command_v1,
+    SchedulerReceiptValidationErrorV1, SchedulerScheduleControlValidationErrorV1,
+    validate_job_run_receipt_v1, validate_owner_job_command_v1, validate_scheduled_job_command_v1,
+    validate_scheduler_schedule_control_command_v1, validate_scheduler_schedule_control_result_v1,
 };
