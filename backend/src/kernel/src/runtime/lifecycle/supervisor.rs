@@ -11,9 +11,9 @@ pub use crate::modules::capability::router::ManagedRuntimeRelay;
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeBlobSessionHandler, ManagedRuntimeClientRealtimeHandler,
     ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
-    ManagedRuntimeModuleQueryHandler, ManagedRuntimeOwnerDerivedKeyHandler,
-    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeRelayRequest,
-    ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeModuleQueryHandler, ManagedRuntimeModuleRequestHandler,
+    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeProviderCredentialHandler,
+    ManagedRuntimeRelayRequest, ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 use hermes_runtime_protocol::managed_control::ManagedControlTransportMajorV1;
@@ -33,6 +33,7 @@ type ConfiguredRequestHandlers = (
     Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>,
     Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>,
     Option<Arc<dyn ManagedRuntimeModuleQueryHandler>>,
+    Option<Arc<dyn ManagedRuntimeModuleRequestHandler>>,
     Option<Arc<dyn ManagedRuntimeClientRealtimeHandler>>,
 );
 
@@ -55,6 +56,7 @@ struct Inner {
     owner_derived_key_handler: Mutex<Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>>,
     blob_session_handler: Mutex<Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>>,
     module_query_handler: Mutex<Option<Arc<dyn ManagedRuntimeModuleQueryHandler>>>,
+    module_request_handler: Mutex<Option<Arc<dyn ManagedRuntimeModuleRequestHandler>>>,
     client_realtime_handler: Mutex<Option<Arc<dyn ManagedRuntimeClientRealtimeHandler>>>,
     vault_route_handler: Mutex<Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>>,
 }
@@ -83,6 +85,7 @@ impl ManagedRuntimeSupervisor {
                 owner_derived_key_handler: Mutex::new(None),
                 blob_session_handler: Mutex::new(None),
                 module_query_handler: Mutex::new(None),
+                module_request_handler: Mutex::new(None),
                 client_realtime_handler: Mutex::new(None),
                 vault_route_handler: Mutex::new(None),
             }),
@@ -168,6 +171,17 @@ impl ManagedRuntimeSupervisor {
             &self.inner.module_query_handler,
             handler,
             "managed runtime module query handler",
+        )
+    }
+
+    pub fn configure_module_request_handler(
+        &self,
+        handler: Arc<dyn ManagedRuntimeModuleRequestHandler>,
+    ) -> Result<(), String> {
+        self.configure_before_launch(
+            &self.inner.module_request_handler,
+            handler,
+            "managed runtime module request handler",
         )
     }
 
@@ -296,6 +310,7 @@ impl ManagedRuntimeSupervisor {
             owner_derived_key_handler,
             blob_session_handler,
             module_query_handler,
+            module_request_handler,
             client_realtime_handler,
         ) = match self.configured_request_handlers() {
             Ok(handlers) => handlers,
@@ -321,6 +336,7 @@ impl ManagedRuntimeSupervisor {
             owner_derived_key_handler,
             blob_session_handler,
             module_query_handler,
+            module_request_handler,
             client_realtime_handler,
         });
         workers.insert(registration_id, worker);
@@ -335,6 +351,7 @@ impl ManagedRuntimeSupervisor {
             self.owner_derived_key_handler()?,
             self.blob_session_handler()?,
             self.module_query_handler()?,
+            self.module_request_handler()?,
             self.client_realtime_handler()?,
         ))
     }
@@ -394,6 +411,16 @@ impl ManagedRuntimeSupervisor {
     ) -> Result<Option<Arc<dyn ManagedRuntimeModuleQueryHandler>>, String> {
         self.inner
             .module_query_handler
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
+            .map(|handler| handler.clone())
+    }
+
+    fn module_request_handler(
+        &self,
+    ) -> Result<Option<Arc<dyn ManagedRuntimeModuleRequestHandler>>, String> {
+        self.inner
+            .module_request_handler
             .lock()
             .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
             .map(|handler| handler.clone())

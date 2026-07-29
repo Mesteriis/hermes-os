@@ -139,6 +139,26 @@ message ManagedRuntimeModuleQueryResponseV1 {
   bytes response_payload = 2;
   string error_code = 15;
 }
+// Caller-to-Kernel request for one descriptor-declared request dependency.
+// Kernel never retries this potentially mutating operation.
+message ManagedRuntimeModuleRequestRequestV1 {
+  bytes request_id = 1;
+  ContractReferenceV1 contract = 2;
+  bytes request_payload = 3;
+  uint32 deadline_millis = 4;
+}
+// Kernel-to-provider delivery after exact request-provider authorization.
+message ManagedRuntimeModuleRequestDeliveryV1 {
+  bytes request_id = 1;
+  string logical_owner_id = 2;
+  ContractReferenceV1 contract = 3;
+  bytes request_payload = 4;
+}
+message ManagedRuntimeModuleRequestResponseV1 {
+  bytes request_id = 1;
+  bytes response_payload = 2;
+  string error_code = 15;
+}
 // Client-safe owner event submitted by a current managed runtime. The Kernel
 // authorizes the exact descriptor contract and maps these generic fields to
 // the Gateway frame; it never decodes the owner payload.
@@ -170,6 +190,8 @@ message ManagedRuntimeControlRequestV1 {
     ManagedRuntimeModuleQueryRequestV1 route_module_query = 9;
     ManagedRuntimeModuleQueryDeliveryV1 deliver_module_query = 10;
     ManagedRuntimeClientRealtimePublishRequestV1 publish_client_realtime = 11;
+    ManagedRuntimeModuleRequestRequestV1 route_module_request = 12;
+    ManagedRuntimeModuleRequestDeliveryV1 deliver_module_request = 13;
   }
 }
 message ManagedRuntimeControlAckV1 {}
@@ -186,6 +208,8 @@ message ManagedRuntimeControlResponseV1 {
     ManagedRuntimeModuleQueryResponseV1 module_query_route = 9;
     ManagedRuntimeModuleQueryResponseV1 module_query_delivery = 10;
     ManagedRuntimeClientRealtimePublishResponseV1 client_realtime_publish = 11;
+    ManagedRuntimeModuleRequestResponseV1 module_request_route = 12;
+    ManagedRuntimeModuleRequestResponseV1 module_request_delivery = 13;
   }
   string error_code = 15;
 }

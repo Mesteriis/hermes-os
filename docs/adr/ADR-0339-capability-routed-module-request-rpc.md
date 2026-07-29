@@ -4,7 +4,10 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: Не реализовано
+Состояние реализации: private versioned request/delivery/response wire,
+hard bounds и managed-runtime control delivery foundation реализованы. Separate
+descriptor/Control Store provider inventory, Kernel authorization/relay и live
+conformance ещё не реализованы; platform gate остаётся `planned`.
 
 Уточняет:
 

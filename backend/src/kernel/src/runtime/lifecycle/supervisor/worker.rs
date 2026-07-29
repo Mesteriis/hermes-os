@@ -10,9 +10,9 @@ use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeBlobSessionHandler, ManagedRuntimeClientRealtimeHandler,
     ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
-    ManagedRuntimeModuleQueryHandler, ManagedRuntimeOwnerDerivedKeyHandler,
-    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeRelayRequest,
-    ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeModuleQueryHandler, ManagedRuntimeModuleRequestHandler,
+    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeProviderCredentialHandler,
+    ManagedRuntimeRelayRequest, ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 use crate::runtime::managed::supervisor as managed_child_supervisor;
@@ -45,6 +45,7 @@ pub(super) struct ActiveWorkerInput {
     pub(super) owner_derived_key_handler: Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>,
     pub(super) blob_session_handler: Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>,
     pub(super) module_query_handler: Option<Arc<dyn ManagedRuntimeModuleQueryHandler>>,
+    pub(super) module_request_handler: Option<Arc<dyn ManagedRuntimeModuleRequestHandler>>,
     pub(super) client_realtime_handler: Option<Arc<dyn ManagedRuntimeClientRealtimeHandler>>,
 }
 
@@ -65,6 +66,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
         owner_derived_key_handler,
         blob_session_handler,
         module_query_handler,
+        module_request_handler,
         client_realtime_handler,
     } = input;
     let shutdown_requested = Arc::clone(&inner.shutdown_requested);
@@ -96,6 +98,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
                             owner_derived_key: owner_derived_key_handler.as_deref(),
                             blob_session: blob_session_handler.as_deref(),
                             module_query: module_query_handler.as_deref(),
+                            module_request: module_request_handler.as_deref(),
                             client_realtime: client_realtime_handler.as_deref(),
                         },
                     ready_sender: &ready_sender,

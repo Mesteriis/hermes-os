@@ -10,6 +10,7 @@ use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
     ManagedRuntimeModuleQueryRequestV1, ManagedRuntimeModuleQueryResponseV1,
+    ManagedRuntimeModuleRequestRequestV1, ManagedRuntimeModuleRequestResponseV1,
     ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedRuntimeOwnerDerivedKeyRequestV1,
     ManagedRuntimeProviderCredentialDeliveryV1, ManagedRuntimeProviderCredentialRequestV1,
     ManagedRuntimeReadyRequestV1, ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1,
@@ -37,6 +38,7 @@ pub(crate) enum ManagedRuntimeInboundRequestV1 {
     OwnerDerivedKey(ManagedRuntimeOwnerDerivedKeyRequestV1),
     BlobSession(ManagedRuntimeBlobSessionRequestV1),
     ModuleQuery(ManagedRuntimeModuleQueryRequestV1),
+    ModuleRequest(ManagedRuntimeModuleRequestRequestV1),
     ClientRealtime(ManagedRuntimeClientRealtimePublishRequestV1),
 }
 
@@ -75,6 +77,14 @@ pub(crate) fn decode_typed_request(
             .is_ok() =>
         {
             Ok(ManagedRuntimeInboundRequestV1::ModuleQuery(value))
+        }
+        Some(Operation::RouteModuleRequest(value))
+            if hermes_runtime_protocol::validation::module_request::validate_module_request_request_v1(
+                &value,
+            )
+            .is_ok() =>
+        {
+            Ok(ManagedRuntimeInboundRequestV1::ModuleRequest(value))
         }
         Some(Operation::PublishClientRealtime(value))
             if hermes_runtime_protocol::validation::client_realtime::validate_managed_client_realtime_publish_request_v1(
@@ -151,6 +161,47 @@ fn module_query_error_code(error: &str) -> &'static str {
         "managed_module_query_ambiguous"
     } else {
         "managed_module_query_denied"
+    }
+}
+
+pub(crate) fn module_request_response(
+    result: Result<ManagedRuntimeModuleRequestResponseV1, String>,
+) -> ManagedRuntimeControlResponseV1 {
+    match result {
+        Ok(response)
+            if hermes_runtime_protocol::validation::module_request::validate_module_request_response_v1(
+                &response,
+            )
+            .is_ok() =>
+        {
+            ManagedRuntimeControlResponseV1 {
+                result: Some(ControlResult::ModuleRequestRoute(response)),
+                error_code: String::new(),
+            }
+        }
+        Ok(_) => ManagedRuntimeControlResponseV1 {
+            result: None,
+            error_code: "managed_module_request_invalid_response".to_owned(),
+        },
+        Err(error) => {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_managed_module_request_error={error}");
+            }
+            ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: module_request_error_code(&error).to_owned(),
+            }
+        }
+    }
+}
+
+fn module_request_error_code(error: &str) -> &'static str {
+    if error.ends_with(" is unavailable") {
+        "managed_module_request_unavailable"
+    } else if error.ends_with(" is ambiguous") {
+        "managed_module_request_ambiguous"
+    } else {
+        "managed_module_request_denied"
     }
 }
 
