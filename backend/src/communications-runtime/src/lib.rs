@@ -16,6 +16,7 @@ pub mod event_runtime;
 pub mod evidence_export_source;
 pub mod query;
 pub mod query_client_port;
+pub mod query_module_port;
 pub mod query_port;
 pub mod saved_search_port;
 pub mod search_access;

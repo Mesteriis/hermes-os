@@ -34,6 +34,7 @@ use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORREL
 use hermes_runtime_protocol::validation::module_client::{
     validate_module_client_request_v1, validate_module_client_response_v1,
 };
+use hermes_runtime_protocol::validation::module_query::validate_module_query_response_v1;
 use hermes_storage_protocol::{
     StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1, StorageBindingV1,
     StorageEffectiveBudgetsV1,
@@ -59,6 +60,7 @@ use crate::{
     evidence_export_source::{
         CommunicationsEvidenceExportDeliveryErrorV1, consume_next_evidence_export_prepare_v1,
     },
+    query_module_port::handle_module_query_delivery_v1,
     search_access::CommunicationsSearchAccessV1,
     search_worker::process_next_derived_index_job_v1,
 };
@@ -232,6 +234,22 @@ impl ManagedControlRequestDispatcherV2<UnixStream> for CommunicationsNestedReque
                     error_code: "managed_runtime_control_invalid_client_delivery".to_owned(),
                 },
             },
+            Some(Operation::DeliverModuleQuery(delivery)) => {
+                let mut reject_nested_request = RejectManagedControlRequestsV2;
+                let response = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(handle_module_query_delivery_v1(
+                        self.persistence,
+                        self.search_access,
+                        channel,
+                        &mut reject_nested_request,
+                        delivery,
+                    ))
+                });
+                ManagedRuntimeControlResponseV1 {
+                    result: Some(ControlResult::ModuleQueryDelivery(response)),
+                    error_code: String::new(),
+                }
+            }
             _ => ManagedRuntimeControlResponseV1 {
                 result: None,
                 error_code: "managed_runtime_control_unexpected_request".to_owned(),
@@ -385,7 +403,7 @@ impl CommunicationsEventRuntimeV1 {
         })
     }
 
-    pub async fn try_handle_client_delivery(
+    pub async fn try_handle_control_delivery(
         &mut self,
     ) -> Result<bool, CommunicationsEventRuntimeErrorV1> {
         let Some((correlation_id, request)) = self
@@ -395,7 +413,50 @@ impl CommunicationsEventRuntimeV1 {
         else {
             return Ok(false);
         };
-        let request = match request.operation {
+        let operation = match request.operation {
+            Some(Operation::DeliverModuleQuery(delivery)) => {
+                let request_id = delivery.request_id.clone();
+                let mut nested_search_access = self.search_access.clone();
+                let mut nested_dispatcher = CommunicationsNestedRequestDispatcher {
+                    persistence: &self.persistence,
+                    search_access: &mut nested_search_access,
+                    content_tickets: &self.content_tickets,
+                };
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(false)
+                    .map_err(|_| unavailable_at("module_query_blocking"))?;
+                let response = handle_module_query_delivery_v1(
+                    &self.persistence,
+                    &mut self.search_access,
+                    &mut self.control_channel,
+                    &mut nested_dispatcher,
+                    delivery,
+                )
+                .await;
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(true)
+                    .map_err(|_| unavailable_at("module_query_nonblocking"))?;
+                validate_module_query_response_v1(&response)
+                    .map_err(|_| unavailable_at("module_query_response_validate"))?;
+                if response.request_id != request_id {
+                    return Err(admission_at("module_query_response_request_id"));
+                }
+                self.control_channel
+                    .write_response(
+                        correlation_id,
+                        ManagedRuntimeControlResponseV1 {
+                            result: Some(ControlResult::ModuleQueryDelivery(response)),
+                            error_code: String::new(),
+                        },
+                    )
+                    .map_err(|_| unavailable_at("module_query_write"))?;
+                return Ok(true);
+            }
+            operation => operation,
+        };
+        let request = match operation {
             Some(Operation::ClientDelivery(delivery)) => match delivery.request {
                 Some(request) => request,
                 None => {

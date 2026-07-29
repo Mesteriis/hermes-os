@@ -61,7 +61,7 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS, COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
     COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID, COMMUNICATIONS_STORAGE_CAPABILITY_ID,
     communication_evidence_recorded_contract_reference_v1, communications_module_descriptor_v1,
-    communications_settings_schema_bytes_v1,
+    communications_query_contract_reference_v1, communications_settings_schema_bytes_v1,
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
 use hermes_communications_saved_query_api::{
@@ -448,6 +448,52 @@ pub(super) fn assert_communications_query_delivery(
     assert!(evidence.recorded_at_unix_seconds > 0);
     assert!((0..1_000_000_000).contains(&evidence.recorded_at_nanos));
     evidence.evidence_id
+}
+
+pub(super) fn assert_communications_module_query_delivery(supervisor: &ManagedRuntimeSupervisor) {
+    let payload = CommunicationsQueryRequestV1 {
+        protocol_major: 1,
+        operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+            limit: 16,
+            cursor: Vec::new(),
+        })),
+    }
+    .encode_to_vec();
+    let request_id = vec![19; 16];
+    let bytes = supervisor
+        .relay(
+            COMMUNICATIONS_REGISTRATION,
+            hermes_runtime_protocol::v1::ManagedRuntimeControlRequestV1 {
+                operation: Some(
+                    hermes_runtime_protocol::v1::managed_runtime_control_request_v1::Operation::DeliverModuleQuery(
+                        hermes_runtime_protocol::v1::ManagedRuntimeModuleQueryDeliveryV1 {
+                            request_id: request_id.clone(),
+                            logical_owner_id: "owner_local".to_owned(),
+                            contract: Some(communications_query_contract_reference_v1()),
+                            request_payload: payload,
+                        },
+                    ),
+                ),
+            }
+            .encode_to_vec(),
+        )
+        .expect("deliver live Communications module query");
+    let response =
+        hermes_runtime_protocol::v1::ManagedRuntimeControlResponseV1::decode(bytes.as_slice())
+            .expect("decode module query delivery response");
+    let Some(
+        hermes_runtime_protocol::v1::managed_runtime_control_response_v1::Result::ModuleQueryDelivery(
+            response,
+        ),
+    ) = response.result
+    else {
+        panic!("Communications module query delivery result");
+    };
+    assert_eq!(response.request_id, request_id);
+    assert!(response.error_code.is_empty());
+    let query = CommunicationsQueryResponseV1::decode(response.response_payload.as_slice())
+        .expect("decode Communications module query response");
+    assert!(matches!(query.result, Some(QueryResult::ListAccounts(_))));
 }
 
 pub(super) fn assert_communications_canonical_read_v2_pagination(
@@ -2644,6 +2690,15 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             max_response_bytes: MAX_MESSAGE_BODY_BYTES_V1,
         },
     );
+    let query_rpc_route = hermes_kernel_control_store::ModuleQueryContractV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_QUERY_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        "communications.query",
+        1,
+        1,
+        hermes_communications_api::COMMUNICATIONS_QUERY_SCHEMA_SHA256,
+    );
     store
         .create_pending_registration_with_all_descriptor_requests(
             &registration,
@@ -2656,7 +2711,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
                 vault_purposes: std::slice::from_ref(&vault_purpose),
                 client_rpc_routes: &client_rpc_routes,
                 client_blob_routes: std::slice::from_ref(&client_blob_route),
-                query_rpc_routes: &[],
+                query_rpc_routes: std::slice::from_ref(&query_rpc_route),
                 contract_dependencies: &[],
             },
         )

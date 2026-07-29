@@ -185,7 +185,7 @@ async fn consume_or_tick(
     maintenance: &mut tokio::time::Interval,
 ) -> Result<(), String> {
     let client_delivery = runtime
-        .try_handle_client_delivery()
+        .try_handle_control_delivery()
         .await
         .map_err(|error| {
             if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {

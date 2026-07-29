@@ -336,6 +336,7 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
         true,
     );
     assert_communications_query_delivery(&store, &supervisor);
+    assert_communications_module_query_delivery(&supervisor);
     assert_communications_canonical_read_v2_pagination(&store, &supervisor);
     assert_communications_search_query_delivery(&store, &supervisor);
     assert_communications_gateway_query_delivery(&store, &supervisor, &root, &data);

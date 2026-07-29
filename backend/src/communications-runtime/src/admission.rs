@@ -346,16 +346,25 @@ fn attachment_observation_consumer_capability_v1(
 pub fn communications_query_capability_v1() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: COMMUNICATIONS_QUERY_CAPABILITY_ID.to_owned(),
-        capability_revision: 2,
+        capability_revision: 3,
         criticality: CapabilityCriticalityV1::Required as i32,
-        provides: vec![ProvidedSurfaceV1 {
-            kind: ProvidedSurfaceKindV1::ClientRpc as i32,
-            contract: Some(communications_query_contract_reference_v1()),
-            client_rpc_route: Some(hermes_runtime_protocol::v1::ClientRpcRouteV1 {
-                path: "/hermes.communications.query.v1.CommunicationsQueryService/Query".to_owned(),
-            }),
-            client_blob_route: None,
-        }],
+        provides: vec![
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::QueryRpc as i32,
+                contract: Some(communications_query_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+                contract: Some(communications_query_contract_reference_v1()),
+                client_rpc_route: Some(hermes_runtime_protocol::v1::ClientRpcRouteV1 {
+                    path: "/hermes.communications.query.v1.CommunicationsQueryService/Query"
+                        .to_owned(),
+                }),
+                client_blob_route: None,
+            },
+        ],
         ..Default::default()
     }
 }
@@ -518,7 +527,7 @@ pub fn communications_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1
     let settings_schema = communications_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 5,
+        descriptor_revision: 6,
         module_id: COMMUNICATIONS_MODULE_ID.to_owned(),
         owner_id: COMMUNICATIONS_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Domain as i32,

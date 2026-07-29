@@ -12,6 +12,10 @@ const paths = {
     BACKEND_ROOT,
   ),
   admission: new URL('src/communications-runtime/src/admission.rs', BACKEND_ROOT),
+  moduleQuery: new URL(
+    'src/communications-runtime/src/query_module_port.rs',
+    BACKEND_ROOT,
+  ),
   cursor: new URL('src/communications-runtime/src/canonical_read_cursor.rs', BACKEND_ROOT),
   persistence: new URL('src/communications-persistence/src/canonical_read.rs', BACKEND_ROOT),
   migration: new URL(
@@ -46,10 +50,11 @@ const paths = {
 };
 
 test('Communications canonical read v2 is one exact owner contract and admitted revision', async () => {
-  const [inventorySource, proto, admission, adr] = await Promise.all([
+  const [inventorySource, proto, admission, moduleQuery, adr] = await Promise.all([
     readFile(paths.inventory, 'utf8'),
     readFile(paths.proto, 'utf8'),
     readFile(paths.admission, 'utf8'),
+    readFile(paths.moduleQuery, 'utf8'),
     readFile(paths.adr, 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
@@ -67,8 +72,12 @@ test('Communications canonical read v2 is one exact owner contract and admitted 
   assert.match(proto, /GetMessageResponseV1 get_message = 11/);
   assert.equal((proto.match(/bytes cursor =/g) ?? []).length, 8);
   assert.equal((proto.match(/bytes next_cursor =/g) ?? []).length, 8);
-  assert.match(admission, /capability_id: COMMUNICATIONS_QUERY_CAPABILITY_ID[\s\S]*capability_revision: 2/);
-  assert.match(admission, /descriptor_revision: 5/);
+  assert.match(admission, /capability_id: COMMUNICATIONS_QUERY_CAPABILITY_ID[\s\S]*capability_revision: 3/);
+  assert.match(admission, /descriptor_revision: 6/);
+  assert.match(admission, /ProvidedSurfaceKindV1::QueryRpc/);
+  assert.match(moduleQuery, /handle_module_query_delivery_v1/);
+  assert.match(moduleQuery, /communications_query_contract_reference_v1/);
+  assert.doesNotMatch(moduleQuery, /mail|telegram|whatsapp|zulip/i);
   assert.match(
     admission,
     /\/hermes\.communications\.query\.v1\.CommunicationsQueryService\/Query/,

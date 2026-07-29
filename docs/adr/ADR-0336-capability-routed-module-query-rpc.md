@@ -10,7 +10,10 @@ descriptor extraction и owner-neutral Kernel authorization/provider relay
 реализованы. Managed conformance покрывает success, zero/ambiguous provider,
 stale caller/provider binding, revoke и response mismatch. Platform gate
 `capability_routed_module_query_rpc_v1` реализован; первый delivery-intent
-adapter остаётся отдельным незакрытым gate.
+adapter остаётся отдельным незакрытым gate. Communications runtime объявляет
+exact `communications.query` как отдельный `query_rpc` surface и обрабатывает
+provider delivery через отдельный module port; browser `client_rpc` при этом
+остаётся независимым transport surface.
 
 Уточняет:
 
