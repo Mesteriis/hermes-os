@@ -112,7 +112,10 @@ test('Communications export is one exact workflow family with a public domain so
     policy.implementation.currentSlice,
     'delivery_intent_target_bound_blob_v1',
   );
-  assert.deepEqual(policy.implementation.ownerInventory.workflows, ['communications_export']);
+  assert.deepEqual(policy.implementation.ownerInventory.workflows, [
+    'communication_delivery_intent',
+    'communications_export',
+  ]);
   assert.deepEqual(
     policy.implementation.productionPackages
       .filter(({ owner }) => owner === 'communications_export')

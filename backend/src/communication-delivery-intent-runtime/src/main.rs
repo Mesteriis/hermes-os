@@ -4,7 +4,9 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use hermes_communication_delivery_intent_persistence::schema::communication_delivery_intent_storage_bundle_v1;
+use hermes_communication_delivery_intent_persistence::{
+    DeliveryIntentPersistenceErrorV1, schema::communication_delivery_intent_storage_bundle_v1,
+};
 use hermes_communication_delivery_intent_runtime::{
     admission::{
         communication_delivery_intent_module_descriptor_v1,
@@ -134,10 +136,29 @@ where
             settings_schema,
             &admission,
             storage,
+            &configuration.event_hub_endpoint,
+            configuration.event_credential_revision,
         ))
         .map_err(runtime_error)?;
     loop {
         runtime.pump_control_once().map_err(runtime_error)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "Communication Delivery Intent clock is invalid".to_owned())?
+            .as_secs()
+            .try_into()
+            .map_err(|_| "Communication Delivery Intent clock is invalid".to_owned())?;
+        match executor.block_on(runtime.process_next_provider_command_v1(now)) {
+            Ok(_) | Err(DeliveryIntentRuntimeErrorV1::Unavailable) => {}
+            Err(DeliveryIntentRuntimeErrorV1::Persistence(
+                DeliveryIntentPersistenceErrorV1::StorageUnavailable,
+            )) => {}
+            Err(error) => return Err(runtime_error(error)),
+        }
+        match executor.block_on(runtime.consume_next_terminal_result_v1(now)) {
+            Ok(_) | Err(DeliveryIntentRuntimeErrorV1::Unavailable) => {}
+            Err(error) => return Err(runtime_error(error)),
+        }
         std::thread::sleep(Duration::from_millis(25));
     }
 }
@@ -145,6 +166,7 @@ where
 fn runtime_error(error: DeliveryIntentRuntimeErrorV1) -> String {
     let reason = match error {
         DeliveryIntentRuntimeErrorV1::Admission => "admission_rejected",
+        DeliveryIntentRuntimeErrorV1::EventContract => "event_contract_rejected",
         DeliveryIntentRuntimeErrorV1::Coordinator(_)
         | DeliveryIntentRuntimeErrorV1::Persistence(_)
         | DeliveryIntentRuntimeErrorV1::Unavailable => "dependency_unavailable",

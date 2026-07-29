@@ -33,6 +33,14 @@ const paths = {
     'src/communication-delivery-intent-runtime/src/admission.rs',
     BACKEND_ROOT,
   ),
+  providerEventAdmission: new URL(
+    'src/communication-delivery-intent-runtime/src/provider_event_admission.rs',
+    BACKEND_ROOT,
+  ),
+  eventRuntime: new URL(
+    'src/communication-delivery-intent-runtime/src/event_runtime.rs',
+    BACKEND_ROOT,
+  ),
   runtimeCoordinator: new URL(
     'src/communication-delivery-intent-runtime/src/coordinator.rs',
     BACKEND_ROOT,
@@ -59,7 +67,7 @@ const paths = {
   ),
 };
 
-test('delivery intent assembly is an exact non-admitted workflow slice', async () => {
+test('delivery intent assembly is an exact managed event workflow slice', async () => {
   const [
     policySource,
     reconstructionSource,
@@ -70,6 +78,8 @@ test('delivery intent assembly is an exact non-admitted workflow slice', async (
     assemblyManifest,
     assembly,
     runtimeAdmission,
+    providerEventAdmission,
+    eventRuntime,
     runtimeCoordinator,
     runtimeProcess,
     persistence,
@@ -87,6 +97,8 @@ test('delivery intent assembly is an exact non-admitted workflow slice', async (
       readFile(paths.assemblyManifest, 'utf8'),
       readFile(paths.assembly, 'utf8'),
       readFile(paths.runtimeAdmission, 'utf8'),
+      readFile(paths.providerEventAdmission, 'utf8'),
+      readFile(paths.eventRuntime, 'utf8'),
       readFile(paths.runtimeCoordinator, 'utf8'),
       readFile(paths.runtimeProcess, 'utf8'),
       readFile(paths.persistence, 'utf8'),
@@ -107,7 +119,10 @@ test('delivery intent assembly is an exact non-admitted workflow slice', async (
     policy.implementation.currentSlice,
     'delivery_intent_target_bound_blob_v1',
   );
-  assert.deepEqual(policy.implementation.ownerInventory.workflows, ['communications_export']);
+  assert.deepEqual(policy.implementation.ownerInventory.workflows, [
+    'communication_delivery_intent',
+    'communications_export',
+  ]);
   assert.deepEqual(
     policy.implementation.productionPackages
       .filter(({ owner }) => owner === 'communication_delivery_intent')
@@ -147,10 +162,11 @@ test('delivery intent assembly is an exact non-admitted workflow slice', async (
   assert.match(runtimeAdmission, /StorageNamespaceRequestV1/);
   assert.match(runtimeAdmission, /BlobQuotaRequestV1/);
   assert.match(runtimeAdmission, /BlobQuotaOperationV1::Write/);
-  assert.doesNotMatch(
-    runtimeAdmission,
-    /ClientRpcRouteV1|DurablePublisher|DurableConsumer|provider/,
-  );
+  assert.doesNotMatch(runtimeAdmission, /ClientRpcRouteV1/);
+  assert.match(providerEventAdmission, /EventRouteDirectionV1::Publish/);
+  assert.match(providerEventAdmission, /EventRouteDirectionV1::Consume/);
+  assert.match(eventRuntime, /publish_exact/);
+  assert.match(eventRuntime, /acknowledge\(\)/);
   assert.match(runtimeCoordinator, /DeliveryIntentBodyMaterializerV1/);
   assert.match(runtimeCoordinator, /DeliveryIntentBodyBlobReceiptV1/);
   assert.match(runtimeProcess, /describe_managed_runtime/);

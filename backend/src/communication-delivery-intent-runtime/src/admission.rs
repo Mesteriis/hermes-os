@@ -12,6 +12,11 @@ use hermes_runtime_protocol::v1::{
 use prost::Message;
 use sha2::{Digest, Sha256};
 
+use crate::provider_event_admission::{
+    delivery_intent_mail_events_capability_v1, delivery_intent_telegram_events_capability_v1,
+    delivery_intent_whatsapp_events_capability_v1, delivery_intent_zulip_events_capability_v1,
+};
+
 pub const COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY_ID_V1: &str =
     "communication_delivery_intent.storage.v1";
 pub const COMMUNICATION_DELIVERY_INTENT_BLOB_CAPABILITY_ID_V1: &str =
@@ -88,7 +93,11 @@ pub fn communication_delivery_intent_module_descriptor_v1(build_id: &str) -> Mod
         }),
         capabilities: vec![
             communication_delivery_intent_blob_capability_v1(),
+            delivery_intent_mail_events_capability_v1(),
             communication_delivery_intent_storage_capability_v1(),
+            delivery_intent_telegram_events_capability_v1(),
+            delivery_intent_whatsapp_events_capability_v1(),
+            delivery_intent_zulip_events_capability_v1(),
         ],
         settings_schema_ref: Some(SettingsSchemaRefV1 {
             major: 1,
@@ -115,19 +124,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn descriptor_admits_only_body_blob_write_and_owner_local_storage() {
+    fn descriptor_admits_blob_storage_and_four_exact_provider_event_units() {
         let descriptor = communication_delivery_intent_module_descriptor_v1("test");
         validate_descriptor_v1(&descriptor).expect("descriptor");
         validate_settings_schema_v1(&communication_delivery_intent_settings_schema_v1())
             .expect("settings");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Workflow as i32);
-        assert_eq!(descriptor.capabilities.len(), 2);
+        assert_eq!(descriptor.capabilities.len(), 6);
         assert_eq!(
             descriptor.capabilities[0].capability_id,
             COMMUNICATION_DELIVERY_INTENT_BLOB_CAPABILITY_ID_V1
         );
         assert_eq!(
-            descriptor.capabilities[1].capability_id,
+            descriptor.capabilities[2].capability_id,
             COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY_ID_V1
         );
         assert!(descriptor.capabilities[0].provides.is_empty());

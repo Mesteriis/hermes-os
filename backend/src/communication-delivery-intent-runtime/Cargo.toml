@@ -22,6 +22,7 @@ hermes-communication-delivery-intent-api = { path = "../communication-delivery-i
 hermes-communication-delivery-intent-core = { path = "../communication-delivery-intent-core" }
 hermes-communication-delivery-intent-event-adapters = { path = "../communication-delivery-intent-event-adapters" }
 hermes-communication-delivery-intent-persistence = { path = "../communication-delivery-intent-persistence" }
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
 hermes-mail-delivery-intent-contract = { path = "../mail-delivery-intent-contract" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }

@@ -82,7 +82,10 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
   );
   assert.deepEqual(inventory.domains, ['communications']);
   assert.deepEqual(inventory.integrations, ['mail']);
-  assert.deepEqual(inventory.workflows, ['communications_export']);
+  assert.deepEqual(inventory.workflows, [
+    'communication_delivery_intent',
+    'communications_export',
+  ]);
   assert.deepEqual(inventory.engines, ['attachment_security']);
   assert.deepEqual(
     policy.implementation.productionPackages

@@ -7,6 +7,10 @@ use hermes_communication_delivery_intent_persistence::{
     CommunicationDeliveryIntentPersistenceV1, CreateDeliveryIntentOutcomeV1,
     DeliveryIntentPersistenceErrorV1,
 };
+use hermes_events_jetstream::{
+    JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
+    request_managed_runtime_event_access_v2,
+};
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, ManagedControlRequestDispatcherV2},
     v1::{
@@ -25,6 +29,7 @@ use hermes_storage_vault::{
 use crate::{
     body_materializer::ManagedDeliveryIntentBodyMaterializerV1,
     coordinator::{DeliveryIntentCoordinatorErrorV1, prepare_create_delivery_intent_v1},
+    event_runtime::{ProviderTerminalSubscriptionV1, bind_terminal_subscriptions},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -41,13 +46,20 @@ pub enum DeliveryIntentRuntimeErrorV1 {
     Admission,
     Coordinator(DeliveryIntentCoordinatorErrorV1),
     Persistence(DeliveryIntentPersistenceErrorV1),
+    EventContract,
     Unavailable,
 }
 
 pub struct DeliveryIntentManagedRuntimeV1 {
-    logical_owner_id: String,
+    pub(crate) logical_owner_id: String,
     control_channel: ManagedControlChannelV2<UnixStream>,
     persistence: CommunicationDeliveryIntentPersistenceV1,
+    pub(crate) runtime_instance_id: String,
+    pub(crate) runtime_generation: u64,
+    pub(crate) event_connection: RuntimeJetStreamConnection,
+    pub(crate) event_publish_permit: RuntimePublishPermitV1,
+    pub(crate) terminal_subscriptions: Vec<ProviderTerminalSubscriptionV1>,
+    pub(crate) next_terminal_subscription: usize,
 }
 
 impl DeliveryIntentManagedRuntimeV1 {
@@ -57,8 +69,13 @@ impl DeliveryIntentManagedRuntimeV1 {
         settings_schema_bytes: Vec<u8>,
         admission: &DeliveryIntentRuntimeAdmissionV1,
         storage_configuration: ManagedStorageRuntimeConfigurationV1,
+        event_hub_endpoint: &str,
+        event_credential_revision: u64,
     ) -> Result<Self, DeliveryIntentRuntimeErrorV1> {
         validate_admission(admission)?;
+        if event_hub_endpoint.trim().is_empty() || event_credential_revision == 0 {
+            return Err(DeliveryIntentRuntimeErrorV1::Admission);
+        }
         let mut control_channel = ManagedControlChannelV2::new(control_channel);
         authenticate_managed_runtime_v2(
             &mut control_channel,
@@ -99,6 +116,47 @@ impl DeliveryIntentManagedRuntimeV1 {
             .await
             .map_err(persistence_error)?;
         let mut control_channel = leases.into_route_port().into_channel();
+        let event_access = request_managed_runtime_event_access_v2(
+            &mut control_channel,
+            &admission.logical_owner_id,
+            &admission.registration_id,
+            &admission.runtime_instance_id,
+            admission.runtime_generation,
+            admission.grant_epoch,
+            event_credential_revision,
+        )
+        .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
+        let event_identity = RuntimeNatsIdentity::new(
+            admission.runtime_instance_id.clone(),
+            admission.runtime_generation,
+            admission.grant_epoch,
+        )
+        .map_err(|_| DeliveryIntentRuntimeErrorV1::Admission)?;
+        let event_publish_permit = event_access
+            .publish_permit(
+                &admission.registration_id,
+                &admission.runtime_instance_id,
+                admission.runtime_generation,
+                admission.grant_epoch,
+            )
+            .map_err(|_| DeliveryIntentRuntimeErrorV1::Admission)?;
+        let terminal_subscriptions = bind_terminal_subscriptions(
+            event_access
+                .subscribe_permits(
+                    &admission.registration_id,
+                    &admission.runtime_instance_id,
+                    admission.runtime_generation,
+                    admission.grant_epoch,
+                )
+                .map_err(|_| DeliveryIntentRuntimeErrorV1::Admission)?,
+        )?;
+        let event_connection = JetStreamClient::connect_runtime_with_jwt(
+            event_hub_endpoint,
+            event_identity,
+            event_access.into_credential(),
+        )
+        .await
+        .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
         signal_managed_runtime_ready(&mut control_channel, admission)?;
         control_channel
             .inner_mut()
@@ -108,6 +166,12 @@ impl DeliveryIntentManagedRuntimeV1 {
             logical_owner_id: admission.logical_owner_id.clone(),
             control_channel,
             persistence,
+            runtime_instance_id: admission.runtime_instance_id.clone(),
+            runtime_generation: admission.runtime_generation,
+            event_connection,
+            event_publish_permit,
+            terminal_subscriptions,
+            next_terminal_subscription: 0,
         })
     }
 

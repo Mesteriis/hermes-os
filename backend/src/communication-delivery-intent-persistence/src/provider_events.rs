@@ -193,6 +193,41 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             .collect()
     }
 
+    pub async fn provider_command_for_claim(
+        &self,
+        claim: &DeliveryIntentClaimV1,
+    ) -> Result<Option<ProviderCommandOutboxEntryV1>, DeliveryIntentPersistenceErrorV1> {
+        if !valid_claim(claim) {
+            return Err(DeliveryIntentPersistenceErrorV1::InvalidInput);
+        }
+        let row = sqlx::query(
+            "SELECT exact_envelope_bytes
+             FROM hermes_data.communication_delivery_intent_provider_outbox
+             WHERE logical_owner_id = $1
+               AND intent_id = $2
+               AND provider_kind = $3
+               AND published_at_unix_seconds IS NULL",
+        )
+        .bind(&claim.logical_owner_id)
+        .bind(claim.intent_id.as_slice())
+        .bind(provider_code(claim.route.provider))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| DeliveryIntentPersistenceErrorV1::StorageUnavailable)?;
+        row.map(|row| {
+            let exact_bytes: Vec<u8> = row
+                .try_get("exact_envelope_bytes")
+                .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidRow)?;
+            let record = OutboxRecordV1::accept(exact_bytes)
+                .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidRow)?;
+            Ok(ProviderCommandOutboxEntryV1 {
+                provider: claim.route.provider,
+                record,
+            })
+        })
+        .transpose()
+    }
+
     pub async fn mark_provider_command_published(
         &self,
         claim: &DeliveryIntentClaimV1,
@@ -216,14 +251,13 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             "SELECT published_at_unix_seconds
              FROM hermes_data.communication_delivery_intent_provider_outbox
              WHERE message_id = $1 AND logical_owner_id = $2 AND intent_id = $3
-               AND provider_kind = $4 AND claim_epoch = $5
+               AND provider_kind = $4
              FOR UPDATE",
         )
         .bind(message_id.as_slice())
         .bind(&claim.logical_owner_id)
         .bind(claim.intent_id.as_slice())
         .bind(provider_code(claim.route.provider))
-        .bind(claim_epoch)
         .fetch_optional(&mut *transaction)
         .await
         .map_err(|_| DeliveryIntentPersistenceErrorV1::StorageUnavailable)?

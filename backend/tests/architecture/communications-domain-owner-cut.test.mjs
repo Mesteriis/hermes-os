@@ -63,7 +63,7 @@ test('Communications remains the exact domain owner after Mail integration admis
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications'],
     integrations: ['mail'],
-    workflows: ['communications_export'],
+    workflows: ['communication_delivery_intent', 'communications_export'],
     engines: ['attachment_security'],
     businessCapabilities: [
       'attachment_security.blob.v1',
@@ -71,6 +71,12 @@ test('Communications remains the exact domain owner after Mail integration admis
       'attachment_security.communications-state.observe.v1',
       'attachment_security.storage.v1',
       'attachment_security.verdict.publish.v1',
+      'communication_delivery_intent.blob.v1',
+      'communication_delivery_intent.mail.events.v1',
+      'communication_delivery_intent.storage.v1',
+      'communication_delivery_intent.telegram.events.v1',
+      'communication_delivery_intent.whatsapp.events.v1',
+      'communication_delivery_intent.zulip.events.v1',
       'communications.attachment.blob-admission.observe.v1',
       'communications.attachment.safety-verdict.observe.v1',
       'communications.blob.v1',

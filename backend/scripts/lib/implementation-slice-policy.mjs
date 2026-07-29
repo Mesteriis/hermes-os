@@ -1531,6 +1531,7 @@ const COMMUNICATION_DELIVERY_INTENT_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-communication-delivery-intent-core', kind: 'normal' },
     { name: 'hermes-communication-delivery-intent-event-adapters', kind: 'normal' },
     { name: 'hermes-communication-delivery-intent-persistence', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
     { name: 'hermes-storage-vault', kind: 'normal' },
@@ -1599,6 +1600,7 @@ const DELIVERY_INTENT_TARGET_BOUND_BLOB_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-communication-delivery-intent-core', kind: 'normal' },
     { name: 'hermes-communication-delivery-intent-event-adapters', kind: 'normal' },
     { name: 'hermes-communication-delivery-intent-persistence', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
     { name: 'hermes-mail-delivery-intent-contract', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
@@ -1976,6 +1978,20 @@ const COMMUNICATIONS_EXPORT_INVENTORY = {
     'communications_export.blob.v1',
     'communications_export.events.v1',
     'communications_export.storage.v1',
+  ].sort(),
+};
+
+const COMMUNICATION_DELIVERY_INTENT_INVENTORY = {
+  ...COMMUNICATIONS_EXPORT_INVENTORY,
+  workflows: ['communication_delivery_intent', 'communications_export'],
+  businessCapabilities: [
+    ...COMMUNICATIONS_EXPORT_INVENTORY.businessCapabilities,
+    'communication_delivery_intent.blob.v1',
+    'communication_delivery_intent.mail.events.v1',
+    'communication_delivery_intent.storage.v1',
+    'communication_delivery_intent.telegram.events.v1',
+    'communication_delivery_intent.whatsapp.events.v1',
+    'communication_delivery_intent.zulip.events.v1',
   ].sort(),
 };
 
@@ -2456,7 +2472,7 @@ function expectedSlice(currentSlice) {
   if (currentSlice === 'delivery_intent_target_bound_blob_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
-      ownerInventory: COMMUNICATIONS_EXPORT_INVENTORY,
+      ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
       cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
       packages: DELIVERY_INTENT_TRANSACTIONAL_EVENT_ADAPTERS_PRODUCTION_PACKAGES,
       workspaceDependencies:

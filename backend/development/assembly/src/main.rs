@@ -22,6 +22,12 @@ const COMMUNICATIONS_STORAGE_CAPABILITY: &str = "communications.storage.v1";
 const COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT: &str = "communications_export.runtime.v1";
 const COMMUNICATIONS_EXPORT_STORAGE_ARTIFACT: &str = "communications_export.storage.v1";
 const COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY: &str = "communications_export.storage.v1";
+const COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT: &str =
+    "communication_delivery_intent.runtime.v1";
+const COMMUNICATION_DELIVERY_INTENT_STORAGE_ARTIFACT: &str =
+    "communication_delivery_intent.storage.v1";
+const COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY: &str =
+    "communication_delivery_intent.storage.v1";
 const ATTACHMENT_SECURITY_RUNTIME_ARTIFACT: &str = "attachment_security.runtime.v1";
 const ATTACHMENT_SECURITY_STORAGE_ARTIFACT: &str = "attachment_security.storage.v1";
 const ATTACHMENT_SECURITY_STORAGE_CAPABILITY: &str = "attachment_security.storage.v1";
@@ -77,7 +83,7 @@ struct ModulePlanV1 {
     request_host_bridge: bool,
 }
 
-const MODULE_PLAN: [ModulePlanV1; 7] = [
+const MODULE_PLAN: [ModulePlanV1; 8] = [
     ModulePlanV1 {
         runtime_artifact_id: COMMUNICATIONS_RUNTIME_ARTIFACT,
         storage_artifact_id: COMMUNICATIONS_STORAGE_ARTIFACT,
@@ -89,6 +95,13 @@ const MODULE_PLAN: [ModulePlanV1; 7] = [
         runtime_artifact_id: COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT,
         storage_artifact_id: COMMUNICATIONS_EXPORT_STORAGE_ARTIFACT,
         storage_capability_id: COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY,
+        runtime_kind: ModuleRuntimeKindV1::Workflow,
+        request_host_bridge: false,
+    },
+    ModulePlanV1 {
+        runtime_artifact_id: COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT,
+        storage_artifact_id: COMMUNICATION_DELIVERY_INTENT_STORAGE_ARTIFACT,
+        storage_capability_id: COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Workflow,
         request_host_bridge: false,
     },
@@ -130,6 +143,15 @@ const MODULE_PLAN: [ModulePlanV1; 7] = [
 ];
 const PRE_EXPORT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3: [&str; 6] = [
     COMMUNICATIONS_RUNTIME_ARTIFACT,
+    ATTACHMENT_SECURITY_RUNTIME_ARTIFACT,
+    MAIL_RUNTIME_ARTIFACT,
+    TELEGRAM_RUNTIME_ARTIFACT,
+    WHATSAPP_RUNTIME_ARTIFACT,
+    ZULIP_RUNTIME_ARTIFACT,
+];
+const PRE_DELIVERY_INTENT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3: [&str; 7] = [
+    COMMUNICATIONS_RUNTIME_ARTIFACT,
+    COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT,
     ATTACHMENT_SECURITY_RUNTIME_ARTIFACT,
     MAIL_RUNTIME_ARTIFACT,
     TELEGRAM_RUNTIME_ARTIFACT,
@@ -750,6 +772,10 @@ fn validate_state_plan(state: &DevelopmentAssemblyStateV1) -> Result<(), String>
 fn validate_refreshable_state_plan(state: &DevelopmentAssemblyStateV1) -> Result<(), String> {
     if validate_state_plan(state).is_ok()
         || state_matches_runtime_artifact_plan(state, &PRE_EXPORT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3)
+        || state_matches_runtime_artifact_plan(
+            state,
+            &PRE_DELIVERY_INTENT_MODULE_PLAN_RUNTIME_ARTIFACTS_V3,
+        )
     {
         return Ok(());
     }
@@ -1329,7 +1355,7 @@ mod tests {
 
     #[test]
     fn development_plan_keeps_domains_workflows_engines_and_integrations_as_distinct_artifacts() {
-        assert_eq!(MODULE_PLAN.len(), 7);
+        assert_eq!(MODULE_PLAN.len(), 8);
         assert_eq!(
             MODULE_PLAN
                 .iter()
@@ -1338,6 +1364,7 @@ mod tests {
             vec![
                 COMMUNICATIONS_RUNTIME_ARTIFACT,
                 COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT,
+                COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT,
                 ATTACHMENT_SECURITY_RUNTIME_ARTIFACT,
                 MAIL_RUNTIME_ARTIFACT,
                 TELEGRAM_RUNTIME_ARTIFACT,
@@ -1349,12 +1376,16 @@ mod tests {
             MODULE_PLAN[1].runtime_kind,
             ModuleRuntimeKindV1::Workflow
         ));
+        assert!(matches!(
+            MODULE_PLAN[2].runtime_kind,
+            ModuleRuntimeKindV1::Workflow
+        ));
         assert_eq!(
-            MODULE_PLAN[2].runtime_artifact_id,
+            MODULE_PLAN[3].runtime_artifact_id,
             "attachment_security.runtime.v1",
         );
         assert_eq!(
-            MODULE_PLAN[2].storage_artifact_id,
+            MODULE_PLAN[3].storage_artifact_id,
             "attachment_security.storage.v1",
         );
     }
@@ -1424,9 +1455,10 @@ mod tests {
     fn pre_export_state_v3_is_refreshable_but_not_current() {
         let path = temporary_state_path("pre-export-v3");
         let mut legacy = fixture_state(25);
-        legacy
-            .modules
-            .retain(|module| module.runtime_artifact_id != COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT);
+        legacy.modules.retain(|module| {
+            module.runtime_artifact_id != COMMUNICATIONS_EXPORT_RUNTIME_ARTIFACT
+                && module.runtime_artifact_id != COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT
+        });
         let mut bytes = format!(
             "version=3\ndistribution_id={}\ndistribution_generation={}\nmodule_count={}\n",
             legacy.distribution_id,
@@ -1451,6 +1483,17 @@ mod tests {
         assert!(validate_refreshable_state_plan(&state).is_ok());
         assert!(validate_state_plan(&state).is_err());
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn pre_delivery_intent_state_v3_is_refreshable_but_not_current() {
+        let mut state = fixture_state(26);
+        state.modules.retain(|module| {
+            module.runtime_artifact_id != COMMUNICATION_DELIVERY_INTENT_RUNTIME_ARTIFACT
+        });
+
+        assert!(validate_refreshable_state_plan(&state).is_ok());
+        assert!(validate_state_plan(&state).is_err());
     }
 
     #[test]
