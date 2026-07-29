@@ -17,6 +17,11 @@ use hermes_mail_api::client_contract::{
     MailClientContractV1,
 };
 pub use hermes_mail_api::client_contract::{MAIL_MODULE_ID, MAIL_OWNER_ID};
+use hermes_mail_delivery_intent_contract::{
+    MAIL_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1, mail_delivery_intent_execute_consume_request_v1,
+    mail_delivery_intent_rejected_publish_request_v1,
+    mail_delivery_intent_succeeded_publish_request_v1,
+};
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
     CapabilityRequestV1, ClientRpcRouteV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
@@ -86,6 +91,7 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_communication_observed_publish_capability_v1(),
         mail_client_capability_v1(MailClientContractV1::CompositionCommand),
         mail_client_capability_v1(MailClientContractV1::CompositionQuery),
+        mail_delivery_intent_capability_v1(),
         mail_client_capability_v1(MailClientContractV1::DeliveryQuery),
         mail_client_capability_v1(MailClientContractV1::Delivery),
         mail_provider_credential_lifecycle_capability_v1(
@@ -148,6 +154,20 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_client_capability_v1(MailClientContractV1::Sync),
         mail_settings_configuration_catalog_capability_v1(),
     ]
+}
+
+fn mail_delivery_intent_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: MAIL_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![
+            mail_delivery_intent_execute_consume_request_v1(),
+            mail_delivery_intent_succeeded_publish_request_v1(),
+            mail_delivery_intent_rejected_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
 }
 
 fn mail_settings_configuration_catalog_capability_v1() -> CapabilityDescriptorV1 {
@@ -494,6 +514,7 @@ mod tests {
                 MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID,
                 MailClientContractV1::CompositionCommand.capability_id(),
                 MailClientContractV1::CompositionQuery.capability_id(),
+                MAIL_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1,
                 MailClientContractV1::DeliveryQuery.capability_id(),
                 MailClientContractV1::Delivery.capability_id(),
                 MAIL_GMAIL_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,

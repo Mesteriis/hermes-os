@@ -9,6 +9,7 @@ pub mod client_port;
 pub mod communications_outbox;
 pub mod delivery_intent_consumer;
 pub mod delivery_intent_execution;
+pub mod delivery_intent_outbox;
 pub mod delivery_intent_result;
 pub mod delivery_intent_worker;
 pub mod gmail_oauth;

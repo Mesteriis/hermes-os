@@ -16,6 +16,8 @@ use hermes_mail_runtime::{
     MailRuntimeAdmission,
     attachment_security_outbox::MailAttachmentSecurityOutboxRelayError,
     communications_outbox::MailCommunicationsOutboxRelayError,
+    delivery_intent_consumer::MailDeliveryIntentConsumeErrorV1,
+    delivery_intent_outbox::MailDeliveryIntentOutboxRelayErrorV1,
     delivery_intent_worker::{
         MailDeliveryIntentWorkerErrorV1, process_next_mail_delivery_intent_v1,
     },
@@ -376,6 +378,17 @@ where
                 .map_err(|_| "Mail runtime account selection failed".to_owned())?;
             execute_account_queues(&runtime, &mut admitted, now)?;
         }
+        match runtime.block_on(admitted.try_consume_delivery_intent(now)) {
+            Ok(_) | Err(MailDeliveryIntentConsumeErrorV1::Unavailable) => {}
+            Err(MailDeliveryIntentConsumeErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_delivery_intent_inbox_persistence_failed");
+                return Err("Mail delivery-intent inbox persistence failed".to_owned());
+            }
+            Err(_) => {
+                developer_diagnostic("developer_mail_delivery_intent_invalid");
+                return Err("Mail delivery-intent command is invalid".to_owned());
+            }
+        }
         runtime
             .block_on(admitted.try_consume_attachment_anchor_handoff(now))
             .map_err(|_| {
@@ -396,6 +409,13 @@ where
             Err(MailCommunicationsOutboxRelayError::Persistence(_)) => {
                 developer_diagnostic("developer_mail_outbox_persistence_failed");
                 return Err("Mail runtime outbox persistence failed".to_owned());
+            }
+        }
+        match runtime.block_on(admitted.relay_delivery_intent_outbox(now)) {
+            Ok(_) | Err(MailDeliveryIntentOutboxRelayErrorV1::Unavailable) => {}
+            Err(MailDeliveryIntentOutboxRelayErrorV1::Persistence(_)) => {
+                developer_diagnostic("developer_mail_delivery_intent_outbox_persistence_failed");
+                return Err("Mail delivery-intent outbox persistence failed".to_owned());
             }
         }
         match runtime.block_on(admitted.relay_attachment_security_outbox(now)) {

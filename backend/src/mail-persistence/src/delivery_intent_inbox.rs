@@ -97,7 +97,7 @@ pub const MAIL_DELIVERY_INTENT_MAX_ATTEMPTS_V1: i32 = 12;
 
 #[derive(Clone)]
 pub struct MailDeliveryIntentStoreV1 {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -288,7 +288,7 @@ impl MailDeliveryIntentStoreV1 {
             .map_err(|_| MailDurablePersistenceError::Database)?;
             MailDeliveryIntentInboxOutcomeV1::Pending
         } else {
-            insert_result_outbox(
+            crate::delivery_intent_result_outbox::insert_result_outbox(
                 &mut transaction,
                 admission.intent_id,
                 route_not_found_result,
@@ -537,7 +537,7 @@ impl MailDeliveryIntentStoreV1 {
         if updated.rows_affected() != 1 {
             return Err(MailDurablePersistenceError::InvalidDeliveryIntentTransition);
         }
-        insert_result_outbox(
+        crate::delivery_intent_result_outbox::insert_result_outbox(
             &mut transaction,
             intent_id,
             result,
@@ -714,29 +714,6 @@ async fn resolve_route(
                 .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
         ),
     }))
-}
-
-async fn insert_result_outbox(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    intent_id: [u8; 16],
-    record: &OutboxRecordV1,
-    created_at_unix_seconds: i64,
-) -> Result<(), MailDurablePersistenceError> {
-    sqlx::query(
-        "INSERT INTO hermes_data.mail_delivery_intent_result_outbox
-            (message_id, envelope_sha256, exact_envelope_bytes, intent_id,
-             created_at_unix_seconds)
-         VALUES ($1, $2, $3, $4, $5)",
-    )
-    .bind(record.message_id().as_slice())
-    .bind(record.envelope_sha256().as_slice())
-    .bind(record.exact_bytes())
-    .bind(intent_id.as_slice())
-    .bind(created_at_unix_seconds)
-    .execute(&mut **transaction)
-    .await
-    .map(|_| ())
-    .map_err(|_| MailDurablePersistenceError::Database)
 }
 
 fn valid_admission(value: &MailDeliveryIntentAdmissionV1) -> bool {

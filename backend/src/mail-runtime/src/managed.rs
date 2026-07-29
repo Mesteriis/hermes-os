@@ -86,6 +86,13 @@ use crate::attachment_security_outbox::{
 use crate::communications_outbox::{
     MailCommunicationsOutboxRelayError, relay_communications_outbox_once,
 };
+use crate::delivery_intent_consumer::{
+    MailDeliveryIntentConsumeErrorV1, MailDeliveryIntentResultContextV1,
+    consume_next_mail_delivery_intent_v1,
+};
+use crate::delivery_intent_outbox::{
+    MailDeliveryIntentOutboxRelayErrorV1, relay_mail_delivery_intent_outbox_once_v1,
+};
 use hermes_communications_ingress::{
     AttachmentDispositionV1, BodyAdmissionFailureV1, BodyAvailabilityV1, BodyBlobReceiptV1,
     CommunicationObservationDraft, ProviderProvenanceV1, with_admitted_body_blob,
@@ -203,6 +210,7 @@ pub struct MailAdmittedRuntime {
     event_publish_permit: RuntimePublishPermitV1,
     attachment_anchor_subscribe_permit: Option<RuntimeSubscribePermitV1>,
     attachment_safety_subscribe_permit: Option<RuntimeSubscribePermitV1>,
+    delivery_intent_subscribe_permit: RuntimeSubscribePermitV1,
     attachment_blob_admission_publish_permitted: bool,
     attachment_security_scan_candidate_publish_permitted: bool,
     pub(crate) account: hermes_mail_api::MailAccountConfigurationV1,
@@ -215,6 +223,7 @@ pub struct MailAdmittedRuntime {
     parked_accounts: BTreeMap<String, MailRuntimeAccountSlotV1>,
     pub(crate) runtime_instance_id: String,
     pub(crate) runtime_generation: u64,
+    logical_owner_id: String,
 }
 
 struct MailRuntimeAccountSlotV1 {
@@ -587,7 +596,7 @@ pub async fn open_admitted_runtime_catalog(
             admission.grant_epoch,
         )
         .map_err(|_| mail_event_hub_error("publish_permit"))?;
-    let subscribe_permits = bind_attachment_subscribe_permits(
+    let subscribe_permits = bind_event_subscribe_permits(
         event_access
             .subscribe_permits(
                 &admission.module_registration_id,
@@ -648,6 +657,7 @@ pub async fn open_admitted_runtime_catalog(
         event_publish_permit,
         attachment_anchor_subscribe_permit: subscribe_permits.anchor,
         attachment_safety_subscribe_permit: subscribe_permits.safety,
+        delivery_intent_subscribe_permit: subscribe_permits.delivery_intent,
         attachment_blob_admission_publish_permitted,
         attachment_security_scan_candidate_publish_permitted,
         account,
@@ -660,6 +670,7 @@ pub async fn open_admitted_runtime_catalog(
         parked_accounts,
         runtime_instance_id: admission.runtime_instance_id.clone(),
         runtime_generation: admission.runtime_generation,
+        logical_owner_id: admission.logical_owner_id.clone(),
     })
 }
 
@@ -2262,6 +2273,47 @@ impl MailAdmittedRuntime {
         .map_err(|_| MailCommunicationsOutboxRelayError::Unavailable)?
     }
 
+    pub async fn try_consume_delivery_intent(
+        &self,
+        consumed_at_unix_seconds: i64,
+    ) -> Result<bool, MailDeliveryIntentConsumeErrorV1> {
+        let outcome = consume_next_mail_delivery_intent_v1(
+            &self.durable.delivery_intent_store(),
+            &self.event_connection,
+            &self.delivery_intent_subscribe_permit,
+            &self.logical_owner_id,
+            &MailDeliveryIntentResultContextV1 {
+                runtime_instance_id: self.runtime_instance_id.clone(),
+                runtime_generation: self.runtime_generation,
+                completed_at_unix_seconds: consumed_at_unix_seconds,
+                completed_at_nanos: 0,
+            },
+        )
+        .await?;
+        Ok(matches!(
+            outcome,
+            hermes_mail_persistence::MailDeliveryIntentInboxOutcomeV1::Pending
+                | hermes_mail_persistence::MailDeliveryIntentInboxOutcomeV1::RouteNotFound
+        ))
+    }
+
+    pub async fn relay_delivery_intent_outbox(
+        &self,
+        published_at_unix_seconds: i64,
+    ) -> Result<usize, MailDeliveryIntentOutboxRelayErrorV1> {
+        tokio::time::timeout(
+            OUTBOX_RELAY_TIMEOUT,
+            relay_mail_delivery_intent_outbox_once_v1(
+                &self.durable.delivery_intent_store(),
+                &self.event_connection,
+                &self.event_publish_permit,
+                published_at_unix_seconds,
+            ),
+        )
+        .await
+        .map_err(|_| MailDeliveryIntentOutboxRelayErrorV1::Unavailable)?
+    }
+
     pub async fn relay_attachment_security_outbox(
         &self,
         published_at_unix_seconds: i64,
@@ -3695,20 +3747,24 @@ fn attachment_security_scan_candidate_publish_permitted(
     Ok(permit.permits_subject(&subject))
 }
 
-struct MailAttachmentSubscribePermitsV1 {
+struct MailEventSubscribePermitsV1 {
     anchor: Option<RuntimeSubscribePermitV1>,
     safety: Option<RuntimeSubscribePermitV1>,
+    delivery_intent: RuntimeSubscribePermitV1,
 }
 
-fn bind_attachment_subscribe_permits(
+fn bind_event_subscribe_permits(
     permits: Vec<RuntimeSubscribePermitV1>,
-) -> Result<MailAttachmentSubscribePermitsV1, MailBootstrapError> {
+) -> Result<MailEventSubscribePermitsV1, MailBootstrapError> {
     let expected_anchor = hermes_communications_attachment_contract::admission::
         communication_attachment_anchor_recorded_contract_reference_v1();
     let expected_safety = hermes_communications_attachment_contract::admission::
         communication_attachment_safety_state_changed_contract_reference_v1();
+    let expected_delivery_intent =
+        hermes_mail_delivery_intent_contract::mail_delivery_intent_execute_contract_reference_v1();
     let mut anchor = None;
     let mut safety = None;
+    let mut delivery_intent = None;
     for permit in permits {
         let Some(contract) = permit.contract() else {
             return Err(MailBootstrapError::EventHub);
@@ -3721,11 +3777,19 @@ fn bind_attachment_subscribe_permits(
             if safety.replace(permit).is_some() {
                 return Err(MailBootstrapError::EventHub);
             }
+        } else if exact_runtime_contract(contract, &expected_delivery_intent) {
+            if delivery_intent.replace(permit).is_some() {
+                return Err(MailBootstrapError::EventHub);
+            }
         } else {
             return Err(MailBootstrapError::EventHub);
         }
     }
-    Ok(MailAttachmentSubscribePermitsV1 { anchor, safety })
+    Ok(MailEventSubscribePermitsV1 {
+        anchor,
+        safety,
+        delivery_intent: delivery_intent.ok_or(MailBootstrapError::EventHub)?,
+    })
 }
 
 fn exact_runtime_contract(

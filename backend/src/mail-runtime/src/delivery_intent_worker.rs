@@ -50,6 +50,9 @@ pub async fn process_next_mail_delivery_intent_v1(
     else {
         return Ok(false);
     };
+    runtime
+        .select_account(&claimed.job.connection_id)
+        .map_err(|_| MailDeliveryIntentWorkerErrorV1::Runtime)?;
 
     match claimed.state {
         MailDeliveryIntentJobStateV1::PendingCustody => {

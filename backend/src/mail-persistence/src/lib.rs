@@ -7,6 +7,7 @@ mod composition;
 mod conformance;
 mod delivery_intent;
 mod delivery_intent_inbox;
+mod delivery_intent_result_outbox;
 mod durable;
 mod lifecycle;
 mod message_flags;
