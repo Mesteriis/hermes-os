@@ -2,12 +2,15 @@
 	--module-settings-accent: var(--h-color-accent);
 	display: grid;
 	align-content: start;
-	gap: var(--h-space-3);
-	padding: 0;
-	border: 0;
-	border-radius: 0;
+	gap: var(--h-space-4);
+	padding: var(--h-space-5);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
 	color: var(--h-color-text);
-	background: transparent;
+	background:
+		radial-gradient(circle at 0 0, color-mix(in srgb, var(--module-settings-accent) 12%, transparent), transparent 28rem),
+		var(--h-color-bg-muted);
+	box-shadow: var(--h-shadow-sm);
 }
 
 .module-settings-panel[data-provider-tone='mail'] {
@@ -162,6 +165,7 @@
 @media (max-width: 720px) {
 	.module-settings-panel {
 		gap: var(--h-space-3);
+		padding: var(--h-space-3);
 	}
 
 	.module-settings-panel__header {
