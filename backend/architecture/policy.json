@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_bulk_action_contract_core_v1",
+    "currentSlice": "communication_bulk_action_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -558,6 +558,12 @@
         "role": "workflow",
         "owner": "communication_bulk_action",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-communication-bulk-action-persistence",
+        "role": "workflow",
+        "owner": "communication_bulk_action",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1540,6 +1546,16 @@
       ],
       "hermes-communication-bulk-action-api": [],
       "hermes-communication-bulk-action-core": [],
+      "hermes-communication-bulk-action-persistence": [
+        {
+          "name": "hermes-communication-bulk-action-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-communications-export-persistence": [
         {
           "name": "hermes-communications-export-core",
@@ -4352,7 +4368,29 @@
           "features": []
         }
       ],
-      "hermes-communication-bulk-action-core": []
+      "hermes-communication-bulk-action-core": [],
+      "hermes-communication-bulk-action-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ]
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -4733,6 +4771,10 @@
         "customBuildAllowed": true
       },
       "hermes-communication-bulk-action-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-bulk-action-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       }

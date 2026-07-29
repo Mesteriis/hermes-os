@@ -1732,6 +1732,16 @@ name = "hermes-communication-bulk-action-core"
 version = "0.1.0"
 
 [[package]]
+name = "hermes-communication-bulk-action-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-bulk-action-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-communication-delivery-intent-api"
 version = "0.1.0"
 dependencies = [

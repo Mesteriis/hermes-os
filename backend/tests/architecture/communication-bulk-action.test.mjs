@@ -5,16 +5,19 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
-test('bulk delivery contract and core are bounded workflow units separate from domains and integrations', async () => {
+test('bulk delivery persistence is bounded, owner-local, and separate from domains and integrations', async () => {
   const [
     adr,
     inventorySource,
     policySource,
     apiManifest,
     coreManifest,
+    persistenceManifest,
     api,
     core,
     contract,
+    persistence,
+    migration,
   ] =
     await Promise.all([
     readFile(
@@ -41,6 +44,13 @@ test('bulk delivery contract and core are bounded workflow units separate from d
         'utf8',
       ),
       readFile(
+        new URL(
+          'src/communication-bulk-action-persistence/Cargo.toml',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
         new URL('src/communication-bulk-action-api/src/lib.rs', BACKEND_ROOT),
         'utf8',
       ),
@@ -51,6 +61,20 @@ test('bulk delivery contract and core are bounded workflow units separate from d
       readFile(
         new URL(
           'src/communication-bulk-action-api/proto/hermes/communication_bulk_action/v1/bulk_action.proto',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-bulk-action-persistence/src/execution.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/communication-bulk-action-persistence/migrations/0001_bulk_delivery_state.sql',
           BACKEND_ROOT,
         ),
         'utf8',
@@ -80,7 +104,7 @@ test('bulk delivery contract and core are bounded workflow units separate from d
   assert.match(adr, /Принятый ADR сам по себе gate не открывает/);
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_bulk_action_contract_core_v1',
+    'communication_bulk_action_persistence_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages
@@ -89,16 +113,30 @@ test('bulk delivery contract and core are bounded workflow units separate from d
     [
       'hermes-communication-bulk-action-api:contract',
       'hermes-communication-bulk-action-core:implementation',
+      'hermes-communication-bulk-action-persistence:persistence',
     ],
   );
   assert.match(apiManifest, /role = "workflow"[\s\S]*surface = "contract"/);
   assert.match(coreManifest, /role = "workflow"[\s\S]*surface = "implementation"/);
+  assert.match(
+    persistenceManifest,
+    /role = "workflow"[\s\S]*surface = "persistence"/,
+  );
   assert.doesNotMatch(
-    `${apiManifest}\n${coreManifest}`,
+    `${apiManifest}\n${coreManifest}\n${persistenceManifest}`,
     /hermes-(?:communications-domain|mail|telegram|whatsapp|zulip|kernel)/,
   );
   assert.match(api, /COMMUNICATION_BULK_ACTION_MAX_TARGETS_V1: usize = 100/);
   assert.match(core, /MAX_TARGET_BODY_BYTES_V1: usize = 64 \* 1024/);
   assert.match(core, /DuplicateTargetId/);
   assert.doesNotMatch(contract, /provider_id|account_id|\bAny\b|\bmap\s*</);
+  assert.match(persistence, /MAX_TARGET_ATTEMPTS_V1: u16 = 3/);
+  assert.match(persistence, /FOR UPDATE SKIP LOCKED/);
+  assert.match(persistence, /claim_epoch/);
+  assert.match(migration, /body_utf8 BYTEA/);
+  assert.match(migration, /target_count BETWEEN 1 AND 100/);
+  assert.doesNotMatch(
+    `${persistence}\n${migration}`,
+    /communications_(?:messages|conversations)|mail_|telegram_|provider_/,
+  );
 });

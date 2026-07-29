@@ -56,6 +56,7 @@ members = [
   "src/communication-delivery-intent-event-adapters",
   "src/communication-bulk-action-api",
   "src/communication-bulk-action-core",
+  "src/communication-bulk-action-persistence",
   "src/mail-delivery-intent-contract",
   "src/telegram-delivery-intent-contract",
   "src/whatsapp-delivery-intent-contract",
