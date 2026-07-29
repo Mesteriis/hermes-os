@@ -175,6 +175,9 @@ function syncFailureLabel(failure: MailSyncFailureCodeV1 | undefined): string {
 	if (failure === MailSyncFailureCodeV1.MAIL_SYNC_FAILURE_CODE_RUNTIME_RESTARTED) {
 		return 'Runtime restarted'
 	}
+	if (failure === MailSyncFailureCodeV1.MAIL_SYNC_FAILURE_CODE_DEADLINE_EXCEEDED) {
+		return 'Deadline exceeded'
+	}
 	return 'Unknown'
 }
 

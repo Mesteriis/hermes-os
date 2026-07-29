@@ -45,6 +45,7 @@ pub enum MailSyncFailureCodeV1 {
     EventHubUnavailable,
     AttachmentAnchorUnavailable,
     RuntimeRestarted,
+    DeadlineExceeded,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

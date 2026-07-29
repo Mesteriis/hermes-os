@@ -137,6 +137,7 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(proto, /service MailSyncHealthQueryService/);
   assert.match(proto, /MAIL_SYNC_OUTCOME_INTERRUPTED/);
   assert.match(proto, /MAIL_SYNC_FAILURE_CODE_RUNTIME_RESTARTED/);
+  assert.match(proto, /MAIL_SYNC_FAILURE_CODE_DEADLINE_EXCEEDED = 10/);
   assert.doesNotMatch(
     proto,
     /\b(?:password|secret|token|cookie|provider_cursor|checkpoint|host|username|message_body)\b/i,
@@ -149,7 +150,7 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(wire, /encode_sync_health_query/);
   assert.match(wire, /decode_sync_health_response/);
   assert.match(wire, /encode_sync_health_response\(&response\)\? != bytes/);
-  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 13/);
+  assert.match(contract, /MAIL_CLIENT_CONTRACT_REVISION: u32 = 14/);
   assert.match(contract, /mail\.sync\.health\.query\.v1/);
   assert.match(
     contract,
@@ -254,6 +255,17 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(managedFlow, /assert_stale_generation_is_interrupted/);
   assert.match(managedFlow, /MailSyncOutcomeV1::Interrupted/);
   assert.match(managedFlow, /MailSyncFailureCodeV1::RuntimeRestarted/);
+  assert.match(runtime, /MAIL_SYNC_OPERATION_DEADLINE_SECONDS: i64 = 300/);
+  assert.match(
+    runtime,
+    /sync_operation_deadline[\s\S]*checked_add\(MAIL_SYNC_OPERATION_DEADLINE_SECONDS\)/,
+  );
+  assert.match(
+    runtimeRoot,
+    /expire_pending_sync_operations[\s\S]*expire_active_gmail_sync_operation[\s\S]*expire_active_imap_sync_operation/,
+  );
+  assert.match(runtimeRoot, /active\.completion\.abort\(\)/);
+  assert.match(runtimeRoot, /active\.pages = None/);
   assert.match(
     build,
     /proto\/hermes\/mail\/sync_health\/v1\/client\.proto/,

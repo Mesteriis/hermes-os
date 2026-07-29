@@ -2,12 +2,12 @@
 
 - Статус: принято
 - Дата: 2026-07-29
-- Состояние реализации: частично реализовано. Public `SyncInboxAcceptedV1`,
-  idempotent durable acceptance и отдельные IMAP/Gmail provider workers
-  реализованы. IMAP и Gmail передают pages через bounded owner-local channels
-  и не получают следующую page до подтверждённой Mail finalization. Gmail HTTP
-  list/history/raw fetch и IMAP provider I/O больше не выполняются в control
-  loop. Полный live iCloud evidence gate остаётся открытым.
+- Состояние реализации: реализовано, admission validation пройден. Public
+  `SyncInboxAcceptedV1`, idempotent durable acceptance, отдельные IMAP/Gmail
+  provider workers и абсолютный Mail-owned deadline реализованы. IMAP и Gmail
+  передают pages через bounded owner-local channels и не получают следующую
+  page до подтверждённой Mail finalization. Gmail HTTP list/history/raw fetch
+  и IMAP provider I/O не выполняются в control loop.
 - Связанные решения: ADR-0204, ADR-0205, ADR-0213, ADR-0214, ADR-0220,
   ADR-0239, ADR-0298, ADR-0299, ADR-0320
 
@@ -122,7 +122,7 @@ Restart помечает незавершённую работу predecessor gen
 - `mail.sync.windows` — максимальное число последовательных pages одного run;
 - adapter fetch chunk — меньшая transport-oriented часть page.
 
-Один IMAP `UID FETCH` содержит не более 25 UIDs. Chunk является protocol
+Один IMAP `UID FETCH` содержит не более 10 UIDs. Chunk является protocol
 adapter constant, а не public business setting. Один protocol step имеет
 10-секундный deadline.
 
@@ -229,8 +229,20 @@ ADR.
 - корректное сопоставление Settings Registry snapshot с
   `configuration_instance_id`: registry target остаётся registration-scoped,
   provider credential binding остаётся configuration-instance-scoped.
+- абсолютный deadline вычисляется от persisted acceptance timestamp, сохраняется
+  вместе с pending operation при multi-account parking и применяется одинаково
+  к ожидающим и активным операциям;
+- при deadline Gmail task отменяется, IMAP page channel закрывается, поздний
+  provider result не может переписать terminal state, а public run получает
+  отдельный sanitized `DEADLINE_EXCEEDED`;
+- live iCloud chain доказана на runtime generation 73:
+  acceptance операции `b093745b-dcc0-4ac0-864e-16e823b97e40`, Mail
+  materialization 1000 сообщений, neutral events, новая Communications
+  canonical evidence и успешная one-use authenticated JSONL download. Этот
+  прогон выявил прежнее нарушение total deadline (328 секунд), после чего
+  deadline boundary был исправлен данным срезом; содержимое сообщений и
+  credentials при проверке не читались и не выводились.
 
-Пункт 8 admission evidence остаётся открытым: успешная цепочка реального
-iCloud account до Communications evidence export в текущем runtime ещё не
-доказана. Остальные результаты validation фиксируются выводом команд и не
-выводятся из наличия этого ADR.
+Полный `make pre-push` после deadline cutover является обязательной частью
+admission evidence и фиксируется фактическим выводом команды, а не наличием
+этого ADR.

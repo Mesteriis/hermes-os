@@ -52,11 +52,18 @@ const RUNTIME_TICK_INTERVAL: Duration = Duration::from_millis(100);
 struct ActiveGmailSyncProviderOperationV1 {
     completion: tokio::task::JoinHandle<CompletedGmailSyncProviderOperationV1>,
     pages: tokio::sync::mpsc::Receiver<GmailSyncProviderPageDeliveryV1>,
+    connection_id: String,
+    operation_id: String,
+    deadline_at_unix_seconds: i64,
 }
 
 struct ActiveImapSyncProviderOperationV1 {
     completion: tokio::task::JoinHandle<CompletedImapSyncProviderOperationV1>,
-    pages: std::sync::mpsc::Receiver<ImapSyncProviderPageDeliveryV1>,
+    pages: Option<std::sync::mpsc::Receiver<ImapSyncProviderPageDeliveryV1>>,
+    connection_id: String,
+    operation_id: String,
+    deadline_at_unix_seconds: i64,
+    timed_out: bool,
 }
 
 fn main() -> Result<(), String> {
@@ -172,6 +179,19 @@ where
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
         let now = i64::try_from(now.as_secs())
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
+        expire_pending_sync_operations(&runtime, &mut admitted, now)?;
+        expire_active_gmail_sync_operation(
+            &runtime,
+            &mut admitted,
+            &mut gmail_sync_provider_operation,
+            now,
+        )?;
+        expire_active_imap_sync_operation(
+            &runtime,
+            &mut admitted,
+            &mut imap_sync_provider_operation,
+            now,
+        )?;
         if gmail_oauth_provider_operation
             .as_ref()
             .is_some_and(tokio::task::JoinHandle::is_finished)
@@ -209,8 +229,10 @@ where
                 }
             }
         }
-        if let Some(operation) = imap_sync_provider_operation.as_mut() {
-            while let Ok(delivery) = operation.pages.try_recv() {
+        if let Some(operation) = imap_sync_provider_operation.as_mut()
+            && let Some(pages) = operation.pages.as_ref()
+        {
+            while let Ok(delivery) = pages.try_recv() {
                 let connection_id = delivery.connection_id().to_owned();
                 admitted
                     .select_account(&connection_id)
@@ -232,14 +254,16 @@ where
             let completed = runtime
                 .block_on(operation.completion)
                 .map_err(|_| "Mail runtime IMAP sync provider worker failed".to_owned())?;
-            let connection_id = completed.connection_id().to_owned();
-            admitted
-                .select_account(&connection_id)
-                .map_err(|_| "Mail runtime IMAP sync account selection failed".to_owned())?;
-            if let Err(error) =
-                runtime.block_on(admitted.finalize_imap_sync_provider_operation(completed, now))
-            {
-                developer_diagnostic(&format!("developer_mail_imap_sync_error={error:?}"));
+            if !operation.timed_out {
+                let connection_id = completed.connection_id().to_owned();
+                admitted
+                    .select_account(&connection_id)
+                    .map_err(|_| "Mail runtime IMAP sync account selection failed".to_owned())?;
+                if let Err(error) =
+                    runtime.block_on(admitted.finalize_imap_sync_provider_operation(completed, now))
+                {
+                    developer_diagnostic(&format!("developer_mail_imap_sync_error={error:?}"));
+                }
             }
         }
         if imap_sync_provider_operation.is_none() {
@@ -249,12 +273,19 @@ where
                     .map_err(|_| "Mail runtime sync account selection failed".to_owned())?;
                 match admitted.prepare_pending_imap_sync() {
                     Ok(Some(prepared)) => {
+                        let connection_id = prepared.connection_id().to_owned();
+                        let operation_id = prepared.operation_id().to_owned();
+                        let deadline_at_unix_seconds = prepared.deadline_at_unix_seconds();
                         let (page_sender, pages) = std::sync::mpsc::sync_channel(1);
                         imap_sync_provider_operation = Some(ActiveImapSyncProviderOperationV1 {
                             completion: runtime.spawn_blocking(move || {
                                 execute_imap_sync_provider_operation(prepared, page_sender)
                             }),
-                            pages,
+                            pages: Some(pages),
+                            connection_id,
+                            operation_id,
+                            deadline_at_unix_seconds,
+                            timed_out: false,
                         });
                         break;
                     }
@@ -310,6 +341,9 @@ where
                     .map_err(|_| "Mail runtime Gmail sync account selection failed".to_owned())?;
                 match runtime.block_on(admitted.prepare_pending_gmail_sync()) {
                     Ok(Some(prepared)) => {
+                        let connection_id = prepared.connection_id().to_owned();
+                        let operation_id = prepared.operation_id().to_owned();
+                        let deadline_at_unix_seconds = prepared.deadline_at_unix_seconds();
                         let (page_sender, pages) = tokio::sync::mpsc::channel(1);
                         gmail_sync_provider_operation = Some(ActiveGmailSyncProviderOperationV1 {
                             completion: runtime.spawn(execute_gmail_sync_provider_operation(
@@ -317,6 +351,9 @@ where
                                 page_sender,
                             )),
                             pages,
+                            connection_id,
+                            operation_id,
+                            deadline_at_unix_seconds,
                         });
                         break;
                     }
@@ -372,6 +409,70 @@ where
         }
         std::thread::sleep(RUNTIME_TICK_INTERVAL);
     }
+}
+
+fn expire_pending_sync_operations(
+    runtime: &tokio::runtime::Runtime,
+    admitted: &mut managed::MailAdmittedRuntime,
+    now_unix_seconds: i64,
+) -> Result<(), String> {
+    for connection_id in admitted.connection_ids() {
+        admitted
+            .select_account(&connection_id)
+            .map_err(|_| "Mail runtime sync account selection failed".to_owned())?;
+        runtime
+            .block_on(admitted.expire_pending_sync_operation(now_unix_seconds))
+            .map_err(|_| "Mail runtime pending sync expiration failed".to_owned())?;
+    }
+    Ok(())
+}
+
+fn expire_active_gmail_sync_operation(
+    runtime: &tokio::runtime::Runtime,
+    admitted: &mut managed::MailAdmittedRuntime,
+    operation: &mut Option<ActiveGmailSyncProviderOperationV1>,
+    now_unix_seconds: i64,
+) -> Result<(), String> {
+    if !operation
+        .as_ref()
+        .is_some_and(|active| now_unix_seconds >= active.deadline_at_unix_seconds)
+    {
+        return Ok(());
+    }
+    let active = operation.take().expect("expired Gmail sync operation");
+    active.completion.abort();
+    admitted
+        .select_account(&active.connection_id)
+        .map_err(|_| "Mail runtime Gmail sync account selection failed".to_owned())?;
+    runtime
+        .block_on(
+            admitted.expire_sync_operation(&active.operation_id, active.deadline_at_unix_seconds),
+        )
+        .map_err(|_| "Mail runtime Gmail sync expiration failed".to_owned())
+}
+
+fn expire_active_imap_sync_operation(
+    runtime: &tokio::runtime::Runtime,
+    admitted: &mut managed::MailAdmittedRuntime,
+    operation: &mut Option<ActiveImapSyncProviderOperationV1>,
+    now_unix_seconds: i64,
+) -> Result<(), String> {
+    let Some(active) = operation.as_mut() else {
+        return Ok(());
+    };
+    if active.timed_out || now_unix_seconds < active.deadline_at_unix_seconds {
+        return Ok(());
+    }
+    active.pages = None;
+    active.timed_out = true;
+    admitted
+        .select_account(&active.connection_id)
+        .map_err(|_| "Mail runtime IMAP sync account selection failed".to_owned())?;
+    runtime
+        .block_on(
+            admitted.expire_sync_operation(&active.operation_id, active.deadline_at_unix_seconds),
+        )
+        .map_err(|_| "Mail runtime IMAP sync expiration failed".to_owned())
 }
 
 fn drain_client_deliveries(

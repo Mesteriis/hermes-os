@@ -257,6 +257,9 @@ const fn failure_to_wire(value: MailSyncFailureCodeV1) -> wire::MailSyncFailureC
         MailSyncFailureCodeV1::RuntimeRestarted => {
             wire::MailSyncFailureCodeV1::MailSyncFailureCodeRuntimeRestarted
         }
+        MailSyncFailureCodeV1::DeadlineExceeded => {
+            wire::MailSyncFailureCodeV1::MailSyncFailureCodeDeadlineExceeded
+        }
     }
 }
 
@@ -290,6 +293,9 @@ fn failure_from_wire(value: i32) -> Result<MailSyncFailureCodeV1, MailClientWire
         }
         wire::MailSyncFailureCodeV1::MailSyncFailureCodeRuntimeRestarted => {
             Ok(MailSyncFailureCodeV1::RuntimeRestarted)
+        }
+        wire::MailSyncFailureCodeV1::MailSyncFailureCodeDeadlineExceeded => {
+            Ok(MailSyncFailureCodeV1::DeadlineExceeded)
         }
         wire::MailSyncFailureCodeV1::MailSyncFailureCodeUnspecified => {
             Err(MailClientWireErrorV1::InvalidPayload)

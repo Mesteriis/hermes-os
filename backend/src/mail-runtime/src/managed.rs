@@ -180,6 +180,17 @@ use crate::gmail_sync_worker::{
 
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
 const OUTBOX_RELAY_TIMEOUT: Duration = Duration::from_secs(2);
+pub const MAIL_SYNC_OPERATION_DEADLINE_SECONDS: i64 = 300;
+
+const fn sync_operation_deadline(started_at_unix_seconds: i64) -> Option<i64> {
+    started_at_unix_seconds.checked_add(MAIL_SYNC_OPERATION_DEADLINE_SECONDS)
+}
+
+#[derive(Clone)]
+struct PendingMailSyncOperationV1 {
+    operation_id: String,
+    deadline_at_unix_seconds: i64,
+}
 
 pub struct MailAdmittedRuntime {
     pub control_channel: ManagedControlChannelV2<UnixStream>,
@@ -197,7 +208,7 @@ pub struct MailAdmittedRuntime {
     pub(crate) configuration_instance_id: String,
     pub(crate) gmail_oauth: Option<hermes_mail_api::GmailOAuthConfigurationV1>,
     pub(crate) gmail_oauth_operation_in_flight: Option<String>,
-    pending_sync_operation_id: Option<String>,
+    pending_sync_operation: Option<PendingMailSyncOperationV1>,
     pub(crate) provider_credential_context: ManagedProviderCredentialContextV1,
     pub(crate) settings_revision: u64,
     parked_accounts: BTreeMap<String, MailRuntimeAccountSlotV1>,
@@ -213,7 +224,7 @@ struct MailRuntimeAccountSlotV1 {
     configuration_instance_id: String,
     gmail_oauth: Option<hermes_mail_api::GmailOAuthConfigurationV1>,
     gmail_oauth_operation_in_flight: Option<String>,
-    pending_sync_operation_id: Option<String>,
+    pending_sync_operation: Option<PendingMailSyncOperationV1>,
     provider_credential_context: ManagedProviderCredentialContextV1,
     settings_revision: u64,
 }
@@ -240,6 +251,7 @@ pub struct PreparedImapSyncProviderOperationV1 {
     password: Zeroizing<Vec<u8>>,
     window: u32,
     windows: u32,
+    deadline_at_unix_seconds: i64,
 }
 
 pub struct CompletedImapSyncProviderOperationV1 {
@@ -252,6 +264,23 @@ impl CompletedImapSyncProviderOperationV1 {
     #[must_use]
     pub fn connection_id(&self) -> &str {
         &self.connection_id
+    }
+}
+
+impl PreparedImapSyncProviderOperationV1 {
+    #[must_use]
+    pub fn connection_id(&self) -> &str {
+        &self.connection_id
+    }
+
+    #[must_use]
+    pub fn operation_id(&self) -> &str {
+        &self.operation_id
+    }
+
+    #[must_use]
+    pub const fn deadline_at_unix_seconds(&self) -> i64 {
+        self.deadline_at_unix_seconds
     }
 }
 
@@ -523,7 +552,7 @@ pub async fn open_admitted_runtime_catalog(
             configuration_instance_id: admission.configuration_instance_id.clone(),
             gmail_oauth: admission.gmail_oauth.clone(),
             gmail_oauth_operation_in_flight: None,
-            pending_sync_operation_id: None,
+            pending_sync_operation: None,
             provider_credential_context: provider_context,
             settings_revision: admission.settings_revision,
         });
@@ -604,7 +633,7 @@ pub async fn open_admitted_runtime_catalog(
         configuration_instance_id,
         gmail_oauth,
         gmail_oauth_operation_in_flight,
-        pending_sync_operation_id,
+        pending_sync_operation,
         provider_credential_context,
         settings_revision,
     } = active_slot;
@@ -624,7 +653,7 @@ pub async fn open_admitted_runtime_catalog(
         configuration_instance_id,
         gmail_oauth,
         gmail_oauth_operation_in_flight,
-        pending_sync_operation_id,
+        pending_sync_operation,
         provider_credential_context,
         settings_revision,
         parked_accounts,
@@ -658,7 +687,7 @@ impl MailAdmittedRuntime {
             configuration_instance_id,
             gmail_oauth,
             gmail_oauth_operation_in_flight,
-            pending_sync_operation_id,
+            pending_sync_operation,
             provider_credential_context,
             settings_revision,
         } = next;
@@ -676,9 +705,9 @@ impl MailAdmittedRuntime {
                 &mut self.gmail_oauth_operation_in_flight,
                 gmail_oauth_operation_in_flight,
             ),
-            pending_sync_operation_id: std::mem::replace(
-                &mut self.pending_sync_operation_id,
-                pending_sync_operation_id,
+            pending_sync_operation: std::mem::replace(
+                &mut self.pending_sync_operation,
+                pending_sync_operation,
             ),
             provider_credential_context: std::mem::replace(
                 &mut self.provider_credential_context,
@@ -2272,7 +2301,12 @@ impl MailAdmittedRuntime {
             .await
             .map_err(map_sync_persistence_error)?;
         if matches!(begin, MailSyncRunStartOutcomeV1::Started(_)) {
-            self.pending_sync_operation_id = Some(operation_id.to_owned());
+            let deadline_at_unix_seconds = sync_operation_deadline(started_at_unix_seconds)
+                .ok_or(MailBootstrapError::Admission)?;
+            self.pending_sync_operation = Some(PendingMailSyncOperationV1 {
+                operation_id: operation_id.to_owned(),
+                deadline_at_unix_seconds,
+            });
         }
         Ok(())
     }
@@ -2283,7 +2317,7 @@ impl MailAdmittedRuntime {
         let MailInboundTransportV1::Imap(configuration) = &self.account.inbound else {
             return Ok(None);
         };
-        let Some(operation_id) = self.pending_sync_operation_id.take() else {
+        let Some(pending) = self.pending_sync_operation.take() else {
             return Ok(None);
         };
         validate_sync_request(&configuration.host, configuration.port, 0)
@@ -2297,13 +2331,14 @@ impl MailAdmittedRuntime {
             .clone();
         Ok(Some(PreparedImapSyncProviderOperationV1 {
             connection_id: self.account.connection_id.clone(),
-            operation_id,
+            operation_id: pending.operation_id,
             host: configuration.host.clone(),
             port: configuration.port,
             username: configuration.username.clone(),
             password,
             window: self.account.sync_window,
             windows: self.account.sync_windows,
+            deadline_at_unix_seconds: pending.deadline_at_unix_seconds,
         }))
     }
 
@@ -2313,7 +2348,7 @@ impl MailAdmittedRuntime {
         let MailInboundTransportV1::Gmail(configuration) = self.account.inbound.clone() else {
             return Ok(None);
         };
-        let Some(operation_id) = self.pending_sync_operation_id.take() else {
+        let Some(pending) = self.pending_sync_operation.take() else {
             return Ok(None);
         };
         let plan = bounded_window(self.account.sync_window, self.account.sync_windows)
@@ -2350,7 +2385,7 @@ impl MailAdmittedRuntime {
         };
         Ok(Some(PreparedGmailSyncProviderOperationV1 {
             connection_id,
-            operation_id,
+            operation_id: pending.operation_id,
             client,
             access_token,
             cursor,
@@ -2359,6 +2394,7 @@ impl MailAdmittedRuntime {
             windows: plan.windows,
             observed_at_unix_seconds,
             observed_at_nanos,
+            deadline_at_unix_seconds: pending.deadline_at_unix_seconds,
         }))
     }
 
@@ -2493,7 +2529,10 @@ impl MailAdmittedRuntime {
                     .clear_gmail_history_checkpoint(&completed.connection_id)
                     .await
                     .map_err(|_| MailBootstrapError::Persistence)?;
-                self.pending_sync_operation_id = Some(completed.operation_id);
+                self.pending_sync_operation = Some(PendingMailSyncOperationV1 {
+                    operation_id: completed.operation_id,
+                    deadline_at_unix_seconds: completed.deadline_at_unix_seconds,
+                });
                 return Ok(());
             }
             GmailSyncProviderOutcomeV1::Failed(failure) => Err(match failure {
@@ -2526,6 +2565,41 @@ impl MailAdmittedRuntime {
         )
         .await
         .map(|_| ())
+    }
+
+    pub async fn expire_pending_sync_operation(
+        &mut self,
+        now_unix_seconds: i64,
+    ) -> Result<bool, MailBootstrapError> {
+        let Some(pending) = self.pending_sync_operation.as_ref() else {
+            return Ok(false);
+        };
+        if now_unix_seconds < pending.deadline_at_unix_seconds {
+            return Ok(false);
+        }
+        let operation_id = pending.operation_id.clone();
+        self.pending_sync_operation = None;
+        self.expire_sync_operation(&operation_id, now_unix_seconds)
+            .await?;
+        Ok(true)
+    }
+
+    pub async fn expire_sync_operation(
+        &mut self,
+        operation_id: &str,
+        completed_at_unix_seconds: i64,
+    ) -> Result<(), MailBootstrapError> {
+        self.durable
+            .complete_sync_run(
+                operation_id,
+                MailSyncOutcomeV1::Failed,
+                0,
+                Some(MailSyncFailureCodeV1::DeadlineExceeded),
+                completed_at_unix_seconds,
+            )
+            .await
+            .map(|_| ())
+            .map_err(|_| MailBootstrapError::Persistence)
     }
 
     pub async fn finalize_imap_sync_provider_page(
@@ -3242,6 +3316,7 @@ pub fn execute_imap_sync_provider_operation(
         password,
         window,
         windows,
+        deadline_at_unix_seconds: _,
     } = prepared;
     let result = match std::str::from_utf8(&password) {
         Err(_) => Err(MailBootstrapError::Credential),
@@ -3816,6 +3891,12 @@ mod tests {
     use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
 
     use super::*;
+
+    #[test]
+    fn sync_operation_deadline_is_absolute_and_fails_closed_on_overflow() {
+        assert_eq!(sync_operation_deadline(1_000), Some(1_300));
+        assert_eq!(sync_operation_deadline(i64::MAX), None);
+    }
 
     #[test]
     fn message_flag_provider_mappings_are_exact_and_owner_local() {

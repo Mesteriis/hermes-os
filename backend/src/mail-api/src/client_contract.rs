@@ -1,7 +1,7 @@
 pub const MAIL_CLIENT_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.mail.v1.bin"));
 pub const MAIL_CLIENT_CONTRACT_MAJOR: u32 = 1;
-pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 13;
+pub const MAIL_CLIENT_CONTRACT_REVISION: u32 = 14;
 pub const MAIL_MODULE_ID: &str = "hermes-mail-runtime";
 pub const MAIL_OWNER_ID: &str = "mail";
 

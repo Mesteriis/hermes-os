@@ -17,6 +17,24 @@ pub struct PreparedGmailSyncProviderOperationV1 {
     pub(crate) windows: u32,
     pub(crate) observed_at_unix_seconds: i64,
     pub(crate) observed_at_nanos: i32,
+    pub(crate) deadline_at_unix_seconds: i64,
+}
+
+impl PreparedGmailSyncProviderOperationV1 {
+    #[must_use]
+    pub fn connection_id(&self) -> &str {
+        &self.connection_id
+    }
+
+    #[must_use]
+    pub fn operation_id(&self) -> &str {
+        &self.operation_id
+    }
+
+    #[must_use]
+    pub const fn deadline_at_unix_seconds(&self) -> i64 {
+        self.deadline_at_unix_seconds
+    }
 }
 
 pub(crate) enum GmailSyncProviderCursorV1 {
@@ -34,6 +52,7 @@ pub struct CompletedGmailSyncProviderOperationV1 {
     pub(crate) operation_id: String,
     pub(crate) observed_messages: usize,
     pub(crate) outcome: GmailSyncProviderOutcomeV1,
+    pub(crate) deadline_at_unix_seconds: i64,
 }
 
 impl CompletedGmailSyncProviderOperationV1 {
@@ -98,6 +117,7 @@ pub async fn execute_gmail_sync_provider_operation(
         windows,
         observed_at_unix_seconds,
         observed_at_nanos,
+        deadline_at_unix_seconds,
     } = prepared;
     let token = match std::str::from_utf8(&access_token) {
         Ok(token) => token,
@@ -107,6 +127,7 @@ pub async fn execute_gmail_sync_provider_operation(
                 operation_id,
                 observed_messages: 0,
                 outcome: GmailSyncProviderOutcomeV1::Failed(GmailSyncProviderFailureV1::Credential),
+                deadline_at_unix_seconds,
             };
         }
     };
@@ -141,6 +162,7 @@ pub async fn execute_gmail_sync_provider_operation(
         operation_id,
         observed_messages,
         outcome,
+        deadline_at_unix_seconds,
     }
 }
 

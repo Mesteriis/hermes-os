@@ -609,6 +609,7 @@ const fn failure_id(value: MailSyncFailureCodeV1) -> i16 {
         MailSyncFailureCodeV1::EventHubUnavailable => 7,
         MailSyncFailureCodeV1::AttachmentAnchorUnavailable => 8,
         MailSyncFailureCodeV1::RuntimeRestarted => 9,
+        MailSyncFailureCodeV1::DeadlineExceeded => 10,
     }
 }
 
@@ -623,6 +624,7 @@ const fn failure_from_id(value: i16) -> Result<MailSyncFailureCodeV1, MailDurabl
         7 => Ok(MailSyncFailureCodeV1::EventHubUnavailable),
         8 => Ok(MailSyncFailureCodeV1::AttachmentAnchorUnavailable),
         9 => Ok(MailSyncFailureCodeV1::RuntimeRestarted),
+        10 => Ok(MailSyncFailureCodeV1::DeadlineExceeded),
         _ => Err(MailDurablePersistenceError::InvalidRow),
     }
 }
@@ -697,5 +699,14 @@ mod tests {
         assert!(!cursor.contains("account-1"));
         assert!(decode_cursor("account-1", &cursor).is_ok());
         assert!(decode_cursor("account-2", &cursor).is_err());
+    }
+
+    #[test]
+    fn deadline_failure_code_has_a_stable_storage_id() {
+        assert_eq!(failure_id(MailSyncFailureCodeV1::DeadlineExceeded), 10);
+        assert_eq!(
+            failure_from_id(10).expect("deadline failure storage ID"),
+            MailSyncFailureCodeV1::DeadlineExceeded
+        );
     }
 }

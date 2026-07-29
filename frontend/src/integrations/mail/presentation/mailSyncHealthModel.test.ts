@@ -88,4 +88,20 @@ describe('Mail sync health presentation model', () => {
 			completedAt: 'Not recorded',
 		})
 	})
+
+	it('renders the bounded operation deadline as a distinct terminal failure', () => {
+		const row = buildMailSyncRunRow(create(MailSyncRunV1Schema, {
+			operationId: 'operation-deadline',
+			connectionId: 'primary',
+			outcome: MailSyncOutcomeV1.MAIL_SYNC_OUTCOME_FAILED,
+			failureCode: MailSyncFailureCodeV1.MAIL_SYNC_FAILURE_CODE_DEADLINE_EXCEEDED,
+			startedAtUnixSeconds: 1_700_000_000n,
+			completedAtUnixSeconds: 1_700_000_300n,
+		}))
+
+		expect(row).toMatchObject({
+			outcome: 'Failed',
+			failure: 'Deadline exceeded',
+		})
+	})
 })
