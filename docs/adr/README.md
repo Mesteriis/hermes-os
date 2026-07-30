@@ -567,4 +567,5 @@ target-bound Blob receipt, а direct RPC, generic content API и cross-owner SQL
 ADR-0348 отделяет module-to-module delivery-intent ingress от client RPC:
 workflow публикует bodyless durable command с fixed target-bound Blob receipt,
 delivery-intent атомарно отвечает submitted/rejected result, а provider
-selection остаётся внутри delivery-intent workflow.
+selection остаётся внутри delivery-intent workflow. Exact contract build unit
+реализован; transactional adapters и live managed evidence остаются открыты.

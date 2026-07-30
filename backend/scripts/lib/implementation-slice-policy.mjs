@@ -634,6 +634,16 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_PRODUCTION_PACKAGES = 
   },
 ];
 
+const COMMUNICATION_DELIVERY_INTENT_INGRESS_CONTRACT_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communication-delivery-intent-ingress-api',
+    role: 'workflow',
+    owner: 'communication_delivery_intent',
+    surface: 'contract',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -1938,6 +1948,14 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_A
   ],
 };
 
+const COMMUNICATION_DELIVERY_INTENT_INGRESS_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delivery-intent-ingress-api': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2194,6 +2212,18 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALL
 const COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-cross-channel-forward-source-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
+const COMMUNICATION_DELIVERY_INTENT_INGRESS_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delivery-intent-ingress-api': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
@@ -2658,6 +2688,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-cross-channel-forward-source-api',
       'hermes-communications-export-api',
       'hermes-communication-delivery-intent-api',
+      'hermes-communication-delivery-intent-ingress-api',
       'hermes-communication-bulk-action-api',
       'hermes-communication-delayed-delivery-api',
       'hermes-communication-cross-channel-forward-api',
@@ -3137,6 +3168,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_delivery_intent_ingress_contract_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_DELIVERY_INTENT_INGRESS_CONTRACT_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATION_DELIVERY_INTENT_INGRESS_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATION_DELIVERY_INTENT_INGRESS_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

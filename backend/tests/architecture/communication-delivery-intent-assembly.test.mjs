@@ -135,7 +135,7 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_cross_channel_forward_source_contract_v1',
+    'communication_delivery_intent_ingress_contract_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, [
     'communication_delivery_intent',
@@ -152,6 +152,7 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
       'hermes-communication-delivery-intent-runtime:runtime',
       'hermes-communication-delivery-intent-assembly:assembly',
       'hermes-communication-delivery-intent-event-adapters:implementation',
+      'hermes-communication-delivery-intent-ingress-api:contract',
     ],
   );
   assert.equal(deliverySlice?.state, 'implemented');

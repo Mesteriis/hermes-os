@@ -263,10 +263,6 @@ test('cross-channel source preparation is event-only and Communications-owned', 
     sourceManifest,
     /role = "domain"[\s\S]*owner = "communications"[\s\S]*surface = "contract"/,
   );
-  assert.equal(
-    policy.implementation.currentSlice,
-    'communication_cross_channel_forward_source_contract_v1',
-  );
   assert.ok(
     policy.implementation.productionPackages.some(
       ({ name, owner, surface }) =>
@@ -317,13 +313,52 @@ test('cross-channel source preparation is event-only and Communications-owned', 
 });
 
 test('delivery-intent workflow ingress is event-only and bodyless', async () => {
-  const ingressAdr = await readFile(
-    new URL(
-      'docs/adr/ADR-0348-event-backed-delivery-intent-workflow-ingress.md',
-      PROJECT_ROOT,
+  const [
+    ingressAdr,
+    ingressManifest,
+    ingressApi,
+    ingressEnvelope,
+    ingressContract,
+    policySource,
+  ] = await Promise.all([
+    readFile(
+      new URL(
+        'docs/adr/ADR-0348-event-backed-delivery-intent-workflow-ingress.md',
+        PROJECT_ROOT,
+      ),
+      'utf8',
     ),
-    'utf8',
-  );
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-ingress-api/Cargo.toml',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-ingress-api/src/lib.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-ingress-api/src/envelope.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-ingress-api/proto/hermes/communication_delivery_intent/ingress/v1/delivery_intent_ingress.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'),
+  ]);
+  const policy = JSON.parse(policySource);
 
   assert.match(ingressAdr, /hermes-communication-delivery-intent-ingress-api/);
   assert.match(ingressAdr, /communication_delivery_intent_submit\.v1\s+command/);
@@ -344,4 +379,37 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   assert.match(ingressAdr, /без direct RPC или cross-owner SQL/);
   assert.match(ingressAdr, /generic workflow command facade/);
   assert.doesNotMatch(ingressAdr, /execute\(any\)/);
+  assert.match(
+    ingressManifest,
+    /role = "workflow"[\s\S]*owner = "communication_delivery_intent"[\s\S]*surface = "contract"/,
+  );
+  assert.equal(
+    policy.implementation.currentSlice,
+    'communication_delivery_intent_ingress_contract_v1',
+  );
+  assert.ok(
+    policy.implementation.productionPackages.some(
+      ({ name, owner, surface }) =>
+        name === 'hermes-communication-delivery-intent-ingress-api'
+        && owner === 'communication_delivery_intent'
+        && surface === 'contract',
+    ),
+  );
+  assert.match(
+    ingressApi,
+    /COMMUNICATION_DELIVERY_INTENT_BLOB_TARGET_OWNER_ID_V1/,
+  );
+  assert.match(
+    ingressApi,
+    /"communication_delivery_intent\.blob\.v1"/,
+  );
+  assert.match(ingressEnvelope, /OutboxRecordV1/);
+  assert.match(ingressEnvelope, /Semantics::Command/);
+  assert.match(ingressEnvelope, /Semantics::Result/);
+  assert.match(ingressContract, /SubmitCommunicationDeliveryIntentCommandV1/);
+  assert.match(ingressContract, /DeliveryIntentBodySourceReceiptV1/);
+  assert.doesNotMatch(
+    `${ingressContract}\n${ingressApi}\n${ingressEnvelope}`,
+    /provider_id|account_id|body_utf8|plaintext_body|recipient|subject|arbitrary_target|\bAny\b|\bmap\s*</,
+  );
 });

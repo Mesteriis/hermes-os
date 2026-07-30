@@ -4,9 +4,13 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: решение принято; contract build unit, producer,
-consumer и live managed evidence ещё не реализованы. Наличие ADR не открывает
-ни `communication_delivery_intent_v1`, ни
+Состояние реализации: generated provider-neutral contract build unit
+`hermes-communication-delivery-intent-ingress-api` реализован. Он фиксирует
+три exact durable contracts, direction-specific route requests, compile-time
+Blob audience и валидируемые `DurableEnvelopeV1` outbox records без plaintext
+или provider identity. Transactional producer/consumer adapters, custody
+transfer и live managed evidence ещё не реализованы. Наличие ADR и contract
+build unit не открывает ни `communication_delivery_intent_v1`, ни
 `communication_cross_channel_forward_v1`.
 
 ## Контекст
@@ -62,6 +66,12 @@ Contract compile-time фиксирует Blob audience:
 target owner      communication_delivery_intent
 target module     hermes-communication-delivery-intent-runtime
 target capability communication_delivery_intent.blob.v1
+```
+
+Durable submit command адресуется exact module capability:
+
+```text
+communication_delivery_intent.event-ingress.v1
 ```
 
 `submitted` означает только durable admission delivery-intent workflow и
