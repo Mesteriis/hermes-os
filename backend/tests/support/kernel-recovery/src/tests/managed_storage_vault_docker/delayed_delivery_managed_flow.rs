@@ -6,6 +6,8 @@ use std::time::Instant;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use hermes_communication_delayed_delivery_api::{
+    COMMUNICATION_DELAYED_DELIVERY_CAPABILITY_ID_V1, COMMUNICATION_DELAYED_DELIVERY_MODULE_ID_V1,
+    COMMUNICATION_DELAYED_DELIVERY_OWNER_V1,
     COMMUNICATION_DELAYED_DELIVERY_REALTIME_CONTRACT_NAME_V1,
     COMMUNICATION_DELAYED_DELIVERY_SCHEDULE_CONNECT_PATH_V1,
     COMMUNICATION_DELAYED_DELIVERY_STATUS_CONNECT_PATH_V1,
@@ -15,11 +17,17 @@ use hermes_communication_delayed_delivery_api::{
         ScheduleDelayedDeliveryRequestV1, ScheduleDelayedDeliveryResponseV1,
     },
 };
+use hermes_communication_delayed_delivery_runtime::COMMUNICATION_DELAYED_DELIVERY_STORAGE_CAPABILITY_ID_V1;
+use hermes_communication_delayed_delivery_runtime::delayed_delivery_query_contract_v1;
 use hermes_gateway_protocol::v1::{
     ClientRealtimeFrameV1, client_realtime_frame_v1::Frame as RealtimeFrame,
 };
+use hermes_kernel_control_store::PlatformStorageBindingStateV1;
+use hermes_runtime_protocol::v1::ModuleClientRequestV1;
 use http_body_util::BodyExt as _;
 use hyper::{Request, StatusCode, body::Bytes};
+
+use crate::identity::device::signer::DeviceSigner;
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault, Storage, Blob, NATS, Scheduler, Communications, delayed-delivery and delivery-intent binaries"]
@@ -39,11 +47,13 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         std::env::set_var("HERMES_TEST_KERNEL_EXECUTABLE", release.kernel());
     }
     let store = Arc::new(configured_communications_store(&root, release.kernel()));
+    let (owner_signer, _) =
+        FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
     store
         .claim_initial_owner(&hermes_kernel_control_store::InitialOwnerIdentity::new(
             DELAYED_DELIVERY_LOGICAL_OWNER_ID,
             "desktop-1",
-            [4; 65],
+            owner_signer.public_key_sec1(),
         ))
         .expect("claim logical browser owner");
     super::super::browser_gateway_session::admit_browser_test_device(
@@ -53,7 +63,6 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
     record_scheduler_runtime(&store);
     let delivery_intent = admit_delivery_intent_runtime(&store);
     let delayed_delivery = admit_delayed_delivery_runtime(&store);
-    let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
     let realtime =
@@ -153,11 +162,70 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         &supervisor,
         &root,
         &data,
+        realtime.clone(),
+        conversation_id.clone(),
+        0x71,
+        1,
+    );
+    let predecessor = delayed_delivery;
+    let stale_runtime_instance_id = predecessor.runtime_instance_id.clone();
+    let stale_runtime_generation = predecessor.runtime_generation;
+    let stale_grant_epoch = predecessor.grant_epoch;
+    let delayed_delivery =
+        restart_delayed_delivery_runtime(&supervisor, &store, &root.join("runtime"), predecessor);
+    restart_scheduler_with_current_grants(
+        &supervisor,
+        &store,
+        release.kernel(),
+        &root.join("runtime"),
+        2,
+    );
+    assert_stale_delayed_route_is_rejected(
+        &store,
+        &supervisor,
+        &delayed_delivery.registration_id,
+        &stale_runtime_instance_id,
+        stale_runtime_generation,
+        stale_grant_epoch,
+    );
+    assert_delayed_delivery_round_trip(
+        &store,
+        &supervisor,
+        &root,
+        &data,
         realtime,
         conversation_id,
+        0x81,
+        2,
+    );
+    let (owner_runtime_dir, owner_control) =
+        start_owner_control(&data, &store, &shutdown, &supervisor);
+    revoke_delayed_delivery_runtime(
+        &owner_runtime_dir,
+        &owner_signer,
+        &store,
+        &supervisor,
+        &delayed_delivery,
+        &delivery_intent.registration_id,
+    );
+    restart_scheduler_with_current_grants(
+        &supervisor,
+        &store,
+        release.kernel(),
+        &root.join("runtime"),
+        3,
+    );
+    assert!(
+        supervisor
+            .is_active(SCHEDULER_REGISTRATION)
+            .expect("observe reconciled Scheduler after delayed-delivery revoke")
     );
 
     supervisor.shutdown().expect("stop managed processes");
+    owner_control
+        .join()
+        .expect("join owner control")
+        .expect("owner control exits");
     unsafe {
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
     }
@@ -172,14 +240,19 @@ fn assert_delayed_delivery_round_trip(
     data: &Path,
     realtime: hermes_gateway_runtime::InMemoryBrowserRealtimeSource,
     conversation_id: Vec<u8>,
+    operation_byte: u8,
+    authentication_sign_count: u32,
 ) {
     let runtime = tokio::runtime::Runtime::new().expect("Gateway runtime");
     let router = super::delivery_intent_realtime_flow::delivery_intent_gateway(
         store, supervisor, root, data, realtime,
     );
-    let cookie =
-        super::super::browser_gateway_session::authenticate_gateway_router(&router, &runtime);
-    let delayed_operation_id = vec![0x71; 16];
+    let cookie = super::super::browser_gateway_session::authenticate_gateway_router_with_sign_count(
+        &router,
+        &runtime,
+        authentication_sign_count,
+    );
+    let delayed_operation_id = vec![operation_byte; 16];
     let private_body = b"delayed private body must not enter durable events or realtime";
     let deliver_at_unix_millis =
         u64::try_from(current_unix_millis()).expect("positive current time") + 7_000;
@@ -191,7 +264,7 @@ fn assert_delayed_delivery_round_trip(
         ScheduleDelayedDeliveryRequestV1 {
             protocol_major: 1,
             delayed_operation_id: delayed_operation_id.clone(),
-            delivery_operation_id: vec![0x72; 16],
+            delivery_operation_id: vec![operation_byte.wrapping_add(1); 16],
             conversation_id,
             reply_to_message_id: None,
             body_utf8: private_body.to_vec(),
@@ -210,7 +283,6 @@ fn assert_delayed_delivery_round_trip(
         response.state,
         DelayedDeliveryStateV1::DelayedDeliveryStateSchedulePending as i32
     );
-
     let terminal = wait_for_terminal_status(
         &router,
         &runtime,
@@ -230,6 +302,164 @@ fn assert_delayed_delivery_round_trip(
             .windows(private_body.len())
             .any(|window| window == private_body),
         "delayed-delivery realtime must not contain private content"
+    );
+}
+
+fn restart_scheduler_with_current_grants(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel: &Path,
+    runtime_dir: &Path,
+    expected_generation: u64,
+) {
+    let predecessor_binding = scheduler_binding(store);
+    let issue = storage_successor::issue_after(&predecessor_binding)
+        .expect("derive Scheduler successor Storage fences");
+    let (reservation, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        SCHEDULER_REGISTRATION,
+        STORAGE_CAPABILITY,
+        issue,
+    )
+    .expect("reserve Scheduler successor for current grants");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision Scheduler successor Storage binding");
+    assert_eq!(
+        scheduler_launch::start_from_reservation(
+            supervisor,
+            store,
+            kernel,
+            runtime_dir,
+            reservation,
+            &binding,
+        )
+        .expect("start Scheduler with reconciled grants"),
+        expected_generation
+    );
+}
+
+fn assert_stale_delayed_route_is_rejected(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    registration_id: &str,
+    runtime_instance_id: &str,
+    runtime_generation: u64,
+    grant_epoch: u64,
+) {
+    let request = ModuleClientRequestV1 {
+        protocol_major: 1,
+        module_id: COMMUNICATION_DELAYED_DELIVERY_MODULE_ID_V1.to_owned(),
+        owner_id: COMMUNICATION_DELAYED_DELIVERY_OWNER_V1.to_owned(),
+        contract: Some(delayed_delivery_query_contract_v1()),
+        request_id: 9_001,
+        request_payload: GetDelayedDeliveryStatusRequestV1 {
+            protocol_major: 1,
+            delayed_operation_id: vec![0x71; 16],
+        }
+        .encode_to_vec(),
+        logical_owner_id: DELAYED_DELIVERY_LOGICAL_OWNER_ID.to_owned(),
+    }
+    .encode_to_vec();
+    let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+        registration_id,
+        runtime_instance_id,
+        runtime_generation,
+        grant_epoch,
+        COMMUNICATION_DELAYED_DELIVERY_CAPABILITY_ID_V1,
+        &request,
+    );
+    assert_eq!(
+        crate::modules::capability::router::route_managed_client_request(
+            store,
+            &supervisor.relay_port(),
+            &route,
+        )
+        .expect_err("stale delayed-delivery route"),
+        "managed runtime fence is stale"
+    );
+}
+
+fn revoke_delayed_delivery_runtime(
+    owner_runtime_dir: &Path,
+    signer: &FileDeviceSigner,
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    delayed_delivery: &StartedDelayedDeliveryRuntime,
+    delivery_intent_registration_id: &str,
+) {
+    let revoked = transition_registration(
+        owner_runtime_dir,
+        signer,
+        &delayed_delivery.registration_id,
+        "revoked",
+    );
+    assert_eq!(revoked.state, "revoked");
+    assert!(revoked.grant_epoch > delayed_delivery.grant_epoch);
+    let registration = store
+        .module_registration(&delayed_delivery.registration_id)
+        .expect("read revoked delayed-delivery registration")
+        .expect("revoked delayed-delivery registration");
+    assert_eq!(registration.state(), ModuleRegistrationState::Revoked);
+    let binding = store
+        .platform_storage_binding(
+            &delayed_delivery.registration_id,
+            COMMUNICATION_DELAYED_DELIVERY_STORAGE_CAPABILITY_ID_V1,
+        )
+        .expect("read revoked delayed-delivery Storage binding")
+        .expect("revoked delayed-delivery Storage binding");
+    assert_eq!(
+        binding.state(),
+        PlatformStorageBindingStateV1::Revoking,
+        "owner revoke must durably reserve the exact delayed-delivery Storage fence"
+    );
+    assert!(
+        !supervisor
+            .stop_if_active(&delayed_delivery.registration_id)
+            .expect("observe stopped delayed-delivery runtime"),
+        "owner transition already stopped the delayed-delivery runtime"
+    );
+    assert!(
+        supervisor
+            .is_active(SCHEDULER_REGISTRATION)
+            .expect("observe Scheduler before catalog reconciliation"),
+        "revoking one workflow must not directly control another owner runtime"
+    );
+    assert!(
+        supervisor
+            .is_active(delivery_intent_registration_id)
+            .expect("observe delivery-intent after delayed-delivery revoke")
+    );
+    let request = ModuleClientRequestV1 {
+        protocol_major: 1,
+        module_id: COMMUNICATION_DELAYED_DELIVERY_MODULE_ID_V1.to_owned(),
+        owner_id: COMMUNICATION_DELAYED_DELIVERY_OWNER_V1.to_owned(),
+        contract: Some(delayed_delivery_query_contract_v1()),
+        request_id: 9_002,
+        request_payload: GetDelayedDeliveryStatusRequestV1 {
+            protocol_major: 1,
+            delayed_operation_id: vec![0x81; 16],
+        }
+        .encode_to_vec(),
+        logical_owner_id: DELAYED_DELIVERY_LOGICAL_OWNER_ID.to_owned(),
+    }
+    .encode_to_vec();
+    let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+        &delayed_delivery.registration_id,
+        &delayed_delivery.runtime_instance_id,
+        delayed_delivery.runtime_generation,
+        delayed_delivery.grant_epoch,
+        COMMUNICATION_DELAYED_DELIVERY_CAPABILITY_ID_V1,
+        &request,
+    );
+    assert_eq!(
+        crate::modules::capability::router::route_managed_client_request(
+            store,
+            &supervisor.relay_port(),
+            &route,
+        )
+        .expect_err("revoked delayed-delivery route"),
+        "module registration is not approved"
     );
 }
 

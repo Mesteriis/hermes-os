@@ -27,7 +27,9 @@ pub(super) struct AdmittedDelayedDeliveryRuntime {
 
 pub(super) struct StartedDelayedDeliveryRuntime {
     pub(super) registration_id: String,
+    pub(super) runtime_instance_id: String,
     pub(super) runtime_generation: u64,
+    pub(super) grant_epoch: u64,
     capability_ids: Vec<String>,
 }
 
@@ -147,6 +149,11 @@ pub(super) fn start_delayed_delivery_runtime(
         .expect("load delayed-delivery managed launch reservation");
     let runtime_generation = reservation.runtime_generation();
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
+    let grant_epoch = store
+        .module_registration(&admitted.registration_id)
+        .expect("read delayed-delivery registration")
+        .expect("delayed-delivery registration")
+        .grant_epoch();
     let binding = delayed_delivery_storage_binding(store, &admitted.registration_id);
     let topology =
         crate::platform::storage::topology::current(store).expect("read Storage topology");
@@ -172,13 +179,9 @@ pub(super) fn start_delayed_delivery_runtime(
             major: 1,
             logical_owner_id: DELAYED_DELIVERY_LOGICAL_OWNER_ID.to_owned(),
             registration_id: admitted.registration_id.clone(),
-            runtime_instance_id,
+            runtime_instance_id: runtime_instance_id.clone(),
             runtime_generation,
-            grant_epoch: store
-                .module_registration(&admitted.registration_id)
-                .expect("read delayed-delivery registration")
-                .expect("delayed-delivery registration")
-                .grant_epoch(),
+            grant_epoch,
             storage: Some(storage),
             event_hub_endpoint: events.nats_endpoint().to_owned(),
             event_credential_revision: events.credential_revision(),
@@ -190,9 +193,53 @@ pub(super) fn start_delayed_delivery_runtime(
         .expect("wait for delayed-delivery readiness");
     StartedDelayedDeliveryRuntime {
         registration_id: admitted.registration_id,
+        runtime_instance_id,
         runtime_generation,
+        grant_epoch,
         capability_ids: admitted.capability_ids,
     }
+}
+
+pub(super) fn restart_delayed_delivery_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    predecessor: StartedDelayedDeliveryRuntime,
+) -> StartedDelayedDeliveryRuntime {
+    let predecessor_generation = predecessor.runtime_generation;
+    let predecessor_instance_id = predecessor.runtime_instance_id.clone();
+    let predecessor_binding = delayed_delivery_storage_binding(store, &predecessor.registration_id);
+    let issue = storage_successor::issue_after(&predecessor_binding)
+        .expect("derive delayed-delivery successor Storage fences");
+    let (_, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        &predecessor.registration_id,
+        COMMUNICATION_DELAYED_DELIVERY_STORAGE_CAPABILITY_ID_V1,
+        issue,
+    )
+    .expect("reserve successor delayed-delivery launch and Storage binding");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision successor delayed-delivery Storage binding");
+    let successor = start_delayed_delivery_runtime(
+        supervisor,
+        store,
+        runtime_dir,
+        AdmittedDelayedDeliveryRuntime {
+            registration_id: predecessor.registration_id,
+            capability_ids: predecessor.capability_ids,
+        },
+    );
+    assert_eq!(
+        successor.runtime_generation,
+        predecessor_generation + 1,
+        "delayed-delivery restart must use the next managed runtime generation"
+    );
+    assert_ne!(
+        successor.runtime_instance_id, predecessor_instance_id,
+        "delayed-delivery restart must use a new managed runtime instance"
+    );
+    successor
 }
 
 fn delayed_delivery_storage_binding(
