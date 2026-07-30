@@ -160,7 +160,10 @@ async fn locked_run_state(
 ) -> Result<(String, String), SchedulerRunClaimErrorV1> {
     query_as("SELECT runs.state, runs.concurrency_key FROM hermes_platform.scheduler_runs AS runs JOIN hermes_platform.scheduler_dispatches AS dispatch ON dispatch.run_id = runs.run_id AND dispatch.lease_epoch = runs.lease_epoch JOIN hermes_platform.scheduler_run_acceptances AS acceptance ON acceptance.command_message_id = dispatch.message_id AND acceptance.run_id = runs.run_id AND acceptance.lease_epoch = runs.lease_epoch WHERE runs.run_id = $1 AND runs.lease_epoch = $2 AND runs.dispatch_message_id = $3 AND dispatch.message_id = $3 AND dispatch.state = 'published' AND runs.lease_expires_at_unix_ms > $4 FOR UPDATE OF runs, dispatch, acceptance")
         .bind(result.run_id.to_vec()).bind(i64::try_from(result.lease_epoch).map_err(|_| SchedulerRunClaimErrorV1::Denied)?).bind(result.command_message_id.to_vec()).bind(result.observed_at.value())
-        .fetch_optional(&mut **transaction).await.map_err(unavailable)?.ok_or(SchedulerRunClaimErrorV1::Denied)
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(unavailable)?
+        .ok_or(SchedulerRunClaimErrorV1::PendingMissing)
 }
 
 async fn insert_result(

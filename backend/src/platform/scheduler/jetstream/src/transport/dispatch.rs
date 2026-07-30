@@ -93,7 +93,7 @@ impl SchedulerJetStreamDispatchPortV1 {
                     hermes_events_protocol::delivery::OutboxRelayOutcomeV1::Published { .. }
                 )
             })
-            .map_err(|_| SchedulerDispatchRelayErrorV1::Unavailable)
+            .map_err(map_relay_error)
     }
 }
 
@@ -169,5 +169,19 @@ pub enum SchedulerJetStreamDispatchPortErrorV1 {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SchedulerDispatchRelayErrorV1 {
-    Unavailable,
+    InvalidEntry,
+    InvalidReceipt,
+    Persistence,
+    PublisherUnavailable,
+}
+
+const fn map_relay_error(error: OutboxRelayErrorV1) -> SchedulerDispatchRelayErrorV1 {
+    match error {
+        OutboxRelayErrorV1::InvalidEntry => SchedulerDispatchRelayErrorV1::InvalidEntry,
+        OutboxRelayErrorV1::InvalidReceipt => SchedulerDispatchRelayErrorV1::InvalidReceipt,
+        OutboxRelayErrorV1::Persistence => SchedulerDispatchRelayErrorV1::Persistence,
+        OutboxRelayErrorV1::PublisherUnavailable => {
+            SchedulerDispatchRelayErrorV1::PublisherUnavailable
+        }
+    }
 }

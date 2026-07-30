@@ -6,6 +6,7 @@ mod handshake;
 mod runtime;
 mod schedule_control;
 mod schedules;
+mod transient_retry;
 mod vault_route;
 mod workers;
 

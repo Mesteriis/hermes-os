@@ -23,8 +23,14 @@ ACK-ает malformed, contract-invalid или foreign Scheduler result, а та�
 malformed due command без mutation, чтобы сохранённая poison delivery не
 завершала producer runtime. Managed live producer → Scheduler Ensure → result
 contour проверен в development ensemble до durable состояния `scheduled`;
-Scheduler также создаёт и публикует due run, но terminal due-delivery обратно в
-producer runtime ещё не доказан;
+Scheduler workers теперь различают transient transport/ack failures и
+invalid/persistence failures: только первые используют bounded exponential
+backoff с jitter. Ack и Result streams не обещают общий порядок, поэтому
+terminal receipt до acceptance получает typed `PendingMissing`, остаётся
+unacked и применяется после redelivery; authority denial и corrupt receipt
+по-прежнему fail-fast. Disposable PostgreSQL contour и повторяемый managed
+delayed-delivery contour доказывают этот cross-stream порядок и terminal
+due-delivery обратно в producer runtime;
 platform gate `scheduler_module_schedule_control_v1` остаётся закрыт.
 
 Уточняет:

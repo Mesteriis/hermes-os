@@ -112,6 +112,8 @@ pub enum SchedulerReceiptConsumeOutcomeV1 {
 pub enum SchedulerReceiptConsumeErrorV1 {
     ConsumerUnavailable,
     InvalidReceipt,
+    PredecessorPending,
+    PersistenceBusy,
     PersistenceDenied,
     PersistenceUnavailable,
     AcknowledgementUnavailable,
@@ -122,12 +124,46 @@ fn map_store_error(error: SchedulerRunClaimErrorV1) -> SchedulerReceiptConsumeEr
         SchedulerRunClaimErrorV1::Unavailable => {
             SchedulerReceiptConsumeErrorV1::PersistenceUnavailable
         }
-        SchedulerRunClaimErrorV1::Denied
-        | SchedulerRunClaimErrorV1::ConcurrencyBusy
-        | SchedulerRunClaimErrorV1::ConcurrencyExhausted
-        | SchedulerRunClaimErrorV1::AlreadyClaimed
-        | SchedulerRunClaimErrorV1::PendingMissing => {
+        SchedulerRunClaimErrorV1::PendingMissing => {
+            SchedulerReceiptConsumeErrorV1::PredecessorPending
+        }
+        SchedulerRunClaimErrorV1::ConcurrencyBusy
+        | SchedulerRunClaimErrorV1::ConcurrencyExhausted => {
+            SchedulerReceiptConsumeErrorV1::PersistenceBusy
+        }
+        SchedulerRunClaimErrorV1::Denied | SchedulerRunClaimErrorV1::AlreadyClaimed => {
             SchedulerReceiptConsumeErrorV1::PersistenceDenied
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cross_stream_ordering_and_capacity_are_retryable_without_hiding_denials() {
+        assert_eq!(
+            map_store_error(SchedulerRunClaimErrorV1::PendingMissing),
+            SchedulerReceiptConsumeErrorV1::PredecessorPending
+        );
+        for error in [
+            SchedulerRunClaimErrorV1::ConcurrencyBusy,
+            SchedulerRunClaimErrorV1::ConcurrencyExhausted,
+        ] {
+            assert_eq!(
+                map_store_error(error),
+                SchedulerReceiptConsumeErrorV1::PersistenceBusy
+            );
+        }
+        for error in [
+            SchedulerRunClaimErrorV1::Denied,
+            SchedulerRunClaimErrorV1::AlreadyClaimed,
+        ] {
+            assert_eq!(
+                map_store_error(error),
+                SchedulerReceiptConsumeErrorV1::PersistenceDenied
+            );
         }
     }
 }

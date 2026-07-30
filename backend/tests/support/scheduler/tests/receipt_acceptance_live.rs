@@ -80,6 +80,29 @@ async fn accepted_terminal_result_releases_its_slot_once() {
 
 #[tokio::test]
 #[ignore = "requires the disposable Scheduler PostgreSQL contour"]
+async fn terminal_before_acceptance_waits_for_cross_stream_predecessor() {
+    let (pool, store, claim) = pending_published_dispatch().await;
+    let result = terminal_result(&claim);
+
+    assert_eq!(
+        store.finish_receipt(&result).await,
+        Err(SchedulerRunClaimErrorV1::PendingMissing)
+    );
+    assert_eq!(run_state(&pool).await, "dispatched");
+    store
+        .accept_receipt(&SchedulerRunAcceptanceV1::try_from(&receipt(&claim)).expect("acceptance"))
+        .await
+        .expect("acceptance");
+    assert_eq!(
+        store.finish_receipt(&result).await,
+        Ok(SchedulerRunTerminalResultOutcomeV1::Applied)
+    );
+    assert_eq!(run_state(&pool).await, "finished");
+    assert_eq!(active_runs(&pool).await, 0);
+}
+
+#[tokio::test]
+#[ignore = "requires the disposable Scheduler PostgreSQL contour"]
 async fn retryable_failure_receipt_enters_retry_wait_and_releases_its_slot_once() {
     let (pool, store, claim) = pending_published_dispatch().await;
     store

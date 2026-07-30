@@ -30,7 +30,8 @@ use hermes_scheduler_protocol::{
 use prost::Message;
 
 use super::clock::SchedulerSystemClockV1;
-use super::workers::report_failure;
+use super::transient_retry::SchedulerTransientRetryV1;
+use super::workers::{report_failure, wait_for_transient_retry};
 
 pub(super) struct SchedulerScheduleControlWorkerConfigV1 {
     command_contract: SchedulerScheduleControlContractV1,
@@ -88,8 +89,20 @@ pub(super) async fn run_schedule_control_worker(
     configuration: SchedulerScheduleControlWorkerConfigV1,
     failure: Sender<()>,
 ) {
-    if let Err(error) = run(&mut port, &store, &configuration).await {
-        report_failure(&failure, error.code());
+    let mut retry = SchedulerTransientRetryV1::default();
+    loop {
+        match run_once(&mut port, &store, &configuration).await {
+            Ok(()) => retry.reset(),
+            Err(error) if error.is_transient() => {
+                if !wait_for_transient_retry(&mut retry, &failure, error.code()).await {
+                    return;
+                }
+            }
+            Err(error) => {
+                report_failure(&failure, error.code());
+                return;
+            }
+        }
     }
 }
 
@@ -122,62 +135,67 @@ impl ScheduleControlWorkerFailureV1 {
             Self::Acknowledge => "schedule_control_acknowledge",
         }
     }
+
+    const fn is_transient(self) -> bool {
+        matches!(
+            self,
+            Self::RelayResultPublisherUnavailable | Self::Receive | Self::Acknowledge
+        )
+    }
 }
 
-async fn run(
+async fn run_once(
     port: &mut SchedulerJetStreamScheduleControlPortV1,
     store: &SchedulerPostgresStoreV1,
     configuration: &SchedulerScheduleControlWorkerConfigV1,
 ) -> Result<(), ScheduleControlWorkerFailureV1> {
     let clock = SchedulerSystemClockV1::new(ClockPolicyV1::production_default());
-    loop {
-        relay_results(port, store).await?;
-        let delivery = port
-            .receive()
-            .await
-            .map_err(|_| ScheduleControlWorkerFailureV1::Receive)?;
-        let Some((delivery, admitted)) = admit_or_discard(
-            delivery,
-            &configuration.command_contract,
-            &configuration.grants,
-        )
-        .await?
-        else {
-            continue;
-        };
-        let reading = clock
-            .read()
-            .map_err(|_| ScheduleControlWorkerFailureV1::Clock)?;
-        if reading.discontinuity() != ClockDiscontinuityV1::Stable {
-            return Err(ScheduleControlWorkerFailureV1::Clock);
-        }
-        let received_at = reading.wall_utc();
-        let request = request_from_admitted(admitted, received_at)
-            .map_err(|_| ScheduleControlWorkerFailureV1::Request)?;
-        let result_message_id = result_message_id(request.command());
-        store
-            .apply_schedule_control(&request, |decision| {
-                let payload = result_payload(&request, decision);
-                let envelope = build_schedule_control_result_envelope_v1(
-                    request.command(),
-                    payload,
-                    result_message_id,
-                    received_at,
-                    &configuration.source,
-                    &configuration.result_contract,
-                )
-                .map_err(|_| SchedulerScheduleControlApplyErrorV1::InvalidResult)?;
-                OutboxRecordV1::accept(envelope.encode_to_vec())
-                    .map_err(|_| SchedulerScheduleControlApplyErrorV1::InvalidResult)
-            })
-            .await
-            .map_err(|_| ScheduleControlWorkerFailureV1::Apply)?;
-        relay_results(port, store).await?;
-        delivery
-            .acknowledge()
-            .await
-            .map_err(|_| ScheduleControlWorkerFailureV1::Acknowledge)?;
+    relay_results(port, store).await?;
+    let delivery = port
+        .receive()
+        .await
+        .map_err(|_| ScheduleControlWorkerFailureV1::Receive)?;
+    let Some((delivery, admitted)) = admit_or_discard(
+        delivery,
+        &configuration.command_contract,
+        &configuration.grants,
+    )
+    .await?
+    else {
+        return Ok(());
+    };
+    let reading = clock
+        .read()
+        .map_err(|_| ScheduleControlWorkerFailureV1::Clock)?;
+    if reading.discontinuity() != ClockDiscontinuityV1::Stable {
+        return Err(ScheduleControlWorkerFailureV1::Clock);
     }
+    let received_at = reading.wall_utc();
+    let request = request_from_admitted(admitted, received_at)
+        .map_err(|_| ScheduleControlWorkerFailureV1::Request)?;
+    let result_message_id = result_message_id(request.command());
+    store
+        .apply_schedule_control(&request, |decision| {
+            let payload = result_payload(&request, decision);
+            let envelope = build_schedule_control_result_envelope_v1(
+                request.command(),
+                payload,
+                result_message_id,
+                received_at,
+                &configuration.source,
+                &configuration.result_contract,
+            )
+            .map_err(|_| SchedulerScheduleControlApplyErrorV1::InvalidResult)?;
+            OutboxRecordV1::accept(envelope.encode_to_vec())
+                .map_err(|_| SchedulerScheduleControlApplyErrorV1::InvalidResult)
+        })
+        .await
+        .map_err(|_| ScheduleControlWorkerFailureV1::Apply)?;
+    relay_results(port, store).await?;
+    delivery
+        .acknowledge()
+        .await
+        .map_err(|_| ScheduleControlWorkerFailureV1::Acknowledge)
 }
 
 async fn admit_or_discard<D>(
@@ -466,6 +484,27 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn only_transport_failures_enter_transient_retry() {
+        for failure in [
+            ScheduleControlWorkerFailureV1::RelayResultPublisherUnavailable,
+            ScheduleControlWorkerFailureV1::Receive,
+            ScheduleControlWorkerFailureV1::Acknowledge,
+        ] {
+            assert!(failure.is_transient(), "{failure:?}");
+        }
+        for failure in [
+            ScheduleControlWorkerFailureV1::RelayResultInvalidEntry,
+            ScheduleControlWorkerFailureV1::RelayResultInvalidReceipt,
+            ScheduleControlWorkerFailureV1::RelayResultPersistence,
+            ScheduleControlWorkerFailureV1::Clock,
+            ScheduleControlWorkerFailureV1::Request,
+            ScheduleControlWorkerFailureV1::Apply,
+        ] {
+            assert!(!failure.is_transient(), "{failure:?}");
+        }
     }
 
     #[test]

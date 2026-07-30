@@ -5,17 +5,18 @@ use std::time::Duration;
 
 use hermes_clock_protocol::{ClockDiscontinuityV1, ClockPolicyV1};
 use hermes_scheduler_jetstream::{
-    SchedulerJetStreamDispatchPortV1, SchedulerJetStreamReceiptPortV1,
-    SchedulerJetStreamScheduleControlPortV1,
+    SchedulerDispatchRelayErrorV1, SchedulerJetStreamDispatchPortV1,
+    SchedulerJetStreamReceiptPortV1, SchedulerJetStreamScheduleControlPortV1,
 };
 use hermes_scheduler_persistence::{
     SchedulerDispatchAdmissionV1, SchedulerMaterializationSourceV1, SchedulerPostgresStoreV1,
-    SchedulerReceiptConsumerV1,
+    SchedulerReceiptConsumeErrorV1, SchedulerReceiptConsumerV1,
 };
 
 use super::{
     clock::SchedulerSystemClockV1,
     schedule_control::{SchedulerScheduleControlWorkerConfigV1, run_schedule_control_worker},
+    transient_retry::SchedulerTransientRetryV1,
 };
 
 pub(super) struct SchedulerWorkerLaunchInputV1<'a> {
@@ -84,6 +85,7 @@ async fn relay_dispatches(
     failure: Sender<()>,
 ) {
     let clock = SchedulerSystemClockV1::new(ClockPolicyV1::production_default());
+    let mut dispatch_retry = SchedulerTransientRetryV1::default();
     let mut interval =
         tokio::time::interval(Duration::from_millis(u64::from(reconcile_interval_millis)));
     loop {
@@ -123,8 +125,19 @@ async fn relay_dispatches(
         }
         for _ in 0..dispatch_batch_limit {
             match dispatch.relay_once(&mut store).await {
-                Ok(true) => {}
-                Ok(false) => break,
+                Ok(true) => dispatch_retry.reset(),
+                Ok(false) => {
+                    dispatch_retry.reset();
+                    break;
+                }
+                Err(SchedulerDispatchRelayErrorV1::PublisherUnavailable) => {
+                    if !wait_for_transient_retry(&mut dispatch_retry, &failure, "dispatch_relay")
+                        .await
+                    {
+                        return;
+                    }
+                    break;
+                }
                 Err(_) => {
                     report_failure(&failure, "dispatch_relay");
                     return;
@@ -140,12 +153,68 @@ async fn receive_receipts(
     failure: Sender<()>,
 ) {
     let mut consumer = SchedulerReceiptConsumerV1::new(port, &store);
+    let mut retry = SchedulerTransientRetryV1::default();
     loop {
-        if consumer.consume_one().await.is_err() {
-            report_failure(&failure, "receipt_consumer");
-            return;
+        match consumer.consume_one().await {
+            Ok(_) => retry.reset(),
+            Err(SchedulerReceiptConsumeErrorV1::ConsumerUnavailable) => {
+                if !wait_for_transient_retry(&mut retry, &failure, "receipt_consumer_unavailable")
+                    .await
+                {
+                    return;
+                }
+            }
+            Err(SchedulerReceiptConsumeErrorV1::AcknowledgementUnavailable) => {
+                if !wait_for_transient_retry(
+                    &mut retry,
+                    &failure,
+                    "receipt_acknowledgement_unavailable",
+                )
+                .await
+                {
+                    return;
+                }
+            }
+            Err(SchedulerReceiptConsumeErrorV1::PredecessorPending) => {
+                if !wait_for_transient_retry(&mut retry, &failure, "receipt_predecessor_pending")
+                    .await
+                {
+                    return;
+                }
+            }
+            Err(SchedulerReceiptConsumeErrorV1::PersistenceBusy) => {
+                if !wait_for_transient_retry(&mut retry, &failure, "receipt_persistence_busy").await
+                {
+                    return;
+                }
+            }
+            Err(SchedulerReceiptConsumeErrorV1::InvalidReceipt) => {
+                report_failure(&failure, "receipt_invalid");
+                return;
+            }
+            Err(SchedulerReceiptConsumeErrorV1::PersistenceDenied) => {
+                report_failure(&failure, "receipt_persistence_denied");
+                return;
+            }
+            Err(SchedulerReceiptConsumeErrorV1::PersistenceUnavailable) => {
+                report_failure(&failure, "receipt_persistence_unavailable");
+                return;
+            }
         }
     }
+}
+
+pub(super) async fn wait_for_transient_retry(
+    retry: &mut SchedulerTransientRetryV1,
+    failure: &Sender<()>,
+    code: &'static str,
+) -> bool {
+    let Some(delay) = retry.next_delay() else {
+        report_failure(failure, code);
+        return false;
+    };
+    tokio::time::sleep(delay).await;
+    true
 }
 
 pub(super) fn report_failure(failure: &Sender<()>, code: &'static str) {
