@@ -10,6 +10,12 @@ use hermes_communications_attachment_contract::admission::{
     communication_attachment_safety_state_changed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
 };
+use hermes_communications_call_evidence_api::{
+    CALL_EVIDENCE_CLIENT_CAPABILITY_ID_V1, CALL_EVIDENCE_CLIENT_CONTRACT_MAJOR_V1,
+    CALL_EVIDENCE_CLIENT_CONTRACT_REVISION_V1, CALL_EVIDENCE_CLIENT_OWNER_V1,
+    CALL_EVIDENCE_CLIENT_SCHEMA_SHA256_V1, CALL_EVIDENCE_QUERY_CONNECT_PATH_V1,
+    CALL_EVIDENCE_QUERY_CONTRACT_NAME_V1, CALL_EVIDENCE_REALTIME_CONTRACT_NAME_V1,
+};
 use hermes_communications_call_evidence_ingress::{
     call_evidence_observed_consume_request_v1, call_evidence_observed_contract_reference_v1,
 };
@@ -100,6 +106,7 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_attachment_blob_admission_observe_capability_v1(),
         communications_attachment_safety_verdict_observe_capability_v1(),
         communications_blob_capability_v1(),
+        communications_call_evidence_client_capability_v1(),
         communications_call_evidence_observe_capability_v1(),
         communications_content_capability_v1(),
         communications_cross_channel_forward_source_blob_capability_v1(),
@@ -114,6 +121,38 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_sender_insights_capability_v1(),
         communications_storage_capability_v1(),
     ]
+}
+
+#[must_use]
+pub fn communications_call_evidence_client_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: CALL_EVIDENCE_CLIENT_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::QueryRpc as i32,
+                contract: Some(communications_call_evidence_query_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+                contract: Some(communications_call_evidence_query_contract_reference_v1()),
+                client_rpc_route: Some(hermes_runtime_protocol::v1::ClientRpcRouteV1 {
+                    path: CALL_EVIDENCE_QUERY_CONNECT_PATH_V1.to_owned(),
+                }),
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::ClientRealtime as i32,
+                contract: Some(communications_call_evidence_realtime_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+        ],
+        ..Default::default()
+    }
 }
 
 #[must_use]
@@ -537,6 +576,28 @@ pub fn communications_query_contract_reference_v1() -> ContractReferenceV1 {
 }
 
 #[must_use]
+pub fn communications_call_evidence_query_contract_reference_v1() -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: CALL_EVIDENCE_CLIENT_OWNER_V1.to_owned(),
+        name: CALL_EVIDENCE_QUERY_CONTRACT_NAME_V1.to_owned(),
+        major: CALL_EVIDENCE_CLIENT_CONTRACT_MAJOR_V1,
+        revision: CALL_EVIDENCE_CLIENT_CONTRACT_REVISION_V1,
+        schema_sha256: CALL_EVIDENCE_CLIENT_SCHEMA_SHA256_V1.to_vec(),
+    }
+}
+
+#[must_use]
+pub fn communications_call_evidence_realtime_contract_reference_v1() -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: CALL_EVIDENCE_CLIENT_OWNER_V1.to_owned(),
+        name: CALL_EVIDENCE_REALTIME_CONTRACT_NAME_V1.to_owned(),
+        major: CALL_EVIDENCE_CLIENT_CONTRACT_MAJOR_V1,
+        revision: CALL_EVIDENCE_CLIENT_CONTRACT_REVISION_V1,
+        schema_sha256: CALL_EVIDENCE_CLIENT_SCHEMA_SHA256_V1.to_vec(),
+    }
+}
+
+#[must_use]
 pub fn communications_content_ticket_contract_reference_v1() -> ContractReferenceV1 {
     ContractReferenceV1 {
         owner: COMMUNICATIONS_OWNER_ID.to_owned(),
@@ -610,7 +671,7 @@ pub fn communications_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1
     let settings_schema = communications_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 7,
+        descriptor_revision: 8,
         module_id: COMMUNICATIONS_MODULE_ID.to_owned(),
         owner_id: COMMUNICATIONS_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Domain as i32,
@@ -669,6 +730,7 @@ mod tests {
                 COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_BLOB_CAPABILITY_ID,
+                CALL_EVIDENCE_CLIENT_CAPABILITY_ID_V1,
                 COMMUNICATIONS_CALL_EVIDENCE_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_CONTENT_CAPABILITY_ID,
                 COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_BLOB_CAPABILITY_ID,

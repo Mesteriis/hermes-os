@@ -39,6 +39,7 @@ members = [
   "src/api/gateway/session",
   "src/api/gateway/runtime",
   "src/communications-api",
+  "src/communications-call-evidence-api",
   "src/communications-call-evidence-core",
   "src/communications-call-evidence-ingress",
   "src/communications-call-evidence-persistence",

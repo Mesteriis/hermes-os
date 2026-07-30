@@ -2101,6 +2101,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communications-call-evidence-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-communications-call-evidence-core"
 version = "0.1.0"
 dependencies = [
@@ -2274,6 +2284,7 @@ dependencies = [
  "hermes-blob-client",
  "hermes-communications-api",
  "hermes-communications-attachment-contract",
+ "hermes-communications-call-evidence-api",
  "hermes-communications-call-evidence-core",
  "hermes-communications-call-evidence-ingress",
  "hermes-communications-call-evidence-persistence",

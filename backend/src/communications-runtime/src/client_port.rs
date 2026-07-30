@@ -3,6 +3,7 @@
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 
+use hermes_communications_call_evidence_persistence::CommunicationsCallEvidencePersistenceV1;
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 use hermes_runtime_protocol::managed_control::{
     ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
@@ -11,10 +12,14 @@ use hermes_runtime_protocol::v1::{ModuleClientRequestV1, ModuleClientResponseV1}
 use prost::Message;
 
 use crate::admission::{
+    communications_call_evidence_query_contract_reference_v1,
     communications_content_read_contract_reference_v1,
     communications_content_ticket_contract_reference_v1,
     communications_query_contract_reference_v1, communications_saved_search_contract_reference_v1,
     communications_sender_insights_contract_reference_v1,
+};
+use crate::call_evidence_client_port::{
+    CallEvidenceClientPortErrorV1, handle_call_evidence_client_request_v1,
 };
 use crate::content_blob_client_port::{
     CommunicationsContentBlobClientPortErrorV1, handle_module_content_blob_request_v1,
@@ -38,6 +43,8 @@ const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
 
 pub async fn dispatch_module_client_request_v1(
     persistence: &CommunicationsDurablePersistence,
+    call_evidence_persistence: &CommunicationsCallEvidencePersistenceV1,
+    logical_owner_id: &str,
     tickets: &Arc<CommunicationsContentTicketStoreV1>,
     search_access: &mut CommunicationsSearchAccessV1,
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
@@ -45,8 +52,17 @@ pub async fn dispatch_module_client_request_v1(
     request: &ModuleClientRequestV1,
 ) -> ModuleClientResponseV1 {
     let encoded = request.encode_to_vec();
-    let result = if request.contract.as_ref() == Some(&communications_query_contract_reference_v1())
+    let result = if request.contract.as_ref()
+        == Some(&communications_call_evidence_query_contract_reference_v1())
     {
+        handle_call_evidence_client_request_v1(
+            call_evidence_persistence,
+            logical_owner_id,
+            &encoded,
+        )
+        .await
+        .map_err(map_call_evidence_error)
+    } else if request.contract.as_ref() == Some(&communications_query_contract_reference_v1()) {
         handle_module_query_request_v1(
             persistence,
             search_access,
@@ -98,6 +114,13 @@ pub async fn dispatch_module_client_request_v1(
             })
             .unwrap_or_else(|| module_error(request.request_id, "UNAVAILABLE")),
         Err(error_code) => module_error(request.request_id, error_code),
+    }
+}
+
+const fn map_call_evidence_error(error: CallEvidenceClientPortErrorV1) -> &'static str {
+    match error {
+        CallEvidenceClientPortErrorV1::Protocol => "REJECTED",
+        CallEvidenceClientPortErrorV1::Unavailable => "UNAVAILABLE",
     }
 }
 

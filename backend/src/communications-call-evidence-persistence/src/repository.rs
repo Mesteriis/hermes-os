@@ -68,6 +68,20 @@ pub struct CallEvidenceRealtimeRecordV1 {
     pub participant_display_label: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CallEvidenceListFilterV1 {
+    pub provider: Option<CallProviderProvenanceV1>,
+    pub direction: Option<CallDirectionV1>,
+    pub media_kind: Option<CallMediaKindV1>,
+    pub state: Option<CallLifecycleStateV1>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CallEvidencePageV1 {
+    pub items: Vec<CallEvidenceProjectionV1>,
+    pub next_cursor: Vec<u8>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CallEvidencePersistenceErrorV1 {
     InvalidInput,
@@ -287,6 +301,70 @@ impl CommunicationsCallEvidencePersistenceV1 {
         .map_err(storage_error)?;
         row.map(|row| projection_from_row(call_evidence_id, &row))
             .transpose()
+    }
+
+    pub async fn list(
+        &self,
+        logical_owner_id: &str,
+        filter: CallEvidenceListFilterV1,
+        limit: u16,
+        cursor: &[u8],
+    ) -> Result<CallEvidencePageV1, CallEvidencePersistenceErrorV1> {
+        if !valid_owner(logical_owner_id) || limit == 0 || limit > 100 {
+            return Err(CallEvidencePersistenceErrorV1::InvalidInput);
+        }
+        let cursor = decode_list_cursor(cursor)?;
+        let cursor_revision = cursor.map(|value| value.0);
+        let cursor_id = cursor.map(|value| value.1.to_vec());
+        let rows = sqlx::query(
+            "SELECT call_evidence_id, source_call_cursor_sha256, account_cursor_sha256, \
+                    conversation_cursor_sha256, participant_cursor_sha256, provider, direction, \
+                    media_kind, lifecycle_state, terminal_disposition, source_revision, \
+                    canonical_revision, started_at_unix_seconds, connected_at_unix_seconds, \
+                    ended_at_unix_seconds, duration_seconds, participant_display_label, \
+                    payload_sha256 \
+             FROM hermes_data.communications_call_evidence_projection \
+             WHERE logical_owner_id = $1 \
+               AND ($2::SMALLINT IS NULL OR provider = $2) \
+               AND ($3::SMALLINT IS NULL OR direction = $3) \
+               AND ($4::SMALLINT IS NULL OR media_kind = $4) \
+               AND ($5::SMALLINT IS NULL OR lifecycle_state = $5) \
+               AND ($6::BIGINT IS NULL OR \
+                    (canonical_revision, call_evidence_id) < ($6, $7)) \
+             ORDER BY canonical_revision DESC, call_evidence_id DESC \
+             LIMIT $8",
+        )
+        .bind(logical_owner_id)
+        .bind(filter.provider.map(provider_code))
+        .bind(filter.direction.map(direction_code))
+        .bind(filter.media_kind.map(media_kind_code))
+        .bind(filter.state.map(state_code))
+        .bind(cursor_revision)
+        .bind(cursor_id)
+        .bind(i64::from(limit) + 1)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage_error)?;
+        let mut items = rows
+            .iter()
+            .map(|row| {
+                let call_evidence_id = bytes16(
+                    row.try_get::<Vec<u8>, _>("call_evidence_id")
+                        .map_err(storage_error)?,
+                )?;
+                projection_from_row(call_evidence_id, row)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let has_more = items.len() > usize::from(limit);
+        if has_more {
+            items.pop();
+        }
+        let next_cursor = if has_more {
+            items.last().map(encode_list_cursor).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        Ok(CallEvidencePageV1 { items, next_cursor })
     }
 
     pub async fn replay(
@@ -646,6 +724,36 @@ fn valid_timestamp(value: i64) -> bool {
     (-62_135_596_800..=253_402_300_799).contains(&value)
 }
 
+fn decode_list_cursor(
+    cursor: &[u8],
+) -> Result<Option<(i64, [u8; 16])>, CallEvidencePersistenceErrorV1> {
+    if cursor.is_empty() {
+        return Ok(None);
+    }
+    if cursor.len() != 24 {
+        return Err(CallEvidencePersistenceErrorV1::InvalidInput);
+    }
+    let canonical_revision = u64::from_be_bytes(
+        cursor[..8]
+            .try_into()
+            .map_err(|_| CallEvidencePersistenceErrorV1::InvalidInput)?,
+    );
+    let call_evidence_id = cursor[8..]
+        .try_into()
+        .map_err(|_| CallEvidencePersistenceErrorV1::InvalidInput)?;
+    if canonical_revision == 0 || !valid_id(&call_evidence_id) {
+        return Err(CallEvidencePersistenceErrorV1::InvalidInput);
+    }
+    Ok(Some((positive_i64(canonical_revision)?, call_evidence_id)))
+}
+
+fn encode_list_cursor(projection: &CallEvidenceProjectionV1) -> Vec<u8> {
+    let mut cursor = Vec::with_capacity(24);
+    cursor.extend_from_slice(&projection.canonical_revision.to_be_bytes());
+    cursor.extend_from_slice(&projection.evidence.call_evidence_id);
+    cursor
+}
+
 fn bytes16(value: Vec<u8>) -> Result<[u8; 16], CallEvidencePersistenceErrorV1> {
     value
         .try_into()
@@ -851,6 +959,39 @@ mod tests {
         );
         assert_eq!(
             validate_consume_input("owner-1", &[0; 16], &[2; 32], 1_700_000_000, 1_700_000_001),
+            Err(CallEvidencePersistenceErrorV1::InvalidInput)
+        );
+    }
+
+    #[test]
+    fn list_cursor_is_exact_opaque_and_round_trips() {
+        let projection = CallEvidenceProjectionV1 {
+            evidence: RecordCallEvidenceV1 {
+                call_evidence_id: [7; 16],
+                source_call_cursor_sha256: [1; 32],
+                account_cursor_sha256: [2; 32],
+                conversation_cursor_sha256: None,
+                participant_cursor_sha256: None,
+                provider: CallProviderProvenanceV1::Telegram,
+                direction: CallDirectionV1::Incoming,
+                media_kind: CallMediaKindV1::OneToOneAudio,
+                state: CallLifecycleStateV1::Ringing,
+                terminal_disposition: None,
+                source_revision: 1,
+                started_at_unix_seconds: Some(41),
+                connected_at_unix_seconds: None,
+                ended_at_unix_seconds: None,
+                duration_seconds: None,
+                participant_display_label: None,
+                payload_sha256: [8; 32],
+            },
+            canonical_revision: 42,
+        };
+        let cursor = encode_list_cursor(&projection);
+        assert_eq!(cursor.len(), 24);
+        assert_eq!(decode_list_cursor(&cursor), Ok(Some((42, [7; 16]))));
+        assert_eq!(
+            decode_list_cursor(&cursor[..23]),
             Err(CallEvidencePersistenceErrorV1::InvalidInput)
         );
     }

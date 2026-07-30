@@ -9,8 +9,9 @@ async function backendSource(path) {
   return readFile(new URL(path, BACKEND_ROOT), 'utf8');
 }
 
-test('call evidence ingress core and persistence are separate Communications domain units', async () => {
-  const [ingressManifest, coreManifest, persistenceManifest, policySource] = await Promise.all([
+test('call evidence contracts core and persistence are separate Communications domain units', async () => {
+  const [apiManifest, ingressManifest, coreManifest, persistenceManifest, policySource] = await Promise.all([
+    backendSource('src/communications-call-evidence-api/Cargo.toml'),
     backendSource('src/communications-call-evidence-ingress/Cargo.toml'),
     backendSource('src/communications-call-evidence-core/Cargo.toml'),
     backendSource('src/communications-call-evidence-persistence/Cargo.toml'),
@@ -18,7 +19,7 @@ test('call evidence ingress core and persistence are separate Communications dom
   ]);
   const policy = JSON.parse(policySource);
 
-  for (const manifest of [ingressManifest, coreManifest]) {
+  for (const manifest of [apiManifest, ingressManifest, coreManifest]) {
     assert.match(manifest, /role = "domain"/);
     assert.match(manifest, /owner = "communications"/);
     assert.doesNotMatch(
@@ -31,6 +32,7 @@ test('call evidence ingress core and persistence are separate Communications dom
   assert.match(ingressManifest, /surface = "contract"/);
   assert.match(coreManifest, /surface = "implementation"/);
   assert.match(persistenceManifest, /surface = "persistence"/);
+  assert.match(apiManifest, /surface = "contract"/);
   assert.match(coreManifest, /hermes-communications-call-evidence-ingress/);
   assert.match(persistenceManifest, /hermes-communications-call-evidence-core/);
   assert.match(persistenceManifest, /hermes-storage-protocol/);
@@ -45,6 +47,7 @@ test('call evidence ingress core and persistence are separate Communications dom
       'hermes-communications-call-evidence-ingress:domain:communications:contract',
       'hermes-communications-call-evidence-core:domain:communications:implementation',
       'hermes-communications-call-evidence-persistence:domain:communications:persistence',
+      'hermes-communications-call-evidence-api:domain:communications:contract',
     ],
   );
   assert.ok(
@@ -62,6 +65,46 @@ test('call evidence ingress core and persistence are separate Communications dom
       'hermes-communications-call-evidence-persistence',
     ),
   );
+});
+
+test('call evidence generated query and shared realtime are typed and client safe', async () => {
+  const [proto, api, persistence, queryPort, realtime, admission, runtimeMain] =
+    await Promise.all([
+      backendSource(
+        'src/communications-call-evidence-api/proto/hermes/communications/call_evidence/client/v1/client.proto',
+      ),
+      backendSource('src/communications-call-evidence-api/src/lib.rs'),
+      backendSource('src/communications-call-evidence-persistence/src/repository.rs'),
+      backendSource('src/communications-runtime/src/call_evidence_query_port.rs'),
+      backendSource('src/communications-runtime/src/call_evidence_realtime.rs'),
+      backendSource('src/communications-runtime/src/admission.rs'),
+      backendSource('src/communications-runtime/src/main.rs'),
+    ]);
+
+  assert.match(proto, /service CallEvidenceQueryService/);
+  assert.match(proto, /GetCallEvidenceRequestV1 get/);
+  assert.match(proto, /ListCallEvidenceRequestV1 list/);
+  assert.match(proto, /optional CallProviderV1 provider/);
+  assert.match(proto, /message CallEvidenceChangedV1/);
+  const protoWithoutComments = proto.replaceAll(/\/\/.*$/gm, '');
+  assert.doesNotMatch(
+    protoWithoutComments,
+    /\b(?:source_call_cursor|account_cursor|conversation_cursor|participant_cursor|provider_call_id|phone_number|transcript|audio_bytes|credential|session_store)\b|map\s*<|google\.protobuf\.Any/,
+  );
+  assert.match(api, /CALL_EVIDENCE_QUERY_CONNECT_PATH_V1/);
+  assert.match(api, /CALL_EVIDENCE_REALTIME_CONTRACT_NAME_V1/);
+  assert.match(persistence, /pub async fn list\(/);
+  assert.match(persistence, /ORDER BY canonical_revision DESC, call_evidence_id DESC/);
+  assert.match(queryPort, /handle_call_evidence_query_v1/);
+  assert.match(queryPort, /provider_filter/);
+  assert.match(queryPort, /state_filter/);
+  assert.match(realtime, /ManagedRuntimeClientRealtimePublishRequestV1/);
+  assert.match(realtime, /communications-call-evidence\/\{\}/);
+  assert.match(realtime, /last_sequence: Option<u64>/);
+  assert.match(admission, /CALL_EVIDENCE_CLIENT_CAPABILITY_ID_V1/);
+  assert.match(admission, /ProvidedSurfaceKindV1::ClientRealtime/);
+  assert.match(runtimeMain, /publish_call_evidence_realtime\(\)/);
+  assert.doesNotMatch(realtime, /source_call_cursor|account_cursor|provider_call_id|transcript/);
 });
 
 test('call evidence durable observation is exact typed and locator negative', async () => {

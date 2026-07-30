@@ -20,6 +20,7 @@ surface = "runtime"
 [dependencies]
 hermes-communications-api = { path = "../communications-api" }
 hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }
+hermes-communications-call-evidence-api = { path = "../communications-call-evidence-api" }
 hermes-communications-call-evidence-core = { path = "../communications-call-evidence-core" }
 hermes-communications-call-evidence-ingress = { path = "../communications-call-evidence-ingress" }
 hermes-communications-call-evidence-persistence = { path = "../communications-call-evidence-persistence" }

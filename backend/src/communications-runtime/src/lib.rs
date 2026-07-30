@@ -3,7 +3,10 @@
 pub mod admission;
 pub mod attachment_observation_consumer;
 pub mod attachment_safety;
+pub mod call_evidence_client_port;
 pub mod call_evidence_consumer;
+pub mod call_evidence_query_port;
+mod call_evidence_realtime;
 pub mod canonical_outbox;
 pub mod canonical_read_cursor;
 pub mod client_port;

@@ -4,8 +4,9 @@ mod repository;
 mod schema;
 
 pub use repository::{
-    CallEvidenceConsumeOutcomeV1, CallEvidencePersistenceErrorV1, CallEvidenceRealtimeRecordV1,
-    CallEvidenceRejectionCodeV1, CommunicationsCallEvidencePersistenceV1,
+    CallEvidenceConsumeOutcomeV1, CallEvidenceListFilterV1, CallEvidencePageV1,
+    CallEvidencePersistenceErrorV1, CallEvidenceRealtimeRecordV1, CallEvidenceRejectionCodeV1,
+    CommunicationsCallEvidencePersistenceV1,
 };
 pub use schema::{
     COMMUNICATIONS_CALL_EVIDENCE_SCHEMA_V1,

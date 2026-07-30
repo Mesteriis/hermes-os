@@ -195,6 +195,12 @@ async fn consume_or_tick(
             }
             "Communications runtime client delivery failed".to_owned()
         })?;
+    match runtime.publish_call_evidence_realtime().await {
+        Ok(_) | Err(CommunicationsEventRuntimeErrorV1::Unavailable) => {}
+        Err(CommunicationsEventRuntimeErrorV1::Admission) => {
+            return Err("Communications call evidence realtime admission failed".to_owned());
+        }
+    }
     if client_delivery {
         if tokio::time::timeout(Duration::ZERO, maintenance.tick())
             .await

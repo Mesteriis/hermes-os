@@ -11,7 +11,10 @@ use hermes_communications_attachment_contract::admission::{
     communication_attachment_safety_verdict_observed_contract_reference_v1,
 };
 use hermes_communications_call_evidence_ingress::call_evidence_observed_contract_reference_v1;
-use hermes_communications_call_evidence_persistence::CommunicationsCallEvidencePersistenceV1;
+use hermes_communications_call_evidence_persistence::{
+    CallEvidenceConsumeOutcomeV1, CallEvidencePersistenceErrorV1,
+    CommunicationsCallEvidencePersistenceV1,
+};
 use hermes_communications_cross_channel_forward_source_api::cross_channel_forward_source_prepare_contract_reference_v1;
 use hermes_communications_domain::COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1;
 use hermes_communications_evidence_export_source_api::evidence_export_prepare_contract_reference_v1;
@@ -51,7 +54,11 @@ use crate::{
         consume_next_attachment_blob_admission_observation_v1,
         consume_next_attachment_safety_verdict_observation_v1,
     },
+    call_evidence_client_port::handle_call_evidence_module_query_delivery_v1,
     call_evidence_consumer::consume_next_call_evidence_observation_v1,
+    call_evidence_realtime::{
+        CallEvidenceClientRealtimeErrorV1, CallEvidenceClientRealtimePublisherV1,
+    },
     canonical_outbox::CanonicalEventContextV1,
     client_port::dispatch_module_client_request_v1,
     consumer::{
@@ -89,6 +96,8 @@ pub struct CommunicationsEventRuntimeV1 {
     domain_publish_permit: RuntimePublishPermitV1,
     persistence: CommunicationsDurablePersistence,
     call_evidence_persistence: CommunicationsCallEvidencePersistenceV1,
+    call_evidence_realtime: CallEvidenceClientRealtimePublisherV1,
+    call_evidence_realtime_pending: bool,
     search_access: CommunicationsSearchAccessV1,
     content_tickets: Arc<CommunicationsContentTicketStoreV1>,
     runtime_instance_id: String,
@@ -209,6 +218,8 @@ fn exact_contract(left: &ContractReferenceV1, right: &ContractReferenceV1) -> bo
 
 struct CommunicationsNestedRequestDispatcher<'a> {
     persistence: &'a CommunicationsDurablePersistence,
+    call_evidence_persistence: &'a CommunicationsCallEvidencePersistenceV1,
+    logical_owner_id: &'a str,
     search_access: &'a mut CommunicationsSearchAccessV1,
     content_tickets: &'a Arc<CommunicationsContentTicketStoreV1>,
 }
@@ -228,6 +239,8 @@ impl ManagedControlRequestDispatcherV2<UnixStream> for CommunicationsNestedReque
                         tokio::runtime::Handle::current().block_on(
                             dispatch_module_client_request_v1(
                                 self.persistence,
+                                self.call_evidence_persistence,
+                                self.logical_owner_id,
                                 self.content_tickets,
                                 self.search_access,
                                 channel,
@@ -434,6 +447,8 @@ impl CommunicationsEventRuntimeV1 {
             domain_publish_permit,
             persistence,
             call_evidence_persistence,
+            call_evidence_realtime: CallEvidenceClientRealtimePublisherV1::default(),
+            call_evidence_realtime_pending: true,
             search_access,
             content_tickets: Arc::new(CommunicationsContentTicketStoreV1::new()),
             runtime_instance_id: admission.runtime_instance_id.clone(),
@@ -458,6 +473,8 @@ impl CommunicationsEventRuntimeV1 {
                 let mut nested_search_access = self.search_access.clone();
                 let mut nested_dispatcher = CommunicationsNestedRequestDispatcher {
                     persistence: &self.persistence,
+                    call_evidence_persistence: &self.call_evidence_persistence,
+                    logical_owner_id: &self.logical_owner_id,
                     search_access: &mut nested_search_access,
                     content_tickets: &self.content_tickets,
                 };
@@ -465,14 +482,27 @@ impl CommunicationsEventRuntimeV1 {
                     .inner_mut()
                     .set_nonblocking(false)
                     .map_err(|_| unavailable_at("module_query_blocking"))?;
-                let response = handle_module_query_delivery_v1(
-                    &self.persistence,
-                    &mut self.search_access,
-                    &mut self.control_channel,
-                    &mut nested_dispatcher,
-                    delivery,
-                )
-                .await;
+                let response = if delivery.contract.as_ref()
+                    == Some(
+                        &crate::admission::communications_call_evidence_query_contract_reference_v1(
+                        ),
+                    ) {
+                    handle_call_evidence_module_query_delivery_v1(
+                        &self.call_evidence_persistence,
+                        &self.logical_owner_id,
+                        delivery,
+                    )
+                    .await
+                } else {
+                    handle_module_query_delivery_v1(
+                        &self.persistence,
+                        &mut self.search_access,
+                        &mut self.control_channel,
+                        &mut nested_dispatcher,
+                        delivery,
+                    )
+                    .await
+                };
                 self.control_channel
                     .inner_mut()
                     .set_nonblocking(true)
@@ -549,6 +579,8 @@ impl CommunicationsEventRuntimeV1 {
         let mut nested_search_access = self.search_access.clone();
         let mut nested_dispatcher = CommunicationsNestedRequestDispatcher {
             persistence: &self.persistence,
+            call_evidence_persistence: &self.call_evidence_persistence,
+            logical_owner_id: &self.logical_owner_id,
             search_access: &mut nested_search_access,
             content_tickets: &self.content_tickets,
         };
@@ -558,6 +590,8 @@ impl CommunicationsEventRuntimeV1 {
             .map_err(|_| unavailable_at("client_blocking"))?;
         let response = dispatch_module_client_request_v1(
             &self.persistence,
+            &self.call_evidence_persistence,
+            &self.logical_owner_id,
             &self.content_tickets,
             &mut self.search_access,
             &mut self.control_channel,
@@ -603,15 +637,20 @@ impl CommunicationsEventRuntimeV1 {
             )
             .await
             .map(|_| ()),
-            CommunicationsConsumerV1::CallEvidence => consume_next_call_evidence_observation_v1(
-                &self.call_evidence_persistence,
-                &self.connection,
-                &self.permits.call_evidence,
-                &self.logical_owner_id,
-                canonical_event_context.recorded_at_unix_seconds,
-            )
-            .await
-            .map(|_| ()),
+            CommunicationsConsumerV1::CallEvidence => {
+                let outcome = consume_next_call_evidence_observation_v1(
+                    &self.call_evidence_persistence,
+                    &self.connection,
+                    &self.permits.call_evidence,
+                    &self.logical_owner_id,
+                    canonical_event_context.recorded_at_unix_seconds,
+                )
+                .await?;
+                if matches!(outcome, CallEvidenceConsumeOutcomeV1::Applied { .. }) {
+                    self.call_evidence_realtime_pending = true;
+                }
+                Ok(())
+            }
             CommunicationsConsumerV1::AttachmentBlobAdmission => {
                 consume_next_attachment_blob_admission_observation_v1(
                     &self.persistence,
@@ -636,6 +675,8 @@ impl CommunicationsEventRuntimeV1 {
                 let mut nested_search_access = self.search_access.clone();
                 let mut dispatcher = CommunicationsNestedRequestDispatcher {
                     persistence: &self.persistence,
+                    call_evidence_persistence: &self.call_evidence_persistence,
+                    logical_owner_id: &self.logical_owner_id,
                     search_access: &mut nested_search_access,
                     content_tickets: &self.content_tickets,
                 };
@@ -664,6 +705,8 @@ impl CommunicationsEventRuntimeV1 {
                 let mut nested_search_access = self.search_access.clone();
                 let mut dispatcher = CommunicationsNestedRequestDispatcher {
                     persistence: &self.persistence,
+                    call_evidence_persistence: &self.call_evidence_persistence,
+                    logical_owner_id: &self.logical_owner_id,
                     search_access: &mut nested_search_access,
                     content_tickets: &self.content_tickets,
                 };
@@ -691,6 +734,47 @@ impl CommunicationsEventRuntimeV1 {
         }
     }
 
+    pub async fn publish_call_evidence_realtime(
+        &mut self,
+    ) -> Result<bool, CommunicationsEventRuntimeErrorV1> {
+        if !self.call_evidence_realtime_pending {
+            return Ok(false);
+        }
+        let mut nested_search_access = self.search_access.clone();
+        let mut dispatcher = CommunicationsNestedRequestDispatcher {
+            persistence: &self.persistence,
+            call_evidence_persistence: &self.call_evidence_persistence,
+            logical_owner_id: &self.logical_owner_id,
+            search_access: &mut nested_search_access,
+            content_tickets: &self.content_tickets,
+        };
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| unavailable_at("call_evidence_realtime_blocking"))?;
+        let result = self
+            .call_evidence_realtime
+            .publish_pending(
+                &self.call_evidence_persistence,
+                &mut self.control_channel,
+                &mut dispatcher,
+                &self.logical_owner_id,
+            )
+            .await
+            .map_err(call_evidence_realtime_error);
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| unavailable_at("call_evidence_realtime_nonblocking"))?;
+        match result {
+            Ok(outcome) => {
+                self.call_evidence_realtime_pending = !outcome.drained;
+                Ok(outcome.published)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     pub async fn process_next_body_custody_transfer(
         &mut self,
     ) -> Result<bool, CommunicationsEventRuntimeErrorV1> {
@@ -699,6 +783,8 @@ impl CommunicationsEventRuntimeV1 {
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
         let mut dispatcher = CommunicationsNestedRequestDispatcher {
             persistence: &self.persistence,
+            call_evidence_persistence: &self.call_evidence_persistence,
+            logical_owner_id: &self.logical_owner_id,
             search_access: &mut self.search_access,
             content_tickets: &self.content_tickets,
         };
@@ -723,6 +809,8 @@ impl CommunicationsEventRuntimeV1 {
         let mut nested_search_access = self.search_access.clone();
         let mut nested_dispatcher = CommunicationsNestedRequestDispatcher {
             persistence: &self.persistence,
+            call_evidence_persistence: &self.call_evidence_persistence,
+            logical_owner_id: &self.logical_owner_id,
             search_access: &mut nested_search_access,
             content_tickets: &self.content_tickets,
         };
@@ -846,6 +934,25 @@ fn cross_channel_forward_source_delivery_error(
             CommunicationsDeliveryErrorV1::Consume(
                 CommunicationsEventConsumeErrorV1::PersistenceRejected,
             )
+        }
+    }
+}
+
+const fn call_evidence_realtime_error(
+    error: CallEvidenceClientRealtimeErrorV1,
+) -> CommunicationsEventRuntimeErrorV1 {
+    match error {
+        CallEvidenceClientRealtimeErrorV1::InvalidRecord
+        | CallEvidenceClientRealtimeErrorV1::Persistence(
+            CallEvidencePersistenceErrorV1::InvalidInput
+            | CallEvidencePersistenceErrorV1::InvalidRow
+            | CallEvidencePersistenceErrorV1::InboxHashConflict,
+        ) => CommunicationsEventRuntimeErrorV1::Admission,
+        CallEvidenceClientRealtimeErrorV1::Persistence(
+            CallEvidencePersistenceErrorV1::StorageUnavailable,
+        )
+        | CallEvidenceClientRealtimeErrorV1::Unavailable => {
+            CommunicationsEventRuntimeErrorV1::Unavailable
         }
     }
 }

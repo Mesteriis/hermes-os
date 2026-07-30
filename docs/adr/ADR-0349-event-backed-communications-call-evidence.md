@@ -4,12 +4,13 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: contract/core, owner-local persistence, revision 15
-существующего Communications storage bundle, managed event consumer и
-Telegram-owned producer/outbox adapter реализованы. Producer остаётся staged
-в Telegram Calls build units до их exact managed admission. Gate
-`communications_call_evidence_v1` остаётся закрыт до generated query/realtime
-surface, exact admission producer-а и live event conformance.
+Состояние реализации: ingress/client contracts, core, owner-local persistence,
+revision 15 существующего Communications storage bundle, managed event
+consumer, generated list/get, replayable client realtime и Telegram-owned
+producer/outbox adapter реализованы. Producer остаётся staged в Telegram Calls
+build units до их exact managed admission. Gate
+`communications_call_evidence_v1` остаётся закрыт до exact admission
+producer-а и live event conformance.
 
 Уточняет:
 
@@ -71,6 +72,8 @@ generic call platform или provider facade не вводится.
   evidence projection;
 - `call-evidence-persistence` владеет inbox/hash fence, canonical rows,
   lifecycle history, query cursors и realtime outbox;
+- `call-evidence-api` владеет только generated list/get и client-safe realtime
+  schema без source cursors и provider locators;
 - integration adapter преобразует только собственную operational projection в
   public Communications contract и сохраняет exact envelope bytes в своём
   outbox;
