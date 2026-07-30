@@ -2102,6 +2102,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communications-call-evidence-core"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-call-evidence-ingress",
+ "prost-types 0.14.4",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-communications-call-evidence-ingress"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "prost-types 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-communications-content-api"
 version = "0.1.0"
 dependencies = [

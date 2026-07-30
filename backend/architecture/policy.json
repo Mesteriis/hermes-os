@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_cross_channel_forward_client_assembly_v1",
+    "currentSlice": "communications_call_evidence_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -672,6 +672,18 @@
         "role": "workflow",
         "owner": "communication_cross_channel_forward",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-communications-call-evidence-ingress",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communications-call-evidence-core",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1137,6 +1149,22 @@
         },
         {
           "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communications-call-evidence-ingress": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communications-call-evidence-core": [
+        {
+          "name": "hermes-communications-call-evidence-ingress",
           "kind": "normal"
         }
       ],
@@ -3479,6 +3507,74 @@
           "features": []
         }
       ],
+      "hermes-communications-call-evidence-ingress": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communications-call-evidence-core": [
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-communications-attachment-contract": [
         {
           "name": "prost",
@@ -5787,6 +5883,14 @@
       "hermes-communication-cross-channel-forward-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
+      },
+      "hermes-communications-call-evidence-ingress": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communications-call-evidence-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -6322,6 +6426,7 @@
     ],
     "integrationDomainContractPackages": [
       "hermes-communications-attachment-contract",
+      "hermes-communications-call-evidence-ingress",
       "hermes-communications-ingress"
     ]
   },

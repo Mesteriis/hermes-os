@@ -667,6 +667,22 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_PRODUCTION_PACKAGES = 
   },
 ];
 
+const COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communications-call-evidence-ingress',
+    role: 'domain',
+    owner: 'communications',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-communications-call-evidence-core',
+    role: 'domain',
+    owner: 'communications',
+    surface: 'implementation',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2037,6 +2053,17 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_WORKSPACE_DEPENDENCY_A
   ],
 };
 
+const COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-call-evidence-ingress': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-communications-call-evidence-core': [
+    { name: 'hermes-communications-call-evidence-ingress', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2337,6 +2364,22 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_THIRD_PARTY_DEPENDENCY
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
     { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
+};
+
+const COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-call-evidence-ingress': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communications-call-evidence-core': [
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
 };
 
@@ -2808,6 +2851,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-zulip-api',
       'hermes-mail-api',
       'hermes-communications-ingress',
+      'hermes-communications-call-evidence-ingress',
       'hermes-communications-attachment-contract',
       'hermes-communications-api',
       'hermes-communications-content-api',
@@ -3362,6 +3406,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communications_call_evidence_contract_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
