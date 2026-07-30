@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_cross_channel_forward_contract_core_v1",
+    "currentSlice": "communication_cross_channel_forward_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -642,6 +642,12 @@
         "role": "workflow",
         "owner": "communication_cross_channel_forward",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-communication-cross-channel-forward-persistence",
+        "role": "workflow",
+        "owner": "communication_cross_channel_forward",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1909,7 +1915,17 @@
         }
       ],
       "hermes-communication-cross-channel-forward-api": [],
-      "hermes-communication-cross-channel-forward-core": []
+      "hermes-communication-cross-channel-forward-core": [],
+      "hermes-communication-cross-channel-forward-persistence": [
+        {
+          "name": "hermes-communication-cross-channel-forward-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ]
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-events-protocol": [
@@ -4980,7 +4996,29 @@
           "features": []
         }
       ],
-      "hermes-communication-cross-channel-forward-core": []
+      "hermes-communication-cross-channel-forward-core": [],
+      "hermes-communication-cross-channel-forward-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ]
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -5004,6 +5042,10 @@
     ],
     "cargoFeaturesEnabled": false,
     "cargoFeatureAllowlist": {
+      "hermes-communication-cross-channel-forward-persistence": {
+        "default": [],
+        "conformance-test-support": []
+      },
       "hermes-communication-delayed-delivery-persistence": {
         "default": [],
         "conformance-test-support": []
@@ -5421,6 +5463,10 @@
         "customBuildAllowed": true
       },
       "hermes-communication-cross-channel-forward-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-cross-channel-forward-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       }

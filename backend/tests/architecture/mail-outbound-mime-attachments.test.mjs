@@ -46,6 +46,10 @@ const MAIL_CAPABILITIES = [
 ];
 
 const MAIL_CARGO_FEATURES = {
+  'hermes-communication-cross-channel-forward-persistence': {
+    default: [],
+    'conformance-test-support': [],
+  },
   'hermes-communication-delayed-delivery-persistence': {
     default: [],
     'conformance-test-support': [],
@@ -82,7 +86,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_cross_channel_forward_contract_core_v1',
+    'communication_cross_channel_forward_persistence_v1',
   );
   assert.deepEqual(inventory.domains, ['communications']);
   assert.deepEqual(inventory.integrations, ['mail']);

@@ -4,11 +4,16 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: решение принято, production gate закрыт. Exact public
-contract, owner-local persistence, managed runtime, Communications source
+Состояние реализации: exact public contract, pure core и owner-local
+persistence реализованы отдельными build units. Persistence предоставляет
+owner-scoped idempotent admission, conflicting replay fence, monotonic state,
+lease/epoch work claims, bounded reconnect-safe retry, client realtime ledger
+и durable Blob custody cleanup queue; plaintext body не хранится. Disposable
+PostgreSQL contour доказывает migration, reconnect, stale claim, retry deadline,
+owner isolation и cleanup completion. Managed runtime, Communications source
 preparation contract, delivery-intent adapter и live managed evidence ещё не
-реализованы. Принятый ADR сам по себе не открывает
-`communication_cross_channel_forward_v1`.
+реализованы. Production gate остаётся закрыт. Принятый ADR сам по себе не
+открывает `communication_cross_channel_forward_v1`.
 
 ## Контекст
 

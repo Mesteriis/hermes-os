@@ -1787,6 +1787,25 @@ name = "hermes-communication-cross-channel-forward-core"
 version = "0.1.0"
 
 [[package]]
+name = "hermes-communication-cross-channel-forward-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-cross-channel-forward-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
+name = "hermes-communication-cross-channel-forward-testkit"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-cross-channel-forward-core",
+ "hermes-communication-cross-channel-forward-persistence",
+ "tokio",
+]
+
+[[package]]
 name = "hermes-communication-delayed-delivery-api"
 version = "0.1.0"
 dependencies = [

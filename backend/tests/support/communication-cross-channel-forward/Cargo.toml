@@ -1,0 +1,15 @@
+[package]
+name = "hermes-communication-cross-channel-forward-testkit"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[package.metadata.hermes]
+role = "test"
+owner = "test"
+surface = "test_support"
+
+[dev-dependencies]
+hermes-communication-cross-channel-forward-core = { path = "../../../src/communication-cross-channel-forward-core" }
+hermes-communication-cross-channel-forward-persistence = { path = "../../../src/communication-cross-channel-forward-persistence", features = ["conformance-test-support"] }
+tokio = { version = "=1.52.4", default-features = false, features = ["macros", "rt-multi-thread"] }
