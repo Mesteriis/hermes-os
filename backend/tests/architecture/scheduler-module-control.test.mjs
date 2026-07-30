@@ -5,7 +5,7 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
-test('module-originated Scheduler control keeps its gate planned while protocol and persistence foundations are exact', async () => {
+test('module-originated Scheduler control opens only with exact protocol and managed evidence', async () => {
   const [adr, inventorySource, proto, schedulerProtocol, validation, runtimeContract, admission, mapping, resultEnvelope, migration, authorityMigration, persistence, schedulerConnection, jetstream, runtimeWorker, schedulerRuntimeControl, delayedDeliveryRuntime, delayedDeliverySchedulerResults, delayedDeliveryDueExecution, kernelTopology, schedulerLaunch, schedulerLifecycle, eventCatalog, development, manifest] = await Promise.all([
     readFile(
       new URL(
@@ -192,10 +192,11 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
     gate: 'scheduler_module_schedule_control_v1',
     role: 'platform',
     owner: 'scheduler',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['scheduler_v1', 'nats_data_plane_v1'],
   });
-  assert.match(adr, /protocol, pure admission mapping и persistence foundation/);
+  assert.match(adr, /Состояние реализации: реализовано/);
+  assert.match(adr, /scheduler_module_schedule_control_v1` открыт/);
   assert.match(adr, /DurableEnvelopeV1/);
   assert.match(proto, /message SchedulerScheduleControlCommandV1/);
   assert.match(

@@ -4,9 +4,8 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: protocol, pure admission mapping и persistence foundation
-реализованы. Exact Protobuf command/result, structural validation, mapping
-approved JobKind на canonical one-shot policy, transactional Scheduler
+Состояние реализации: реализовано. Exact Protobuf command/result, structural
+validation, mapping approved JobKind на canonical one-shot policy, transactional Scheduler
 inbox/result outbox, exact duplicate replay, same-ID hash conflict и cancellation
 race покрыты unit и disposable PostgreSQL conformance. Exact runtime
 configuration, source/runtime/grant/catalog admission, canonical correlated
@@ -31,7 +30,11 @@ unacked и применяется после redelivery; authority denial и cor
 по-прежнему fail-fast. Disposable PostgreSQL contour и повторяемый managed
 delayed-delivery contour доказывают этот cross-stream порядок и terminal
 due-delivery обратно в producer runtime;
-platform gate `scheduler_module_schedule_control_v1` остаётся закрыт.
+platform gate `scheduler_module_schedule_control_v1` открыт после двух
+последовательных managed contours и полного `make pre-push`: exact protocol,
+descriptor/catalog routes, durable inbox/result outbox, one-shot mapping,
+cancellation races, commit-before-ACK, runtime/grant/generation/lease fences,
+negative paths и live producer → Scheduler → result доказаны вместе.
 
 Уточняет:
 

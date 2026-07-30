@@ -500,7 +500,7 @@
       "gate": "scheduler_module_schedule_control_v1",
       "role": "platform",
       "owner": "scheduler",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["scheduler_v1", "nats_data_plane_v1"]
     },
     {
