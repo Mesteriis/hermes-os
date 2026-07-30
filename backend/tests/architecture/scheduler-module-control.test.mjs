@@ -6,7 +6,7 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
 test('module-originated Scheduler control keeps its gate planned while protocol and persistence foundations are exact', async () => {
-  const [adr, inventorySource, proto, validation, runtimeContract, admission, mapping, resultEnvelope, migration, authorityMigration, persistence, jetstream, runtimeWorker, kernelTopology, development, manifest] = await Promise.all([
+  const [adr, inventorySource, proto, validation, runtimeContract, admission, mapping, resultEnvelope, migration, authorityMigration, persistence, jetstream, runtimeWorker, kernelTopology, eventCatalog, development, manifest] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0342-module-originated-scheduler-control-events.md',
@@ -107,6 +107,13 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
     ),
     readFile(
       new URL(
+        'src/kernel/src/platform/events/catalog/entries.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/kernel/src/platform/development.rs',
         BACKEND_ROOT,
       ),
@@ -164,6 +171,13 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
   assert.match(kernelTopology, /command_publishers\.contains/);
   assert.match(kernelTopology, /result_consumers\.contains/);
   assert.match(kernelTopology, /scheduler_catalog::resolve/);
+  assert.match(eventCatalog, /scheduler_dispatch_entries/);
+  assert.match(eventCatalog, /module_scheduler_job_requests/);
+  assert.match(eventCatalog, /SCHEDULER_DISPATCH_CAPABILITY_ID_V1/);
+  assert.doesNotMatch(
+    eventCatalog.split('#[cfg(test)]')[0],
+    /communication_delayed_delivery|mail|telegram|whatsapp|zulip/,
+  );
   assert.match(development, /events\.scheduler\.schedule_control\.command/);
   assert.match(development, /events\.scheduler\.schedule_control\.result/);
   assert.match(development, /StorageBundleV1::decode/);

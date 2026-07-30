@@ -105,7 +105,12 @@ delivery, materialization и relay не являются owner execution.
 становится Scheduler catalog entry только после capability-level approval;
 pending, foreign и duplicate request fail closed. Этот catalog не является
 schedule-control API, не upsert-ит schedules и не заменяет exact owner
-contract admission будущего gate. `JobContractBindingV1` и persisted Scheduler
+contract admission будущего gate. Kernel Event Catalog выводит из каждого
+такого approved JobKind отдельный exact command publisher для единственного
+approved Scheduler dispatch authority; provider/domain-specific список
+publish routes в Scheduler descriptor не кодируется. Ambiguous Scheduler
+authority fail-closed, а publisher отсутствует после revoke JobKind grant.
+`JobContractBindingV1` и persisted Scheduler
 schedule теперь несут nonzero contract revision; старая row без revision
 отклоняется при decode до явного revisioned owner update. Private owner-control
 теперь содержит typed `UpsertSchedulerSchedule`: после owner-session check
