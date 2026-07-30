@@ -94,12 +94,29 @@ pub enum BodyCleanupErrorV1 {
     Unavailable,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BodyCleanupReasonV1 {
+    DeliveryAccepted,
+    DeliveryRejected,
+}
+
 #[allow(async_fn_in_trait)]
 pub trait BodyCleanupPortV1 {
     async fn request_cleanup(
         &mut self,
         claim: &DelayedDeliveryExecutionClaimV1,
+        reason: BodyCleanupReasonV1,
     ) -> Result<(), BodyCleanupErrorV1>;
+}
+
+pub trait DelayedDeliveryRuntimePortV1:
+    BodyReadPortV1 + BodyCleanupPortV1 + crate::DeliveryIntentRequestPortV1
+{
+}
+
+impl<T> DelayedDeliveryRuntimePortV1 for T where
+    T: BodyReadPortV1 + BodyCleanupPortV1 + crate::DeliveryIntentRequestPortV1
+{
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

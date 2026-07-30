@@ -24,10 +24,12 @@ exact lease. Отдельная execution unit реализует owner-local du
 stable delivery-intent request, fenced accepted/failed transition, terminal
 Scheduler receipt и durable cleanup-pending outcome. Отдельная event-adapter
 unit уже строит exact Scheduler command envelope с runtime/grant fences и
-проверяет correlated Scheduler result до persistence mutation. Реальные managed
-adapters для Blob/request routing, executable admission, assembly, client
-routing и live end-to-end contour ещё не реализованы. Этот ADR не открывает
-workflow gate сам по себе.
+проверяет correlated Scheduler result до persistence mutation. Отдельная
+runtime-adapters unit реализует receipt-bound Blob read, terminal-reason-bound
+custody release и exact delivery-intent `request_rpc` через один sequential
+managed-control port. Executable admission, assembly, client routing и live
+end-to-end contour ещё не реализованы. Этот ADR не открывает workflow gate сам
+по себе.
 
 Уточняет:
 
@@ -72,6 +74,7 @@ hermes-communication-delayed-delivery-core
 hermes-communication-delayed-delivery-persistence
 hermes-communication-delayed-delivery-execution
 hermes-communication-delayed-delivery-event-adapters
+hermes-communication-delayed-delivery-runtime-adapters
 hermes-communication-delayed-delivery-runtime
 hermes-communication-delayed-delivery-assembly
 ```
@@ -82,8 +85,9 @@ operation, body custody reference, Scheduler correlation и owner-local inbox /
 outbox. Execution unit владеет только fenced due orchestration через public
 ports. Event-adapters unit владеет exact Scheduler `DurableEnvelopeV1`
 construction/admission mapping и не выполняет transport I/O. Runtime обслуживает
-client contract, durable Scheduler/Blob transport adapters и managed lifecycle.
-Assembly создаёт отдельный signed runtime/storage fragment.
+client contract и managed lifecycle. Runtime-adapters unit владеет только
+Kernel-routed Blob/request transport, не persistence и не lifecycle. Assembly
+создаёт отдельный signed runtime/storage fragment.
 
 Ни одна unit не импортирует Communications implementation, integration
 runtime/persistence, Scheduler implementation/persistence или Kernel

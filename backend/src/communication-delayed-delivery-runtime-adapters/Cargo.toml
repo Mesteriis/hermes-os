@@ -1,0 +1,19 @@
+[package]
+name = "hermes-communication-delayed-delivery-runtime-adapters"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "communication_delayed_delivery"
+surface = "implementation"
+
+[dependencies]
+hermes-blob-client = { path = "../platform/blob/client" }
+hermes-communication-delayed-delivery-execution = { path = "../communication-delayed-delivery-execution" }
+hermes-communication-delivery-intent-api = { path = "../communication-delivery-intent-api" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }

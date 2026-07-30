@@ -2,8 +2,8 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::{
-    BodyCleanupPortV1, BodyReadPortV1, ClaimDueExecutionOutcomeV1, ClaimDueExecutionV1,
-    DelayedDeliveryIntentRequestV1, DelayedDeliveryIntentResponseV1, DeliveryIntentRequestPortV1,
+    BodyCleanupReasonV1, ClaimDueExecutionOutcomeV1, ClaimDueExecutionV1,
+    DelayedDeliveryIntentRequestV1, DelayedDeliveryIntentResponseV1, DelayedDeliveryRuntimePortV1,
     ExecutionStoreErrorV1, ExecutionStorePortV1, MarkDeliveryAcceptedV1, MarkDeliveryFailedV1,
     SchedulerReceiptFactoryPortV1, SchedulerTerminalOutcomeV1, decode_delivery_intent_response_v1,
     ports::receipt_matches_body,
@@ -23,13 +23,10 @@ pub enum DelayedDeliveryWorkerErrorV1 {
     Store(ExecutionStoreErrorV1),
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn execute_due_delivery_v1(
     store: &mut impl ExecutionStorePortV1,
-    body_port: &mut impl BodyReadPortV1,
-    delivery_port: &mut impl DeliveryIntentRequestPortV1,
+    runtime_port: &mut impl DelayedDeliveryRuntimePortV1,
     receipt_factory: &mut impl SchedulerReceiptFactoryPortV1,
-    cleanup_port: &mut impl BodyCleanupPortV1,
     command: &ClaimDueExecutionV1,
     now_unix_millis: u64,
 ) -> Result<DelayedDeliveryExecutionOutcomeV1, DelayedDeliveryWorkerErrorV1> {
@@ -41,7 +38,7 @@ pub async fn execute_due_delivery_v1(
         ClaimDueExecutionOutcomeV1::Claimed(claim)
         | ClaimDueExecutionOutcomeV1::Duplicate(claim) => claim,
     };
-    let body = match body_port.read_once(&claim).await {
+    let body = match runtime_port.read_once(&claim).await {
         Ok(body) => Zeroizing::new(body),
         Err(_) => return Ok(DelayedDeliveryExecutionOutcomeV1::Retryable),
     };
@@ -57,7 +54,7 @@ pub async fn execute_due_delivery_v1(
         body_utf8: body.to_vec(),
     }
     .encode();
-    let response = match delivery_port
+    let response = match runtime_port
         .request(claim.delivery_operation_id, payload)
         .await
     {
@@ -83,7 +80,10 @@ pub async fn execute_due_delivery_v1(
                 .await
                 .map_err(DelayedDeliveryWorkerErrorV1::Store)?;
             Ok(DelayedDeliveryExecutionOutcomeV1::Accepted {
-                cleanup_pending: cleanup_port.request_cleanup(&claim).await.is_err(),
+                cleanup_pending: runtime_port
+                    .request_cleanup(&claim, BodyCleanupReasonV1::DeliveryAccepted)
+                    .await
+                    .is_err(),
             })
         }
         Ok(DelayedDeliveryIntentResponseV1::Rejected) => {
@@ -105,7 +105,10 @@ pub async fn execute_due_delivery_v1(
                 .await
                 .map_err(DelayedDeliveryWorkerErrorV1::Store)?;
             Ok(DelayedDeliveryExecutionOutcomeV1::Rejected {
-                cleanup_pending: cleanup_port.request_cleanup(&claim).await.is_err(),
+                cleanup_pending: runtime_port
+                    .request_cleanup(&claim, BodyCleanupReasonV1::DeliveryRejected)
+                    .await
+                    .is_err(),
             })
         }
         Ok(DelayedDeliveryIntentResponseV1::Retryable) | Err(_) => {
@@ -123,9 +126,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        BodyCleanupErrorV1, BodyReadErrorV1, DelayedDeliveryBodyReceiptV1,
-        DelayedDeliveryDurableMessageV1, DelayedDeliveryExecutionClaimV1,
-        DeliveryIntentRequestErrorV1, SchedulerExecutionFenceV1, SchedulerReceiptErrorV1,
+        BodyCleanupErrorV1, BodyCleanupPortV1, BodyReadErrorV1, BodyReadPortV1,
+        DelayedDeliveryBodyReceiptV1, DelayedDeliveryDurableMessageV1,
+        DelayedDeliveryExecutionClaimV1, DeliveryIntentRequestErrorV1, DeliveryIntentRequestPortV1,
+        SchedulerExecutionFenceV1, SchedulerReceiptErrorV1,
     };
 
     struct StoreFixture {
@@ -159,20 +163,21 @@ mod tests {
         }
     }
 
-    struct BodyFixture(Vec<u8>);
+    struct RuntimeFixture {
+        body: Vec<u8>,
+        cleanup_failure: bool,
+    }
 
-    impl BodyReadPortV1 for BodyFixture {
+    impl BodyReadPortV1 for RuntimeFixture {
         async fn read_once(
             &mut self,
             _: &DelayedDeliveryExecutionClaimV1,
         ) -> Result<Vec<u8>, BodyReadErrorV1> {
-            Ok(self.0.clone())
+            Ok(self.body.clone())
         }
     }
 
-    struct DeliveryFixture;
-
-    impl DeliveryIntentRequestPortV1 for DeliveryFixture {
+    impl DeliveryIntentRequestPortV1 for RuntimeFixture {
         async fn request(
             &mut self,
             request_id: [u8; 16],
@@ -205,14 +210,13 @@ mod tests {
         }
     }
 
-    struct CleanupFixture(bool);
-
-    impl BodyCleanupPortV1 for CleanupFixture {
+    impl BodyCleanupPortV1 for RuntimeFixture {
         async fn request_cleanup(
             &mut self,
             _: &DelayedDeliveryExecutionClaimV1,
+            _: BodyCleanupReasonV1,
         ) -> Result<(), BodyCleanupErrorV1> {
-            if self.0 {
+            if self.cleanup_failure {
                 Err(BodyCleanupErrorV1::Unavailable)
             } else {
                 Ok(())
@@ -230,10 +234,11 @@ mod tests {
         };
         let outcome = execute_due_delivery_v1(
             &mut store,
-            &mut BodyFixture(body),
-            &mut DeliveryFixture,
+            &mut RuntimeFixture {
+                body,
+                cleanup_failure: true,
+            },
             &mut ReceiptFixture,
-            &mut CleanupFixture(true),
             &command(),
             20_000,
         )
@@ -259,10 +264,11 @@ mod tests {
         };
         let outcome = execute_due_delivery_v1(
             &mut store,
-            &mut BodyFixture(b"tampered".to_vec()),
-            &mut DeliveryFixture,
+            &mut RuntimeFixture {
+                body: b"tampered".to_vec(),
+                cleanup_failure: false,
+            },
             &mut ReceiptFixture,
-            &mut CleanupFixture(false),
             &command(),
             20_000,
         )

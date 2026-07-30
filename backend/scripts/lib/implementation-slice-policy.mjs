@@ -558,6 +558,16 @@ const COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communication-delayed-delivery-runtime-adapters',
+    role: 'workflow',
+    owner: 'communication_delayed_delivery',
+    surface: 'implementation',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -1778,6 +1788,16 @@ const COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLI
   ],
 };
 
+const COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delayed-delivery-runtime-adapters': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communication-delayed-delivery-execution', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-api', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -1978,6 +1998,11 @@ const COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOW
     { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
+};
+
+const COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delayed-delivery-runtime-adapters': [],
 };
 
 const FORBIDDEN_DEPENDENCIES = [
@@ -2809,16 +2834,16 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'communication_delayed_delivery_event_adapters_v1') {
+  if (currentSlice === 'communication_delayed_delivery_runtime_adapters_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
       cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
-      packages: COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_PRODUCTION_PACKAGES,
+      packages: COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_PRODUCTION_PACKAGES,
       workspaceDependencies:
-        COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+        COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
-        COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+        COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

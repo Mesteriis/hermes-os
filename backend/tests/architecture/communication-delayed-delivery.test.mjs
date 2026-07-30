@@ -27,6 +27,8 @@ test('delayed delivery admits separate contract and policy units while its runti
     executionWorker,
     eventAdaptersManifest,
     eventAdaptersSource,
+    runtimeAdaptersManifest,
+    runtimeAdaptersSource,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -144,6 +146,20 @@ test('delayed delivery admits separate contract and policy units while its runti
       ),
       'utf8',
     ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-runtime-adapters/Cargo.toml',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-runtime-adapters/src/lib.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
   ]);
 
   const inventory = JSON.parse(inventorySource);
@@ -224,6 +240,19 @@ test('delayed delivery admits separate contract and policy units while its runti
   assert.match(eventAdaptersSource, /expected_command_message_id/);
   assert.doesNotMatch(
     eventAdaptersSource,
+    /scheduler_(?:implementation|persistence)|kernel::|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
+  );
+  assert.match(
+    runtimeAdaptersManifest,
+    /owner = "communication_delayed_delivery"[\s\S]*surface = "implementation"/,
+  );
+  assert.match(runtimeAdaptersSource, /impl BodyReadPortV1/);
+  assert.match(runtimeAdaptersSource, /impl BodyCleanupPortV1/);
+  assert.match(runtimeAdaptersSource, /impl DeliveryIntentRequestPortV1/);
+  assert.match(runtimeAdaptersSource, /request_managed_blob_custody_release_v2/);
+  assert.match(runtimeAdaptersSource, /Operation::RouteModuleRequest/);
+  assert.doesNotMatch(
+    runtimeAdaptersSource,
     /scheduler_(?:implementation|persistence)|kernel::|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
   );
   for (const source of [executionSource, executionPorts, executionWorker]) {

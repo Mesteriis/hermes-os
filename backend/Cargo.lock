@@ -1820,6 +1820,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-delayed-delivery-runtime-adapters"
+version = "0.1.0"
+dependencies = [
+ "hermes-blob-client",
+ "hermes-communication-delayed-delivery-execution",
+ "hermes-communication-delivery-intent-api",
+ "hermes-runtime-protocol",
+]
+
+[[package]]
 name = "hermes-communication-delivery-intent-api"
 version = "0.1.0"
 dependencies = [

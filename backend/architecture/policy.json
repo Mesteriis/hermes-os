@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delayed_delivery_event_adapters_v1",
+    "currentSlice": "communication_delayed_delivery_runtime_adapters_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -603,6 +603,12 @@
       },
       {
         "name": "hermes-communication-delayed-delivery-event-adapters",
+        "role": "workflow",
+        "owner": "communication_delayed_delivery",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-communication-delayed-delivery-runtime-adapters",
         "role": "workflow",
         "owner": "communication_delayed_delivery",
         "surface": "implementation"
@@ -1765,6 +1771,24 @@
         },
         {
           "name": "hermes-scheduler-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-delayed-delivery-runtime-adapters": [
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delayed-delivery-execution",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delivery-intent-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
           "kind": "normal"
         }
       ]
@@ -4718,7 +4742,8 @@
           "defaultFeatures": false,
           "features": []
         }
-      ]
+      ],
+      "hermes-communication-delayed-delivery-runtime-adapters": []
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -5131,6 +5156,10 @@
         "customBuildAllowed": false
       },
       "hermes-communication-delayed-delivery-event-adapters": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-delayed-delivery-runtime-adapters": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       }
