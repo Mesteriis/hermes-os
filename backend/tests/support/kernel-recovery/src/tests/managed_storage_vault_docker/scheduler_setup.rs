@@ -22,6 +22,8 @@ fn record_scheduler_registration(store: &SqliteControlStore, descriptor: &[u8]) 
         ACK_CAPABILITY.to_owned(),
         DISPATCH_CAPABILITY.to_owned(),
         RESULT_CAPABILITY.to_owned(),
+        SCHEDULE_CONTROL_COMMAND_CAPABILITY.to_owned(),
+        SCHEDULE_CONTROL_RESULT_CAPABILITY.to_owned(),
         STORAGE_CAPABILITY.to_owned(),
     ];
     let storage = ModuleStorageRequestV1::new(
@@ -38,6 +40,7 @@ fn record_scheduler_registration(store: &SqliteControlStore, descriptor: &[u8]) 
             "platform",
             "maintenance",
             ModuleEventRouteDirectionV1::Publish,
+            [7; 32],
         ),
         event_route(
             ACK_CAPABILITY,
@@ -45,6 +48,7 @@ fn record_scheduler_registration(store: &SqliteControlStore, descriptor: &[u8]) 
             "scheduler",
             "job_receipt",
             ModuleEventRouteDirectionV1::Consume,
+            scheduler_contract_schema(),
         ),
         event_route(
             RESULT_CAPABILITY,
@@ -52,6 +56,23 @@ fn record_scheduler_registration(store: &SqliteControlStore, descriptor: &[u8]) 
             "scheduler",
             "job_receipt",
             ModuleEventRouteDirectionV1::Consume,
+            scheduler_contract_schema(),
+        ),
+        event_route(
+            SCHEDULE_CONTROL_COMMAND_CAPABILITY,
+            ModuleEventEnvelopeKindV1::Command,
+            "scheduler",
+            "schedule_control",
+            ModuleEventRouteDirectionV1::Consume,
+            scheduler_contract_schema(),
+        ),
+        event_route(
+            SCHEDULE_CONTROL_RESULT_CAPABILITY,
+            ModuleEventEnvelopeKindV1::Result,
+            "scheduler",
+            "schedule_control",
+            ModuleEventRouteDirectionV1::Publish,
+            scheduler_contract_schema(),
         ),
     ];
     store
@@ -113,7 +134,7 @@ fn record_scheduler_runtime_fixture(
 
 pub(super) fn issue_initial_scheduler_storage_binding(store: &SqliteControlStore) {
     let bundle = store
-        .platform_storage_bundle("scheduler", 7)
+        .platform_storage_bundle("scheduler", 9)
         .expect("read Scheduler Storage bundle")
         .expect("Scheduler Storage bundle is present");
     let binding = issue_managed(
@@ -122,7 +143,7 @@ pub(super) fn issue_initial_scheduler_storage_binding(store: &SqliteControlStore
         "01010101010101010101010101010101",
         1,
         STORAGE_CAPABILITY,
-        StorageBindingIssueV1::new(1, 1, 7, *bundle.digest())
+        StorageBindingIssueV1::new(1, 1, 9, *bundle.digest())
             .expect("initial Scheduler Storage issue"),
     )
     .expect("issue Scheduler Storage binding");
@@ -135,6 +156,7 @@ fn event_route(
     owner: &str,
     contract: &str,
     direction: ModuleEventRouteDirectionV1,
+    contract_schema_sha256: [u8; 32],
 ) -> ModuleEventRouteRequestV1 {
     ModuleEventRouteRequestV1::new(
         hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
@@ -145,7 +167,7 @@ fn event_route(
             contract_name: contract.to_owned(),
             contract_major: 1,
             contract_revision: 1,
-            contract_schema_sha256: [7; 32],
+            contract_schema_sha256,
             direction,
             max_in_flight: 16,
             delivery_policy: matches!(direction, ModuleEventRouteDirectionV1::Consume).then(|| {
@@ -157,6 +179,10 @@ fn event_route(
             }),
         },
     )
+}
+
+fn scheduler_contract_schema() -> [u8; 32] {
+    Sha256::digest(SCHEDULER_JOB_DESCRIPTOR_SET_V1).into()
 }
 
 fn event_hub_topology() -> PlatformEventHubTopologyV1 {

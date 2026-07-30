@@ -26,7 +26,9 @@ use hermes_runtime_protocol::v1::{
     scheduler_runtime_control_request_v1::Operation as SchedulerOperation,
     scheduler_runtime_control_response_v1::Result as SchedulerResult,
 };
-use hermes_scheduler_protocol::v1::ScheduledJobCommandV1;
+use hermes_scheduler_protocol::{
+    SCHEDULER_JOB_DESCRIPTOR_SET_V1, SCHEDULER_RUNTIME_MODULE_ID_V1, v1::ScheduledJobCommandV1,
+};
 use hermes_storage_protocol::v1::{
     GetStorageRuntimeStatusRequestV1, StorageRuntimeControlRequestV1,
     StorageRuntimeControlResponseV1, StorageRuntimeStateV1,
@@ -1942,7 +1944,7 @@ fn assert_recovered_scheduler_delivery(store: &SqliteControlStore, due_at: i64) 
         matches!(envelope.contract, Some(contract) if contract.owner == "platform" && contract.name == "maintenance")
     );
     assert!(
-        matches!(envelope.source, Some(source) if source.module_id == SCHEDULER_REGISTRATION && source.runtime_generation == 2)
+        matches!(envelope.source, Some(source) if source.module_id == SCHEDULER_RUNTIME_MODULE_ID_V1 && source.runtime_generation == 2)
     );
     let command = ScheduledJobCommandV1::decode(envelope.payload.as_slice())
         .expect("decode recovered Scheduler command");
@@ -2079,6 +2081,8 @@ const STORAGE_CAPABILITY: &str = "storage.scheduler";
 const DISPATCH_CAPABILITY: &str = "events.scheduler.dispatch";
 const ACK_CAPABILITY: &str = "events.scheduler.ack";
 const RESULT_CAPABILITY: &str = "events.scheduler.result";
+const SCHEDULE_CONTROL_COMMAND_CAPABILITY: &str = "events.scheduler.schedule_control.command";
+const SCHEDULE_CONTROL_RESULT_CAPABILITY: &str = "events.scheduler.schedule_control.result";
 
 fn scheduler_binding(
     store: &SqliteControlStore,
