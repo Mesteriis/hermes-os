@@ -116,6 +116,23 @@ message ManagedRuntimeBlobSessionDeliveryV1 {
   bytes custody_transfer_source_proof = 3;
   BlobCustodyTransferGrantV1 custody_transfer_grant = 4;
 }
+// Current custody owner asks Blob authority to reserve one idempotent
+// grace-period release. Runtime/grant coordinates come from this authenticated
+// managed channel and are deliberately absent from the module payload.
+message ManagedRuntimeBlobCustodyReleaseRequestV1 {
+  bytes operation_id = 1;
+  string capability_id = 2;
+  bytes reference_id = 3;
+  uint64 declared_size = 4;
+  bytes receipt_sha256 = 5;
+  bytes custody_source_proof = 6;
+  BlobCustodyReleaseReasonV1 reason = 7;
+}
+message ManagedRuntimeBlobCustodyReleaseDeliveryV1 {
+  bytes operation_id = 1;
+  BlobCustodyReleaseOutcomeV1 outcome = 2;
+  uint64 delete_not_before_unix_ms = 3;
+}
 // Caller-to-Kernel request for one descriptor-declared query dependency.
 // Target process identity and capability are deliberately absent: Kernel
 // resolves the single current approved provider of the exact contract.
@@ -192,6 +209,7 @@ message ManagedRuntimeControlRequestV1 {
     ManagedRuntimeClientRealtimePublishRequestV1 publish_client_realtime = 11;
     ManagedRuntimeModuleRequestRequestV1 route_module_request = 12;
     ManagedRuntimeModuleRequestDeliveryV1 deliver_module_request = 13;
+    ManagedRuntimeBlobCustodyReleaseRequestV1 release_blob_custody = 14;
   }
 }
 message ManagedRuntimeControlAckV1 {}
@@ -210,6 +228,7 @@ message ManagedRuntimeControlResponseV1 {
     ManagedRuntimeClientRealtimePublishResponseV1 client_realtime_publish = 11;
     ManagedRuntimeModuleRequestResponseV1 module_request_route = 12;
     ManagedRuntimeModuleRequestResponseV1 module_request_delivery = 13;
+    ManagedRuntimeBlobCustodyReleaseDeliveryV1 blob_custody_release = 14;
   }
   string error_code = 15;
 }

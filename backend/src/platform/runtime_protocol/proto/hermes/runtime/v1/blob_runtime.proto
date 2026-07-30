@@ -105,6 +105,56 @@ message BlobCustodyTransferGrantV1 {
   string target_custody_scope_id = 20;
 }
 
+// Kernel-signed authority for the current custody owner to request one
+// idempotent grace-period release. It is a control-plane mutation grant and
+// cannot authorize Blob plaintext access.
+message BlobCustodyReleaseGrantV1 {
+  uint32 major = 1;
+  string kernel_instance_id = 2;
+  bytes operation_id = 3;
+  string owner_id = 4;
+  string registration_id = 5;
+  string capability_id = 6;
+  string runtime_instance_id = 7;
+  uint64 runtime_generation = 8;
+  uint64 grant_epoch = 9;
+  bytes reference_id = 10;
+  uint64 declared_size = 11;
+  bytes receipt_sha256 = 12;
+  bytes custody_source_proof_sha256 = 13;
+  string custody_scope_id = 14;
+  BlobCustodyReleaseReasonV1 reason = 15;
+  uint64 issued_at_unix_ms = 16;
+  uint64 expires_at_unix_ms = 17;
+  uint64 blob_runtime_generation = 18;
+  bytes kernel_authorization_signature_raw = 19;
+}
+
+enum BlobCustodyReleaseReasonV1 {
+  BLOB_CUSTODY_RELEASE_REASON_UNSPECIFIED_V1 = 0;
+  BLOB_CUSTODY_RELEASE_REASON_TERMINAL_ACCEPTED_V1 = 1;
+  BLOB_CUSTODY_RELEASE_REASON_TERMINAL_REJECTED_V1 = 2;
+  BLOB_CUSTODY_RELEASE_REASON_TERMINAL_CANCELLED_V1 = 3;
+}
+
+enum BlobCustodyReleaseOutcomeV1 {
+  BLOB_CUSTODY_RELEASE_OUTCOME_UNSPECIFIED_V1 = 0;
+  BLOB_CUSTODY_RELEASE_OUTCOME_ACCEPTED_V1 = 1;
+  BLOB_CUSTODY_RELEASE_OUTCOME_EXISTING_V1 = 2;
+  BLOB_CUSTODY_RELEASE_OUTCOME_ALREADY_RELEASED_V1 = 3;
+}
+
+message BlobCustodyReleaseRequestV1 {
+  BlobCustodyReleaseGrantV1 grant = 1;
+}
+
+message BlobCustodyReleaseResponseV1 {
+  bytes operation_id = 1;
+  BlobCustodyReleaseOutcomeV1 outcome = 2;
+  uint64 delete_not_before_unix_ms = 3;
+  string error_code = 15;
+}
+
 enum BlobBackupClassV1 {
   BLOB_BACKUP_CLASS_UNSPECIFIED_V1 = 0;
   BLOB_BACKUP_CLASS_REQUIRED_V1 = 1;
@@ -167,10 +217,16 @@ message BlobRuntimeStatusV1 {
 }
 
 message BlobRuntimeControlRequestV1 {
-  oneof operation { GetBlobRuntimeStatusRequestV1 get_status = 1; }
+  oneof operation {
+    GetBlobRuntimeStatusRequestV1 get_status = 1;
+    BlobCustodyReleaseRequestV1 release_custody = 2;
+  }
 }
 
 message BlobRuntimeControlResponseV1 {
-  oneof result { BlobRuntimeStatusV1 status = 1; }
+  oneof result {
+    BlobRuntimeStatusV1 status = 1;
+    BlobCustodyReleaseResponseV1 custody_release = 2;
+  }
   string error_code = 15;
 }

@@ -162,6 +162,7 @@ fn response_for(
     }
     match request.operation {
         Some(Operation::GetStatus(GetBlobRuntimeStatusRequestV1 {})) => status.clone(),
+        Some(Operation::ReleaseCustody(_)) => error_response("operation_not_available"),
         None => error_response("operation_not_available"),
     }
 }
