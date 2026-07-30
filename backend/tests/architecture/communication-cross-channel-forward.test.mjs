@@ -16,6 +16,14 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     core,
     contract,
     persistenceManifest,
+    runtimeManifest,
+    runtimeAdmission,
+    runtimeMain,
+    managedRuntime,
+    sourcePrepare,
+    sourceResults,
+    blobTransfer,
+    runtimeEventOutbox,
     migration,
     eventMigration,
     operations,
@@ -69,6 +77,56 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     readFile(
       new URL(
         'src/communication-cross-channel-forward-persistence/Cargo.toml',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-cross-channel-forward-runtime/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-runtime/src/admission.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-cross-channel-forward-runtime/src/main.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-runtime/src/managed_runtime.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-runtime/src/source_prepare.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-runtime/src/source_results.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-runtime/src/blob_transfer.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-runtime/src/event_outbox.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -181,6 +239,7 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
       'hermes-communication-cross-channel-forward-api:contract',
       'hermes-communication-cross-channel-forward-core:implementation',
       'hermes-communication-cross-channel-forward-persistence:persistence',
+      'hermes-communication-cross-channel-forward-runtime:runtime',
     ],
   );
   assert.match(apiManifest, /role = "workflow"[\s\S]*surface = "contract"/);
@@ -189,8 +248,9 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     persistenceManifest,
     /role = "workflow"[\s\S]*surface = "persistence"/,
   );
+  assert.match(runtimeManifest, /role = "workflow"[\s\S]*surface = "runtime"/);
   assert.doesNotMatch(
-    `${apiManifest}\n${coreManifest}\n${persistenceManifest}`,
+    `${apiManifest}\n${coreManifest}\n${persistenceManifest}\n${runtimeManifest}`,
     /hermes-(?:communications-domain|mail|telegram|whatsapp|zulip|kernel)/,
   );
   assert.match(api, /COMMUNICATION_CROSS_CHANNEL_FORWARD_CAPABILITY_ID_V1/);
@@ -241,6 +301,28 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
   assert.match(postgresConformance, /ClaimLost/);
   assert.match(storageRunner, /HERMES_COMMUNICATION_CROSS_CHANNEL_FORWARD_POSTGRES/);
   assert.match(schema, /COMMUNICATION_CROSS_CHANNEL_FORWARD_STORAGE_BUNDLE_REVISION_V2/);
+  assert.match(runtimeAdmission, /ModuleKindV1::Workflow/);
+  assert.match(runtimeAdmission, /max_processes: 1/);
+  assert.match(runtimeAdmission, /communication_delivery_intent_submit_publish_request_v1/);
+  assert.match(runtimeAdmission, /cross_channel_forward_source_prepared_consume_request_v1/);
+  assert.match(runtimeMain, /--serve-inherited/);
+  assert.match(managedRuntime, /request_managed_runtime_event_access_v2/);
+  assert.match(managedRuntime, /bind_source_subscriptions/);
+  assert.match(managedRuntime, /signal_ready/);
+  assert.match(sourcePrepare, /next_source_prepare_candidate/);
+  assert.match(sourcePrepare, /persist_source_prepare_outbox/);
+  assert.match(sourceResults, /decode_envelope_v1/);
+  assert.match(sourceResults, /persist_source_prepared_and_delivery_submit/);
+  assert.match(sourceResults, /delivery\.acknowledge\(\)/);
+  assert.match(blobTransfer, /BlobDataOperationReadRangeV1/);
+  assert.match(blobTransfer, /BlobDataOperationWriteV1/);
+  assert.match(blobTransfer, /COMMUNICATION_DELIVERY_INTENT_BLOB_TARGET_MODULE_ID_V1/);
+  assert.match(runtimeEventOutbox, /publish_exact/);
+  assert.match(runtimeEventOutbox, /mark_event_outbox_published/);
+  assert.doesNotMatch(
+    `${runtimeAdmission}\n${managedRuntime}\n${sourcePrepare}\n${sourceResults}\n${blobTransfer}\n${runtimeEventOutbox}`,
+    /hermes-(?:mail|telegram|whatsapp|zulip)-(?:runtime|persistence|core|api)/,
+  );
 });
 
 test('cross-channel source preparation is event-only and Communications-owned', async () => {
@@ -442,7 +524,7 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   );
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_cross_channel_forward_event_persistence_v1',
+    'communication_cross_channel_forward_managed_runtime_v1',
   );
   assert.ok(
     policy.implementation.productionPackages.some(

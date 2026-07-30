@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_cross_channel_forward_event_persistence_v1",
+    "currentSlice": "communication_cross_channel_forward_managed_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -660,6 +660,12 @@
         "role": "workflow",
         "owner": "communication_delivery_intent",
         "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-cross-channel-forward-runtime",
+        "role": "workflow",
+        "owner": "communication_cross_channel_forward",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1963,6 +1969,48 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-cross-channel-forward-runtime": [
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-cross-channel-forward-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-cross-channel-forward-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delivery-intent-ingress-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-cross-channel-forward-source-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ]
@@ -5158,6 +5206,51 @@
             "tls-rustls-ring"
           ]
         }
+      ],
+      "hermes-communication-cross-channel-forward-runtime": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -5616,6 +5709,10 @@
       },
       "hermes-communication-cross-channel-forward-persistence": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-cross-channel-forward-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       }
     },

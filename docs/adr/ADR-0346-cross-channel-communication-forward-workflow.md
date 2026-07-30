@@ -19,8 +19,13 @@ read, fixed target-bound Blob write, typed result и ACK-after-commit. Managed
 admission wiring ещё не реализован. Workflow persistence теперь реализует
 owner-local event inbox/hash fence, exact source-command/delivery-submit
 outbox, source rejection и atomic prepared-result → dispatching transition.
-Workflow runtime result/Blob-transfer adapter, delivery-intent consumer и live
-managed evidence ещё не реализованы. Production gate остаётся закрыт.
+Отдельная workflow-owned runtime build unit реализует managed admission,
+generation/grant/storage fences, exact source-command producer, source
+prepared/rejected consumers, verified Blob read, fixed delivery-intent Blob
+write, transactional submit handoff, exact outbox relay и ACK-after-commit.
+Delivery-intent consumer, downstream terminal-result consumer, custody cleanup,
+client port, assembly и live managed evidence ещё не реализованы. Production
+gate остаётся закрыт.
 Принятый ADR сам по себе не открывает
 `communication_cross_channel_forward_v1`.
 

@@ -10,9 +10,11 @@
 Blob audience и валидируемые `DurableEnvelopeV1` outbox records без plaintext
 или provider identity. Cross-channel persistence реализует exact submit
 outbox, source-result inbox/hash fence и atomic dispatch transition после
-custody transfer. Runtime producer, delivery-intent consumer, custody cleanup
-и live managed evidence ещё не реализованы. Наличие ADR и contract build unit
-не открывает ни `communication_delivery_intent_v1`, ни
+custody transfer. Cross-channel managed runtime реализует verified source Blob
+read, fixed delivery-intent target-bound write, submit producer, durable relay
+и ACK-after-commit. Delivery-intent consumer, downstream result consumer,
+custody cleanup и live managed evidence ещё не реализованы. Наличие ADR и
+contract/runtime build units не открывает ни `communication_delivery_intent_v1`, ни
 `communication_cross_channel_forward_v1`.
 
 ## Контекст

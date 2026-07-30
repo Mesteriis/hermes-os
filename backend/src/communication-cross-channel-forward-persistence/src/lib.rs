@@ -8,6 +8,7 @@ mod event_outbox;
 mod operations;
 mod realtime;
 pub mod schema;
+mod source_queue;
 mod work_queue;
 
 pub use cleanup::{CrossChannelForwardCleanupJobV1, CrossChannelForwardCleanupReasonV1};
@@ -23,6 +24,7 @@ pub use operations::{
     CrossChannelForwardStatusRecordV1,
 };
 pub use realtime::CrossChannelForwardClientRealtimeTransitionV1;
+pub use source_queue::CrossChannelForwardSourcePrepareCandidateV1;
 use sqlx::{
     PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},

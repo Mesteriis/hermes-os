@@ -214,6 +214,19 @@ async fn event_handoff_is_atomic_replay_fenced_and_survives_reconnect() {
         .await
         .expect("create forward");
 
+    assert_eq!(
+        persistence
+            .next_source_prepare_candidate(OWNER)
+            .await
+            .expect("source prepare candidate")
+            .expect("accepted operation"),
+        hermes_communication_cross_channel_forward_persistence::
+            CrossChannelForwardSourcePrepareCandidateV1 {
+                forward_id: [1; 16],
+                source_message_id: [2; 16],
+                target_conversation_id: [3; 16],
+            }
+    );
     let source_context = CrossChannelForwardSourceEnvelopeContextV1 {
         module_id: "hermes-communication-cross-channel-forward-runtime".to_owned(),
         runtime_instance_id: "forward-runtime-1".to_owned(),
@@ -234,6 +247,13 @@ async fn event_handoff_is_atomic_replay_fenced_and_survives_reconnect() {
         .persist_source_prepare_outbox(OWNER, [1; 16], &source_prepare, 1_100)
         .await
         .expect("persist source prepare outbox");
+    assert_eq!(
+        persistence
+            .next_source_prepare_candidate(OWNER)
+            .await
+            .expect("source prepare candidate after commit"),
+        None
+    );
     persistence
         .persist_source_prepare_outbox(OWNER, [1; 16], &source_prepare, 1_100)
         .await
