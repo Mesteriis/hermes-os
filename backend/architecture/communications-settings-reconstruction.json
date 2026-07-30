@@ -528,7 +528,12 @@
       "role": "workflow",
       "owner": "communication_cross_channel_forward",
       "state": "planned",
-      "dependsOn": ["communication_delivery_intent_v1"]
+      "dependsOn": [
+        "communication_delivery_intent_v1",
+        "communications_content_read_v1",
+        "capability_routed_module_request_rpc_v1",
+        "blob_v1"
+      ]
     },
     {
       "gate": "communication_reply_suggestion_v1",

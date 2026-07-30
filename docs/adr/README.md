@@ -555,3 +555,8 @@ ADR-0344 добавляет отдельный delayed-delivery execution-store 
 execution port и owner-local persistence связываются явным typed mapping без
 SQL в orchestration, persistence dependency на execution или смешивания с
 Blob/request transport adapters.
+ADR-0346 определяет отдельный `communication_cross_channel_forward` workflow:
+Communications подготавливает source evidence как target-bound Blob delegation,
+workflow сохраняет provenance и передаёт exact body в delivery-intent, а
+Kernel/Core только маршрутизируют exact contracts и не становятся provider
+facade.
