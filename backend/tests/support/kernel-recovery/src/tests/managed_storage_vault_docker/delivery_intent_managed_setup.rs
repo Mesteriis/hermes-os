@@ -2,6 +2,7 @@
 
 use super::*;
 
+use crate::modules::capability::module_request::ModuleRequestRouteHandlerV1;
 use hermes_communication_delivery_intent_api::{
     COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1, COMMUNICATION_DELIVERY_INTENT_OWNER_V1,
 };
@@ -147,6 +148,12 @@ pub(super) fn configure_delivery_intent_runtime_routes(
     store: &Arc<SqliteControlStore>,
     client_realtime: InMemoryBrowserRealtimeSource,
 ) {
+    supervisor
+        .configure_module_request_handler(Arc::new(ModuleRequestRouteHandlerV1::new(
+            Arc::clone(store),
+            supervisor.relay_port(),
+        )))
+        .expect("configure managed module request handler");
     supervisor
         .configure_module_query_handler(Arc::new(ModuleQueryRouteHandlerV1::new(
             Arc::clone(store),

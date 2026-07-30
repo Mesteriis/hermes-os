@@ -18,7 +18,7 @@ use hermes_gateway_protocol::v1::{
 use http_body_util::BodyExt as _;
 use hyper::{Request, StatusCode, body::Bytes};
 
-type DeliveryIntentGateway = hermes_gateway_runtime::GatewayApplicationRouter<
+pub(super) type DeliveryIntentGateway = hermes_gateway_runtime::GatewayApplicationRouter<
     crate::identity::browser_gateway::ControlStoreBrowserAuthority,
     hermes_gateway_runtime::InMemoryBrowserRealtimeSource,
 >;
@@ -194,7 +194,7 @@ fn managed_delivery_intent_reaches_gateway_sse_and_replays_after_restart() {
     std::fs::remove_dir_all(data).expect("remove kernel fixture");
 }
 
-fn canonical_conversation_for_message(
+pub(super) fn canonical_conversation_for_message(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     message_id: &[u8],
@@ -244,7 +244,7 @@ fn canonical_conversation_for_message(
     conversation_id
 }
 
-fn delivery_intent_gateway(
+pub(super) fn delivery_intent_gateway(
     store: &Arc<SqliteControlStore>,
     supervisor: &ManagedRuntimeSupervisor,
     root: &Path,

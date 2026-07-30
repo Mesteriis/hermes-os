@@ -21,8 +21,6 @@ use hermes_communication_delivery_intent_runtime::admission::{
 use hermes_kernel_control_store::PlatformStorageBindingStateV1;
 use hermes_runtime_protocol::v1::ManagedWorkflowRuntimeConfigurationV1;
 
-use crate::modules::capability::module_request::ModuleRequestRouteHandlerV1;
-
 const BULK_ACTION_RELEASE_ARTIFACT_ID: &str = "workflow.communication_bulk_action";
 const BULK_ACTION_RUNTIME_INSTANCE_ID: &str = "bulk-action-runtime-1";
 pub(super) const BULK_ACTION_LOGICAL_OWNER_ID: &str = "owner-1";
@@ -143,18 +141,6 @@ pub(super) fn prepare_bulk_action_runtime(
     crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
         .expect("provision bulk-action Storage binding");
     admitted
-}
-
-pub(super) fn configure_bulk_action_request_route(
-    supervisor: &ManagedRuntimeSupervisor,
-    store: &Arc<SqliteControlStore>,
-) {
-    supervisor
-        .configure_module_request_handler(Arc::new(ModuleRequestRouteHandlerV1::new(
-            Arc::clone(store),
-            supervisor.relay_port(),
-        )))
-        .expect("configure managed module request handler");
 }
 
 pub(super) fn start_bulk_action_runtime(

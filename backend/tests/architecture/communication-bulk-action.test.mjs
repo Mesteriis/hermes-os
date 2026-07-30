@@ -28,6 +28,7 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
     clientRealtime,
     admission,
     assembly,
+    deliveryIntentSetup,
     managedSetup,
     managedFlow,
     conformanceRunner,
@@ -163,6 +164,13 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
       ),
       readFile(
         new URL(
+          'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/delivery_intent_managed_setup.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
           'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/bulk_action_managed_setup.rs',
           BACKEND_ROOT,
         ),
@@ -274,7 +282,11 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
     managedSetup,
     /communication_delivery_intent_module_descriptor_v1/,
   );
-  assert.match(managedSetup, /configure_bulk_action_request_route/);
+  assert.match(
+    deliveryIntentSetup,
+    /configure_delivery_intent_runtime_routes[\s\S]*configure_module_request_handler/,
+  );
+  assert.doesNotMatch(managedSetup, /configure_bulk_action_request_route/);
   assert.match(managedFlow, /managed_bulk_action_reaches_gateway_sse_and_replays_after_restart/);
   assert.match(managedFlow, /admit_delivery_intent_runtime/);
   assert.match(managedFlow, /COMMUNICATION_BULK_ACTION_QUERY_CONNECT_PATH_V1/);

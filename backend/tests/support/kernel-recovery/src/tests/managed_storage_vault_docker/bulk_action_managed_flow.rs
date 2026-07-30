@@ -63,7 +63,6 @@ fn managed_bulk_action_reaches_gateway_sse_and_replays_after_restart() {
         hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(32).expect("realtime source");
     configure_route_handler(&supervisor, &store, &data);
     configure_delivery_intent_runtime_routes(&supervisor, &store, realtime.clone());
-    configure_bulk_action_request_route(&supervisor, &store);
     supervisor
         .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
             Arc::clone(&store),
