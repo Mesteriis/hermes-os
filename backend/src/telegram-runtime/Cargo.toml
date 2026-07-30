@@ -22,6 +22,7 @@ hermes-blob-client-contract = { path = "../platform/blob/client-contract" }
 hermes-blob-client = { path = "../platform/blob/client" }
 hermes-clock-protocol = { path = "../platform/clock/protocol" }
 hermes-communications-ingress = { path = "../communications-ingress" }
+hermes-communications-call-evidence-ingress = { path = "../communications-call-evidence-ingress" }
 hermes-events-protocol = { path = "../platform/events" }
 hermes-events-jetstream = { path = "../platform/events/jetstream" }
 hermes-managed-vault-client = { path = "../platform/vault/managed_client" }

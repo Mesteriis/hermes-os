@@ -5,6 +5,7 @@
 pub mod admission;
 pub mod automation_client_port;
 pub mod bootstrap;
+pub mod call_evidence_outbox;
 mod calls_backfill;
 pub mod calls_client_port;
 mod calls_execution;

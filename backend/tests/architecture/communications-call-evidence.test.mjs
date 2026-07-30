@@ -177,6 +177,75 @@ test('managed Communications consumer is exact fenced and acknowledges after per
   );
 });
 
+test('Telegram owns the call evidence producer and relays exact outbox bytes', async () => {
+  const [
+    persistenceManifest,
+    runtimeManifest,
+    mapper,
+    repository,
+    outbox,
+    migration,
+    admission,
+    relay,
+    process,
+    assembly,
+  ] = await Promise.all([
+    backendSource('src/telegram-calls-persistence/Cargo.toml'),
+    backendSource('src/telegram-runtime/Cargo.toml'),
+    backendSource('src/telegram-calls-persistence/src/call_evidence.rs'),
+    backendSource('src/telegram-calls-persistence/src/repository.rs'),
+    backendSource('src/telegram-calls-persistence/src/call_evidence_outbox.rs'),
+    backendSource('src/telegram-calls-persistence/src/schema.rs'),
+    backendSource('src/telegram-runtime/src/admission.rs'),
+    backendSource('src/telegram-runtime/src/call_evidence_outbox.rs'),
+    backendSource('src/telegram-runtime/src/process.rs'),
+    backendSource('src/telegram-assembly/src/lib.rs'),
+  ]);
+
+  for (const manifest of [persistenceManifest, runtimeManifest]) {
+    assert.match(manifest, /hermes-communications-call-evidence-ingress/);
+    assert.doesNotMatch(
+      manifest,
+      /hermes-communications-(?:call-evidence-(?:core|persistence)|runtime|assembly)/,
+    );
+  }
+
+  const productionMapper = mapper.replace(/#\[cfg\(test\)\][\s\S]*$/u, '');
+  assert.match(productionMapper, /build_call_evidence_observed_outbox_record_v1/);
+  assert.match(productionMapper, /external_account_id: session\.account_id\.clone\(\)/);
+  assert.match(productionMapper, /external_call_id: session\.call_session_id\.clone\(\)/);
+  assert.doesNotMatch(
+    productionMapper,
+    /(?:encode_to_vec|payload:|DurableEnvelopeV1)/,
+  );
+
+  assert.match(repository, /ingest_provider_update_with_call_evidence/);
+  assert.match(
+    repository,
+    /persist_history[\s\S]*insert_call_evidence_outbox[\s\S]*transaction\s*\.commit\(\)/,
+  );
+  assert.match(outbox, /ON CONFLICT \(message_id\) DO NOTHING/);
+  assert.match(outbox, /existing_hash[\s\S]*existing_bytes/);
+  assert.match(outbox, /TelegramCallsPersistenceError::IdempotencyConflict/);
+  assert.match(migration, /telegram_call_evidence_outbox/);
+  assert.match(migration, /exact_envelope_bytes BYTEA NOT NULL/);
+  assert.match(assembly, /telegram_storage_bundle_with_call_evidence_v9/);
+
+  assert.match(admission, /telegram\.call-evidence\.publish\.v1/);
+  assert.match(admission, /call_evidence_observed_publish_request_v1/);
+  assert.match(relay, /RuntimeOutboxPublisherV1/);
+  assert.match(relay, /relay_once\(&mut store, &publisher\)/);
+  assert.match(
+    relay,
+    /Err\(_\) => return Err\(TelegramCallEvidenceOutboxRelayErrorV1::Unavailable\)/,
+  );
+  assert.match(process, /relay_call_evidence_outbox_once_v1/);
+  assert.match(
+    process,
+    /Ok\(_\) \| Err\(TelegramCallEvidenceOutboxRelayErrorV1::Unavailable\) => \{\}/,
+  );
+});
+
 test('call evidence ADR keeps the completion gate closed until live managed evidence', async () => {
   const [adr, inventorySource] = await Promise.all([
     readFile(

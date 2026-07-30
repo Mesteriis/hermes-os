@@ -5,10 +5,11 @@
 Дата: 2026-07-30
 
 Состояние реализации: contract/core, owner-local persistence, revision 15
-существующего Communications storage bundle и managed event consumer
-реализованы. Gate `communications_call_evidence_v1` остаётся закрыт до
-integration-owned producer, generated query/realtime surface и live event
-conformance.
+существующего Communications storage bundle, managed event consumer и
+Telegram-owned producer/outbox adapter реализованы. Producer остаётся staged
+в Telegram Calls build units до их exact managed admission. Gate
+`communications_call_evidence_v1` остаётся закрыт до generated query/realtime
+surface, exact admission producer-а и live event conformance.
 
 Уточняет:
 

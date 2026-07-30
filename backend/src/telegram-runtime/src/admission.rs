@@ -4,6 +4,7 @@
 //! descriptor does not register Telegram in the production inventory or grant
 //! any capability.
 
+use hermes_communications_call_evidence_ingress::call_evidence_observed_publish_request_v1;
 use hermes_communications_ingress::admission::communication_observed_publish_request_v1;
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
@@ -45,6 +46,7 @@ pub const TELEGRAM_API_HASH_PROVISIONING_CAPABILITY_ID: &str =
     "telegram.api-hash.credential-provisioning.v1";
 pub const TELEGRAM_CREDENTIALS_CAPABILITY_ID: &str = "telegram.credentials.v1";
 pub const TELEGRAM_EVENTS_CAPABILITY_ID: &str = "telegram.events.v1";
+pub const TELEGRAM_CALL_EVIDENCE_PUBLISH_CAPABILITY_ID: &str = "telegram.call-evidence.publish.v1";
 pub const TELEGRAM_RUNTIME_CAPABILITY_ID: &str = "telegram.runtime.v1";
 pub const TELEGRAM_STORAGE_CAPABILITY_ID: &str = "telegram.storage.v1";
 pub const TELEGRAM_SESSION_STORE_KEY_PROVISIONING_CAPABILITY_ID: &str =
@@ -70,6 +72,7 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         telegram_automation_client_capability_v1(TelegramAutomationContractV1::Command),
         telegram_automation_client_capability_v1(TelegramAutomationContractV1::Query),
         telegram_blob_capability_v1(),
+        telegram_call_evidence_publish_capability_v1(),
         telegram_calls_client_capability_v1(TelegramCallsContractV1::Command),
         telegram_calls_client_capability_v1(TelegramCallsContractV1::Query),
         telegram_calls_client_capability_v1(TelegramCallsContractV1::Realtime),
@@ -89,6 +92,16 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         ),
         telegram_storage_capability_v1(),
     ]
+}
+
+fn telegram_call_evidence_publish_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: TELEGRAM_CALL_EVIDENCE_PUBLISH_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![call_evidence_observed_publish_request_v1()],
+        ..Default::default()
+    }
 }
 
 fn telegram_calls_client_capability_v1(
@@ -366,9 +379,10 @@ mod tests {
 
     use super::{
         TELEGRAM_API_HASH_PROVISIONING_CAPABILITY_ID, TELEGRAM_BLOB_CAPABILITY_ID,
-        TELEGRAM_CREDENTIALS_CAPABILITY_ID, TELEGRAM_EVENTS_CAPABILITY_ID,
-        TELEGRAM_RUNTIME_CAPABILITY_ID, TELEGRAM_SESSION_STORE_KEY_PROVISIONING_CAPABILITY_ID,
-        TELEGRAM_STORAGE_CAPABILITY_ID, telegram_module_descriptor_v1,
+        TELEGRAM_CALL_EVIDENCE_PUBLISH_CAPABILITY_ID, TELEGRAM_CREDENTIALS_CAPABILITY_ID,
+        TELEGRAM_EVENTS_CAPABILITY_ID, TELEGRAM_RUNTIME_CAPABILITY_ID,
+        TELEGRAM_SESSION_STORE_KEY_PROVISIONING_CAPABILITY_ID, TELEGRAM_STORAGE_CAPABILITY_ID,
+        telegram_module_descriptor_v1,
     };
     use hermes_telegram_delivery_intent_contract::TELEGRAM_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1;
 
@@ -390,6 +404,7 @@ mod tests {
                 "telegram.automation.command.v1",
                 "telegram.automation.query.v1",
                 TELEGRAM_BLOB_CAPABILITY_ID,
+                TELEGRAM_CALL_EVIDENCE_PUBLISH_CAPABILITY_ID,
                 "telegram.calls.command.v1",
                 "telegram.calls.query.v1",
                 "telegram.calls.realtime.v1",

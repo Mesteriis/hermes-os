@@ -5,6 +5,7 @@ pub const TELEGRAM_CALLS_STORAGE_REVISION_V1: u32 = 3;
 pub const TELEGRAM_CALLS_STORAGE_REVISION_V2: u32 = 4;
 pub const TELEGRAM_CALLS_STORAGE_REVISION_V3: u32 = 5;
 pub const TELEGRAM_CALLS_STORAGE_REVISION_V4: u32 = 6;
+pub const TELEGRAM_CALLS_STORAGE_REVISION_V5: u32 = 9;
 
 pub const TELEGRAM_CALLS_SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS hermes_data.telegram_call_sessions (
@@ -310,6 +311,29 @@ CREATE INDEX IF NOT EXISTS telegram_call_realtime_backfill_state_idx
     );
 "#;
 
+pub const TELEGRAM_CALLS_SCHEMA_V5: &str = r#"
+CREATE TABLE IF NOT EXISTS hermes_data.telegram_call_evidence_outbox (
+    message_id BYTEA PRIMARY KEY CHECK (octet_length(message_id) = 16),
+    envelope_sha256 BYTEA NOT NULL CHECK (octet_length(envelope_sha256) = 32),
+    exact_envelope_bytes BYTEA NOT NULL CHECK (
+        octet_length(exact_envelope_bytes) > 0
+        AND octet_length(exact_envelope_bytes) <= 262144
+    ),
+    created_at_unix_seconds BIGINT NOT NULL CHECK (created_at_unix_seconds > 0),
+    published_at_unix_seconds BIGINT NULL CHECK (
+        published_at_unix_seconds IS NULL
+        OR published_at_unix_seconds > 0
+    )
+);
+
+CREATE INDEX IF NOT EXISTS telegram_call_evidence_outbox_pending_idx
+    ON hermes_data.telegram_call_evidence_outbox (
+        created_at_unix_seconds,
+        message_id
+    )
+    WHERE published_at_unix_seconds IS NULL;
+"#;
+
 pub fn telegram_calls_storage_migration_v1() -> StorageMigrationStepV1 {
     StorageMigrationStepV1 {
         revision: TELEGRAM_CALLS_STORAGE_REVISION_V1,
@@ -346,6 +370,15 @@ pub fn telegram_calls_storage_migration_v4() -> StorageMigrationStepV1 {
     }
 }
 
+pub fn telegram_calls_storage_migration_v5() -> StorageMigrationStepV1 {
+    StorageMigrationStepV1 {
+        revision: TELEGRAM_CALLS_STORAGE_REVISION_V5,
+        migration_id: "telegram_call_evidence_outbox".to_owned(),
+        forward_sql_utf8: TELEGRAM_CALLS_SCHEMA_V5.as_bytes().to_vec(),
+        sha256: Sha256::digest(TELEGRAM_CALLS_SCHEMA_V5.as_bytes()).to_vec(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,6 +410,9 @@ mod tests {
 
         let backfill = telegram_calls_storage_migration_v4();
         assert_eq!(backfill.revision, 6);
+        let evidence = telegram_calls_storage_migration_v5();
+        assert_eq!(evidence.revision, 9);
+        assert!(TELEGRAM_CALLS_SCHEMA_V5.contains("telegram_call_evidence_outbox"));
         assert_eq!(backfill.migration_id, "telegram_call_realtime_backfill_job");
         assert!(TELEGRAM_CALLS_SCHEMA_V4.contains("telegram_call_realtime_replay_order"));
         assert!(TELEGRAM_CALLS_SCHEMA_V4.contains("telegram_call_realtime_replay_cursor"));

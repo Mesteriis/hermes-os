@@ -3092,6 +3092,7 @@ dependencies = [
 name = "hermes-telegram-calls-persistence"
 version = "0.1.0"
 dependencies = [
+ "hermes-communications-call-evidence-ingress",
  "hermes-events-protocol",
  "hermes-scheduler-protocol",
  "hermes-storage-protocol",
@@ -3161,6 +3162,7 @@ dependencies = [
  "hermes-blob-client",
  "hermes-blob-client-contract",
  "hermes-clock-protocol",
+ "hermes-communications-call-evidence-ingress",
  "hermes-communications-ingress",
  "hermes-events-jetstream",
  "hermes-events-protocol",

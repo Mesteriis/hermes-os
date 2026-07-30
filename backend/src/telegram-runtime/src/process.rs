@@ -50,6 +50,9 @@ use crate::{
         TelegramAdmittedProviderLoop, TelegramAdmittedRuntime,
         TelegramProviderReconfigurationContextV1, resolve_provider_reconfiguration_parameters,
     },
+    call_evidence_outbox::{
+        TelegramCallEvidenceOutboxRelayErrorV1, relay_call_evidence_outbox_once_v1,
+    },
     calls_execution::TelegramCallExecutionError,
     client_transport::{self, TelegramClientTransportError},
     delivery_intent_consumer::{
@@ -260,10 +263,15 @@ impl TelegramProcessLoop {
                         .map_err(TelegramDurableProcessError::Projection)?;
                 }
             }
-            let runtime_generation = self
+            let (runtime_generation, runtime_instance_id) = self
                 .composition
                 .runtime_admission()
-                .map(|admission| admission.runtime_generation)
+                .map(|admission| {
+                    (
+                        admission.runtime_generation,
+                        admission.runtime_instance_id.clone(),
+                    )
+                })
                 .ok_or_else(|| {
                     TelegramDurableProcessError::Provider(TdlibError::Protocol(
                         "Telegram call update has no admitted runtime fence".to_owned(),
@@ -288,6 +296,7 @@ impl TelegramProcessLoop {
                             calls,
                             &observation,
                             runtime_generation,
+                            &runtime_instance_id,
                             observed_at_unix_seconds,
                         )
                         .await?;
@@ -310,6 +319,7 @@ impl TelegramProcessLoop {
                             calls,
                             &observation,
                             runtime_generation,
+                            &runtime_instance_id,
                             observed_at_unix_seconds,
                         )
                         .await?;
@@ -670,6 +680,17 @@ pub fn serve_admitted_provider_loop(
                 return Err("Telegram delivery-intent outbox persistence failed".to_owned());
             }
         }
+        match executor.block_on(relay_call_evidence_outbox_once_v1(
+            &calls,
+            &event_connection,
+            &event_publish_permit,
+            published_at_unix_seconds,
+        )) {
+            Ok(_) | Err(TelegramCallEvidenceOutboxRelayErrorV1::Unavailable) => {}
+            Err(TelegramCallEvidenceOutboxRelayErrorV1::Persistence) => {
+                return Err("Telegram call evidence outbox persistence failed".to_owned());
+            }
+        }
     }
 }
 
@@ -737,6 +758,7 @@ async fn persist_call_observation(
     calls: &TelegramCallsPersistence,
     observation: &TdlibCallObservation,
     runtime_generation: u64,
+    runtime_instance_id: &str,
     observed_at_unix_seconds: u64,
 ) -> Result<hermes_telegram_calls_core::TelegramCallSession, TelegramDurableProcessError> {
     let update = call_update(observation, runtime_generation, observed_at_unix_seconds);
@@ -755,7 +777,11 @@ async fn persist_call_observation(
         call_session_id(&update)
     };
     calls
-        .ingest_provider_update(&suggested_call_session_id, &update)
+        .ingest_provider_update_with_call_evidence(
+            &suggested_call_session_id,
+            &update,
+            runtime_instance_id,
+        )
         .await
         .map(|persisted| persisted.session)
         .map_err(TelegramDurableProcessError::Calls)

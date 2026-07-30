@@ -203,6 +203,31 @@ impl TelegramCallsPersistence {
         new_call_session_id: &str,
         update: &TelegramProviderCallUpdate,
     ) -> Result<PersistedCallUpdate, TelegramCallsPersistenceError> {
+        self.ingest_provider_update_inner(new_call_session_id, update, None)
+            .await
+    }
+
+    pub async fn ingest_provider_update_with_call_evidence(
+        &self,
+        new_call_session_id: &str,
+        update: &TelegramProviderCallUpdate,
+        runtime_instance_id: &str,
+    ) -> Result<PersistedCallUpdate, TelegramCallsPersistenceError> {
+        if runtime_instance_id.is_empty() {
+            return Err(TelegramCallsPersistenceError::InvalidRequest(
+                "runtime_instance_id",
+            ));
+        }
+        self.ingest_provider_update_inner(new_call_session_id, update, Some(runtime_instance_id))
+            .await
+    }
+
+    async fn ingest_provider_update_inner(
+        &self,
+        new_call_session_id: &str,
+        update: &TelegramProviderCallUpdate,
+        call_evidence_runtime_instance_id: Option<&str>,
+    ) -> Result<PersistedCallUpdate, TelegramCallsPersistenceError> {
         let mut transaction = self
             .pool
             .begin()
@@ -213,6 +238,19 @@ impl TelegramCallsPersistence {
             project_provider_call_update(current.as_ref(), new_call_session_id, update)?;
 
         if !projected.changed {
+            if let Some(runtime_instance_id) = call_evidence_runtime_instance_id {
+                let record = crate::call_evidence::call_evidence_record_v1(
+                    &projected.session,
+                    runtime_instance_id,
+                )
+                .map_err(|_| TelegramCallsPersistenceError::InvalidRequest("call_evidence"))?;
+                crate::call_evidence_outbox::insert_call_evidence_outbox(
+                    &mut transaction,
+                    &record,
+                    projected.session.updated_at_unix_seconds,
+                )
+                .await?;
+            }
             transaction
                 .commit()
                 .await
@@ -235,6 +273,19 @@ impl TelegramCallsPersistence {
             projected.session.updated_at_unix_seconds,
         )
         .await?;
+        if let Some(runtime_instance_id) = call_evidence_runtime_instance_id {
+            let record = crate::call_evidence::call_evidence_record_v1(
+                &projected.session,
+                runtime_instance_id,
+            )
+            .map_err(|_| TelegramCallsPersistenceError::InvalidRequest("call_evidence"))?;
+            crate::call_evidence_outbox::insert_call_evidence_outbox(
+                &mut transaction,
+                &record,
+                projected.session.updated_at_unix_seconds,
+            )
+            .await?;
+        }
         transaction
             .commit()
             .await
