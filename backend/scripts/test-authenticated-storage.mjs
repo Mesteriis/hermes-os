@@ -13,6 +13,8 @@ const compose = ['compose', '--project-name', project, '-f', 'development/authen
 const focusedTest = process.env.HERMES_STORAGE_AUTHENTICATED_TEST_FILTER?.trim();
 const managedTest = process.env.HERMES_STORAGE_MANAGED_TEST_FILTER?.trim();
 const schedulerPostgresTest = process.env.HERMES_SCHEDULER_POSTGRES_TEST_FILTER?.trim();
+const delayedDeliveryPostgresTest =
+  process.env.HERMES_COMMUNICATION_DELAYED_DELIVERY_POSTGRES_TEST_FILTER?.trim();
 const telegramCallsTest = process.env.HERMES_TELEGRAM_CALLS_POSTGRES_TEST_FILTER?.trim();
 const keepContour = process.env.HERMES_STORAGE_KEEP_CONTOUR === '1';
 const authenticatedTests = [
@@ -186,6 +188,13 @@ async function run_conformance(secrets) {
       await run_scheduler_postgres_conformance(secrets, schedulerPostgresTest);
       return;
     }
+    if (delayedDeliveryPostgresTest) {
+      await run_delayed_delivery_postgres_conformance(
+        secrets,
+        delayedDeliveryPostgresTest,
+      );
+      return;
+    }
     if (telegramCallsTest) {
       await run_telegram_calls_conformance(secrets, telegramCallsTest);
       return;
@@ -255,6 +264,35 @@ async function run_scheduler_postgres_conformance(secrets, test) {
       env: {
         ...process.env,
         HERMES_SCHEDULER_POSTGRES_URL: await postgres_test_database_url(secrets),
+      },
+    });
+  } finally {
+    await stop_contour(secrets);
+  }
+}
+
+async function run_delayed_delivery_postgres_conformance(secrets, test) {
+  await start_contour(secrets);
+  try {
+    await run('cargo', [
+      `+${toolchain}`,
+      '--config',
+      'build.rustc-wrapper=""',
+      'test',
+      '--locked',
+      '-p',
+      'hermes-communication-delayed-delivery-testkit',
+      '--test',
+      'postgres_live',
+      '--',
+      '--ignored',
+      test,
+      '--test-threads=1',
+    ], {
+      env: {
+        ...process.env,
+        HERMES_COMMUNICATION_DELAYED_DELIVERY_POSTGRES_URL:
+          await postgres_test_database_url(secrets),
       },
     });
   } finally {

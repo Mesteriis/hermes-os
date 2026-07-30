@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "conformance-test-support")]
+mod conformance;
 mod execution;
 mod operations;
 mod realtime;
@@ -7,6 +9,8 @@ mod relay;
 pub mod schema;
 mod status;
 
+#[cfg(feature = "conformance-test-support")]
+pub use conformance::DelayedDeliveryPersistenceConformanceV1;
 pub use execution::{
     ClaimDueExecutionOutcomeV1, ClaimDueExecutionV1, DelayedDeliveryExecutionClaimV1,
     MarkDeliveryAcceptedV1, MarkDeliveryFailedV1,

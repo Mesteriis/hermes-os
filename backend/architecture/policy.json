@@ -4955,6 +4955,10 @@
     ],
     "cargoFeaturesEnabled": false,
     "cargoFeatureAllowlist": {
+      "hermes-communication-delayed-delivery-persistence": {
+        "default": [],
+        "conformance-test-support": []
+      },
       "hermes-mail-api": {
         "default": [],
         "conformance-test-support": []
@@ -6010,6 +6014,7 @@
       "tokio-postgres"
     ],
     "testSupportPostgresClientAllowlist": [
+      "hermes-communication-delayed-delivery-testkit:dev:sqlx",
       "hermes-events-jetstream-testkit:dev:sqlx",
       "hermes-kernel-recovery-testkit:dev:sqlx",
       "hermes-scheduler-testkit:dev:sqlx"

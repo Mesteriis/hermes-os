@@ -896,6 +896,7 @@ export function validatePolicy(policy) {
     || !isExactOrderedStringList(
       storage?.testSupportPostgresClientAllowlist,
       [
+        'hermes-communication-delayed-delivery-testkit:dev:sqlx',
         'hermes-events-jetstream-testkit:dev:sqlx',
         'hermes-kernel-recovery-testkit:dev:sqlx',
         'hermes-scheduler-testkit:dev:sqlx',

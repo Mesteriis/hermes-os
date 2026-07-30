@@ -12,6 +12,10 @@ role = "workflow"
 owner = "communication_delayed_delivery"
 surface = "persistence"
 
+[features]
+default = []
+conformance-test-support = []
+
 [dependencies]
 hermes-communication-delayed-delivery-core = { path = "../communication-delayed-delivery-core" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }

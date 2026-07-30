@@ -2360,6 +2360,10 @@ const COMMUNICATION_DELIVERY_INTENT_INVENTORY = {
 };
 
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
+  'hermes-communication-delayed-delivery-persistence': {
+    default: [],
+    'conformance-test-support': [],
+  },
   'hermes-mail-api': {
     default: [],
     'conformance-test-support': [],

@@ -18,6 +18,7 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     coreSource,
     persistenceManifest,
     persistenceSource,
+    persistenceConformance,
     persistenceOperations,
     persistenceExecution,
     persistenceRelay,
@@ -50,6 +51,9 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     assemblySource,
     assemblyMain,
     developmentReleaseScript,
+    authenticatedStorageRunner,
+    conformanceManifest,
+    conformanceTest,
     methodRoutingAdr,
   ] = await Promise.all([
     readFile(
@@ -113,6 +117,13 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     readFile(
       new URL(
         'src/communication-delayed-delivery-persistence/src/lib.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-persistence/src/conformance.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -311,6 +322,21 @@ test('delayed delivery admits exact due commands in a separate adapter while its
       'utf8',
     ),
     readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'tests/support/communication-delayed-delivery/Cargo.toml',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/communication-delayed-delivery/tests/postgres_live.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
     readFile(
       new URL(
         'docs/adr/ADR-0345-method-exact-delayed-delivery-client-command-routing.md',
@@ -362,6 +388,9 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   );
   assert.match(persistenceSource, /DelayedDeliveryBodyReceiptV1/);
   assert.match(persistenceSource, /SchedulerExecutionFenceV1/);
+  assert.match(persistenceManifest, /conformance-test-support = \[\]/);
+  assert.match(persistenceConformance, /DelayedDeliveryPersistenceConformanceV1/);
+  assert.match(persistenceConformance, /PgPoolOptions::new\(\)/);
   assert.match(persistenceOperations, /pub async fn create_operation/);
   assert.match(persistenceOperations, /pub async fn request_cancellation/);
   assert.match(persistenceOperations, /pub async fn apply_scheduler_result/);
@@ -500,6 +529,26 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(
     developmentReleaseScript,
     /communication_delayed_delivery\.release-artifacts\.json/,
+  );
+  assert.match(
+    conformanceManifest,
+    /name = "hermes-communication-delayed-delivery-testkit"/,
+  );
+  assert.match(
+    conformanceManifest,
+    /hermes-communication-delayed-delivery-persistence[\s\S]*features = \["conformance-test-support"\]/,
+  );
+  assert.match(conformanceTest, /durable_lifecycle_survives_restart/);
+  assert.match(conformanceTest, /ClaimDueExecutionOutcomeV1::Duplicate/);
+  assert.match(conformanceTest, /SchedulerScheduleResultV1::TooLate/);
+  assert.match(conformanceTest, /client_realtime_window/);
+  assert.match(
+    authenticatedStorageRunner,
+    /HERMES_COMMUNICATION_DELAYED_DELIVERY_POSTGRES_TEST_FILTER/,
+  );
+  assert.match(
+    authenticatedStorageRunner,
+    /hermes-communication-delayed-delivery-testkit/,
   );
   assert.doesNotMatch(
     `${assemblySource}\n${assemblyMain}`,

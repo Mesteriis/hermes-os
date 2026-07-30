@@ -1877,6 +1877,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-delayed-delivery-testkit"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-delayed-delivery-core",
+ "hermes-communication-delayed-delivery-persistence",
+ "prost 0.14.4",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "hermes-communication-delivery-intent-api"
 version = "0.1.0"
 dependencies = [

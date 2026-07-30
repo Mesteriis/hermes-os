@@ -128,6 +128,7 @@ members = [
   "tests/support/events",
   "tests/support/blob",
   "tests/support/scheduler",
+  "tests/support/communication-delayed-delivery",
   "tests/support/telemetry",
   "tests/support/storage",
   "tests/support/mail-communications-slice",

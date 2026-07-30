@@ -478,31 +478,6 @@ fn validate_admission(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::runtime_source_reference;
-
-    #[test]
-    fn runtime_source_reference_preserves_the_exact_managed_identity() {
-        assert_eq!(
-            runtime_source_reference("5a903dfad7f58b794797c33b781d84b1"),
-            Some([
-                0x5a, 0x90, 0x3d, 0xfa, 0xd7, 0xf5, 0x8b, 0x79, 0x47, 0x97, 0xc3, 0x3b, 0x78, 0x1d,
-                0x84, 0xb1,
-            ])
-        );
-    }
-
-    #[test]
-    fn runtime_source_reference_rejects_non_exact_identity_text() {
-        assert_eq!(runtime_source_reference("runtime-instance"), None);
-        assert_eq!(
-            runtime_source_reference("5a903dfad7f58b794797c33b781d84bz"),
-            None
-        );
-    }
-}
-
 fn authenticate(
     channel: &mut ManagedControlChannelV2<UnixStream>,
     descriptor: Vec<u8>,
@@ -704,4 +679,29 @@ fn bind_subscribe_permits(
         .cloned()
         .ok_or(DelayedDeliveryManagedRuntimeErrorV1::Admission)?;
     Ok((schedule, due))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::runtime_source_reference;
+
+    #[test]
+    fn runtime_source_reference_preserves_the_exact_managed_identity() {
+        assert_eq!(
+            runtime_source_reference("5a903dfad7f58b794797c33b781d84b1"),
+            Some([
+                0x5a, 0x90, 0x3d, 0xfa, 0xd7, 0xf5, 0x8b, 0x79, 0x47, 0x97, 0xc3, 0x3b, 0x78, 0x1d,
+                0x84, 0xb1,
+            ])
+        );
+    }
+
+    #[test]
+    fn runtime_source_reference_rejects_non_exact_identity_text() {
+        assert_eq!(runtime_source_reference("runtime-instance"), None);
+        assert_eq!(
+            runtime_source_reference("5a903dfad7f58b794797c33b781d84bz"),
+            None
+        );
+    }
 }

@@ -65,6 +65,17 @@ failure получен от Delivery Intent для отсутствующего 
 и попытки Blob custody cleanup. Это доказывает полный runtime contour до
 provider-neutral Delivery Intent request; provider execution остаётся
 ответственностью выбранной integration и не входит в этот workflow.
+
+Отдельная test-only assembly unit
+`hermes-communication-delayed-delivery-testkit` теперь запускается через
+authenticated-storage runner на disposable PostgreSQL. Live conformance
+доказывает exact create idempotency и hash conflict, Scheduler result
+inbox duplicate/conflict, stale cancel revision, Scheduler-authoritative
+`too_late` race, due claim duplicate/lease conflict, terminal receipt outbox,
+replayable transition log и восстановление terminal state после нового
+persistence connection. Этот storage evidence не заменяет managed-process
+restart/revoke/outage contour.
+
 Этот ADR не открывает workflow gate сам по себе.
 
 Уточняет:

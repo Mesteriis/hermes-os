@@ -46,6 +46,10 @@ const MAIL_CAPABILITIES = [
 ];
 
 const MAIL_CARGO_FEATURES = {
+  'hermes-communication-delayed-delivery-persistence': {
+    default: [],
+    'conformance-test-support': [],
+  },
   'hermes-mail-api': {
     default: [],
     'conformance-test-support': [],
