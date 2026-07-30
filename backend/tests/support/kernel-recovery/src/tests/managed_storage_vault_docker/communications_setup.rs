@@ -22,6 +22,11 @@ use hermes_communications_content_api::{
     CONTENT_READ_CONTRACT_NAME_V1, CONTENT_TICKET_CONNECT_PATH_V1, CONTENT_TICKET_CONTRACT_NAME_V1,
     MAX_MESSAGE_BODY_BYTES_V1,
 };
+use hermes_communications_cross_channel_forward_source_api::{
+    cross_channel_forward_source_prepare_contract_reference_v1,
+    cross_channel_forward_source_prepared_contract_reference_v1,
+    cross_channel_forward_source_rejected_contract_reference_v1,
+};
 use hermes_communications_evidence_export_source_api::{
     evidence_export_prepare_contract_reference_v1, evidence_export_prepared_contract_reference_v1,
     evidence_export_rejected_contract_reference_v1,
@@ -53,9 +58,10 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_BLOB_CAPABILITY_ID, COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
     COMMUNICATIONS_BLOB_QUOTA_BYTES, COMMUNICATIONS_CONTENT_CAPABILITY_ID,
-    COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID,
-    COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
-    COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
+    COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_BLOB_CAPABILITY_ID,
+    COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_CAPABILITY_ID, COMMUNICATIONS_EVENTS_CAPABILITY_ID,
+    COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID,
+    COMMUNICATIONS_MODULE_ID, COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
     COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
     COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION,
     COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS, COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
@@ -404,9 +410,12 @@ fn start_reserved_communications_domain(
         },
     )
     .expect("start Communications domain");
-    supervisor
-        .wait_until_ready(COMMUNICATIONS_REGISTRATION)
-        .expect("wait for Communications readiness");
+    if let Err(error) = supervisor.wait_until_ready(COMMUNICATIONS_REGISTRATION) {
+        panic!(
+            "wait for Communications readiness: {error}; last_failure={:?}",
+            supervisor.last_failure(COMMUNICATIONS_REGISTRATION),
+        );
+    }
     generation
 }
 
@@ -908,6 +917,62 @@ pub(super) fn assert_communications_ingress_delivery(
         );
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
+}
+
+pub(super) fn managed_mail_target_conversation(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+) -> Vec<u8> {
+    let account_cursor = fixture_account_cursor(
+        hermes_communications_ingress::ProviderProvenanceV1::MailImap,
+        "integration-private-account-1",
+    );
+    let accounts = route_communications_query(
+        store,
+        supervisor,
+        72,
+        &CommunicationsQueryRequestV1 {
+            protocol_major: 1,
+            operation: Some(Operation::ListAccounts(ListAccountsRequestV1 {
+                limit: 16,
+                cursor: Vec::new(),
+            })),
+        }
+        .encode_to_vec(),
+    );
+    let Some(QueryResult::ListAccounts(accounts)) = accounts.result else {
+        panic!("managed Mail accounts query result");
+    };
+    let account = accounts
+        .accounts
+        .into_iter()
+        .find(|account| account.account_cursor_sha256 == account_cursor)
+        .expect("managed Mail account");
+    let conversations = route_communications_query(
+        store,
+        supervisor,
+        73,
+        &CommunicationsQueryRequestV1 {
+            protocol_major: 1,
+            operation: Some(Operation::ListConversations(
+                hermes_communications_api::query_wire::ListConversationsRequestV1 {
+                    account_cursor_sha256: account.account_cursor_sha256,
+                    limit: 16,
+                    cursor: Vec::new(),
+                },
+            )),
+        }
+        .encode_to_vec(),
+    );
+    let Some(QueryResult::ListConversations(conversations)) = conversations.result else {
+        panic!("managed Mail conversations query result");
+    };
+    conversations
+        .conversations
+        .first()
+        .expect("managed Mail conversation")
+        .conversation_id
+        .clone()
 }
 
 pub(super) fn assert_communications_transferred_body_projection(
@@ -2498,6 +2563,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID.to_owned(),
         "communications.blob.v1".to_owned(),
         COMMUNICATIONS_CONTENT_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_EVENTS_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID.to_owned(),
@@ -2542,6 +2609,14 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
         vec![ModuleBlobOperationV1::Write],
     );
+    let cross_channel_forward_source_blob = ModuleBlobQuotaRequestV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_BLOB_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        COMMUNICATIONS_BLOB_QUOTA_BYTES,
+        COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
+        vec![ModuleBlobOperationV1::Write],
+    );
     let vault_purpose = ModuleVaultPurposeRequestV1::new_with_key_schema_revision(
         COMMUNICATIONS_REGISTRATION,
         COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
@@ -2569,6 +2644,12 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
     let evidence_export_prepare = evidence_export_prepare_contract_reference_v1();
     let evidence_export_prepared = evidence_export_prepared_contract_reference_v1();
     let evidence_export_rejected = evidence_export_rejected_contract_reference_v1();
+    let cross_channel_forward_source_prepare =
+        cross_channel_forward_source_prepare_contract_reference_v1();
+    let cross_channel_forward_source_prepared =
+        cross_channel_forward_source_prepared_contract_reference_v1();
+    let cross_channel_forward_source_rejected =
+        cross_channel_forward_source_rejected_contract_reference_v1();
     let routes = [
         communications_event_route(
             COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
@@ -2623,6 +2704,24 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             ModuleEventEnvelopeKindV1::Observation,
             &observed,
             ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Command,
+            &cross_channel_forward_source_prepare,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &cross_channel_forward_source_prepared,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &cross_channel_forward_source_rejected,
+            ModuleEventRouteDirectionV1::Publish,
         ),
     ];
     let client_rpc_routes = [
@@ -2706,7 +2805,12 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             ModuleDescriptorRegistrationRequestsV1 {
                 storage: std::slice::from_ref(&storage),
                 events: &routes,
-                blobs: &[blob, content_blob, export_source_blob],
+                blobs: &[
+                    blob,
+                    content_blob,
+                    export_source_blob,
+                    cross_channel_forward_source_blob,
+                ],
                 scheduler: &[],
                 vault_purposes: std::slice::from_ref(&vault_purpose),
                 client_rpc_routes: &client_rpc_routes,

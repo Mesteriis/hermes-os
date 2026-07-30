@@ -1,5 +1,8 @@
 mod admission;
 mod blob_transfer;
+mod client_port;
+mod client_realtime;
+mod contracts;
 mod custody_cleanup;
 mod delivery_results;
 mod event_outbox;
@@ -8,8 +11,11 @@ mod source_prepare;
 mod source_results;
 
 pub use blob_transfer::{
-    CrossChannelForwardBlobPortV1, CrossChannelForwardBlobTransferErrorV1,
-    ManagedCrossChannelForwardBlobPortV1,
+    CrossChannelForwardBlobMaterializationV1, CrossChannelForwardBlobPortV1,
+    CrossChannelForwardBlobTransferErrorV1, ManagedCrossChannelForwardBlobPortV1,
+};
+pub use client_port::{
+    get_cross_channel_forward_status_payload_v1, start_cross_channel_forward_payload_v1,
 };
 pub use custody_cleanup::{
     CrossChannelForwardCustodyCleanupErrorV1, CrossChannelForwardCustodyReleasePortV1,

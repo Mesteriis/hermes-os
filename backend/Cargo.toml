@@ -74,6 +74,7 @@ members = [
   "src/communication-cross-channel-forward-core",
   "src/communication-cross-channel-forward-persistence",
   "src/communication-cross-channel-forward-runtime",
+  "src/communication-cross-channel-forward-assembly",
   "src/mail-delivery-intent-contract",
   "src/telegram-delivery-intent-contract",
   "src/whatsapp-delivery-intent-contract",

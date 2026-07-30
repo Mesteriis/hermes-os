@@ -1,7 +1,8 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobCustodyTargetV1, ManagedBlobSessionRequestV1,
+    BlobDataClient, ManagedBlobCustodyTargetV1, ManagedBlobCustodyTransferRequestV1,
+    ManagedBlobSessionRequestV1, request_managed_blob_custody_transfer_v2,
     request_managed_blob_session_v2,
 };
 use hermes_communication_cross_channel_forward_persistence::{
@@ -29,11 +30,16 @@ pub enum CrossChannelForwardBlobTransferErrorV1 {
     Unavailable,
 }
 
+pub struct CrossChannelForwardBlobMaterializationV1 {
+    pub source_body: CrossChannelForwardBlobReceiptV1,
+    pub delivery_body: CrossChannelForwardBlobReceiptV1,
+}
+
 pub trait CrossChannelForwardBlobPortV1 {
     fn transfer_to_delivery_intent(
         &mut self,
         prepared: &CrossChannelForwardPreparedEventV1,
-    ) -> Result<CrossChannelForwardBlobReceiptV1, CrossChannelForwardBlobTransferErrorV1>;
+    ) -> Result<CrossChannelForwardBlobMaterializationV1, CrossChannelForwardBlobTransferErrorV1>;
 }
 
 pub struct ManagedCrossChannelForwardBlobPortV1<'a> {
@@ -45,15 +51,41 @@ impl CrossChannelForwardBlobPortV1 for ManagedCrossChannelForwardBlobPortV1<'_> 
     fn transfer_to_delivery_intent(
         &mut self,
         prepared: &CrossChannelForwardPreparedEventV1,
-    ) -> Result<CrossChannelForwardBlobReceiptV1, CrossChannelForwardBlobTransferErrorV1> {
+    ) -> Result<CrossChannelForwardBlobMaterializationV1, CrossChannelForwardBlobTransferErrorV1>
+    {
         validate_source_receipt(&prepared.source_body)?;
+        let transfer = request_managed_blob_custody_transfer_v2(
+            self.control_channel,
+            self.dispatcher,
+            ManagedBlobCustodyTransferRequestV1 {
+                capability_id: COMMUNICATION_CROSS_CHANNEL_FORWARD_BLOB_CAPABILITY_ID_V1,
+                source_reference_id: &prepared.source_body.reference_id,
+                declared_size: prepared.source_body.declared_bytes,
+                receipt_sha256: &prepared.source_body.sha256,
+                custody_source_proof: &prepared.source_body.custody_transfer_source_proof,
+                evidence_id: &prepared.result_message_id,
+                evidence_envelope_sha256: &prepared.envelope_sha256,
+            },
+        )
+        .map_err(|_| CrossChannelForwardBlobTransferErrorV1::Unavailable)?;
+        let source_reference_id: [u8; 16] = transfer
+            .grant
+            .target_reference_id
+            .as_slice()
+            .try_into()
+            .ok()
+            .filter(|value: &[u8; 16]| value.iter().any(|byte| *byte != 0))
+            .ok_or(CrossChannelForwardBlobTransferErrorV1::InvalidReceipt)?;
+        BlobDataClient::new(&transfer.data_socket_path)
+            .and_then(|client| client.custody_transfer(transfer.grant, transfer.channel_binding))
+            .map_err(|_| CrossChannelForwardBlobTransferErrorV1::Unavailable)?;
         let read = request_managed_blob_session_v2(
             self.control_channel,
             self.dispatcher,
             ManagedBlobSessionRequestV1 {
                 capability_id: COMMUNICATION_CROSS_CHANNEL_FORWARD_BLOB_CAPABILITY_ID_V1,
                 operation: BlobDataOperationV1::BlobDataOperationReadRangeV1,
-                reference_id: &prepared.source_body.reference_id,
+                reference_id: &source_reference_id,
                 declared_size: prepared.source_body.declared_bytes,
                 backup_class: 1,
                 receipt_sha256: Some(&prepared.source_body.sha256),
@@ -104,11 +136,22 @@ impl CrossChannelForwardBlobPortV1 for ManagedCrossChannelForwardBlobPortV1<'_> 
         BlobDataClient::new(write.data_socket_path)
             .and_then(|client| client.write(write.grant, write.channel_binding, bytes))
             .map_err(|_| CrossChannelForwardBlobTransferErrorV1::Unavailable)?;
-        Ok(CrossChannelForwardBlobReceiptV1 {
-            reference_id,
-            declared_bytes: prepared.source_body.declared_bytes,
-            sha256: prepared.source_body.sha256,
-            custody_transfer_source_proof: proof,
+        Ok(CrossChannelForwardBlobMaterializationV1 {
+            source_body: CrossChannelForwardBlobReceiptV1 {
+                reference_id: source_reference_id,
+                declared_bytes: prepared.source_body.declared_bytes,
+                sha256: prepared.source_body.sha256,
+                custody_transfer_source_proof: prepared
+                    .source_body
+                    .custody_transfer_source_proof
+                    .clone(),
+            },
+            delivery_body: CrossChannelForwardBlobReceiptV1 {
+                reference_id,
+                declared_bytes: prepared.source_body.declared_bytes,
+                sha256: prepared.source_body.sha256,
+                custody_transfer_source_proof: proof,
+            },
         })
     }
 }

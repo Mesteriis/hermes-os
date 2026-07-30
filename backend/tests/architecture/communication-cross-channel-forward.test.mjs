@@ -17,9 +17,14 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     contract,
     persistenceManifest,
     runtimeManifest,
+    assemblyManifest,
+    assemblyLib,
     runtimeAdmission,
     runtimeMain,
     managedRuntime,
+    clientPort,
+    clientRealtime,
+    runtimeContracts,
     sourcePrepare,
     sourceResults,
     deliveryResults,
@@ -89,6 +94,14 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
       'utf8',
     ),
     readFile(
+      new URL('src/communication-cross-channel-forward-assembly/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-cross-channel-forward-assembly/src/lib.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
       new URL(
         'src/communication-cross-channel-forward-runtime/src/admission.rs',
         BACKEND_ROOT,
@@ -102,6 +115,27 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     readFile(
       new URL(
         'src/communication-cross-channel-forward-runtime/src/managed_runtime.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-runtime/src/client_port.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-runtime/src/client_realtime.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-runtime/src/contracts.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -264,6 +298,7 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
       'hermes-communication-cross-channel-forward-core:implementation',
       'hermes-communication-cross-channel-forward-persistence:persistence',
       'hermes-communication-cross-channel-forward-runtime:runtime',
+      'hermes-communication-cross-channel-forward-assembly:assembly',
     ],
   );
   assert.match(apiManifest, /role = "workflow"[\s\S]*surface = "contract"/);
@@ -273,8 +308,11 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     /role = "workflow"[\s\S]*surface = "persistence"/,
   );
   assert.match(runtimeManifest, /role = "workflow"[\s\S]*surface = "runtime"/);
+  assert.match(assemblyManifest, /role = "workflow"[\s\S]*surface = "assembly"/);
+  assert.match(assemblyLib, /materialize_cross_channel_forward_release_assembly_v1/);
+  assert.doesNotMatch(assemblyLib, /tokio|sqlx|async_nats|JetStreamClient/);
   assert.doesNotMatch(
-    `${apiManifest}\n${coreManifest}\n${persistenceManifest}\n${runtimeManifest}`,
+    `${apiManifest}\n${coreManifest}\n${persistenceManifest}\n${runtimeManifest}\n${assemblyManifest}`,
     /hermes-(?:communications-domain|mail|telegram|whatsapp|zulip|kernel)/,
   );
   assert.match(api, /COMMUNICATION_CROSS_CHANNEL_FORWARD_CAPABILITY_ID_V1/);
@@ -329,14 +367,24 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
   assert.match(schema, /COMMUNICATION_CROSS_CHANNEL_FORWARD_STORAGE_BUNDLE_REVISION_V3/);
   assert.match(runtimeAdmission, /ModuleKindV1::Workflow/);
   assert.match(runtimeAdmission, /max_processes: 1/);
+  assert.match(runtimeAdmission, /ProvidedSurfaceKindV1::ClientRealtime/);
+  assert.match(runtimeAdmission, /COMMUNICATION_CROSS_CHANNEL_FORWARD_COMMAND_CONNECT_PATH_V1/);
+  assert.match(runtimeAdmission, /COMMUNICATION_CROSS_CHANNEL_FORWARD_QUERY_CONNECT_PATH_V1/);
   assert.match(runtimeAdmission, /communication_delivery_intent_submit_publish_request_v1/);
   assert.match(runtimeAdmission, /communication_delivery_intent_submitted_consume_request_v1/);
   assert.match(runtimeAdmission, /communication_delivery_intent_rejected_consume_request_v1/);
   assert.match(runtimeAdmission, /cross_channel_forward_source_prepared_consume_request_v1/);
-  assert.match(runtimeMain, /--serve-inherited/);
+  assert.match(runtimeMain, /Some\("serve-inherited"\)/);
   assert.match(managedRuntime, /request_managed_runtime_event_access_v2/);
   assert.match(managedRuntime, /bind_result_subscriptions/);
+  assert.match(managedRuntime, /Operation::ClientDelivery/);
+  assert.match(managedRuntime, /pump_client_realtime_once/);
   assert.match(managedRuntime, /signal_ready/);
+  assert.match(clientPort, /start_cross_channel_forward_payload_v1/);
+  assert.match(clientPort, /get_cross_channel_forward_status_payload_v1/);
+  assert.match(clientRealtime, /ManagedRuntimeClientRealtimePublishRequestV1/);
+  assert.match(clientRealtime, /client_realtime_window/);
+  assert.match(runtimeContracts, /COMMUNICATION_CROSS_CHANNEL_FORWARD_SCHEMA_SHA256/);
   assert.match(sourcePrepare, /next_source_prepare_candidate/);
   assert.match(sourcePrepare, /persist_source_prepare_outbox/);
   assert.match(sourceResults, /decode_envelope_v1/);
@@ -354,7 +402,7 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
   assert.match(runtimeEventOutbox, /publish_exact/);
   assert.match(runtimeEventOutbox, /mark_event_outbox_published/);
   assert.doesNotMatch(
-    `${runtimeAdmission}\n${managedRuntime}\n${sourcePrepare}\n${sourceResults}\n${deliveryResults}\n${blobTransfer}\n${custodyCleanup}\n${runtimeEventOutbox}`,
+    `${runtimeAdmission}\n${managedRuntime}\n${clientPort}\n${clientRealtime}\n${runtimeContracts}\n${sourcePrepare}\n${sourceResults}\n${deliveryResults}\n${blobTransfer}\n${custodyCleanup}\n${runtimeEventOutbox}`,
     /hermes-(?:mail|telegram|whatsapp|zulip)-(?:runtime|persistence|core|api)/,
   );
 });
@@ -630,7 +678,7 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   );
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_cross_channel_forward_terminal_results_v1',
+    'communication_cross_channel_forward_client_assembly_v1',
   );
   assert.ok(
     policy.implementation.productionPackages.some(

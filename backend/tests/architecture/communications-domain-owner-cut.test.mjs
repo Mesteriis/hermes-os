@@ -58,12 +58,16 @@ test('Communications remains the exact domain owner after Mail integration admis
 
   assert.equal(
     policy.implementation.currentSlice,
-  'communication_cross_channel_forward_terminal_results_v1',
+  'communication_cross_channel_forward_client_assembly_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications'],
     integrations: ['mail'],
-    workflows: ['communication_delivery_intent', 'communications_export'],
+    workflows: [
+      'communication_cross_channel_forward',
+      'communication_delivery_intent',
+      'communications_export',
+    ],
     engines: ['attachment_security'],
     businessCapabilities: [
       'attachment_security.blob.v1',
@@ -71,6 +75,7 @@ test('Communications remains the exact domain owner after Mail integration admis
       'attachment_security.communications-state.observe.v1',
       'attachment_security.storage.v1',
       'attachment_security.verdict.publish.v1',
+      'communication.cross_channel_forward.v1',
       'communication_cross_channel_forward.blob.v1',
       'communication_cross_channel_forward.delivery_rejected.v1',
       'communication_cross_channel_forward.delivery_submit.v1',
@@ -92,6 +97,8 @@ test('Communications remains the exact domain owner after Mail integration admis
       'communications.attachment.safety-verdict.observe.v1',
       'communications.blob.v1',
       'communications.content.v1',
+      'communications.cross-channel-forward-source.blob.v1',
+      'communications.cross-channel-forward-source.v1',
       'communications.events.v1',
       'communications.export-source.blob.v1',
       'communications.export-source.v1',

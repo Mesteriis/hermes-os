@@ -1,7 +1,8 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
+    BlobDataClient, ManagedBlobCustodyTransferRequestV1, ManagedBlobSessionRequestV1,
+    request_managed_blob_custody_transfer_v2, request_managed_blob_session_v2,
 };
 use hermes_communication_delivery_intent_ingress_api::COMMUNICATION_DELIVERY_INTENT_INGRESS_MAX_PROOF_BYTES_V1;
 use hermes_communication_delivery_intent_persistence::DeliveryIntentIngressBlobReceiptV1;
@@ -26,9 +27,38 @@ pub fn read_delivery_intent_ingress_body_v1(
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     receipt: &DeliveryIntentIngressBlobReceiptV1,
-) -> Result<Zeroizing<Vec<u8>>, DeliveryIntentIngressBodyErrorV1> {
+    command_message_id: &[u8; 16],
+    envelope_sha256: &[u8; 32],
+) -> Result<
+    (Zeroizing<Vec<u8>>, DeliveryIntentIngressBlobReceiptV1),
+    DeliveryIntentIngressBodyErrorV1,
+> {
     validate_receipt(receipt)?;
-    let reference_id = receipt.reference_id;
+    let transfer = request_managed_blob_custody_transfer_v2(
+        control_channel,
+        dispatcher,
+        ManagedBlobCustodyTransferRequestV1 {
+            capability_id: COMMUNICATION_DELIVERY_INTENT_BLOB_CAPABILITY_ID_V1,
+            source_reference_id: &receipt.reference_id,
+            declared_size: receipt.declared_bytes,
+            receipt_sha256: &receipt.sha256,
+            custody_source_proof: &receipt.custody_source_proof,
+            evidence_id: command_message_id,
+            evidence_envelope_sha256: envelope_sha256,
+        },
+    )
+    .map_err(|_| DeliveryIntentIngressBodyErrorV1::Unavailable)?;
+    let reference_id: [u8; 16] = transfer
+        .grant
+        .target_reference_id
+        .as_slice()
+        .try_into()
+        .ok()
+        .filter(|value: &[u8; 16]| value.iter().any(|byte| *byte != 0))
+        .ok_or(DeliveryIntentIngressBodyErrorV1::InvalidReceipt)?;
+    BlobDataClient::new(&transfer.data_socket_path)
+        .and_then(|client| client.custody_transfer(transfer.grant, transfer.channel_binding))
+        .map_err(|_| DeliveryIntentIngressBodyErrorV1::Unavailable)?;
     let sha256 = receipt.sha256;
     let session = request_managed_blob_session_v2(
         control_channel,
@@ -60,7 +90,15 @@ pub fn read_delivery_intent_ingress_body_v1(
     {
         return Err(DeliveryIntentIngressBodyErrorV1::InvalidReceipt);
     }
-    Ok(Zeroizing::new(bytes))
+    Ok((
+        Zeroizing::new(bytes),
+        DeliveryIntentIngressBlobReceiptV1 {
+            reference_id,
+            declared_bytes: receipt.declared_bytes,
+            sha256,
+            custody_source_proof: receipt.custody_source_proof.clone(),
+        },
+    ))
 }
 
 fn validate_receipt(

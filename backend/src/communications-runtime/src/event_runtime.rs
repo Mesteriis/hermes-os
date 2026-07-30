@@ -10,6 +10,7 @@ use hermes_communications_attachment_contract::admission::{
     communication_attachment_blob_admission_observed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
 };
+use hermes_communications_cross_channel_forward_source_api::cross_channel_forward_source_prepare_contract_reference_v1;
 use hermes_communications_domain::COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1;
 use hermes_communications_evidence_export_source_api::evidence_export_prepare_contract_reference_v1;
 use hermes_communications_ingress::admission::communication_observed_contract_reference_v1;
@@ -55,6 +56,10 @@ use crate::{
         consume_next_observation_v1,
     },
     content_ticket_store::CommunicationsContentTicketStoreV1,
+    cross_channel_forward_source::{
+        CommunicationsCrossChannelForwardSourceDeliveryErrorV1,
+        consume_next_cross_channel_forward_source_prepare_v1,
+    },
     custody_worker::{CommunicationsCustodyWorkerErrorV1, process_next_body_custody_transfer_v1},
     domain_outbox::{CommunicationsDomainOutboxRelayErrorV1, relay_domain_outbox_once},
     evidence_export_source::{
@@ -97,6 +102,7 @@ struct CommunicationsSubscribePermitsV1 {
     attachment_blob_admission: RuntimeSubscribePermitV1,
     attachment_safety_verdict: RuntimeSubscribePermitV1,
     evidence_export_prepare: RuntimeSubscribePermitV1,
+    cross_channel_forward_source_prepare: RuntimeSubscribePermitV1,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -105,6 +111,7 @@ enum CommunicationsConsumerV1 {
     AttachmentBlobAdmission,
     AttachmentSafetyVerdict,
     EvidenceExportPrepare,
+    CrossChannelForwardSourcePrepare,
 }
 
 impl CommunicationsConsumerV1 {
@@ -113,7 +120,8 @@ impl CommunicationsConsumerV1 {
             Self::Observation => Self::AttachmentBlobAdmission,
             Self::AttachmentBlobAdmission => Self::AttachmentSafetyVerdict,
             Self::AttachmentSafetyVerdict => Self::EvidenceExportPrepare,
-            Self::EvidenceExportPrepare => Self::Observation,
+            Self::EvidenceExportPrepare => Self::CrossChannelForwardSourcePrepare,
+            Self::CrossChannelForwardSourcePrepare => Self::Observation,
         }
     }
 }
@@ -128,10 +136,13 @@ impl CommunicationsSubscribePermitsV1 {
         let attachment_safety_verdict =
             communication_attachment_safety_verdict_observed_contract_reference_v1();
         let evidence_export_prepare = evidence_export_prepare_contract_reference_v1();
+        let cross_channel_forward_source_prepare =
+            cross_channel_forward_source_prepare_contract_reference_v1();
         let mut observation_permit = None;
         let mut attachment_blob_admission_permit = None;
         let mut attachment_safety_verdict_permit = None;
         let mut evidence_export_prepare_permit = None;
+        let mut cross_channel_forward_source_prepare_permit = None;
         for permit in permits {
             let Some(contract) = permit.contract() else {
                 return Err(CommunicationsEventRuntimeErrorV1::Admission);
@@ -144,6 +155,8 @@ impl CommunicationsSubscribePermitsV1 {
                 replace_once(&mut attachment_safety_verdict_permit, permit)?;
             } else if exact_contract(contract, &evidence_export_prepare) {
                 replace_once(&mut evidence_export_prepare_permit, permit)?;
+            } else if exact_contract(contract, &cross_channel_forward_source_prepare) {
+                replace_once(&mut cross_channel_forward_source_prepare_permit, permit)?;
             } else {
                 return Err(CommunicationsEventRuntimeErrorV1::Admission);
             }
@@ -155,6 +168,8 @@ impl CommunicationsSubscribePermitsV1 {
             attachment_safety_verdict: attachment_safety_verdict_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
             evidence_export_prepare: evidence_export_prepare_permit
+                .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
+            cross_channel_forward_source_prepare: cross_channel_forward_source_prepare_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
         })
     }
@@ -612,6 +627,34 @@ impl CommunicationsEventRuntimeV1 {
                     .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
                 result
             }
+            CommunicationsConsumerV1::CrossChannelForwardSourcePrepare => {
+                let mut nested_search_access = self.search_access.clone();
+                let mut dispatcher = CommunicationsNestedRequestDispatcher {
+                    persistence: &self.persistence,
+                    search_access: &mut nested_search_access,
+                    content_tickets: &self.content_tickets,
+                };
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(false)
+                    .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
+                let result = consume_next_cross_channel_forward_source_prepare_v1(
+                    &self.persistence,
+                    &self.connection,
+                    &self.permits.cross_channel_forward_source_prepare,
+                    &mut self.control_channel,
+                    &mut dispatcher,
+                    &canonical_event_context,
+                )
+                .await
+                .map(|_| ())
+                .map_err(cross_channel_forward_source_delivery_error);
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(true)
+                    .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
+                result
+            }
         }
     }
 
@@ -744,6 +787,29 @@ fn evidence_export_delivery_error(
             )
         }
         CommunicationsEvidenceExportDeliveryErrorV1::Persistence => {
+            CommunicationsDeliveryErrorV1::Consume(
+                CommunicationsEventConsumeErrorV1::PersistenceRejected,
+            )
+        }
+    }
+}
+
+fn cross_channel_forward_source_delivery_error(
+    error: CommunicationsCrossChannelForwardSourceDeliveryErrorV1,
+) -> CommunicationsDeliveryErrorV1 {
+    match error {
+        CommunicationsCrossChannelForwardSourceDeliveryErrorV1::Unavailable => {
+            CommunicationsDeliveryErrorV1::Unavailable
+        }
+        CommunicationsCrossChannelForwardSourceDeliveryErrorV1::InvalidEnvelope => {
+            CommunicationsDeliveryErrorV1::InvalidEnvelope
+        }
+        CommunicationsCrossChannelForwardSourceDeliveryErrorV1::InvalidPayload => {
+            CommunicationsDeliveryErrorV1::Consume(
+                CommunicationsEventConsumeErrorV1::InvalidPayload,
+            )
+        }
+        CommunicationsCrossChannelForwardSourceDeliveryErrorV1::Persistence => {
             CommunicationsDeliveryErrorV1::Consume(
                 CommunicationsEventConsumeErrorV1::PersistenceRejected,
             )
@@ -905,14 +971,16 @@ mod tests {
         let second = first.successor();
         let third = second.successor();
         let fourth = third.successor();
+        let fifth = fourth.successor();
 
         assert_eq!(
-            [first, second, third, fourth, fourth.successor()],
+            [first, second, third, fourth, fifth, fifth.successor()],
             [
                 CommunicationsConsumerV1::Observation,
                 CommunicationsConsumerV1::AttachmentBlobAdmission,
                 CommunicationsConsumerV1::AttachmentSafetyVerdict,
                 CommunicationsConsumerV1::EvidenceExportPrepare,
+                CommunicationsConsumerV1::CrossChannelForwardSourcePrepare,
                 CommunicationsConsumerV1::Observation,
             ]
         );

@@ -67,9 +67,14 @@ pub async fn consume_source_prepared_once_v1(
     {
         return Err(CrossChannelForwardSourceResultErrorV1::InvalidPayload);
     }
-    let delivery_body = blob_port
+    let materialized = blob_port
         .transfer_to_delivery_intent(&prepared)
         .map_err(CrossChannelForwardSourceResultErrorV1::Blob)?;
+    let prepared = CrossChannelForwardPreparedEventV1 {
+        source_body: materialized.source_body,
+        ..prepared
+    };
+    let delivery_body = materialized.delivery_body;
     let envelope_context = delivery_context(
         context.runtime_instance_id,
         context.runtime_generation,

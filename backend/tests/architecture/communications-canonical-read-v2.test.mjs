@@ -73,7 +73,7 @@ test('Communications canonical read v2 is one exact owner contract and admitted 
   assert.equal((proto.match(/bytes cursor =/g) ?? []).length, 8);
   assert.equal((proto.match(/bytes next_cursor =/g) ?? []).length, 8);
   assert.match(admission, /capability_id: COMMUNICATIONS_QUERY_CAPABILITY_ID[\s\S]*capability_revision: 3/);
-  assert.match(admission, /descriptor_revision: 6/);
+  assert.match(admission, /descriptor_revision: 7/);
   assert.match(admission, /ProvidedSurfaceKindV1::QueryRpc/);
   assert.match(moduleQuery, /handle_module_query_delivery_v1/);
   assert.match(moduleQuery, /communications_query_contract_reference_v1/);

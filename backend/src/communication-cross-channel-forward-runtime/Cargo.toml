@@ -19,6 +19,7 @@ surface = "runtime"
 [dependencies]
 hermes-blob-client = { path = "../platform/blob/client" }
 hermes-communication-cross-channel-forward-api = { path = "../communication-cross-channel-forward-api" }
+hermes-communication-cross-channel-forward-core = { path = "../communication-cross-channel-forward-core" }
 hermes-communication-cross-channel-forward-persistence = { path = "../communication-cross-channel-forward-persistence" }
 hermes-communication-delivery-intent-ingress-api = { path = "../communication-delivery-intent-ingress-api" }
 hermes-communications-cross-channel-forward-source-api = { path = "../communications-cross-channel-forward-source-api" }

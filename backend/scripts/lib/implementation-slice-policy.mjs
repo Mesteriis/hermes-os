@@ -657,6 +657,16 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_PRODUCTION_PACKAGES = 
   },
 ];
 
+const COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communication-cross-channel-forward-assembly',
+    role: 'workflow',
+    owner: 'communication_cross_channel_forward',
+    surface: 'assembly',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -1983,6 +1993,7 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_A
   'hermes-communication-cross-channel-forward-runtime': [
     { name: 'hermes-blob-client', kind: 'normal' },
     { name: 'hermes-communication-cross-channel-forward-api', kind: 'normal' },
+    { name: 'hermes-communication-cross-channel-forward-core', kind: 'normal' },
     { name: 'hermes-communication-cross-channel-forward-persistence', kind: 'normal' },
     { name: 'hermes-communication-delivery-intent-ingress-api', kind: 'normal' },
     { name: 'hermes-communications-cross-channel-forward-source-api', kind: 'normal' },
@@ -2013,6 +2024,16 @@ const COMMUNICATION_DELIVERY_INTENT_EVENT_INGRESS_CONSUMER_WORKSPACE_DEPENDENCY_
     { name: 'hermes-telegram-delivery-intent-contract', kind: 'normal' },
     { name: 'hermes-whatsapp-delivery-intent-contract', kind: 'normal' },
     { name: 'hermes-zulip-delivery-intent-contract', kind: 'normal' },
+  ],
+};
+
+const COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELIVERY_INTENT_EVENT_INGRESS_CONSUMER_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-cross-channel-forward-assembly': [
+    { name: 'hermes-communication-cross-channel-forward-persistence', kind: 'normal' },
+    { name: 'hermes-communication-cross-channel-forward-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
 };
 
@@ -2310,6 +2331,15 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY
 const COMMUNICATION_DELIVERY_INTENT_EVENT_INGRESS_CONSUMER_THIRD_PARTY_DEPENDENCY_ALLOWLIST =
   COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST;
 
+const COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELIVERY_INTENT_EVENT_INGRESS_CONSUMER_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-cross-channel-forward-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -2557,9 +2587,14 @@ const COMMUNICATIONS_EXPORT_INVENTORY = {
 
 const COMMUNICATION_DELIVERY_INTENT_INVENTORY = {
   ...COMMUNICATIONS_EXPORT_INVENTORY,
-  workflows: ['communication_delivery_intent', 'communications_export'],
+  workflows: [
+    'communication_cross_channel_forward',
+    'communication_delivery_intent',
+    'communications_export',
+  ],
   businessCapabilities: [
     ...COMMUNICATIONS_EXPORT_INVENTORY.businessCapabilities,
+    'communication.cross_channel_forward.v1',
     'communication_cross_channel_forward.blob.v1',
     'communication_cross_channel_forward.delivery_rejected.v1',
     'communication_cross_channel_forward.delivery_submit.v1',
@@ -2577,6 +2612,8 @@ const COMMUNICATION_DELIVERY_INTENT_INVENTORY = {
     'communication_delivery_intent.telegram.events.v1',
     'communication_delivery_intent.whatsapp.events.v1',
     'communication_delivery_intent.zulip.events.v1',
+    'communications.cross-channel-forward-source.blob.v1',
+    'communications.cross-channel-forward-source.v1',
   ].sort(),
 };
 
@@ -3312,6 +3349,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATION_DELIVERY_INTENT_EVENT_INGRESS_CONSUMER_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATION_DELIVERY_INTENT_EVENT_INGRESS_CONSUMER_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_cross_channel_forward_client_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATION_CROSS_CHANNEL_FORWARD_CLIENT_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

@@ -7,7 +7,7 @@ use hermes_communication_delivery_intent_api::{
     COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1, COMMUNICATION_DELIVERY_INTENT_OWNER_V1,
 };
 use hermes_communication_delivery_intent_persistence::schema::{
-    COMMUNICATION_DELIVERY_INTENT_STORAGE_BUNDLE_REVISION_V3,
+    COMMUNICATION_DELIVERY_INTENT_STORAGE_BUNDLE_REVISION_V5,
     communication_delivery_intent_storage_bundle_v1,
 };
 use hermes_communication_delivery_intent_runtime::admission::{
@@ -97,7 +97,7 @@ pub(super) fn admit_delivery_intent_runtime(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 COMMUNICATION_DELIVERY_INTENT_OWNER_V1,
-                u64::from(COMMUNICATION_DELIVERY_INTENT_STORAGE_BUNDLE_REVISION_V3),
+                u64::from(COMMUNICATION_DELIVERY_INTENT_STORAGE_BUNDLE_REVISION_V5),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -120,7 +120,7 @@ pub(super) fn prepare_delivery_intent_runtime(
     let bundle = store
         .platform_storage_bundle(
             COMMUNICATION_DELIVERY_INTENT_OWNER_V1,
-            u64::from(COMMUNICATION_DELIVERY_INTENT_STORAGE_BUNDLE_REVISION_V3),
+            u64::from(COMMUNICATION_DELIVERY_INTENT_STORAGE_BUNDLE_REVISION_V5),
         )
         .expect("read delivery-intent Storage bundle")
         .expect("delivery-intent Storage bundle");
@@ -133,7 +133,7 @@ pub(super) fn prepare_delivery_intent_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(COMMUNICATION_DELIVERY_INTENT_STORAGE_BUNDLE_REVISION_V3),
+            u64::from(COMMUNICATION_DELIVERY_INTENT_STORAGE_BUNDLE_REVISION_V5),
             *bundle.digest(),
         )
         .expect("delivery-intent Storage binding issue"),

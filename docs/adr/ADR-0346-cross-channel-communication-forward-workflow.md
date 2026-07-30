@@ -15,17 +15,23 @@ source-preparation contract реализован отдельной domain-owned
 Communications persistence реализует owner-local source/target snapshot,
 channel-kind validation, revision fence и atomic inbox/result-outbox commit.
 Communications runtime adapter реализует exact command decode, verified Blob
-read, fixed target-bound Blob write, typed result и ACK-after-commit. Managed
-admission wiring ещё не реализован. Workflow persistence теперь реализует
+custody transfer/read, fixed target-bound Blob write, typed result,
+ACK-after-commit и exact managed admission wiring. Workflow persistence реализует
 owner-local event inbox/hash fence, exact source-command/delivery-submit
 outbox, source rejection и atomic prepared-result → dispatching transition.
 Отдельная workflow-owned runtime build unit реализует managed admission,
 generation/grant/storage fences, exact source-command producer, source
 prepared/rejected consumers, verified Blob read, fixed delivery-intent Blob
 write, transactional submit handoff, exact outbox relay и ACK-after-commit.
-Delivery-intent consumer, downstream terminal-result consumer, custody cleanup,
-client port, assembly и live managed evidence ещё не реализованы. Production
-gate остаётся закрыт.
+Delivery-intent consumer, downstream terminal-result consumer и обе durable
+Blob custody cleanup очереди реализованы. Workflow runtime предоставляет
+method-exact public command/query port и публикует owner-local transition
+ledger через общий replayable client SSE. Отдельная deterministic assembly
+build unit формирует signed release fragment без runtime behavior. Live managed
+conformance доказывает Gateway command, event-only Communications handoff,
+две Kernel-authorized Blob custody передачи, delivery-intent ingress, terminal
+result, durable custody cleanup, client SSE и replay после runtime restart.
+Production gate остаётся закрыт до итогового полного clean-room parity audit.
 Принятый ADR сам по себе не открывает
 `communication_cross_channel_forward_v1`.
 

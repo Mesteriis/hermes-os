@@ -1,5 +1,5 @@
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     fs,
     os::{
         fd::{AsRawFd, FromRawFd},
@@ -41,22 +41,22 @@ fn main() -> Result<(), String> {
         return Err("Communication Cross-channel Forward command is required".to_owned());
     };
     match command.to_str() {
-        Some("--export-storage-bundle") => export_bytes(
+        Some("export-storage-bundle") => export_bytes(
             &mut arguments,
             communication_cross_channel_forward_storage_bundle_v1().encode_to_vec(),
         ),
-        Some("--export-module-descriptor") => {
+        Some("export-module-descriptor") => {
             let build_id = required_string(&mut arguments, "build id")?;
             export_bytes(
                 &mut arguments,
                 communication_cross_channel_forward_module_descriptor_v1(&build_id).encode_to_vec(),
             )
         }
-        Some("--export-settings-schema") => export_bytes(
+        Some("export-settings-schema") => export_bytes(
             &mut arguments,
             communication_cross_channel_forward_settings_schema_bytes_v1(),
         ),
-        Some("--serve-inherited") => serve_inherited(&mut arguments),
+        Some("serve-inherited") => serve_inherited(&mut arguments),
         _ => Err("Communication Cross-channel Forward command is invalid".to_owned()),
     }
 }
@@ -65,7 +65,10 @@ fn export_bytes<I>(arguments: &mut I, bytes: Vec<u8>) -> Result<(), String>
 where
     I: Iterator<Item = OsString>,
 {
-    let output = required_path(arguments, "output path")?;
+    let output = arguments
+        .next()
+        .map(PathBuf::from)
+        .ok_or_else(|| "Communication Cross-channel Forward output path is required".to_owned())?;
     require_no_arguments(arguments)?;
     fs::write(output, bytes)
         .map_err(|_| "Communication Cross-channel Forward export failed".to_owned())
@@ -125,7 +128,7 @@ where
             .as_millis()
             .try_into()
             .map_err(|_| "Communication Cross-channel Forward clock is invalid".to_owned())?;
-        runtime.pump_control_once().map_err(runtime_error)?;
+        retry_runtime(executor.block_on(runtime.pump_control_once(now)))?;
         retry_runtime(executor.block_on(runtime.enqueue_source_prepare_once(now)))?;
         retry_runtime(executor.block_on(runtime.relay_event_outbox_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_source_prepared_once(now)))?;
@@ -133,6 +136,7 @@ where
         retry_runtime(executor.block_on(runtime.consume_delivery_submitted_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_delivery_rejected_once(now)))?;
         retry_runtime(executor.block_on(runtime.process_custody_cleanup_once(now)))?;
+        retry_runtime(executor.block_on(runtime.pump_client_realtime_once()))?;
         std::thread::sleep(Duration::from_millis(25));
     }
 }
@@ -160,6 +164,7 @@ fn runtime_error(error: CrossChannelForwardManagedRuntimeErrorV1) -> String {
         CrossChannelForwardManagedRuntimeErrorV1::Blob(_) => "blob",
         CrossChannelForwardManagedRuntimeErrorV1::EventContract => "event_contract",
         CrossChannelForwardManagedRuntimeErrorV1::EventUnavailable => "event_unavailable",
+        CrossChannelForwardManagedRuntimeErrorV1::InvalidTransition => "invalid_transition",
         CrossChannelForwardManagedRuntimeErrorV1::Persistence(_) => "persistence",
         CrossChannelForwardManagedRuntimeErrorV1::Unavailable => "unavailable",
     };
@@ -171,10 +176,10 @@ where
     I: Iterator<Item = OsString>,
 {
     let paths = InheritedPaths {
-        descriptor: required_path(arguments, "descriptor path")?,
-        settings_schema: required_path(arguments, "settings schema path")?,
-        runtime_configuration: required_path(arguments, "runtime configuration path")?,
-        runtime_instance_id: required_string(arguments, "runtime instance id")?,
+        descriptor: required_path(arguments, "--descriptor-path")?,
+        settings_schema: required_path(arguments, "--settings-schema-path")?,
+        runtime_configuration: required_path(arguments, "--runtime-configuration-path")?,
+        runtime_instance_id: required_string(arguments, "--runtime-instance-id")?,
     };
     require_no_arguments(arguments)?;
     Ok(paths)
@@ -184,16 +189,16 @@ fn required_path<I>(arguments: &mut I, name: &str) -> Result<PathBuf, String>
 where
     I: Iterator<Item = OsString>,
 {
-    arguments
-        .next()
-        .map(PathBuf::from)
-        .ok_or_else(|| format!("Communication Cross-channel Forward {name} is required"))
+    required_string(arguments, name).map(PathBuf::from)
 }
 
 fn required_string<I>(arguments: &mut I, name: &str) -> Result<String, String>
 where
     I: Iterator<Item = OsString>,
 {
+    if arguments.next().as_deref() != Some(OsStr::new(name)) {
+        return Err("Communication Cross-channel Forward arguments are invalid".to_owned());
+    }
     let value = arguments
         .next()
         .and_then(|value| value.into_string().ok())

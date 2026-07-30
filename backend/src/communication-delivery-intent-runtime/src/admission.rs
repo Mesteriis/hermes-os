@@ -145,6 +145,7 @@ pub fn communication_delivery_intent_blob_capability_v1() -> CapabilityDescripto
                 custody_scope_id: COMMUNICATION_DELIVERY_INTENT_BLOB_CUSTODY_SCOPE_ID_V1.to_owned(),
                 allowed_operations: vec![
                     BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::CustodyTransfer as i32,
                     BlobQuotaOperationV1::ReleaseCustody as i32,
                     BlobQuotaOperationV1::Write as i32,
                 ],
@@ -240,7 +241,7 @@ pub fn communication_delivery_intent_module_descriptor_v1(build_id: &str) -> Mod
     let settings_schema = communication_delivery_intent_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 6,
+        descriptor_revision: 7,
         module_id: COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1.to_owned(),
         owner_id: COMMUNICATION_DELIVERY_INTENT_OWNER_V1.to_owned(),
         module_kind: ModuleKindV1::Workflow as i32,
@@ -335,6 +336,7 @@ mod tests {
             Some(
                 [
                     BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::CustodyTransfer as i32,
                     BlobQuotaOperationV1::ReleaseCustody as i32,
                     BlobQuotaOperationV1::Write as i32,
                 ]

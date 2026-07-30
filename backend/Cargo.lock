@@ -1783,6 +1783,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-cross-channel-forward-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-cross-channel-forward-persistence",
+ "hermes-communication-cross-channel-forward-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-communication-cross-channel-forward-core"
 version = "0.1.0"
 
@@ -1803,6 +1816,7 @@ version = "0.1.0"
 dependencies = [
  "hermes-blob-client",
  "hermes-communication-cross-channel-forward-api",
+ "hermes-communication-cross-channel-forward-core",
  "hermes-communication-cross-channel-forward-persistence",
  "hermes-communication-delivery-intent-ingress-api",
  "hermes-communications-cross-channel-forward-source-api",
@@ -2506,6 +2520,9 @@ dependencies = [
  "hermes-communication-bulk-action-api",
  "hermes-communication-bulk-action-persistence",
  "hermes-communication-bulk-action-runtime",
+ "hermes-communication-cross-channel-forward-api",
+ "hermes-communication-cross-channel-forward-persistence",
+ "hermes-communication-cross-channel-forward-runtime",
  "hermes-communication-delayed-delivery-api",
  "hermes-communication-delayed-delivery-persistence",
  "hermes-communication-delayed-delivery-runtime",
@@ -2515,6 +2532,7 @@ dependencies = [
  "hermes-communications-api",
  "hermes-communications-attachment-contract",
  "hermes-communications-content-api",
+ "hermes-communications-cross-channel-forward-source-api",
  "hermes-communications-evidence-export-source-api",
  "hermes-communications-export-api",
  "hermes-communications-export-persistence",

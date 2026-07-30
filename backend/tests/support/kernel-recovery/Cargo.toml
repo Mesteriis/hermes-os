@@ -41,6 +41,10 @@ hermes-communications-sender-insights-api = { path = "../../../src/communication
 hermes-communication-delivery-intent-api = { path = "../../../src/communication-delivery-intent-api" }
 hermes-communication-delivery-intent-persistence = { path = "../../../src/communication-delivery-intent-persistence" }
 hermes-communication-delivery-intent-runtime = { path = "../../../src/communication-delivery-intent-runtime" }
+hermes-communication-cross-channel-forward-api = { path = "../../../src/communication-cross-channel-forward-api" }
+hermes-communication-cross-channel-forward-persistence = { path = "../../../src/communication-cross-channel-forward-persistence" }
+hermes-communication-cross-channel-forward-runtime = { path = "../../../src/communication-cross-channel-forward-runtime" }
+hermes-communications-cross-channel-forward-source-api = { path = "../../../src/communications-cross-channel-forward-source-api" }
 hermes-communication-delayed-delivery-api = { path = "../../../src/communication-delayed-delivery-api" }
 hermes-communication-delayed-delivery-persistence = { path = "../../../src/communication-delayed-delivery-persistence" }
 hermes-communication-delayed-delivery-runtime = { path = "../../../src/communication-delayed-delivery-runtime" }

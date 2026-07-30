@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_cross_channel_forward_terminal_results_v1",
+    "currentSlice": "communication_cross_channel_forward_client_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -666,6 +666,12 @@
         "role": "workflow",
         "owner": "communication_cross_channel_forward",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-communication-cross-channel-forward-assembly",
+        "role": "workflow",
+        "owner": "communication_cross_channel_forward",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1990,6 +1996,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communication-cross-channel-forward-core",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-communication-cross-channel-forward-persistence",
           "kind": "normal"
         },
@@ -2019,6 +2029,24 @@
         },
         {
           "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-cross-channel-forward-assembly": [
+        {
+          "name": "hermes-communication-cross-channel-forward-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-cross-channel-forward-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ]
@@ -5259,6 +5287,35 @@
           "defaultFeatures": true,
           "features": []
         }
+      ],
+      "hermes-communication-cross-channel-forward-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -5726,6 +5783,10 @@
       "hermes-communication-cross-channel-forward-runtime": {
         "primaryKind": "bin",
         "customBuildAllowed": false
+      },
+      "hermes-communication-cross-channel-forward-assembly": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -5768,6 +5829,7 @@
         "mail"
       ],
       "workflows": [
+        "communication_cross_channel_forward",
         "communication_delivery_intent",
         "communications_export"
       ],
@@ -5780,6 +5842,7 @@
         "attachment_security.communications-state.observe.v1",
         "attachment_security.storage.v1",
         "attachment_security.verdict.publish.v1",
+        "communication.cross_channel_forward.v1",
         "communication_cross_channel_forward.blob.v1",
         "communication_cross_channel_forward.delivery_rejected.v1",
         "communication_cross_channel_forward.delivery_submit.v1",
@@ -5801,6 +5864,8 @@
         "communications.attachment.safety-verdict.observe.v1",
         "communications.blob.v1",
         "communications.content.v1",
+        "communications.cross-channel-forward-source.blob.v1",
+        "communications.cross-channel-forward-source.v1",
         "communications.events.v1",
         "communications.export-source.blob.v1",
         "communications.export-source.v1",

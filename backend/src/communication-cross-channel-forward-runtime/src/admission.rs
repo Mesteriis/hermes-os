@@ -1,5 +1,8 @@
 use hermes_communication_cross_channel_forward_api::{
+    COMMUNICATION_CROSS_CHANNEL_FORWARD_CAPABILITY_ID_V1,
+    COMMUNICATION_CROSS_CHANNEL_FORWARD_COMMAND_CONNECT_PATH_V1,
     COMMUNICATION_CROSS_CHANNEL_FORWARD_MODULE_ID_V1, COMMUNICATION_CROSS_CHANNEL_FORWARD_OWNER_V1,
+    COMMUNICATION_CROSS_CHANNEL_FORWARD_QUERY_CONNECT_PATH_V1,
 };
 use hermes_communication_delivery_intent_ingress_api::{
     communication_delivery_intent_rejected_consume_request_v1,
@@ -19,14 +22,21 @@ use hermes_communications_cross_channel_forward_source_api::{
 };
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
-    CapabilityRequestV1, ContractReferenceV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1,
-    ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1,
-    SettingsSchemaV1, StorageNamespaceRequestV1, capability_request_v1::Request,
+    CapabilityRequestV1, ClientRpcRouteV1, ContractReferenceV1, ModuleDescriptorV1, ModuleKindV1,
+    ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1,
+    SettingsSchemaRefV1, SettingsSchemaV1, StorageNamespaceRequestV1,
+    capability_request_v1::Request,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
 
-use crate::COMMUNICATION_CROSS_CHANNEL_FORWARD_BLOB_CAPABILITY_ID_V1;
+use crate::{
+    COMMUNICATION_CROSS_CHANNEL_FORWARD_BLOB_CAPABILITY_ID_V1,
+    contracts::{
+        cross_channel_forward_command_contract_v1, cross_channel_forward_query_contract_v1,
+        cross_channel_forward_realtime_contract_v1,
+    },
+};
 
 pub const COMMUNICATION_CROSS_CHANNEL_FORWARD_STORAGE_CAPABILITY_ID_V1: &str =
     "communication_cross_channel_forward.storage.v1";
@@ -54,7 +64,7 @@ pub fn communication_cross_channel_forward_module_descriptor_v1(
     let settings = communication_cross_channel_forward_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 2,
+        descriptor_revision: 3,
         module_id: COMMUNICATION_CROSS_CHANNEL_FORWARD_MODULE_ID_V1.to_owned(),
         owner_id: COMMUNICATION_CROSS_CHANNEL_FORWARD_OWNER_V1.to_owned(),
         module_kind: ModuleKindV1::Workflow as i32,
@@ -66,6 +76,7 @@ pub fn communication_cross_channel_forward_module_descriptor_v1(
             minimum_revision: 1,
         }),
         capabilities: vec![
+            client_capability(),
             blob_capability(),
             delivery_rejected_capability(),
             delivery_submit_capability(),
@@ -88,6 +99,42 @@ pub fn communication_cross_channel_forward_module_descriptor_v1(
             max_cpu_millis: 500,
         }),
         display_name: "Communication Cross-channel Forward".to_owned(),
+    }
+}
+
+fn client_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATION_CROSS_CHANNEL_FORWARD_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            client_surface(
+                cross_channel_forward_command_contract_v1(),
+                COMMUNICATION_CROSS_CHANNEL_FORWARD_COMMAND_CONNECT_PATH_V1,
+            ),
+            client_surface(
+                cross_channel_forward_query_contract_v1(),
+                COMMUNICATION_CROSS_CHANNEL_FORWARD_QUERY_CONNECT_PATH_V1,
+            ),
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::ClientRealtime as i32,
+                contract: Some(cross_channel_forward_realtime_contract_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+        ],
+        ..Default::default()
+    }
+}
+
+fn client_surface(contract: ContractReferenceV1, path: &str) -> ProvidedSurfaceV1 {
+    ProvidedSurfaceV1 {
+        kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+        contract: Some(contract),
+        client_rpc_route: Some(ClientRpcRouteV1 {
+            path: path.to_owned(),
+        }),
+        client_blob_route: None,
     }
 }
 
@@ -194,6 +241,7 @@ fn blob_capability() -> CapabilityDescriptorV1 {
                 allowed_operations: vec![
                     BlobQuotaOperationV1::Write as i32,
                     BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::CustodyTransfer as i32,
                     BlobQuotaOperationV1::ReleaseCustody as i32,
                 ],
             })),
@@ -210,7 +258,8 @@ mod tests {
     #[test]
     fn descriptor_requests_only_exact_event_storage_and_blob_capabilities() {
         let descriptor = communication_cross_channel_forward_module_descriptor_v1("build-1");
-        assert_eq!(descriptor.capabilities.len(), 8);
+        assert_eq!(descriptor.capabilities.len(), 9);
+        assert_eq!(descriptor.capabilities[0].provides.len(), 3);
         assert_eq!(
             descriptor
                 .runtime_budget_request

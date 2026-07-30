@@ -92,7 +92,7 @@ impl DeliveryIntentManagedRuntimeV1 {
                 .map_err(event_error)?;
         let record = OutboxRecordV1::accept(delivery.exact_bytes().to_vec())
             .map_err(|_| DeliveryIntentRuntimeErrorV1::EventContract)?;
-        let decoded = decode_event_ingress(&record, &self.logical_owner_id, now_unix_seconds)?;
+        let mut decoded = decode_event_ingress(&record, &self.logical_owner_id, now_unix_seconds)?;
         match self
             .persistence
             .inspect_event_ingress(&decoded.event)
@@ -110,7 +110,7 @@ impl DeliveryIntentManagedRuntimeV1 {
             .inner_mut()
             .set_nonblocking(false)
             .map_err(|_| DeliveryIntentRuntimeErrorV1::Unavailable)?;
-        let prepared = self.prepare_event_ingress(&decoded);
+        let prepared = self.prepare_event_ingress(&mut decoded);
         self.control_channel
             .inner_mut()
             .set_nonblocking(true)
@@ -162,7 +162,7 @@ impl DeliveryIntentManagedRuntimeV1 {
 
     fn prepare_event_ingress(
         &mut self,
-        decoded: &DecodedDeliveryIntentIngressV1,
+        decoded: &mut DecodedDeliveryIntentIngressV1,
     ) -> Result<PreparedDeliveryIntentIngressV1, DeliveryIntentRuntimeErrorV1> {
         if decoded.deadline_expired {
             return Ok(PreparedDeliveryIntentIngressV1::Reject(
@@ -171,10 +171,12 @@ impl DeliveryIntentManagedRuntimeV1 {
             ));
         }
         let mut dispatcher = RejectManagedControlRequestsV2;
-        let body = match read_delivery_intent_ingress_body_v1(
+        let (body, body_receipt) = match read_delivery_intent_ingress_body_v1(
             &mut self.control_channel,
             &mut dispatcher,
             &decoded.body_source,
+            &decoded.event.command_message_id,
+            &decoded.event.envelope_sha256,
         ) {
             Ok(body) => body,
             Err(DeliveryIntentIngressBodyErrorV1::InvalidReceipt) => {
@@ -187,6 +189,7 @@ impl DeliveryIntentManagedRuntimeV1 {
                 return Err(DeliveryIntentRuntimeErrorV1::Unavailable);
             }
         };
+        decoded.event.body_receipt = body_receipt;
         let conversation_id = CommunicationConversationIdV1::new(decoded.target_conversation_id);
         let reply_to_message_id = decoded
             .target_reply_to_message_id

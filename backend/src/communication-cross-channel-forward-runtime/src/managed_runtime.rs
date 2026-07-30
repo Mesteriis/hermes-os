@@ -19,8 +19,14 @@ use hermes_events_jetstream::{
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
     v1::{
-        ContractReferenceV1, ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
-        ManagedStorageRuntimeConfigurationV1,
+        ContractReferenceV1, ManagedRuntimeClientDeliveryResponseV1,
+        ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
+        ManagedStorageRuntimeConfigurationV1, ModuleClientRequestV1, ModuleClientResponseV1,
+        managed_runtime_control_request_v1::Operation,
+        managed_runtime_control_response_v1::Result as ControlResult,
+    },
+    validation::module_client::{
+        validate_module_client_request_v1, validate_module_client_response_v1,
     },
 };
 use hermes_storage_protocol::{
@@ -36,10 +42,20 @@ use crate::{
     CrossChannelForwardDeliveryResultErrorV1, CrossChannelForwardEventRelayErrorV1,
     CrossChannelForwardSourceConsumerContextV1, CrossChannelForwardSourcePrepareErrorV1,
     CrossChannelForwardSourceResultErrorV1, ManagedCrossChannelForwardBlobPortV1,
-    ManagedCrossChannelForwardCustodyReleasePortV1, consume_delivery_rejected_once_v1,
-    consume_delivery_submitted_once_v1, consume_source_prepared_once_v1,
-    consume_source_rejected_once_v1, enqueue_source_prepare_once_v1,
-    process_cross_channel_custody_cleanup_once_v1, relay_event_outbox_once_v1,
+    ManagedCrossChannelForwardCustodyReleasePortV1,
+    client_port::{
+        get_cross_channel_forward_status_payload_v1, start_cross_channel_forward_payload_v1,
+    },
+    client_realtime::{
+        CrossChannelForwardClientRealtimeErrorV1, CrossChannelForwardClientRealtimePublisherV1,
+    },
+    consume_delivery_rejected_once_v1, consume_delivery_submitted_once_v1,
+    consume_source_prepared_once_v1, consume_source_rejected_once_v1,
+    contracts::{
+        cross_channel_forward_command_contract_v1, cross_channel_forward_query_contract_v1,
+    },
+    enqueue_source_prepare_once_v1, process_cross_channel_custody_cleanup_once_v1,
+    relay_event_outbox_once_v1,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -57,6 +73,7 @@ pub enum CrossChannelForwardManagedRuntimeErrorV1 {
     Blob(CrossChannelForwardBlobTransferErrorV1),
     EventContract,
     EventUnavailable,
+    InvalidTransition,
     Persistence(CrossChannelForwardPersistenceErrorV1),
     Unavailable,
 }
@@ -71,6 +88,7 @@ pub struct CrossChannelForwardManagedRuntimeV1 {
     delivery_submitted_subscription: RuntimeSubscribePermitV1,
     source_prepared_subscription: RuntimeSubscribePermitV1,
     source_rejected_subscription: RuntimeSubscribePermitV1,
+    client_realtime: CrossChannelForwardClientRealtimePublisherV1,
 }
 
 impl CrossChannelForwardManagedRuntimeV1 {
@@ -174,6 +192,17 @@ impl CrossChannelForwardManagedRuntimeV1 {
         )
         .await
         .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::EventUnavailable)?;
+        let mut client_realtime = CrossChannelForwardClientRealtimePublisherV1::default();
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        client_realtime
+            .publish_pending(
+                &persistence,
+                &mut control_channel,
+                &mut dispatcher,
+                &admission.logical_owner_id,
+            )
+            .await
+            .map_err(client_realtime_error)?;
         signal_ready(&mut control_channel, admission)?;
         control_channel
             .inner_mut()
@@ -189,6 +218,7 @@ impl CrossChannelForwardManagedRuntimeV1 {
             delivery_submitted_subscription,
             source_prepared_subscription,
             source_rejected_subscription,
+            client_realtime,
         })
     }
 
@@ -330,24 +360,154 @@ impl CrossChannelForwardManagedRuntimeV1 {
         result.map_err(custody_cleanup_error)
     }
 
-    pub fn pump_control_once(&mut self) -> Result<bool, CrossChannelForwardManagedRuntimeErrorV1> {
-        let Some((correlation_id, _request)) = self
+    pub async fn pump_control_once(
+        &mut self,
+        now_unix_millis: i64,
+    ) -> Result<bool, CrossChannelForwardManagedRuntimeErrorV1> {
+        let Some((correlation_id, request)) = self
             .control_channel
             .try_receive_request()
             .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Unavailable)?
         else {
             return Ok(false);
         };
+        let Some(Operation::ClientDelivery(delivery)) = request.operation else {
+            self.write_client_error(correlation_id, "managed_runtime_control_unexpected_request")?;
+            return Ok(true);
+        };
+        let Some(request) = delivery
+            .request
+            .filter(|request| validate_module_client_request_v1(request).is_ok())
+        else {
+            self.write_client_error(
+                correlation_id,
+                "managed_runtime_control_invalid_client_delivery",
+            )?;
+            return Ok(true);
+        };
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Unavailable)?;
+        let response = dispatch_client(
+            &self.persistence,
+            &self.admission.logical_owner_id,
+            request,
+            now_unix_millis,
+        )
+        .await;
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Unavailable)?;
+        if validate_module_client_response_v1(&response).is_err() {
+            return Err(CrossChannelForwardManagedRuntimeErrorV1::Unavailable);
+        }
+        self.control_channel
+            .write_response(
+                correlation_id,
+                ManagedRuntimeControlResponseV1 {
+                    result: Some(ControlResult::ClientDelivery(
+                        ManagedRuntimeClientDeliveryResponseV1 {
+                            response: Some(response),
+                        },
+                    )),
+                    error_code: String::new(),
+                },
+            )
+            .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Unavailable)?;
+        Ok(true)
+    }
+
+    pub async fn pump_client_realtime_once(
+        &mut self,
+    ) -> Result<bool, CrossChannelForwardManagedRuntimeErrorV1> {
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Unavailable)?;
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let result = self
+            .client_realtime
+            .publish_pending(
+                &self.persistence,
+                &mut self.control_channel,
+                &mut dispatcher,
+                &self.admission.logical_owner_id,
+            )
+            .await
+            .map_err(client_realtime_error);
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Unavailable)?;
+        result
+    }
+
+    fn write_client_error(
+        &mut self,
+        correlation_id: [u8; 16],
+        error_code: &str,
+    ) -> Result<(), CrossChannelForwardManagedRuntimeErrorV1> {
         self.control_channel
             .write_response(
                 correlation_id,
                 ManagedRuntimeControlResponseV1 {
                     result: None,
-                    error_code: "managed_runtime_control_unexpected_request".to_owned(),
+                    error_code: error_code.to_owned(),
                 },
             )
-            .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Unavailable)?;
-        Ok(true)
+            .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Unavailable)
+    }
+}
+
+async fn dispatch_client(
+    persistence: &CommunicationCrossChannelForwardPersistenceV1,
+    logical_owner_id: &str,
+    request: ModuleClientRequestV1,
+    now_unix_millis: i64,
+) -> ModuleClientResponseV1 {
+    let valid_identity = request.protocol_major == 1
+        && request.module_id
+            == hermes_communication_cross_channel_forward_api::COMMUNICATION_CROSS_CHANNEL_FORWARD_MODULE_ID_V1
+        && request.owner_id == COMMUNICATION_CROSS_CHANNEL_FORWARD_OWNER_V1;
+    let (response_payload, accepted_route) = if valid_identity {
+        if request.contract.as_ref() == Some(&cross_channel_forward_command_contract_v1()) {
+            (
+                start_cross_channel_forward_payload_v1(
+                    persistence,
+                    logical_owner_id,
+                    &request.request_payload,
+                    now_unix_millis,
+                )
+                .await,
+                true,
+            )
+        } else if request.contract.as_ref() == Some(&cross_channel_forward_query_contract_v1()) {
+            (
+                get_cross_channel_forward_status_payload_v1(
+                    persistence,
+                    logical_owner_id,
+                    &request.request_payload,
+                )
+                .await,
+                true,
+            )
+        } else {
+            (Vec::new(), false)
+        }
+    } else {
+        (Vec::new(), false)
+    };
+    ModuleClientResponseV1 {
+        protocol_major: 1,
+        request_id: request.request_id,
+        response_payload,
+        error_code: if accepted_route {
+            String::new()
+        } else {
+            "REJECTED".to_owned()
+        },
     }
 }
 
@@ -487,7 +647,6 @@ fn storage_binding(
     admission: &CrossChannelForwardRuntimeAdmissionV1,
 ) -> Result<StorageBindingV1, CrossChannelForwardManagedRuntimeErrorV1> {
     if configuration.runtime_instance_id != admission.runtime_instance_id
-        || configuration.logical_owner_id != admission.logical_owner_id
         || configuration.logical_owner_id != configuration.owner
         || configuration.owner != COMMUNICATION_CROSS_CHANNEL_FORWARD_OWNER_V1
         || configuration.storage_bundle_digest.len() != 32
@@ -611,6 +770,22 @@ fn custody_cleanup_error(
         }
         CrossChannelForwardCustodyCleanupErrorV1::Persistence(error) => {
             CrossChannelForwardManagedRuntimeErrorV1::Persistence(error)
+        }
+    }
+}
+
+fn client_realtime_error(
+    error: CrossChannelForwardClientRealtimeErrorV1,
+) -> CrossChannelForwardManagedRuntimeErrorV1 {
+    match error {
+        CrossChannelForwardClientRealtimeErrorV1::InvalidTransition => {
+            CrossChannelForwardManagedRuntimeErrorV1::InvalidTransition
+        }
+        CrossChannelForwardClientRealtimeErrorV1::Persistence(error) => {
+            CrossChannelForwardManagedRuntimeErrorV1::Persistence(error)
+        }
+        CrossChannelForwardClientRealtimeErrorV1::Unavailable => {
+            CrossChannelForwardManagedRuntimeErrorV1::Unavailable
         }
     }
 }
