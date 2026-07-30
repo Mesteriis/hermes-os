@@ -458,6 +458,12 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
     ingressApi,
     ingressEnvelope,
     ingressContract,
+    deliveryPersistenceManifest,
+    deliveryIngressMigration,
+    deliveryIngressPersistence,
+    deliveryRuntimeManifest,
+    deliveryEventIngress,
+    deliveryIngressResultOutbox,
     policySource,
   ] = await Promise.all([
     readFile(
@@ -495,6 +501,48 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
       ),
       'utf8',
     ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-persistence/Cargo.toml',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-persistence/migrations/0004_event_ingress.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-persistence/src/ingress_events.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-runtime/Cargo.toml',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-runtime/src/event_ingress.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-runtime/src/ingress_result_outbox.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
     readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'),
   ]);
   const policy = JSON.parse(policySource);
@@ -524,7 +572,7 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   );
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_cross_channel_forward_managed_runtime_v1',
+    'communication_delivery_intent_event_ingress_consumer_v1',
   );
   assert.ok(
     policy.implementation.productionPackages.some(
@@ -537,6 +585,43 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   assert.match(
     ingressApi,
     /COMMUNICATION_DELIVERY_INTENT_BLOB_TARGET_OWNER_ID_V1/,
+  );
+  assert.match(
+    deliveryPersistenceManifest,
+    /owner = "communication_delivery_intent"[\s\S]*surface = "persistence"/,
+  );
+  assert.match(
+    deliveryRuntimeManifest,
+    /hermes-communication-delivery-intent-ingress-api/,
+  );
+  assert.match(
+    deliveryIngressMigration,
+    /communication_delivery_intent_ingress_inbox/,
+  );
+  assert.match(
+    deliveryIngressMigration,
+    /communication_delivery_intent_ingress_result_outbox/,
+  );
+  assert.match(deliveryIngressMigration, /exact_envelope_bytes/);
+  assert.doesNotMatch(
+    deliveryIngressMigration,
+    /body_utf8|provider_id|account_id|mail_|telegram_|whatsapp_|zulip_/,
+  );
+  assert.match(deliveryIngressPersistence, /insert_or_fence_inbox/);
+  assert.match(deliveryIngressPersistence, /create_intent_in_transaction/);
+  assert.match(deliveryIngressPersistence, /insert_exact_result/);
+  assert.match(deliveryEventIngress, /inspect_event_ingress/);
+  assert.match(deliveryEventIngress, /read_delivery_intent_ingress_body_v1/);
+  assert.match(deliveryEventIngress, /admit_event_ingress/);
+  assert.match(
+    deliveryEventIngress,
+    /admit_event_ingress[\s\S]*delivery\.acknowledge\(\)/,
+  );
+  assert.match(deliveryIngressResultOutbox, /publish_exact/);
+  assert.match(deliveryIngressResultOutbox, /mark_ingress_result_published/);
+  assert.doesNotMatch(
+    `${deliveryIngressPersistence}\n${deliveryEventIngress}\n${deliveryIngressResultOutbox}`,
+    /hermes_communication_cross_channel_forward_(?:runtime|persistence|core)/,
   );
   assert.match(
     ingressApi,

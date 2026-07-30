@@ -88,102 +88,17 @@ impl CommunicationDeliveryIntentPersistenceV1 {
         &self,
         command: &CreateDeliveryIntentV1,
     ) -> Result<CreateDeliveryIntentOutcomeV1, DeliveryIntentPersistenceErrorV1> {
-        if !valid_create(command) {
-            return Err(DeliveryIntentPersistenceErrorV1::InvalidInput);
-        }
         let mut transaction = self
             .pool
             .begin()
             .await
             .map_err(|_| DeliveryIntentPersistenceErrorV1::StorageUnavailable)?;
-        let reply_message_id = command
-            .canonical_reply_message_id
-            .map(|id| id.bytes().to_vec());
-        let reply_source_cursor = command
-            .route
-            .reply_to_source_cursor
-            .map(|cursor| cursor.bytes().to_vec());
-        let declared_bytes = i64::try_from(command.body_receipt.declared_bytes)
-            .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidInput)?;
-        let inserted = sqlx::query(
-            "INSERT INTO hermes_data.communication_delivery_intent_jobs (
-               intent_id, logical_owner_id, request_fingerprint,
-               canonical_conversation_id, canonical_reply_message_id,
-               provider_kind, account_cursor, conversation_cursor,
-               reply_source_cursor, body_reference_id, body_declared_bytes,
-               body_sha256, body_custody_source_proof,
-               state, state_revision, created_at_unix_seconds,
-               updated_at_unix_seconds
-             ) VALUES (
-               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-               $13, $14, 1, $15, $15
-             ) ON CONFLICT (logical_owner_id, intent_id) DO NOTHING",
-        )
-        .bind(command.intent_id.as_slice())
-        .bind(&command.logical_owner_id)
-        .bind(command.request_fingerprint.as_slice())
-        .bind(command.canonical_conversation_id.bytes().as_slice())
-        .bind(reply_message_id)
-        .bind(provider_code(command.route.provider))
-        .bind(command.route.account_cursor.bytes().as_slice())
-        .bind(command.route.conversation_cursor.bytes().as_slice())
-        .bind(reply_source_cursor)
-        .bind(command.body_receipt.reference_id.as_slice())
-        .bind(declared_bytes)
-        .bind(command.body_receipt.sha256.as_slice())
-        .bind(&command.body_receipt.custody_transfer_source_proof)
-        .bind(STATE_ACCEPTED)
-        .bind(command.created_at_unix_seconds)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|_| DeliveryIntentPersistenceErrorV1::StorageUnavailable)?
-        .rows_affected()
-            == 1;
-
-        if inserted {
-            insert_transition(
-                &mut transaction,
-                &command.logical_owner_id,
-                &command.intent_id,
-                1,
-                STATE_ACCEPTED,
-                None,
-                command.created_at_unix_seconds,
-            )
-            .await?;
-        }
-        let row = sqlx::query(
-            "SELECT intent_id, logical_owner_id, request_fingerprint, state,
-                    state_revision, provider_operation_id, rejection_code
-             FROM hermes_data.communication_delivery_intent_jobs
-             WHERE logical_owner_id = $1 AND intent_id = $2",
-        )
-        .bind(&command.logical_owner_id)
-        .bind(command.intent_id.as_slice())
-        .fetch_one(&mut *transaction)
-        .await
-        .map_err(|_| DeliveryIntentPersistenceErrorV1::StorageUnavailable)?;
-        let stored_owner: String = row
-            .try_get("logical_owner_id")
-            .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidRow)?;
-        let stored_fingerprint: Vec<u8> = row
-            .try_get("request_fingerprint")
-            .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidRow)?;
-        if stored_owner != command.logical_owner_id
-            || stored_fingerprint.as_slice() != command.request_fingerprint
-        {
-            return Err(DeliveryIntentPersistenceErrorV1::Conflict);
-        }
-        let status = status_from_row(&row)?;
+        let outcome = create_intent_in_transaction(&mut transaction, command).await?;
         transaction
             .commit()
             .await
             .map_err(|_| DeliveryIntentPersistenceErrorV1::StorageUnavailable)?;
-        Ok(if inserted {
-            CreateDeliveryIntentOutcomeV1::Created(status)
-        } else {
-            CreateDeliveryIntentOutcomeV1::Existing(status)
-        })
+        Ok(outcome)
     }
 
     pub async fn claim_next(
@@ -501,6 +416,99 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             .map_err(|_| DeliveryIntentPersistenceErrorV1::StorageUnavailable)?;
         Ok(status)
     }
+}
+
+pub(crate) async fn create_intent_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    command: &CreateDeliveryIntentV1,
+) -> Result<CreateDeliveryIntentOutcomeV1, DeliveryIntentPersistenceErrorV1> {
+    if !valid_create(command) {
+        return Err(DeliveryIntentPersistenceErrorV1::InvalidInput);
+    }
+    let reply_message_id = command
+        .canonical_reply_message_id
+        .map(|id| id.bytes().to_vec());
+    let reply_source_cursor = command
+        .route
+        .reply_to_source_cursor
+        .map(|cursor| cursor.bytes().to_vec());
+    let declared_bytes = i64::try_from(command.body_receipt.declared_bytes)
+        .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidInput)?;
+    let inserted = sqlx::query(
+        "INSERT INTO hermes_data.communication_delivery_intent_jobs (
+           intent_id, logical_owner_id, request_fingerprint,
+           canonical_conversation_id, canonical_reply_message_id,
+           provider_kind, account_cursor, conversation_cursor,
+           reply_source_cursor, body_reference_id, body_declared_bytes,
+           body_sha256, body_custody_source_proof,
+           state, state_revision, created_at_unix_seconds,
+           updated_at_unix_seconds
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+           $13, $14, 1, $15, $15
+         ) ON CONFLICT (logical_owner_id, intent_id) DO NOTHING",
+    )
+    .bind(command.intent_id.as_slice())
+    .bind(&command.logical_owner_id)
+    .bind(command.request_fingerprint.as_slice())
+    .bind(command.canonical_conversation_id.bytes().as_slice())
+    .bind(reply_message_id)
+    .bind(provider_code(command.route.provider))
+    .bind(command.route.account_cursor.bytes().as_slice())
+    .bind(command.route.conversation_cursor.bytes().as_slice())
+    .bind(reply_source_cursor)
+    .bind(command.body_receipt.reference_id.as_slice())
+    .bind(declared_bytes)
+    .bind(command.body_receipt.sha256.as_slice())
+    .bind(&command.body_receipt.custody_transfer_source_proof)
+    .bind(STATE_ACCEPTED)
+    .bind(command.created_at_unix_seconds)
+    .execute(&mut **transaction)
+    .await
+    .map_err(|_| DeliveryIntentPersistenceErrorV1::StorageUnavailable)?
+    .rows_affected()
+        == 1;
+
+    if inserted {
+        insert_transition(
+            transaction,
+            &command.logical_owner_id,
+            &command.intent_id,
+            1,
+            STATE_ACCEPTED,
+            None,
+            command.created_at_unix_seconds,
+        )
+        .await?;
+    }
+    let row = sqlx::query(
+        "SELECT intent_id, logical_owner_id, request_fingerprint, state,
+                state_revision, provider_operation_id, rejection_code
+         FROM hermes_data.communication_delivery_intent_jobs
+         WHERE logical_owner_id = $1 AND intent_id = $2",
+    )
+    .bind(&command.logical_owner_id)
+    .bind(command.intent_id.as_slice())
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(|_| DeliveryIntentPersistenceErrorV1::StorageUnavailable)?;
+    let stored_owner: String = row
+        .try_get("logical_owner_id")
+        .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidRow)?;
+    let stored_fingerprint: Vec<u8> = row
+        .try_get("request_fingerprint")
+        .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidRow)?;
+    if stored_owner != command.logical_owner_id
+        || stored_fingerprint.as_slice() != command.request_fingerprint
+    {
+        return Err(DeliveryIntentPersistenceErrorV1::Conflict);
+    }
+    let status = status_from_row(&row)?;
+    Ok(if inserted {
+        CreateDeliveryIntentOutcomeV1::Created(status)
+    } else {
+        CreateDeliveryIntentOutcomeV1::Existing(status)
+    })
 }
 
 pub(crate) async fn insert_transition(

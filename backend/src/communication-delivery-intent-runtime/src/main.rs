@@ -175,6 +175,18 @@ where
             Err(error) if retryable_terminal_result_error(error) => {}
             Err(error) => return Err(runtime_error(error)),
         }
+        match executor.block_on(runtime.consume_next_event_ingress_v1(now)) {
+            Ok(_) => {}
+            Err(error) if retryable_event_ingress_error(error) => {}
+            Err(error) => return Err(runtime_error(error)),
+        }
+        match executor.block_on(runtime.relay_ingress_result_once_v1(now)) {
+            Ok(_) | Err(DeliveryIntentRuntimeErrorV1::Unavailable) => {}
+            Err(DeliveryIntentRuntimeErrorV1::Persistence(
+                DeliveryIntentPersistenceErrorV1::StorageUnavailable,
+            )) => {}
+            Err(error) => return Err(runtime_error(error)),
+        }
         std::thread::sleep(Duration::from_millis(25));
     }
 }
@@ -187,6 +199,17 @@ fn retryable_terminal_result_error(error: DeliveryIntentRuntimeErrorV1) -> bool 
                 DeliveryIntentPersistenceErrorV1::StorageUnavailable
                     | DeliveryIntentPersistenceErrorV1::Conflict
                     | DeliveryIntentPersistenceErrorV1::ClaimLost
+            )
+    )
+}
+
+fn retryable_event_ingress_error(error: DeliveryIntentRuntimeErrorV1) -> bool {
+    matches!(
+        error,
+        DeliveryIntentRuntimeErrorV1::Unavailable
+            | DeliveryIntentRuntimeErrorV1::RouteUnavailable
+            | DeliveryIntentRuntimeErrorV1::Persistence(
+                DeliveryIntentPersistenceErrorV1::StorageUnavailable
             )
     )
 }

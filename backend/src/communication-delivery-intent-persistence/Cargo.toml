@@ -12,6 +12,10 @@ role = "workflow"
 owner = "communication_delivery_intent"
 surface = "persistence"
 
+[features]
+default = []
+conformance-test-support = []
+
 [dependencies]
 hermes-communication-delivery-intent-core = { path = "../communication-delivery-intent-core" }
 hermes-events-protocol = { path = "../platform/events" }

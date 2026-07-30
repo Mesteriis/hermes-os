@@ -11,6 +11,14 @@ use hermes_communication_delivery_intent_api::{
     COMMUNICATION_DELIVERY_INTENT_REALTIME_CONTRACT_NAME_V1,
     COMMUNICATION_DELIVERY_INTENT_SCHEMA_SHA256,
 };
+use hermes_communication_delivery_intent_ingress_api::{
+    communication_delivery_intent_rejected_contract_reference_v1,
+    communication_delivery_intent_rejected_publish_request_v1,
+    communication_delivery_intent_submit_consume_request_v1,
+    communication_delivery_intent_submit_contract_reference_v1,
+    communication_delivery_intent_submitted_contract_reference_v1,
+    communication_delivery_intent_submitted_publish_request_v1,
+};
 use hermes_communications_api::COMMUNICATIONS_QUERY_SCHEMA_SHA256;
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
@@ -135,9 +143,60 @@ pub fn communication_delivery_intent_blob_capability_v1() -> CapabilityDescripto
             request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
                 max_bytes: COMMUNICATION_DELIVERY_INTENT_BLOB_QUOTA_BYTES_V1,
                 custody_scope_id: COMMUNICATION_DELIVERY_INTENT_BLOB_CUSTODY_SCOPE_ID_V1.to_owned(),
-                allowed_operations: vec![BlobQuotaOperationV1::Write as i32],
+                allowed_operations: vec![
+                    BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::Write as i32,
+                ],
             })),
         }],
+        ..Default::default()
+    }
+}
+
+fn delivery_intent_ingress_submit_capability_v1() -> CapabilityDescriptorV1 {
+    event_capability(
+        "communication_delivery_intent.ingress_submit.v1",
+        ProvidedSurfaceKindV1::DurableConsumer,
+        communication_delivery_intent_submit_contract_reference_v1(),
+        communication_delivery_intent_submit_consume_request_v1(),
+    )
+}
+
+fn delivery_intent_ingress_submitted_capability_v1() -> CapabilityDescriptorV1 {
+    event_capability(
+        "communication_delivery_intent.ingress_submitted.v1",
+        ProvidedSurfaceKindV1::DurablePublisher,
+        communication_delivery_intent_submitted_contract_reference_v1(),
+        communication_delivery_intent_submitted_publish_request_v1(),
+    )
+}
+
+fn delivery_intent_ingress_rejected_capability_v1() -> CapabilityDescriptorV1 {
+    event_capability(
+        "communication_delivery_intent.ingress_rejected.v1",
+        ProvidedSurfaceKindV1::DurablePublisher,
+        communication_delivery_intent_rejected_contract_reference_v1(),
+        communication_delivery_intent_rejected_publish_request_v1(),
+    )
+}
+
+fn event_capability(
+    capability_id: &str,
+    surface_kind: ProvidedSurfaceKindV1,
+    contract: ContractReferenceV1,
+    request: CapabilityRequestV1,
+) -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: capability_id.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: surface_kind as i32,
+            contract: Some(contract),
+            client_rpc_route: None,
+            client_blob_route: None,
+        }],
+        requests: vec![request],
         ..Default::default()
     }
 }
@@ -180,7 +239,7 @@ pub fn communication_delivery_intent_module_descriptor_v1(build_id: &str) -> Mod
     let settings_schema = communication_delivery_intent_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 5,
+        descriptor_revision: 6,
         module_id: COMMUNICATION_DELIVERY_INTENT_MODULE_ID_V1.to_owned(),
         owner_id: COMMUNICATION_DELIVERY_INTENT_OWNER_V1.to_owned(),
         module_kind: ModuleKindV1::Workflow as i32,
@@ -195,6 +254,9 @@ pub fn communication_delivery_intent_module_descriptor_v1(build_id: &str) -> Mod
             communication_delivery_intent_client_capability_v1(),
             communication_delivery_intent_blob_capability_v1(),
             communication_delivery_intent_communications_query_capability_v1(),
+            delivery_intent_ingress_rejected_capability_v1(),
+            delivery_intent_ingress_submit_capability_v1(),
+            delivery_intent_ingress_submitted_capability_v1(),
             delivery_intent_mail_events_capability_v1(),
             communication_delivery_intent_storage_capability_v1(),
             delivery_intent_telegram_events_capability_v1(),
@@ -232,7 +294,7 @@ mod tests {
         validate_settings_schema_v1(&communication_delivery_intent_settings_schema_v1())
             .expect("settings");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Workflow as i32);
-        assert_eq!(descriptor.capabilities.len(), 8);
+        assert_eq!(descriptor.capabilities.len(), 11);
         assert_eq!(
             descriptor.capabilities[0].capability_id,
             COMMUNICATION_DELIVERY_INTENT_CAPABILITY_ID_V1
@@ -246,8 +308,36 @@ mod tests {
             COMMUNICATION_DELIVERY_INTENT_COMMUNICATIONS_QUERY_CAPABILITY_ID_V1
         );
         assert_eq!(
-            descriptor.capabilities[4].capability_id,
+            descriptor.capabilities[7].capability_id,
             COMMUNICATION_DELIVERY_INTENT_STORAGE_CAPABILITY_ID_V1
+        );
+        assert_eq!(
+            descriptor.capabilities[3..=5]
+                .iter()
+                .map(|capability| capability.capability_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "communication_delivery_intent.ingress_rejected.v1",
+                "communication_delivery_intent.ingress_submit.v1",
+                "communication_delivery_intent.ingress_submitted.v1",
+            ]
+        );
+        let blob_operations = descriptor.capabilities[1].requests[0]
+            .request
+            .as_ref()
+            .and_then(|request| match request {
+                Request::BlobQuota(quota) => Some(quota.allowed_operations.as_slice()),
+                _ => None,
+            });
+        assert_eq!(
+            blob_operations,
+            Some(
+                [
+                    BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::Write as i32,
+                ]
+                .as_slice()
+            )
         );
         assert_eq!(descriptor.capabilities[0].provides.len(), 4);
         assert_eq!(

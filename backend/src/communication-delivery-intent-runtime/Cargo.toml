@@ -21,9 +21,11 @@ hermes-blob-client = { path = "../platform/blob/client" }
 hermes-communication-delivery-intent-api = { path = "../communication-delivery-intent-api" }
 hermes-communication-delivery-intent-core = { path = "../communication-delivery-intent-core" }
 hermes-communication-delivery-intent-event-adapters = { path = "../communication-delivery-intent-event-adapters" }
+hermes-communication-delivery-intent-ingress-api = { path = "../communication-delivery-intent-ingress-api" }
 hermes-communication-delivery-intent-persistence = { path = "../communication-delivery-intent-persistence" }
 hermes-communications-api = { path = "../communications-api" }
 hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-events-protocol = { path = "../platform/events" }
 hermes-mail-delivery-intent-contract = { path = "../mail-delivery-intent-contract" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }

@@ -86,8 +86,8 @@ test('delivery intent body is materialized once into an exact provider-bound Blo
   }
 
   assert.match(admission, /communication_delivery_intent\.blob\.v1/);
+  assert.match(admission, /BlobQuotaOperationV1::ReadRange/);
   assert.match(admission, /BlobQuotaOperationV1::Write/);
-  assert.doesNotMatch(admission, /BlobQuotaOperationV1::ReadRange/);
 
   for (const exactTarget of [
     'MAIL_DELIVERY_INTENT_TARGET_BLOB_CAPABILITY_ID_V1',

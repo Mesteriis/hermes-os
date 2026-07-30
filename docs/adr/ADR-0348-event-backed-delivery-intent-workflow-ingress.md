@@ -12,9 +12,15 @@ Blob audience и валидируемые `DurableEnvelopeV1` outbox records б�
 outbox, source-result inbox/hash fence и atomic dispatch transition после
 custody transfer. Cross-channel managed runtime реализует verified source Blob
 read, fixed delivery-intent target-bound write, submit producer, durable relay
-и ACK-after-commit. Delivery-intent consumer, downstream result consumer,
-custody cleanup и live managed evidence ещё не реализованы. Наличие ADR и
-contract/runtime build units не открывает ни `communication_delivery_intent_v1`, ни
+и ACK-after-commit. Delivery-intent runtime реализует exact submit consumer,
+source/runtime/correlation validation, target-bound Blob read, canonical route
+resolution, provider-bound rematerialization, owner-local inbox/hash fence,
+atomic `inbox + intent + result outbox`, durable result relay и ACK-after-commit
+либо exact duplicate. Эти границы подтверждены focused tests и disposable
+PostgreSQL reconnect conformance. Downstream result consumer в cross-channel,
+исходная delivery-intent Blob custody cleanup и live managed end-to-end
+evidence ещё не реализованы. Наличие ADR и отдельных contract/runtime build
+units не открывает ни `communication_delivery_intent_v1`, ни
 `communication_cross_channel_forward_v1`.
 
 ## Контекст

@@ -12,7 +12,8 @@ use hermes_communication_delivery_intent_persistence::{
 };
 use hermes_events_jetstream::{
     JetStreamClient, ManagedRuntimeEventAccessErrorV1, RuntimeJetStreamConnection,
-    RuntimeNatsIdentity, RuntimePublishPermitV1, request_managed_runtime_event_access_v2,
+    RuntimeNatsIdentity, RuntimePublishPermitV1, RuntimeSubscribePermitV1,
+    request_managed_runtime_event_access_v2,
 };
 use hermes_runtime_protocol::{
     managed_control::{
@@ -47,6 +48,7 @@ use crate::{
         CommunicationsQueryClientErrorV1, ManagedCommunicationsQueryClientV1,
     },
     coordinator::{DeliveryIntentCoordinatorErrorV1, prepare_create_delivery_intent_v1},
+    event_ingress::bind_delivery_intent_ingress_subscription,
     event_runtime::{ProviderTerminalSubscriptionV1, bind_terminal_subscriptions},
     module_request_port::handle_module_request_delivery_v1,
 };
@@ -73,12 +75,13 @@ pub enum DeliveryIntentRuntimeErrorV1 {
 
 pub struct DeliveryIntentManagedRuntimeV1 {
     pub(crate) logical_owner_id: String,
-    control_channel: ManagedControlChannelV2<UnixStream>,
-    persistence: CommunicationDeliveryIntentPersistenceV1,
+    pub(crate) control_channel: ManagedControlChannelV2<UnixStream>,
+    pub(crate) persistence: CommunicationDeliveryIntentPersistenceV1,
     pub(crate) runtime_instance_id: String,
     pub(crate) runtime_generation: u64,
     pub(crate) event_connection: RuntimeJetStreamConnection,
     pub(crate) event_publish_permit: RuntimePublishPermitV1,
+    pub(crate) event_ingress_subscription: RuntimeSubscribePermitV1,
     pub(crate) terminal_subscriptions: Vec<ProviderTerminalSubscriptionV1>,
     pub(crate) next_terminal_subscription: usize,
     client_realtime: DeliveryIntentClientRealtimePublisherV1,
@@ -162,16 +165,17 @@ impl DeliveryIntentManagedRuntimeV1 {
                 admission.grant_epoch,
             )
             .map_err(|_| DeliveryIntentRuntimeErrorV1::Admission)?;
-        let terminal_subscriptions = bind_terminal_subscriptions(
-            event_access
-                .subscribe_permits(
-                    &admission.registration_id,
-                    &admission.runtime_instance_id,
-                    admission.runtime_generation,
-                    admission.grant_epoch,
-                )
-                .map_err(|_| DeliveryIntentRuntimeErrorV1::Admission)?,
-        )?;
+        let mut subscribe_permits = event_access
+            .subscribe_permits(
+                &admission.registration_id,
+                &admission.runtime_instance_id,
+                admission.runtime_generation,
+                admission.grant_epoch,
+            )
+            .map_err(|_| DeliveryIntentRuntimeErrorV1::Admission)?;
+        let event_ingress_subscription =
+            bind_delivery_intent_ingress_subscription(&mut subscribe_permits)?;
+        let terminal_subscriptions = bind_terminal_subscriptions(subscribe_permits)?;
         let event_connection = JetStreamClient::connect_runtime_with_jwt(
             event_hub_endpoint,
             event_identity,
@@ -203,6 +207,7 @@ impl DeliveryIntentManagedRuntimeV1 {
             runtime_generation: admission.runtime_generation,
             event_connection,
             event_publish_permit,
+            event_ingress_subscription,
             terminal_subscriptions,
             next_terminal_subscription: 0,
             client_realtime,

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_cross_channel_forward_managed_runtime_v1",
+    "currentSlice": "communication_delivery_intent_event_ingress_consumer_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1574,6 +1574,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communication-delivery-intent-ingress-api",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-communication-delivery-intent-persistence",
           "kind": "normal"
         },
@@ -1583,6 +1587,10 @@
         },
         {
           "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
           "kind": "normal"
         },
         {
@@ -5283,6 +5291,10 @@
         "default": [],
         "conformance-test-support": []
       },
+      "hermes-communication-delivery-intent-persistence": {
+        "default": [],
+        "conformance-test-support": []
+      },
       "hermes-mail-api": {
         "default": [],
         "conformance-test-support": []
@@ -5769,6 +5781,9 @@
         "attachment_security.storage.v1",
         "attachment_security.verdict.publish.v1",
         "communication_delivery_intent.blob.v1",
+        "communication_delivery_intent.ingress_rejected.v1",
+        "communication_delivery_intent.ingress_submit.v1",
+        "communication_delivery_intent.ingress_submitted.v1",
         "communication_delivery_intent.mail.events.v1",
         "communication_delivery_intent.storage.v1",
         "communication_delivery_intent.telegram.events.v1",

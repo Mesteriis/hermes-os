@@ -1994,6 +1994,28 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_A
   ],
 };
 
+const COMMUNICATION_DELIVERY_INTENT_EVENT_INGRESS_CONSUMER_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delivery-intent-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-api', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-core', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-event-adapters', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-ingress-api', kind: 'normal' },
+    { name: 'hermes-communication-delivery-intent-persistence', kind: 'normal' },
+    { name: 'hermes-communications-api', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-mail-delivery-intent-contract', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+    { name: 'hermes-telegram-delivery-intent-contract', kind: 'normal' },
+    { name: 'hermes-whatsapp-delivery-intent-contract', kind: 'normal' },
+    { name: 'hermes-zulip-delivery-intent-contract', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2285,6 +2307,9 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY
   ],
 };
 
+const COMMUNICATION_DELIVERY_INTENT_EVENT_INGRESS_CONSUMER_THIRD_PARTY_DEPENDENCY_ALLOWLIST =
+  COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST;
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -2536,6 +2561,9 @@ const COMMUNICATION_DELIVERY_INTENT_INVENTORY = {
   businessCapabilities: [
     ...COMMUNICATIONS_EXPORT_INVENTORY.businessCapabilities,
     'communication_delivery_intent.blob.v1',
+    'communication_delivery_intent.ingress_rejected.v1',
+    'communication_delivery_intent.ingress_submit.v1',
+    'communication_delivery_intent.ingress_submitted.v1',
     'communication_delivery_intent.mail.events.v1',
     'communication_delivery_intent.storage.v1',
     'communication_delivery_intent.telegram.events.v1',
@@ -2550,6 +2578,10 @@ const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
     'conformance-test-support': [],
   },
   'hermes-communication-delayed-delivery-persistence': {
+    default: [],
+    'conformance-test-support': [],
+  },
+  'hermes-communication-delivery-intent-persistence': {
     default: [],
     'conformance-test-support': [],
   },
@@ -3259,6 +3291,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_delivery_intent_event_ingress_consumer_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_CROSS_CHANNEL_FORWARD_MANAGED_RUNTIME_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATION_DELIVERY_INTENT_EVENT_INGRESS_CONSUMER_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATION_DELIVERY_INTENT_EVENT_INGRESS_CONSUMER_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
