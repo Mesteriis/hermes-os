@@ -17,10 +17,14 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     contract,
     persistenceManifest,
     migration,
+    eventMigration,
     operations,
     workQueue,
+    eventIo,
+    eventOutbox,
     cleanup,
     realtime,
+    schema,
     postgresConformance,
     storageRunner,
   ] = await Promise.all([
@@ -78,6 +82,13 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     ),
     readFile(
       new URL(
+        'src/communication-cross-channel-forward-persistence/migrations/0002_event_handoff.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-cross-channel-forward-persistence/src/operations.rs',
         BACKEND_ROOT,
       ),
@@ -92,6 +103,20 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     ),
     readFile(
       new URL(
+        'src/communication-cross-channel-forward-persistence/src/event_io.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-persistence/src/event_outbox.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-cross-channel-forward-persistence/src/cleanup.rs',
         BACKEND_ROOT,
       ),
@@ -100,6 +125,13 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     readFile(
       new URL(
         'src/communication-cross-channel-forward-persistence/src/realtime.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-persistence/src/schema.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -173,17 +205,42 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
   assert.match(migration, /communication_cross_channel_forward_realtime/);
   assert.match(migration, /attempt_count BETWEEN 0 AND 32/);
   assert.doesNotMatch(migration, /body_utf8|provider|mail_|telegram_|whatsapp_|zulip_/);
+  assert.match(eventMigration, /communication_cross_channel_forward_event_inbox/);
+  assert.match(eventMigration, /communication_cross_channel_forward_event_outbox/);
+  assert.match(eventMigration, /exact_envelope_bytes/);
+  assert.match(eventMigration, /source_result_message_id/);
+  assert.match(eventMigration, /delivery_submit_message_id/);
+  assert.doesNotMatch(
+    eventMigration,
+    /body_utf8|provider|account_id|mail_|telegram_|whatsapp_|zulip_/,
+  );
   assert.match(operations, /request_fingerprint/);
   assert.match(operations, /ON CONFLICT \(logical_owner_id, forward_id\) DO NOTHING/);
   assert.match(workQueue, /FOR UPDATE SKIP LOCKED/);
   assert.match(workQueue, /claim_epoch = operation\.claim_epoch \+ 1/);
   assert.match(workQueue, /LEAST\(attempt_count \+ 1, 32\)/);
+  assert.match(eventIo, /persist_source_prepare_outbox/);
+  assert.match(eventIo, /persist_source_prepared_and_delivery_submit/);
+  assert.match(eventIo, /persist_source_rejected/);
+  assert.match(eventIo, /ON CONFLICT DO NOTHING/);
+  assert.match(eventIo, /envelope_sha256/);
+  assert.match(eventIo, /insert_exact_outbox/);
+  assert.match(eventIo, /insert_forward_transition/);
+  assert.match(eventOutbox, /pending_event_outbox/);
+  assert.match(eventOutbox, /mark_event_outbox_published/);
+  assert.match(eventOutbox, /exact_envelope_bytes/);
+  assert.match(eventOutbox, /ON CONFLICT DO NOTHING/);
+  assert.doesNotMatch(
+    `${eventIo}\n${eventOutbox}`,
+    /body_utf8|provider_id|account_id|mail_|telegram_|whatsapp_|zulip_/,
+  );
   assert.match(cleanup, /next_cleanup/);
   assert.match(cleanup, /reschedule_cleanup/);
   assert.match(realtime, /client_realtime_window/);
   assert.match(postgresConformance, /survives_reconnect/);
   assert.match(postgresConformance, /ClaimLost/);
   assert.match(storageRunner, /HERMES_COMMUNICATION_CROSS_CHANNEL_FORWARD_POSTGRES/);
+  assert.match(schema, /COMMUNICATION_CROSS_CHANNEL_FORWARD_STORAGE_BUNDLE_REVISION_V2/);
 });
 
 test('cross-channel source preparation is event-only and Communications-owned', async () => {
@@ -385,7 +442,7 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   );
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_delivery_intent_ingress_contract_v1',
+    'communication_cross_channel_forward_event_persistence_v1',
   );
   assert.ok(
     policy.implementation.productionPackages.some(

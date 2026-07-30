@@ -8,9 +8,11 @@
 `hermes-communication-delivery-intent-ingress-api` реализован. Он фиксирует
 три exact durable contracts, direction-specific route requests, compile-time
 Blob audience и валидируемые `DurableEnvelopeV1` outbox records без plaintext
-или provider identity. Transactional producer/consumer adapters, custody
-transfer и live managed evidence ещё не реализованы. Наличие ADR и contract
-build unit не открывает ни `communication_delivery_intent_v1`, ни
+или provider identity. Cross-channel persistence реализует exact submit
+outbox, source-result inbox/hash fence и atomic dispatch transition после
+custody transfer. Runtime producer, delivery-intent consumer, custody cleanup
+и live managed evidence ещё не реализованы. Наличие ADR и contract build unit
+не открывает ни `communication_delivery_intent_v1`, ни
 `communication_cross_channel_forward_v1`.
 
 ## Контекст

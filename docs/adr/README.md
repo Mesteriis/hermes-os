@@ -568,4 +568,5 @@ ADR-0348 отделяет module-to-module delivery-intent ingress от client R
 workflow публикует bodyless durable command с fixed target-bound Blob receipt,
 delivery-intent атомарно отвечает submitted/rejected result, а provider
 selection остаётся внутри delivery-intent workflow. Exact contract build unit
-реализован; transactional adapters и live managed evidence остаются открыты.
+и cross-channel transactional event persistence реализованы; runtime adapters
+и live managed evidence остаются открыты.

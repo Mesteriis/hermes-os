@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delivery_intent_ingress_contract_v1",
+    "currentSlice": "communication_cross_channel_forward_event_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1955,6 +1955,10 @@
       "hermes-communication-cross-channel-forward-persistence": [
         {
           "name": "hermes-communication-cross-channel-forward-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
           "kind": "normal"
         },
         {

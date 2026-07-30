@@ -3,6 +3,8 @@
 mod cleanup;
 #[cfg(feature = "conformance-test-support")]
 mod conformance;
+mod event_io;
+mod event_outbox;
 mod operations;
 mod realtime;
 pub mod schema;
@@ -11,6 +13,10 @@ mod work_queue;
 pub use cleanup::{CrossChannelForwardCleanupJobV1, CrossChannelForwardCleanupReasonV1};
 #[cfg(feature = "conformance-test-support")]
 pub use conformance::CrossChannelForwardPersistenceConformanceV1;
+pub use event_io::{
+    CrossChannelForwardBlobReceiptV1, CrossChannelForwardPreparedEventV1,
+    CrossChannelForwardRejectedEventV1,
+};
 use hermes_storage_protocol::StorageBindingV1;
 pub use operations::{
     CreateCrossChannelForwardOutcomeV1, CreateCrossChannelForwardV1,

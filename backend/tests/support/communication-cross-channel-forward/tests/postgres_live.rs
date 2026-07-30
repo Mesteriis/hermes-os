@@ -5,9 +5,25 @@ use hermes_communication_cross_channel_forward_core::{
 };
 use hermes_communication_cross_channel_forward_persistence::{
     CommunicationCrossChannelForwardPersistenceV1, CreateCrossChannelForwardOutcomeV1,
-    CreateCrossChannelForwardV1, CrossChannelForwardCleanupReasonV1,
-    CrossChannelForwardPersistenceConformanceV1, CrossChannelForwardPersistenceErrorV1,
+    CreateCrossChannelForwardV1, CrossChannelForwardBlobReceiptV1,
+    CrossChannelForwardCleanupReasonV1, CrossChannelForwardPersistenceConformanceV1,
+    CrossChannelForwardPersistenceErrorV1, CrossChannelForwardPreparedEventV1,
     CrossChannelForwardPreparedSourceV1, CrossChannelForwardWorkStageV1,
+};
+use hermes_communication_delivery_intent_ingress_api::{
+    CommunicationDeliveryIntentIngressEnvelopeContextV1,
+    build_communication_delivery_intent_submit_outbox_record_v1,
+    wire::DeliveryIntentBodySourceReceiptV1,
+};
+use hermes_communications_cross_channel_forward_source_api::{
+    CrossChannelForwardSourceEnvelopeContextV1,
+    build_cross_channel_forward_source_prepare_outbox_record_v1,
+    build_cross_channel_forward_source_prepared_outbox_record_v1,
+    build_cross_channel_forward_source_rejected_outbox_record_v1,
+    wire::{
+        CrossChannelForwardBodySourceReceiptV1, CrossChannelForwardSourcePreparedV1,
+        CrossChannelForwardSourceRejectCodeV1, CrossChannelForwardSourceRejectedV1,
+    },
 };
 
 const POSTGRES_URL: &str = "HERMES_COMMUNICATION_CROSS_CHANNEL_FORWARD_POSTGRES_URL";
@@ -183,6 +199,240 @@ async fn durable_forward_survives_reconnect_and_fences_conflicts_claims_and_clea
         after_cleanup_restart.status("owner-2", &[1; 16]).await,
         Err(CrossChannelForwardPersistenceErrorV1::NotFound)
     );
+}
+
+#[tokio::test]
+#[ignore = "requires the disposable cross-channel forward PostgreSQL contour"]
+async fn event_handoff_is_atomic_replay_fenced_and_survives_reconnect() {
+    let database_url = required(POSTGRES_URL);
+    let persistence = connect(&database_url).await;
+    CrossChannelForwardPersistenceConformanceV1::install_schema(&persistence)
+        .await
+        .expect("install cross-channel forward schema");
+    persistence
+        .create_forward(create_command(1, 2, 3))
+        .await
+        .expect("create forward");
+
+    let source_context = CrossChannelForwardSourceEnvelopeContextV1 {
+        module_id: "hermes-communication-cross-channel-forward-runtime".to_owned(),
+        runtime_instance_id: "forward-runtime-1".to_owned(),
+        runtime_generation: 7,
+        recorded_at_unix_seconds: 1_800_000_000,
+        recorded_at_nanos: 0,
+    };
+    let source_prepare = build_cross_channel_forward_source_prepare_outbox_record_v1(
+        [1; 16],
+        [2; 16],
+        [3; 16],
+        OWNER,
+        1_800_000_030,
+        &source_context,
+    )
+    .expect("source prepare");
+    persistence
+        .persist_source_prepare_outbox(OWNER, [1; 16], &source_prepare, 1_100)
+        .await
+        .expect("persist source prepare outbox");
+    persistence
+        .persist_source_prepare_outbox(OWNER, [1; 16], &source_prepare, 1_100)
+        .await
+        .expect("exact source prepare replay");
+    let pending = persistence
+        .pending_event_outbox(16)
+        .await
+        .expect("source prepare outbox");
+    assert_eq!(pending, vec![source_prepare.clone()]);
+    persistence
+        .mark_event_outbox_published(*source_prepare.message_id(), 1_150)
+        .await
+        .expect("mark source prepare published");
+
+    let communications_context = CrossChannelForwardSourceEnvelopeContextV1 {
+        module_id: "hermes-communications-runtime".to_owned(),
+        runtime_instance_id: "communications-runtime-1".to_owned(),
+        runtime_generation: 11,
+        recorded_at_unix_seconds: 1_800_000_001,
+        recorded_at_nanos: 0,
+    };
+    let source_prepared = build_cross_channel_forward_source_prepared_outbox_record_v1(
+        [1; 16],
+        CrossChannelForwardSourcePreparedV1 {
+            forward_id: vec![1; 16],
+            source_message_id: vec![2; 16],
+            target_conversation_id: vec![3; 16],
+            source_evidence_id: vec![9; 16],
+            source_evidence_revision: 5,
+            body_source: Some(CrossChannelForwardBodySourceReceiptV1 {
+                reference_id: vec![6; 16],
+                declared_bytes: 42,
+                sha256: vec![7; 32],
+                custody_transfer_source_proof: vec![8; 64],
+            }),
+            logical_owner_id: OWNER.to_owned(),
+        },
+        &communications_context,
+    )
+    .expect("source prepared");
+    let prepared_event = CrossChannelForwardPreparedEventV1 {
+        result_message_id: *source_prepared.message_id(),
+        envelope_sha256: *source_prepared.envelope_sha256(),
+        logical_owner_id: OWNER.to_owned(),
+        forward_id: [1; 16],
+        source_message_id: [2; 16],
+        target_conversation_id: [3; 16],
+        source_evidence_id: [9; 16],
+        source_evidence_revision: 5,
+        source_body: CrossChannelForwardBlobReceiptV1 {
+            reference_id: [6; 16],
+            declared_bytes: 42,
+            sha256: [7; 32],
+            custody_transfer_source_proof: vec![8; 64],
+        },
+    };
+    let delivery_body = CrossChannelForwardBlobReceiptV1 {
+        reference_id: [10; 16],
+        declared_bytes: 42,
+        sha256: [7; 32],
+        custody_transfer_source_proof: vec![11; 64],
+    };
+    let delivery_submit = build_communication_delivery_intent_submit_outbox_record_v1(
+        [12; 16],
+        [3; 16],
+        Some([4; 16]),
+        DeliveryIntentBodySourceReceiptV1 {
+            reference_id: delivery_body.reference_id.to_vec(),
+            declared_bytes: delivery_body.declared_bytes,
+            sha256: delivery_body.sha256.to_vec(),
+            custody_transfer_source_proof: delivery_body.custody_transfer_source_proof.clone(),
+        },
+        OWNER,
+        1_800_000_031,
+        &CommunicationDeliveryIntentIngressEnvelopeContextV1 {
+            module_id: "hermes-communication-cross-channel-forward-runtime".to_owned(),
+            runtime_instance_id: "forward-runtime-1".to_owned(),
+            runtime_generation: 7,
+            recorded_at_unix_seconds: 1_800_000_001,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("delivery submit");
+    persistence
+        .persist_source_prepared_and_delivery_submit(
+            &prepared_event,
+            &delivery_body,
+            &delivery_submit,
+            1_200,
+        )
+        .await
+        .expect("atomic source result and delivery submit");
+    persistence
+        .persist_source_prepared_and_delivery_submit(
+            &prepared_event,
+            &delivery_body,
+            &delivery_submit,
+            1_200,
+        )
+        .await
+        .expect("exact prepared replay");
+
+    let status = persistence
+        .status(OWNER, &[1; 16])
+        .await
+        .expect("dispatch status");
+    assert_eq!(status.state, CrossChannelForwardStateV1::Dispatching);
+    assert_eq!(status.delivery_intent_id, Some([12; 16]));
+    let pending = persistence
+        .pending_event_outbox(16)
+        .await
+        .expect("delivery submit outbox");
+    assert_eq!(pending, vec![delivery_submit.clone()]);
+
+    let mut conflicting = prepared_event;
+    conflicting.envelope_sha256 = [13; 32];
+    assert_eq!(
+        persistence
+            .persist_source_prepared_and_delivery_submit(
+                &conflicting,
+                &delivery_body,
+                &delivery_submit,
+                1_201,
+            )
+            .await,
+        Err(CrossChannelForwardPersistenceErrorV1::Conflict)
+    );
+    drop(persistence);
+
+    let reopened = connect(&database_url).await;
+    assert_eq!(
+        reopened
+            .pending_event_outbox(16)
+            .await
+            .expect("outbox after reconnect"),
+        vec![delivery_submit.clone()]
+    );
+    reopened
+        .mark_event_outbox_published(*delivery_submit.message_id(), 1_300)
+        .await
+        .expect("mark delivery submit published");
+    assert_eq!(
+        reopened
+            .pending_event_outbox(16)
+            .await
+            .expect("empty published outbox"),
+        Vec::new()
+    );
+
+    reopened
+        .create_forward(create_command(20, 21, 22))
+        .await
+        .expect("create rejected forward");
+    let rejected_prepare = build_cross_channel_forward_source_prepare_outbox_record_v1(
+        [20; 16],
+        [21; 16],
+        [22; 16],
+        OWNER,
+        1_800_000_032,
+        &source_context,
+    )
+    .expect("rejected source prepare");
+    reopened
+        .persist_source_prepare_outbox(OWNER, [20; 16], &rejected_prepare, 1_400)
+        .await
+        .expect("persist rejected source prepare");
+    let rejected_result = build_cross_channel_forward_source_rejected_outbox_record_v1(
+        [20; 16],
+        CrossChannelForwardSourceRejectedV1 {
+            forward_id: vec![20; 16],
+            code: CrossChannelForwardSourceRejectCodeV1::CrossChannelForwardSourceRejectCodeSourceMissingOrInactive
+                as i32,
+            logical_owner_id: OWNER.to_owned(),
+        },
+        &communications_context,
+    )
+    .expect("source rejected");
+    let rejected_event =
+        hermes_communication_cross_channel_forward_persistence::CrossChannelForwardRejectedEventV1 {
+            result_message_id: *rejected_result.message_id(),
+            envelope_sha256: *rejected_result.envelope_sha256(),
+            logical_owner_id: OWNER.to_owned(),
+            forward_id: [20; 16],
+            rejection_code: 2,
+        };
+    reopened
+        .persist_source_rejected(&rejected_event, 1_500)
+        .await
+        .expect("persist source rejection");
+    reopened
+        .persist_source_rejected(&rejected_event, 1_500)
+        .await
+        .expect("exact source rejection replay");
+    let rejected_status = reopened
+        .status(OWNER, &[20; 16])
+        .await
+        .expect("rejected status");
+    assert_eq!(rejected_status.state, CrossChannelForwardStateV1::Rejected);
+    assert_eq!(rejected_status.error_code, Some(2));
 }
 
 fn create_command(

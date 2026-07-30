@@ -134,7 +134,7 @@ impl CommunicationCrossChannelForwardPersistenceV1 {
         let row = sqlx::query(
             "SELECT forward_id, source_message_id, target_conversation_id,
                     target_reply_message_id, state, state_revision,
-                    delivery_intent_id, error_code,
+                    delivery_intent_id, delivery_submit_message_id, error_code,
                     created_at_unix_millis, updated_at_unix_millis
              FROM hermes_data.communication_cross_channel_forward_operations
              WHERE logical_owner_id = $1 AND forward_id = $2",
@@ -167,6 +167,20 @@ pub(crate) fn status_from_row(
     let error_code: Option<i16> = row
         .try_get("error_code")
         .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
+    let terminal_delivery_intent_id: Option<Vec<u8>> = row
+        .try_get("delivery_intent_id")
+        .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
+    let submitted_delivery_intent_id: Option<Vec<u8>> =
+        row.try_get("delivery_submit_message_id")
+            .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
+    if terminal_delivery_intent_id
+        .as_ref()
+        .zip(submitted_delivery_intent_id.as_ref())
+        .is_some_and(|(terminal, submitted)| terminal != submitted)
+    {
+        return Err(CrossChannelForwardPersistenceErrorV1::InvalidRow);
+    }
+    let delivery_intent_id = terminal_delivery_intent_id.or(submitted_delivery_intent_id);
     Ok(CrossChannelForwardStatusRecordV1 {
         forward_id: id16(
             row.try_get("forward_id")
@@ -192,10 +206,7 @@ pub(crate) fn status_from_row(
             row.try_get("state_revision")
                 .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?,
         )?,
-        delivery_intent_id: optional_id16(
-            row.try_get("delivery_intent_id")
-                .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?,
-        )?,
+        delivery_intent_id: optional_id16(delivery_intent_id)?,
         error_code: error_code
             .map(|value| {
                 u16::try_from(value)
