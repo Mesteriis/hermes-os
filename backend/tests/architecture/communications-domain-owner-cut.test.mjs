@@ -68,7 +68,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication_delivery_intent',
       'communications_export',
     ],
-    engines: ['attachment_security'],
+    engines: ['ai', 'attachment_security'],
     businessCapabilities: [
       'attachment_security.blob.v1',
       'attachment_security.candidate.observe.v1',

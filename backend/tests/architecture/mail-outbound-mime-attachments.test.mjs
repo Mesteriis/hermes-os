@@ -99,7 +99,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
     'communication_delivery_intent',
     'communications_export',
   ]);
-  assert.deepEqual(inventory.engines, ['attachment_security']);
+  assert.deepEqual(inventory.engines, ['ai', 'attachment_security']);
   assert.deepEqual(
     policy.implementation.productionPackages
       .filter(({ role }) => role === 'integration')

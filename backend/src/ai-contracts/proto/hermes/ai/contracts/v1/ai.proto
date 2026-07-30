@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package hermes.ai.contracts.v1;
+
+enum AiUseCaseV1 {
+  AI_USE_CASE_UNSPECIFIED = 0;
+  AI_USE_CASE_COMMUNICATION_REPLY_SUGGESTION = 1;
+}
+
+enum AiReplyToneV1 {
+  AI_REPLY_TONE_UNSPECIFIED = 0;
+  AI_REPLY_TONE_NEUTRAL = 1;
+  AI_REPLY_TONE_WARM = 2;
+  AI_REPLY_TONE_FORMAL = 3;
+  AI_REPLY_TONE_CONCISE = 4;
+}
+
+enum AiReplyLanguageV1 {
+  AI_REPLY_LANGUAGE_UNSPECIFIED = 0;
+  AI_REPLY_LANGUAGE_AUTO = 1;
+  AI_REPLY_LANGUAGE_ENGLISH = 2;
+  AI_REPLY_LANGUAGE_SPANISH = 3;
+  AI_REPLY_LANGUAGE_RUSSIAN = 4;
+}
+
+enum AiReplySubjectPolicyV1 {
+  AI_REPLY_SUBJECT_POLICY_UNSPECIFIED = 0;
+  AI_REPLY_SUBJECT_POLICY_PRESERVE = 1;
+  AI_REPLY_SUBJECT_POLICY_GENERATE_IF_MISSING = 2;
+  AI_REPLY_SUBJECT_POLICY_OMIT = 3;
+}
+
+enum AiEgressPolicyV1 {
+  AI_EGRESS_POLICY_UNSPECIFIED = 0;
+  AI_EGRESS_POLICY_LOCAL_ONLY = 1;
+}
+
+enum AiInferenceTerminalStatusV1 {
+  AI_INFERENCE_TERMINAL_STATUS_UNSPECIFIED = 0;
+  AI_INFERENCE_TERMINAL_STATUS_READY = 1;
+  AI_INFERENCE_TERMINAL_STATUS_REJECTED_POLICY = 2;
+  AI_INFERENCE_TERMINAL_STATUS_REJECTED_INPUT = 3;
+  AI_INFERENCE_TERMINAL_STATUS_PROVIDER_UNAVAILABLE = 4;
+  AI_INFERENCE_TERMINAL_STATUS_PROVIDER_REJECTED = 5;
+}
+
+enum AiInferenceCompletenessV1 {
+  AI_INFERENCE_COMPLETENESS_UNSPECIFIED = 0;
+  AI_INFERENCE_COMPLETENESS_COMPLETE = 1;
+  AI_INFERENCE_COMPLETENESS_PARTIAL = 2;
+}
+
+message AiPrivateSourceReceiptV1 {
+  bytes reference_id = 1;
+  uint64 declared_bytes = 2;
+  bytes sha256 = 3;
+  bytes custody_transfer_source_proof = 4;
+}
+
+message AiContextReceiptV1 {
+  bytes context_id = 1;
+  AiUseCaseV1 use_case = 2;
+  bytes source_evidence_id = 3;
+  uint64 source_evidence_revision = 4;
+  uint32 contract_major = 5;
+  uint32 contract_revision = 6;
+  bytes contract_schema_sha256 = 7;
+  bytes request_digest = 8;
+}
+
+message CommunicationReplySuggestionInferenceRequestV1 {
+  bytes run_id = 1;
+  AiContextReceiptV1 context = 2;
+  AiPrivateSourceReceiptV1 source = 3;
+  AiReplyToneV1 tone = 4;
+  AiReplyLanguageV1 language = 5;
+  AiReplySubjectPolicyV1 subject_policy = 6;
+  uint32 maximum_output_bytes = 7;
+  uint32 maximum_output_tokens = 8;
+  AiEgressPolicyV1 egress_policy = 9;
+  uint32 egress_policy_revision = 10;
+  string logical_owner_id = 11;
+}
+
+message AiInferenceReceiptV1 {
+  bytes model_revision_sha256 = 1;
+  bytes prompt_policy_sha256 = 2;
+  uint64 provider_settings_revision = 3;
+  uint32 provider_policy_revision = 4;
+}
+
+message CommunicationReplySuggestionInferenceResultV1 {
+  bytes run_id = 1;
+  bytes request_digest = 2;
+  bytes source_sha256 = 3;
+  bytes subject_utf8 = 4;
+  bytes body_utf8 = 5;
+  AiReplyToneV1 resolved_tone = 6;
+  AiReplyLanguageV1 resolved_language = 7;
+  AiInferenceReceiptV1 inference_receipt = 8;
+  AiInferenceCompletenessV1 completeness = 9;
+  uint32 confidence_basis_points = 10;
+  AiInferenceTerminalStatusV1 terminal_status = 11;
+}
+
+// Private-content request_rpc from the AI engine to an approved provider.
+// Provider/model/endpoint selection is descriptor and effective-settings owned.
+message AiProviderReplyGenerationRequestV1 {
+  bytes request_id = 1;
+  bytes input_utf8 = 2;
+  AiReplyToneV1 tone = 3;
+  AiReplyLanguageV1 language = 4;
+  AiReplySubjectPolicyV1 subject_policy = 5;
+  uint32 maximum_output_bytes = 6;
+  uint32 maximum_output_tokens = 7;
+  AiEgressPolicyV1 egress_policy = 8;
+  uint32 egress_policy_revision = 9;
+}
+
+message AiProviderReplyGenerationResultV1 {
+  bytes request_id = 1;
+  bytes subject_utf8 = 2;
+  bytes body_utf8 = 3;
+  AiReplyToneV1 resolved_tone = 4;
+  AiReplyLanguageV1 resolved_language = 5;
+  bytes model_revision_sha256 = 6;
+  uint32 input_tokens = 7;
+  uint32 output_tokens = 8;
+  AiInferenceTerminalStatusV1 terminal_status = 9;
+}

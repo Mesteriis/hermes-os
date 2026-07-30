@@ -158,3 +158,34 @@ test('Communications AI source runtime commits an owner-bound event handoff befo
     /provider_id|provider_account|provider_locator|model_id|model_key|prompt|ollama/,
   );
 });
+
+test('AI public contracts are one concrete provider-neutral engine unit', async () => {
+  const [manifest, api, validation, proto] = await Promise.all([
+    backendSource('src/ai-contracts/Cargo.toml'),
+    backendSource('src/ai-contracts/src/lib.rs'),
+    backendSource('src/ai-contracts/src/validation.rs'),
+    backendSource('src/ai-contracts/proto/hermes/ai/contracts/v1/ai.proto'),
+  ]);
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "ai"/);
+  assert.match(manifest, /surface = "contract"/);
+  assert.match(api, /communication_reply_suggestion_inference/);
+  assert.match(api, /ai_provider_reply_generation/);
+  assert.match(api, /AI_INFERENCE_REQUEST_CAPABILITY_ID_V1/);
+  assert.match(api, /AI_PROVIDER_GENERATION_CAPABILITY_ID_V1/);
+  assert.match(validation, /compute_reply_inference_request_digest_v1/);
+  assert.match(validation, /AI_CONTRACTS_SCHEMA_SHA256/);
+  assert.match(validation, /AiEgressPolicyLocalOnly/);
+  assert.match(proto, /message AiContextReceiptV1/);
+  assert.match(proto, /message CommunicationReplySuggestionInferenceRequestV1/);
+  assert.match(proto, /message CommunicationReplySuggestionInferenceResultV1/);
+  assert.match(proto, /message AiProviderReplyGenerationRequestV1/);
+  assert.match(proto, /uint32 maximum_output_bytes/);
+  assert.match(proto, /uint32 maximum_output_tokens/);
+  assert.doesNotMatch(
+    `${api}\n${validation}\n${proto}`,
+    /(?:string|bytes)\s+(?:provider_id|provider_name|model_id|model_name|endpoint|prompt_text)\b|google\.protobuf\.Any|map<|string target_owner|string target_module|string target_capability/,
+  );
+  assert.doesNotMatch(manifest, /communications|reply-suggestion|ollama|sqlx|gateway|kernel/);
+});

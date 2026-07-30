@@ -757,6 +757,12 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
     owner: 'communications',
     surface: 'contract',
   },
+  {
+    name: 'hermes-ai-contracts',
+    role: 'engine',
+    owner: 'ai',
+    surface: 'contract',
+  },
 ];
 
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
@@ -2238,6 +2244,9 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
+  'hermes-ai-contracts': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
 };
 
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
@@ -2628,6 +2637,13 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
+  'hermes-ai-contracts': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
 };
 
 const FORBIDDEN_DEPENDENCIES = [
@@ -2928,6 +2944,10 @@ const REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY = {
 
 const COMMUNICATIONS_AI_SOURCE_CONTRACT_INVENTORY = {
   ...REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY,
+  engines: [
+    ...REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY.engines,
+    'ai',
+  ].sort(),
   businessCapabilities: [
     ...REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY.businessCapabilities,
     'communications.ai-reply-source.blob.v1',
@@ -3136,6 +3156,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-evidence-export-source-api',
       'hermes-communications-cross-channel-forward-source-api',
       'hermes-communications-ai-source-api',
+      'hermes-ai-contracts',
       'hermes-communications-export-api',
       'hermes-communication-delivery-intent-api',
       'hermes-communication-delivery-intent-ingress-api',

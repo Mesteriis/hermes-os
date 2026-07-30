@@ -623,7 +623,7 @@ test('Attachment Security remains one exact engine after Mail integration admiss
     policy.implementation.currentSlice,
   'review_communications_attention_v1',
   );
-  assert.deepEqual(policy.implementation.ownerInventory.engines, ['attachment_security']);
+  assert.deepEqual(policy.implementation.ownerInventory.engines, ['ai', 'attachment_security']);
   assert.deepEqual(
     productionPackages
       .filter(({ name }) => name.startsWith('hermes-attachment-security-'))
