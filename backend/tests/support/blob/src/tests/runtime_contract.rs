@@ -19,6 +19,7 @@ fn blob_managed_runtime_contract_excludes_content_and_requires_current_vault_fen
         data_socket_path: "/private/hermes/runtime/blob/data.sock".to_owned(),
         kernel_instance_id: "instance_blob".to_owned(),
         kernel_authorization_public_key_sec1: vec![4; 65],
+        custody_release_grace_period_ms: 24 * 60 * 60 * 1_000,
     };
     assert!(validate_blob_runtime_configuration(&configuration).is_ok());
     let status = BlobRuntimeStatusV1 {
@@ -48,6 +49,7 @@ fn blob_runtime_rejects_unbounded_configuration_or_status() {
         data_socket_path: "relative.sock".to_owned(),
         kernel_instance_id: String::new(),
         kernel_authorization_public_key_sec1: vec![4; 64],
+        custody_release_grace_period_ms: 0,
     };
     assert!(validate_blob_runtime_configuration(&configuration).is_err());
     let status = BlobRuntimeStatusV1 {

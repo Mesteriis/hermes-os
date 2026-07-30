@@ -7,6 +7,9 @@ pub(crate) mod binding;
 #[path = "../../../../../../src/kernel/src/platform/blob/launch.rs"]
 pub(crate) mod launch;
 
+#[path = "../../../../../../src/kernel/src/platform/blob/release.rs"]
+pub(crate) mod release;
+
 #[path = "../../../../../../src/kernel/src/platform/blob/session.rs"]
 pub(crate) mod session;
 

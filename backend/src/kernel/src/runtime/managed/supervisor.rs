@@ -277,9 +277,9 @@ fn dispatch_correlated_relay(
 
 #[derive(Clone, Copy)]
 enum CorrelatedRelayResponseKindV1 {
-    ClientDelivery,
-    ModuleQueryDelivery,
-    ModuleRequestDelivery,
+    Client,
+    ModuleQuery,
+    ModuleRequest,
 }
 
 impl CorrelatedRelayResponseKindV1 {
@@ -287,9 +287,9 @@ impl CorrelatedRelayResponseKindV1 {
         use hermes_runtime_protocol::v1::managed_runtime_control_request_v1::Operation;
 
         match request.operation.as_ref() {
-            Some(Operation::ClientDelivery(_)) => Ok(Self::ClientDelivery),
-            Some(Operation::DeliverModuleQuery(_)) => Ok(Self::ModuleQueryDelivery),
-            Some(Operation::DeliverModuleRequest(_)) => Ok(Self::ModuleRequestDelivery),
+            Some(Operation::ClientDelivery(_)) => Ok(Self::Client),
+            Some(Operation::DeliverModuleQuery(_)) => Ok(Self::ModuleQuery),
+            Some(Operation::DeliverModuleRequest(_)) => Ok(Self::ModuleRequest),
             _ => Err("managed runtime V2 relay operation is prohibited".to_owned()),
         }
     }
@@ -297,13 +297,13 @@ impl CorrelatedRelayResponseKindV1 {
     fn matches(self, response: &ManagedRuntimeControlResponseV1) -> bool {
         matches!(
             (self, response.result.as_ref()),
-            (Self::ClientDelivery, Some(ControlResult::ClientDelivery(_)))
+            (Self::Client, Some(ControlResult::ClientDelivery(_)))
                 | (
-                    Self::ModuleQueryDelivery,
+                    Self::ModuleQuery,
                     Some(ControlResult::ModuleQueryDelivery(_))
                 )
                 | (
-                    Self::ModuleRequestDelivery,
+                    Self::ModuleRequest,
                     Some(ControlResult::ModuleRequestDelivery(_))
                 )
         )

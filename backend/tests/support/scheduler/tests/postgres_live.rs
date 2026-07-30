@@ -340,7 +340,7 @@ fn envelope_record(
             command_id: vec![causation_message_id; 16],
             command_message_id: vec![causation_message_id; 16],
             outcome: ResultOutcomeV1::Succeeded.into(),
-            completed_at: Some(timestamp.clone()),
+            completed_at: Some(timestamp),
             execution_attempt: 1,
         })
     };
@@ -362,9 +362,11 @@ fn envelope_record(
         }),
         recorded_at: Some(timestamp),
         partition_key: vec![message_id],
-        causation_message_id: (!command)
-            .then(|| vec![causation_message_id; 16])
-            .unwrap_or_default(),
+        causation_message_id: if command {
+            Vec::new()
+        } else {
+            vec![causation_message_id; 16]
+        },
         correlation_id: vec![8; 16],
         actor: Some(ActorRefV1 {
             kind: ActorKindV1::System.into(),

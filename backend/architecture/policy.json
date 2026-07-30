@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delayed_delivery_execution_v1",
+    "currentSlice": "communication_delayed_delivery_event_adapters_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -597,6 +597,12 @@
       },
       {
         "name": "hermes-communication-delayed-delivery-execution",
+        "role": "workflow",
+        "owner": "communication_delayed_delivery",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-communication-delayed-delivery-event-adapters",
         "role": "workflow",
         "owner": "communication_delayed_delivery",
         "surface": "implementation"
@@ -1745,6 +1751,20 @@
       "hermes-communication-delayed-delivery-execution": [
         {
           "name": "hermes-communication-delivery-intent-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-delayed-delivery-event-adapters": [
+        {
+          "name": "hermes-communication-delayed-delivery-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-scheduler-protocol",
           "kind": "normal"
         }
       ]
@@ -4672,6 +4692,32 @@
           "defaultFeatures": true,
           "features": []
         }
+      ],
+      "hermes-communication-delayed-delivery-event-adapters": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -5081,6 +5127,10 @@
         "customBuildAllowed": false
       },
       "hermes-communication-delayed-delivery-execution": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-delayed-delivery-event-adapters": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       }

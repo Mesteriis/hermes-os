@@ -135,7 +135,9 @@ fn storage_error(
 
 fn blob_transfer_failure(error: BlobClientError) -> BlobCustodyTransferFailureV1 {
     match error {
-        BlobClientError::Rejected(_) => BlobCustodyTransferFailureV1::PolicyRejected,
+        BlobClientError::Rejected(_) | BlobClientError::InvalidCustodyReleaseRequest => {
+            BlobCustodyTransferFailureV1::PolicyRejected
+        }
         BlobClientError::InvalidSocketPath
         | BlobClientError::InvalidTimeout
         | BlobClientError::Connect(_)
@@ -165,6 +167,10 @@ mod tests {
     fn rejected_custody_transfer_remains_terminal() {
         assert_eq!(
             blob_transfer_failure(BlobClientError::Rejected("denied".to_owned())),
+            BlobCustodyTransferFailureV1::PolicyRejected,
+        );
+        assert_eq!(
+            blob_transfer_failure(BlobClientError::InvalidCustodyReleaseRequest),
             BlobCustodyTransferFailureV1::PolicyRejected,
         );
     }
