@@ -24,6 +24,7 @@ slice, executable evidence и только затем frontend activation.
 - [ADR-0265: provider operational client transport](ADR-0265-provider-operational-client-transport-admission.md);
 - [ADR-0281: frontend clean-room composition](ADR-0281-communications-frontend-clean-room-composition.md);
 - [ADR-0287: Telegram operational realtime](ADR-0287-telegram-operational-realtime-replay-boundary.md).
+- [ADR-0353: reply suggestion and AI inference boundary](ADR-0353-communication-reply-suggestion-and-ai-inference-boundary.md).
 
 ## Контекст
 
@@ -425,7 +426,10 @@ runtime не является domain, а app composition не становитс
 | Delayed delivery | `communication_delayed_delivery` workflow | `communication_delayed_delivery_v1` |
 | Bulk action | `communication_bulk_action` workflow | `communication_bulk_action_v1` after `capability_routed_module_request_rpc_v1` |
 | Cross-channel forward | `communication_cross_channel_forward` workflow | `communication_cross_channel_forward_v1` |
-| AI Reply | `communication_reply_suggestion` workflow | `communication_reply_suggestion_v1` |
+| Communications AI source handoff | Communications | `communications_ai_context_source_v1` |
+| Typed local inference | `ai` engine | `ai_inference_v1` |
+| Local Ollama provider execution | `ollama` integration | `ollama_ai_provider_v1` |
+| AI Reply | `communication_reply_suggestion` workflow | `communication_reply_suggestion_v1` after the three AI dependency gates above |
 | Summary | `communication_summary` workflow | `communication_summary_v1` |
 | Translation | `communication_translation` workflow | `communication_translation_v1` |
 | Explanation | `communication_explanation` workflow | `communication_explanation_v1` |

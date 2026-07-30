@@ -154,6 +154,13 @@ opaque payload bytes, `Any`, generic maps, read-all grants, generic Context API
 и durable Context projection запрещены. Cargo и SQL negative tests проверяют
 эту границу.
 
+[ADR-0353](../../docs/adr/ADR-0353-communication-reply-suggestion-and-ai-inference-boundary.md)
+фиксирует первый concrete AI use case. Communications передаёт current body
+только через event-backed target-bound custody, reply-suggestion остаётся
+отдельным workflow, inference принадлежит AI engine, а Ollama protocol —
+отдельной integration unit. Ни client content ticket, ни Gateway, ни generic AI
+facade не используются.
+
 ## Проверки
 
 ```sh

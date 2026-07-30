@@ -15,6 +15,15 @@ const AI_CONTEXT_KEYS = [
   'assembledContextLifetime',
   'consistencyModel',
   'largePrivateContentTransport',
+  'firstConcreteUseCase',
+  'firstConcreteUseCaseAdr',
+  'communicationsPrivateContentHandoff',
+  'clientContentTicketReuseForWorkflowEnabled',
+  'inferenceOwnerRole',
+  'firstProviderIntegration',
+  'firstProviderEgressPolicy',
+  'callerSelectedProviderOrModelEnabled',
+  'providerImplementationInsideInferenceOwnerEnabled',
   'businessTruthPromotion',
   'aiOutputAuthority',
   'aiDirectOwnerQueryAccessEnabled',
@@ -52,6 +61,16 @@ export function validateAiContextPolicy(policy) {
     && aiContext.assembledContextLifetime === 'request_or_run_scoped_not_projection'
     && aiContext.consistencyModel === 'as_of_source_revisions_and_completeness'
     && aiContext.largePrivateContentTransport === 'expiring_blob_ref_after_blob_v1'
+    && aiContext.firstConcreteUseCase === 'communication_reply_suggestion_v1'
+    && aiContext.firstConcreteUseCaseAdr === 'ADR-0353'
+    && aiContext.communicationsPrivateContentHandoff
+      === 'event_backed_target_bound_blob_custody_v1'
+    && aiContext.clientContentTicketReuseForWorkflowEnabled === false
+    && aiContext.inferenceOwnerRole === 'engine'
+    && aiContext.firstProviderIntegration === 'ollama_ai_provider_v1'
+    && aiContext.firstProviderEgressPolicy === 'local_loopback_only'
+    && aiContext.callerSelectedProviderOrModelEnabled === false
+    && aiContext.providerImplementationInsideInferenceOwnerEnabled === false
     && aiContext.businessTruthPromotion === 'workflow_to_target_domain_command_or_review'
     && aiContext.aiOutputAuthority === 'candidate_only'
     && aiContext.aiDirectOwnerQueryAccessEnabled === false

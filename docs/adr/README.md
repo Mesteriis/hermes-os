@@ -587,3 +587,8 @@ ADR-0352 делает Event Hub launch configuration capability-scoped: Kernel
 передаёт eventless pair только domain без approved event route requests, а
 client realtime продолжает идти через общий replayable SSE. Eventless Review
 live conformance подтверждает этот контракт без фиктивного NATS grant.
+ADR-0353 разделяет AI Reply на Communications-owned event-backed source
+handoff, отдельный `communication_reply_suggestion` workflow, AI inference
+engine и Ollama integration. Client content ticket не переиспользуется,
+private body не проходит через NATS/Gateway, а все четыре gates остаются
+закрыты до отдельных build units и live inference evidence.

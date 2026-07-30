@@ -536,11 +536,48 @@
       ]
     },
     {
+      "gate": "communications_ai_context_source_v1",
+      "role": "domain",
+      "owner": "communications",
+      "state": "planned",
+      "dependsOn": [
+        "communications_content_read_v1",
+        "nats_data_plane_v1",
+        "blob_v1"
+      ]
+    },
+    {
+      "gate": "ai_inference_v1",
+      "role": "engine",
+      "owner": "ai",
+      "state": "planned",
+      "dependsOn": [
+        "capability_routed_module_request_rpc_v1",
+        "blob_v1",
+        "ollama_ai_provider_v1"
+      ]
+    },
+    {
+      "gate": "ollama_ai_provider_v1",
+      "role": "integration",
+      "owner": "ollama",
+      "state": "planned",
+      "dependsOn": [
+        "capability_routed_module_request_rpc_v1",
+        "managed_integration_settings_apply_v1"
+      ]
+    },
+    {
       "gate": "communication_reply_suggestion_v1",
       "role": "workflow",
       "owner": "communication_reply_suggestion",
       "state": "planned",
-      "dependsOn": ["communications_content_read_v1"]
+      "dependsOn": [
+        "communications_ai_context_source_v1",
+        "ai_inference_v1",
+        "capability_routed_module_request_rpc_v1",
+        "blob_v1"
+      ]
     },
     {
       "gate": "communication_summary_v1",
