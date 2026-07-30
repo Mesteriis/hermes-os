@@ -703,6 +703,22 @@ const COMMUNICATIONS_CALL_EVIDENCE_QUERY_REALTIME_PRODUCTION_PACKAGES = [
   },
 ];
 
+const REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_PRODUCTION_PACKAGES = [
+  ...COMMUNICATIONS_CALL_EVIDENCE_QUERY_REALTIME_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-review-attention-api',
+    role: 'domain',
+    owner: 'review',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-review-attention-core',
+    role: 'domain',
+    owner: 'review',
+    surface: 'implementation',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2129,6 +2145,12 @@ const COMMUNICATIONS_CALL_EVIDENCE_QUERY_REALTIME_WORKSPACE_DEPENDENCY_ALLOWLIST
     )),
 };
 
+const REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_CALL_EVIDENCE_QUERY_REALTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-review-attention-api': [],
+  'hermes-review-attention-core': [],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2466,6 +2488,19 @@ const COMMUNICATIONS_CALL_EVIDENCE_QUERY_REALTIME_THIRD_PARTY_DEPENDENCY_ALLOWLI
   ],
 };
 
+const REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_CALL_EVIDENCE_QUERY_REALTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-review-attention-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-review-attention-core': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -2743,6 +2778,17 @@ const COMMUNICATION_DELIVERY_INTENT_INVENTORY = {
   ].sort(),
 };
 
+const REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_INVENTORY = {
+  ...COMMUNICATION_DELIVERY_INTENT_INVENTORY,
+  domains: ['communications', 'review'],
+  businessCapabilities: [
+    ...COMMUNICATION_DELIVERY_INTENT_INVENTORY.businessCapabilities,
+    'review.communication-attention.command.v1',
+    'review.communication-attention.query.v1',
+    'review.communication-attention.realtime.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -2949,6 +2995,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communication-bulk-action-api',
       'hermes-communication-delayed-delivery-api',
       'hermes-communication-cross-channel-forward-api',
+      'hermes-review-attention-api',
       'hermes-mail-delivery-intent-contract',
       'hermes-telegram-delivery-intent-contract',
       'hermes-whatsapp-delivery-intent-contract',
@@ -3542,6 +3589,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATIONS_CALL_EVIDENCE_QUERY_REALTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATIONS_CALL_EVIDENCE_QUERY_REALTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'review_communications_attention_contract_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

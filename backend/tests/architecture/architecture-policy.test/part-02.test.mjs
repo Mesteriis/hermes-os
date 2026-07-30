@@ -169,7 +169,7 @@ test('requires an explicit single-layout policy', () => {
 
 
 
-for (const owner of ['relationships', 'projects', 'obligations', 'decisions', 'knowledge', 'review']) {
+for (const owner of ['relationships', 'projects', 'obligations', 'decisions', 'knowledge']) {
   test(`rejects a production path for blocked domain ${owner}`, () => {
     const violations = validateSourceEntries(policy(), [
       { path: `modules/${owner}/src/lib.rs`, content: '' },

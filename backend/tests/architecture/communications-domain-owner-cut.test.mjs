@@ -36,7 +36,7 @@ test('Communications domain does not import integration or Blob implementations'
   }
 });
 
-test('Communications remains the exact domain owner after Mail integration admission', async () => {
+test('Communications remains isolated after Review owner admission', async () => {
   const [
     policySource,
     ingressSources,
@@ -58,10 +58,10 @@ test('Communications remains the exact domain owner after Mail integration admis
 
   assert.equal(
     policy.implementation.currentSlice,
-  'communications_call_evidence_query_realtime_v1',
+    'review_communications_attention_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
-    domains: ['communications'],
+    domains: ['communications', 'review'],
     integrations: ['mail'],
     workflows: [
       'communication_cross_channel_forward',
@@ -131,6 +131,9 @@ test('Communications remains the exact domain owner after Mail integration admis
       'mail.smtp.credentials.v1',
       'mail.storage.v1',
       'mail.sync.v1',
+      'review.communication-attention.command.v1',
+      'review.communication-attention.query.v1',
+      'review.communication-attention.realtime.v1',
     ],
   });
   assert.deepEqual(

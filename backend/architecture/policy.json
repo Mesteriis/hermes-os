@@ -46,6 +46,7 @@
       "tasks",
       "calendar",
       "documents",
+      "review",
       "ai"
     ],
     "blocked": [
@@ -53,12 +54,11 @@
       "projects",
       "obligations",
       "decisions",
-      "knowledge",
-      "review"
+      "knowledge"
     ]
   },
   "implementation": {
-    "currentSlice": "communications_call_evidence_query_realtime_v1",
+    "currentSlice": "review_communications_attention_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -696,6 +696,18 @@
         "role": "domain",
         "owner": "communications",
         "surface": "contract"
+      },
+      {
+        "name": "hermes-review-attention-api",
+        "role": "domain",
+        "owner": "review",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-review-attention-core",
+        "role": "domain",
+        "owner": "review",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1191,6 +1203,8 @@
         }
       ],
       "hermes-communications-call-evidence-api": [],
+      "hermes-review-attention-api": [],
+      "hermes-review-attention-core": [],
       "hermes-communications-attachment-contract": [
         {
           "name": "hermes-events-protocol",
@@ -3666,6 +3680,50 @@
           "features": []
         }
       ],
+      "hermes-review-attention-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-review-attention-core": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-communications-attachment-contract": [
         {
           "name": "prost",
@@ -5990,6 +6048,14 @@
       "hermes-communications-call-evidence-api": {
         "primaryKind": "lib",
         "customBuildAllowed": true
+      },
+      "hermes-review-attention-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-review-attention-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -6026,7 +6092,8 @@
     },
     "ownerInventory": {
       "domains": [
-        "communications"
+        "communications",
+        "review"
       ],
       "integrations": [
         "mail"
@@ -6100,7 +6167,10 @@
         "mail.oauth.start.v1",
         "mail.smtp.credentials.v1",
         "mail.storage.v1",
-        "mail.sync.v1"
+        "mail.sync.v1",
+        "review.communication-attention.command.v1",
+        "review.communication-attention.query.v1",
+        "review.communication-attention.realtime.v1"
       ]
     },
     "kernelProfile": {

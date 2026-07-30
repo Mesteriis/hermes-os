@@ -62,7 +62,7 @@ test('sender insights is one exact Communications build-unit capability', async 
   assert.equal(gate.state, 'implemented');
   assert.equal(
     policy.implementation.currentSlice,
-  'communications_call_evidence_query_realtime_v1',
+  'review_communications_attention_contract_core_v1',
   );
   assert.ok(policy.implementation.ownerInventory.businessCapabilities.includes(
     'communications.sender-insights.v1',

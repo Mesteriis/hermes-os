@@ -1,0 +1,112 @@
+# ADR-0351: Review Communications attention owner admission
+
+Статус: Принято
+
+Дата: 2026-07-30
+
+Состояние реализации: exact client contract и pure core реализованы.
+Persistence, managed runtime, assembly, Gateway routes и live conformance ещё
+не реализованы; `review_communications_attention_v1` остаётся planned.
+
+Уточняет:
+
+- [ADR-0207: canonical domain registry](ADR-0207-canonical-business-domain-registry.md);
+- [ADR-0213: code ownership and module autonomy](ADR-0213-code-ownership-and-module-autonomy.md);
+- [ADR-0220: canonical durable envelope](ADR-0220-canonical-durable-envelope-and-contract-evolution.md);
+- [ADR-0253: Communications legacy disposition](ADR-0253-communications-legacy-surface-disposition-and-clean-room-completion.md);
+- [ADR-0282: full Communications reconstruction](ADR-0282-full-communications-and-settings-capability-reconstruction.md).
+
+## Контекст
+
+Historical Communications UI смешивал provider actions и Hermes attention
+state. Provider read/archive/mute/label принадлежат integration runtime.
+Hermes pending/reviewed/dismissed, pin, importance и snooze являются отдельной
+business truth и принадлежат Review.
+
+Хранение этих полей в Communications создало бы скрытый Review facade. Импорт
+Communications domain из Review или Review из Communications нарушил бы
+compile isolation. Review owner ранее был blocked, поэтому contract и runtime
+нельзя было добавлять без отдельного phase gate.
+
+## Решение
+
+Review открывается как отдельный domain owner начиная с двух build units:
+
+- `hermes-review-attention-api` — generated command/query/realtime contract;
+- `hermes-review-attention-core` — pure attention aggregate and invariants.
+
+Следующие units добавляются отдельными slices:
+
+- owner-local PostgreSQL persistence с operation inbox/hash и optimistic
+  revision fence;
+- managed Review runtime с distinct human/module owner context;
+- release assembly и exact Kernel admission;
+- generated Gateway routes и shared owner-local SSE;
+- app composition, которая связывает opaque Review source reference с
+  Communications canonical read только на клиентском/application уровне.
+
+Review packages не зависят от Communications packages. Source evidence
+передаётся как opaque stable 16-byte ID. Review не читает Communications SQL,
+не вызывает Communications runtime и не декодирует provider identity.
+
+## Attention semantics
+
+Attention state состоит из независимых typed dimensions:
+
+- disposition: `pending`, `reviewed`, `dismissed`;
+- pinned flag;
+- importance: `normal`, `important`;
+- optional bounded snooze deadline.
+
+Первое действие создаёт owner-scoped aggregate с deterministic attention ID.
+Каждая mutation требует exact expected revision. Semantic no-op не увеличивает
+revision. Dismiss очищает pin и snooze; дальнейшие mutations требуют explicit
+restore в `pending`. Snooze должен быть в будущем и не дальше 366 дней.
+
+Provider actions, message content, subjects, addresses, account IDs, provider
+locators, credentials и sessions отсутствуют в contract, core, logs и errors.
+
+## Client contract
+
+Command, query и realtime являются разными approval capabilities:
+
+```text
+review.communication-attention.command.v1
+review.communication-attention.query.v1
+review.communication-attention.realtime.v1
+```
+
+Command принимает exact operation ID, opaque source evidence ID, expected
+revision и одно typed action. Query возвращает только Review-owned state.
+Realtime содержит attention ID, revision и client-safe state без source content.
+
+## Cross-owner flow
+
+```text
+client action
+  -> generated Review command through Core Gateway
+  -> Review runtime
+  -> Review owner-local state
+  -> shared owner-local SSE
+
+application composition
+  -> Review query
+  -> Communications canonical query
+  -> UI composition only
+```
+
+Communications не импортирует Review и не выполняет Review command.
+Автоматическое создание attention item из Communications event в этом slice
+не вводится. Если оно понадобится, отдельный workflow/target consumer должен
+преобразовать source event в Review command через event spine.
+
+## Phase gate
+
+Этот ADR разрешает Review owner и только exact contract/core package inventory.
+Он не открывает `review_communications_attention_v1`. Gate открывается после:
+
+1. owner-local persistence and idempotency fences;
+2. managed runtime/assembly exact admission;
+3. generated command/query/realtime Gateway routes;
+4. restart, replay, stale revision, cross-owner and privacy-negative tests;
+5. live managed proof through Gateway and shared SSE.
