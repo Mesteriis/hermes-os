@@ -8,6 +8,7 @@ const PROJECT_ROOT = new URL('../../../', import.meta.url);
 test('delayed delivery admits exact due commands in a separate adapter while its runtime gate stays planned', async () => {
   const [
     adr,
+    storeAdapterAdr,
     inventorySource,
     schedulerAdr,
     apiManifest,
@@ -30,10 +31,19 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     dueEventAdapterSource,
     runtimeAdaptersManifest,
     runtimeAdaptersSource,
+    storeAdaptersManifest,
+    storeAdaptersSource,
   ] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0341-scheduled-communication-delivery-workflow.md',
+        PROJECT_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'docs/adr/ADR-0344-delayed-delivery-execution-store-adapter.md',
         PROJECT_ROOT,
       ),
       'utf8',
@@ -168,6 +178,20 @@ test('delayed delivery admits exact due commands in a separate adapter while its
       ),
       'utf8',
     ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-store-adapters/Cargo.toml',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-store-adapters/src/lib.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
   ]);
 
   const inventory = JSON.parse(inventorySource);
@@ -271,6 +295,21 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     runtimeAdaptersSource,
     /scheduler_(?:implementation|persistence)|kernel::|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
   );
+  assert.match(
+    storeAdaptersManifest,
+    /owner = "communication_delayed_delivery"[\s\S]*surface = "persistence"/,
+  );
+  assert.match(storeAdaptersSource, /impl execution::ExecutionStorePortV1/);
+  assert.match(storeAdaptersSource, /claim_due_execution/);
+  assert.match(storeAdaptersSource, /mark_delivery_accepted/);
+  assert.match(storeAdaptersSource, /mark_delivery_failed/);
+  assert.match(storeAdaptersSource, /ClaimDueExecutionOutcomeV1::Duplicate/);
+  assert.doesNotMatch(
+    storeAdaptersSource,
+    /sqlx|async_nats|scheduler_(?:implementation|persistence)|kernel::|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
+  );
+  assert.match(storeAdapterAdr, /не содержит SQL/);
+  assert.match(storeAdapterAdr, /не repository facade/);
   for (const source of [executionSource, executionPorts, executionWorker]) {
     assert.doesNotMatch(
       source,

@@ -568,6 +568,16 @@ const COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATION_DELAYED_DELIVERY_STORE_ADAPTERS_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communication-delayed-delivery-store-adapters',
+    role: 'workflow',
+    owner: 'communication_delayed_delivery',
+    surface: 'persistence',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -1798,6 +1808,14 @@ const COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOW
   ],
 };
 
+const COMMUNICATION_DELAYED_DELIVERY_STORE_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delayed-delivery-store-adapters': [
+    { name: 'hermes-communication-delayed-delivery-execution', kind: 'normal' },
+    { name: 'hermes-communication-delayed-delivery-persistence', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2003,6 +2021,11 @@ const COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOW
 const COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATION_DELAYED_DELIVERY_EVENT_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communication-delayed-delivery-runtime-adapters': [],
+};
+
+const COMMUNICATION_DELAYED_DELIVERY_STORE_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-delayed-delivery-store-adapters': [],
 };
 
 const FORBIDDEN_DEPENDENCIES = [
@@ -2837,16 +2860,23 @@ function expectedSlice(currentSlice) {
   if (
     currentSlice === 'communication_delayed_delivery_runtime_adapters_v1'
     || currentSlice === 'communication_delayed_delivery_due_event_adapter_v1'
+    || currentSlice === 'communication_delayed_delivery_store_adapter_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
       cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
-      packages: COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_PRODUCTION_PACKAGES,
+      packages: currentSlice === 'communication_delayed_delivery_store_adapter_v1'
+        ? COMMUNICATION_DELAYED_DELIVERY_STORE_ADAPTERS_PRODUCTION_PACKAGES
+        : COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_PRODUCTION_PACKAGES,
       workspaceDependencies:
-        COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+        currentSlice === 'communication_delayed_delivery_store_adapter_v1'
+          ? COMMUNICATION_DELAYED_DELIVERY_STORE_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST
+          : COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
-        COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+        currentSlice === 'communication_delayed_delivery_store_adapter_v1'
+          ? COMMUNICATION_DELAYED_DELIVERY_STORE_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST
+          : COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

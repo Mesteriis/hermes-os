@@ -78,6 +78,7 @@ hermes-communication-delayed-delivery-persistence
 hermes-communication-delayed-delivery-execution
 hermes-communication-delayed-delivery-event-adapters
 hermes-communication-delayed-delivery-runtime-adapters
+hermes-communication-delayed-delivery-store-adapters
 hermes-communication-delayed-delivery-runtime
 hermes-communication-delayed-delivery-assembly
 ```
@@ -90,7 +91,9 @@ ports. Event-adapters unit владеет exact Scheduler `DurableEnvelopeV1`
 construction/admission mapping и не выполняет transport I/O. Runtime обслуживает
 client contract и managed lifecycle. Runtime-adapters unit владеет только
 Kernel-routed Blob/request transport, не persistence и не lifecycle. Assembly
-создаёт отдельный signed runtime/storage fragment.
+создаёт отдельный signed runtime/storage fragment. Store-adapters unit
+реализует только execution persistence port и явно отображает owner-local
+execution models в persistence models без SQL или transport logic.
 
 Ни одна unit не импортирует Communications implementation, integration
 runtime/persistence, Scheduler implementation/persistence или Kernel
@@ -295,7 +298,7 @@ Gate открывается только вместе с:
 1. implemented `scheduler_v1`, включая live successor restart/revoke и hot
    reconciliation;
 2. exact module-originated Scheduler command/result contracts и grants;
-3. восемью отдельными delayed-delivery packages и Cargo boundaries;
+3. девятью отдельными delayed-delivery packages и Cargo boundaries;
 4. generated Schedule/Cancel/Status/realtime contracts и hard bounds;
 5. owner-local Storage bundle, idempotent operation and state transitions;
 6. encrypted Blob custody without plaintext workflow SQL;

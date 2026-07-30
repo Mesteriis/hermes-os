@@ -1830,6 +1830,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-delayed-delivery-store-adapters"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-delayed-delivery-execution",
+ "hermes-communication-delayed-delivery-persistence",
+]
+
+[[package]]
 name = "hermes-communication-delivery-intent-api"
 version = "0.1.0"
 dependencies = [

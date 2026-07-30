@@ -1,0 +1,17 @@
+[package]
+name = "hermes-communication-delayed-delivery-store-adapters"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "communication_delayed_delivery"
+surface = "persistence"
+
+[dependencies]
+hermes-communication-delayed-delivery-execution = { path = "../communication-delayed-delivery-execution" }
+hermes-communication-delayed-delivery-persistence = { path = "../communication-delayed-delivery-persistence" }

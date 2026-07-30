@@ -551,3 +551,7 @@ ADR-0342 вводит недостающий durable module-to-Scheduler seam: m
 Scheduler сохраняет command/result до ACK, а Kernel/Event Hub проверяют
 topology и fences без decode business payload. Protocol foundation реализован;
 durable runtime gate остаётся закрыт до persistence/JetStream/live evidence.
+ADR-0344 добавляет отдельный delayed-delivery execution-store adapter:
+execution port и owner-local persistence связываются явным typed mapping без
+SQL в orchestration, persistence dependency на execution или смешивания с
+Blob/request transport adapters.

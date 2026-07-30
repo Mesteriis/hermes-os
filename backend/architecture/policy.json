@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delayed_delivery_due_event_adapter_v1",
+    "currentSlice": "communication_delayed_delivery_store_adapter_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -612,6 +612,12 @@
         "role": "workflow",
         "owner": "communication_delayed_delivery",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-communication-delayed-delivery-store-adapters",
+        "role": "workflow",
+        "owner": "communication_delayed_delivery",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1789,6 +1795,16 @@
         },
         {
           "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-delayed-delivery-store-adapters": [
+        {
+          "name": "hermes-communication-delayed-delivery-execution",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delayed-delivery-persistence",
           "kind": "normal"
         }
       ]
@@ -4743,7 +4759,8 @@
           "features": []
         }
       ],
-      "hermes-communication-delayed-delivery-runtime-adapters": []
+      "hermes-communication-delayed-delivery-runtime-adapters": [],
+      "hermes-communication-delayed-delivery-store-adapters": []
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -5160,6 +5177,10 @@
         "customBuildAllowed": false
       },
       "hermes-communication-delayed-delivery-runtime-adapters": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-delayed-delivery-store-adapters": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       }
