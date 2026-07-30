@@ -55,6 +55,39 @@ test('Review attention core owns optimistic revision and bounded snooze invarian
   assert.doesNotMatch(core.replace(/#\[cfg\(test\)\][\s\S]*$/u, ''), /serde_json|sqlx|tokio|prost/);
 });
 
+test('Review attention persistence is owner-local atomic and operation-idempotent', async () => {
+  const [manifest, repository, schema, migration] = await Promise.all([
+    backendSource('src/review-attention-persistence/Cargo.toml'),
+    backendSource('src/review-attention-persistence/src/repository.rs'),
+    backendSource('src/review-attention-persistence/src/schema.rs'),
+    backendSource(
+      'src/review-attention-persistence/migrations/0001_review_attention.sql',
+    ),
+  ]);
+
+  assert.match(manifest, /role = "domain"/);
+  assert.match(manifest, /owner = "review"/);
+  assert.match(manifest, /surface = "persistence"/);
+  assert.match(manifest, /hermes-review-attention-core/);
+  assert.match(manifest, /hermes-storage-protocol/);
+  assert.doesNotMatch(manifest, /communications-|mail-|telegram-|whatsapp-|zulip-/);
+  assert.match(repository, /\.pool\s*\.begin\(\)/);
+  assert.match(repository, /ON CONFLICT \(logical_owner_id, operation_id\) DO NOTHING/);
+  assert.match(repository, /request_sha256/);
+  assert.match(repository, /stored_sha256\.as_slice\(\) != request_sha256/);
+  assert.match(repository, /FOR UPDATE/);
+  assert.match(repository, /outcome\.changed/);
+  assert.match(repository, /transaction\.commit\(\)/);
+  assert.match(schema, /owner_id: "review"/);
+  assert.match(migration, /hermes_data\.review_attention_state/);
+  assert.match(migration, /hermes_data\.review_attention_operations/);
+  assert.match(migration, /expected_revision BIGINT NOT NULL/);
+  assert.doesNotMatch(
+    `${repository}\n${migration}`,
+    /communications_|mail_|telegram_|provider_|message_body|subject|email_address|phone_number/,
+  );
+});
+
 test('Review owner admission does not prematurely open the managed gate', async () => {
   const [adr, inventorySource, policySource] = await Promise.all([
     readFile(
@@ -82,7 +115,7 @@ test('Review owner admission does not prematurely open the managed gate', async 
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'review_communications_attention_contract_core_v1',
+    'review_communications_attention_persistence_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.domains, [
     'communications',
@@ -90,5 +123,6 @@ test('Review owner admission does not prematurely open the managed gate', async 
   ]);
   assert.match(adr, /Review packages не зависят от Communications packages/);
   assert.match(adr, /Он не открывает `review_communications_attention_v1`/);
+  assert.match(adr, /operation ID вместе с exact request hash/);
   assert.match(adr, /live managed proof through Gateway and shared SSE/);
 });

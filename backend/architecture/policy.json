@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_communications_attention_contract_core_v1",
+    "currentSlice": "review_communications_attention_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -708,6 +708,12 @@
         "role": "domain",
         "owner": "review",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-review-attention-persistence",
+        "role": "domain",
+        "owner": "review",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1205,6 +1211,16 @@
       "hermes-communications-call-evidence-api": [],
       "hermes-review-attention-api": [],
       "hermes-review-attention-core": [],
+      "hermes-review-attention-persistence": [
+        {
+          "name": "hermes-review-attention-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-communications-attachment-contract": [
         {
           "name": "hermes-events-protocol",
@@ -3724,6 +3740,28 @@
           "features": []
         }
       ],
+      "hermes-review-attention-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-communications-attachment-contract": [
         {
           "name": "prost",
@@ -6054,6 +6092,10 @@
         "customBuildAllowed": true
       },
       "hermes-review-attention-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-review-attention-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       }

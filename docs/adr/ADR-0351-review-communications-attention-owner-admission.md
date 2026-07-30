@@ -4,9 +4,10 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: exact client contract и pure core реализованы.
-Persistence, managed runtime, assembly, Gateway routes и live conformance ещё
-не реализованы; `review_communications_attention_v1` остаётся planned.
+Состояние реализации: exact client contract, pure core и owner-local
+PostgreSQL persistence реализованы. Managed runtime, assembly, Gateway routes
+и live conformance ещё не реализованы;
+`review_communications_attention_v1` остаётся planned.
 
 Уточняет:
 
@@ -35,10 +36,13 @@ Review открывается как отдельный domain owner начин�
 - `hermes-review-attention-api` — generated command/query/realtime contract;
 - `hermes-review-attention-core` — pure attention aggregate and invariants.
 
+Owner-local persistence реализован отдельной unit
+`hermes-review-attention-persistence`: operation ID вместе с exact request hash
+даёт idempotent replay, а aggregate mutation и operation result фиксируются в
+одной PostgreSQL transaction.
+
 Следующие units добавляются отдельными slices:
 
-- owner-local PostgreSQL persistence с operation inbox/hash и optimistic
-  revision fence;
 - managed Review runtime с distinct human/module owner context;
 - release assembly и exact Kernel admission;
 - generated Gateway routes и shared owner-local SSE;
@@ -102,11 +106,11 @@ Communications не импортирует Review и не выполняет Rev
 
 ## Phase gate
 
-Этот ADR разрешает Review owner и только exact contract/core package inventory.
-Он не открывает `review_communications_attention_v1`. Gate открывается после:
+Этот ADR разрешает Review owner и только exact contract/core/persistence
+package inventory. Он не открывает `review_communications_attention_v1`. Gate
+открывается после:
 
-1. owner-local persistence and idempotency fences;
-2. managed runtime/assembly exact admission;
-3. generated command/query/realtime Gateway routes;
-4. restart, replay, stale revision, cross-owner and privacy-negative tests;
-5. live managed proof through Gateway and shared SSE.
+1. managed runtime/assembly exact admission;
+2. generated command/query/realtime Gateway routes;
+3. restart, replay, stale revision, cross-owner and privacy-negative tests;
+4. live managed proof through Gateway and shared SSE.

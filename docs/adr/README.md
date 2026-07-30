@@ -578,6 +578,6 @@ ADR-0350 разделяет module owner и authenticated human owner в managed
 domain/integration launch: первый остаётся authority для grants, Event Hub и
 storage, второй — для provider/domain tenancy и client realtime.
 ADR-0351 открывает Review как отдельного domain owner для Hermes
-pending/reviewed/dismissed, pin, importance и snooze. Contract/core units
-реализованы без Communications dependency; persistence/runtime/live gate
-остаётся закрытым.
+pending/reviewed/dismissed, pin, importance и snooze. Contract/core и
+owner-local idempotent persistence units реализованы без Communications
+dependency; runtime/live gate остаётся закрытым.
