@@ -91,7 +91,7 @@ async fn relay_dispatches(
         let reading = match clock.read() {
             Ok(reading) if reading.discontinuity() == ClockDiscontinuityV1::Stable => reading,
             _ => {
-                let _ = failure.send(());
+                report_failure(&failure, "dispatch_clock");
                 return;
             }
         };
@@ -105,7 +105,7 @@ async fn relay_dispatches(
             .await
             .is_err()
         {
-            let _ = failure.send(());
+            report_failure(&failure, "materialize_due");
             return;
         }
         if store
@@ -118,7 +118,7 @@ async fn relay_dispatches(
             .await
             .is_err()
         {
-            let _ = failure.send(());
+            report_failure(&failure, "materialize_retries");
             return;
         }
         for _ in 0..dispatch_batch_limit {
@@ -126,7 +126,7 @@ async fn relay_dispatches(
                 Ok(true) => {}
                 Ok(false) => break,
                 Err(_) => {
-                    let _ = failure.send(());
+                    report_failure(&failure, "dispatch_relay");
                     return;
                 }
             }
@@ -142,8 +142,15 @@ async fn receive_receipts(
     let mut consumer = SchedulerReceiptConsumerV1::new(port, &store);
     loop {
         if consumer.consume_one().await.is_err() {
-            let _ = failure.send(());
+            report_failure(&failure, "receipt_consumer");
             return;
         }
     }
+}
+
+pub(super) fn report_failure(failure: &Sender<()>, code: &'static str) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_scheduler_worker_failure={code}");
+    }
+    let _ = failure.send(());
 }

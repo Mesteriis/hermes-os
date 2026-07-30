@@ -3,6 +3,7 @@
 use std::sync::mpsc::Sender;
 
 use hermes_clock_protocol::{ClockDiscontinuityV1, ClockPolicyV1, UtcMillisV1};
+use hermes_events_protocol::delivery::OutboxRelayErrorV1;
 use hermes_events_protocol::delivery::{OutboxRecordV1, OutboxRelayOutcomeV1, relay_once};
 use hermes_runtime_protocol::v1::{
     SchedulerRuntimeScheduleControlBindingV1, SchedulerRuntimeScheduleControlGrantV1,
@@ -28,6 +29,7 @@ use hermes_scheduler_protocol::{
 use prost::Message;
 
 use super::clock::SchedulerSystemClockV1;
+use super::workers::report_failure;
 
 pub(super) struct SchedulerScheduleControlWorkerConfigV1 {
     command_contract: SchedulerScheduleControlContractV1,
@@ -85,8 +87,41 @@ pub(super) async fn run_schedule_control_worker(
     configuration: SchedulerScheduleControlWorkerConfigV1,
     failure: Sender<()>,
 ) {
-    if run(&mut port, &store, &configuration).await.is_err() {
-        let _ = failure.send(());
+    if let Err(error) = run(&mut port, &store, &configuration).await {
+        report_failure(&failure, error.code());
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ScheduleControlWorkerFailureV1 {
+    RelayResultInvalidEntry,
+    RelayResultInvalidReceipt,
+    RelayResultPersistence,
+    RelayResultPublisherUnavailable,
+    Receive,
+    Admission,
+    Clock,
+    Request,
+    Apply,
+    Acknowledge,
+}
+
+impl ScheduleControlWorkerFailureV1 {
+    const fn code(self) -> &'static str {
+        match self {
+            Self::RelayResultInvalidEntry => "schedule_control_relay_result_invalid_entry",
+            Self::RelayResultInvalidReceipt => "schedule_control_relay_result_invalid_receipt",
+            Self::RelayResultPersistence => "schedule_control_relay_result_persistence",
+            Self::RelayResultPublisherUnavailable => {
+                "schedule_control_relay_result_publisher_unavailable"
+            }
+            Self::Receive => "schedule_control_receive",
+            Self::Admission => "schedule_control_admission",
+            Self::Clock => "schedule_control_clock",
+            Self::Request => "schedule_control_request",
+            Self::Apply => "schedule_control_apply",
+            Self::Acknowledge => "schedule_control_acknowledge",
+        }
     }
 }
 
@@ -94,24 +129,30 @@ async fn run(
     port: &mut SchedulerJetStreamScheduleControlPortV1,
     store: &SchedulerPostgresStoreV1,
     configuration: &SchedulerScheduleControlWorkerConfigV1,
-) -> Result<(), ()> {
+) -> Result<(), ScheduleControlWorkerFailureV1> {
     let clock = SchedulerSystemClockV1::new(ClockPolicyV1::production_default());
     loop {
         relay_results(port, store).await?;
-        let delivery = port.receive().await.map_err(|_| ())?;
+        let delivery = port
+            .receive()
+            .await
+            .map_err(|_| ScheduleControlWorkerFailureV1::Receive)?;
         let exact_bytes = delivery.exact_bytes().to_vec();
         let admitted = admit_schedule_control_command_v1(
             &exact_bytes,
             &configuration.command_contract,
             &configuration.grants,
         )
-        .map_err(|_| ())?;
-        let reading = clock.read().map_err(|_| ())?;
+        .map_err(|_| ScheduleControlWorkerFailureV1::Admission)?;
+        let reading = clock
+            .read()
+            .map_err(|_| ScheduleControlWorkerFailureV1::Clock)?;
         if reading.discontinuity() != ClockDiscontinuityV1::Stable {
-            return Err(());
+            return Err(ScheduleControlWorkerFailureV1::Clock);
         }
         let received_at = reading.wall_utc();
-        let request = request_from_admitted(admitted, received_at).map_err(|_| ())?;
+        let request = request_from_admitted(admitted, received_at)
+            .map_err(|_| ScheduleControlWorkerFailureV1::Request)?;
         let result_message_id = result_message_id(request.command());
         store
             .apply_schedule_control(&request, |decision| {
@@ -129,21 +170,40 @@ async fn run(
                     .map_err(|_| SchedulerScheduleControlApplyErrorV1::InvalidResult)
             })
             .await
-            .map_err(|_| ())?;
+            .map_err(|_| ScheduleControlWorkerFailureV1::Apply)?;
         relay_results(port, store).await?;
-        delivery.acknowledge().await.map_err(|_| ())?;
+        delivery
+            .acknowledge()
+            .await
+            .map_err(|_| ScheduleControlWorkerFailureV1::Acknowledge)?;
     }
 }
 
 async fn relay_results(
     port: &SchedulerJetStreamScheduleControlPortV1,
     store: &SchedulerPostgresStoreV1,
-) -> Result<(), ()> {
+) -> Result<(), ScheduleControlWorkerFailureV1> {
     let mut outbox = SchedulerScheduleControlResultOutboxV1::new(store);
     loop {
-        match relay_once(&mut outbox, port).await.map_err(|_| ())? {
+        match relay_once(&mut outbox, port)
+            .await
+            .map_err(map_relay_error)?
+        {
             OutboxRelayOutcomeV1::Published { .. } => {}
             OutboxRelayOutcomeV1::Idle => return Ok(()),
+        }
+    }
+}
+
+const fn map_relay_error(error: OutboxRelayErrorV1) -> ScheduleControlWorkerFailureV1 {
+    match error {
+        OutboxRelayErrorV1::InvalidEntry => ScheduleControlWorkerFailureV1::RelayResultInvalidEntry,
+        OutboxRelayErrorV1::InvalidReceipt => {
+            ScheduleControlWorkerFailureV1::RelayResultInvalidReceipt
+        }
+        OutboxRelayErrorV1::Persistence => ScheduleControlWorkerFailureV1::RelayResultPersistence,
+        OutboxRelayErrorV1::PublisherUnavailable => {
+            ScheduleControlWorkerFailureV1::RelayResultPublisherUnavailable
         }
     }
 }

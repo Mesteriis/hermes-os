@@ -83,6 +83,9 @@ fn result_outbox_id(message_id: &[u8; 16]) -> String {
     value
 }
 
-fn persistence(_: sqlx::Error) -> OutboxRelayErrorV1 {
+fn persistence(error: sqlx::Error) -> OutboxRelayErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_scheduler_schedule_control_persistence_error={error}");
+    }
     OutboxRelayErrorV1::Persistence
 }

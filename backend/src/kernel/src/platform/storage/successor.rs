@@ -32,6 +32,18 @@ pub(crate) fn reserve(
 pub(crate) fn issue_after(
     binding: &PlatformStorageBindingV1,
 ) -> Result<StorageBindingIssueV1, String> {
+    issue_after_with_bundle(
+        binding,
+        binding.storage_bundle_revision(),
+        *binding.storage_bundle_digest(),
+    )
+}
+
+pub(crate) fn issue_after_with_bundle(
+    binding: &PlatformStorageBindingV1,
+    storage_bundle_revision: u64,
+    storage_bundle_digest: [u8; 32],
+) -> Result<StorageBindingIssueV1, String> {
     let role_epoch = binding
         .role_epoch()
         .checked_add(1)
@@ -43,8 +55,8 @@ pub(crate) fn issue_after(
     StorageBindingIssueV1::new(
         role_epoch,
         credential_lease_revision,
-        binding.storage_bundle_revision(),
-        *binding.storage_bundle_digest(),
+        storage_bundle_revision,
+        storage_bundle_digest,
     )
 }
 

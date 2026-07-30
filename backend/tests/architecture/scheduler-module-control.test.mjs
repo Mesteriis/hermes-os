@@ -159,13 +159,19 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
   assert.match(jetstream, /SchedulerJetStreamScheduleControlPortV1/);
   assert.match(runtimeWorker, /\.apply_schedule_control\(&request/);
   assert.match(runtimeWorker, /relay_results\(port, store\)\.await\?/);
-  assert.match(runtimeWorker, /delivery\.acknowledge\(\)\.await/);
+  assert.match(runtimeWorker, /delivery\s*\.acknowledge\(\)\s*\.await/);
   assert.match(kernelTopology, /current_managed_runtime_matches/);
   assert.match(kernelTopology, /command_publishers\.contains/);
   assert.match(kernelTopology, /result_consumers\.contains/);
   assert.match(kernelTopology, /scheduler_catalog::resolve/);
   assert.match(development, /events\.scheduler\.schedule_control\.command/);
   assert.match(development, /events\.scheduler\.schedule_control\.result/);
+  assert.match(development, /StorageBundleV1::decode/);
+  assert.match(development, /issue_after_with_bundle/);
+  assert.doesNotMatch(
+    development,
+    /StorageBindingIssueV1::new\(1,\s*1,\s*7,/,
+  );
   assert.match(manifest, /role = "platform"/);
   assert.match(manifest, /owner = "scheduler"/);
   assert.match(manifest, /surface = "contract"/);

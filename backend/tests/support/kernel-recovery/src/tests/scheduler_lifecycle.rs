@@ -35,6 +35,14 @@ fn active_scheduler_binding_is_the_only_automatic_restart_intent() {
     assert_eq!(successor.storage_bundle_revision(), 1);
     let bundle_digest: [u8; 32] = Sha256::digest([9]).into();
     assert_eq!(successor.storage_bundle_digest(), &bundle_digest);
+    let upgraded_digest: [u8; 32] = Sha256::digest([10]).into();
+    let upgraded =
+        crate::platform::storage::successor::issue_after_with_bundle(&selected, 2, upgraded_digest)
+            .expect("derive successor with upgraded Storage bundle");
+    assert_eq!(upgraded.role_epoch(), 2);
+    assert_eq!(upgraded.credential_lease_revision(), 2);
+    assert_eq!(upgraded.storage_bundle_revision(), 2);
+    assert_eq!(upgraded.storage_bundle_digest(), &upgraded_digest);
 
     let revoking = store
         .begin_platform_storage_binding_revocation(

@@ -15,6 +15,8 @@ use hermes_kernel_control_store::{
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_scheduler_protocol::SCHEDULER_JOB_DESCRIPTOR_SET_V1;
+use hermes_storage_protocol::v1::StorageBundleV1;
+use prost::Message;
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::process::Command;
@@ -253,14 +255,19 @@ fn ensure_scheduler(
         .ok_or_else(|| "developer Scheduler descriptor is unavailable".to_owned())?;
     ensure_scheduler_registration(store, descriptor)?;
     bundled_launch::admit(store, REGISTRATION_ID, &bundle, "platform.scheduler")?;
-    let digest = ensure_scheduler_storage_bundle(store, &kernel, runtime_dir)?;
+    let (bundle_revision, bundle_digest) =
+        ensure_scheduler_storage_bundle(store, &kernel, runtime_dir)?;
     let reservation = managed_launch::reserve(supervisor, store, REGISTRATION_ID)?;
     let binding_issue = match store
         .platform_storage_binding(REGISTRATION_ID, STORAGE_CAPABILITY)
         .map_err(|_| "developer Scheduler Storage binding is unavailable".to_owned())?
     {
-        Some(binding) => crate::platform::storage::successor::issue_after(&binding)?,
-        None => StorageBindingIssueV1::new(1, 1, 7, digest)?,
+        Some(binding) => crate::platform::storage::successor::issue_after_with_bundle(
+            &binding,
+            bundle_revision,
+            bundle_digest,
+        )?,
+        None => StorageBindingIssueV1::new(1, 1, bundle_revision, bundle_digest)?,
     };
     let binding = issue_managed(
         store,
@@ -447,16 +454,26 @@ fn ensure_scheduler_storage_bundle(
     store: &SqliteControlStore,
     kernel: &Path,
     runtime_dir: &Path,
-) -> Result<[u8; 32], String> {
+) -> Result<(u64, [u8; 32]), String> {
     let bytes = export_scheduler_storage_bundle(kernel, runtime_dir)?;
+    let exported = StorageBundleV1::decode(bytes.as_slice())
+        .map_err(|_| "developer Scheduler Storage bundle is invalid".to_owned())?;
+    if exported.major != 1
+        || exported.owner_id != "scheduler"
+        || exported.bundle_id != "scheduler_state"
+        || exported.revision == 0
+    {
+        return Err("developer Scheduler Storage bundle is invalid".to_owned());
+    }
+    let revision = u64::from(exported.revision);
     let digest: [u8; 32] = Sha256::digest(&bytes).into();
-    let bundle = PlatformStorageBundleV1::new("scheduler", 9, digest, bytes)
+    let bundle = PlatformStorageBundleV1::new("scheduler", revision, digest, bytes)
         .map_err(|_| "developer Scheduler Storage bundle is invalid".to_owned())?;
     match store
         .platform_storage_bundle("scheduler", bundle.revision())
         .map_err(|_| "developer Scheduler Storage bundle is unavailable".to_owned())?
     {
-        Some(existing) if existing.digest() == bundle.digest() => Ok(digest),
+        Some(existing) if existing.digest() == bundle.digest() => Ok((revision, digest)),
         Some(_) => Err(
             "developer Scheduler Storage bundle revision conflicts with the persisted contract"
                 .to_owned(),
@@ -465,7 +482,7 @@ fn ensure_scheduler_storage_bundle(
             store
                 .record_platform_storage_bundle(&bundle)
                 .map_err(|_| "developer Scheduler Storage bundle cannot be recorded".to_owned())?;
-            Ok(digest)
+            Ok((revision, digest))
         }
     }
 }
