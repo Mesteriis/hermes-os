@@ -1,0 +1,34 @@
+[package]
+name = "hermes-communication-delayed-delivery-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-communication-delayed-delivery-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "communication_delayed_delivery"
+surface = "runtime"
+
+[dependencies]
+hermes-communication-delayed-delivery-api = { path = "../communication-delayed-delivery-api" }
+hermes-communication-delayed-delivery-core = { path = "../communication-delayed-delivery-core" }
+hermes-communication-delayed-delivery-event-adapters = { path = "../communication-delayed-delivery-event-adapters" }
+hermes-communication-delayed-delivery-persistence = { path = "../communication-delayed-delivery-persistence" }
+hermes-communication-delayed-delivery-runtime-adapters = { path = "../communication-delayed-delivery-runtime-adapters" }
+hermes-communication-delivery-intent-api = { path = "../communication-delivery-intent-api" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-scheduler-protocol = { path = "../platform/scheduler/protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-storage-vault = { path = "../platform/storage/vault" }
+libc = "=0.2.186"
+prost = "=0.14.4"
+sha2 = { version = "=0.11.0", default-features = false }
+tokio = { version = "=1.52.4", default-features = false, features = ["rt-multi-thread", "time"] }
+zeroize = "=1.9.0"

@@ -6,8 +6,10 @@ pub const COMMUNICATION_DELAYED_DELIVERY_MODULE_ID_V1: &str =
     "hermes-communication-delayed-delivery-runtime";
 pub const COMMUNICATION_DELAYED_DELIVERY_CAPABILITY_ID_V1: &str =
     "communication.delayed_delivery.v1";
-pub const COMMUNICATION_DELAYED_DELIVERY_COMMAND_CONTRACT_NAME_V1: &str =
-    "communication.delayed_delivery.command";
+pub const COMMUNICATION_DELAYED_DELIVERY_SCHEDULE_COMMAND_CONTRACT_NAME_V1: &str =
+    "communication.delayed_delivery.schedule";
+pub const COMMUNICATION_DELAYED_DELIVERY_CANCEL_COMMAND_CONTRACT_NAME_V1: &str =
+    "communication.delayed_delivery.cancel";
 pub const COMMUNICATION_DELAYED_DELIVERY_QUERY_CONTRACT_NAME_V1: &str =
     "communication.delayed_delivery.query";
 pub const COMMUNICATION_DELAYED_DELIVERY_REALTIME_CONTRACT_NAME_V1: &str =
@@ -53,6 +55,10 @@ mod tests {
         assert!(COMMUNICATION_DELAYED_DELIVERY_SCHEDULE_CONNECT_PATH_V1.starts_with('/'));
         assert!(COMMUNICATION_DELAYED_DELIVERY_CANCEL_CONNECT_PATH_V1.starts_with('/'));
         assert!(COMMUNICATION_DELAYED_DELIVERY_STATUS_CONNECT_PATH_V1.starts_with('/'));
+        assert_ne!(
+            COMMUNICATION_DELAYED_DELIVERY_SCHEDULE_COMMAND_CONTRACT_NAME_V1,
+            COMMUNICATION_DELAYED_DELIVERY_CANCEL_COMMAND_CONTRACT_NAME_V1
+        );
         let source =
             include_str!("../proto/hermes/communication_delayed_delivery/v1/delivery.proto");
         for forbidden in ["provider_id", "account_id", "blob", "scheduler", "map<"] {

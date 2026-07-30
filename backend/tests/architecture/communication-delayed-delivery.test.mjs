@@ -37,6 +37,13 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     runtimeAdaptersSource,
     storeAdaptersManifest,
     storeAdaptersSource,
+    runtimeManifest,
+    runtimeAdmission,
+    runtimeClientPort,
+    runtimeClientRealtime,
+    managedRuntime,
+    runtimeMain,
+    methodRoutingAdr,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -224,6 +231,43 @@ test('delayed delivery admits exact due commands in a separate adapter while its
       ),
       'utf8',
     ),
+    readFile(
+      new URL('src/communication-delayed-delivery-runtime/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-delayed-delivery-runtime/src/admission.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-delayed-delivery-runtime/src/client_port.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-runtime/src/client_realtime.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-runtime/src/managed_runtime.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-delayed-delivery-runtime/src/main.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'docs/adr/ADR-0345-method-exact-delayed-delivery-client-command-routing.md',
+        PROJECT_ROOT,
+      ),
+      'utf8',
+    ),
   ]);
 
   const inventory = JSON.parse(inventorySource);
@@ -241,6 +285,11 @@ test('delayed delivery admits exact due commands in a separate adapter while its
       'scheduler_module_schedule_control_v1',
     ],
   });
+  assert.equal(
+    JSON.parse(await readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'))
+      .implementation.currentSlice,
+    'communication_delayed_delivery_managed_runtime_v1',
+  );
   assert.match(adr, /Состояние реализации: частично реализовано/);
   assert.match(
     apiManifest,
@@ -352,6 +401,28 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   );
   assert.match(storeAdapterAdr, /не содержит SQL/);
   assert.match(storeAdapterAdr, /не repository facade/);
+  assert.match(
+    runtimeManifest,
+    /owner = "communication_delayed_delivery"[\s\S]*surface = "runtime"/,
+  );
+  assert.match(runtimeAdmission, /communication_delayed_delivery_module_descriptor_v1/);
+  assert.match(runtimeAdmission, /ProvidedSurfaceKindV1::ClientRealtime/);
+  assert.match(runtimeAdmission, /ClockTimerRequestV1/);
+  assert.match(runtimeAdmission, /BlobQuotaOperationV1::ReleaseCustody/);
+  assert.match(runtimeClientPort, /schedule_delayed_delivery_payload_v1/);
+  assert.match(runtimeClientPort, /cancel_delayed_delivery_payload_v1/);
+  assert.match(runtimeClientRealtime, /ManagedRuntimeClientRealtimePublishRequestV1/);
+  assert.match(runtimeClientRealtime, /communication-delayed-delivery\/\{\}/);
+  assert.match(managedRuntime, /Operation::ClientDelivery/);
+  assert.match(managedRuntime, /pump_client_realtime_once/);
+  assert.match(runtimeMain, /serve-inherited/);
+  assert.match(runtimeMain, /as_millis/);
+  assert.match(methodRoutingAdr, /Schedule -> communication\.delayed_delivery\.schedule@1/);
+  assert.match(methodRoutingAdr, /Cancel   -> communication\.delayed_delivery\.cancel@1/);
+  assert.doesNotMatch(
+    `${runtimeAdmission}\n${runtimeClientPort}\n${runtimeClientRealtime}\n${managedRuntime}`,
+    /setInterval|polling|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
+  );
   for (const source of [executionSource, executionPorts, executionWorker]) {
     assert.doesNotMatch(
       source,

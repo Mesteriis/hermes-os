@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delayed_delivery_persistence_runtime_surfaces_v1",
+    "currentSlice": "communication_delayed_delivery_managed_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -618,6 +618,12 @@
         "role": "workflow",
         "owner": "communication_delayed_delivery",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-communication-delayed-delivery-runtime",
+        "role": "workflow",
+        "owner": "communication_delayed_delivery",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1786,6 +1792,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communication-delayed-delivery-api",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-communication-delayed-delivery-execution",
           "kind": "normal"
         },
@@ -1805,6 +1815,48 @@
         },
         {
           "name": "hermes-communication-delayed-delivery-persistence",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-delayed-delivery-runtime": [
+        {
+          "name": "hermes-communication-delayed-delivery-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delayed-delivery-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delayed-delivery-event-adapters",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delayed-delivery-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delayed-delivery-runtime-adapters",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delivery-intent-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-scheduler-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ]
@@ -4759,8 +4811,62 @@
           "features": []
         }
       ],
-      "hermes-communication-delayed-delivery-runtime-adapters": [],
-      "hermes-communication-delayed-delivery-store-adapters": []
+      "hermes-communication-delayed-delivery-runtime-adapters": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communication-delayed-delivery-store-adapters": [],
+      "hermes-communication-delayed-delivery-runtime": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ]
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -5182,6 +5288,10 @@
       },
       "hermes-communication-delayed-delivery-store-adapters": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-delayed-delivery-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       }
     },

@@ -12,7 +12,9 @@ module-originated schedule-control transport принят Kernel и Scheduler.
 generated Schedule/Cancel/Status/realtime contract, hard request/body/time
 bounds, cancellation-race policy и owner-local Storage bundle. Persistence
 сохраняет только bounded Blob custody receipt, Scheduler inbox/outbox correlation
-и execution fences; plaintext body в workflow SQL запрещён. Создание operation
+и execution fences; plaintext body в workflow SQL запрещён. Managed runtime
+теперь материализует private body в encrypted Blob custody до создания
+operation. Создание operation
 и Ensure outbox атомарно, Cancel revision-fenced и атомарен со своим outbox,
 Scheduler result дедуплицируется по inbox ID/hash до mutation. Encrypted Blob
 custody materialization ещё не подключён. Persistence теперь также предоставляет
@@ -31,11 +33,16 @@ unit уже строит exact Scheduler command envelope с runtime/grant fence
 строго допускает только due `ScheduledJobCommandV1` своего exact JobKind,
 связывает command metadata, scheduled time и RuntimeLease и строит стабильные
 acceptance/terminal Scheduler receipts без синтетических command-объектов.
-Отдельная runtime-adapters unit реализует receipt-bound Blob read,
+Отдельная runtime-adapters unit реализует bounded Blob write,
+receipt-bound Blob read,
 terminal-reason-bound custody release и exact delivery-intent `request_rpc`
-через один sequential managed-control port. Executable admission, assembly,
-client routing и live end-to-end contour ещё не реализованы. Этот ADR не
-открывает workflow gate сам по себе.
+через один sequential managed-control port. Managed runtime реализует inherited
+control authentication, owner-local Storage binding, method-exact
+Schedule/Cancel/Status routing и cursor-based client realtime publication в
+единый Gateway SSE stream. Schedule и Cancel используют разные exact contracts
+по ADR-0345. Scheduler event runtime, assembly, release admission и live
+end-to-end contour ещё не реализованы. Этот ADR не открывает workflow gate сам
+по себе.
 
 Уточняет:
 

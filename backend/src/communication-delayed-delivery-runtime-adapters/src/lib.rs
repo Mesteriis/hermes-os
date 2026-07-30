@@ -4,8 +4,11 @@ use std::os::unix::net::UnixStream;
 
 use hermes_blob_client::{
     BlobClientError, BlobDataClient, ManagedBlobCustodyReleaseRequestV1,
-    ManagedBlobSessionRequestV1, request_managed_blob_custody_release_v2,
-    request_managed_blob_session_v2,
+    ManagedBlobCustodyTargetV1, ManagedBlobSessionRequestV1,
+    request_managed_blob_custody_release_v2, request_managed_blob_session_v2,
+};
+use hermes_communication_delayed_delivery_api::{
+    COMMUNICATION_DELAYED_DELIVERY_MODULE_ID_V1, COMMUNICATION_DELAYED_DELIVERY_OWNER_V1,
 };
 use hermes_communication_delayed_delivery_execution::{
     BodyCleanupErrorV1, BodyCleanupPortV1, BodyCleanupReasonV1, BodyReadErrorV1, BodyReadPortV1,
@@ -29,6 +32,7 @@ use hermes_runtime_protocol::{
         validate_module_request_request_v1, validate_module_request_response_v1,
     },
 };
+use sha2::{Digest, Sha256};
 
 const REQUIRED_BACKUP_CLASS_V1: u32 = 1;
 const DELIVERY_REQUEST_DEADLINE_MILLIS_V1: u32 = 30_000;
@@ -36,6 +40,20 @@ const DELIVERY_REQUEST_DEADLINE_MILLIS_V1: u32 = 30_000;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ManagedDelayedDeliveryRuntimePortErrorV1 {
     InvalidCapability,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DelayedDeliveryCustodyErrorV1 {
+    InvalidInput,
+    Unavailable,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DelayedDeliveryBodyCustodyReceiptV1 {
+    pub reference_id: [u8; 16],
+    pub declared_bytes: u64,
+    pub sha256: [u8; 32],
+    pub custody_proof: Vec<u8>,
 }
 
 pub struct ManagedDelayedDeliveryRuntimePortV1<'a> {
@@ -64,6 +82,71 @@ impl<'a> ManagedDelayedDeliveryRuntimePortV1<'a> {
             blob_capability_id,
         })
     }
+
+    pub fn materialize_body(
+        &mut self,
+        logical_owner_id: &str,
+        delayed_operation_id: [u8; 16],
+        body_utf8: &[u8],
+    ) -> Result<DelayedDeliveryBodyCustodyReceiptV1, DelayedDeliveryCustodyErrorV1> {
+        let declared_bytes = u64::try_from(body_utf8.len())
+            .ok()
+            .filter(|size| *size > 0 && *size <= 64 * 1024)
+            .ok_or(DelayedDeliveryCustodyErrorV1::InvalidInput)?;
+        if logical_owner_id.is_empty()
+            || logical_owner_id.len() > 128
+            || delayed_operation_id.iter().all(|byte| *byte == 0)
+        {
+            return Err(DelayedDeliveryCustodyErrorV1::InvalidInput);
+        }
+        let sha256: [u8; 32] = Sha256::digest(body_utf8).into();
+        let reference_id = body_reference_id(logical_owner_id, delayed_operation_id, sha256);
+        let session = request_managed_blob_session_v2(
+            self.channel,
+            self.dispatcher,
+            ManagedBlobSessionRequestV1 {
+                capability_id: self.blob_capability_id,
+                operation: BlobDataOperationV1::BlobDataOperationWriteV1,
+                reference_id: &reference_id,
+                declared_size: declared_bytes,
+                backup_class: REQUIRED_BACKUP_CLASS_V1,
+                receipt_sha256: Some(&sha256),
+                custody_target: Some(ManagedBlobCustodyTargetV1 {
+                    owner_id: COMMUNICATION_DELAYED_DELIVERY_OWNER_V1,
+                    module_id: COMMUNICATION_DELAYED_DELIVERY_MODULE_ID_V1,
+                    capability_id: self.blob_capability_id,
+                }),
+            },
+        )
+        .map_err(|_| DelayedDeliveryCustodyErrorV1::Unavailable)?;
+        let custody_proof = session.custody_transfer_source_proof;
+        BlobDataClient::new(session.data_socket_path)
+            .and_then(|client| {
+                client.write(session.grant, session.channel_binding, body_utf8.to_vec())
+            })
+            .map_err(|_| DelayedDeliveryCustodyErrorV1::Unavailable)?;
+        Ok(DelayedDeliveryBodyCustodyReceiptV1 {
+            reference_id,
+            declared_bytes,
+            sha256,
+            custody_proof,
+        })
+    }
+}
+
+fn body_reference_id(
+    logical_owner_id: &str,
+    delayed_operation_id: [u8; 16],
+    body_sha256: [u8; 32],
+) -> [u8; 16] {
+    let digest = Sha256::new()
+        .chain_update(b"hermes.communication-delayed-delivery.body.v1\0")
+        .chain_update((logical_owner_id.len() as u64).to_be_bytes())
+        .chain_update(logical_owner_id.as_bytes())
+        .chain_update(delayed_operation_id)
+        .chain_update(body_sha256)
+        .finalize();
+    digest[..16].try_into().expect("SHA-256 prefix is exact")
 }
 
 impl BodyReadPortV1 for ManagedDelayedDeliveryRuntimePortV1<'_> {
@@ -197,6 +280,8 @@ fn body_read_error(error: BlobClientError) -> BodyReadErrorV1 {
     }
 }
 
+pub const PACKAGE: &str = "hermes-communication-delayed-delivery-runtime-adapters";
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,6 +305,14 @@ mod tests {
             BodyReadErrorV1::Unavailable
         );
     }
-}
 
-pub const PACKAGE: &str = "hermes-communication-delayed-delivery-runtime-adapters";
+    #[test]
+    fn custody_reference_binds_owner_operation_and_body_digest() {
+        let digest = [3; 32];
+        let reference = body_reference_id("owner-1", [1; 16], digest);
+        assert_eq!(reference, body_reference_id("owner-1", [1; 16], digest));
+        assert_ne!(reference, body_reference_id("owner-2", [1; 16], digest));
+        assert_ne!(reference, body_reference_id("owner-1", [2; 16], digest));
+        assert_ne!(reference, body_reference_id("owner-1", [1; 16], [4; 32]));
+    }
+}

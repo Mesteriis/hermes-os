@@ -1820,13 +1820,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-delayed-delivery-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-delayed-delivery-api",
+ "hermes-communication-delayed-delivery-core",
+ "hermes-communication-delayed-delivery-event-adapters",
+ "hermes-communication-delayed-delivery-persistence",
+ "hermes-communication-delayed-delivery-runtime-adapters",
+ "hermes-communication-delivery-intent-api",
+ "hermes-runtime-protocol",
+ "hermes-scheduler-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-communication-delayed-delivery-runtime-adapters"
 version = "0.1.0"
 dependencies = [
  "hermes-blob-client",
+ "hermes-communication-delayed-delivery-api",
  "hermes-communication-delayed-delivery-execution",
  "hermes-communication-delivery-intent-api",
  "hermes-runtime-protocol",
+ "sha2 0.11.0",
 ]
 
 [[package]]

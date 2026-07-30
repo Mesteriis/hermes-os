@@ -228,6 +228,28 @@ impl CommunicationDelayedDeliveryPersistenceV1 {
         .map_err(|_| DelayedDeliveryPersistenceErrorV1::StorageUnavailable)?
         .rows_affected();
         if affected != 1 {
+            let status = status_in_transaction(
+                &mut transaction,
+                &command.logical_owner_id,
+                &command.delayed_operation_id,
+            )
+            .await?;
+            if status.state == DelayedDeliveryStateV1::CancelRequested
+                && status.state_revision == command.expected_revision.saturating_add(1)
+            {
+                verify_existing_outbox(
+                    &mut transaction,
+                    &command.logical_owner_id,
+                    &command.delayed_operation_id,
+                    &command.scheduler_command,
+                )
+                .await?;
+                transaction
+                    .commit()
+                    .await
+                    .map_err(|_| DelayedDeliveryPersistenceErrorV1::StorageUnavailable)?;
+                return Ok(status);
+            }
             return Err(DelayedDeliveryPersistenceErrorV1::StaleRevision);
         }
         crate::realtime::insert_operation_transition(

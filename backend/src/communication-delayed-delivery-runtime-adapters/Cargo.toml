@@ -14,6 +14,8 @@ surface = "implementation"
 
 [dependencies]
 hermes-blob-client = { path = "../platform/blob/client" }
+hermes-communication-delayed-delivery-api = { path = "../communication-delayed-delivery-api" }
 hermes-communication-delayed-delivery-execution = { path = "../communication-delayed-delivery-execution" }
 hermes-communication-delivery-intent-api = { path = "../communication-delivery-intent-api" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+sha2 = { version = "=0.11.0", default-features = false }
