@@ -137,7 +137,9 @@ function emptySettingsSchema() {
   return Buffer.concat([fieldVarint(1, 1), fieldVarint(2, 1)]);
 }
 
-function moduleDescriptor({ moduleId, ownerId, releaseVersion, buildId, schema }) {
+function moduleDescriptor({
+  moduleId, ownerId, releaseVersion, buildId, schema, descriptorRevision,
+}) {
   const schemaReference = Buffer.concat([
     fieldVarint(1, 1),
     fieldVarint(2, 1),
@@ -146,7 +148,7 @@ function moduleDescriptor({ moduleId, ownerId, releaseVersion, buildId, schema }
   ]);
   return Buffer.concat([
     fieldVarint(1, 1),
-    fieldVarint(2, 1),
+    fieldVarint(2, descriptorRevision),
     fieldString(3, moduleId),
     fieldString(4, ownerId),
     fieldVarint(5, 5),
@@ -177,6 +179,7 @@ function createModuleArtifact({ artifactId, moduleId, ownerId, binaryName }, opt
     releaseVersion: options.get('--release-version'),
     buildId: options.get('--build-id'),
     schema,
+    descriptorRevision: artifactId === 'platform.scheduler' ? 2 : 1,
   });
   const descriptorPath = join(options.get('--descriptor-dir'), `${artifactId}.descriptor.pb`);
   const schemaPath = join(options.get('--descriptor-dir'), `${artifactId}.settings.pb`);

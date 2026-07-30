@@ -324,8 +324,10 @@ fn ensure_scheduler_registration(
             .map_err(|_| "developer Scheduler grants cannot be recorded".to_owned());
     }
     let current = registration.expect("checked registration");
+    let routes = scheduler_event_routes();
+    let routes_are_current = scheduler_event_routes_are_current(store, &routes)?;
     if current.state() == ModuleRegistrationState::Approved
-        && current.descriptor_sha256() != &descriptor_sha256
+        && (current.descriptor_sha256() != &descriptor_sha256 || !routes_are_current)
     {
         let next_epoch = current
             .grant_epoch()
@@ -341,7 +343,6 @@ fn ensure_scheduler_registration(
         );
         let storage =
             ModuleStorageRequestV1::new(REGISTRATION_ID, STORAGE_CAPABILITY, "scheduler", 4, 5_000);
-        let routes = scheduler_event_routes();
         return store
             .upgrade_approved_registration_with_all_descriptor_requests(
                 &upgraded,
@@ -369,6 +370,21 @@ fn ensure_scheduler_registration(
         .map_err(|_| "developer Scheduler grants cannot be restored".to_owned())
 }
 
+fn scheduler_event_routes_are_current(
+    store: &SqliteControlStore,
+    expected: &[ModuleEventRouteRequestV1],
+) -> Result<bool, String> {
+    for route in expected {
+        let current = store
+            .module_event_route_requests("scheduler_developer", route.capability_id())
+            .map_err(|_| "developer Scheduler event routes are unavailable".to_owned())?;
+        if current.as_slice() != std::slice::from_ref(route) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 fn scheduler_capabilities() -> [String; 6] {
     [
         "events.scheduler.ack",
@@ -382,7 +398,7 @@ fn scheduler_capabilities() -> [String; 6] {
 }
 
 fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 5] {
-    let schedule_control_schema: [u8; 32] = Sha256::digest(SCHEDULER_JOB_DESCRIPTOR_SET_V1).into();
+    let scheduler_schema: [u8; 32] = Sha256::digest(SCHEDULER_JOB_DESCRIPTOR_SET_V1).into();
     [
         scheduler_event_route(
             "events.scheduler.dispatch",
@@ -398,7 +414,7 @@ fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 5] {
             "scheduler",
             "job_receipt",
             ModuleEventRouteDirectionV1::Consume,
-            [7; 32],
+            scheduler_schema,
         ),
         scheduler_event_route(
             "events.scheduler.result",
@@ -406,7 +422,7 @@ fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 5] {
             "scheduler",
             "job_receipt",
             ModuleEventRouteDirectionV1::Consume,
-            [7; 32],
+            scheduler_schema,
         ),
         scheduler_event_route(
             "events.scheduler.schedule_control.command",
@@ -414,7 +430,7 @@ fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 5] {
             "scheduler",
             "schedule_control",
             ModuleEventRouteDirectionV1::Consume,
-            schedule_control_schema,
+            scheduler_schema,
         ),
         scheduler_event_route(
             "events.scheduler.schedule_control.result",
@@ -422,7 +438,7 @@ fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 5] {
             "scheduler",
             "schedule_control",
             ModuleEventRouteDirectionV1::Publish,
-            schedule_control_schema,
+            scheduler_schema,
         ),
     ]
 }

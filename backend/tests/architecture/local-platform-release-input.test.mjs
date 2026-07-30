@@ -127,6 +127,7 @@ test('creates exact local platform runtime contracts before compiling a distribu
     assert.equal(scheduler.relative_path, 'bin/hermes-scheduler-runtime');
     assert.equal(readFileSync(scheduler.settings_schema.source_path).toString('hex'), '08011001');
     const descriptor = decodeFields(readFileSync(scheduler.descriptor.source_path));
+    assert.equal(descriptor.get(2)?.[0], 2n);
     assert.equal(fieldString(descriptor, 3), 'scheduler');
     assert.equal(fieldString(descriptor, 4), 'scheduler');
     assert.equal(descriptor.get(5)?.[0], 5n);
