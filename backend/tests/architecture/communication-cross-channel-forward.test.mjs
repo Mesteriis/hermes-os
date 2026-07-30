@@ -271,7 +271,7 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     gate: 'communication_cross_channel_forward_v1',
     role: 'workflow',
     owner: 'communication_cross_channel_forward',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'communication_delivery_intent_v1',
       'communications_content_read_v1',
@@ -288,7 +288,14 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
   assert.match(adr, /Kernel[\s\S]*не декодирует source metadata, content или delivery payload/);
   assert.match(adr, /Core capability router[\s\S]*не содержит cross-channel business method/);
   assert.match(adr, /не хранит plaintext body/);
-  assert.match(adr, /Принятый ADR сам по себе не\s+открывает/);
+  assert.match(
+    adr,
+    /Live evidence закрывает exact gate `communication_cross_channel_forward_v1`/,
+  );
+  assert.match(
+    adr,
+    /общий `communications_settings_reconstruction_complete_v1` остаётся закрыт/,
+  );
   assert.deepEqual(
     policy.implementation.productionPackages
       .filter(({ owner }) => owner === 'communication_cross_channel_forward')

@@ -31,9 +31,9 @@ build unit формирует signed release fragment без runtime behavior. L
 conformance доказывает Gateway command, event-only Communications handoff,
 две Kernel-authorized Blob custody передачи, delivery-intent ingress, terminal
 result, durable custody cleanup, client SSE и replay после runtime restart.
-Production gate остаётся закрыт до итогового полного clean-room parity audit.
-Принятый ADR сам по себе не открывает
-`communication_cross_channel_forward_v1`.
+Live evidence закрывает exact gate `communication_cross_channel_forward_v1`;
+общий `communications_settings_reconstruction_complete_v1` остаётся закрыт до
+итогового полного clean-room parity audit.
 
 ## Контекст
 
@@ -184,7 +184,8 @@ owner-scoped identity, state, causation, correlation и timestamps.
 
 ## Completion gate
 
-`communication_cross_channel_forward_v1` станет `implemented` только после:
+`communication_cross_channel_forward_v1` является `implemented`, поскольку
+выполнены все условия:
 
 1. exact public command/query/realtime contract и pure core;
 2. owner-local idempotent persistence, retry и replay;
@@ -198,5 +199,5 @@ owner-scoped identity, state, causation, correlation и timestamps.
 7. live managed proof от source evidence до accepted delivery-intent без
    provider imports, content leakage или cross-owner SQL.
 
-До выполнения всех пунктов reconstruction matrix сохраняет gate в состоянии
-`planned`.
+Reconstruction matrix фиксирует gate в состоянии `implemented`; это не
+подменяет оставшиеся независимые Communications/Settings gates.
