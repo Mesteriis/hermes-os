@@ -5,8 +5,8 @@
 Дата: 2026-07-30
 
 Состояние реализации: exact client contract, pure core и owner-local
-PostgreSQL persistence реализованы. Managed runtime, assembly, Gateway routes
-и live conformance ещё не реализованы;
+PostgreSQL command/query/realtime persistence реализованы. Managed runtime,
+assembly, Gateway routes и live conformance ещё не реализованы;
 `review_communications_attention_v1` остаётся planned.
 
 Уточняет:
@@ -39,7 +39,9 @@ Review открывается как отдельный domain owner начин�
 Owner-local persistence реализован отдельной unit
 `hermes-review-attention-persistence`: operation ID вместе с exact request hash
 даёт idempotent replay, а aggregate mutation и operation result фиксируются в
-одной PostgreSQL transaction.
+одной PostgreSQL transaction. Owner-local get/list использует bounded keyset
+paging, а каждое semantic изменение атомарно добавляет durable realtime
+transition для restart-safe SSE replay.
 
 Следующие units добавляются отдельными slices:
 

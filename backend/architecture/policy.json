@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_communications_attention_persistence_v1",
+    "currentSlice": "review_communications_attention_read_realtime_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {

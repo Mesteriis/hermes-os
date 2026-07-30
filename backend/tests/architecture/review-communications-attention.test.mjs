@@ -56,12 +56,17 @@ test('Review attention core owns optimistic revision and bounded snooze invarian
 });
 
 test('Review attention persistence is owner-local atomic and operation-idempotent', async () => {
-  const [manifest, repository, schema, migration] = await Promise.all([
+  const [manifest, repository, query, realtime, schema, migration, realtimeMigration] = await Promise.all([
     backendSource('src/review-attention-persistence/Cargo.toml'),
     backendSource('src/review-attention-persistence/src/repository.rs'),
+    backendSource('src/review-attention-persistence/src/query.rs'),
+    backendSource('src/review-attention-persistence/src/realtime.rs'),
     backendSource('src/review-attention-persistence/src/schema.rs'),
     backendSource(
       'src/review-attention-persistence/migrations/0001_review_attention.sql',
+    ),
+    backendSource(
+      'src/review-attention-persistence/migrations/0002_review_attention_realtime.sql',
     ),
   ]);
 
@@ -77,13 +82,20 @@ test('Review attention persistence is owner-local atomic and operation-idempoten
   assert.match(repository, /stored_sha256\.as_slice\(\) != request_sha256/);
   assert.match(repository, /FOR UPDATE/);
   assert.match(repository, /outcome\.changed/);
+  assert.match(repository, /insert_realtime_transition/);
   assert.match(repository, /transaction\.commit\(\)/);
+  assert.match(query, /ORDER BY attention_id ASC/);
+  assert.match(query, /REVIEW_ATTENTION_MAX_PAGE_SIZE_V1: u16 = 100/);
+  assert.match(realtime, /realtime_sequence > \$2/);
+  assert.match(realtime, /REVIEW_ATTENTION_REALTIME_REPLAY_LIMIT_V1: u16 = 256/);
   assert.match(schema, /owner_id: "review"/);
   assert.match(migration, /hermes_data\.review_attention_state/);
   assert.match(migration, /hermes_data\.review_attention_operations/);
   assert.match(migration, /expected_revision BIGINT NOT NULL/);
+  assert.match(realtimeMigration, /hermes_data\.review_attention_realtime/);
+  assert.match(realtimeMigration, /UNIQUE \(logical_owner_id, attention_id, state_revision\)/);
   assert.doesNotMatch(
-    `${repository}\n${migration}`,
+    `${repository}\n${query}\n${realtime}\n${migration}\n${realtimeMigration}`,
     /communications_|mail_|telegram_|provider_|message_body|subject|email_address|phone_number/,
   );
 });
@@ -115,7 +127,7 @@ test('Review owner admission does not prematurely open the managed gate', async 
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'review_communications_attention_persistence_v1',
+    'review_communications_attention_read_realtime_persistence_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.domains, [
     'communications',

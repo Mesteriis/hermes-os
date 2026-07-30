@@ -579,5 +579,5 @@ domain/integration launch: первый остаётся authority для grants
 storage, второй — для provider/domain tenancy и client realtime.
 ADR-0351 открывает Review как отдельного domain owner для Hermes
 pending/reviewed/dismissed, pin, importance и snooze. Contract/core и
-owner-local idempotent persistence units реализованы без Communications
-dependency; runtime/live gate остаётся закрытым.
+owner-local idempotent command/query/realtime persistence units реализованы
+без Communications dependency; runtime/live gate остаётся закрытым.

@@ -3631,7 +3631,10 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'review_communications_attention_persistence_v1') {
+  if (
+    currentSlice === 'review_communications_attention_persistence_v1'
+    || currentSlice === 'review_communications_attention_read_realtime_persistence_v1'
+  ) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_INVENTORY,

@@ -10,6 +10,8 @@ use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 
+use crate::realtime::insert_realtime_transition;
+
 const DISPOSITION_PENDING: i16 = 1;
 const DISPOSITION_REVIEWED: i16 = 2;
 const DISPOSITION_DISMISSED: i16 = 3;
@@ -43,7 +45,7 @@ pub enum ReviewAttentionPersistenceErrorV1 {
 
 #[derive(Clone)]
 pub struct ReviewAttentionPersistenceV1 {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 impl ReviewAttentionPersistenceV1 {
@@ -145,6 +147,12 @@ impl ReviewAttentionPersistenceV1 {
         .map_err(ReviewAttentionPersistenceErrorV1::Domain)?;
         if outcome.changed {
             persist_attention(&mut transaction, &operation.logical_owner_id, &outcome).await?;
+            insert_realtime_transition(
+                &mut transaction,
+                &operation.logical_owner_id,
+                &outcome.attention,
+            )
+            .await?;
         }
         complete_operation(
             &mut transaction,
@@ -318,7 +326,7 @@ async fn load_operation_replay(
     })
 }
 
-fn attention_from_row(
+pub(crate) fn attention_from_row(
     row: &sqlx::postgres::PgRow,
 ) -> Result<ReviewAttentionV1, ReviewAttentionPersistenceErrorV1> {
     Ok(ReviewAttentionV1 {
@@ -392,7 +400,7 @@ fn request_sha256(operation: &ApplyReviewAttentionOperationV1) -> [u8; 32] {
     hash.finalize().into()
 }
 
-const fn disposition_code(value: ReviewDispositionV1) -> i16 {
+pub(crate) const fn disposition_code(value: ReviewDispositionV1) -> i16 {
     match value {
         ReviewDispositionV1::Pending => DISPOSITION_PENDING,
         ReviewDispositionV1::Reviewed => DISPOSITION_REVIEWED,
@@ -400,14 +408,16 @@ const fn disposition_code(value: ReviewDispositionV1) -> i16 {
     }
 }
 
-const fn importance_code(value: ReviewImportanceV1) -> i16 {
+pub(crate) const fn importance_code(value: ReviewImportanceV1) -> i16 {
     match value {
         ReviewImportanceV1::Normal => IMPORTANCE_NORMAL,
         ReviewImportanceV1::Important => IMPORTANCE_IMPORTANT,
     }
 }
 
-fn disposition(value: i16) -> Result<ReviewDispositionV1, ReviewAttentionPersistenceErrorV1> {
+pub(crate) fn disposition(
+    value: i16,
+) -> Result<ReviewDispositionV1, ReviewAttentionPersistenceErrorV1> {
     match value {
         DISPOSITION_PENDING => Ok(ReviewDispositionV1::Pending),
         DISPOSITION_REVIEWED => Ok(ReviewDispositionV1::Reviewed),
@@ -416,7 +426,9 @@ fn disposition(value: i16) -> Result<ReviewDispositionV1, ReviewAttentionPersist
     }
 }
 
-fn importance(value: i16) -> Result<ReviewImportanceV1, ReviewAttentionPersistenceErrorV1> {
+pub(crate) fn importance(
+    value: i16,
+) -> Result<ReviewImportanceV1, ReviewAttentionPersistenceErrorV1> {
     match value {
         IMPORTANCE_NORMAL => Ok(ReviewImportanceV1::Normal),
         IMPORTANCE_IMPORTANT => Ok(ReviewImportanceV1::Important),
@@ -424,7 +436,7 @@ fn importance(value: i16) -> Result<ReviewImportanceV1, ReviewAttentionPersisten
     }
 }
 
-fn optional_timestamp(
+pub(crate) fn optional_timestamp(
     seconds: Option<i64>,
     nanos: Option<i32>,
 ) -> Result<Option<ReviewTimestampV1>, ReviewAttentionPersistenceErrorV1> {
@@ -435,7 +447,7 @@ fn optional_timestamp(
     }
 }
 
-fn timestamp(
+pub(crate) fn timestamp(
     unix_seconds: i64,
     nanos: i32,
 ) -> Result<ReviewTimestampV1, ReviewAttentionPersistenceErrorV1> {
@@ -448,7 +460,9 @@ fn timestamp(
     })
 }
 
-fn id16(value: Vec<u8>) -> Result<[u8; STABLE_ID_BYTES_V1], ReviewAttentionPersistenceErrorV1> {
+pub(crate) fn id16(
+    value: Vec<u8>,
+) -> Result<[u8; STABLE_ID_BYTES_V1], ReviewAttentionPersistenceErrorV1> {
     value
         .try_into()
         .ok()
@@ -456,7 +470,7 @@ fn id16(value: Vec<u8>) -> Result<[u8; STABLE_ID_BYTES_V1], ReviewAttentionPersi
         .ok_or(ReviewAttentionPersistenceErrorV1::InvalidRow)
 }
 
-fn positive_u64(value: i64) -> Result<u64, ReviewAttentionPersistenceErrorV1> {
+pub(crate) fn positive_u64(value: i64) -> Result<u64, ReviewAttentionPersistenceErrorV1> {
     u64::try_from(value)
         .ok()
         .filter(|value| *value > 0)
