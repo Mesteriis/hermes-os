@@ -76,6 +76,16 @@ replayable transition log и восстановление terminal state пос�
 persistence connection. Этот storage evidence не заменяет managed-process
 restart/revoke/outage contour.
 
+Live managed NATS-outage conformance теперь дополнительно доказывает, что
+Schedule RPC во время остановленного Event Hub сохраняет exact operation и
+Scheduler command в состоянии `schedule_pending`, не останавливая
+delayed-delivery runtime. После подтверждённого NATS reconnect тест дожидается
+terminal bounded failure прежнего Scheduler process, запускает его fenced
+successor и получает terminal delivery из прежнего durable command после
+контрактного JetStream `ack_wait`, без повторного Schedule RPC и без private
+body в realtime. Этот evidence закрывает только NATS outage item; отдельные
+Scheduler и Blob outage contours ещё не пройдены.
+
 Этот ADR не открывает workflow gate сам по себе.
 
 Уточняет:
