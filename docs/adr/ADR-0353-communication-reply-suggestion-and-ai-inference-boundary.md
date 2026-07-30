@@ -10,10 +10,15 @@ contract/runtime handoff и public AI contract unit `hermes-ai-contracts`
 current-revision validation, target-bound Blob custody и commit-before-Ack.
 AI contract unit имеет concrete reply request/result, common context receipt,
 deterministic request digest и provider-neutral bounded local-only generation
-port. Всё перечисленное имеет Cargo/architecture evidence. Live event-only
+port. Provider result обязан вернуть typed completeness и bounded confidence;
+engine не фабрикует эти значения. Всё перечисленное имеет Cargo/architecture
+evidence. Live event-only
 source preparation ещё не доказано, поэтому gate
-`communications_ai_context_source_v1` остаётся `planned`. Остальные четыре AI
-engine units, provider integration и workflow ещё не реализованы; gates
+`communications_ai_context_source_v1` остаётся `planned`.
+`hermes-ai-inference-core` также реализован как отдельная engine unit с
+revision-fenced lifecycle, fixed prompt/policy receipt и sanitized terminal
+results. Остальные три AI engine units, provider integration и workflow ещё не
+реализованы; gates
 `ai_inference_v1`, `ollama_ai_provider_v1` и
 `communication_reply_suggestion_v1` также остаются `planned`.
 

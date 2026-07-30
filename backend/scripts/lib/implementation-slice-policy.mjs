@@ -763,6 +763,12 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
     owner: 'ai',
     surface: 'contract',
   },
+  {
+    name: 'hermes-ai-inference-core',
+    role: 'engine',
+    owner: 'ai',
+    surface: 'implementation',
+  },
 ];
 
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
@@ -2247,6 +2253,9 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-ai-contracts': [
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
+  'hermes-ai-inference-core': [
+    { name: 'hermes-ai-contracts', kind: 'normal' },
+  ],
 };
 
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
@@ -2643,6 +2652,9 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-ai-inference-core': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
 };
 

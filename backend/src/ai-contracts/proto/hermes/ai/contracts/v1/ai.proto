@@ -127,4 +127,6 @@ message AiProviderReplyGenerationResultV1 {
   uint32 input_tokens = 7;
   uint32 output_tokens = 8;
   AiInferenceTerminalStatusV1 terminal_status = 9;
+  AiInferenceCompletenessV1 completeness = 10;
+  uint32 confidence_basis_points = 11;
 }

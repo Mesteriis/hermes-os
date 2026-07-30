@@ -55,6 +55,7 @@ members = [
   "src/communications-cross-channel-forward-source-api",
   "src/communications-ai-source-api",
   "src/ai-contracts",
+  "src/ai-inference-core",
   "src/communications-export-api",
   "src/communications-export-core",
   "src/communications-export-persistence",

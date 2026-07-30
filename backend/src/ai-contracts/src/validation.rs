@@ -186,6 +186,12 @@ pub fn validate_provider_reply_generation_result_v1(
         || !sha256(&result.model_revision_sha256)
         || result.output_tokens == 0
         || result.output_tokens > AI_MAX_OUTPUT_TOKENS_V1
+        || !matches!(
+            AiInferenceCompletenessV1::try_from(result.completeness),
+            Ok(AiInferenceCompletenessV1::AiInferenceCompletenessComplete
+                | AiInferenceCompletenessV1::AiInferenceCompletenessPartial)
+        )
+        || result.confidence_basis_points > 10_000
     {
         return Err(AiContractValidationErrorV1::InvalidResult);
     }
@@ -219,6 +225,9 @@ fn provider_rejection_is_sanitized(
         && result.model_revision_sha256.is_empty()
         && result.input_tokens == 0
         && result.output_tokens == 0
+        && result.completeness
+            == AiInferenceCompletenessV1::AiInferenceCompletenessUnspecified as i32
+        && result.confidence_basis_points == 0
 }
 
 fn rejection_status(status: AiInferenceTerminalStatusV1) -> bool {
@@ -346,6 +355,29 @@ mod tests {
             egress_policy_revision: AI_LOCAL_EGRESS_POLICY_REVISION_V1,
         };
         validate_provider_reply_generation_request_v1(&request).expect("provider request");
+    }
+
+    #[test]
+    fn provider_result_carries_validated_completeness_and_confidence() {
+        let mut result = AiProviderReplyGenerationResultV1 {
+            request_id: vec![1; 16],
+            subject_utf8: b"Re: subject".to_vec(),
+            body_utf8: b"Suggested reply".to_vec(),
+            resolved_tone: AiReplyToneV1::AiReplyToneWarm as i32,
+            resolved_language: AiReplyLanguageV1::AiReplyLanguageEnglish as i32,
+            model_revision_sha256: vec![2; 32],
+            input_tokens: 12,
+            output_tokens: 8,
+            terminal_status: AiInferenceTerminalStatusV1::AiInferenceTerminalStatusReady as i32,
+            completeness: AiInferenceCompletenessV1::AiInferenceCompletenessComplete as i32,
+            confidence_basis_points: 8_000,
+        };
+        validate_provider_reply_generation_result_v1(&result).expect("provider result");
+        result.confidence_basis_points = 10_001;
+        assert_eq!(
+            validate_provider_reply_generation_result_v1(&result),
+            Err(AiContractValidationErrorV1::InvalidResult)
+        );
     }
 
     #[test]

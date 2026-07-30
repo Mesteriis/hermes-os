@@ -181,11 +181,37 @@ test('AI public contracts are one concrete provider-neutral engine unit', async 
   assert.match(proto, /message CommunicationReplySuggestionInferenceRequestV1/);
   assert.match(proto, /message CommunicationReplySuggestionInferenceResultV1/);
   assert.match(proto, /message AiProviderReplyGenerationRequestV1/);
+  assert.match(proto, /message AiProviderReplyGenerationResultV1/);
   assert.match(proto, /uint32 maximum_output_bytes/);
   assert.match(proto, /uint32 maximum_output_tokens/);
+  assert.match(proto, /AiInferenceCompletenessV1 completeness = 10/);
+  assert.match(proto, /uint32 confidence_basis_points = 11/);
   assert.doesNotMatch(
     `${api}\n${validation}\n${proto}`,
     /(?:string|bytes)\s+(?:provider_id|provider_name|model_id|model_name|endpoint|prompt_text)\b|google\.protobuf\.Any|map<|string target_owner|string target_module|string target_capability/,
   );
   assert.doesNotMatch(manifest, /communications|reply-suggestion|ollama|sqlx|gateway|kernel/);
+});
+
+test('AI inference core owns lifecycle and fixed policy without provider implementation', async () => {
+  const [manifest, core] = await Promise.all([
+    backendSource('src/ai-inference-core/Cargo.toml'),
+    backendSource('src/ai-inference-core/src/lib.rs'),
+  ]);
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "ai"/);
+  assert.match(manifest, /surface = "implementation"/);
+  assert.match(manifest, /hermes-ai-contracts/);
+  assert.match(core, /AiInferenceRunStateV1/);
+  assert.match(core, /accept_reply_inference_v1/);
+  assert.match(core, /begin_reply_inference_v1/);
+  assert.match(core, /complete_reply_inference_v1/);
+  assert.match(core, /reject_reply_inference_v1/);
+  assert.match(core, /AI_INFERENCE_PROVIDER_POLICY_REVISION_V1/);
+  assert.match(core, /prompt_policy_sha256_v1/);
+  assert.doesNotMatch(
+    `${manifest}\n${core}`,
+    /communications|reply-suggestion|ollama|reqwest|hyper|sqlx|gateway|kernel|settings_registry|provider_id|model_id|endpoint/,
+  );
 });

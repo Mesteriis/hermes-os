@@ -738,6 +738,12 @@
         "role": "engine",
         "owner": "ai",
         "surface": "contract"
+      },
+      {
+        "name": "hermes-ai-inference-core",
+        "role": "engine",
+        "owner": "ai",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1707,6 +1713,12 @@
       "hermes-ai-contracts": [
         {
           "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-ai-inference-core": [
+        {
+          "name": "hermes-ai-contracts",
           "kind": "normal"
         }
       ],
@@ -4875,6 +4887,16 @@
           "features": []
         }
       ],
+      "hermes-ai-inference-core": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-communication-delivery-intent-ingress-api": [
         {
           "name": "prost",
@@ -6192,6 +6214,10 @@
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
+      },
+      "hermes-ai-inference-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       },
       "hermes-communication-delivery-intent-ingress-api": {
         "primaryKind": "lib",
