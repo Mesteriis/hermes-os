@@ -75,6 +75,8 @@ pub struct DelayedDeliveryOperationStatusV1 {
     pub deliver_at_unix_millis: u64,
     pub scheduler_schedule_revision: Option<u64>,
     pub error_code: Option<u16>,
+    pub created_at_unix_millis: u64,
+    pub updated_at_unix_millis: u64,
 }
 
 impl CommunicationDelayedDeliveryPersistenceV1 {
@@ -133,6 +135,13 @@ impl CommunicationDelayedDeliveryPersistenceV1 {
         .rows_affected()
             == 1;
         if inserted {
+            crate::realtime::insert_operation_transition(
+                &mut transaction,
+                &command.logical_owner_id,
+                command.operation.delayed_operation_id(),
+                created_at,
+            )
+            .await?;
             insert_outbox(
                 &mut transaction,
                 &command.logical_owner_id,
@@ -221,6 +230,13 @@ impl CommunicationDelayedDeliveryPersistenceV1 {
         if affected != 1 {
             return Err(DelayedDeliveryPersistenceErrorV1::StaleRevision);
         }
+        crate::realtime::insert_operation_transition(
+            &mut transaction,
+            &command.logical_owner_id,
+            &command.delayed_operation_id,
+            requested_at,
+        )
+        .await?;
         insert_outbox(
             &mut transaction,
             &command.logical_owner_id,
@@ -287,6 +303,13 @@ impl CommunicationDelayedDeliveryPersistenceV1 {
             return Ok(ApplySchedulerResultOutcomeV1::Duplicate(status));
         }
         apply_scheduler_transition(&mut transaction, command, received_at).await?;
+        crate::realtime::insert_operation_transition(
+            &mut transaction,
+            &command.logical_owner_id,
+            &command.delayed_operation_id,
+            received_at,
+        )
+        .await?;
         let status = status_in_transaction(
             &mut transaction,
             &command.logical_owner_id,
@@ -495,7 +518,8 @@ async fn status_in_transaction(
 ) -> Result<DelayedDeliveryOperationStatusV1, DelayedDeliveryPersistenceErrorV1> {
     let row = sqlx::query(
         "SELECT delayed_operation_id, delivery_operation_id, state, state_revision,
-                deliver_at_unix_millis, scheduler_schedule_revision, error_code
+                deliver_at_unix_millis, scheduler_schedule_revision, error_code,
+                created_at_unix_millis, updated_at_unix_millis
          FROM hermes_data.communication_delayed_delivery_operations
          WHERE logical_owner_id = $1 AND delayed_operation_id = $2",
     )
@@ -508,7 +532,7 @@ async fn status_in_transaction(
     status_from_row(&row)
 }
 
-fn status_from_row(
+pub(crate) fn status_from_row(
     row: &sqlx::postgres::PgRow,
 ) -> Result<DelayedDeliveryOperationStatusV1, DelayedDeliveryPersistenceErrorV1> {
     Ok(DelayedDeliveryOperationStatusV1 {
@@ -530,6 +554,12 @@ fn status_from_row(
                 u16::try_from(value).map_err(|_| DelayedDeliveryPersistenceErrorV1::InvalidRow)
             })
             .transpose()?,
+        created_at_unix_millis: positive_u64(
+            row.try_get("created_at_unix_millis").map_err(row_error)?,
+        )?,
+        updated_at_unix_millis: positive_u64(
+            row.try_get("updated_at_unix_millis").map_err(row_error)?,
+        )?,
     })
 }
 
@@ -569,7 +599,7 @@ fn valid_scheduler_result(command: &ApplySchedulerResultV1) -> bool {
         }
 }
 
-fn valid_owner(value: &str) -> bool {
+pub(crate) fn valid_owner(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value
@@ -600,7 +630,7 @@ fn id16(value: Vec<u8>) -> Result<[u8; 16], DelayedDeliveryPersistenceErrorV1> {
         .map_err(|_| DelayedDeliveryPersistenceErrorV1::InvalidRow)
 }
 
-fn state_from_code(
+pub(crate) fn state_from_code(
     value: i16,
 ) -> Result<DelayedDeliveryStateV1, DelayedDeliveryPersistenceErrorV1> {
     match value {

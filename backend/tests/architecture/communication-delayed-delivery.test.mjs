@@ -20,8 +20,12 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     persistenceSource,
     persistenceOperations,
     persistenceExecution,
+    persistenceRelay,
+    persistenceStatus,
+    persistenceRealtime,
     persistenceMigration,
     schedulerReceiptMigration,
+    clientRealtimeMigration,
     executionManifest,
     executionSource,
     executionPorts,
@@ -115,6 +119,27 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     ),
     readFile(
       new URL(
+        'src/communication-delayed-delivery-persistence/src/relay.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-persistence/src/status.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-persistence/src/realtime.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-delayed-delivery-persistence/migrations/0001_delayed_delivery_state.sql',
         BACKEND_ROOT,
       ),
@@ -123,6 +148,13 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     readFile(
       new URL(
         'src/communication-delayed-delivery-persistence/migrations/0002_scheduler_receipt_outbox.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-persistence/migrations/0003_client_realtime_replay.sql',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -245,6 +277,16 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   );
   assert.match(schedulerReceiptMigration, /scheduler\.job_run\.acceptance\.v1/);
   assert.match(schedulerReceiptMigration, /scheduler\.job_run\.result\.v1/);
+  assert.match(persistenceRelay, /pub async fn pending_scheduler_commands/);
+  assert.match(persistenceRelay, /pub async fn pending_scheduler_receipts/);
+  assert.match(persistenceRelay, /pub async fn mark_scheduler_message_published/);
+  assert.match(persistenceRelay, /envelope_sha256 = \$3/);
+  assert.match(persistenceStatus, /pub async fn status/);
+  assert.match(persistenceStatus, /created_at_unix_millis/);
+  assert.match(persistenceRealtime, /pub async fn client_realtime_window/);
+  assert.match(persistenceRealtime, /insert_operation_transition/);
+  assert.match(clientRealtimeMigration, /realtime_sequence/);
+  assert.doesNotMatch(clientRealtimeMigration, /body_utf8|provider_id|account_id/);
   assert.doesNotMatch(schedulerReceiptMigration, /body_utf8|provider_id|account_id/);
   assert.match(
     persistenceMigration,

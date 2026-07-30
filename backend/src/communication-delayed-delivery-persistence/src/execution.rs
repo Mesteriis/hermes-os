@@ -90,6 +90,13 @@ impl CommunicationDelayedDeliveryPersistenceV1 {
         }
         transition_to_due(&mut transaction, command, claimed_at).await?;
         transition_to_dispatching(&mut transaction, command, claimed_at).await?;
+        crate::realtime::insert_operation_transition(
+            &mut transaction,
+            &command.logical_owner_id,
+            &command.delayed_operation_id,
+            claimed_at,
+        )
+        .await?;
         insert_receipt_outbox(
             &mut transaction,
             &command.logical_owner_id,
@@ -155,6 +162,13 @@ impl CommunicationDelayedDeliveryPersistenceV1 {
         if affected != 1 {
             return Err(DelayedDeliveryPersistenceErrorV1::ClaimLost);
         }
+        crate::realtime::insert_operation_transition(
+            &mut transaction,
+            &command.claim.logical_owner_id,
+            &command.claim.delayed_operation_id,
+            accepted_at,
+        )
+        .await?;
         insert_receipt_outbox(
             &mut transaction,
             &command.claim.logical_owner_id,
@@ -218,6 +232,13 @@ impl CommunicationDelayedDeliveryPersistenceV1 {
         if affected != 1 {
             return Err(DelayedDeliveryPersistenceErrorV1::ClaimLost);
         }
+        crate::realtime::insert_operation_transition(
+            &mut transaction,
+            &command.claim.logical_owner_id,
+            &command.claim.delayed_operation_id,
+            failed_at,
+        )
+        .await?;
         insert_receipt_outbox(
             &mut transaction,
             &command.claim.logical_owner_id,

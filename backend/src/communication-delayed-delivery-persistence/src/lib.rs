@@ -2,7 +2,10 @@
 
 mod execution;
 mod operations;
+mod realtime;
+mod relay;
 pub mod schema;
+mod status;
 
 pub use execution::{
     ClaimDueExecutionOutcomeV1, ClaimDueExecutionV1, DelayedDeliveryExecutionClaimV1,
@@ -14,6 +17,8 @@ pub use operations::{
     CreateDelayedDeliveryOperationV1, DelayedDeliveryOperationStatusV1,
     RequestDelayedDeliveryCancellationV1, SchedulerScheduleResultV1,
 };
+pub use realtime::DelayedDeliveryClientRealtimeTransitionV1;
+pub use relay::{DelayedDeliveryOutboxRecordV1, DelayedDeliveryOutboxStreamV1};
 use sqlx::{
     PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},

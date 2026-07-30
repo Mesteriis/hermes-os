@@ -15,7 +15,10 @@ bounds, cancellation-race policy и owner-local Storage bundle. Persistence
 и execution fences; plaintext body в workflow SQL запрещён. Создание operation
 и Ensure outbox атомарно, Cancel revision-fenced и атомарен со своим outbox,
 Scheduler result дедуплицируется по inbox ID/hash до mutation. Encrypted Blob
-custody materialization ещё не подключён, но due command уже atomically проходит
+custody materialization ещё не подключён. Persistence теперь также предоставляет
+bounded exact Scheduler command/receipt outbox relay с hash-bound idempotent
+publication, owner-scoped Status с authoritative created/updated timestamps и
+атомарный replayable client-realtime transition log. Due command уже atomically проходит
 `scheduled|cancel_requested -> due -> dispatching`, сохраняет exact
 run/schedule/lease fence и acceptance receipt outbox. Delivery-intent acceptance
 может завершить operation и записать terminal Scheduler result только при живом

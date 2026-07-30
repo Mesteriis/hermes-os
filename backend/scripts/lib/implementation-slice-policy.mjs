@@ -2861,20 +2861,30 @@ function expectedSlice(currentSlice) {
     currentSlice === 'communication_delayed_delivery_runtime_adapters_v1'
     || currentSlice === 'communication_delayed_delivery_due_event_adapter_v1'
     || currentSlice === 'communication_delayed_delivery_store_adapter_v1'
+    || currentSlice === 'communication_delayed_delivery_persistence_runtime_surfaces_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
       cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
-      packages: currentSlice === 'communication_delayed_delivery_store_adapter_v1'
+      packages: [
+        'communication_delayed_delivery_store_adapter_v1',
+        'communication_delayed_delivery_persistence_runtime_surfaces_v1',
+      ].includes(currentSlice)
         ? COMMUNICATION_DELAYED_DELIVERY_STORE_ADAPTERS_PRODUCTION_PACKAGES
         : COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_PRODUCTION_PACKAGES,
       workspaceDependencies:
-        currentSlice === 'communication_delayed_delivery_store_adapter_v1'
+        [
+          'communication_delayed_delivery_store_adapter_v1',
+          'communication_delayed_delivery_persistence_runtime_surfaces_v1',
+        ].includes(currentSlice)
           ? COMMUNICATION_DELAYED_DELIVERY_STORE_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST
           : COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
-        currentSlice === 'communication_delayed_delivery_store_adapter_v1'
+        [
+          'communication_delayed_delivery_store_adapter_v1',
+          'communication_delayed_delivery_persistence_runtime_surfaces_v1',
+        ].includes(currentSlice)
           ? COMMUNICATION_DELAYED_DELIVERY_STORE_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST
           : COMMUNICATION_DELAYED_DELIVERY_RUNTIME_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
