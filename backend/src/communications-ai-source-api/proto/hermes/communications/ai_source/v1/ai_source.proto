@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package hermes.communications.ai_source.v1;
+
+// Exact workflow command into the Communications-owned AI source port.
+// Target authority is compile-time fixed and is never selected by the payload.
+message PrepareCommunicationReplySourceCommandV1 {
+  bytes run_id = 1;
+  bytes source_message_id = 2;
+  uint64 expected_source_revision = 3;
+  string logical_owner_id = 4;
+}
+
+message CommunicationReplySourcePreparedV1 {
+  bytes run_id = 1;
+  bytes source_message_id = 2;
+  bytes source_evidence_id = 3;
+  uint64 source_evidence_revision = 4;
+  CommunicationReplyBodySourceReceiptV1 body_source = 5;
+  string logical_owner_id = 6;
+}
+
+message CommunicationReplySourceRejectedV1 {
+  bytes run_id = 1;
+  CommunicationReplySourceRejectCodeV1 code = 2;
+  string logical_owner_id = 3;
+}
+
+message CommunicationReplyBodySourceReceiptV1 {
+  bytes reference_id = 1;
+  uint64 declared_bytes = 2;
+  bytes sha256 = 3;
+  bytes custody_transfer_source_proof = 4;
+}
+
+enum CommunicationReplySourceRejectCodeV1 {
+  COMMUNICATION_REPLY_SOURCE_REJECT_CODE_UNSPECIFIED = 0;
+  COMMUNICATION_REPLY_SOURCE_REJECT_CODE_INVALID_REQUEST = 1;
+  COMMUNICATION_REPLY_SOURCE_REJECT_CODE_SOURCE_MISSING_OR_INACTIVE = 2;
+  COMMUNICATION_REPLY_SOURCE_REJECT_CODE_STALE_REVISION = 3;
+  COMMUNICATION_REPLY_SOURCE_REJECT_CODE_CONTENT_UNAVAILABLE = 4;
+  COMMUNICATION_REPLY_SOURCE_REJECT_CODE_INVALID_UTF8 = 5;
+  COMMUNICATION_REPLY_SOURCE_REJECT_CODE_CONTENT_LIMIT = 6;
+  COMMUNICATION_REPLY_SOURCE_REJECT_CODE_POLICY = 7;
+}

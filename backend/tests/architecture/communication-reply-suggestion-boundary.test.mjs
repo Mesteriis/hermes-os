@@ -15,6 +15,10 @@ const INVENTORY_PATH = new URL(
   BACKEND_ROOT,
 );
 
+async function backendSource(path) {
+  return readFile(new URL(path, BACKEND_ROOT), 'utf8');
+}
+
 test('reply suggestion agreement keeps domain workflow engine and integration separate', async () => {
   const [adr, policySource, inventorySource] = await Promise.all([
     readFile(ADR_PATH, 'utf8'),
@@ -82,5 +86,37 @@ test('reply suggestion agreement keeps domain workflow engine and integration se
   assert.doesNotMatch(
     adr,
     /Gateway (?:fetches|reads) (?:the )?message body|generic ai context workflow/i,
+  );
+});
+
+test('Communications AI source is one provider-neutral event contract unit', async () => {
+  const [manifest, api, envelope, proto] = await Promise.all([
+    backendSource('src/communications-ai-source-api/Cargo.toml'),
+    backendSource('src/communications-ai-source-api/src/lib.rs'),
+    backendSource('src/communications-ai-source-api/src/envelope.rs'),
+    backendSource(
+      'src/communications-ai-source-api/proto/hermes/communications/ai_source/v1/ai_source.proto',
+    ),
+  ]);
+
+  assert.match(manifest, /role = "domain"/);
+  assert.match(manifest, /owner = "communications"/);
+  assert.match(manifest, /surface = "contract"/);
+  assert.doesNotMatch(
+    manifest,
+    /communication-reply-suggestion|ollama|ai-inference|sqlx|kernel|gateway/,
+  );
+  assert.match(api, /communication_reply_source_prepare/);
+  assert.match(api, /communication_reply_source_prepared/);
+  assert.match(api, /communication_reply_source_rejected/);
+  assert.match(api, /communication_reply_suggestion\.source\.blob\.v1/);
+  assert.match(envelope, /DurableEnvelopeV1/);
+  assert.match(envelope, /target_capability: COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID_V1/);
+  assert.match(envelope, /validate_envelope_v1/);
+  assert.match(proto, /uint64 expected_source_revision = 3/);
+  assert.match(proto, /bytes custody_transfer_source_proof = 4/);
+  assert.doesNotMatch(
+    `${api}\n${envelope}\n${proto}`,
+    /provider_id|provider_account|provider_locator|model_id|model_key|prompt|string target_owner|string target_module|string target_capability|message_body|body_text/,
   );
 });

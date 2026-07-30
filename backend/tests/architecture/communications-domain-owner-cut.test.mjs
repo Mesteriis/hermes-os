@@ -93,6 +93,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication_delivery_intent.telegram.events.v1',
       'communication_delivery_intent.whatsapp.events.v1',
       'communication_delivery_intent.zulip.events.v1',
+      'communications.ai-reply-source.v1',
       'communications.attachment.blob-admission.observe.v1',
       'communications.attachment.safety-verdict.observe.v1',
       'communications.blob.v1',

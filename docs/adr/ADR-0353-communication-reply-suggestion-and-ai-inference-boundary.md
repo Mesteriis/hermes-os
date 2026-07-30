@@ -4,9 +4,12 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: architecture agreement accepted; production packages,
-runtime admission and live inference evidence ещё не реализованы. Gates
-`communications_ai_context_source_v1`, `ai_inference_v1`,
+Состояние реализации: architecture agreement и Communications-owned contract
+unit `hermes-communications-ai-source-api` реализованы. Durable
+command/prepared/rejected schemas, exact route requests, target-bound audience
+и envelope builders имеют Cargo/architecture evidence. Communications
+persistence/runtime handoff, AI engine, provider integration и workflow ещё не
+реализованы; gates `communications_ai_context_source_v1`, `ai_inference_v1`,
 `ollama_ai_provider_v1` и `communication_reply_suggestion_v1` остаются
 `planned`.
 

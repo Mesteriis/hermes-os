@@ -591,4 +591,6 @@ ADR-0353 разделяет AI Reply на Communications-owned event-backed sour
 handoff, отдельный `communication_reply_suggestion` workflow, AI inference
 engine и Ollama integration. Client content ticket не переиспользуется,
 private body не проходит через NATS/Gateway, а все четыре gates остаются
-закрыты до отдельных build units и live inference evidence.
+закрыты до отдельных build units и live inference evidence. Первый
+Communications-owned source contract build unit уже реализован, но сам source
+handoff gate ждёт persistence/runtime и live event evidence.
