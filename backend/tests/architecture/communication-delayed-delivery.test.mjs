@@ -5,7 +5,7 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
-test('delayed delivery admits separate contract and policy units while its runtime gate stays planned', async () => {
+test('delayed delivery admits exact due commands in a separate adapter while its runtime gate stays planned', async () => {
   const [
     adr,
     inventorySource,
@@ -27,6 +27,7 @@ test('delayed delivery admits separate contract and policy units while its runti
     executionWorker,
     eventAdaptersManifest,
     eventAdaptersSource,
+    dueEventAdapterSource,
     runtimeAdaptersManifest,
     runtimeAdaptersSource,
   ] = await Promise.all([
@@ -148,6 +149,13 @@ test('delayed delivery admits separate contract and policy units while its runti
     ),
     readFile(
       new URL(
+        'src/communication-delayed-delivery-event-adapters/src/due.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-delayed-delivery-runtime-adapters/Cargo.toml',
         BACKEND_ROOT,
       ),
@@ -238,8 +246,16 @@ test('delayed delivery admits separate contract and policy units while its runti
   assert.match(eventAdaptersSource, /pub fn decode_scheduler_result_v1/);
   assert.match(eventAdaptersSource, /FenceKindV1::GrantEpoch/);
   assert.match(eventAdaptersSource, /expected_command_message_id/);
+  assert.match(dueEventAdapterSource, /validate_scheduled_job_command_v1/);
+  assert.match(dueEventAdapterSource, /JobTriggerKindV1::Time/);
+  assert.match(dueEventAdapterSource, /JOB_EXECUTE_CAPABILITY_V1/);
+  assert.match(dueEventAdapterSource, /FenceKindV1::RuntimeLease/);
+  assert.match(dueEventAdapterSource, /JobRunOutcomeV1::Accepted/);
+  assert.match(dueEventAdapterSource, /JobRunOutcomeV1::Succeeded/);
+  assert.match(dueEventAdapterSource, /ReceiptBindingV1/);
+  assert.doesNotMatch(dueEventAdapterSource, /job_kind: None/);
   assert.doesNotMatch(
-    eventAdaptersSource,
+    `${eventAdaptersSource}\n${dueEventAdapterSource}`,
     /scheduler_(?:implementation|persistence)|kernel::|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
   );
   assert.match(

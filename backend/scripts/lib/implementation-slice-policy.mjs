@@ -2834,7 +2834,10 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'communication_delayed_delivery_runtime_adapters_v1') {
+  if (
+    currentSlice === 'communication_delayed_delivery_runtime_adapters_v1'
+    || currentSlice === 'communication_delayed_delivery_due_event_adapter_v1'
+  ) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,

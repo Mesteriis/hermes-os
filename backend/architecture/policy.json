@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delayed_delivery_runtime_adapters_v1",
+    "currentSlice": "communication_delayed_delivery_due_event_adapter_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {

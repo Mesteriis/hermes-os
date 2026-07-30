@@ -17,6 +17,13 @@ use prost::Message;
 use prost_types::Timestamp;
 use sha2::{Digest, Sha256};
 
+mod due;
+pub use due::{
+    DecodedDelayedDeliveryDueCommandV1, DelayedDeliveryDueAdapterErrorV1,
+    DelayedDeliveryDueContractV1, DelayedDeliveryDueMessageV1, DelayedDeliveryDueRuntimeContextV1,
+    build_delayed_delivery_terminal_receipt_v1, decode_delayed_delivery_due_command_v1,
+};
+
 const SCHEDULER_CONTRACT_OWNER: &str = "scheduler";
 const SCHEDULER_CONTRACT_NAME: &str = "schedule_control";
 const SCHEDULER_TARGET_CAPABILITY: &str = "scheduler_schedule_control";

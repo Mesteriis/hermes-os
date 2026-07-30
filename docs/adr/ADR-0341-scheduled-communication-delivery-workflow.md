@@ -24,12 +24,15 @@ exact lease. Отдельная execution unit реализует owner-local du
 stable delivery-intent request, fenced accepted/failed transition, terminal
 Scheduler receipt и durable cleanup-pending outcome. Отдельная event-adapter
 unit уже строит exact Scheduler command envelope с runtime/grant fences и
-проверяет correlated Scheduler result до persistence mutation. Отдельная
-runtime-adapters unit реализует receipt-bound Blob read, terminal-reason-bound
-custody release и exact delivery-intent `request_rpc` через один sequential
-managed-control port. Executable admission, assembly, client routing и live
-end-to-end contour ещё не реализованы. Этот ADR не открывает workflow gate сам
-по себе.
+проверяет correlated Scheduler result до persistence mutation. Она также
+строго допускает только due `ScheduledJobCommandV1` своего exact JobKind,
+связывает command metadata, scheduled time и RuntimeLease и строит стабильные
+acceptance/terminal Scheduler receipts без синтетических command-объектов.
+Отдельная runtime-adapters unit реализует receipt-bound Blob read,
+terminal-reason-bound custody release и exact delivery-intent `request_rpc`
+через один sequential managed-control port. Executable admission, assembly,
+client routing и live end-to-end contour ещё не реализованы. Этот ADR не
+открывает workflow gate сам по себе.
 
 Уточняет:
 
@@ -292,7 +295,7 @@ Gate открывается только вместе с:
 1. implemented `scheduler_v1`, включая live successor restart/revoke и hot
    reconciliation;
 2. exact module-originated Scheduler command/result contracts и grants;
-3. пятью отдельными delayed-delivery packages и Cargo boundaries;
+3. восемью отдельными delayed-delivery packages и Cargo boundaries;
 4. generated Schedule/Cancel/Status/realtime contracts и hard bounds;
 5. owner-local Storage bundle, idempotent operation and state transitions;
 6. encrypted Blob custody without plaintext workflow SQL;
