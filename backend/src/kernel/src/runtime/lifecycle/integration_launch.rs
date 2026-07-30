@@ -92,6 +92,10 @@ pub(crate) fn launch_reserved(
         .module_registration(registration_id)
         .map_err(|_| "managed integration registration is unavailable".to_owned())?
         .ok_or_else(|| "managed integration registration is unavailable".to_owned())?;
+    let logical_human_owner = store
+        .initial_owner_identity()
+        .map_err(|_| "managed integration human owner is unavailable".to_owned())?
+        .ok_or_else(|| "managed integration human owner is unavailable".to_owned())?;
     let granted_capability_ids = store
         .module_grant_snapshot(registration_id)
         .map_err(|_| "managed integration grants are unavailable".to_owned())?
@@ -158,6 +162,7 @@ pub(crate) fn launch_reserved(
         runtime_artifacts: Vec::new(),
         integration_state_root: None,
         configuration_instances,
+        logical_human_owner_id: logical_human_owner.owner_id().to_owned(),
     };
     validate_managed_integration_runtime_configuration(&configuration)
         .map_err(|_| "managed integration runtime configuration is invalid".to_owned())?;

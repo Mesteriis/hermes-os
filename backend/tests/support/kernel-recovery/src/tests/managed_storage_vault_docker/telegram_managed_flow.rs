@@ -3,6 +3,7 @@
 use super::*;
 use std::time::Instant;
 
+use crate::platform::client_realtime::ClientRealtimePublishHandlerV1;
 use hermes_events_protocol::validation::envelope::decode_envelope_v1;
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
@@ -80,16 +81,17 @@ impl TelegramClientRouteError {
     }
 }
 
-struct PreparedManagedTelegramFixture {
-    root: PathBuf,
-    data: PathBuf,
-    store: Arc<SqliteControlStore>,
-    supervisor: ManagedRuntimeSupervisor,
+pub(super) struct PreparedManagedTelegramFixture {
+    pub(super) root: PathBuf,
+    pub(super) data: PathBuf,
+    pub(super) store: Arc<SqliteControlStore>,
+    pub(super) supervisor: ManagedRuntimeSupervisor,
+    pub(super) realtime: hermes_gateway_runtime::InMemoryBrowserRealtimeSource,
     admitted_telegram: Option<AdmittedTelegramRuntime>,
 }
 
 impl PreparedManagedTelegramFixture {
-    fn start_telegram(&mut self) -> StartedTelegramRuntime {
+    pub(super) fn start_telegram(&mut self) -> StartedTelegramRuntime {
         start_telegram_runtime(
             &self.supervisor,
             &self.store,
@@ -101,7 +103,10 @@ impl PreparedManagedTelegramFixture {
         )
     }
 
-    fn restart_telegram(&self, predecessor: StartedTelegramRuntime) -> StartedTelegramRuntime {
+    pub(super) fn restart_telegram(
+        &self,
+        predecessor: StartedTelegramRuntime,
+    ) -> StartedTelegramRuntime {
         restart_telegram_runtime(
             &self.supervisor,
             &self.store,
@@ -123,7 +128,7 @@ impl Drop for PreparedManagedTelegramFixture {
     }
 }
 
-fn prepare_managed_telegram_fixture() -> PreparedManagedTelegramFixture {
+pub(super) fn prepare_managed_telegram_fixture() -> PreparedManagedTelegramFixture {
     prepare_managed_telegram_fixture_without_capability(None)
 }
 
@@ -151,12 +156,21 @@ fn prepare_managed_telegram_fixture_without_capability(
             [4; 65],
         ))
         .expect("claim initial owner");
+    super::super::browser_gateway_session::admit_browser_test_device(&store, "owner-1");
     let admitted_telegram =
         admit_telegram_runtime_without_capability(&store, excluded_capability_id);
     let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
+    let realtime =
+        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(64).expect("realtime source");
     configure_route_handler(&supervisor, &store, &data);
+    supervisor
+        .configure_client_realtime_handler(Arc::new(ClientRealtimePublishHandlerV1::new(
+            Arc::clone(&store),
+            realtime.clone(),
+        )))
+        .expect("configure managed client realtime handler");
     supervisor
         .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
             Arc::clone(&store),
@@ -195,6 +209,7 @@ fn prepare_managed_telegram_fixture_without_capability(
         data,
         store,
         supervisor,
+        realtime,
         admitted_telegram: Some(admitted_telegram),
     }
 }
@@ -1374,8 +1389,14 @@ fn managed_telegram_call_history_route_is_durable_and_replayable() {
         )),
     }
     .encode_to_vec();
-    let list_response =
-        wait_for_telegram_call_history(&store, &fixture.supervisor, &telegram, 101, &list_request);
+    let list_response = wait_for_telegram_call_history(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        101,
+        &list_request,
+        2,
+    );
     let calls_query_response_v1::Response::CallList(list) = list_response
         .response
         .as_ref()
@@ -1543,8 +1564,14 @@ fn managed_telegram_call_history_route_is_durable_and_replayable() {
     let stale_runtime = telegram.clone();
     let telegram = fixture.restart_telegram(telegram);
     assert_telegram_lifecycle_query(&store, &fixture.supervisor, &telegram);
-    let replayed_list =
-        wait_for_telegram_call_history(&store, &fixture.supervisor, &telegram, 108, &list_request);
+    let replayed_list = wait_for_telegram_call_history(
+        &store,
+        &fixture.supervisor,
+        &telegram,
+        108,
+        &list_request,
+        2,
+    );
     let calls_query_response_v1::Response::CallList(replayed_list) = replayed_list
         .response
         .expect("restarted Telegram Calls list response")
@@ -1949,6 +1976,7 @@ fn wait_for_telegram_call_history(
     telegram: &StartedTelegramRuntime,
     request_id: u64,
     request_payload: &[u8],
+    expected_minimum: usize,
 ) -> CallsQueryResponseV1 {
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     loop {
@@ -1963,7 +1991,8 @@ fn wait_for_telegram_call_history(
         let response = decode_calls_query_response(&bytes);
         if matches!(
             response.response,
-            Some(calls_query_response_v1::Response::CallList(ref list)) if !list.calls.is_empty()
+            Some(calls_query_response_v1::Response::CallList(ref list))
+                if list.calls.len() >= expected_minimum
         ) {
             return response;
         }
@@ -2015,7 +2044,7 @@ fn wait_for_telegram_call_operation(
     }
 }
 
-fn route_telegram_calls_until_ready(
+pub(super) fn route_telegram_calls_until_ready(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     telegram: &StartedTelegramRuntime,
@@ -2046,7 +2075,9 @@ fn route_telegram_calls_until_ready(
                 }
                 std::thread::sleep(Duration::from_millis(25));
             }
-            Err(error) => panic!("Telegram Calls route failed: {error:?}"),
+            Err(error) => {
+                panic!("Telegram Calls route {request_id} failed: {error:?}")
+            }
         }
     }
 }
@@ -2109,7 +2140,7 @@ fn decode_calls_replay_response(bytes: &[u8]) -> CallsReplayResponseV1 {
         .expect("Telegram Calls replay response")
 }
 
-fn decode_calls_command_response(bytes: &[u8]) -> CallsCommandResponseV1 {
+pub(super) fn decode_calls_command_response(bytes: &[u8]) -> CallsCommandResponseV1 {
     let response = ModuleClientResponseV1::decode(bytes).expect("Telegram Calls module response");
     CallsCommandResponseV1::decode(response.response_payload.as_slice())
         .expect("Telegram Calls command response")

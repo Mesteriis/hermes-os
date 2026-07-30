@@ -169,7 +169,8 @@ async fn assert_live_flow(endpoint: String, supervisor: &ManagedRuntimeSuperviso
 async fn persist_provider_observation(durable: &TelegramDurablePersistence) {
     let mut runtime = TelegramRuntime::new(UnusedProvider);
     runtime.set_admission(Some(hermes_telegram_runtime::TelegramRuntimeAdmission {
-        logical_owner_id: "owner-1".to_owned(),
+        logical_owner_id: "telegram".to_owned(),
+        logical_human_owner_id: "owner-1".to_owned(),
         configuration_instance_id: "telegram-account-1".to_owned(),
         module_registration_id: TELEGRAM_REGISTRATION_ID.to_owned(),
         runtime_instance_id: TELEGRAM_RUNTIME_ID.to_owned(),

@@ -69,6 +69,7 @@ pub enum CallTerminalDispositionV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecordCallEvidenceV1 {
     pub call_evidence_id: [u8; 16],
+    pub logical_owner_id: String,
     pub source_call_cursor_sha256: [u8; 32],
     pub account_cursor_sha256: [u8; 32],
     pub conversation_cursor_sha256: Option<[u8; 32]>,
@@ -115,6 +116,7 @@ pub fn decode_call_evidence_observation_v1(
 ) -> Result<RecordCallEvidenceV1, CallEvidenceCoreErrorV1> {
     let evidence = RecordCallEvidenceV1 {
         call_evidence_id: id16(&wire.call_evidence_id)?,
+        logical_owner_id: wire.logical_owner_id.clone(),
         source_call_cursor_sha256: id32(&wire.source_call_cursor_sha256)?,
         account_cursor_sha256: id32(&wire.account_cursor_sha256)?,
         conversation_cursor_sha256: optional_id32(&wire.conversation_cursor_sha256)?,
@@ -178,6 +180,7 @@ pub fn apply_call_evidence_v1(
 
 fn validate_evidence(value: &RecordCallEvidenceV1) -> Result<(), CallEvidenceCoreErrorV1> {
     if value.source_revision == 0
+        || !valid_owner(&value.logical_owner_id)
         || value.call_evidence_id.iter().all(|byte| *byte == 0)
         || value
             .source_call_cursor_sha256
@@ -224,6 +227,7 @@ fn validate_stable_identity(
     incoming: &RecordCallEvidenceV1,
 ) -> Result<(), CallEvidenceCoreErrorV1> {
     if current.call_evidence_id != incoming.call_evidence_id
+        || current.logical_owner_id != incoming.logical_owner_id
         || current.source_call_cursor_sha256 != incoming.source_call_cursor_sha256
         || current.account_cursor_sha256 != incoming.account_cursor_sha256
         || current.provider != incoming.provider
@@ -233,6 +237,14 @@ fn validate_stable_identity(
         return Err(CallEvidenceCoreErrorV1::IdentityConflict);
     }
     Ok(())
+}
+
+fn valid_owner(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
+        })
 }
 
 fn id16(value: &[u8]) -> Result<[u8; 16], CallEvidenceCoreErrorV1> {
@@ -347,6 +359,7 @@ mod tests {
     fn wire(state: WireState, revision: u64) -> CallEvidenceObservedV1 {
         CallEvidenceObservedV1 {
             call_evidence_id: [1; 16].to_vec(),
+            logical_owner_id: "owner-1".to_owned(),
             source_call_cursor_sha256: [2; 32].to_vec(),
             account_cursor_sha256: [3; 32].to_vec(),
             conversation_cursor_sha256: [4; 32].to_vec(),

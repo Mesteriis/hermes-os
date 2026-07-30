@@ -616,7 +616,7 @@
       "gate": "communications_call_evidence_v1",
       "role": "domain",
       "owner": "communications",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["communications_canonical_read_v2"]
     },
     {

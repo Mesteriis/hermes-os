@@ -24,6 +24,9 @@ message CallEvidenceObservedV1 {
   optional uint64 duration_seconds = 15;
   // Presentation evidence only. It is not identity or authorization input.
   optional string participant_display_label = 16;
+  // Stable human-owner scope. Module and provider owner identities are not
+  // valid substitutes for this value.
+  string logical_owner_id = 17;
 }
 
 enum CallProviderProvenanceV1 {

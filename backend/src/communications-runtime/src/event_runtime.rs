@@ -82,6 +82,7 @@ use crate::{
 
 pub struct CommunicationsRuntimeAdmissionV1 {
     pub logical_owner_id: String,
+    pub logical_human_owner_id: String,
     pub registration_id: String,
     pub runtime_instance_id: String,
     pub runtime_generation: u64,
@@ -103,6 +104,7 @@ pub struct CommunicationsEventRuntimeV1 {
     runtime_instance_id: String,
     runtime_generation: u64,
     logical_owner_id: String,
+    logical_human_owner_id: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -314,6 +316,7 @@ impl CommunicationsEventRuntimeV1 {
         if descriptor_bytes.is_empty()
             || settings_schema_bytes.is_empty()
             || admission.logical_owner_id.trim().is_empty()
+            || admission.logical_human_owner_id.trim().is_empty()
             || admission.registration_id.trim().is_empty()
             || admission.runtime_instance_id.trim().is_empty()
             || admission.runtime_generation == 0
@@ -454,6 +457,7 @@ impl CommunicationsEventRuntimeV1 {
             runtime_instance_id: admission.runtime_instance_id.clone(),
             runtime_generation: admission.runtime_generation,
             logical_owner_id: admission.logical_owner_id.clone(),
+            logical_human_owner_id: admission.logical_human_owner_id.clone(),
         })
     }
 
@@ -489,7 +493,7 @@ impl CommunicationsEventRuntimeV1 {
                     ) {
                     handle_call_evidence_module_query_delivery_v1(
                         &self.call_evidence_persistence,
-                        &self.logical_owner_id,
+                        &self.logical_human_owner_id,
                         delivery,
                     )
                     .await
@@ -591,7 +595,7 @@ impl CommunicationsEventRuntimeV1 {
         let response = dispatch_module_client_request_v1(
             &self.persistence,
             &self.call_evidence_persistence,
-            &self.logical_owner_id,
+            &self.logical_human_owner_id,
             &self.content_tickets,
             &mut self.search_access,
             &mut self.control_channel,
@@ -642,7 +646,7 @@ impl CommunicationsEventRuntimeV1 {
                     &self.call_evidence_persistence,
                     &self.connection,
                     &self.permits.call_evidence,
-                    &self.logical_owner_id,
+                    &self.logical_human_owner_id,
                     canonical_event_context.recorded_at_unix_seconds,
                 )
                 .await?;
@@ -758,7 +762,7 @@ impl CommunicationsEventRuntimeV1 {
                 &self.call_evidence_persistence,
                 &mut self.control_channel,
                 &mut dispatcher,
-                &self.logical_owner_id,
+                &self.logical_human_owner_id,
             )
             .await
             .map_err(call_evidence_realtime_error);

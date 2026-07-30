@@ -60,6 +60,7 @@ pub enum TelegramBootstrapError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TelegramManagedLaunchAdmissionV1 {
     logical_owner_id: String,
+    logical_human_owner_id: String,
     configuration_instance_id: String,
     module_registration_id: String,
     runtime_instance_id: String,
@@ -83,6 +84,7 @@ impl TelegramManagedLaunchAdmissionV1 {
             .ok_or_else(|| "Telegram runtime configuration is invalid".to_owned())?;
         Ok(Self {
             logical_owner_id: configuration.logical_owner_id.clone(),
+            logical_human_owner_id: configuration.logical_human_owner_id.clone(),
             configuration_instance_id: configuration.configuration_instance_id.clone(),
             module_registration_id: configuration.registration_id.clone(),
             runtime_instance_id: configuration.runtime_instance_id.clone(),
@@ -227,6 +229,7 @@ pub async fn open_admitted_runtime(
     let provider_context = provider_credential_context(launch_admission, &storage_configuration)?;
     let mut admission = TelegramRuntimeAdmission {
         logical_owner_id: launch_admission.logical_owner_id.clone(),
+        logical_human_owner_id: launch_admission.logical_human_owner_id.clone(),
         configuration_instance_id: launch_admission.configuration_instance_id.clone(),
         module_registration_id: launch_admission.module_registration_id.clone(),
         runtime_instance_id: launch_admission.runtime_instance_id.clone(),

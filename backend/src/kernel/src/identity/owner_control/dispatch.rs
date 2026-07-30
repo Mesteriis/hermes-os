@@ -331,7 +331,7 @@ fn start_reserved_domain_runtime(
     request: StartReservedDomainRuntimeRequestV1,
 ) -> Result<OwnerResult, String> {
     (|| {
-        sessions.authorize(store, &request.owner_session_id)?;
+        let logical_human_owner = sessions.authorized_owner(store, &request.owner_session_id)?;
         let reservation =
             macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
         let registration = store
@@ -366,6 +366,7 @@ fn start_reserved_domain_runtime(
             storage: Some(storage),
             event_hub_endpoint: event_topology.nats_endpoint().to_owned(),
             event_credential_revision: event_topology.credential_revision(),
+            logical_human_owner_id: logical_human_owner.owner_id().to_owned(),
         };
         validate_managed_domain_runtime_configuration(&configuration)
             .map_err(|_| "managed domain runtime configuration is invalid".to_owned())?;

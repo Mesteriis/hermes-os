@@ -357,6 +357,7 @@ pub(super) fn start_zulip_runtime(
         runtime_artifacts: Vec::new(),
         integration_state_root: None,
         configuration_instances: Vec::new(),
+        logical_human_owner_id: "owner-1".to_owned(),
     };
     managed_launch::start_reserved_integration(
         supervisor,

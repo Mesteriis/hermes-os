@@ -26,6 +26,7 @@ pub fn validate_managed_integration_runtime_configuration(
         .ok_or(ManagedIntegrationRuntimeValidationErrorV1::InvalidConfiguration)?;
     if configuration.major != 1
         || !valid_identifier(&configuration.logical_owner_id)
+        || !valid_identifier(&configuration.logical_human_owner_id)
         || !valid_identifier(&configuration.registration_id)
         || !valid_identifier(&configuration.runtime_instance_id)
         || !valid_identifier(&configuration.configuration_instance_id)
@@ -287,6 +288,7 @@ mod tests {
                 state_layout_revision: 1,
             }),
             configuration_instances: Vec::new(),
+            logical_human_owner_id: "owner-1".to_owned(),
         }
     }
 }

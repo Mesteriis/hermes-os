@@ -289,14 +289,30 @@ test('Telegram owns the call evidence producer and relays exact outbox bytes', a
   );
 });
 
-test('call evidence ADR keeps the completion gate closed until live managed evidence', async () => {
-  const [adr, inventorySource] = await Promise.all([
+test('call evidence gate has live managed outage, SSE and restart evidence', async () => {
+  const [adr, ownerAdr, managedFlow, integrationProtocol, domainProtocol, inventorySource] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0349-event-backed-communications-call-evidence.md',
         REPOSITORY_ROOT,
       ),
       'utf8',
+    ),
+    readFile(
+      new URL(
+        'docs/adr/ADR-0350-explicit-human-owner-context-for-managed-domain-and-integration-runtimes.md',
+        REPOSITORY_ROOT,
+      ),
+      'utf8',
+    ),
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/call_evidence_managed_flow.rs',
+    ),
+    backendSource(
+      'src/platform/runtime_protocol/proto/hermes/runtime/v1/managed_integration_runtime.proto',
+    ),
+    backendSource(
+      'src/platform/runtime_protocol/proto/hermes/runtime/v1/managed_domain_runtime.proto',
     ),
     backendSource('architecture/communications-settings-reconstruction.json'),
   ]);
@@ -309,11 +325,20 @@ test('call evidence ADR keeps the completion gate closed until live managed evid
     gate: 'communications_call_evidence_v1',
     role: 'domain',
     owner: 'communications',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['communications_canonical_read_v2'],
   });
   assert.match(adr, /Integration не импортирует Communications implementation или persistence/);
   assert.match(adr, /Communications не импортирует integration API, runtime, SDK или storage/);
-  assert.match(adr, /ADR и static package presence сами по себе gate не открывают/);
+  assert.match(adr, /ADR и static package presence сами по\s+себе gate не открывают/);
   assert.match(adr, /live managed proof from integration outbox through NATS/);
+  assert.match(ownerAdr, /module owner никогда не используется как fallback human owner/);
+  assert.match(integrationProtocol, /string logical_human_owner_id = 14/);
+  assert.match(domainProtocol, /string logical_human_owner_id = 10/);
+  assert.match(managedFlow, /set_authenticated_nats_container_running\(false\)/);
+  assert.match(managedFlow, /wait_for_pending_call_evidence/);
+  assert.match(managedFlow, /CALL_EVIDENCE_QUERY_CONNECT_PATH_V1/);
+  assert.match(managedFlow, /\/api\/realtime\/v1\/events/);
+  assert.match(managedFlow, /restart_communications_domain/);
+  assert.match(managedFlow, /assert_call_evidence_event_is_client_safe/);
 });

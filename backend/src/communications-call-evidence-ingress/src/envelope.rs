@@ -92,6 +92,7 @@ pub fn build_call_evidence_observed_outbox_record_v1(
             .participant_display_label
             .as_ref()
             .map(|value| value.trim().to_owned()),
+        logical_owner_id: draft.logical_owner_id.clone(),
     }
     .encode_to_vec();
     let recorded_at = Timestamp {
@@ -186,6 +187,8 @@ fn observation_message_id(draft: &CallEvidenceObservationDraftV1) -> [u8; 16] {
 fn source_cursor(domain: &[u8], draft: &CallEvidenceObservationDraftV1, value: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(domain);
+    hasher.update(draft.logical_owner_id.as_bytes());
+    hasher.update(b"\0");
     hasher.update(draft.provider.as_str().as_bytes());
     hasher.update(b"\0");
     hasher.update(draft.external_account_id.as_bytes());
@@ -271,6 +274,7 @@ mod tests {
     fn draft(observation_id: &str, revision: u64) -> CallEvidenceObservationDraftV1 {
         CallEvidenceObservationDraftV1 {
             observation_id: observation_id.to_owned(),
+            logical_owner_id: "owner-1".to_owned(),
             provider: CallProviderProvenanceV1::Telegram,
             external_account_id: "provider-account-secret".to_owned(),
             external_call_id: "provider-call-secret".to_owned(),

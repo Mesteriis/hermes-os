@@ -14,6 +14,7 @@ use hermes_telegram_calls_core::{
 
 pub(crate) fn call_evidence_record_v1(
     session: &TelegramCallSession,
+    logical_owner_id: &str,
     runtime_instance_id: &str,
 ) -> Result<OutboxRecordV1, CallEvidenceEnvelopeBuildErrorV1> {
     let state = lifecycle_state(session);
@@ -35,6 +36,7 @@ pub(crate) fn call_evidence_record_v1(
                 "telegram-call-evidence:{}:{}",
                 session.call_session_id, session.revision
             ),
+            logical_owner_id: logical_owner_id.to_owned(),
             provider: CallProviderProvenanceV1::Telegram,
             external_account_id: session.account_id.clone(),
             external_call_id: session.call_session_id.clone(),
@@ -130,8 +132,12 @@ mod tests {
 
     #[test]
     fn mapper_hashes_provider_locators_before_serialization() {
-        let record = call_evidence_record_v1(&session(TelegramProviderCallState::Pending), "tg-1")
-            .expect("record");
+        let record = call_evidence_record_v1(
+            &session(TelegramProviderCallState::Pending),
+            "owner-1",
+            "tg-1",
+        )
+        .expect("record");
         let envelope = decode_envelope_v1(record.exact_bytes()).expect("valid durable observation");
         let _: DurableEnvelopeV1 =
             DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");

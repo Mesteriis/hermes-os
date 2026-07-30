@@ -263,13 +263,14 @@ impl TelegramProcessLoop {
                         .map_err(TelegramDurableProcessError::Projection)?;
                 }
             }
-            let (runtime_generation, runtime_instance_id) = self
+            let (runtime_generation, runtime_instance_id, logical_human_owner_id) = self
                 .composition
                 .runtime_admission()
                 .map(|admission| {
                     (
                         admission.runtime_generation,
                         admission.runtime_instance_id.clone(),
+                        admission.logical_human_owner_id.clone(),
                     )
                 })
                 .ok_or_else(|| {
@@ -296,6 +297,7 @@ impl TelegramProcessLoop {
                             calls,
                             &observation,
                             runtime_generation,
+                            &logical_human_owner_id,
                             &runtime_instance_id,
                             observed_at_unix_seconds,
                         )
@@ -319,6 +321,7 @@ impl TelegramProcessLoop {
                             calls,
                             &observation,
                             runtime_generation,
+                            &logical_human_owner_id,
                             &runtime_instance_id,
                             observed_at_unix_seconds,
                         )
@@ -501,7 +504,7 @@ pub fn serve_admitted_provider_loop(
                 &durable.delivery_intent_store(),
                 &event_connection,
                 &delivery_intent_subscribe_permit,
-                &admission.logical_owner_id,
+                &admission.logical_human_owner_id,
                 &result_context,
             )) {
                 Ok(_) | Err(TelegramDeliveryIntentConsumeErrorV1::Unavailable) => {}
@@ -758,6 +761,7 @@ async fn persist_call_observation(
     calls: &TelegramCallsPersistence,
     observation: &TdlibCallObservation,
     runtime_generation: u64,
+    logical_human_owner_id: &str,
     runtime_instance_id: &str,
     observed_at_unix_seconds: u64,
 ) -> Result<hermes_telegram_calls_core::TelegramCallSession, TelegramDurableProcessError> {
@@ -780,6 +784,7 @@ async fn persist_call_observation(
         .ingest_provider_update_with_call_evidence(
             &suggested_call_session_id,
             &update,
+            logical_human_owner_id,
             runtime_instance_id,
         )
         .await

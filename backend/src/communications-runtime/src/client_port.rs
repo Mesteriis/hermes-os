@@ -44,7 +44,7 @@ const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
 pub async fn dispatch_module_client_request_v1(
     persistence: &CommunicationsDurablePersistence,
     call_evidence_persistence: &CommunicationsCallEvidencePersistenceV1,
-    logical_owner_id: &str,
+    logical_human_owner_id: &str,
     tickets: &Arc<CommunicationsContentTicketStoreV1>,
     search_access: &mut CommunicationsSearchAccessV1,
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
@@ -57,7 +57,7 @@ pub async fn dispatch_module_client_request_v1(
     {
         handle_call_evidence_client_request_v1(
             call_evidence_persistence,
-            logical_owner_id,
+            logical_human_owner_id,
             &encoded,
         )
         .await

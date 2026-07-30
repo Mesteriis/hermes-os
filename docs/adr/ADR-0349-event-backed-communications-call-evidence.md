@@ -4,13 +4,13 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: ingress/client contracts, core, owner-local persistence,
-revision 15 существующего Communications storage bundle, managed event
-consumer, generated list/get, replayable client realtime и Telegram-owned
-producer/outbox adapter реализованы. Producer остаётся staged в Telegram Calls
-build units до их exact managed admission. Gate
-`communications_call_evidence_v1` остаётся закрыт до exact admission
-producer-а и live event conformance.
+Состояние реализации: реализовано. Ingress/client contracts, core, owner-local
+persistence, revision 15 существующего Communications storage bundle, managed
+event consumer, generated list/get, replayable client realtime и
+Telegram-owned producer/outbox adapter подтверждены live managed conformance.
+Gate `communications_call_evidence_v1` открыт. Telegram Calls остаётся отдельной
+integration build unit; это не открывает `telegram_call_media_v1` и не добавляет
+Telegram runtime в production inventory.
 
 Уточняет:
 
@@ -19,7 +19,8 @@ producer-а и live event conformance.
 - [ADR-0220: canonical durable envelope](ADR-0220-canonical-durable-envelope-and-contract-evolution.md);
 - [ADR-0240: canonical Communications migration](ADR-0240-canonical-communications-owner-clean-room-migration.md);
 - [ADR-0282: full Communications reconstruction](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
-- [ADR-0284: Telegram one-to-one audio calls](ADR-0284-telegram-one-to-one-audio-calls-operational-boundary.md).
+- [ADR-0284: Telegram one-to-one audio calls](ADR-0284-telegram-one-to-one-audio-calls-operational-boundary.md);
+- [ADR-0350: explicit human owner context](ADR-0350-explicit-human-owner-context-for-managed-domain-and-integration-runtimes.md).
 
 ## Контекст
 
@@ -130,7 +131,7 @@ Exact contract:
 owner: communications
 name: call_evidence_observed
 major: 1
-revision: 1
+revision: 2
 kind: observation
 ```
 
@@ -190,4 +191,9 @@ consent, Blob custody и `call_transcription_v1`.
 7. live managed proof from integration outbox through NATS to Communications
    query/realtime after runtime restart.
 
-ADR и static package presence сами по себе gate не открывают.
+Live conformance
+`managed_call_evidence_survives_nats_outage_and_replays_through_gateway_sse`
+подтверждает managed Telegram producer, exact outbox retention при NATS outage,
+доставку в Communications query и shared SSE, privacy-negative payload check и
+replay после рестарта Communications. ADR и static package presence сами по
+себе gate не открывают.

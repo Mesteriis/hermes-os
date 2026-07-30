@@ -570,3 +570,10 @@ delivery-intent атомарно отвечает submitted/rejected result, а 
 selection остаётся внутри delivery-intent workflow. Exact contract build unit
 и cross-channel transactional event persistence реализованы; runtime adapters
 и live managed evidence остаются открыты.
+ADR-0349 фиксирует provider-neutral Communications call evidence как отдельные
+contract/core/persistence/runtime units и event-only ingress от integrations.
+Live managed Telegram → NATS → Communications → Gateway SSE conformance
+реализован, поэтому capability gate открыт без открытия Telegram media gate.
+ADR-0350 разделяет module owner и authenticated human owner в managed
+domain/integration launch: первый остаётся authority для grants, Event Hub и
+storage, второй — для provider/domain tenancy и client realtime.

@@ -15,7 +15,7 @@ pub const PACKAGE: &str = "hermes-communications-call-evidence-ingress";
 pub const CALL_EVIDENCE_CONTRACT_OWNER_V1: &str = "communications";
 pub const CALL_EVIDENCE_OBSERVED_CONTRACT_NAME_V1: &str = "call_evidence_observed";
 pub const CALL_EVIDENCE_CONTRACT_MAJOR_V1: u32 = 1;
-pub const CALL_EVIDENCE_CONTRACT_REVISION_V1: u32 = 1;
+pub const CALL_EVIDENCE_CONTRACT_REVISION_V1: u32 = 2;
 pub const CALL_EVIDENCE_MAX_IN_FLIGHT_V1: u32 = 32;
 pub const MAX_CALL_OBSERVATION_ID_BYTES_V1: usize = 256;
 pub const MAX_CALL_SOURCE_ID_BYTES_V1: usize = 512;
@@ -93,6 +93,7 @@ pub enum CallTerminalDispositionV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CallEvidenceObservationDraftV1 {
     pub observation_id: String,
+    pub logical_owner_id: String,
     pub provider: CallProviderProvenanceV1,
     pub external_account_id: String,
     pub external_call_id: String,
@@ -114,6 +115,7 @@ pub struct CallEvidenceObservationDraftV1 {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CallEvidenceDraftErrorV1 {
     InvalidObservationId,
+    InvalidOwner,
     InvalidSourceIdentity,
     InvalidRevision,
     InvalidState,
@@ -128,6 +130,11 @@ impl CallEvidenceObservationDraftV1 {
             &self.observation_id,
             MAX_CALL_OBSERVATION_ID_BYTES_V1,
             CallEvidenceDraftErrorV1::InvalidObservationId,
+        )?;
+        validate_identifier(
+            &self.logical_owner_id,
+            MAX_CALL_SOURCE_ID_BYTES_V1,
+            CallEvidenceDraftErrorV1::InvalidOwner,
         )?;
         for value in [&self.external_account_id, &self.external_call_id] {
             validate_identifier(
@@ -282,6 +289,7 @@ mod tests {
     fn draft() -> CallEvidenceObservationDraftV1 {
         CallEvidenceObservationDraftV1 {
             observation_id: "telegram-call-1-revision-3".to_owned(),
+            logical_owner_id: "owner-1".to_owned(),
             provider: CallProviderProvenanceV1::Telegram,
             external_account_id: "account-1".to_owned(),
             external_call_id: "call-1".to_owned(),

@@ -16,6 +16,13 @@ use hermes_communications_attachment_contract::admission::{
     communication_attachment_safety_state_changed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
 };
+use hermes_communications_call_evidence_api::{
+    CALL_EVIDENCE_CLIENT_CAPABILITY_ID_V1, CALL_EVIDENCE_CLIENT_CONTRACT_MAJOR_V1,
+    CALL_EVIDENCE_CLIENT_CONTRACT_REVISION_V1, CALL_EVIDENCE_CLIENT_SCHEMA_SHA256_V1,
+    CALL_EVIDENCE_QUERY_CONNECT_PATH_V1, CALL_EVIDENCE_QUERY_CONTRACT_NAME_V1,
+    CALL_EVIDENCE_REALTIME_CONTRACT_NAME_V1,
+};
+use hermes_communications_call_evidence_ingress::call_evidence_observed_contract_reference_v1;
 use hermes_communications_content_api::{
     COMMUNICATIONS_CONTENT_READ_SCHEMA_SHA256, COMMUNICATIONS_CONTENT_TICKET_SCHEMA_SHA256,
     CONTENT_CONTRACT_MAJOR_V1, CONTENT_CONTRACT_REVISION_V1, CONTENT_READ_BLOB_PATH_V1,
@@ -50,14 +57,12 @@ use hermes_communications_export_runtime::admission::{
     COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY_ID_V1, communications_export_module_descriptor_v1,
     communications_export_settings_schema_bytes_v1,
 };
-use hermes_communications_persistence::{
-    COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1, communications_storage_bundle_v1,
-};
 use hermes_communications_runtime::admission::{
     COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_BLOB_CAPABILITY_ID, COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
-    COMMUNICATIONS_BLOB_QUOTA_BYTES, COMMUNICATIONS_CONTENT_CAPABILITY_ID,
+    COMMUNICATIONS_BLOB_QUOTA_BYTES, COMMUNICATIONS_CALL_EVIDENCE_OBSERVE_CAPABILITY_ID,
+    COMMUNICATIONS_CONTENT_CAPABILITY_ID,
     COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_BLOB_CAPABILITY_ID,
     COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_CAPABILITY_ID, COMMUNICATIONS_EVENTS_CAPABILITY_ID,
     COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID,
@@ -70,6 +75,7 @@ use hermes_communications_runtime::admission::{
     communications_query_contract_reference_v1, communications_settings_schema_bytes_v1,
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
+use hermes_communications_runtime::storage_bundle::communications_runtime_storage_bundle_v1;
 use hermes_communications_saved_query_api::{
     COMMUNICATIONS_SAVED_SEARCH_SCHEMA_SHA256, SAVED_SEARCH_CONNECT_PATH_V1,
     SAVED_SEARCH_CONTRACT_MAJOR_V1, SAVED_SEARCH_CONTRACT_NAME_V1,
@@ -82,9 +88,10 @@ use hermes_communications_sender_insights_api::{
 };
 use hermes_kernel_control_store::{
     ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientBlobContractVersionV1,
-    ModuleClientBlobRouteV1, ModuleClientBlobTransportV1, ModuleClientRpcContractVersionV1,
-    ModuleClientRpcRouteV1, ModuleDescriptorRegistrationRequestsV1, ModuleRegistrationState,
-    ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1, PlatformStorageBindingStateV1,
+    ModuleClientBlobRouteV1, ModuleClientBlobTransportV1, ModuleClientRealtimeContractVersionV1,
+    ModuleClientRealtimeRouteV1, ModuleClientRpcContractVersionV1, ModuleClientRpcRouteV1,
+    ModuleDescriptorRegistrationRequestsV1, ModuleRegistrationState, ModuleVaultPurposePolicyV1,
+    ModuleVaultPurposeRequestV1, PlatformStorageBindingStateV1,
 };
 use hermes_runtime_protocol::v1::{
     BlobDataOperationV1, ManagedRuntimeBlobSessionRequestV1, ModuleClientResponseV1, VaultActionV1,
@@ -115,11 +122,10 @@ pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> Sql
 }
 
 pub(super) fn issue_initial_communications_storage_binding(store: &SqliteControlStore) {
+    let runtime_bundle =
+        communications_runtime_storage_bundle_v1().expect("compose Communications Storage bundle");
     let bundle = store
-        .platform_storage_bundle(
-            "communications",
-            u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1),
-        )
+        .platform_storage_bundle("communications", u64::from(runtime_bundle.revision))
         .expect("read Communications Storage bundle")
         .expect("Communications Storage bundle is present");
     let binding = issue_managed(
@@ -128,13 +134,8 @@ pub(super) fn issue_initial_communications_storage_binding(store: &SqliteControl
         COMMUNICATIONS_RUNTIME_INSTANCE_ID,
         1,
         COMMUNICATIONS_STORAGE_CAPABILITY_ID,
-        StorageBindingIssueV1::new(
-            1,
-            1,
-            u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1),
-            *bundle.digest(),
-        )
-        .expect("initial Communications Storage issue"),
+        StorageBindingIssueV1::new(1, 1, u64::from(runtime_bundle.revision), *bundle.digest())
+            .expect("initial Communications Storage issue"),
     )
     .expect("issue Communications Storage binding");
     assert_eq!(binding.runtime_generation(), 1);
@@ -407,6 +408,7 @@ fn start_reserved_communications_domain(
             storage: Some(storage),
             event_hub_endpoint: events.nats_endpoint().to_owned(),
             event_credential_revision: events.credential_revision(),
+            logical_human_owner_id: "owner-1".to_owned(),
         },
     )
     .expect("start Communications domain");
@@ -2562,6 +2564,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID.to_owned(),
         "communications.blob.v1".to_owned(),
+        CALL_EVIDENCE_CLIENT_CAPABILITY_ID_V1.to_owned(),
+        COMMUNICATIONS_CALL_EVIDENCE_OBSERVE_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_CONTENT_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_CAPABILITY_ID.to_owned(),
@@ -2637,6 +2641,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         communication_attachment_safety_state_changed_contract_reference_v1();
     let observed =
         hermes_communications_ingress::admission::communication_observed_contract_reference_v1();
+    let call_evidence_observed = call_evidence_observed_contract_reference_v1();
     let attachment_blob_admission =
         communication_attachment_blob_admission_observed_contract_reference_v1();
     let attachment_safety_verdict =
@@ -2703,6 +2708,12 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             COMMUNICATIONS_OBSERVE_CAPABILITY_ID,
             ModuleEventEnvelopeKindV1::Observation,
             &observed,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_CALL_EVIDENCE_OBSERVE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Observation,
+            &call_evidence_observed,
             ModuleEventRouteDirectionV1::Consume,
         ),
         communications_event_route(
@@ -2773,6 +2784,18 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             COMMUNICATIONS_SENDER_INSIGHTS_SCHEMA_SHA256,
             SENDER_INSIGHTS_CONNECT_PATH_V1,
         ),
+        ModuleClientRpcRouteV1::new(
+            COMMUNICATIONS_REGISTRATION,
+            CALL_EVIDENCE_CLIENT_CAPABILITY_ID_V1,
+            COMMUNICATIONS_OWNER_ID,
+            CALL_EVIDENCE_QUERY_CONTRACT_NAME_V1,
+            ModuleClientRpcContractVersionV1 {
+                major: CALL_EVIDENCE_CLIENT_CONTRACT_MAJOR_V1,
+                revision: CALL_EVIDENCE_CLIENT_CONTRACT_REVISION_V1,
+            },
+            CALL_EVIDENCE_CLIENT_SCHEMA_SHA256_V1,
+            CALL_EVIDENCE_QUERY_CONNECT_PATH_V1,
+        ),
     ];
     let client_blob_route = ModuleClientBlobRouteV1::new(
         COMMUNICATIONS_REGISTRATION,
@@ -2798,6 +2821,26 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         1,
         hermes_communications_api::COMMUNICATIONS_QUERY_SCHEMA_SHA256,
     );
+    let call_evidence_query_rpc_route = hermes_kernel_control_store::ModuleQueryContractV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        CALL_EVIDENCE_CLIENT_CAPABILITY_ID_V1,
+        COMMUNICATIONS_OWNER_ID,
+        CALL_EVIDENCE_QUERY_CONTRACT_NAME_V1,
+        CALL_EVIDENCE_CLIENT_CONTRACT_MAJOR_V1,
+        CALL_EVIDENCE_CLIENT_CONTRACT_REVISION_V1,
+        CALL_EVIDENCE_CLIENT_SCHEMA_SHA256_V1,
+    );
+    let call_evidence_realtime_route = ModuleClientRealtimeRouteV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        CALL_EVIDENCE_CLIENT_CAPABILITY_ID_V1,
+        COMMUNICATIONS_OWNER_ID,
+        CALL_EVIDENCE_REALTIME_CONTRACT_NAME_V1,
+        ModuleClientRealtimeContractVersionV1 {
+            major: CALL_EVIDENCE_CLIENT_CONTRACT_MAJOR_V1,
+            revision: CALL_EVIDENCE_CLIENT_CONTRACT_REVISION_V1,
+        },
+        CALL_EVIDENCE_CLIENT_SCHEMA_SHA256_V1,
+    );
     store
         .create_pending_registration_with_all_descriptor_requests(
             &registration,
@@ -2815,8 +2858,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
                 vault_purposes: std::slice::from_ref(&vault_purpose),
                 client_rpc_routes: &client_rpc_routes,
                 client_blob_routes: std::slice::from_ref(&client_blob_route),
-                client_realtime_routes: &[],
-                query_rpc_routes: std::slice::from_ref(&query_rpc_route),
+                client_realtime_routes: std::slice::from_ref(&call_evidence_realtime_route),
+                query_rpc_routes: &[query_rpc_route, call_evidence_query_rpc_route],
                 request_rpc_routes: &[],
                 contract_dependencies: &[],
             },
@@ -2889,13 +2932,16 @@ fn record_communications_runtime_fixture(
     descriptor: &[u8],
     grant_epoch: u64,
 ) {
-    let canonical_bundle = communications_storage_bundle_v1().encode_to_vec();
+    let canonical_bundle = communications_runtime_storage_bundle_v1()
+        .expect("compose Communications runtime Storage bundle");
+    let canonical_bundle_revision = canonical_bundle.revision;
+    let canonical_bundle = canonical_bundle.encode_to_vec();
     let digest: [u8; 32] = Sha256::digest(&canonical_bundle).into();
     store
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 "communications",
-                u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1),
+                u64::from(canonical_bundle_revision),
                 digest,
                 canonical_bundle,
             )

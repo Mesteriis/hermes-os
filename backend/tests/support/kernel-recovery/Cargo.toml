@@ -29,6 +29,8 @@ hermes-attachment-security-runtime = { path = "../../../src/attachment-security-
 hermes-communications-persistence = { path = "../../../src/communications-persistence" }
 hermes-communications-runtime = { path = "../../../src/communications-runtime" }
 hermes-communications-attachment-contract = { path = "../../../src/communications-attachment-contract" }
+hermes-communications-call-evidence-api = { path = "../../../src/communications-call-evidence-api" }
+hermes-communications-call-evidence-ingress = { path = "../../../src/communications-call-evidence-ingress" }
 hermes-communications-ingress = { path = "../../../src/communications-ingress" }
 hermes-communications-api = { path = "../../../src/communications-api" }
 hermes-communications-content-api = { path = "../../../src/communications-content-api" }
@@ -60,6 +62,8 @@ hermes-telegram-api = { path = "../../../src/telegram-api" }
 hermes-telegram-assembly = { path = "../../../src/telegram-assembly" }
 hermes-telegram-automation-api = { path = "../../../src/telegram-automation-api" }
 hermes-telegram-calls-api = { path = "../../../src/telegram-calls-api" }
+hermes-telegram-calls-core = { path = "../../../src/telegram-calls-core" }
+hermes-telegram-calls-persistence = { path = "../../../src/telegram-calls-persistence" }
 hermes-telegram-core = { path = "../../../src/telegram-core" }
 hermes-telegram-persistence = { path = "../../../src/telegram-persistence", features = ["conformance-test-support"] }
 hermes-telegram-runtime = { path = "../../../src/telegram-runtime" }

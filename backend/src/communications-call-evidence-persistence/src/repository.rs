@@ -299,7 +299,7 @@ impl CommunicationsCallEvidencePersistenceV1 {
         .fetch_optional(&self.pool)
         .await
         .map_err(storage_error)?;
-        row.map(|row| projection_from_row(call_evidence_id, &row))
+        row.map(|row| projection_from_row(logical_owner_id, call_evidence_id, &row))
             .transpose()
     }
 
@@ -352,7 +352,7 @@ impl CommunicationsCallEvidencePersistenceV1 {
                     row.try_get::<Vec<u8>, _>("call_evidence_id")
                         .map_err(storage_error)?,
                 )?;
-                projection_from_row(call_evidence_id, row)
+                projection_from_row(logical_owner_id, call_evidence_id, row)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let has_more = items.len() > usize::from(limit);
@@ -462,11 +462,12 @@ async fn load_projection_for_update(
     .fetch_optional(transaction.as_mut())
     .await
     .map_err(storage_error)?;
-    row.map(|row| projection_from_row(*call_evidence_id, &row))
+    row.map(|row| projection_from_row(logical_owner_id, *call_evidence_id, &row))
         .transpose()
 }
 
 fn projection_from_row(
+    logical_owner_id: &str,
     call_evidence_id: [u8; 16],
     row: &sqlx::postgres::PgRow,
 ) -> Result<CallEvidenceProjectionV1, CallEvidencePersistenceErrorV1> {
@@ -474,6 +475,7 @@ fn projection_from_row(
     Ok(CallEvidenceProjectionV1 {
         evidence: RecordCallEvidenceV1 {
             call_evidence_id,
+            logical_owner_id: logical_owner_id.to_owned(),
             source_call_cursor_sha256: bytes32(row.try_get("source_call_cursor_sha256")?)?,
             account_cursor_sha256: bytes32(row.try_get("account_cursor_sha256")?)?,
             conversation_cursor_sha256: optional_bytes32(
@@ -968,6 +970,7 @@ mod tests {
         let projection = CallEvidenceProjectionV1 {
             evidence: RecordCallEvidenceV1 {
                 call_evidence_id: [7; 16],
+                logical_owner_id: "owner-1".to_owned(),
                 source_call_cursor_sha256: [1; 32],
                 account_cursor_sha256: [2; 32],
                 conversation_cursor_sha256: None,

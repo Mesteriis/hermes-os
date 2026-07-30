@@ -46,6 +46,11 @@ pub async fn consume_next_call_evidence_observation_v1(
         .map_err(|_| CommunicationsDeliveryErrorV1::InvalidEnvelope)?;
     let decoded = decode_call_evidence_envelope_v1(&envelope, &expected)
         .map_err(CommunicationsDeliveryErrorV1::Consume)?;
+    if decoded.evidence.logical_owner_id != logical_owner_id {
+        return Err(CommunicationsDeliveryErrorV1::Consume(
+            CommunicationsEventConsumeErrorV1::WrongContract,
+        ));
+    }
     let message_id = id16(&envelope.message_id).map_err(CommunicationsDeliveryErrorV1::Consume)?;
     let outcome = persistence
         .consume(
@@ -183,6 +188,7 @@ mod tests {
         build_call_evidence_observed_outbox_record_v1(
             &CallEvidenceObservationDraftV1 {
                 observation_id: "telegram-call-1-revision-1".to_owned(),
+                logical_owner_id: "owner-1".to_owned(),
                 provider: CallProviderProvenanceV1::Telegram,
                 external_account_id: "account-1".to_owned(),
                 external_call_id: "call-1".to_owned(),

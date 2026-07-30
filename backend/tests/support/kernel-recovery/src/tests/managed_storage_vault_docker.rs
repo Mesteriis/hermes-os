@@ -157,6 +157,8 @@ use mail_gmail_fixture::*;
 use mail_gmail_oauth_fixture::*;
 use mail_imap_fixture::*;
 use mail_smtp_fixture::*;
+#[path = "managed_storage_vault_docker/call_evidence_managed_flow.rs"]
+mod call_evidence_managed_flow;
 #[path = "managed_storage_vault_docker/telegram_managed_flow.rs"]
 mod telegram_managed_flow;
 use attachment_security_blob_fixture::*;

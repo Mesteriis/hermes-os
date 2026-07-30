@@ -19,6 +19,7 @@ pub fn validate_managed_domain_runtime_configuration(
         .ok_or(ManagedDomainRuntimeValidationErrorV1::InvalidConfiguration)?;
     if configuration.major != 1
         || !valid_identifier(&configuration.logical_owner_id)
+        || !valid_identifier(&configuration.logical_human_owner_id)
         || !valid_identifier(&configuration.registration_id)
         || !valid_identifier(&configuration.runtime_instance_id)
         || configuration.runtime_generation == 0
@@ -106,11 +107,16 @@ mod tests {
             }),
             event_hub_endpoint: "nats://localhost:4222".to_owned(),
             event_credential_revision: 1,
+            logical_human_owner_id: "owner-1".to_owned(),
         }
     }
 
     #[test]
     fn accepts_exact_domain_runtime_fences() {
+        assert_ne!(
+            configuration().logical_owner_id,
+            configuration().logical_human_owner_id,
+        );
         assert_eq!(
             validate_managed_domain_runtime_configuration(&configuration()),
             Ok(())

@@ -699,6 +699,7 @@ mod tests {
         });
         runtime.set_admission(Some(TelegramRuntimeAdmission {
             logical_owner_id: "owner".to_owned(),
+            logical_human_owner_id: "owner-1".to_owned(),
             configuration_instance_id: "cfg".to_owned(),
             module_registration_id: "registration".to_owned(),
             runtime_instance_id: "admitted-runtime".to_owned(),
@@ -767,6 +768,7 @@ mod tests {
         let mut runtime = TelegramRuntime::new(PollingTransport { events: Vec::new() });
         runtime.set_admission(Some(TelegramRuntimeAdmission {
             logical_owner_id: "owner".to_owned(),
+            logical_human_owner_id: "owner-1".to_owned(),
             configuration_instance_id: "configuration".to_owned(),
             module_registration_id: "telegram-registration".to_owned(),
             runtime_instance_id: "telegram-runtime-1".to_owned(),
@@ -929,6 +931,7 @@ pub struct TelegramRuntimeComposition {
 #[derive(Clone)]
 pub struct TelegramRuntimeAdmission {
     pub logical_owner_id: String,
+    pub logical_human_owner_id: String,
     pub configuration_instance_id: String,
     pub module_registration_id: String,
     pub runtime_instance_id: String,

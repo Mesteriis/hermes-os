@@ -5,11 +5,13 @@ use std::os::unix::net::UnixStream;
 use hermes_runtime_protocol::managed_control::{
     ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
 };
+use hermes_runtime_protocol::v1::ModuleClientRequestV1;
 use hermes_telegram_api::{
     TelegramAccount, TelegramAccountState, TelegramClientRequest, TelegramClientResponse,
-    TelegramRuntimeState, validate_setup,
+    TelegramRuntimeState, client_contract::TelegramClientContractV1, validate_setup,
 };
 use hermes_telegram_persistence::TelegramDurablePersistence;
+use prost::Message;
 
 use crate::{
     TelegramRuntimeComposition,
@@ -38,6 +40,9 @@ pub(crate) async fn try_handle<D>(
 where
     D: ManagedControlRequestDispatcherV2<UnixStream>,
 {
+    if !owns_telegram_client_contract(request)? {
+        return Ok(None);
+    }
     let TelegramConfigurationClientContextV1 {
         runtime_available,
         composition,
@@ -156,4 +161,47 @@ where
     encode_module_response(contract, request_id, &response)
         .map(Some)
         .map_err(TelegramClientTransportError::Port)
+}
+
+fn owns_telegram_client_contract(request: &[u8]) -> Result<bool, TelegramClientTransportError> {
+    let envelope = ModuleClientRequestV1::decode(request).map_err(|error| {
+        TelegramClientTransportError::Port(crate::client_port::TelegramClientPortError::Codec(
+            error.to_string(),
+        ))
+    })?;
+    let contract = envelope.contract.as_ref().ok_or_else(|| {
+        TelegramClientTransportError::Port(crate::client_port::TelegramClientPortError::Protocol(
+            "Telegram client contract is missing".to_owned(),
+        ))
+    })?;
+    Ok(TelegramClientContractV1::from_contract_name(&contract.name).is_some())
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_runtime_protocol::v1::ContractReferenceV1;
+
+    use super::*;
+
+    #[test]
+    fn configuration_port_declines_another_telegram_build_unit_contract() {
+        let request = ModuleClientRequestV1 {
+            protocol_major: 1,
+            module_id: "hermes-telegram-runtime".to_owned(),
+            owner_id: "telegram".to_owned(),
+            contract: Some(ContractReferenceV1 {
+                owner: "telegram".to_owned(),
+                name: "telegram.calls.query.v1".to_owned(),
+                major: 1,
+                revision: 1,
+                schema_sha256: vec![7; 32],
+            }),
+            request_id: 1,
+            request_payload: vec![1],
+            logical_owner_id: String::new(),
+        }
+        .encode_to_vec();
+
+        assert!(matches!(owns_telegram_client_contract(&request), Ok(false)));
+    }
 }

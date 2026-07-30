@@ -8,7 +8,7 @@ use hermes_telegram_api::{
     client_contract::{TELEGRAM_MODULE_ID, TELEGRAM_OWNER_ID},
 };
 use hermes_telegram_assembly::{
-    TELEGRAM_STORAGE_BUNDLE_REVISION_V6, telegram_storage_bundle_with_calls_backfill_v6,
+    TELEGRAM_STORAGE_BUNDLE_REVISION_V9, telegram_storage_bundle_with_call_evidence_v9,
 };
 use hermes_telegram_core::credential_lease_purpose_for_purpose;
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramPersistenceConformanceV1};
@@ -145,12 +145,12 @@ pub(super) fn admit_telegram_runtime_without_capability(
             Some(Sha256::digest(&schema).into()),
         ))
         .expect("record Telegram release binding");
-    let bundle = telegram_storage_bundle_with_calls_backfill_v6().encode_to_vec();
+    let bundle = telegram_storage_bundle_with_call_evidence_v9().encode_to_vec();
     store
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 TELEGRAM_OWNER_ID,
-                u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V6),
+                u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V9),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -175,7 +175,7 @@ pub(super) fn prepare_telegram_runtime(
     let bundle = store
         .platform_storage_bundle(
             TELEGRAM_OWNER_ID,
-            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V6),
+            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V9),
         )
         .expect("read Telegram Storage bundle")
         .expect("Telegram Storage bundle");
@@ -188,7 +188,7 @@ pub(super) fn prepare_telegram_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V6),
+            u64::from(TELEGRAM_STORAGE_BUNDLE_REVISION_V9),
             *bundle.digest(),
         )
         .expect("Telegram Storage binding issue"),
@@ -247,6 +247,7 @@ pub(super) fn start_telegram_runtime(
         runtime_artifacts: Vec::new(),
         integration_state_root: None,
         configuration_instances: Vec::new(),
+        logical_human_owner_id: "owner-1".to_owned(),
     };
     managed_launch::start_reserved_integration(
         supervisor,
@@ -455,7 +456,7 @@ async fn telegram_admin_persistence() -> TelegramDurablePersistence {
     .expect("connect Telegram conformance persistence")
 }
 
-async fn telegram_admin_pool() -> sqlx::PgPool {
+pub(super) async fn telegram_admin_pool() -> sqlx::PgPool {
     let password = Zeroizing::new(
         std::fs::read_to_string(required(
             "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",
@@ -518,6 +519,23 @@ pub(super) fn telegram_call_media_state() -> String {
             .fetch_one(&pool)
             .await
             .expect("read durable Telegram media projection")
+        })
+}
+
+pub(super) fn telegram_pending_call_evidence_count() -> i64 {
+    tokio::runtime::Runtime::new()
+        .expect("Telegram call evidence outbox runtime")
+        .block_on(async {
+            let pool = telegram_admin_pool().await;
+            let count = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM hermes_data.telegram_call_evidence_outbox \
+                 WHERE published_at_unix_seconds IS NULL",
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("read Telegram call evidence outbox");
+            pool.close().await;
+            count
         })
 }
 
