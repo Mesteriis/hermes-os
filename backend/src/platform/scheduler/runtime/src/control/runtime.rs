@@ -267,7 +267,7 @@ fn materialization_source(
 ) -> Result<SchedulerMaterializationSourceV1, String> {
     let instance_id = runtime_instance_id(&configuration.runtime_instance_id)?;
     SchedulerMaterializationSourceV1::new(
-        identity.registration_id().to_owned(),
+        SCHEDULER_RUNTIME_MODULE_ID_V1.to_owned(),
         instance_id,
         identity.runtime_generation(),
     )

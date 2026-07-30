@@ -58,7 +58,7 @@ pub fn communication_delayed_delivery_module_descriptor_v1(build_id: &str) -> Mo
     let settings = communication_delayed_delivery_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 1,
+        descriptor_revision: 2,
         module_id: COMMUNICATION_DELAYED_DELIVERY_MODULE_ID_V1.to_owned(),
         owner_id: COMMUNICATION_DELAYED_DELIVERY_OWNER_V1.to_owned(),
         module_kind: ModuleKindV1::Workflow as i32,

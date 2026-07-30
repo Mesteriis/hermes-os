@@ -46,10 +46,25 @@ Scheduler command/receipt outbox и принимает correlated schedule resul
 execution подключён к отдельным execution/runtime/store adapter units: exact
 Scheduler command декодируется до claim, Retryable не подтверждает JetStream
 delivery, а accepted/rejected подтверждает его только после durable terminal
-receipt. Отдельная assembly unit материализует runtime binary, exact descriptor,
-settings schema и Storage bundle как unsigned release fragment без runtime
-поведения. Development release compiler принимает этот exact fragment в общий
-подписываемый distribution input. Live end-to-end contour ещё не реализован.
+receipt. Descriptor revision 2 отдельно материализует exact
+`communication_delivery_intent.command` dependency в Kernel Control Store,
+чтобы `request_rpc` не зависел от устаревшей нормализованной записи предыдущей
+descriptor revision. Scheduler materializes due commands с canonical module
+source `hermes-scheduler-runtime`, а не с private registration id: consumer
+проверяет source как public runtime identity и не принимает Kernel-private
+registration identity за producer contract. Отдельная assembly unit
+материализует runtime binary, exact descriptor, settings schema и Storage
+bundle как unsigned release fragment без runtime поведения. Development release
+compiler принимает этот exact fragment в общий подписываемый distribution
+input.
+
+Live development evidence: новая delayed operation прошла
+`schedule_pending -> scheduled -> dispatching -> failed`; controlled terminal
+failure получен от Delivery Intent для отсутствующего тестового conversation,
+а due command подтверждён в JetStream только после durable terminal transition
+и попытки Blob custody cleanup. Это доказывает полный runtime contour до
+provider-neutral Delivery Intent request; provider execution остаётся
+ответственностью выбранной integration и не входит в этот workflow.
 Этот ADR не открывает workflow gate сам по себе.
 
 Уточняет:

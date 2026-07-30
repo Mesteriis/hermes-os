@@ -234,6 +234,10 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
     schedulerRuntimeControl,
     /SchedulerScheduleControlWorkerConfigV1::from_runtime\(\s*SCHEDULER_RUNTIME_MODULE_ID_V1,/,
   );
+  assert.match(
+    schedulerRuntimeControl,
+    /SchedulerMaterializationSourceV1::new\(\s*SCHEDULER_RUNTIME_MODULE_ID_V1\.to_owned\(\),/,
+  );
   assert.match(schedulerRuntimeControl, /STORAGE_CONNECT_ATTEMPTS: u8 = 120/);
   assert.match(
     schedulerRuntimeControl,

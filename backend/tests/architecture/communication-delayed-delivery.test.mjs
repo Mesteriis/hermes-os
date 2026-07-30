@@ -456,6 +456,11 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     /owner = "communication_delayed_delivery"[\s\S]*surface = "runtime"/,
   );
   assert.match(runtimeAdmission, /communication_delayed_delivery_module_descriptor_v1/);
+  assert.match(runtimeAdmission, /descriptor_revision: 2/);
+  assert.match(
+    runtimeAdmission,
+    /COMMUNICATION_DELAYED_DELIVERY_DELIVERY_DEPENDENCY_CAPABILITY_ID_V1[\s\S]*dependencies: vec!\[delivery_intent_command_contract_v1\(\)\]/,
+  );
   assert.match(runtimeAdmission, /ProvidedSurfaceKindV1::ClientRealtime/);
   assert.match(runtimeAdmission, /ClockTimerRequestV1/);
   assert.match(runtimeAdmission, /BlobQuotaOperationV1::ReleaseCustody/);
