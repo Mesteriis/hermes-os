@@ -204,10 +204,18 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
     let delayed_delivery = assert_delayed_delivery_survives_nats_outage(
         &managed_contour,
         delayed_delivery,
-        realtime,
-        conversation_id,
+        realtime.clone(),
+        conversation_id.clone(),
         0x91,
         3,
+    );
+    assert_delayed_delivery_survives_scheduler_outage(
+        &managed_contour,
+        &delayed_delivery.registration_id,
+        realtime,
+        conversation_id,
+        0xa1,
+        4,
     );
     let (owner_runtime_dir, owner_control) =
         start_owner_control(&data, &store, &shutdown, &supervisor);
@@ -224,7 +232,7 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         &store,
         release.kernel(),
         &root.join("runtime"),
-        4,
+        6,
     );
     assert!(
         supervisor
@@ -448,7 +456,112 @@ fn assert_delayed_delivery_survives_nats_outage(
             .any(|window| window == private_body),
         "NATS outage recovery realtime must not contain private content"
     );
+    restart_scheduler_with_current_grants(supervisor, store, kernel, &root.join("runtime"), 4);
     delayed_delivery
+}
+
+fn assert_delayed_delivery_survives_scheduler_outage(
+    contour: &DelayedDeliveryManagedContour<'_>,
+    delayed_delivery_registration_id: &str,
+    realtime: hermes_gateway_runtime::InMemoryBrowserRealtimeSource,
+    conversation_id: Vec<u8>,
+    operation_byte: u8,
+    authentication_sign_count: u32,
+) {
+    let DelayedDeliveryManagedContour {
+        store,
+        supervisor,
+        root,
+        data,
+        kernel,
+    } = contour;
+    supervisor
+        .stop(SCHEDULER_REGISTRATION)
+        .expect("stop Scheduler for delayed-delivery outage");
+    let runtime = tokio::runtime::Runtime::new().expect("Gateway runtime");
+    let router = super::delivery_intent_realtime_flow::delivery_intent_gateway(
+        store, supervisor, root, data, realtime,
+    );
+    let cookie = super::super::browser_gateway_session::authenticate_gateway_router_with_sign_count(
+        &router,
+        &runtime,
+        authentication_sign_count,
+    );
+    let delayed_operation_id = vec![operation_byte; 16];
+    let private_body = b"delayed private body retained through Scheduler outage";
+    let deliver_at_unix_millis =
+        u64::try_from(current_unix_millis()).expect("positive current time") + 8_000;
+    let response = route_proto(
+        &router,
+        &runtime,
+        &cookie,
+        COMMUNICATION_DELAYED_DELIVERY_SCHEDULE_CONNECT_PATH_V1,
+        ScheduleDelayedDeliveryRequestV1 {
+            protocol_major: 1,
+            delayed_operation_id: delayed_operation_id.clone(),
+            delivery_operation_id: vec![operation_byte.wrapping_add(1); 16],
+            conversation_id,
+            reply_to_message_id: None,
+            body_utf8: private_body.to_vec(),
+            deliver_at_unix_millis,
+        }
+        .encode_to_vec(),
+    );
+    let response =
+        ScheduleDelayedDeliveryResponseV1::decode(response.as_slice()).expect("schedule response");
+    std::thread::sleep(Duration::from_millis(1_500));
+    let pending = delayed_delivery_status(
+        &router,
+        &runtime,
+        &cookie,
+        &delayed_operation_id,
+        deliver_at_unix_millis,
+    );
+
+    assert_eq!(response.delayed_operation_id, delayed_operation_id);
+    assert_eq!(
+        response.error,
+        DelayedDeliveryErrorCodeV1::DelayedDeliveryErrorCodeUnspecified as i32
+    );
+    assert_eq!(
+        response.state,
+        DelayedDeliveryStateV1::DelayedDeliveryStateSchedulePending as i32
+    );
+    assert_eq!(
+        pending.state,
+        DelayedDeliveryStateV1::DelayedDeliveryStateSchedulePending as i32,
+        "Scheduler outage must retain the exact operation before acceptance"
+    );
+    assert!(
+        supervisor
+            .is_active(delayed_delivery_registration_id)
+            .expect("observe delayed-delivery runtime during Scheduler outage"),
+        "Scheduler outage must not stop the delayed-delivery runtime"
+    );
+    restart_scheduler_with_current_grants(supervisor, store, kernel, &root.join("runtime"), 5);
+    let terminal = wait_for_terminal_status(
+        &router,
+        &runtime,
+        &cookie,
+        &delayed_operation_id,
+        deliver_at_unix_millis,
+        supervisor,
+        delayed_delivery_registration_id,
+    );
+    assert_eq!(
+        terminal.state,
+        DelayedDeliveryStateV1::DelayedDeliveryStateDeliveryAccepted as i32,
+        "the retained command must complete after Scheduler successor recovery"
+    );
+    let event =
+        read_delayed_delivery_terminal_sse(&router, &runtime, &cookie, &delayed_operation_id);
+    assert!(
+        !event
+            .encode_to_vec()
+            .windows(private_body.len())
+            .any(|window| window == private_body),
+        "Scheduler outage recovery realtime must not contain private content"
+    );
 }
 
 fn wait_for_scheduler_outage_stop(supervisor: &ManagedRuntimeSupervisor) {

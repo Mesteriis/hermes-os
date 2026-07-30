@@ -84,7 +84,14 @@ terminal bounded failure прежнего Scheduler process, запускает 
 successor и получает terminal delivery из прежнего durable command после
 контрактного JetStream `ack_wait`, без повторного Schedule RPC и без private
 body в realtime. Этот evidence закрывает только NATS outage item; отдельные
-Scheduler и Blob outage contours ещё не пройдены.
+outage items не выводятся из него.
+
+Отдельный live Scheduler-outage contour останавливает active Scheduler при
+здоровом NATS, принимает новый Schedule RPC в `schedule_pending` и подтверждает,
+что delayed-delivery runtime остаётся active. Fenced Scheduler successor затем
+завершает сохранённую operation из прежнего command/outbox без повторного
+Schedule RPC; terminal SSE снова не содержит private body. Этот evidence
+закрывает Scheduler outage item, но Blob outage всё ещё не пройден.
 
 Этот ADR не открывает workflow gate сам по себе.
 
