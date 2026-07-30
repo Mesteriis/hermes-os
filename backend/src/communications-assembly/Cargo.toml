@@ -17,7 +17,6 @@ owner = "communications"
 surface = "assembly"
 
 [dependencies]
-hermes-communications-persistence = { path = "../communications-persistence" }
 hermes-communications-runtime = { path = "../communications-runtime" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }

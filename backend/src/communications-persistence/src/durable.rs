@@ -131,6 +131,14 @@ impl CommunicationsDurablePersistence {
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)
     }
 
+    /// Shares the already budgeted owner-local pool with a separately admitted
+    /// Communications persistence build unit. The runtime remains the only
+    /// composition root; persistence packages do not import each other.
+    #[must_use]
+    pub fn owner_local_pool_handle(&self) -> PgPool {
+        self.pool.clone()
+    }
+
     pub async fn persist_consumed_observation(
         &self,
         record: &OutboxRecordV1,

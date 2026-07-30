@@ -2082,6 +2082,27 @@ const COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = 
   ],
 };
 
+const COMMUNICATIONS_CALL_EVIDENCE_MANAGED_CONSUMER_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-runtime':
+    COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST[
+      'hermes-communications-runtime'
+    ].flatMap((dependency) => (
+      dependency.name === 'hermes-communications-attachment-contract'
+        ? [
+            dependency,
+            { name: 'hermes-communications-call-evidence-core', kind: 'normal' },
+            { name: 'hermes-communications-call-evidence-ingress', kind: 'normal' },
+            { name: 'hermes-communications-call-evidence-persistence', kind: 'normal' },
+          ]
+        : [dependency]
+    )),
+  'hermes-communications-assembly':
+    COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST[
+      'hermes-communications-assembly'
+    ].filter((dependency) => dependency.name !== 'hermes-communications-persistence'),
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3456,6 +3477,19 @@ function expectedSlice(currentSlice) {
       packages: COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies:
         COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communications_call_evidence_managed_consumer_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATIONS_CALL_EVIDENCE_MANAGED_CONSUMER_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,

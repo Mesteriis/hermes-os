@@ -10,6 +10,9 @@ use hermes_communications_attachment_contract::admission::{
     communication_attachment_safety_state_changed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
 };
+use hermes_communications_call_evidence_ingress::{
+    call_evidence_observed_consume_request_v1, call_evidence_observed_contract_reference_v1,
+};
 use hermes_communications_content_api::{
     COMMUNICATIONS_CONTENT_READ_SCHEMA_SHA256, COMMUNICATIONS_CONTENT_TICKET_SCHEMA_SHA256,
     CONTENT_CONTRACT_MAJOR_V1, CONTENT_CONTRACT_REVISION_V1, CONTENT_READ_BLOB_PATH_V1,
@@ -60,6 +63,8 @@ pub const COMMUNICATIONS_BLOB_CAPABILITY_ID: &str =
     COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID;
 pub const COMMUNICATIONS_EVENTS_CAPABILITY_ID: &str = "communications.events.v1";
 pub const COMMUNICATIONS_OBSERVE_CAPABILITY_ID: &str = "communications.observe.v1";
+pub const COMMUNICATIONS_CALL_EVIDENCE_OBSERVE_CAPABILITY_ID: &str =
+    "communications.call-evidence.observe.v1";
 pub const COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID: &str =
     "communications.attachment.blob-admission.observe.v1";
 pub const COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID: &str =
@@ -95,6 +100,7 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_attachment_blob_admission_observe_capability_v1(),
         communications_attachment_safety_verdict_observe_capability_v1(),
         communications_blob_capability_v1(),
+        communications_call_evidence_observe_capability_v1(),
         communications_content_capability_v1(),
         communications_cross_channel_forward_source_blob_capability_v1(),
         communications_cross_channel_forward_source_capability_v1(),
@@ -108,6 +114,24 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_sender_insights_capability_v1(),
         communications_storage_capability_v1(),
     ]
+}
+
+#[must_use]
+pub fn communications_call_evidence_observe_capability_v1() -> CapabilityDescriptorV1 {
+    let observation = call_evidence_observed_contract_reference_v1();
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_CALL_EVIDENCE_OBSERVE_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: ProvidedSurfaceKindV1::DurableConsumer as i32,
+            contract: Some(observation),
+            client_rpc_route: None,
+            client_blob_route: None,
+        }],
+        requests: vec![call_evidence_observed_consume_request_v1()],
+        ..Default::default()
+    }
 }
 
 #[must_use]
@@ -645,6 +669,7 @@ mod tests {
                 COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_BLOB_CAPABILITY_ID,
+                COMMUNICATIONS_CALL_EVIDENCE_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_CONTENT_CAPABILITY_ID,
                 COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_BLOB_CAPABILITY_ID,
                 COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_CAPABILITY_ID,

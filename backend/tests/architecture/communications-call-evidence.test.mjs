@@ -138,6 +138,45 @@ test('call evidence persistence is owner local atomic and private-content negati
   );
 });
 
+test('managed Communications consumer is exact fenced and acknowledges after persistence', async () => {
+  const [runtimeManifest, admission, consumer, eventRuntime, runtimeBundle, assemblyManifest] =
+    await Promise.all([
+      backendSource('src/communications-runtime/Cargo.toml'),
+      backendSource('src/communications-runtime/src/admission.rs'),
+      backendSource('src/communications-runtime/src/call_evidence_consumer.rs'),
+      backendSource('src/communications-runtime/src/event_runtime.rs'),
+      backendSource('src/communications-runtime/src/storage_bundle.rs'),
+      backendSource('src/communications-assembly/Cargo.toml'),
+    ]);
+
+  for (const dependency of [
+    'hermes-communications-call-evidence-core',
+    'hermes-communications-call-evidence-ingress',
+    'hermes-communications-call-evidence-persistence',
+  ]) {
+    assert.match(runtimeManifest, new RegExp(dependency));
+  }
+  assert.match(admission, /communications\.call-evidence\.observe\.v1/);
+  assert.match(admission, /call_evidence_observed_consume_request_v1/);
+  assert.match(consumer, /FenceKindV1::RuntimeLease/);
+  assert.match(consumer, /source_fence\.epoch != source\.runtime_generation/);
+  assert.match(consumer, /metadata\.source_sequence != Some\(payload\.source_revision\)/);
+  assert.match(consumer, /persistence[\s\S]*\.consume\(/);
+  assert.match(
+    consumer,
+    /\.consume\([\s\S]*\.await[\s\S]*delivery\.acknowledge\(\)\.await/,
+  );
+  assert.match(eventRuntime, /CommunicationsConsumerV1::CallEvidence/);
+  assert.match(eventRuntime, /call_evidence_persistence[\s\S]{0,80}\.verify_storage_ready/);
+  assert.match(runtimeBundle, /append_communications_call_evidence_storage_v1/);
+  assert.doesNotMatch(assemblyManifest, /hermes-communications-persistence/);
+  const productionConsumer = consumer.replace(/#\[cfg\(test\)\][\s\S]*$/u, '');
+  assert.doesNotMatch(
+    productionConsumer,
+    /telegram-(?:runtime|tdlib|calls)|whatsapp-(?:runtime|host)|provider_call_id|provider_account_id/,
+  );
+});
+
 test('call evidence ADR keeps the completion gate closed until live managed evidence', async () => {
   const [adr, inventorySource] = await Promise.all([
     readFile(

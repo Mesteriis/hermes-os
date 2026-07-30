@@ -115,9 +115,8 @@ impl CommunicationsCallEvidencePersistenceV1 {
         Ok(Self { pool })
     }
 
-    #[cfg(test)]
     #[must_use]
-    pub fn from_pool_for_test(pool: PgPool) -> Self {
+    pub fn from_owner_local_pool(pool: PgPool) -> Self {
         Self { pool }
     }
 

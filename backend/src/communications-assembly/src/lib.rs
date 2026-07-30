@@ -8,10 +8,10 @@ use std::io::Write;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
-use hermes_communications_persistence::communications_storage_bundle_v1;
 use hermes_communications_runtime::admission::{
     communications_module_descriptor_v1, communications_settings_schema_v1,
 };
+use hermes_communications_runtime::storage_bundle::communications_runtime_storage_bundle_v1;
 use hermes_runtime_protocol::validation::descriptor::{
     validate_descriptor_v1, validate_settings_schema_v1,
 };
@@ -115,7 +115,8 @@ pub fn materialize_communications_release_assembly_v1(
     validate_inputs(output_directory, build_id, runtime_source)?;
     let descriptor = communications_module_descriptor_v1(build_id);
     let settings_schema = communications_settings_schema_v1();
-    let storage_bundle = communications_storage_bundle_v1();
+    let storage_bundle = communications_runtime_storage_bundle_v1()
+        .map_err(|_| CommunicationsReleaseAssemblyErrorV1::InvalidCanonicalArtifact)?;
     if validate_descriptor_v1(&descriptor).is_err()
         || validate_settings_schema_v1(&settings_schema).is_err()
         || validate_storage_bundle(&storage_bundle).is_err()

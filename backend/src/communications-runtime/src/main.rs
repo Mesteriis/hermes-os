@@ -6,7 +6,6 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use hermes_communications_persistence::communications_storage_bundle_v1;
 use hermes_communications_runtime::{
     admission::{communications_module_descriptor_v1, communications_settings_schema_bytes_v1},
     consumer::CommunicationsDeliveryErrorV1,
@@ -14,6 +13,7 @@ use hermes_communications_runtime::{
         CommunicationsEventRuntimeErrorV1, CommunicationsEventRuntimeV1,
         CommunicationsRuntimeAdmissionV1,
     },
+    storage_bundle::communications_runtime_storage_bundle_v1,
 };
 use hermes_runtime_protocol::{
     v1::ManagedDomainRuntimeConfigurationV1,
@@ -62,7 +62,9 @@ where
     }
     std::io::Write::write_all(
         &mut std::io::stdout(),
-        &communications_storage_bundle_v1().encode_to_vec(),
+        &communications_runtime_storage_bundle_v1()
+            .map_err(|_| "Communications storage bundle is unavailable".to_owned())?
+            .encode_to_vec(),
     )
     .map_err(|_| "Communications storage bundle is unavailable".to_owned())
 }

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communications_call_evidence_persistence_v1",
+    "currentSlice": "communications_call_evidence_managed_consumer_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1225,6 +1225,18 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communications-call-evidence-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-call-evidence-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-call-evidence-persistence",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-communications-content-api",
           "kind": "normal"
         },
@@ -1286,10 +1298,6 @@
         }
       ],
       "hermes-communications-assembly": [
-        {
-          "name": "hermes-communications-persistence",
-          "kind": "normal"
-        },
         {
           "name": "hermes-communications-runtime",
           "kind": "normal"

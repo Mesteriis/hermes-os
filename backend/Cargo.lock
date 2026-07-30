@@ -2079,7 +2079,6 @@ dependencies = [
 name = "hermes-communications-assembly"
 version = "0.1.0"
 dependencies = [
- "hermes-communications-persistence",
  "hermes-communications-runtime",
  "hermes-runtime-protocol",
  "hermes-storage-protocol",
@@ -2275,6 +2274,9 @@ dependencies = [
  "hermes-blob-client",
  "hermes-communications-api",
  "hermes-communications-attachment-contract",
+ "hermes-communications-call-evidence-core",
+ "hermes-communications-call-evidence-ingress",
+ "hermes-communications-call-evidence-persistence",
  "hermes-communications-content-api",
  "hermes-communications-cross-channel-forward-source-api",
  "hermes-communications-domain",

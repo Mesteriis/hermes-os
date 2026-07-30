@@ -10,6 +10,8 @@ use hermes_communications_attachment_contract::admission::{
     communication_attachment_blob_admission_observed_contract_reference_v1,
     communication_attachment_safety_verdict_observed_contract_reference_v1,
 };
+use hermes_communications_call_evidence_ingress::call_evidence_observed_contract_reference_v1;
+use hermes_communications_call_evidence_persistence::CommunicationsCallEvidencePersistenceV1;
 use hermes_communications_cross_channel_forward_source_api::cross_channel_forward_source_prepare_contract_reference_v1;
 use hermes_communications_domain::COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1;
 use hermes_communications_evidence_export_source_api::evidence_export_prepare_contract_reference_v1;
@@ -49,6 +51,7 @@ use crate::{
         consume_next_attachment_blob_admission_observation_v1,
         consume_next_attachment_safety_verdict_observation_v1,
     },
+    call_evidence_consumer::consume_next_call_evidence_observation_v1,
     canonical_outbox::CanonicalEventContextV1,
     client_port::dispatch_module_client_request_v1,
     consumer::{
@@ -85,10 +88,12 @@ pub struct CommunicationsEventRuntimeV1 {
     next_consumer: CommunicationsConsumerV1,
     domain_publish_permit: RuntimePublishPermitV1,
     persistence: CommunicationsDurablePersistence,
+    call_evidence_persistence: CommunicationsCallEvidencePersistenceV1,
     search_access: CommunicationsSearchAccessV1,
     content_tickets: Arc<CommunicationsContentTicketStoreV1>,
     runtime_instance_id: String,
     runtime_generation: u64,
+    logical_owner_id: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -99,6 +104,7 @@ pub enum CommunicationsEventRuntimeErrorV1 {
 
 struct CommunicationsSubscribePermitsV1 {
     observation: RuntimeSubscribePermitV1,
+    call_evidence: RuntimeSubscribePermitV1,
     attachment_blob_admission: RuntimeSubscribePermitV1,
     attachment_safety_verdict: RuntimeSubscribePermitV1,
     evidence_export_prepare: RuntimeSubscribePermitV1,
@@ -108,6 +114,7 @@ struct CommunicationsSubscribePermitsV1 {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CommunicationsConsumerV1 {
     Observation,
+    CallEvidence,
     AttachmentBlobAdmission,
     AttachmentSafetyVerdict,
     EvidenceExportPrepare,
@@ -117,7 +124,8 @@ enum CommunicationsConsumerV1 {
 impl CommunicationsConsumerV1 {
     const fn successor(self) -> Self {
         match self {
-            Self::Observation => Self::AttachmentBlobAdmission,
+            Self::Observation => Self::CallEvidence,
+            Self::CallEvidence => Self::AttachmentBlobAdmission,
             Self::AttachmentBlobAdmission => Self::AttachmentSafetyVerdict,
             Self::AttachmentSafetyVerdict => Self::EvidenceExportPrepare,
             Self::EvidenceExportPrepare => Self::CrossChannelForwardSourcePrepare,
@@ -131,6 +139,7 @@ impl CommunicationsSubscribePermitsV1 {
         permits: Vec<RuntimeSubscribePermitV1>,
     ) -> Result<Self, CommunicationsEventRuntimeErrorV1> {
         let observation = communication_observed_contract_reference_v1();
+        let call_evidence = call_evidence_observed_contract_reference_v1();
         let attachment_blob_admission =
             communication_attachment_blob_admission_observed_contract_reference_v1();
         let attachment_safety_verdict =
@@ -139,6 +148,7 @@ impl CommunicationsSubscribePermitsV1 {
         let cross_channel_forward_source_prepare =
             cross_channel_forward_source_prepare_contract_reference_v1();
         let mut observation_permit = None;
+        let mut call_evidence_permit = None;
         let mut attachment_blob_admission_permit = None;
         let mut attachment_safety_verdict_permit = None;
         let mut evidence_export_prepare_permit = None;
@@ -149,6 +159,8 @@ impl CommunicationsSubscribePermitsV1 {
             };
             if exact_contract(contract, &observation) {
                 replace_once(&mut observation_permit, permit)?;
+            } else if exact_contract(contract, &call_evidence) {
+                replace_once(&mut call_evidence_permit, permit)?;
             } else if exact_contract(contract, &attachment_blob_admission) {
                 replace_once(&mut attachment_blob_admission_permit, permit)?;
             } else if exact_contract(contract, &attachment_safety_verdict) {
@@ -163,6 +175,8 @@ impl CommunicationsSubscribePermitsV1 {
         }
         Ok(Self {
             observation: observation_permit.ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
+            call_evidence: call_evidence_permit
+                .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
             attachment_blob_admission: attachment_blob_admission_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
             attachment_safety_verdict: attachment_safety_verdict_permit
@@ -380,6 +394,14 @@ impl CommunicationsEventRuntimeV1 {
             .verify_storage_ready()
             .await
             .map_err(|_| unavailable_at("storage_readiness"))?;
+        let call_evidence_persistence =
+            CommunicationsCallEvidencePersistenceV1::from_owner_local_pool(
+                persistence.owner_local_pool_handle(),
+            );
+        call_evidence_persistence
+            .verify_storage_ready()
+            .await
+            .map_err(|_| unavailable_at("call_evidence_storage_readiness"))?;
         let mut control_channel = leases.into_route_port().into_channel();
         let started_at_unix_seconds = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -411,10 +433,12 @@ impl CommunicationsEventRuntimeV1 {
             next_consumer: CommunicationsConsumerV1::Observation,
             domain_publish_permit,
             persistence,
+            call_evidence_persistence,
             search_access,
             content_tickets: Arc::new(CommunicationsContentTicketStoreV1::new()),
             runtime_instance_id: admission.runtime_instance_id.clone(),
             runtime_generation: admission.runtime_generation,
+            logical_owner_id: admission.logical_owner_id.clone(),
         })
     }
 
@@ -576,6 +600,15 @@ impl CommunicationsEventRuntimeV1 {
                 &self.connection,
                 &self.permits.observation,
                 &canonical_event_context,
+            )
+            .await
+            .map(|_| ()),
+            CommunicationsConsumerV1::CallEvidence => consume_next_call_evidence_observation_v1(
+                &self.call_evidence_persistence,
+                &self.connection,
+                &self.permits.call_evidence,
+                &self.logical_owner_id,
+                canonical_event_context.recorded_at_unix_seconds,
             )
             .await
             .map(|_| ()),
@@ -972,11 +1005,21 @@ mod tests {
         let third = second.successor();
         let fourth = third.successor();
         let fifth = fourth.successor();
+        let sixth = fifth.successor();
 
         assert_eq!(
-            [first, second, third, fourth, fifth, fifth.successor()],
+            [
+                first,
+                second,
+                third,
+                fourth,
+                fifth,
+                sixth,
+                sixth.successor()
+            ],
             [
                 CommunicationsConsumerV1::Observation,
+                CommunicationsConsumerV1::CallEvidence,
                 CommunicationsConsumerV1::AttachmentBlobAdmission,
                 CommunicationsConsumerV1::AttachmentSafetyVerdict,
                 CommunicationsConsumerV1::EvidenceExportPrepare,
