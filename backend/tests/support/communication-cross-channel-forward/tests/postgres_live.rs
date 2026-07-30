@@ -6,14 +6,20 @@ use hermes_communication_cross_channel_forward_core::{
 use hermes_communication_cross_channel_forward_persistence::{
     CommunicationCrossChannelForwardPersistenceV1, CreateCrossChannelForwardOutcomeV1,
     CreateCrossChannelForwardV1, CrossChannelForwardBlobReceiptV1,
-    CrossChannelForwardCleanupReasonV1, CrossChannelForwardPersistenceConformanceV1,
+    CrossChannelForwardCleanupReasonV1, CrossChannelForwardDeliveryRejectedEventV1,
+    CrossChannelForwardDeliverySubmittedEventV1, CrossChannelForwardPersistenceConformanceV1,
     CrossChannelForwardPersistenceErrorV1, CrossChannelForwardPreparedEventV1,
     CrossChannelForwardPreparedSourceV1, CrossChannelForwardWorkStageV1,
 };
 use hermes_communication_delivery_intent_ingress_api::{
     CommunicationDeliveryIntentIngressEnvelopeContextV1,
+    build_communication_delivery_intent_rejected_outbox_record_v1,
     build_communication_delivery_intent_submit_outbox_record_v1,
-    wire::DeliveryIntentBodySourceReceiptV1,
+    build_communication_delivery_intent_submitted_outbox_record_v1,
+    wire::{
+        CommunicationDeliveryIntentIngressRejectCodeV1, CommunicationDeliveryIntentRejectedV1,
+        CommunicationDeliveryIntentSubmittedV1, DeliveryIntentBodySourceReceiptV1,
+    },
 };
 use hermes_communications_cross_channel_forward_source_api::{
     CrossChannelForwardSourceEnvelopeContextV1,
@@ -317,7 +323,7 @@ async fn event_handoff_is_atomic_replay_fenced_and_survives_reconnect() {
         custody_transfer_source_proof: vec![11; 64],
     };
     let delivery_submit = build_communication_delivery_intent_submit_outbox_record_v1(
-        [12; 16],
+        [1; 16],
         [3; 16],
         Some([4; 16]),
         DeliveryIntentBodySourceReceiptV1 {
@@ -361,7 +367,7 @@ async fn event_handoff_is_atomic_replay_fenced_and_survives_reconnect() {
         .await
         .expect("dispatch status");
     assert_eq!(status.state, CrossChannelForwardStateV1::Dispatching);
-    assert_eq!(status.delivery_intent_id, Some([12; 16]));
+    assert_eq!(status.delivery_intent_id, Some([1; 16]));
     let pending = persistence
         .pending_event_outbox(16)
         .await
@@ -401,6 +407,171 @@ async fn event_handoff_is_atomic_replay_fenced_and_survives_reconnect() {
             .await
             .expect("empty published outbox"),
         Vec::new()
+    );
+    let delivery_result = build_communication_delivery_intent_submitted_outbox_record_v1(
+        *delivery_submit.message_id(),
+        CommunicationDeliveryIntentSubmittedV1 {
+            intent_id: vec![1; 16],
+            logical_owner_id: OWNER.to_owned(),
+        },
+        &CommunicationDeliveryIntentIngressEnvelopeContextV1 {
+            module_id: "hermes-communication-delivery-intent-runtime".to_owned(),
+            runtime_instance_id: "delivery-runtime-1".to_owned(),
+            runtime_generation: 13,
+            recorded_at_unix_seconds: 1_800_000_003,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("delivery submitted");
+    let submitted_event = CrossChannelForwardDeliverySubmittedEventV1 {
+        result_message_id: *delivery_result.message_id(),
+        envelope_sha256: *delivery_result.envelope_sha256(),
+        logical_owner_id: OWNER.to_owned(),
+        delivery_intent_id: [1; 16],
+        delivery_submit_message_id: *delivery_submit.message_id(),
+    };
+    reopened
+        .persist_delivery_submitted(&submitted_event, 1_350)
+        .await
+        .expect("persist downstream durable admission");
+    reopened
+        .persist_delivery_submitted(&submitted_event, 1_350)
+        .await
+        .expect("exact delivery result replay");
+    let terminal = reopened
+        .status(OWNER, &[1; 16])
+        .await
+        .expect("terminal event-backed status");
+    assert_eq!(terminal.state, CrossChannelForwardStateV1::DeliveryAccepted);
+    assert_eq!(terminal.delivery_intent_id, Some([1; 16]));
+    let cleanup = reopened
+        .next_cleanup(OWNER, 1_350)
+        .await
+        .expect("event terminal cleanup")
+        .expect("source custody cleanup must be durable");
+    assert_eq!(cleanup.blob_reference, [6; 16]);
+    assert_eq!(cleanup.declared_bytes, 42);
+    assert_eq!(cleanup.sha256, [7; 32]);
+    assert_eq!(cleanup.custody_proof, vec![8; 64]);
+    reopened
+        .complete_cleanup(OWNER, &[1; 16], 1_360)
+        .await
+        .expect("complete event terminal cleanup");
+    let mut conflicting_delivery = submitted_event;
+    conflicting_delivery.envelope_sha256 = [14; 32];
+    assert_eq!(
+        reopened
+            .persist_delivery_submitted(&conflicting_delivery, 1_361)
+            .await,
+        Err(CrossChannelForwardPersistenceErrorV1::Conflict)
+    );
+
+    reopened
+        .create_forward(create_command(30, 31, 32))
+        .await
+        .expect("create delivery-rejected forward");
+    let rejected_delivery_prepare = build_cross_channel_forward_source_prepare_outbox_record_v1(
+        [30; 16],
+        [31; 16],
+        [32; 16],
+        OWNER,
+        1_800_000_033,
+        &source_context,
+    )
+    .expect("delivery-rejected source prepare");
+    reopened
+        .persist_source_prepare_outbox(OWNER, [30; 16], &rejected_delivery_prepare, 1_370)
+        .await
+        .expect("persist delivery-rejected source prepare");
+    let rejected_delivery_source = CrossChannelForwardPreparedEventV1 {
+        result_message_id: [33; 16],
+        envelope_sha256: [34; 32],
+        logical_owner_id: OWNER.to_owned(),
+        forward_id: [30; 16],
+        source_message_id: [31; 16],
+        target_conversation_id: [32; 16],
+        source_evidence_id: [35; 16],
+        source_evidence_revision: 1,
+        source_body: CrossChannelForwardBlobReceiptV1 {
+            reference_id: [36; 16],
+            declared_bytes: 42,
+            sha256: [37; 32],
+            custody_transfer_source_proof: vec![38; 64],
+        },
+    };
+    let rejected_delivery_body = CrossChannelForwardBlobReceiptV1 {
+        reference_id: [39; 16],
+        declared_bytes: 42,
+        sha256: [37; 32],
+        custody_transfer_source_proof: vec![40; 64],
+    };
+    let rejected_delivery_submit = build_communication_delivery_intent_submit_outbox_record_v1(
+        [30; 16],
+        [32; 16],
+        Some([4; 16]),
+        DeliveryIntentBodySourceReceiptV1 {
+            reference_id: rejected_delivery_body.reference_id.to_vec(),
+            declared_bytes: rejected_delivery_body.declared_bytes,
+            sha256: rejected_delivery_body.sha256.to_vec(),
+            custody_transfer_source_proof: rejected_delivery_body
+                .custody_transfer_source_proof
+                .clone(),
+        },
+        OWNER,
+        1_800_000_034,
+        &source_context_for_delivery(),
+    )
+    .expect("rejected delivery submit");
+    reopened
+        .persist_source_prepared_and_delivery_submit(
+            &rejected_delivery_source,
+            &rejected_delivery_body,
+            &rejected_delivery_submit,
+            1_380,
+        )
+        .await
+        .expect("persist delivery-rejected dispatch");
+    let rejected_delivery_result =
+        build_communication_delivery_intent_rejected_outbox_record_v1(
+            *rejected_delivery_submit.message_id(),
+            CommunicationDeliveryIntentRejectedV1 {
+                intent_id: vec![30; 16],
+                code: CommunicationDeliveryIntentIngressRejectCodeV1::
+                    CommunicationDeliveryIntentIngressRejectCodePolicy as i32,
+                logical_owner_id: OWNER.to_owned(),
+            },
+            &delivery_result_context(),
+        )
+        .expect("delivery rejected");
+    let rejected_delivery_event = CrossChannelForwardDeliveryRejectedEventV1 {
+        result_message_id: *rejected_delivery_result.message_id(),
+        envelope_sha256: *rejected_delivery_result.envelope_sha256(),
+        logical_owner_id: OWNER.to_owned(),
+        delivery_intent_id: [30; 16],
+        delivery_submit_message_id: *rejected_delivery_submit.message_id(),
+        rejection_code: 4,
+    };
+    reopened
+        .persist_delivery_rejected(&rejected_delivery_event, 1_390)
+        .await
+        .expect("persist downstream rejection");
+    let rejected_delivery_status = reopened
+        .status(OWNER, &[30; 16])
+        .await
+        .expect("delivery-rejected status");
+    assert_eq!(
+        rejected_delivery_status.state,
+        CrossChannelForwardStateV1::Rejected
+    );
+    assert_eq!(rejected_delivery_status.error_code, Some(4));
+    assert_eq!(
+        reopened
+            .next_cleanup(OWNER, 1_390)
+            .await
+            .expect("delivery-rejected cleanup")
+            .expect("rejected delivery must enqueue cleanup")
+            .reason,
+        CrossChannelForwardCleanupReasonV1::Rejected
     );
 
     reopened
@@ -469,6 +640,26 @@ fn create_command(
             target_reply_to_message_id: Some([4; 16]),
         },
         created_at_unix_millis: 1_000,
+    }
+}
+
+fn source_context_for_delivery() -> CommunicationDeliveryIntentIngressEnvelopeContextV1 {
+    CommunicationDeliveryIntentIngressEnvelopeContextV1 {
+        module_id: "hermes-communication-cross-channel-forward-runtime".to_owned(),
+        runtime_instance_id: "forward-runtime-1".to_owned(),
+        runtime_generation: 7,
+        recorded_at_unix_seconds: 1_800_000_004,
+        recorded_at_nanos: 0,
+    }
+}
+
+fn delivery_result_context() -> CommunicationDeliveryIntentIngressEnvelopeContextV1 {
+    CommunicationDeliveryIntentIngressEnvelopeContextV1 {
+        module_id: "hermes-communication-delivery-intent-runtime".to_owned(),
+        runtime_instance_id: "delivery-runtime-1".to_owned(),
+        runtime_generation: 13,
+        recorded_at_unix_seconds: 1_800_000_005,
+        recorded_at_nanos: 0,
     }
 }
 

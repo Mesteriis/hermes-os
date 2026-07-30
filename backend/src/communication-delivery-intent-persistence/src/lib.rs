@@ -3,6 +3,7 @@
 mod client_realtime;
 #[cfg(feature = "conformance-test-support")]
 mod conformance;
+mod ingress_cleanup;
 mod ingress_events;
 mod intents;
 mod provider_events;
@@ -12,9 +13,12 @@ pub use client_realtime::DeliveryIntentClientRealtimeTransitionV1;
 #[cfg(feature = "conformance-test-support")]
 pub use conformance::DeliveryIntentPersistenceConformanceV1;
 use hermes_storage_protocol::StorageBindingV1;
+pub use ingress_cleanup::{
+    DeliveryIntentIngressCleanupJobV1, DeliveryIntentIngressCleanupReasonV1,
+};
 pub use ingress_events::{
-    DeliveryIntentIngressDispositionV1, DeliveryIntentIngressEventV1,
-    DeliveryIntentIngressResultKindV1,
+    DeliveryIntentIngressBlobReceiptV1, DeliveryIntentIngressDispositionV1,
+    DeliveryIntentIngressEventV1, DeliveryIntentIngressResultKindV1,
 };
 pub use intents::{
     CreateDeliveryIntentOutcomeV1, CreateDeliveryIntentV1, DeliveryIntentBodyBlobReceiptV1,

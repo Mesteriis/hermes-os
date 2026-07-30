@@ -22,10 +22,13 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     managedRuntime,
     sourcePrepare,
     sourceResults,
+    deliveryResults,
     blobTransfer,
+    custodyCleanup,
     runtimeEventOutbox,
     migration,
     eventMigration,
+    resultMigration,
     operations,
     workQueue,
     eventIo,
@@ -119,7 +122,21 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     ),
     readFile(
       new URL(
+        'src/communication-cross-channel-forward-runtime/src/delivery_results.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-cross-channel-forward-runtime/src/blob_transfer.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-runtime/src/custody_cleanup.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -141,6 +158,13 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
     readFile(
       new URL(
         'src/communication-cross-channel-forward-persistence/migrations/0002_event_handoff.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-cross-channel-forward-persistence/migrations/0003_delivery_result_correlation.sql',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -270,6 +294,8 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
   assert.match(eventMigration, /exact_envelope_bytes/);
   assert.match(eventMigration, /source_result_message_id/);
   assert.match(eventMigration, /delivery_submit_message_id/);
+  assert.match(resultMigration, /delivery_intent_command_id/);
+  assert.match(resultMigration, /communication_cross_channel_forward_delivery_intent_idx/);
   assert.doesNotMatch(
     eventMigration,
     /body_utf8|provider|account_id|mail_|telegram_|whatsapp_|zulip_/,
@@ -300,27 +326,35 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
   assert.match(postgresConformance, /survives_reconnect/);
   assert.match(postgresConformance, /ClaimLost/);
   assert.match(storageRunner, /HERMES_COMMUNICATION_CROSS_CHANNEL_FORWARD_POSTGRES/);
-  assert.match(schema, /COMMUNICATION_CROSS_CHANNEL_FORWARD_STORAGE_BUNDLE_REVISION_V2/);
+  assert.match(schema, /COMMUNICATION_CROSS_CHANNEL_FORWARD_STORAGE_BUNDLE_REVISION_V3/);
   assert.match(runtimeAdmission, /ModuleKindV1::Workflow/);
   assert.match(runtimeAdmission, /max_processes: 1/);
   assert.match(runtimeAdmission, /communication_delivery_intent_submit_publish_request_v1/);
+  assert.match(runtimeAdmission, /communication_delivery_intent_submitted_consume_request_v1/);
+  assert.match(runtimeAdmission, /communication_delivery_intent_rejected_consume_request_v1/);
   assert.match(runtimeAdmission, /cross_channel_forward_source_prepared_consume_request_v1/);
   assert.match(runtimeMain, /--serve-inherited/);
   assert.match(managedRuntime, /request_managed_runtime_event_access_v2/);
-  assert.match(managedRuntime, /bind_source_subscriptions/);
+  assert.match(managedRuntime, /bind_result_subscriptions/);
   assert.match(managedRuntime, /signal_ready/);
   assert.match(sourcePrepare, /next_source_prepare_candidate/);
   assert.match(sourcePrepare, /persist_source_prepare_outbox/);
   assert.match(sourceResults, /decode_envelope_v1/);
   assert.match(sourceResults, /persist_source_prepared_and_delivery_submit/);
   assert.match(sourceResults, /delivery\.acknowledge\(\)/);
+  assert.match(deliveryResults, /persist_delivery_submitted/);
+  assert.match(deliveryResults, /persist_delivery_rejected/);
+  assert.match(deliveryResults, /COMMUNICATION_DELIVERY_INTENT_BLOB_TARGET_MODULE_ID_V1/);
+  assert.match(deliveryResults, /delivery\.acknowledge\(\)/);
   assert.match(blobTransfer, /BlobDataOperationReadRangeV1/);
   assert.match(blobTransfer, /BlobDataOperationWriteV1/);
   assert.match(blobTransfer, /COMMUNICATION_DELIVERY_INTENT_BLOB_TARGET_MODULE_ID_V1/);
+  assert.match(custodyCleanup, /request_managed_blob_custody_release_v2/);
+  assert.match(custodyCleanup, /reschedule_cleanup/);
   assert.match(runtimeEventOutbox, /publish_exact/);
   assert.match(runtimeEventOutbox, /mark_event_outbox_published/);
   assert.doesNotMatch(
-    `${runtimeAdmission}\n${managedRuntime}\n${sourcePrepare}\n${sourceResults}\n${blobTransfer}\n${runtimeEventOutbox}`,
+    `${runtimeAdmission}\n${managedRuntime}\n${sourcePrepare}\n${sourceResults}\n${deliveryResults}\n${blobTransfer}\n${custodyCleanup}\n${runtimeEventOutbox}`,
     /hermes-(?:mail|telegram|whatsapp|zulip)-(?:runtime|persistence|core|api)/,
   );
 });
@@ -461,9 +495,12 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
     deliveryPersistenceManifest,
     deliveryIngressMigration,
     deliveryIngressPersistence,
+    deliveryCleanupMigration,
+    deliveryCleanupPersistence,
     deliveryRuntimeManifest,
     deliveryEventIngress,
     deliveryIngressResultOutbox,
+    deliveryIngressCleanup,
     policySource,
   ] = await Promise.all([
     readFile(
@@ -524,6 +561,20 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
     ),
     readFile(
       new URL(
+        'src/communication-delivery-intent-persistence/migrations/0005_event_ingress_cleanup.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-persistence/src/ingress_cleanup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-delivery-intent-runtime/Cargo.toml',
         BACKEND_ROOT,
       ),
@@ -539,6 +590,13 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
     readFile(
       new URL(
         'src/communication-delivery-intent-runtime/src/ingress_result_outbox.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delivery-intent-runtime/src/ingress_cleanup.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -572,7 +630,7 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   );
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_delivery_intent_event_ingress_consumer_v1',
+    'communication_cross_channel_forward_terminal_results_v1',
   );
   assert.ok(
     policy.implementation.productionPackages.some(
@@ -603,6 +661,11 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
     /communication_delivery_intent_ingress_result_outbox/,
   );
   assert.match(deliveryIngressMigration, /exact_envelope_bytes/);
+  assert.match(
+    deliveryCleanupMigration,
+    /communication_delivery_intent_ingress_cleanup/,
+  );
+  assert.match(deliveryCleanupMigration, /custody_source_proof/);
   assert.doesNotMatch(
     deliveryIngressMigration,
     /body_utf8|provider_id|account_id|mail_|telegram_|whatsapp_|zulip_/,
@@ -610,6 +673,9 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   assert.match(deliveryIngressPersistence, /insert_or_fence_inbox/);
   assert.match(deliveryIngressPersistence, /create_intent_in_transaction/);
   assert.match(deliveryIngressPersistence, /insert_exact_result/);
+  assert.match(deliveryIngressPersistence, /insert_cleanup/);
+  assert.match(deliveryCleanupPersistence, /next_ingress_cleanup/);
+  assert.match(deliveryCleanupPersistence, /reschedule_ingress_cleanup/);
   assert.match(deliveryEventIngress, /inspect_event_ingress/);
   assert.match(deliveryEventIngress, /read_delivery_intent_ingress_body_v1/);
   assert.match(deliveryEventIngress, /admit_event_ingress/);
@@ -619,6 +685,8 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   );
   assert.match(deliveryIngressResultOutbox, /publish_exact/);
   assert.match(deliveryIngressResultOutbox, /mark_ingress_result_published/);
+  assert.match(deliveryIngressCleanup, /request_managed_blob_custody_release_v2/);
+  assert.match(deliveryIngressCleanup, /complete_ingress_cleanup/);
   assert.doesNotMatch(
     `${deliveryIngressPersistence}\n${deliveryEventIngress}\n${deliveryIngressResultOutbox}`,
     /hermes_communication_cross_channel_forward_(?:runtime|persistence|core)/,
@@ -630,6 +698,10 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   assert.match(ingressEnvelope, /OutboxRecordV1/);
   assert.match(ingressEnvelope, /Semantics::Command/);
   assert.match(ingressEnvelope, /Semantics::Result/);
+  assert.match(
+    ingressEnvelope,
+    /communication_delivery_intent_submit_message_id_v1/,
+  );
   assert.match(ingressContract, /SubmitCommunicationDeliveryIntentCommandV1/);
   assert.match(ingressContract, /DeliveryIntentBodySourceReceiptV1/);
   assert.doesNotMatch(

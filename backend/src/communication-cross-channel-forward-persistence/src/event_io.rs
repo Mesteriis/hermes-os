@@ -115,7 +115,6 @@ impl CommunicationCrossChannelForwardPersistenceV1 {
             || prepared.source_body.sha256 != delivery_body.sha256
             || !valid_timestamp(consumed_at_unix_millis)
             || !valid_id16(delivery_submit_outbox.message_id())
-            || delivery_submit_outbox.message_id() == &prepared.forward_id
         {
             return Err(CrossChannelForwardPersistenceErrorV1::InvalidInput);
         }
@@ -159,13 +158,14 @@ impl CommunicationCrossChannelForwardPersistenceV1 {
                  delivery_body_declared_bytes = $10,
                  delivery_body_sha256 = $11,
                  delivery_body_custody_proof = $12,
-                 delivery_submit_message_id = $13,
+                 delivery_intent_command_id = $13,
+                 delivery_submit_message_id = $14,
                  attempt_count = 0, claimed_by = NULL,
                  lease_expires_at_unix_millis = NULL,
-                 updated_at_unix_millis = $14
-             WHERE logical_owner_id = $15 AND forward_id = $16
-               AND source_message_id = $17 AND target_conversation_id = $18
-               AND state = $19 AND source_result_message_id IS NULL",
+                 updated_at_unix_millis = $15
+             WHERE logical_owner_id = $16 AND forward_id = $17
+               AND source_message_id = $18 AND target_conversation_id = $19
+               AND state = $20 AND source_result_message_id IS NULL",
         )
         .bind(STATE_DISPATCHING)
         .bind(prepared.source_evidence_id.as_slice())
@@ -179,6 +179,7 @@ impl CommunicationCrossChannelForwardPersistenceV1 {
         .bind(delivery_body_length)
         .bind(delivery_body.sha256.as_slice())
         .bind(&delivery_body.custody_transfer_source_proof)
+        .bind(prepared.forward_id.as_slice())
         .bind(delivery_submit_outbox.message_id().as_slice())
         .bind(consumed_at_unix_millis)
         .bind(&prepared.logical_owner_id)
@@ -260,14 +261,14 @@ impl CommunicationCrossChannelForwardPersistenceV1 {
         commit(transaction).await
     }
 
-    async fn begin(
+    pub(crate) async fn begin(
         &self,
     ) -> Result<Transaction<'_, Postgres>, CrossChannelForwardPersistenceErrorV1> {
         self.pool.begin().await.map_err(storage_error)
     }
 }
 
-async fn inbox_duplicate(
+pub(crate) async fn inbox_duplicate(
     transaction: &mut Transaction<'_, Postgres>,
     message_id: [u8; 16],
     envelope_sha256: [u8; 32],
@@ -350,7 +351,7 @@ fn valid_sha256(value: &[u8; 32]) -> bool {
     value.iter().any(|byte| *byte != 0)
 }
 
-async fn commit(
+pub(crate) async fn commit(
     transaction: Transaction<'_, Postgres>,
 ) -> Result<(), CrossChannelForwardPersistenceErrorV1> {
     transaction.commit().await.map_err(storage_error)

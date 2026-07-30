@@ -145,6 +145,7 @@ pub fn communication_delivery_intent_blob_capability_v1() -> CapabilityDescripto
                 custody_scope_id: COMMUNICATION_DELIVERY_INTENT_BLOB_CUSTODY_SCOPE_ID_V1.to_owned(),
                 allowed_operations: vec![
                     BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::ReleaseCustody as i32,
                     BlobQuotaOperationV1::Write as i32,
                 ],
             })),
@@ -334,6 +335,7 @@ mod tests {
             Some(
                 [
                     BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::ReleaseCustody as i32,
                     BlobQuotaOperationV1::Write as i32,
                 ]
                 .as_slice()

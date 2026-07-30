@@ -2,8 +2,12 @@ use hermes_communication_cross_channel_forward_api::{
     COMMUNICATION_CROSS_CHANNEL_FORWARD_MODULE_ID_V1, COMMUNICATION_CROSS_CHANNEL_FORWARD_OWNER_V1,
 };
 use hermes_communication_delivery_intent_ingress_api::{
+    communication_delivery_intent_rejected_consume_request_v1,
+    communication_delivery_intent_rejected_contract_reference_v1,
     communication_delivery_intent_submit_contract_reference_v1,
     communication_delivery_intent_submit_publish_request_v1,
+    communication_delivery_intent_submitted_consume_request_v1,
+    communication_delivery_intent_submitted_contract_reference_v1,
 };
 use hermes_communications_cross_channel_forward_source_api::{
     cross_channel_forward_source_prepare_contract_reference_v1,
@@ -50,7 +54,7 @@ pub fn communication_cross_channel_forward_module_descriptor_v1(
     let settings = communication_cross_channel_forward_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 1,
+        descriptor_revision: 2,
         module_id: COMMUNICATION_CROSS_CHANNEL_FORWARD_MODULE_ID_V1.to_owned(),
         owner_id: COMMUNICATION_CROSS_CHANNEL_FORWARD_OWNER_V1.to_owned(),
         module_kind: ModuleKindV1::Workflow as i32,
@@ -63,7 +67,9 @@ pub fn communication_cross_channel_forward_module_descriptor_v1(
         }),
         capabilities: vec![
             blob_capability(),
+            delivery_rejected_capability(),
             delivery_submit_capability(),
+            delivery_submitted_capability(),
             source_prepare_capability(),
             source_prepared_capability(),
             source_rejected_capability(),
@@ -118,6 +124,24 @@ fn delivery_submit_capability() -> CapabilityDescriptorV1 {
         ProvidedSurfaceKindV1::DurablePublisher,
         communication_delivery_intent_submit_contract_reference_v1(),
         communication_delivery_intent_submit_publish_request_v1(),
+    )
+}
+
+fn delivery_submitted_capability() -> CapabilityDescriptorV1 {
+    event_capability(
+        "communication_cross_channel_forward.delivery_submitted.v1",
+        ProvidedSurfaceKindV1::DurableConsumer,
+        communication_delivery_intent_submitted_contract_reference_v1(),
+        communication_delivery_intent_submitted_consume_request_v1(),
+    )
+}
+
+fn delivery_rejected_capability() -> CapabilityDescriptorV1 {
+    event_capability(
+        "communication_cross_channel_forward.delivery_rejected.v1",
+        ProvidedSurfaceKindV1::DurableConsumer,
+        communication_delivery_intent_rejected_contract_reference_v1(),
+        communication_delivery_intent_rejected_consume_request_v1(),
     )
 }
 
@@ -186,7 +210,7 @@ mod tests {
     #[test]
     fn descriptor_requests_only_exact_event_storage_and_blob_capabilities() {
         let descriptor = communication_cross_channel_forward_module_descriptor_v1("build-1");
-        assert_eq!(descriptor.capabilities.len(), 6);
+        assert_eq!(descriptor.capabilities.len(), 8);
         assert_eq!(
             descriptor
                 .runtime_budget_request

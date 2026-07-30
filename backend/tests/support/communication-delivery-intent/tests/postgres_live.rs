@@ -5,13 +5,14 @@ use hermes_communication_delivery_intent_core::{
 use hermes_communication_delivery_intent_ingress_api::{
     CommunicationDeliveryIntentIngressEnvelopeContextV1,
     build_communication_delivery_intent_submitted_outbox_record_v1,
+    communication_delivery_intent_submit_message_id_v1,
     wire::CommunicationDeliveryIntentSubmittedV1,
 };
 use hermes_communication_delivery_intent_persistence::{
     CommunicationDeliveryIntentPersistenceV1, CreateDeliveryIntentV1,
-    DeliveryIntentBodyBlobReceiptV1, DeliveryIntentIngressDispositionV1,
-    DeliveryIntentIngressEventV1, DeliveryIntentPersistenceConformanceV1,
-    DeliveryIntentPersistenceErrorV1,
+    DeliveryIntentBodyBlobReceiptV1, DeliveryIntentIngressBlobReceiptV1,
+    DeliveryIntentIngressDispositionV1, DeliveryIntentIngressEventV1,
+    DeliveryIntentPersistenceConformanceV1, DeliveryIntentPersistenceErrorV1,
 };
 
 const POSTGRES_URL: &str = "HERMES_COMMUNICATION_DELIVERY_INTENT_POSTGRES_URL";
@@ -85,18 +86,59 @@ async fn event_ingress_is_atomic_replay_fenced_and_survives_reconnect() {
             .expect("published result")
             .is_empty()
     );
+    let cleanup = reopened
+        .next_ingress_cleanup(OWNER, 1_800_000_020)
+        .await
+        .expect("read ingress cleanup")
+        .expect("committed ingress must enqueue custody cleanup");
+    assert_eq!(cleanup.intent_id, event.intent_id);
+    assert_eq!(cleanup.body_receipt, event.body_receipt);
+    reopened
+        .reschedule_ingress_cleanup(OWNER, &event.intent_id, 0, 1_800_000_030, 1_800_000_020)
+        .await
+        .expect("persist cleanup outage");
+    drop(reopened);
+
+    let after_cleanup_restart = connect(&database_url).await;
+    assert_eq!(
+        after_cleanup_restart
+            .next_ingress_cleanup(OWNER, 1_800_000_029)
+            .await
+            .expect("cleanup before retry"),
+        None
+    );
+    let cleanup = after_cleanup_restart
+        .next_ingress_cleanup(OWNER, 1_800_000_030)
+        .await
+        .expect("cleanup after reconnect")
+        .expect("cleanup retry survives reconnect");
+    assert_eq!(cleanup.attempt_count, 1);
+    after_cleanup_restart
+        .complete_ingress_cleanup(OWNER, &event.intent_id, 1_800_000_031)
+        .await
+        .expect("complete custody cleanup");
+    assert_eq!(
+        after_cleanup_restart
+            .next_ingress_cleanup(OWNER, 1_800_000_031)
+            .await
+            .expect("completed cleanup"),
+        None
+    );
 }
 
-fn ingress_event(
-    command_message_id: [u8; 16],
-    envelope_sha256: [u8; 32],
-) -> DeliveryIntentIngressEventV1 {
+fn ingress_event(intent_id: [u8; 16], envelope_sha256: [u8; 32]) -> DeliveryIntentIngressEventV1 {
     DeliveryIntentIngressEventV1 {
-        command_message_id,
+        command_message_id: communication_delivery_intent_submit_message_id_v1(&intent_id),
         envelope_sha256,
-        correlation_id: command_message_id,
+        correlation_id: intent_id,
         logical_owner_id: OWNER.to_owned(),
-        intent_id: command_message_id,
+        intent_id,
+        body_receipt: DeliveryIntentIngressBlobReceiptV1 {
+            reference_id: [10; 16],
+            declared_bytes: 42,
+            sha256: [11; 32],
+            custody_source_proof: vec![12; 64],
+        },
         consumed_at_unix_seconds: 1_800_000_010,
     }
 }

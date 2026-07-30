@@ -9,6 +9,8 @@ use crate::{
 
 const RESULT_SUBMITTED: i16 = 1;
 const RESULT_REJECTED: i16 = 2;
+const CLEANUP_SUBMITTED: i16 = 1;
+const CLEANUP_REJECTED: i16 = 2;
 type ExistingIngressRowV1 = (Vec<u8>, Vec<u8>, String, Vec<u8>);
 type ExistingIngressResultRowV1 = (Vec<u8>, Vec<u8>, i16, String, Vec<u8>);
 
@@ -19,7 +21,16 @@ pub struct DeliveryIntentIngressEventV1 {
     pub correlation_id: [u8; 16],
     pub logical_owner_id: String,
     pub intent_id: [u8; 16],
+    pub body_receipt: DeliveryIntentIngressBlobReceiptV1,
     pub consumed_at_unix_seconds: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeliveryIntentIngressBlobReceiptV1 {
+    pub reference_id: [u8; 16],
+    pub declared_bytes: u64,
+    pub sha256: [u8; 32],
+    pub custody_source_proof: Vec<u8>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -97,6 +108,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             return commit(transaction, disposition).await;
         }
         create_intent_in_transaction(&mut transaction, command).await?;
+        insert_cleanup(&mut transaction, event, CLEANUP_SUBMITTED).await?;
         insert_exact_result(
             &mut transaction,
             event,
@@ -118,6 +130,7 @@ impl CommunicationDeliveryIntentPersistenceV1 {
             validate_existing_result(&mut transaction, event, result, RESULT_REJECTED).await?;
             return commit(transaction, disposition).await;
         }
+        insert_cleanup(&mut transaction, event, CLEANUP_REJECTED).await?;
         insert_exact_result(
             &mut transaction,
             event,
@@ -176,6 +189,40 @@ impl CommunicationDeliveryIntentPersistenceV1 {
         .await
         .map(|_| ())
         .map_err(storage_error)
+    }
+}
+
+async fn insert_cleanup(
+    transaction: &mut Transaction<'_, Postgres>,
+    event: &DeliveryIntentIngressEventV1,
+    reason: i16,
+) -> Result<(), DeliveryIntentPersistenceErrorV1> {
+    let declared_bytes = i64::try_from(event.body_receipt.declared_bytes)
+        .map_err(|_| DeliveryIntentPersistenceErrorV1::InvalidInput)?;
+    let inserted = sqlx::query(
+        "INSERT INTO hermes_data.communication_delivery_intent_ingress_cleanup (
+           logical_owner_id, intent_id, reference_id, declared_bytes,
+           sha256, custody_source_proof, reason, attempt_count,
+           next_attempt_at_unix_seconds, created_at_unix_seconds,
+           updated_at_unix_seconds
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $8, $8)
+         ON CONFLICT (logical_owner_id, intent_id) DO NOTHING",
+    )
+    .bind(&event.logical_owner_id)
+    .bind(event.intent_id.as_slice())
+    .bind(event.body_receipt.reference_id.as_slice())
+    .bind(declared_bytes)
+    .bind(event.body_receipt.sha256.as_slice())
+    .bind(&event.body_receipt.custody_source_proof)
+    .bind(reason)
+    .bind(event.consumed_at_unix_seconds)
+    .execute(&mut **transaction)
+    .await
+    .map_err(storage_error)?;
+    if inserted.rows_affected() == 1 {
+        Ok(())
+    } else {
+        Err(DeliveryIntentPersistenceErrorV1::Conflict)
     }
 }
 
@@ -306,7 +353,15 @@ fn valid_event(event: &DeliveryIntentIngressEventV1) -> bool {
         && valid_id16(&event.correlation_id)
         && valid_bounded_identity(&event.logical_owner_id)
         && valid_id16(&event.intent_id)
+        && valid_blob_receipt(&event.body_receipt)
         && valid_timestamp(event.consumed_at_unix_seconds)
+}
+
+fn valid_blob_receipt(receipt: &DeliveryIntentIngressBlobReceiptV1) -> bool {
+    valid_id16(&receipt.reference_id)
+        && (1..=16 * 1024 * 1024).contains(&receipt.declared_bytes)
+        && valid_id32(&receipt.sha256)
+        && (1..=2_048).contains(&receipt.custody_source_proof.len())
 }
 
 async fn commit(
@@ -337,6 +392,12 @@ mod tests {
             correlation_id: [3; 16],
             logical_owner_id: "owner-1".to_owned(),
             intent_id: [4; 16],
+            body_receipt: DeliveryIntentIngressBlobReceiptV1 {
+                reference_id: [5; 16],
+                declared_bytes: 42,
+                sha256: [6; 32],
+                custody_source_proof: vec![7; 64],
+            },
             consumed_at_unix_seconds: 5,
         };
         assert!(valid_event(&event));

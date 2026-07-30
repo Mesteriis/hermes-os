@@ -8,6 +8,9 @@ pub use envelope::{
     build_communication_delivery_intent_rejected_outbox_record_v1,
     build_communication_delivery_intent_submit_outbox_record_v1,
     build_communication_delivery_intent_submitted_outbox_record_v1,
+    communication_delivery_intent_rejected_message_id_v1,
+    communication_delivery_intent_submit_message_id_v1,
+    communication_delivery_intent_submitted_message_id_v1,
 };
 use hermes_runtime_protocol::v1::{
     CapabilityRequestV1, ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1,

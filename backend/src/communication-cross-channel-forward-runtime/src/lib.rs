@@ -1,5 +1,7 @@
 mod admission;
 mod blob_transfer;
+mod custody_cleanup;
+mod delivery_results;
 mod event_outbox;
 mod managed_runtime;
 mod source_prepare;
@@ -8,6 +10,14 @@ mod source_results;
 pub use blob_transfer::{
     CrossChannelForwardBlobPortV1, CrossChannelForwardBlobTransferErrorV1,
     ManagedCrossChannelForwardBlobPortV1,
+};
+pub use custody_cleanup::{
+    CrossChannelForwardCustodyCleanupErrorV1, CrossChannelForwardCustodyReleasePortV1,
+    ManagedCrossChannelForwardCustodyReleasePortV1, process_cross_channel_custody_cleanup_once_v1,
+};
+pub use delivery_results::{
+    CrossChannelForwardDeliveryResultErrorV1, consume_delivery_rejected_once_v1,
+    consume_delivery_submitted_once_v1,
 };
 pub use event_outbox::{CrossChannelForwardEventRelayErrorV1, relay_event_outbox_once_v1};
 pub use managed_runtime::{

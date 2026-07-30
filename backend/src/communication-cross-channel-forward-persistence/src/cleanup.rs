@@ -14,7 +14,9 @@ pub enum CrossChannelForwardCleanupReasonV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CrossChannelForwardCleanupJobV1 {
     pub forward_id: [u8; 16],
-    pub blob_reference: Vec<u8>,
+    pub blob_reference: [u8; 16],
+    pub declared_bytes: u64,
+    pub sha256: [u8; 32],
     pub custody_proof: Vec<u8>,
     pub reason: CrossChannelForwardCleanupReasonV1,
     pub attempt_count: u16,
@@ -31,13 +33,18 @@ impl CommunicationCrossChannelForwardPersistenceV1 {
             return Err(CrossChannelForwardPersistenceErrorV1::InvalidInput);
         }
         let row = sqlx::query(
-            "SELECT forward_id, source_blob_reference, source_custody_proof,
-                    reason, attempt_count
-             FROM hermes_data.communication_cross_channel_forward_cleanup
-             WHERE logical_owner_id = $1
-               AND completed_at_unix_millis IS NULL
-               AND next_attempt_at_unix_millis <= $2
-             ORDER BY next_attempt_at_unix_millis, forward_id
+            "SELECT cleanup.forward_id, cleanup.source_blob_reference,
+                    operation.source_body_length, operation.source_body_sha256,
+                    cleanup.source_custody_proof, cleanup.reason,
+                    cleanup.attempt_count
+             FROM hermes_data.communication_cross_channel_forward_cleanup AS cleanup
+             JOIN hermes_data.communication_cross_channel_forward_operations AS operation
+               ON operation.logical_owner_id = cleanup.logical_owner_id
+              AND operation.forward_id = cleanup.forward_id
+             WHERE cleanup.logical_owner_id = $1
+               AND cleanup.completed_at_unix_millis IS NULL
+               AND cleanup.next_attempt_at_unix_millis <= $2
+             ORDER BY cleanup.next_attempt_at_unix_millis, cleanup.forward_id
              LIMIT 1",
         )
         .bind(logical_owner_id)
@@ -126,7 +133,27 @@ fn cleanup_from_row(
     let proof: Vec<u8> = row
         .try_get("source_custody_proof")
         .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
-    if reference.is_empty() || reference.len() > 1_024 || proof.is_empty() || proof.len() > 4_096 {
+    let reference = reference
+        .try_into()
+        .ok()
+        .filter(|value: &[u8; 16]| value.iter().any(|byte| *byte != 0))
+        .ok_or(CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
+    let body_length: i32 = row
+        .try_get("source_body_length")
+        .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
+    let declared_bytes = u64::try_from(body_length)
+        .ok()
+        .filter(|value| (1..=64 * 1024).contains(value))
+        .ok_or(CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
+    let sha256: Vec<u8> = row
+        .try_get("source_body_sha256")
+        .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
+    let sha256 = sha256
+        .try_into()
+        .ok()
+        .filter(|value: &[u8; 32]| value.iter().any(|byte| *byte != 0))
+        .ok_or(CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
+    if proof.is_empty() || proof.len() > 4_096 {
         return Err(CrossChannelForwardPersistenceErrorV1::InvalidRow);
     }
     let attempt_count: i16 = row
@@ -138,6 +165,8 @@ fn cleanup_from_row(
                 .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?,
         )?,
         blob_reference: reference,
+        declared_bytes,
+        sha256,
         custody_proof: proof,
         reason: match row
             .try_get::<i16, _>("reason")

@@ -3,10 +3,8 @@ use std::os::unix::net::UnixStream;
 use hermes_blob_client::{
     BlobDataClient, ManagedBlobSessionRequestV1, request_managed_blob_session_v2,
 };
-use hermes_communication_delivery_intent_ingress_api::{
-    COMMUNICATION_DELIVERY_INTENT_INGRESS_MAX_PROOF_BYTES_V1,
-    wire::DeliveryIntentBodySourceReceiptV1,
-};
+use hermes_communication_delivery_intent_ingress_api::COMMUNICATION_DELIVERY_INTENT_INGRESS_MAX_PROOF_BYTES_V1;
+use hermes_communication_delivery_intent_persistence::DeliveryIntentIngressBlobReceiptV1;
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, ManagedControlRequestDispatcherV2},
     v1::BlobDataOperationV1,
@@ -27,19 +25,11 @@ pub enum DeliveryIntentIngressBodyErrorV1 {
 pub fn read_delivery_intent_ingress_body_v1(
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
-    receipt: &DeliveryIntentBodySourceReceiptV1,
+    receipt: &DeliveryIntentIngressBlobReceiptV1,
 ) -> Result<Zeroizing<Vec<u8>>, DeliveryIntentIngressBodyErrorV1> {
     validate_receipt(receipt)?;
-    let reference_id: [u8; 16] = receipt
-        .reference_id
-        .as_slice()
-        .try_into()
-        .map_err(|_| DeliveryIntentIngressBodyErrorV1::InvalidReceipt)?;
-    let sha256: [u8; 32] = receipt
-        .sha256
-        .as_slice()
-        .try_into()
-        .map_err(|_| DeliveryIntentIngressBodyErrorV1::InvalidReceipt)?;
+    let reference_id = receipt.reference_id;
+    let sha256 = receipt.sha256;
     let session = request_managed_blob_session_v2(
         control_channel,
         dispatcher,
@@ -74,15 +64,15 @@ pub fn read_delivery_intent_ingress_body_v1(
 }
 
 fn validate_receipt(
-    receipt: &DeliveryIntentBodySourceReceiptV1,
+    receipt: &DeliveryIntentIngressBlobReceiptV1,
 ) -> Result<(), DeliveryIntentIngressBodyErrorV1> {
     if receipt.reference_id.len() != 16
         || receipt.reference_id.iter().all(|byte| *byte == 0)
         || !(1..=MAX_DELIVERY_BODY_BYTES_V1).contains(&receipt.declared_bytes)
         || receipt.sha256.len() != 32
         || receipt.sha256.iter().all(|byte| *byte == 0)
-        || receipt.custody_transfer_source_proof.is_empty()
-        || receipt.custody_transfer_source_proof.len()
+        || receipt.custody_source_proof.is_empty()
+        || receipt.custody_source_proof.len()
             > COMMUNICATION_DELIVERY_INTENT_INGRESS_MAX_PROOF_BYTES_V1
     {
         return Err(DeliveryIntentIngressBodyErrorV1::InvalidReceipt);
@@ -96,16 +86,16 @@ mod tests {
 
     #[test]
     fn ingress_receipt_is_bounded_and_requires_custody_proof() {
-        let receipt = DeliveryIntentBodySourceReceiptV1 {
-            reference_id: vec![1; 16],
+        let receipt = DeliveryIntentIngressBlobReceiptV1 {
+            reference_id: [1; 16],
             declared_bytes: 42,
-            sha256: vec![2; 32],
-            custody_transfer_source_proof: vec![3; 64],
+            sha256: [2; 32],
+            custody_source_proof: vec![3; 64],
         };
         assert_eq!(validate_receipt(&receipt), Ok(()));
         assert_eq!(
-            validate_receipt(&DeliveryIntentBodySourceReceiptV1 {
-                custody_transfer_source_proof: Vec::new(),
+            validate_receipt(&DeliveryIntentIngressBlobReceiptV1 {
+                custody_source_proof: Vec::new(),
                 ..receipt
             }),
             Err(DeliveryIntentIngressBodyErrorV1::InvalidReceipt)

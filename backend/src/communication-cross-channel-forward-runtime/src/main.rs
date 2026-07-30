@@ -130,6 +130,9 @@ where
         retry_runtime(executor.block_on(runtime.relay_event_outbox_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_source_prepared_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_source_rejected_once(now)))?;
+        retry_runtime(executor.block_on(runtime.consume_delivery_submitted_once(now)))?;
+        retry_runtime(executor.block_on(runtime.consume_delivery_rejected_once(now)))?;
+        retry_runtime(executor.block_on(runtime.process_custody_cleanup_once(now)))?;
         std::thread::sleep(Duration::from_millis(25));
     }
 }

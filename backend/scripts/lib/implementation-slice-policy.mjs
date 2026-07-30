@@ -2560,6 +2560,14 @@ const COMMUNICATION_DELIVERY_INTENT_INVENTORY = {
   workflows: ['communication_delivery_intent', 'communications_export'],
   businessCapabilities: [
     ...COMMUNICATIONS_EXPORT_INVENTORY.businessCapabilities,
+    'communication_cross_channel_forward.blob.v1',
+    'communication_cross_channel_forward.delivery_rejected.v1',
+    'communication_cross_channel_forward.delivery_submit.v1',
+    'communication_cross_channel_forward.delivery_submitted.v1',
+    'communication_cross_channel_forward.source_prepare.v1',
+    'communication_cross_channel_forward.source_prepared.v1',
+    'communication_cross_channel_forward.source_rejected.v1',
+    'communication_cross_channel_forward.storage.v1',
     'communication_delivery_intent.blob.v1',
     'communication_delivery_intent.ingress_rejected.v1',
     'communication_delivery_intent.ingress_submit.v1',
@@ -3294,7 +3302,7 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'communication_delivery_intent_event_ingress_consumer_v1') {
+  if (currentSlice === 'communication_cross_channel_forward_terminal_results_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,

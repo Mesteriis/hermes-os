@@ -134,7 +134,8 @@ impl CommunicationCrossChannelForwardPersistenceV1 {
         let row = sqlx::query(
             "SELECT forward_id, source_message_id, target_conversation_id,
                     target_reply_message_id, state, state_revision,
-                    delivery_intent_id, delivery_submit_message_id, error_code,
+                    delivery_intent_id, delivery_intent_command_id,
+                    delivery_submit_message_id, error_code,
                     created_at_unix_millis, updated_at_unix_millis
              FROM hermes_data.communication_cross_channel_forward_operations
              WHERE logical_owner_id = $1 AND forward_id = $2",
@@ -171,7 +172,7 @@ pub(crate) fn status_from_row(
         .try_get("delivery_intent_id")
         .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
     let submitted_delivery_intent_id: Option<Vec<u8>> =
-        row.try_get("delivery_submit_message_id")
+        row.try_get("delivery_intent_command_id")
             .map_err(|_| CrossChannelForwardPersistenceErrorV1::InvalidRow)?;
     if terminal_delivery_intent_id
         .as_ref()

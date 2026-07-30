@@ -9,14 +9,15 @@ use hermes_communication_delivery_intent_ingress_api::{
     build_communication_delivery_intent_rejected_outbox_record_v1,
     build_communication_delivery_intent_submitted_outbox_record_v1,
     communication_delivery_intent_submit_contract_reference_v1,
+    communication_delivery_intent_submit_message_id_v1,
     wire::{
         CommunicationDeliveryIntentIngressRejectCodeV1, CommunicationDeliveryIntentRejectedV1,
-        CommunicationDeliveryIntentSubmittedV1, DeliveryIntentBodySourceReceiptV1,
-        SubmitCommunicationDeliveryIntentCommandV1,
+        CommunicationDeliveryIntentSubmittedV1, SubmitCommunicationDeliveryIntentCommandV1,
     },
 };
 use hermes_communication_delivery_intent_persistence::{
-    CreateDeliveryIntentV1, DeliveryIntentIngressDispositionV1, DeliveryIntentIngressEventV1,
+    CreateDeliveryIntentV1, DeliveryIntentIngressBlobReceiptV1, DeliveryIntentIngressDispositionV1,
+    DeliveryIntentIngressEventV1,
 };
 use hermes_events_jetstream::{
     RuntimePullDeliveryErrorV1, RuntimeSubscribePermitV1, receive_runtime_pull_delivery,
@@ -48,7 +49,7 @@ struct DecodedDeliveryIntentIngressV1 {
     event: DeliveryIntentIngressEventV1,
     target_conversation_id: [u8; 16],
     target_reply_to_message_id: Option<[u8; 16]>,
-    body_source: DeliveryIntentBodySourceReceiptV1,
+    body_source: DeliveryIntentIngressBlobReceiptV1,
     deadline_expired: bool,
 }
 
@@ -313,7 +314,8 @@ fn decode_event_ingress(
         || command.logical_attempt != 1
         || deadline.nanos != 0
         || deadline.seconds <= recorded_at.seconds
-        || envelope.message_id.as_slice() != intent_id
+        || envelope.message_id.as_slice()
+            != communication_delivery_intent_submit_message_id_v1(&intent_id)
         || envelope.partition_key.as_slice() != intent_id
         || envelope.correlation_id.as_slice() != intent_id
         || !envelope.causation_message_id.is_empty()
@@ -336,6 +338,12 @@ fn decode_event_ingress(
     let body_source = payload
         .body_source
         .ok_or(DeliveryIntentRuntimeErrorV1::EventContract)?;
+    let body_source = DeliveryIntentIngressBlobReceiptV1 {
+        reference_id: id16(&body_source.reference_id)?,
+        declared_bytes: body_source.declared_bytes,
+        sha256: id32(&body_source.sha256)?,
+        custody_source_proof: body_source.custody_transfer_source_proof,
+    };
     Ok(DecodedDeliveryIntentIngressV1 {
         event: DeliveryIntentIngressEventV1 {
             command_message_id: *record.message_id(),
@@ -343,6 +351,7 @@ fn decode_event_ingress(
             correlation_id: intent_id,
             logical_owner_id: payload.logical_owner_id,
             intent_id,
+            body_receipt: body_source.clone(),
             consumed_at_unix_seconds,
         },
         target_conversation_id,
@@ -375,6 +384,14 @@ fn id16(value: &[u8]) -> Result<[u8; 16], DeliveryIntentRuntimeErrorV1> {
         .try_into()
         .ok()
         .filter(|id: &[u8; 16]| id.iter().any(|byte| *byte != 0))
+        .ok_or(DeliveryIntentRuntimeErrorV1::EventContract)
+}
+
+fn id32(value: &[u8]) -> Result<[u8; 32], DeliveryIntentRuntimeErrorV1> {
+    value
+        .try_into()
+        .ok()
+        .filter(|id: &[u8; 32]| id.iter().any(|byte| *byte != 0))
         .ok_or(DeliveryIntentRuntimeErrorV1::EventContract)
 }
 

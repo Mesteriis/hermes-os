@@ -58,7 +58,7 @@ test('Communications remains the exact domain owner after Mail integration admis
 
   assert.equal(
     policy.implementation.currentSlice,
-  'communication_delivery_intent_event_ingress_consumer_v1',
+  'communication_cross_channel_forward_terminal_results_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications'],
@@ -71,6 +71,14 @@ test('Communications remains the exact domain owner after Mail integration admis
       'attachment_security.communications-state.observe.v1',
       'attachment_security.storage.v1',
       'attachment_security.verdict.publish.v1',
+      'communication_cross_channel_forward.blob.v1',
+      'communication_cross_channel_forward.delivery_rejected.v1',
+      'communication_cross_channel_forward.delivery_submit.v1',
+      'communication_cross_channel_forward.delivery_submitted.v1',
+      'communication_cross_channel_forward.source_prepare.v1',
+      'communication_cross_channel_forward.source_prepared.v1',
+      'communication_cross_channel_forward.source_rejected.v1',
+      'communication_cross_channel_forward.storage.v1',
       'communication_delivery_intent.blob.v1',
       'communication_delivery_intent.ingress_rejected.v1',
       'communication_delivery_intent.ingress_submit.v1',

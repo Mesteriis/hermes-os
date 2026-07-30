@@ -3,6 +3,7 @@
 mod cleanup;
 #[cfg(feature = "conformance-test-support")]
 mod conformance;
+mod delivery_results;
 mod event_io;
 mod event_outbox;
 mod operations;
@@ -14,6 +15,9 @@ mod work_queue;
 pub use cleanup::{CrossChannelForwardCleanupJobV1, CrossChannelForwardCleanupReasonV1};
 #[cfg(feature = "conformance-test-support")]
 pub use conformance::CrossChannelForwardPersistenceConformanceV1;
+pub use delivery_results::{
+    CrossChannelForwardDeliveryRejectedEventV1, CrossChannelForwardDeliverySubmittedEventV1,
+};
 pub use event_io::{
     CrossChannelForwardBlobReceiptV1, CrossChannelForwardPreparedEventV1,
     CrossChannelForwardRejectedEventV1,

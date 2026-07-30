@@ -16,10 +16,16 @@ read, fixed delivery-intent target-bound write, submit producer, durable relay
 source/runtime/correlation validation, target-bound Blob read, canonical route
 resolution, provider-bound rematerialization, owner-local inbox/hash fence,
 atomic `inbox + intent + result outbox`, durable result relay и ACK-after-commit
-либо exact duplicate. Эти границы подтверждены focused tests и disposable
-PostgreSQL reconnect conformance. Downstream result consumer в cross-channel,
-исходная delivery-intent Blob custody cleanup и live managed end-to-end
-evidence ещё не реализованы. Наличие ADR и отдельных contract/runtime build
+либо exact duplicate. Cross-channel runtime реализует exact
+`submitted/rejected` consumers, атомарный terminal transition и durable cleanup
+исходной Communications custody. Delivery-intent runtime атомарно ставит
+входящую target-bound custody в собственную cleanup queue и освобождает её через
+Blob platform authority с bounded retry. Submit command сохраняет
+deterministic intent/correlation identity, но использует отдельный
+deterministic message ID, чтобы не конфликтовать с source-prepare command в
+owner-local outbox и JetStream deduplication. Эти границы подтверждены focused
+tests и disposable PostgreSQL reconnect conformance. Live managed end-to-end
+evidence ещё не реализован. Наличие ADR и отдельных contract/runtime build
 units не открывает ни `communication_delivery_intent_v1`, ни
 `communication_cross_channel_forward_v1`.
 
@@ -111,10 +117,12 @@ receipt до state mutation. Delivery-intent admission, inbox и submitted ил�
 rejected result outbox коммитятся атомарно. ACK разрешён только после commit
 либо exact duplicate.
 
-Command ID, message ID, partition key и correlation ID детерминированы
-`intent_id`. Redelivery exact bytes не создаёт второй intent. Тот же message ID
-с другим hash, другой payload для существующего intent ID или stale runtime
-fence отклоняются fail-closed.
+Command ID, partition key и correlation ID равны `intent_id`. Message ID
+детерминирован отдельным hash namespace от `intent_id`, потому что тот же
+cross-channel operation ранее публикует source-prepare command. Redelivery
+exact bytes не создаёт второй intent. Тот же message ID с другим hash, другой
+payload для существующего intent ID или stale runtime fence отклоняются
+fail-closed.
 
 ## Ownership и SRP
 

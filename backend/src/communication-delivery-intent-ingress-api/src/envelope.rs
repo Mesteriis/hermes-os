@@ -76,7 +76,7 @@ pub fn build_communication_delivery_intent_submit_outbox_record_v1(
     }
     .encode_to_vec();
     build_envelope(
-        intent_id,
+        communication_delivery_intent_submit_message_id_v1(&intent_id),
         &intent_id,
         &[],
         COMMUNICATION_DELIVERY_INTENT_SUBMIT_CONTRACT_NAME_V1,
@@ -103,6 +103,20 @@ pub fn build_communication_delivery_intent_submit_outbox_record_v1(
     )
 }
 
+#[must_use]
+pub fn communication_delivery_intent_submit_message_id_v1(intent_id: &[u8; 16]) -> [u8; 16] {
+    let digest = Sha256::digest(
+        [
+            b"communication-delivery-intent-submit-message-v1".as_slice(),
+            intent_id,
+        ]
+        .concat(),
+    );
+    digest[..16]
+        .try_into()
+        .expect("SHA-256 prefix is exactly 16 bytes")
+}
+
 pub fn build_communication_delivery_intent_submitted_outbox_record_v1(
     command_message_id: [u8; 16],
     payload: CommunicationDeliveryIntentSubmittedV1,
@@ -110,11 +124,11 @@ pub fn build_communication_delivery_intent_submitted_outbox_record_v1(
 ) -> Result<OutboxRecordV1, CommunicationDeliveryIntentIngressEnvelopeBuildErrorV1> {
     validate_context(context)?;
     let intent_id = validate_result_payload(&payload.intent_id, &payload.logical_owner_id)?;
-    if !valid_id(&command_message_id) {
+    if command_message_id != communication_delivery_intent_submit_message_id_v1(&intent_id) {
         return Err(CommunicationDeliveryIntentIngressEnvelopeBuildErrorV1::InvalidPayload);
     }
     build_envelope(
-        result_message_id(b"submitted", &intent_id),
+        communication_delivery_intent_submitted_message_id_v1(&intent_id),
         &intent_id,
         &command_message_id,
         COMMUNICATION_DELIVERY_INTENT_SUBMITTED_CONTRACT_NAME_V1,
@@ -137,7 +151,7 @@ pub fn build_communication_delivery_intent_rejected_outbox_record_v1(
     validate_context(context)?;
     let intent_id = validate_result_payload(&payload.intent_id, &payload.logical_owner_id)?;
     let reject_code = CommunicationDeliveryIntentIngressRejectCodeV1::try_from(payload.code);
-    if !valid_id(&command_message_id)
+    if command_message_id != communication_delivery_intent_submit_message_id_v1(&intent_id)
         || !matches!(
             reject_code,
             Ok(code)
@@ -149,7 +163,7 @@ pub fn build_communication_delivery_intent_rejected_outbox_record_v1(
         return Err(CommunicationDeliveryIntentIngressEnvelopeBuildErrorV1::InvalidPayload);
     }
     build_envelope(
-        result_message_id(b"rejected", &intent_id),
+        communication_delivery_intent_rejected_message_id_v1(&intent_id),
         &intent_id,
         &command_message_id,
         COMMUNICATION_DELIVERY_INTENT_REJECTED_CONTRACT_NAME_V1,
@@ -298,6 +312,16 @@ fn id16(bytes: &[u8]) -> Result<[u8; 16], CommunicationDeliveryIntentIngressEnve
         .ok_or(CommunicationDeliveryIntentIngressEnvelopeBuildErrorV1::InvalidPayload)
 }
 
+#[must_use]
+pub fn communication_delivery_intent_submitted_message_id_v1(intent_id: &[u8; 16]) -> [u8; 16] {
+    result_message_id(b"submitted", intent_id)
+}
+
+#[must_use]
+pub fn communication_delivery_intent_rejected_message_id_v1(intent_id: &[u8; 16]) -> [u8; 16] {
+    result_message_id(b"rejected", intent_id)
+}
+
 fn result_message_id(label: &[u8], intent_id: &[u8; 16]) -> [u8; 16] {
     let mut hasher = Sha256::new();
     hasher.update(b"communication-delivery-intent-event-ingress-result-v1");
@@ -360,6 +384,11 @@ mod tests {
             command.target_capability,
             COMMUNICATION_DELIVERY_INTENT_INGRESS_COMMAND_CAPABILITY_ID_V1
         );
+        assert_eq!(
+            envelope.message_id,
+            communication_delivery_intent_submit_message_id_v1(&[1; 16])
+        );
+        assert_ne!(envelope.message_id, vec![1; 16]);
         let payload =
             SubmitCommunicationDeliveryIntentCommandV1::decode(envelope.payload.as_slice())
                 .expect("payload");
@@ -393,7 +422,7 @@ mod tests {
     #[test]
     fn results_are_correlated_and_rejection_codes_are_closed() {
         let submitted = build_communication_delivery_intent_submitted_outbox_record_v1(
-            [8; 16],
+            communication_delivery_intent_submit_message_id_v1(&[1; 16]),
             CommunicationDeliveryIntentSubmittedV1 {
                 intent_id: vec![1; 16],
                 logical_owner_id: "owner-1".to_owned(),
@@ -406,7 +435,10 @@ mod tests {
             panic!("result semantics");
         };
         assert_eq!(result.command_id, vec![1; 16]);
-        assert_eq!(result.command_message_id, vec![8; 16]);
+        assert_eq!(
+            result.command_message_id,
+            communication_delivery_intent_submit_message_id_v1(&[1; 16])
+        );
 
         let invalid = CommunicationDeliveryIntentRejectedV1 {
             intent_id: vec![1; 16],
@@ -415,7 +447,7 @@ mod tests {
         };
         assert_eq!(
             build_communication_delivery_intent_rejected_outbox_record_v1(
-                [8; 16],
+                communication_delivery_intent_submit_message_id_v1(&[1; 16]),
                 invalid,
                 &context(),
             ),

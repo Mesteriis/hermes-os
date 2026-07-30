@@ -187,6 +187,13 @@ where
             )) => {}
             Err(error) => return Err(runtime_error(error)),
         }
+        match executor.block_on(runtime.process_ingress_cleanup_once_v1(now)) {
+            Ok(_) | Err(DeliveryIntentRuntimeErrorV1::Unavailable) => {}
+            Err(DeliveryIntentRuntimeErrorV1::Persistence(
+                DeliveryIntentPersistenceErrorV1::StorageUnavailable,
+            )) => {}
+            Err(error) => return Err(runtime_error(error)),
+        }
         std::thread::sleep(Duration::from_millis(25));
     }
 }

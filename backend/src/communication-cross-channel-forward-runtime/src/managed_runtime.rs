@@ -4,6 +4,10 @@ use hermes_communication_cross_channel_forward_api::COMMUNICATION_CROSS_CHANNEL_
 use hermes_communication_cross_channel_forward_persistence::{
     CommunicationCrossChannelForwardPersistenceV1, CrossChannelForwardPersistenceErrorV1,
 };
+use hermes_communication_delivery_intent_ingress_api::{
+    communication_delivery_intent_rejected_contract_reference_v1,
+    communication_delivery_intent_submitted_contract_reference_v1,
+};
 use hermes_communications_cross_channel_forward_source_api::{
     cross_channel_forward_source_prepared_contract_reference_v1,
     cross_channel_forward_source_rejected_contract_reference_v1,
@@ -28,11 +32,14 @@ use hermes_storage_vault::{
 };
 
 use crate::{
-    CrossChannelForwardBlobTransferErrorV1, CrossChannelForwardEventRelayErrorV1,
+    CrossChannelForwardBlobTransferErrorV1, CrossChannelForwardCustodyCleanupErrorV1,
+    CrossChannelForwardDeliveryResultErrorV1, CrossChannelForwardEventRelayErrorV1,
     CrossChannelForwardSourceConsumerContextV1, CrossChannelForwardSourcePrepareErrorV1,
     CrossChannelForwardSourceResultErrorV1, ManagedCrossChannelForwardBlobPortV1,
-    consume_source_prepared_once_v1, consume_source_rejected_once_v1,
-    enqueue_source_prepare_once_v1, relay_event_outbox_once_v1,
+    ManagedCrossChannelForwardCustodyReleasePortV1, consume_delivery_rejected_once_v1,
+    consume_delivery_submitted_once_v1, consume_source_prepared_once_v1,
+    consume_source_rejected_once_v1, enqueue_source_prepare_once_v1,
+    process_cross_channel_custody_cleanup_once_v1, relay_event_outbox_once_v1,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,6 +67,8 @@ pub struct CrossChannelForwardManagedRuntimeV1 {
     persistence: CommunicationCrossChannelForwardPersistenceV1,
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
+    delivery_rejected_subscription: RuntimeSubscribePermitV1,
+    delivery_submitted_subscription: RuntimeSubscribePermitV1,
     source_prepared_subscription: RuntimeSubscribePermitV1,
     source_rejected_subscription: RuntimeSubscribePermitV1,
 }
@@ -143,17 +152,21 @@ impl CrossChannelForwardManagedRuntimeV1 {
                 admission.grant_epoch,
             )
             .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Admission)?;
-        let (source_prepared_subscription, source_rejected_subscription) =
-            bind_source_subscriptions(
-                event_access
-                    .subscribe_permits(
-                        &admission.registration_id,
-                        &admission.runtime_instance_id,
-                        admission.runtime_generation,
-                        admission.grant_epoch,
-                    )
-                    .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Admission)?,
-            )?;
+        let (
+            delivery_rejected_subscription,
+            delivery_submitted_subscription,
+            source_prepared_subscription,
+            source_rejected_subscription,
+        ) = bind_result_subscriptions(
+            event_access
+                .subscribe_permits(
+                    &admission.registration_id,
+                    &admission.runtime_instance_id,
+                    admission.runtime_generation,
+                    admission.grant_epoch,
+                )
+                .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Admission)?,
+        )?;
         let event_connection = JetStreamClient::connect_runtime_with_jwt(
             event_hub_endpoint,
             event_identity,
@@ -172,6 +185,8 @@ impl CrossChannelForwardManagedRuntimeV1 {
             persistence,
             event_connection,
             event_publish_permit,
+            delivery_rejected_subscription,
+            delivery_submitted_subscription,
             source_prepared_subscription,
             source_rejected_subscription,
         })
@@ -256,6 +271,65 @@ impl CrossChannelForwardManagedRuntimeV1 {
         .map_err(source_result_error)
     }
 
+    pub async fn consume_delivery_submitted_once(
+        &self,
+        now_unix_millis: i64,
+    ) -> Result<bool, CrossChannelForwardManagedRuntimeErrorV1> {
+        consume_delivery_submitted_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.delivery_submitted_subscription,
+            &self.admission.logical_owner_id,
+            now_unix_millis,
+        )
+        .await
+        .map_err(delivery_result_error)
+    }
+
+    pub async fn consume_delivery_rejected_once(
+        &self,
+        now_unix_millis: i64,
+    ) -> Result<bool, CrossChannelForwardManagedRuntimeErrorV1> {
+        consume_delivery_rejected_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.delivery_rejected_subscription,
+            &self.admission.logical_owner_id,
+            now_unix_millis,
+        )
+        .await
+        .map_err(delivery_result_error)
+    }
+
+    pub async fn process_custody_cleanup_once(
+        &mut self,
+        now_unix_millis: i64,
+    ) -> Result<bool, CrossChannelForwardManagedRuntimeErrorV1> {
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Unavailable)?;
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let result = {
+            let mut release_port = ManagedCrossChannelForwardCustodyReleasePortV1 {
+                control_channel: &mut self.control_channel,
+                dispatcher: &mut dispatcher,
+            };
+            process_cross_channel_custody_cleanup_once_v1(
+                &self.persistence,
+                &self.admission.logical_owner_id,
+                now_unix_millis,
+                &mut release_port,
+            )
+            .await
+        };
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| CrossChannelForwardManagedRuntimeErrorV1::Unavailable)?;
+        result.map_err(custody_cleanup_error)
+    }
+
     pub fn pump_control_once(&mut self) -> Result<bool, CrossChannelForwardManagedRuntimeErrorV1> {
         let Some((correlation_id, _request)) = self
             .control_channel
@@ -277,15 +351,28 @@ impl CrossChannelForwardManagedRuntimeV1 {
     }
 }
 
-fn bind_source_subscriptions(
+fn bind_result_subscriptions(
     permits: Vec<RuntimeSubscribePermitV1>,
 ) -> Result<
-    (RuntimeSubscribePermitV1, RuntimeSubscribePermitV1),
+    (
+        RuntimeSubscribePermitV1,
+        RuntimeSubscribePermitV1,
+        RuntimeSubscribePermitV1,
+        RuntimeSubscribePermitV1,
+    ),
     CrossChannelForwardManagedRuntimeErrorV1,
 > {
-    if permits.len() != 2 {
+    if permits.len() != 4 {
         return Err(CrossChannelForwardManagedRuntimeErrorV1::Admission);
     }
+    let delivery_rejected = exact_permit(
+        &permits,
+        &communication_delivery_intent_rejected_contract_reference_v1(),
+    )?;
+    let delivery_submitted = exact_permit(
+        &permits,
+        &communication_delivery_intent_submitted_contract_reference_v1(),
+    )?;
     let prepared = exact_permit(
         &permits,
         &cross_channel_forward_source_prepared_contract_reference_v1(),
@@ -294,7 +381,7 @@ fn bind_source_subscriptions(
         &permits,
         &cross_channel_forward_source_rejected_contract_reference_v1(),
     )?;
-    Ok((prepared, rejected))
+    Ok((delivery_rejected, delivery_submitted, prepared, rejected))
 }
 
 fn exact_permit(
@@ -307,6 +394,7 @@ fn exact_permit(
                 && actual.name == contract.name
                 && actual.major == contract.major
                 && actual.revision == contract.revision
+                && actual.schema_sha256 == contract.schema_sha256
         })
     });
     let permit = matching
@@ -493,6 +581,36 @@ fn source_result_error(
         }
         CrossChannelForwardSourceResultErrorV1::EventUnavailable => {
             CrossChannelForwardManagedRuntimeErrorV1::EventUnavailable
+        }
+    }
+}
+
+fn delivery_result_error(
+    error: CrossChannelForwardDeliveryResultErrorV1,
+) -> CrossChannelForwardManagedRuntimeErrorV1 {
+    match error {
+        CrossChannelForwardDeliveryResultErrorV1::InvalidEnvelope
+        | CrossChannelForwardDeliveryResultErrorV1::InvalidPayload => {
+            CrossChannelForwardManagedRuntimeErrorV1::EventContract
+        }
+        CrossChannelForwardDeliveryResultErrorV1::Persistence(error) => {
+            CrossChannelForwardManagedRuntimeErrorV1::Persistence(error)
+        }
+        CrossChannelForwardDeliveryResultErrorV1::EventUnavailable => {
+            CrossChannelForwardManagedRuntimeErrorV1::EventUnavailable
+        }
+    }
+}
+
+fn custody_cleanup_error(
+    error: CrossChannelForwardCustodyCleanupErrorV1,
+) -> CrossChannelForwardManagedRuntimeErrorV1 {
+    match error {
+        CrossChannelForwardCustodyCleanupErrorV1::Blob(error) => {
+            CrossChannelForwardManagedRuntimeErrorV1::Blob(error)
+        }
+        CrossChannelForwardCustodyCleanupErrorV1::Persistence(error) => {
+            CrossChannelForwardManagedRuntimeErrorV1::Persistence(error)
         }
     }
 }
