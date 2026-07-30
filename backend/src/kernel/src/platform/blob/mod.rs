@@ -3,5 +3,6 @@
 pub(crate) mod binding;
 pub(crate) mod catalog;
 pub(crate) mod launch;
+pub(crate) mod release;
 pub(crate) mod session;
 pub(crate) mod status;

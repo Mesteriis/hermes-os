@@ -13,7 +13,8 @@ use hermes_kernel_control_store::{
 };
 use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeResponseV1, ManagedRuntimeBlobSessionDeliveryV1,
+    DescribeManagedRuntimeResponseV1, ManagedRuntimeBlobCustodyReleaseDeliveryV1,
+    ManagedRuntimeBlobCustodyReleaseRequestV1, ManagedRuntimeBlobSessionDeliveryV1,
     ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeClientRealtimePublishRequestV1,
     ManagedRuntimeClientRealtimePublishResponseV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, ManagedRuntimeEventCredentialDeliveryV1,
@@ -76,6 +77,14 @@ pub trait ManagedRuntimeBlobSessionHandler: Send + Sync {
     ) -> Result<ManagedRuntimeBlobSessionDeliveryV1, String>;
 }
 
+pub trait ManagedRuntimeBlobCustodyReleaseHandler: Send + Sync {
+    fn release_blob_custody(
+        &self,
+        expectation: &ManagedRuntimeExpectation,
+        request: ManagedRuntimeBlobCustodyReleaseRequestV1,
+    ) -> Result<ManagedRuntimeBlobCustodyReleaseDeliveryV1, String>;
+}
+
 pub trait ManagedRuntimeModuleQueryHandler: Send + Sync {
     fn route_module_query(
         &self,
@@ -107,6 +116,7 @@ pub(crate) struct ManagedRuntimeControlHandlers<'a> {
     pub provider_credential: Option<&'a dyn ManagedRuntimeProviderCredentialHandler>,
     pub owner_derived_key: Option<&'a dyn ManagedRuntimeOwnerDerivedKeyHandler>,
     pub blob_session: Option<&'a dyn ManagedRuntimeBlobSessionHandler>,
+    pub blob_custody_release: Option<&'a dyn ManagedRuntimeBlobCustodyReleaseHandler>,
     pub module_query: Option<&'a dyn ManagedRuntimeModuleQueryHandler>,
     pub module_request: Option<&'a dyn ManagedRuntimeModuleRequestHandler>,
     pub client_realtime: Option<&'a dyn ManagedRuntimeClientRealtimeHandler>,
@@ -167,6 +177,16 @@ pub(crate) fn dispatch_typed_request(
                         "managed runtime Blob session handler is not available".to_owned()
                     })
                     .and_then(|handler| handler.issue_blob_session(expectation, request)),
+            ))
+        }
+        inbound::ManagedRuntimeInboundRequestV1::BlobCustodyRelease(request) => {
+            Ok(inbound::blob_custody_release_response(
+                handlers
+                    .blob_custody_release
+                    .ok_or_else(|| {
+                        "managed runtime Blob custody release handler is not available".to_owned()
+                    })
+                    .and_then(|handler| handler.release_blob_custody(expectation, request)),
             ))
         }
         inbound::ManagedRuntimeInboundRequestV1::ModuleQuery(request) => {
@@ -520,6 +540,16 @@ pub(crate) fn relay_with_control_routes(
                 .ok_or_else(|| "managed runtime Blob session handler is not available".to_owned())?
                 .issue_blob_session(expectation, request);
             inbound::respond_blob_session(channel, result)?;
+            continue;
+        }
+        if let Ok(Some(request)) = inbound::blob_custody_release_request(&frame) {
+            let result = handlers
+                .blob_custody_release
+                .ok_or_else(|| {
+                    "managed runtime Blob custody release handler is not available".to_owned()
+                })?
+                .release_blob_custody(expectation, request);
+            inbound::respond_blob_custody_release(channel, result)?;
             continue;
         }
         return Ok(frame);

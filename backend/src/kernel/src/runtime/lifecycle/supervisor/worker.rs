@@ -8,11 +8,12 @@ use std::thread::JoinHandle;
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::{
-    ManagedRuntimeBlobSessionHandler, ManagedRuntimeClientRealtimeHandler,
-    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
-    ManagedRuntimeModuleQueryHandler, ManagedRuntimeModuleRequestHandler,
-    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeProviderCredentialHandler,
-    ManagedRuntimeRelayRequest, ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeBlobCustodyReleaseHandler, ManagedRuntimeBlobSessionHandler,
+    ManagedRuntimeClientRealtimeHandler, ManagedRuntimeEventCredentialHandler,
+    ManagedRuntimeExpectation, ManagedRuntimeModuleQueryHandler,
+    ManagedRuntimeModuleRequestHandler, ManagedRuntimeOwnerDerivedKeyHandler,
+    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeRelayRequest,
+    ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 use crate::runtime::managed::supervisor as managed_child_supervisor;
@@ -44,6 +45,8 @@ pub(super) struct ActiveWorkerInput {
         Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>,
     pub(super) owner_derived_key_handler: Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>,
     pub(super) blob_session_handler: Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>,
+    pub(super) blob_custody_release_handler:
+        Option<Arc<dyn ManagedRuntimeBlobCustodyReleaseHandler>>,
     pub(super) module_query_handler: Option<Arc<dyn ManagedRuntimeModuleQueryHandler>>,
     pub(super) module_request_handler: Option<Arc<dyn ManagedRuntimeModuleRequestHandler>>,
     pub(super) client_realtime_handler: Option<Arc<dyn ManagedRuntimeClientRealtimeHandler>>,
@@ -65,6 +68,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
         provider_credential_handler,
         owner_derived_key_handler,
         blob_session_handler,
+        blob_custody_release_handler,
         module_query_handler,
         module_request_handler,
         client_realtime_handler,
@@ -97,6 +101,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
                             provider_credential: provider_credential_handler.as_deref(),
                             owner_derived_key: owner_derived_key_handler.as_deref(),
                             blob_session: blob_session_handler.as_deref(),
+                            blob_custody_release: blob_custody_release_handler.as_deref(),
                             module_query: module_query_handler.as_deref(),
                             module_request: module_request_handler.as_deref(),
                             client_realtime: client_realtime_handler.as_deref(),

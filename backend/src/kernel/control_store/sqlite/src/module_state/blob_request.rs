@@ -119,6 +119,7 @@ fn operation_mask(operations: &[ModuleBlobOperationV1]) -> i64 {
             ModuleBlobOperationV1::Write => 1,
             ModuleBlobOperationV1::ReadRange => 2,
             ModuleBlobOperationV1::CustodyTransfer => 4,
+            ModuleBlobOperationV1::ReleaseCustody => 8,
         }
     })
 }
@@ -128,8 +129,26 @@ fn decode_operation_mask(mask: i64) -> Vec<ModuleBlobOperationV1> {
         (1, ModuleBlobOperationV1::Write),
         (2, ModuleBlobOperationV1::ReadRange),
         (4, ModuleBlobOperationV1::CustodyTransfer),
+        (8, ModuleBlobOperationV1::ReleaseCustody),
     ]
     .into_iter()
     .filter_map(|(bit, operation)| (mask & bit != 0).then_some(operation))
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custody_release_keeps_a_distinct_persisted_operation_bit() {
+        let operations = [
+            ModuleBlobOperationV1::Write,
+            ModuleBlobOperationV1::ReadRange,
+            ModuleBlobOperationV1::CustodyTransfer,
+            ModuleBlobOperationV1::ReleaseCustody,
+        ];
+        assert_eq!(operation_mask(&operations), 15);
+        assert_eq!(decode_operation_mask(15), operations);
+    }
 }

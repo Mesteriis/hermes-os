@@ -27,6 +27,12 @@ const MAX_SESSION_TTL_SECONDS: u32 = 30;
 const CUSTODY_SOURCE_PROOF_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
 const BLOB_CONTENT_KEY_SCHEMA_REVISION: u64 = 1;
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(super) enum CustodySourceProofUseV1 {
+    Transfer,
+    Release,
+}
+
 /// Kernel authority for an exact direct Blob data operation.
 pub(crate) struct BlobSessionHandlerV1 {
     store: Arc<SqliteControlStore>,
@@ -195,6 +201,7 @@ impl BlobSessionHandlerV1 {
             &signer.public_key_sec1(),
             self.store.snapshot().instance_id(),
             now,
+            CustodySourceProofUseV1::Transfer,
         )?;
         if source.reference_id != request.reference_id
             || source.declared_size != request.declared_size
@@ -281,11 +288,12 @@ pub(crate) fn valid_request(request: &ManagedRuntimeBlobSessionRequestV1) -> boo
         && valid_custody_target_request(request)
 }
 
-fn verify_custody_source_proof(
+pub(super) fn verify_custody_source_proof(
     encoded: &[u8],
     public_key_sec1: &[u8; 65],
     kernel_instance_id: &str,
     now_unix_ms: u64,
+    proof_use: CustodySourceProofUseV1,
 ) -> Result<BlobCustodySourceProofV1, String> {
     let proof = BlobCustodySourceProofV1::decode(encoded)
         .map_err(|_| "managed runtime Blob custody transfer is denied".to_owned())?;
@@ -303,7 +311,11 @@ fn verify_custody_source_proof(
         || proof.reference_id.iter().all(|byte| *byte == 0)
         || proof.declared_size == 0
         || proof.receipt_sha256.len() != 32
-        || proof.expires_at_unix_ms <= now_unix_ms
+        || proof.receipt_sha256.iter().all(|byte| *byte == 0)
+        || proof.issued_at_unix_ms == 0
+        || proof.expires_at_unix_ms <= proof.issued_at_unix_ms
+        || (proof_use == CustodySourceProofUseV1::Transfer
+            && proof.expires_at_unix_ms <= now_unix_ms)
         || proof.issued_at_unix_ms > now_unix_ms
         || proof.kernel_authorization_signature_raw.len() != 64
         || !valid_proof_target(&proof)
@@ -428,7 +440,7 @@ fn valid_proof_target(proof: &BlobCustodySourceProofV1) -> bool {
         || populated.iter().all(|value| valid_target_token(value))
 }
 
-fn proof_authorizes_target(
+pub(super) fn proof_authorizes_target(
     proof: &BlobCustodySourceProofV1,
     target_owner_id: &str,
     target_module_id: &str,

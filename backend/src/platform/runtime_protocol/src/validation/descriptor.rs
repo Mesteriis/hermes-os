@@ -271,15 +271,16 @@ fn valid_capability_request(request: &crate::v1::CapabilityRequestV1) -> bool {
 }
 
 fn valid_blob_operations(operations: &[i32]) -> bool {
-    if operations.is_empty() || operations.len() > 3 {
+    if operations.is_empty() || operations.len() > 4 {
         return false;
     }
-    let mut seen = [false; 3];
+    let mut seen = [false; 4];
     operations.iter().all(|value| {
         let index = match BlobQuotaOperationV1::try_from(*value).ok() {
             Some(BlobQuotaOperationV1::Write) => 0,
             Some(BlobQuotaOperationV1::ReadRange) => 1,
             Some(BlobQuotaOperationV1::CustodyTransfer) => 2,
+            Some(BlobQuotaOperationV1::ReleaseCustody) => 3,
             Some(BlobQuotaOperationV1::Unspecified) | None => return false,
         };
         if seen[index] {

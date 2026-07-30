@@ -5,6 +5,7 @@ pub enum ModuleBlobOperationV1 {
     Write,
     ReadRange,
     CustodyTransfer,
+    ReleaseCustody,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

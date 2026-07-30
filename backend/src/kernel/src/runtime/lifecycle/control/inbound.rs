@@ -5,6 +5,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::v1::{
+    ManagedRuntimeBlobCustodyReleaseDeliveryV1, ManagedRuntimeBlobCustodyReleaseRequestV1,
     ManagedRuntimeBlobSessionDeliveryV1, ManagedRuntimeBlobSessionRequestV1,
     ManagedRuntimeClientRealtimePublishRequestV1, ManagedRuntimeClientRealtimePublishResponseV1,
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
@@ -29,6 +30,7 @@ const EVENT_CREDENTIAL_FIELD_TAG: u8 = 0x1a;
 const PROVIDER_CREDENTIAL_FIELD_TAG: u8 = 0x22;
 const BLOB_SESSION_FIELD_TAG: u8 = 0x32;
 const OWNER_DERIVED_KEY_FIELD_TAG: u8 = 0x3a;
+const BLOB_CUSTODY_RELEASE_FIELD_TAG: u8 = 0x72;
 
 pub(crate) enum ManagedRuntimeInboundRequestV1 {
     Ready(ManagedRuntimeReadyRequestV1),
@@ -37,6 +39,7 @@ pub(crate) enum ManagedRuntimeInboundRequestV1 {
     ProviderCredential(ManagedRuntimeProviderCredentialRequestV1),
     OwnerDerivedKey(ManagedRuntimeOwnerDerivedKeyRequestV1),
     BlobSession(ManagedRuntimeBlobSessionRequestV1),
+    BlobCustodyRelease(ManagedRuntimeBlobCustodyReleaseRequestV1),
     ModuleQuery(ManagedRuntimeModuleQueryRequestV1),
     ModuleRequest(ManagedRuntimeModuleRequestRequestV1),
     ClientRealtime(ManagedRuntimeClientRealtimePublishRequestV1),
@@ -69,6 +72,11 @@ pub(crate) fn decode_typed_request(
             if crate::platform::blob::session::valid_request(&value) =>
         {
             Ok(ManagedRuntimeInboundRequestV1::BlobSession(value))
+        }
+        Some(Operation::ReleaseBlobCustody(value))
+            if crate::platform::blob::release::valid_request(&value) =>
+        {
+            Ok(ManagedRuntimeInboundRequestV1::BlobCustodyRelease(value))
         }
         Some(Operation::RouteModuleQuery(value))
             if hermes_runtime_protocol::validation::module_query::validate_module_query_request_v1(
@@ -527,6 +535,68 @@ fn blob_session_error_code(error: &str) -> &'static str {
     }
 }
 
+pub(crate) fn try_receive_blob_custody_release(
+    channel: &mut UnixStream,
+) -> Result<Option<ManagedRuntimeBlobCustodyReleaseRequestV1>, String> {
+    let Some(frame) = peek_complete_frame(channel)? else {
+        return Ok(None);
+    };
+    if frame.first() != Some(&BLOB_CUSTODY_RELEASE_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = blob_custody_release_request(&frame)?
+        .ok_or_else(|| "managed runtime Blob custody release request is invalid".to_owned())?;
+    read_frame(channel)?;
+    Ok(Some(request))
+}
+
+pub(crate) fn blob_custody_release_request(
+    frame: &[u8],
+) -> Result<Option<ManagedRuntimeBlobCustodyReleaseRequestV1>, String> {
+    if frame.first() != Some(&BLOB_CUSTODY_RELEASE_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = ManagedRuntimeControlRequestV1::decode(frame)
+        .map_err(|_| "managed runtime Blob custody release request is invalid".to_owned())?;
+    let Some(Operation::ReleaseBlobCustody(value)) = request.operation else {
+        return Err("managed runtime Blob custody release request is invalid".to_owned());
+    };
+    crate::platform::blob::release::valid_request(&value)
+        .then_some(value)
+        .map(Some)
+        .ok_or_else(|| "managed runtime Blob custody release request is invalid".to_owned())
+}
+
+pub(crate) fn respond_blob_custody_release(
+    channel: &mut UnixStream,
+    result: Result<ManagedRuntimeBlobCustodyReleaseDeliveryV1, String>,
+) -> Result<(), String> {
+    write_frame(
+        channel,
+        &blob_custody_release_response(result).encode_to_vec(),
+    )
+}
+
+pub(crate) fn blob_custody_release_response(
+    result: Result<ManagedRuntimeBlobCustodyReleaseDeliveryV1, String>,
+) -> ManagedRuntimeControlResponseV1 {
+    match result {
+        Ok(delivery) => ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::BlobCustodyRelease(delivery)),
+            error_code: String::new(),
+        },
+        Err(error) => ManagedRuntimeControlResponseV1 {
+            result: None,
+            error_code: if error.contains("unavailable") {
+                "managed_blob_custody_release_unavailable"
+            } else {
+                "managed_blob_custody_release_denied"
+            }
+            .to_owned(),
+        },
+    }
+}
+
 fn peek_complete_frame(channel: &mut UnixStream) -> Result<Option<Vec<u8>>, String> {
     let mut header = [0_u8; 5];
     let header_length = match peek(channel, &mut header) {
@@ -634,10 +704,11 @@ fn valid_configuration_instance_id(value: &str) -> bool {
 #[cfg(test)]
 mod blob_session_error_code_tests {
     use super::{
-        ManagedRuntimeInboundRequestV1, VAULT_ROUTE_FIELD_TAG, blob_session_error_code,
-        decode_typed_request,
+        BLOB_CUSTODY_RELEASE_FIELD_TAG, ManagedRuntimeInboundRequestV1, VAULT_ROUTE_FIELD_TAG,
+        blob_custody_release_request, blob_session_error_code, decode_typed_request,
     };
     use hermes_runtime_protocol::v1::{
+        BlobCustodyReleaseReasonV1, ManagedRuntimeBlobCustodyReleaseRequestV1,
         ManagedRuntimeControlRequestV1, ManagedRuntimeReadyRequestV1,
         ManagedRuntimeVaultRouteRequestV1, managed_runtime_control_request_v1::Operation,
     };
@@ -682,5 +753,31 @@ mod blob_session_error_code_tests {
             decode_typed_request(request),
             Ok(ManagedRuntimeInboundRequestV1::Ready(_))
         ));
+    }
+
+    #[test]
+    fn custody_release_uses_its_exact_typed_oneof_tag() {
+        let frame = ManagedRuntimeControlRequestV1 {
+            operation: Some(Operation::ReleaseBlobCustody(
+                ManagedRuntimeBlobCustodyReleaseRequestV1 {
+                    operation_id: vec![1; 16],
+                    capability_id: "attachment_security.blob.v1".to_owned(),
+                    reference_id: vec![2; 16],
+                    declared_size: 3,
+                    receipt_sha256: vec![4; 32],
+                    custody_source_proof: vec![5; 64],
+                    reason: BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalAcceptedV1
+                        as i32,
+                },
+            )),
+        }
+        .encode_to_vec();
+
+        assert_eq!(frame.first(), Some(&BLOB_CUSTODY_RELEASE_FIELD_TAG));
+        assert!(
+            blob_custody_release_request(&frame)
+                .expect("decode")
+                .is_some()
+        );
     }
 }

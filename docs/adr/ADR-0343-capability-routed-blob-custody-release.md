@@ -4,12 +4,14 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: частично реализовано. Typed runtime protocol, Kernel-staged
-24-hour grace policy, Kernel-signature verification, crash-safe Blob-owned
-idempotency ledger и exact deletion reservation реализованы. Kernel issuance,
-managed-control routing, correlated Blob client, end-to-end conformance и
-admission ещё не реализованы. До их завершения delayed-delivery cleanup остаётся
-durable pending, а gate `communication_delayed_delivery_v1` — `planned`.
+Состояние реализации: частично реализовано. Typed runtime protocol, отдельная
+descriptor operation, Kernel-staged 24-hour grace policy, Kernel issuance и
+current-binding admission, correlated managed-control Blob client,
+Kernel-signature verification, crash-safe Blob-owned idempotency ledger и exact
+deletion reservation реализованы. Delayed-delivery managed runtime,
+end-to-end conformance и admission ещё не реализованы. До их завершения
+delayed-delivery cleanup остаётся durable pending, а gate
+`communication_delayed_delivery_v1` — `planned`.
 
 Уточняет:
 

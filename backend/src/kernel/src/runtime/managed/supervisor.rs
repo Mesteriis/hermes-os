@@ -2,9 +2,10 @@
 
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::runtime::lifecycle::control::{
-    self as managed_runtime_control, ManagedRuntimeBlobSessionHandler,
-    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
-    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeProviderCredentialHandler,
+    self as managed_runtime_control, ManagedRuntimeBlobCustodyReleaseHandler,
+    ManagedRuntimeBlobSessionHandler, ManagedRuntimeEventCredentialHandler,
+    ManagedRuntimeExpectation, ManagedRuntimeOwnerDerivedKeyHandler,
+    ManagedRuntimeProviderCredentialHandler,
 };
 use crate::runtime::managed::execution::{
     self as bounded_managed_child_execution, ManagedChildExecutionPolicy,
@@ -377,7 +378,30 @@ fn process_typed_requests(
         dispatch_blob_session(channel, expectation, handlers.blob_session, request)?;
         return Ok(true);
     }
+    if let Some(request) =
+        managed_runtime_control::inbound::try_receive_blob_custody_release(channel)?
+    {
+        dispatch_blob_custody_release(
+            channel,
+            expectation,
+            handlers.blob_custody_release,
+            request,
+        )?;
+        return Ok(true);
+    }
     Ok(false)
+}
+
+fn dispatch_blob_custody_release(
+    channel: &mut std::os::unix::net::UnixStream,
+    expectation: &ManagedRuntimeExpectation,
+    handler: Option<&dyn ManagedRuntimeBlobCustodyReleaseHandler>,
+    request: hermes_runtime_protocol::v1::ManagedRuntimeBlobCustodyReleaseRequestV1,
+) -> Result<(), String> {
+    let result = handler
+        .ok_or_else(|| "managed runtime Blob custody release route is not available".to_owned())?
+        .release_blob_custody(expectation, request);
+    managed_runtime_control::inbound::respond_blob_custody_release(channel, result)
 }
 
 fn dispatch_blob_session(

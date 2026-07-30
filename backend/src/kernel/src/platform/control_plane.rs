@@ -13,6 +13,7 @@ use crate::identity::owner_control;
 use crate::modules::capability::module_query::ModuleQueryRouteHandlerV1;
 use crate::modules::capability::module_request::ModuleRequestRouteHandlerV1;
 use crate::modules::registration::ipc as registration_ipc;
+use crate::platform::blob::release::BlobCustodyReleaseHandlerV1;
 use crate::platform::blob::session::BlobSessionHandlerV1;
 use crate::platform::client_realtime::ClientRealtimePublishHandlerV1;
 use crate::platform::events::credential::{
@@ -111,6 +112,13 @@ fn configure_runtime(
     ))?;
     managed_runtime_supervisor.configure_blob_session_handler(Arc::new(
         BlobSessionHandlerV1::new(
+            Arc::clone(store),
+            managed_runtime_supervisor.relay_port(),
+            data_dir.to_path_buf(),
+        ),
+    ))?;
+    managed_runtime_supervisor.configure_blob_custody_release_handler(Arc::new(
+        BlobCustodyReleaseHandlerV1::new(
             Arc::clone(store),
             managed_runtime_supervisor.relay_port(),
             data_dir.to_path_buf(),

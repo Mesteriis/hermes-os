@@ -14,11 +14,12 @@ use hermes_runtime_protocol::managed_control::{
     ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
 };
 use hermes_runtime_protocol::v1::{
-    BlobCustodySourceProofV1, BlobCustodyTransferGrantV1, BlobDataCustodyTransferRequestV1,
-    BlobDataOperationV1, BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1,
-    BlobDataSessionGrantV1, BlobDataWriteRequestV1, ManagedRuntimeBlobSessionRequestV1,
-    ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
-    blob_data_request_v1::Operation,
+    BlobCustodyReleaseOutcomeV1, BlobCustodyReleaseReasonV1, BlobCustodySourceProofV1,
+    BlobCustodyTransferGrantV1, BlobDataCustodyTransferRequestV1, BlobDataOperationV1,
+    BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
+    BlobDataWriteRequestV1, ManagedRuntimeBlobCustodyReleaseRequestV1,
+    ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeControlResponseV1, blob_data_request_v1::Operation,
     managed_runtime_control_request_v1::Operation as ControlOperation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
@@ -53,6 +54,23 @@ pub struct ManagedBlobCustodyTransferRequestV1<'a> {
     pub custody_source_proof: &'a [u8],
     pub evidence_id: &'a [u8; 16],
     pub evidence_envelope_sha256: &'a [u8; 32],
+}
+
+pub struct ManagedBlobCustodyReleaseRequestV1<'a> {
+    pub operation_id: &'a [u8; 16],
+    pub capability_id: &'a str,
+    pub reference_id: &'a [u8; 16],
+    pub declared_size: u64,
+    pub receipt_sha256: &'a [u8; 32],
+    pub custody_source_proof: &'a [u8],
+    pub reason: BlobCustodyReleaseReasonV1,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ManagedBlobCustodyReleaseV1 {
+    pub operation_id: [u8; 16],
+    pub outcome: BlobCustodyReleaseOutcomeV1,
+    pub delete_not_before_unix_ms: u64,
 }
 
 /// One exact Blob data-session intent, independent of the control transport.
@@ -165,6 +183,98 @@ pub fn request_managed_blob_custody_transfer(
         grant,
         channel_binding,
     })
+}
+
+pub fn request_managed_blob_custody_release_v2(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+    request: ManagedBlobCustodyReleaseRequestV1<'_>,
+) -> Result<ManagedBlobCustodyReleaseV1, BlobClientError> {
+    if request.operation_id.iter().all(|byte| *byte == 0)
+        || !valid_token(request.capability_id)
+        || request.reference_id.iter().all(|byte| *byte == 0)
+        || request.declared_size == 0
+        || request.receipt_sha256.iter().all(|byte| *byte == 0)
+        || request.custody_source_proof.is_empty()
+        || request.custody_source_proof.len() > 2_048
+        || !matches!(
+            request.reason,
+            BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalAcceptedV1
+                | BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalRejectedV1
+                | BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalCancelledV1
+        )
+    {
+        return Err(BlobClientError::InvalidCustodyReleaseRequest);
+    }
+    let response = channel
+        .request_next_with_dispatch(
+            ManagedRuntimeControlRequestV1 {
+                operation: Some(ControlOperation::ReleaseBlobCustody(
+                    ManagedRuntimeBlobCustodyReleaseRequestV1 {
+                        operation_id: request.operation_id.to_vec(),
+                        capability_id: request.capability_id.to_owned(),
+                        reference_id: request.reference_id.to_vec(),
+                        declared_size: request.declared_size,
+                        receipt_sha256: request.receipt_sha256.to_vec(),
+                        custody_source_proof: request.custody_source_proof.to_vec(),
+                        reason: request.reason as i32,
+                    },
+                )),
+            },
+            dispatcher,
+        )
+        .map_err(|_| BlobClientError::Unavailable)?;
+    decode_custody_release_response(response, request.operation_id)
+}
+
+fn decode_custody_release_response(
+    response: ManagedRuntimeControlResponseV1,
+    expected_operation_id: &[u8; 16],
+) -> Result<ManagedBlobCustodyReleaseV1, BlobClientError> {
+    let delivery = match response.result {
+        Some(ControlResult::BlobCustodyRelease(delivery)) if response.error_code.is_empty() => {
+            delivery
+        }
+        _ if response.error_code == "managed_blob_custody_release_unavailable" => {
+            return Err(BlobClientError::Unavailable);
+        }
+        _ => {
+            return Err(BlobClientError::Rejected(
+                "managed_blob_custody_release_denied".to_owned(),
+            ));
+        }
+    };
+    let operation_id = delivery
+        .operation_id
+        .as_slice()
+        .try_into()
+        .map_err(|_| BlobClientError::InvalidResponse)?;
+    let outcome = BlobCustodyReleaseOutcomeV1::try_from(delivery.outcome)
+        .map_err(|_| BlobClientError::InvalidResponse)?;
+    if operation_id != *expected_operation_id
+        || delivery.delete_not_before_unix_ms == 0
+        || !matches!(
+            outcome,
+            BlobCustodyReleaseOutcomeV1::BlobCustodyReleaseOutcomeAcceptedV1
+                | BlobCustodyReleaseOutcomeV1::BlobCustodyReleaseOutcomeExistingV1
+                | BlobCustodyReleaseOutcomeV1::BlobCustodyReleaseOutcomeAlreadyReleasedV1
+        )
+    {
+        return Err(BlobClientError::InvalidResponse);
+    }
+    Ok(ManagedBlobCustodyReleaseV1 {
+        operation_id,
+        outcome,
+        delete_not_before_unix_ms: delivery.delete_not_before_unix_ms,
+    })
+}
+
+fn valid_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
+        })
 }
 
 /// Correlated V2 transport for the exact custody-transfer session operation.
@@ -666,6 +776,7 @@ pub enum BlobClientError {
     InvalidResponse,
     Rejected(String),
     InvalidSessionRequest,
+    InvalidCustodyReleaseRequest,
     Unavailable,
 }
 
@@ -714,6 +825,33 @@ mod tests {
                 "managed_blob_session_denied"
             ),
             BlobClientError::Rejected("managed_blob_session_denied".to_owned()),
+        );
+    }
+
+    #[test]
+    fn custody_release_response_is_exact_and_typed() {
+        let response = ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::BlobCustodyRelease(
+                hermes_runtime_protocol::v1::ManagedRuntimeBlobCustodyReleaseDeliveryV1 {
+                    operation_id: vec![1; 16],
+                    outcome: BlobCustodyReleaseOutcomeV1::BlobCustodyReleaseOutcomeExistingV1
+                        as i32,
+                    delete_not_before_unix_ms: 42,
+                },
+            )),
+            error_code: String::new(),
+        };
+        assert_eq!(
+            decode_custody_release_response(response.clone(), &[1; 16]),
+            Ok(ManagedBlobCustodyReleaseV1 {
+                operation_id: [1; 16],
+                outcome: BlobCustodyReleaseOutcomeV1::BlobCustodyReleaseOutcomeExistingV1,
+                delete_not_before_unix_ms: 42,
+            })
+        );
+        assert_eq!(
+            decode_custody_release_response(response, &[2; 16]),
+            Err(BlobClientError::InvalidResponse)
         );
     }
 

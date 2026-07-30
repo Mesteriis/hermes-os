@@ -770,6 +770,9 @@ fn blob_quota_request_for_capability(
                     Some(BlobQuotaOperationV1::CustodyTransfer) => {
                         Ok(ModuleBlobOperationV1::CustodyTransfer)
                     }
+                    Some(BlobQuotaOperationV1::ReleaseCustody) => {
+                        Ok(ModuleBlobOperationV1::ReleaseCustody)
+                    }
                     Some(BlobQuotaOperationV1::Unspecified) | None => {
                         Err("module Blob quota request is invalid".to_owned())
                     }
