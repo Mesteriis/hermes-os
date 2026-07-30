@@ -41,6 +41,7 @@ members = [
   "src/communications-api",
   "src/communications-call-evidence-core",
   "src/communications-call-evidence-ingress",
+  "src/communications-call-evidence-persistence",
   "src/communications-content-api",
   "src/communications-saved-query-api",
   "src/communications-sender-insights-api",

@@ -4,9 +4,9 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: первая contract/core фаза реализуется. Gate
-`communications_call_evidence_v1` остаётся закрыт до owner-local persistence,
-managed event consumer, generated query/realtime surface и live event
+Состояние реализации: contract/core и owner-local persistence реализованы.
+Gate `communications_call_evidence_v1` остаётся закрыт до integration-owned
+producer, managed event consumer, generated query/realtime surface и live event
 conformance.
 
 Уточняет:

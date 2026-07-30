@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communications_call_evidence_contract_core_v1",
+    "currentSlice": "communications_call_evidence_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -684,6 +684,12 @@
         "role": "domain",
         "owner": "communications",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-communications-call-evidence-persistence",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1165,6 +1171,16 @@
       "hermes-communications-call-evidence-core": [
         {
           "name": "hermes-communications-call-evidence-ingress",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communications-call-evidence-persistence": [
+        {
+          "name": "hermes-communications-call-evidence-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -3575,6 +3591,28 @@
           "features": []
         }
       ],
+      "hermes-communications-call-evidence-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-communications-attachment-contract": [
         {
           "name": "prost",
@@ -5889,6 +5927,10 @@
         "customBuildAllowed": true
       },
       "hermes-communications-call-evidence-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communications-call-evidence-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       }

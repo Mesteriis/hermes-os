@@ -683,6 +683,16 @@ const COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_PRODUCTION_PACKAGES = [
+  ...COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communications-call-evidence-persistence',
+    role: 'domain',
+    owner: 'communications',
+    surface: 'persistence',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2064,6 +2074,14 @@ const COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST 
   ],
 };
 
+const COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-call-evidence-persistence': [
+    { name: 'hermes-communications-call-evidence-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2380,6 +2398,14 @@ const COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIS
   'hermes-communications-call-evidence-core': [
     { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
+const COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-call-evidence-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
   ],
 };
 
@@ -3419,6 +3445,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATIONS_CALL_EVIDENCE_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communications_call_evidence_persistence_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATIONS_CALL_EVIDENCE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

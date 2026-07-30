@@ -9,10 +9,11 @@ async function backendSource(path) {
   return readFile(new URL(path, BACKEND_ROOT), 'utf8');
 }
 
-test('call evidence ingress and core are separate Communications domain units', async () => {
-  const [ingressManifest, coreManifest, policySource] = await Promise.all([
+test('call evidence ingress core and persistence are separate Communications domain units', async () => {
+  const [ingressManifest, coreManifest, persistenceManifest, policySource] = await Promise.all([
     backendSource('src/communications-call-evidence-ingress/Cargo.toml'),
     backendSource('src/communications-call-evidence-core/Cargo.toml'),
+    backendSource('src/communications-call-evidence-persistence/Cargo.toml'),
     backendSource('architecture/policy.json'),
   ]);
   const policy = JSON.parse(policySource);
@@ -25,10 +26,16 @@ test('call evidence ingress and core are separate Communications domain units', 
       /telegram-(?:runtime|tdlib|calls)|whatsapp-(?:runtime|host)|zoom|sqlx|kernel|gateway/,
     );
   }
+  assert.match(persistenceManifest, /role = "domain"/);
+  assert.match(persistenceManifest, /owner = "communications"/);
   assert.match(ingressManifest, /surface = "contract"/);
   assert.match(coreManifest, /surface = "implementation"/);
+  assert.match(persistenceManifest, /surface = "persistence"/);
   assert.match(coreManifest, /hermes-communications-call-evidence-ingress/);
+  assert.match(persistenceManifest, /hermes-communications-call-evidence-core/);
+  assert.match(persistenceManifest, /hermes-storage-protocol/);
   assert.doesNotMatch(ingressManifest, /communications-call-evidence-core/);
+  assert.doesNotMatch(persistenceManifest, /telegram|whatsapp|zulip|mail-/);
 
   assert.deepEqual(
     policy.implementation.productionPackages
@@ -37,6 +44,7 @@ test('call evidence ingress and core are separate Communications domain units', 
     [
       'hermes-communications-call-evidence-ingress:domain:communications:contract',
       'hermes-communications-call-evidence-core:domain:communications:implementation',
+      'hermes-communications-call-evidence-persistence:domain:communications:persistence',
     ],
   );
   assert.ok(
@@ -47,6 +55,11 @@ test('call evidence ingress and core are separate Communications domain units', 
   assert.ok(
     !policy.dependencies.integrationDomainContractPackages.includes(
       'hermes-communications-call-evidence-core',
+    ),
+  );
+  assert.ok(
+    !policy.dependencies.integrationDomainContractPackages.includes(
+      'hermes-communications-call-evidence-persistence',
     ),
   );
 });
@@ -92,6 +105,36 @@ test('call evidence core is monotonic terminal and provider behavior free', asyn
   assert.doesNotMatch(
     core,
     /createCall|acceptCall|discardCall|tgcalls|TDLib|WhatsAppHost|ZoomClient|provider command/,
+  );
+});
+
+test('call evidence persistence is owner local atomic and private-content negative', async () => {
+  const [manifest, repository, migration] = await Promise.all([
+    backendSource('src/communications-call-evidence-persistence/Cargo.toml'),
+    backendSource('src/communications-call-evidence-persistence/src/repository.rs'),
+    backendSource(
+      'src/communications-call-evidence-persistence/migrations/0001_call_evidence.sql',
+    ),
+  ]);
+
+  assert.match(manifest, /hermes-communications-call-evidence-core/);
+  assert.match(manifest, /hermes-storage-protocol/);
+  assert.match(repository, /existing_inbox_outcome/);
+  assert.match(repository, /InboxHashConflict/);
+  assert.match(repository, /FOR UPDATE/);
+  assert.match(repository, /transaction\.commit\(\)/);
+  assert.match(repository, /next_realtime_sequence/);
+  assert.match(migration, /communications_call_evidence_inbox/);
+  assert.match(migration, /communications_call_evidence_projection/);
+  assert.match(migration, /communications_call_evidence_history/);
+  assert.match(migration, /communications_call_evidence_realtime_frames/);
+  assert.doesNotMatch(
+    repository,
+    /\b(?:phone_number|raw_provider|provider_call_id|provider_account_id|pcm|audio_bytes|transcript|cookie|session_store|debug_log)\b/,
+  );
+  assert.doesNotMatch(
+    migration,
+    /\b(?:phone_number|username|raw_provider|provider_call_id|provider_account_id|pcm|audio_bytes|transcript|credential|cookie|session_store|debug_log)\b/,
   );
 });
 

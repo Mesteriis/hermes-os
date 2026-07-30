@@ -409,7 +409,7 @@ test('delayed delivery admits exact due commands and durable Blob cleanup as an 
   assert.equal(
     JSON.parse(await readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'))
       .implementation.currentSlice,
-  'communications_call_evidence_contract_core_v1',
+  'communications_call_evidence_persistence_v1',
   );
   assert.match(adr, /Состояние реализации: реализовано/);
   assert.match(
