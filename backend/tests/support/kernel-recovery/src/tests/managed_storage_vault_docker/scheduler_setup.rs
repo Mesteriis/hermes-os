@@ -2,11 +2,15 @@ use super::*;
 
 pub(super) fn configured_scheduler_store(root: &Path, kernel: &Path) -> SqliteControlStore {
     let store = configured_store(root, kernel);
+    record_scheduler_runtime(&store);
+    store
+}
+
+pub(super) fn record_scheduler_runtime(store: &SqliteControlStore) {
     let schema = scheduler_schema();
     let descriptor = scheduler_descriptor(&schema);
     let grant_epoch = record_scheduler_registration(&store, &descriptor);
     record_scheduler_runtime_fixture(&store, &schema, &descriptor, grant_epoch);
-    store
 }
 
 fn record_scheduler_registration(store: &SqliteControlStore, descriptor: &[u8]) -> u64 {
@@ -127,9 +131,15 @@ fn record_scheduler_runtime_fixture(
             grant_epoch,
         ))
         .expect("record Scheduler reservation");
-    store
-        .record_platform_event_hub_topology(&event_hub_topology())
-        .expect("record Event Hub topology");
+    if store
+        .platform_event_hub_topology()
+        .expect("read Event Hub topology")
+        .is_none()
+    {
+        store
+            .record_platform_event_hub_topology(&event_hub_topology())
+            .expect("record Event Hub topology");
+    }
 }
 
 pub(super) fn issue_initial_scheduler_storage_binding(store: &SqliteControlStore) {
@@ -233,7 +243,6 @@ fn scheduler_descriptor(schema: &[u8]) -> Vec<u8> {
     .encode_to_vec()
 }
 pub(super) fn installed_scheduler_release(root: &Path) -> InstalledSignedBundle {
-    let schema = scheduler_schema();
     InstalledSignedBundle::install(
         root,
         &[
@@ -247,16 +256,22 @@ pub(super) fn installed_scheduler_release(root: &Path) -> InstalledSignedBundle 
                 vault_binary(),
                 descriptor("vault").encode_to_vec(),
             ),
-            SignedRuntimeArtifact::new(
-                "platform.scheduler",
-                scheduler_binary(),
-                scheduler_descriptor(&schema),
-            )
-            .with_settings_schema(schema),
+            scheduler_release_artifact(),
         ],
     )
     .expect("install signed Scheduler release")
 }
-fn scheduler_binary() -> PathBuf {
+
+pub(super) fn scheduler_release_artifact() -> SignedRuntimeArtifact {
+    let schema = scheduler_schema();
+    SignedRuntimeArtifact::new(
+        "platform.scheduler",
+        scheduler_binary(),
+        scheduler_descriptor(&schema),
+    )
+    .with_settings_schema(schema)
+}
+
+pub(super) fn scheduler_binary() -> PathBuf {
     binary("HERMES_SCHEDULER_RUNTIME_BIN")
 }

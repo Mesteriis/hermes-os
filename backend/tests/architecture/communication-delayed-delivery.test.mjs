@@ -52,6 +52,8 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     assemblyMain,
     developmentReleaseScript,
     authenticatedStorageRunner,
+    managedSetup,
+    managedFlow,
     conformanceManifest,
     conformanceTest,
     methodRoutingAdr,
@@ -325,6 +327,20 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/delayed_delivery_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/delayed_delivery_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'tests/support/communication-delayed-delivery/Cargo.toml',
         BACKEND_ROOT,
       ),
@@ -550,6 +566,32 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     authenticatedStorageRunner,
     /hermes-communication-delayed-delivery-testkit/,
   );
+  assert.match(
+    authenticatedStorageRunner,
+    /HERMES_COMMUNICATION_DELAYED_DELIVERY_RUNTIME_BIN/,
+  );
+  assert.match(
+    authenticatedStorageRunner,
+    /managed_delayed_delivery_starts_with_scheduler_and_delivery_intent/,
+  );
+  assert.match(
+    managedSetup,
+    /installed_delayed_delivery_conformance_release/,
+  );
+  assert.match(managedSetup, /scheduler_release_artifact/);
+  assert.match(managedSetup, /delivery_intent_release_artifact/);
+  assert.match(managedSetup, /communication_delayed_delivery_module_descriptor_v1/);
+  assert.match(managedSetup, /communication_delayed_delivery_storage_bundle_v1/);
+  assert.match(managedSetup, /start_reserved_workflow/);
+  assert.match(
+    managedFlow,
+    /managed_delayed_delivery_starts_with_scheduler_and_delivery_intent/,
+  );
+  assert.match(managedFlow, /start_communications_domain/);
+  assert.match(managedFlow, /start_delivery_intent_runtime/);
+  assert.match(managedFlow, /start_delayed_delivery_runtime/);
+  assert.match(managedFlow, /scheduler_launch::start_from_reservation/);
+  assert.match(managedFlow, /supervisor[\s\S]*is_active/);
   assert.doesNotMatch(
     `${assemblySource}\n${assemblyMain}`,
     /scheduler_(?:implementation|persistence)|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,

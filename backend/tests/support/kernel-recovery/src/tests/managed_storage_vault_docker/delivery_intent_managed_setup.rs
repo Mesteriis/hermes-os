@@ -40,17 +40,19 @@ pub(super) fn installed_communications_delivery_intent_release(
     root: &Path,
 ) -> InstalledSignedBundle {
     let mut artifacts = communications_release_artifacts();
-    artifacts.push(
-        SignedRuntimeArtifact::new(
-            DELIVERY_INTENT_RELEASE_ARTIFACT_ID,
-            delivery_intent_binary(),
-            communication_delivery_intent_module_descriptor_v1("managed-delivery-intent-live")
-                .encode_to_vec(),
-        )
-        .with_settings_schema(communication_delivery_intent_settings_schema_bytes_v1()),
-    );
+    artifacts.push(delivery_intent_release_artifact());
     InstalledSignedBundle::install(root, &artifacts)
         .expect("install signed Communications and delivery-intent release")
+}
+
+pub(super) fn delivery_intent_release_artifact() -> SignedRuntimeArtifact {
+    SignedRuntimeArtifact::new(
+        DELIVERY_INTENT_RELEASE_ARTIFACT_ID,
+        delivery_intent_binary(),
+        communication_delivery_intent_module_descriptor_v1("managed-delivery-intent-live")
+            .encode_to_vec(),
+    )
+    .with_settings_schema(communication_delivery_intent_settings_schema_bytes_v1())
 }
 
 pub(super) fn admit_delivery_intent_runtime(
@@ -268,6 +270,6 @@ fn delivery_intent_storage_binding(
         .expect("active delivery-intent Storage binding")
 }
 
-fn delivery_intent_binary() -> PathBuf {
+pub(super) fn delivery_intent_binary() -> PathBuf {
     binary("HERMES_COMMUNICATION_DELIVERY_INTENT_RUNTIME_BIN")
 }

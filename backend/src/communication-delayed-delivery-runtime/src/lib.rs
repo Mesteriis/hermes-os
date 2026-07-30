@@ -10,6 +10,7 @@ pub mod scheduler_outbox;
 mod scheduler_results;
 
 pub use admission::{
+    COMMUNICATION_DELAYED_DELIVERY_STORAGE_CAPABILITY_ID_V1,
     communication_delayed_delivery_module_descriptor_v1,
     communication_delayed_delivery_settings_schema_bytes_v1,
     communication_delayed_delivery_settings_schema_v1,
