@@ -98,25 +98,56 @@ pub enum BodyCleanupErrorV1 {
 pub enum BodyCleanupReasonV1 {
     DeliveryAccepted,
     DeliveryRejected,
+    DeliveryCancelled,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DelayedDeliveryBodyCleanupJobV1 {
+    pub logical_owner_id: String,
+    pub delayed_operation_id: [u8; 16],
+    pub body_receipt: DelayedDeliveryBodyReceiptV1,
+    pub reason: BodyCleanupReasonV1,
+    pub attempt_count: u32,
 }
 
 #[allow(async_fn_in_trait)]
 pub trait BodyCleanupPortV1 {
     async fn request_cleanup(
         &mut self,
-        claim: &DelayedDeliveryExecutionClaimV1,
-        reason: BodyCleanupReasonV1,
+        job: &DelayedDeliveryBodyCleanupJobV1,
     ) -> Result<(), BodyCleanupErrorV1>;
 }
 
 pub trait DelayedDeliveryRuntimePortV1:
-    BodyReadPortV1 + BodyCleanupPortV1 + crate::DeliveryIntentRequestPortV1
+    BodyReadPortV1 + crate::DeliveryIntentRequestPortV1
 {
 }
 
 impl<T> DelayedDeliveryRuntimePortV1 for T where
-    T: BodyReadPortV1 + BodyCleanupPortV1 + crate::DeliveryIntentRequestPortV1
+    T: BodyReadPortV1 + crate::DeliveryIntentRequestPortV1
 {
+}
+
+#[allow(async_fn_in_trait)]
+pub trait CleanupStorePortV1 {
+    async fn next_pending_cleanup(
+        &mut self,
+        logical_owner_id: &str,
+        now_unix_millis: u64,
+    ) -> Result<Option<DelayedDeliveryBodyCleanupJobV1>, ExecutionStoreErrorV1>;
+
+    async fn complete_cleanup(
+        &mut self,
+        job: &DelayedDeliveryBodyCleanupJobV1,
+        completed_at_unix_millis: u64,
+    ) -> Result<(), ExecutionStoreErrorV1>;
+
+    async fn reschedule_cleanup(
+        &mut self,
+        job: &DelayedDeliveryBodyCleanupJobV1,
+        next_attempt_at_unix_millis: u64,
+        rescheduled_at_unix_millis: u64,
+    ) -> Result<(), ExecutionStoreErrorV1>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

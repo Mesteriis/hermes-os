@@ -1,5 +1,6 @@
 use sqlx::Row;
 
+use crate::cleanup::{DelayedDeliveryBodyCleanupReasonV1, enqueue_body_cleanup};
 use crate::{
     CommunicationDelayedDeliveryPersistenceV1, DelayedDeliveryBodyReceiptV1,
     DelayedDeliveryDurableMessageV1, DelayedDeliveryPersistenceErrorV1, SchedulerExecutionFenceV1,
@@ -162,6 +163,14 @@ impl CommunicationDelayedDeliveryPersistenceV1 {
         if affected != 1 {
             return Err(DelayedDeliveryPersistenceErrorV1::ClaimLost);
         }
+        enqueue_body_cleanup(
+            &mut transaction,
+            &command.claim.logical_owner_id,
+            &command.claim.delayed_operation_id,
+            DelayedDeliveryBodyCleanupReasonV1::DeliveryAccepted,
+            accepted_at,
+        )
+        .await?;
         crate::realtime::insert_operation_transition(
             &mut transaction,
             &command.claim.logical_owner_id,
@@ -232,6 +241,14 @@ impl CommunicationDelayedDeliveryPersistenceV1 {
         if affected != 1 {
             return Err(DelayedDeliveryPersistenceErrorV1::ClaimLost);
         }
+        enqueue_body_cleanup(
+            &mut transaction,
+            &command.claim.logical_owner_id,
+            &command.claim.delayed_operation_id,
+            DelayedDeliveryBodyCleanupReasonV1::DeliveryRejected,
+            failed_at,
+        )
+        .await?;
         crate::realtime::insert_operation_transition(
             &mut transaction,
             &command.claim.logical_owner_id,

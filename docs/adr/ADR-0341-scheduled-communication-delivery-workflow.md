@@ -4,8 +4,8 @@
 
 Дата: 2026-07-29
 
-Состояние реализации: частично реализовано. Gate
-`communication_delayed_delivery_v1` остаётся `planned`. `scheduler_v1`
+Состояние реализации: реализовано. Gate
+`communication_delayed_delivery_v1` открыт как `implemented`. `scheduler_v1`
 реализован с live restart/revoke и hot-reconciliation evidence, а
 module-originated schedule-control transport принят Kernel и Scheduler.
 Реализованы отдельные `api`, `core` и persistence units delayed-delivery с
@@ -27,7 +27,10 @@ run/schedule/lease fence и acceptance receipt outbox. Delivery-intent acceptanc
 exact lease. Отдельная execution unit реализует owner-local due orchestration
 через compile-isolated ports: one-use body read с проверкой custody size/digest,
 stable delivery-intent request, fenced accepted/failed transition, terminal
-Scheduler receipt и durable cleanup-pending outcome. Отдельная event-adapter
+Scheduler receipt и атомарный durable cleanup job. Отдельная cleanup
+orchestration responsibility завершает Blob custody только после terminal
+business commit; failure сохраняет retry с bounded exponential backoff и
+переживает новый persistence connection. Отдельная event-adapter
 unit уже строит exact Scheduler command envelope с runtime/grant fences и
 проверяет correlated Scheduler result до persistence mutation. Она также
 строго допускает только due `ScheduledJobCommandV1` своего exact JobKind,
@@ -128,7 +131,12 @@ test не синтезирует этот result в обход Scheduler. Это
 managed Cancel routing, duplicate/stale negatives и cancellation-successor
 recovery.
 
-Этот ADR не открывает workflow gate сам по себе.
+Live managed contour дополнительно доказывает, что и delivery acceptance, и
+successful cancellation проходят exact capability-routed Blob custody release:
+Blob crash-safe ledger содержит committed deletion reservation, а private body
+не попадает в durable event, status или SSE. Совместно с disposable PostgreSQL
+retry/reconnect conformance и полным project gate это закрывает последний
+admission item и открывает workflow gate.
 
 Уточняет:
 
@@ -407,8 +415,9 @@ Gate открывается только вместе с:
 12. live managed contour through real Scheduler and delivery-intent runtimes;
 13. architecture, SRP, Cargo, Clippy and full test gates.
 
-Gate остаётся `planned`, пока весь evidence не пройден. Skeleton UI может
-показывать reference layout, но не fake scheduled records или fake completion.
+Gate имеет состояние `implemented`: весь перечисленный evidence пройден.
+Frontend обязан использовать generated contracts и shared replayable SSE;
+fake scheduled records или fake completion по-прежнему запрещены.
 
 ## Отклонённые варианты
 

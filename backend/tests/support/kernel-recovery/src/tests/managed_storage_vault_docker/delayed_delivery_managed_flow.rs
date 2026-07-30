@@ -34,6 +34,7 @@ use hermes_runtime_protocol::v1::{
 };
 use http_body_util::BodyExt as _;
 use hyper::{Request, StatusCode, body::Bytes};
+use sha2::{Digest, Sha256};
 
 use crate::identity::device::signer::DeviceSigner;
 use crate::runtime::lifecycle::control::{
@@ -438,6 +439,12 @@ fn assert_delayed_delivery_round_trip(
             .any(|window| window == private_body),
         "delayed-delivery realtime must not contain private content"
     );
+    assert_blob_release_committed(
+        data,
+        DELAYED_DELIVERY_LOGICAL_OWNER_ID,
+        operation_byte,
+        private_body,
+    );
 }
 
 fn assert_delayed_delivery_cancellation_round_trip(
@@ -606,6 +613,64 @@ fn assert_delayed_delivery_cancellation_round_trip(
             .any(|window| window == private_body),
         "cancelled delayed-delivery realtime must not contain private content"
     );
+    assert_blob_release_committed(
+        data,
+        DELAYED_DELIVERY_LOGICAL_OWNER_ID,
+        operation_byte,
+        private_body,
+    );
+}
+
+fn assert_blob_release_committed(
+    data: &Path,
+    logical_owner_id: &str,
+    operation_byte: u8,
+    private_body: &[u8],
+) {
+    let delayed_operation_id = [operation_byte; 16];
+    let body_sha256: [u8; 32] = Sha256::digest(private_body).into();
+    let reference_digest = Sha256::new()
+        .chain_update(b"hermes.communication-delayed-delivery.body.v1\0")
+        .chain_update((logical_owner_id.len() as u64).to_be_bytes())
+        .chain_update(logical_owner_id.as_bytes())
+        .chain_update(delayed_operation_id)
+        .chain_update(body_sha256)
+        .finalize();
+    let reference_id: [u8; 16] = reference_digest[..16]
+        .try_into()
+        .expect("SHA-256 prefix is exact");
+    let release_name = reference_id
+        .iter()
+        .fold(String::with_capacity(32), |mut value, byte| {
+            use std::fmt::Write as _;
+            write!(&mut value, "{byte:02x}").expect("write reference hex");
+            value
+        });
+    let release_path = data
+        .join("blob")
+        .join("custody-releases-v1")
+        .join(release_name);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let record = loop {
+        match std::fs::read(&release_path) {
+            Ok(record) => break record,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::NotFound && Instant::now() < deadline =>
+            {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(error) => panic!(
+                "read delayed-delivery Blob custody release {}: {error}",
+                release_path.display()
+            ),
+        }
+    };
+    assert_eq!(record.len(), 97, "Blob custody release record size");
+    assert_eq!(&record[..8], b"HBRLSV1\0");
+    assert_eq!(&record[8..24], delayed_operation_id.as_slice());
+    assert_eq!(record[64], 1, "Blob deletion reservation must be committed");
+    let checksum: [u8; 32] = Sha256::digest(&record[..65]).into();
+    assert_eq!(&record[65..], checksum.as_slice());
 }
 
 #[allow(clippy::too_many_arguments)]

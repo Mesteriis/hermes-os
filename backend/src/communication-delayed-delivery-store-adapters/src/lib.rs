@@ -49,6 +49,54 @@ impl execution::ExecutionStorePortV1 for DelayedDeliveryExecutionStoreAdapterV1 
     }
 }
 
+impl execution::CleanupStorePortV1 for DelayedDeliveryExecutionStoreAdapterV1 {
+    async fn next_pending_cleanup(
+        &mut self,
+        logical_owner_id: &str,
+        now_unix_millis: u64,
+    ) -> Result<Option<execution::DelayedDeliveryBodyCleanupJobV1>, execution::ExecutionStoreErrorV1>
+    {
+        self.persistence
+            .next_body_cleanup(logical_owner_id, now_unix_millis)
+            .await
+            .map(|job| job.map(execution_cleanup_job))
+            .map_err(execution_store_error)
+    }
+
+    async fn complete_cleanup(
+        &mut self,
+        job: &execution::DelayedDeliveryBodyCleanupJobV1,
+        completed_at_unix_millis: u64,
+    ) -> Result<(), execution::ExecutionStoreErrorV1> {
+        self.persistence
+            .complete_body_cleanup(
+                &job.logical_owner_id,
+                &job.delayed_operation_id,
+                completed_at_unix_millis,
+            )
+            .await
+            .map_err(execution_store_error)
+    }
+
+    async fn reschedule_cleanup(
+        &mut self,
+        job: &execution::DelayedDeliveryBodyCleanupJobV1,
+        next_attempt_at_unix_millis: u64,
+        rescheduled_at_unix_millis: u64,
+    ) -> Result<(), execution::ExecutionStoreErrorV1> {
+        self.persistence
+            .reschedule_body_cleanup(
+                &job.logical_owner_id,
+                &job.delayed_operation_id,
+                job.attempt_count,
+                next_attempt_at_unix_millis,
+                rescheduled_at_unix_millis,
+            )
+            .await
+            .map_err(execution_store_error)
+    }
+}
+
 fn persistence_claim_command(
     command: &execution::ClaimDueExecutionV1,
 ) -> persistence::ClaimDueExecutionV1 {
@@ -159,6 +207,33 @@ fn execution_claim(
             lease_epoch: claim.fence.lease_epoch,
             lease_expires_at_unix_millis: claim.fence.lease_expires_at_unix_millis,
         },
+    }
+}
+
+fn execution_cleanup_job(
+    job: persistence::DelayedDeliveryBodyCleanupJobV1,
+) -> execution::DelayedDeliveryBodyCleanupJobV1 {
+    execution::DelayedDeliveryBodyCleanupJobV1 {
+        logical_owner_id: job.logical_owner_id,
+        delayed_operation_id: job.delayed_operation_id,
+        body_receipt: execution::DelayedDeliveryBodyReceiptV1 {
+            reference_id: job.body_receipt.reference_id,
+            declared_bytes: job.body_receipt.declared_bytes,
+            sha256: job.body_receipt.sha256,
+            custody_proof: job.body_receipt.custody_proof,
+        },
+        reason: match job.reason {
+            persistence::DelayedDeliveryBodyCleanupReasonV1::DeliveryAccepted => {
+                execution::BodyCleanupReasonV1::DeliveryAccepted
+            }
+            persistence::DelayedDeliveryBodyCleanupReasonV1::DeliveryRejected => {
+                execution::BodyCleanupReasonV1::DeliveryRejected
+            }
+            persistence::DelayedDeliveryBodyCleanupReasonV1::DeliveryCancelled => {
+                execution::BodyCleanupReasonV1::DeliveryCancelled
+            }
+        },
+        attempt_count: job.attempt_count,
     }
 }
 

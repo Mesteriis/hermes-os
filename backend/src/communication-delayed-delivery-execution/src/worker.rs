@@ -2,9 +2,9 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::{
-    BodyCleanupReasonV1, ClaimDueExecutionOutcomeV1, ClaimDueExecutionV1,
-    DelayedDeliveryIntentRequestV1, DelayedDeliveryIntentResponseV1, DelayedDeliveryRuntimePortV1,
-    ExecutionStoreErrorV1, ExecutionStorePortV1, MarkDeliveryAcceptedV1, MarkDeliveryFailedV1,
+    ClaimDueExecutionOutcomeV1, ClaimDueExecutionV1, DelayedDeliveryIntentRequestV1,
+    DelayedDeliveryIntentResponseV1, DelayedDeliveryRuntimePortV1, ExecutionStoreErrorV1,
+    ExecutionStorePortV1, MarkDeliveryAcceptedV1, MarkDeliveryFailedV1,
     SchedulerReceiptFactoryPortV1, SchedulerTerminalOutcomeV1, decode_delivery_intent_response_v1,
     ports::receipt_matches_body,
 };
@@ -13,8 +13,8 @@ const ERROR_DELIVERY_INTENT_REJECTED_V1: u16 = 4;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DelayedDeliveryExecutionOutcomeV1 {
-    Accepted { cleanup_pending: bool },
-    Rejected { cleanup_pending: bool },
+    Accepted,
+    Rejected,
     Retryable,
 }
 
@@ -79,12 +79,7 @@ pub async fn execute_due_delivery_v1(
                 })
                 .await
                 .map_err(DelayedDeliveryWorkerErrorV1::Store)?;
-            Ok(DelayedDeliveryExecutionOutcomeV1::Accepted {
-                cleanup_pending: runtime_port
-                    .request_cleanup(&claim, BodyCleanupReasonV1::DeliveryAccepted)
-                    .await
-                    .is_err(),
-            })
+            Ok(DelayedDeliveryExecutionOutcomeV1::Accepted)
         }
         Ok(DelayedDeliveryIntentResponseV1::Rejected) => {
             let terminal_receipt = match receipt_factory.terminal_receipt(
@@ -104,12 +99,7 @@ pub async fn execute_due_delivery_v1(
                 })
                 .await
                 .map_err(DelayedDeliveryWorkerErrorV1::Store)?;
-            Ok(DelayedDeliveryExecutionOutcomeV1::Rejected {
-                cleanup_pending: runtime_port
-                    .request_cleanup(&claim, BodyCleanupReasonV1::DeliveryRejected)
-                    .await
-                    .is_err(),
-            })
+            Ok(DelayedDeliveryExecutionOutcomeV1::Rejected)
         }
         Ok(DelayedDeliveryIntentResponseV1::Retryable) | Err(_) => {
             Ok(DelayedDeliveryExecutionOutcomeV1::Retryable)
@@ -126,10 +116,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        BodyCleanupErrorV1, BodyCleanupPortV1, BodyReadErrorV1, BodyReadPortV1,
-        DelayedDeliveryBodyReceiptV1, DelayedDeliveryDurableMessageV1,
-        DelayedDeliveryExecutionClaimV1, DeliveryIntentRequestErrorV1, DeliveryIntentRequestPortV1,
-        SchedulerExecutionFenceV1, SchedulerReceiptErrorV1,
+        BodyReadErrorV1, BodyReadPortV1, DelayedDeliveryBodyReceiptV1,
+        DelayedDeliveryDurableMessageV1, DelayedDeliveryExecutionClaimV1,
+        DeliveryIntentRequestErrorV1, DeliveryIntentRequestPortV1, SchedulerExecutionFenceV1,
+        SchedulerReceiptErrorV1,
     };
 
     struct StoreFixture {
@@ -165,7 +155,6 @@ mod tests {
 
     struct RuntimeFixture {
         body: Vec<u8>,
-        cleanup_failure: bool,
     }
 
     impl BodyReadPortV1 for RuntimeFixture {
@@ -210,22 +199,8 @@ mod tests {
         }
     }
 
-    impl BodyCleanupPortV1 for RuntimeFixture {
-        async fn request_cleanup(
-            &mut self,
-            _: &DelayedDeliveryExecutionClaimV1,
-            _: BodyCleanupReasonV1,
-        ) -> Result<(), BodyCleanupErrorV1> {
-            if self.cleanup_failure {
-                Err(BodyCleanupErrorV1::Unavailable)
-            } else {
-                Ok(())
-            }
-        }
-    }
-
     #[tokio::test]
-    async fn accepts_with_stable_request_and_reports_durable_cleanup_retry() {
+    async fn accepts_with_stable_request_after_durable_terminal_commit() {
         let body = b"scheduled hello".to_vec();
         let mut store = StoreFixture {
             claim: claim(&body),
@@ -234,22 +209,14 @@ mod tests {
         };
         let outcome = execute_due_delivery_v1(
             &mut store,
-            &mut RuntimeFixture {
-                body,
-                cleanup_failure: true,
-            },
+            &mut RuntimeFixture { body },
             &mut ReceiptFixture,
             &command(),
             20_000,
         )
         .await
         .expect("execution");
-        assert_eq!(
-            outcome,
-            DelayedDeliveryExecutionOutcomeV1::Accepted {
-                cleanup_pending: true,
-            }
-        );
+        assert_eq!(outcome, DelayedDeliveryExecutionOutcomeV1::Accepted);
         assert!(store.accepted);
         assert!(!store.failed);
     }
@@ -266,7 +233,6 @@ mod tests {
             &mut store,
             &mut RuntimeFixture {
                 body: b"tampered".to_vec(),
-                cleanup_failure: false,
             },
             &mut ReceiptFixture,
             &command(),

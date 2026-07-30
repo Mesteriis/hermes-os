@@ -12,7 +12,8 @@ use hermes_communication_delayed_delivery_api::{
 };
 use hermes_communication_delayed_delivery_execution::{
     BodyCleanupErrorV1, BodyCleanupPortV1, BodyCleanupReasonV1, BodyReadErrorV1, BodyReadPortV1,
-    DelayedDeliveryExecutionClaimV1, DeliveryIntentRequestErrorV1, DeliveryIntentRequestPortV1,
+    DelayedDeliveryBodyCleanupJobV1, DelayedDeliveryExecutionClaimV1, DeliveryIntentRequestErrorV1,
+    DeliveryIntentRequestPortV1,
 };
 use hermes_communication_delivery_intent_api::{
     COMMUNICATION_DELIVERY_INTENT_COMMAND_CONTRACT_NAME_V1,
@@ -225,27 +226,29 @@ impl DeliveryIntentRequestPortV1 for ManagedDelayedDeliveryRuntimePortV1<'_> {
 impl BodyCleanupPortV1 for ManagedDelayedDeliveryRuntimePortV1<'_> {
     async fn request_cleanup(
         &mut self,
-        claim: &DelayedDeliveryExecutionClaimV1,
-        reason: BodyCleanupReasonV1,
+        job: &DelayedDeliveryBodyCleanupJobV1,
     ) -> Result<(), BodyCleanupErrorV1> {
-        let reason = match reason {
+        let reason = match job.reason {
             BodyCleanupReasonV1::DeliveryAccepted => {
                 BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalAcceptedV1
             }
             BodyCleanupReasonV1::DeliveryRejected => {
                 BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalRejectedV1
             }
+            BodyCleanupReasonV1::DeliveryCancelled => {
+                BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalCancelledV1
+            }
         };
         request_managed_blob_custody_release_v2(
             self.channel,
             self.dispatcher,
             ManagedBlobCustodyReleaseRequestV1 {
-                operation_id: &claim.delayed_operation_id,
+                operation_id: &job.delayed_operation_id,
                 capability_id: self.blob_capability_id,
-                reference_id: &claim.body_receipt.reference_id,
-                declared_size: claim.body_receipt.declared_bytes,
-                receipt_sha256: &claim.body_receipt.sha256,
-                custody_source_proof: &claim.body_receipt.custody_proof,
+                reference_id: &job.body_receipt.reference_id,
+                declared_size: job.body_receipt.declared_bytes,
+                receipt_sha256: &job.body_receipt.sha256,
+                custody_source_proof: &job.body_receipt.custody_proof,
                 reason,
             },
         )

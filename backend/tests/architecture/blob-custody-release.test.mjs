@@ -72,7 +72,8 @@ test('Blob custody release has typed Blob-owned authority without a data-plane d
     ),
   ]);
 
-  assert.match(adr, /Состояние реализации: частично реализовано/);
+  assert.match(adr, /Состояние реализации: реализовано/);
+  assert.match(adr, /durable retry после reconnect/);
   assert.match(adr, /Kernel-staged platform configuration/);
   assert.match(blobProto, /message BlobCustodyReleaseGrantV1/);
   assert.match(blobProto, /message BlobCustodyReleaseRequestV1/);

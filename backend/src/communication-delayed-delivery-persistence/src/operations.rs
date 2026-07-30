@@ -4,6 +4,7 @@ use hermes_communication_delayed_delivery_core::{
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 
+use crate::cleanup::{DelayedDeliveryBodyCleanupReasonV1, enqueue_body_cleanup};
 use crate::{
     CommunicationDelayedDeliveryPersistenceV1, DelayedDeliveryBodyReceiptV1,
     DelayedDeliveryDurableMessageV1, DelayedDeliveryPersistenceErrorV1, valid_body_receipt,
@@ -529,6 +530,25 @@ async fn apply_scheduler_transition(
     .rows_affected();
     if affected != 1 {
         return Err(DelayedDeliveryPersistenceErrorV1::Conflict);
+    }
+    let cleanup_reason = match command.result {
+        SchedulerScheduleResultV1::Cancelled => {
+            Some(DelayedDeliveryBodyCleanupReasonV1::DeliveryCancelled)
+        }
+        SchedulerScheduleResultV1::Rejected { .. } => {
+            Some(DelayedDeliveryBodyCleanupReasonV1::DeliveryRejected)
+        }
+        SchedulerScheduleResultV1::Ensured { .. } | SchedulerScheduleResultV1::TooLate => None,
+    };
+    if let Some(reason) = cleanup_reason {
+        enqueue_body_cleanup(
+            transaction,
+            &command.logical_owner_id,
+            &command.delayed_operation_id,
+            reason,
+            received_at,
+        )
+        .await?;
     }
     Ok(())
 }

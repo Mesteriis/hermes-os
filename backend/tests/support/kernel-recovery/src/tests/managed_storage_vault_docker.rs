@@ -49,7 +49,10 @@ use crate::platform::vault::provider_credential::ProviderCredentialHandlerV1;
 use crate::platform::vault::status as vault_status;
 use crate::platform::vault::{binding as vault_binding, launch as vault_launch};
 use crate::platform::{
-    blob::{binding as blob_binding, launch as blob_launch, session::BlobSessionHandlerV1},
+    blob::{
+        binding as blob_binding, launch as blob_launch, release::BlobCustodyReleaseHandlerV1,
+        session::BlobSessionHandlerV1,
+    },
     events::{catalog as event_catalog, topology as event_topology},
     macos::managed_launch,
     scheduler::{launch as scheduler_launch, lifecycle as scheduler_lifecycle},
@@ -2004,6 +2007,13 @@ fn configure_route_handlers(
     supervisor
         .configure_blob_session_handler(blob_session_handler)
         .expect("Blob session handler");
+    supervisor
+        .configure_blob_custody_release_handler(Arc::new(BlobCustodyReleaseHandlerV1::new(
+            Arc::clone(store),
+            supervisor.relay_port(),
+            data.to_path_buf(),
+        )))
+        .expect("Blob custody release handler");
 }
 
 fn upsert_recovery_schedule(

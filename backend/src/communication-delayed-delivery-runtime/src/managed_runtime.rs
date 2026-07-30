@@ -2,6 +2,7 @@ use std::os::unix::net::UnixStream;
 
 use crate::{
     COMMUNICATION_DELAYED_DELIVERY_BLOB_CAPABILITY_ID_V1,
+    body_cleanup::process_pending_body_cleanup_v1,
     client_port::{
         DelayedDeliveryClientContextV1, cancel_delayed_delivery_payload_v1,
         get_delayed_delivery_status_payload_v1, schedule_delayed_delivery_payload_v1,
@@ -26,6 +27,7 @@ use crate::{
 use hermes_communication_delayed_delivery_api::{
     COMMUNICATION_DELAYED_DELIVERY_MODULE_ID_V1, COMMUNICATION_DELAYED_DELIVERY_OWNER_V1,
 };
+use hermes_communication_delayed_delivery_execution::DelayedDeliveryCleanupErrorV1;
 use hermes_communication_delayed_delivery_persistence::{
     CommunicationDelayedDeliveryPersistenceV1, DelayedDeliveryPersistenceErrorV1,
 };
@@ -379,6 +381,37 @@ impl DelayedDeliveryManagedRuntimeV1 {
             .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Unavailable)?;
         result.map_err(due_execution_error)
     }
+
+    pub async fn process_body_cleanup_once(
+        &mut self,
+        now_unix_millis: u64,
+    ) -> Result<bool, DelayedDeliveryManagedRuntimeErrorV1> {
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Unavailable)?;
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let result = process_pending_body_cleanup_v1(
+            &self.persistence,
+            &mut self.control_channel,
+            &mut dispatcher,
+            &self.admission.logical_owner_id,
+            now_unix_millis,
+        )
+        .await;
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Unavailable)?;
+        result
+            .map(|outcome| {
+                !matches!(
+                    outcome,
+                    hermes_communication_delayed_delivery_execution::DelayedDeliveryCleanupOutcomeV1::Idle
+                )
+            })
+            .map_err(body_cleanup_error)
+    }
 }
 
 async fn dispatch_client(
@@ -648,6 +681,27 @@ fn due_execution_error(
         | DelayedDeliveryDueExecutionErrorV1::EventUnavailable => {
             DelayedDeliveryManagedRuntimeErrorV1::Unavailable
         }
+    }
+}
+
+fn body_cleanup_error(
+    error: DelayedDeliveryCleanupErrorV1,
+) -> DelayedDeliveryManagedRuntimeErrorV1 {
+    match error {
+        DelayedDeliveryCleanupErrorV1::InvalidInput => {
+            DelayedDeliveryManagedRuntimeErrorV1::InvalidTransition
+        }
+        DelayedDeliveryCleanupErrorV1::Store(error) => match error {
+            hermes_communication_delayed_delivery_execution::ExecutionStoreErrorV1::InvalidInput
+            | hermes_communication_delayed_delivery_execution::ExecutionStoreErrorV1::Conflict
+            | hermes_communication_delayed_delivery_execution::ExecutionStoreErrorV1::ClaimLost
+            | hermes_communication_delayed_delivery_execution::ExecutionStoreErrorV1::NotFound => {
+                DelayedDeliveryManagedRuntimeErrorV1::InvalidTransition
+            }
+            hermes_communication_delayed_delivery_execution::ExecutionStoreErrorV1::Unavailable => {
+                DelayedDeliveryManagedRuntimeErrorV1::Unavailable
+            }
+        },
     }
 }
 

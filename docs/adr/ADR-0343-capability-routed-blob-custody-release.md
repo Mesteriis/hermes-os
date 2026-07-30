@@ -4,14 +4,19 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: частично реализовано. Typed runtime protocol, отдельная
+Состояние реализации: реализовано. Typed runtime protocol, отдельная
 descriptor operation, Kernel-staged 24-hour grace policy, Kernel issuance и
 current-binding admission, correlated managed-control Blob client,
 Kernel-signature verification, crash-safe Blob-owned idempotency ledger и exact
-deletion reservation реализованы. Delayed-delivery managed runtime,
-end-to-end conformance и admission ещё не реализованы. До их завершения
-delayed-delivery cleanup остаётся durable pending, а gate
-`communication_delayed_delivery_v1` — `planned`.
+deletion reservation реализованы. Delayed-delivery terminal transition
+атомарно создаёт owner-local durable cleanup job; Blob failure сохраняет
+bounded retry state и не откатывает business outcome. Managed runtime
+маршрутизирует exact accepted/rejected/cancelled reason через current
+capability/grant fence, а успешный ответ Blob завершает job. Disposable
+PostgreSQL conformance доказывает retry после нового connection, а live managed
+contour — committed deletion reservation для delivery acceptance и
+cancellation. Gate `communication_delayed_delivery_v1` открыт как
+`implemented`.
 
 Уточняет:
 
@@ -119,6 +124,12 @@ Admission требует:
 6. grace-period deletion и missing-file reconciliation;
 7. no paths, proofs, secrets or content in diagnostics;
 8. architecture, Cargo, SRP, Clippy and full tests.
+
+Эти условия выполнены. Protocol/Kernel/Blob conformance покрывает hard bounds,
+current binding, replay/conflict, foreign/stale/revoked access, crash recovery,
+grace deletion и sanitized diagnostics. Delayed-delivery conformance отдельно
+покрывает durable retry после reconnect и настоящий managed release route для
+accepted/cancelled terminal outcomes.
 
 ## Отклонённые варианты
 

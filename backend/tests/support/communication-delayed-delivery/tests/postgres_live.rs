@@ -6,10 +6,11 @@ use hermes_communication_delayed_delivery_core::{
 use hermes_communication_delayed_delivery_persistence::{
     ApplySchedulerResultOutcomeV1, ApplySchedulerResultV1, ClaimDueExecutionOutcomeV1,
     ClaimDueExecutionV1, CreateDelayedDeliveryOperationOutcomeV1, CreateDelayedDeliveryOperationV1,
-    DelayedDeliveryBodyReceiptV1, DelayedDeliveryDurableMessageV1,
-    DelayedDeliveryPersistenceConformanceV1, DelayedDeliveryPersistenceErrorV1,
-    MarkDeliveryFailedV1, RequestDelayedDeliveryCancellationV1, SchedulerExecutionFenceV1,
-    SchedulerScheduleResultV1, schema::communication_delayed_delivery_storage_bundle_v1,
+    DelayedDeliveryBodyCleanupReasonV1, DelayedDeliveryBodyReceiptV1,
+    DelayedDeliveryDurableMessageV1, DelayedDeliveryPersistenceConformanceV1,
+    DelayedDeliveryPersistenceErrorV1, MarkDeliveryFailedV1, RequestDelayedDeliveryCancellationV1,
+    SchedulerExecutionFenceV1, SchedulerScheduleResultV1,
+    schema::communication_delayed_delivery_storage_bundle_v1,
 };
 use sqlx::{PgPool, postgres::PgPoolOptions};
 
@@ -132,6 +133,22 @@ async fn durable_lifecycle_survives_restart_and_fences_duplicates_and_cancel_rac
         .expect("persist terminal failure");
 
     assert_cancel_too_late_race(&persistence).await;
+    let cleanup = persistence
+        .next_body_cleanup(OWNER, 7_100)
+        .await
+        .expect("read terminal body cleanup")
+        .expect("terminal failure must enqueue body cleanup");
+    assert_eq!(cleanup.delayed_operation_id, [1; 16]);
+    assert_eq!(
+        cleanup.reason,
+        DelayedDeliveryBodyCleanupReasonV1::DeliveryRejected
+    );
+    assert_eq!(cleanup.attempt_count, 0);
+    persistence
+        .reschedule_body_cleanup(OWNER, &[1; 16], 0, 7_500, 7_100)
+        .await
+        .expect("persist body cleanup retry");
+    assert_cancelled_cleanup_enqueued(&persistence).await;
     drop(persistence);
 
     let reopened = connect(&database_url).await;
@@ -159,6 +176,45 @@ async fn durable_lifecycle_survives_restart_and_fences_duplicates_and_cancel_rac
             .expect("read Scheduler receipt outbox")
             .len(),
         2
+    );
+    assert_eq!(
+        reopened
+            .next_body_cleanup(OWNER, 7_499)
+            .await
+            .expect("read cleanup before retry deadline"),
+        None
+    );
+    let retried_cleanup = reopened
+        .next_body_cleanup(OWNER, 7_500)
+        .await
+        .expect("read cleanup after reconnect")
+        .expect("cleanup retry must survive reconnect");
+    assert_eq!(retried_cleanup.delayed_operation_id, [1; 16]);
+    assert_eq!(retried_cleanup.attempt_count, 1);
+    reopened
+        .complete_body_cleanup(OWNER, &[1; 16], 7_600)
+        .await
+        .expect("complete durable body cleanup");
+    let cancelled_cleanup = reopened
+        .next_body_cleanup(OWNER, 7_601)
+        .await
+        .expect("read cancelled body cleanup")
+        .expect("successful cancellation must enqueue body cleanup");
+    assert_eq!(cancelled_cleanup.delayed_operation_id, [3; 16]);
+    assert_eq!(
+        cancelled_cleanup.reason,
+        DelayedDeliveryBodyCleanupReasonV1::DeliveryCancelled
+    );
+    reopened
+        .complete_body_cleanup(OWNER, &[3; 16], 7_602)
+        .await
+        .expect("complete cancelled body cleanup");
+    assert_eq!(
+        reopened
+            .next_body_cleanup(OWNER, 7_602)
+            .await
+            .expect("read completed cleanup queue"),
+        None
     );
 }
 
@@ -199,6 +255,46 @@ async fn assert_cancel_too_late_race(
         ApplySchedulerResultOutcomeV1::Applied(ref status)
             if status.state == DelayedDeliveryStateV1::Scheduled
                 && status.state_revision == 4
+    ));
+}
+
+async fn assert_cancelled_cleanup_enqueued(
+    persistence: &hermes_communication_delayed_delivery_persistence::CommunicationDelayedDeliveryPersistenceV1,
+) {
+    persistence
+        .create_operation(&create_command(3, 30))
+        .await
+        .expect("create cancellable operation");
+    persistence
+        .apply_scheduler_result(&scheduler_result(
+            3,
+            31,
+            SchedulerScheduleResultV1::Ensured {
+                schedule_revision: 1,
+            },
+        ))
+        .await
+        .expect("schedule cancellable operation");
+    persistence
+        .request_cancellation(&RequestDelayedDeliveryCancellationV1 {
+            logical_owner_id: OWNER.to_owned(),
+            delayed_operation_id: [3; 16],
+            expected_revision: 2,
+            scheduler_command: durable_message(32, "scheduler.schedule.command.v1"),
+            requested_at_unix_millis: 6_300,
+        })
+        .await
+        .expect("request successful cancellation");
+    let mut cancelled_result = scheduler_result(3, 33, SchedulerScheduleResultV1::Cancelled);
+    cancelled_result.received_at_unix_millis = 7_601;
+    let cancelled = persistence
+        .apply_scheduler_result(&cancelled_result)
+        .await
+        .expect("apply Scheduler cancellation");
+    assert!(matches!(
+        cancelled,
+        ApplySchedulerResultOutcomeV1::Applied(ref status)
+            if status.state == DelayedDeliveryStateV1::Cancelled
     ));
 }
 

@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod cleanup;
 #[cfg(feature = "conformance-test-support")]
 mod conformance;
 mod execution;
@@ -9,6 +10,7 @@ mod relay;
 pub mod schema;
 mod status;
 
+pub use cleanup::{DelayedDeliveryBodyCleanupJobV1, DelayedDeliveryBodyCleanupReasonV1};
 #[cfg(feature = "conformance-test-support")]
 pub use conformance::DelayedDeliveryPersistenceConformanceV1;
 pub use execution::{

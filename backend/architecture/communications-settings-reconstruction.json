@@ -507,7 +507,7 @@
       "gate": "communication_delayed_delivery_v1",
       "role": "workflow",
       "owner": "communication_delayed_delivery",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "communication_delivery_intent_v1",
         "scheduler_module_schedule_control_v1"

@@ -5,7 +5,7 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
-test('delayed delivery admits exact due commands in a separate adapter while its runtime gate stays planned', async () => {
+test('delayed delivery admits exact due commands and durable Blob cleanup as an implemented workflow', async () => {
   const [
     adr,
     storeAdapterAdr,
@@ -24,13 +24,16 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     persistenceRelay,
     persistenceStatus,
     persistenceRealtime,
+    persistenceCleanup,
     persistenceMigration,
     schedulerReceiptMigration,
     clientRealtimeMigration,
+    bodyCleanupMigration,
     executionManifest,
     executionSource,
     executionPorts,
     executionWorker,
+    executionCleanup,
     eventAdaptersManifest,
     eventAdaptersSource,
     dueEventAdapterSource,
@@ -45,6 +48,7 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     runtimeSchedulerOutbox,
     runtimeSchedulerResults,
     runtimeDueExecution,
+    runtimeBodyCleanup,
     managedRuntime,
     runtimeMain,
     assemblyManifest,
@@ -167,6 +171,13 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     ),
     readFile(
       new URL(
+        'src/communication-delayed-delivery-persistence/src/cleanup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-delayed-delivery-persistence/migrations/0001_delayed_delivery_state.sql',
         BACKEND_ROOT,
       ),
@@ -187,6 +198,13 @@ test('delayed delivery admits exact due commands in a separate adapter while its
       'utf8',
     ),
     readFile(
+      new URL(
+        'src/communication-delayed-delivery-persistence/migrations/0004_body_cleanup_queue.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
       new URL('src/communication-delayed-delivery-execution/Cargo.toml', BACKEND_ROOT),
       'utf8',
     ),
@@ -200,6 +218,10 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     ),
     readFile(
       new URL('src/communication-delayed-delivery-execution/src/worker.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-delayed-delivery-execution/src/cleanup.rs', BACKEND_ROOT),
       'utf8',
     ),
     readFile(
@@ -293,6 +315,13 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     ),
     readFile(
       new URL(
+        'src/communication-delayed-delivery-runtime/src/body_cleanup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-delayed-delivery-runtime/src/managed_runtime.rs',
         BACKEND_ROOT,
       ),
@@ -371,7 +400,7 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     gate: 'communication_delayed_delivery_v1',
     role: 'workflow',
     owner: 'communication_delayed_delivery',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'communication_delivery_intent_v1',
       'scheduler_module_schedule_control_v1',
@@ -382,7 +411,7 @@ test('delayed delivery admits exact due commands in a separate adapter while its
       .implementation.currentSlice,
     'communication_delayed_delivery_assembly_v1',
   );
-  assert.match(adr, /Состояние реализации: частично реализовано/);
+  assert.match(adr, /Состояние реализации: реализовано/);
   assert.match(
     apiManifest,
     /owner = "communication_delayed_delivery"[\s\S]*surface = "contract"/,
@@ -429,7 +458,15 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(persistenceStatus, /created_at_unix_millis/);
   assert.match(persistenceRealtime, /pub async fn client_realtime_window/);
   assert.match(persistenceRealtime, /insert_operation_transition/);
+  assert.match(persistenceCleanup, /pub async fn next_body_cleanup/);
+  assert.match(persistenceCleanup, /pub async fn complete_body_cleanup/);
+  assert.match(persistenceCleanup, /pub async fn reschedule_body_cleanup/);
+  assert.match(persistenceCleanup, /reconcile_terminal_cleanup/);
+  assert.match(persistenceCleanup, /LEAST\(attempt_count \+ 1, 32\)/);
   assert.match(clientRealtimeMigration, /realtime_sequence/);
+  assert.match(bodyCleanupMigration, /communication_delayed_delivery_body_cleanup/);
+  assert.match(bodyCleanupMigration, /completed_at_unix_millis IS NULL/);
+  assert.doesNotMatch(bodyCleanupMigration, /body_utf8|provider_id|account_id/);
   assert.doesNotMatch(clientRealtimeMigration, /body_utf8|provider_id|account_id/);
   assert.doesNotMatch(schedulerReceiptMigration, /body_utf8|provider_id|account_id/);
   assert.match(
@@ -447,7 +484,11 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(executionPorts, /pub trait SchedulerReceiptFactoryPortV1/);
   assert.match(executionWorker, /pub async fn execute_due_delivery_v1/);
   assert.match(executionWorker, /Sha256::digest/);
-  assert.match(executionWorker, /cleanup_pending/);
+  assert.doesNotMatch(executionWorker, /cleanup_pending|request_cleanup/);
+  assert.match(executionCleanup, /pub async fn process_body_cleanup_once_v1/);
+  assert.match(executionCleanup, /complete_cleanup/);
+  assert.match(executionCleanup, /reschedule_cleanup/);
+  assert.match(executionCleanup, /MAX_RETRY_MILLIS/);
   assert.match(
     eventAdaptersManifest,
     /owner = "communication_delayed_delivery"[\s\S]*surface = "implementation"/,
@@ -490,6 +531,8 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(storeAdaptersSource, /mark_delivery_accepted/);
   assert.match(storeAdaptersSource, /mark_delivery_failed/);
   assert.match(storeAdaptersSource, /ClaimDueExecutionOutcomeV1::Duplicate/);
+  assert.match(storeAdaptersSource, /impl execution::CleanupStorePortV1/);
+  assert.match(storeAdaptersSource, /reschedule_body_cleanup/);
   assert.doesNotMatch(
     storeAdaptersSource,
     /sqlx|async_nats|scheduler_(?:implementation|persistence)|kernel::|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
@@ -524,11 +567,14 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(runtimeDueExecution, /DelayedDeliveryExecutionOutcomeV1::Retryable/);
   assert.match(runtimeDueExecution, /\.acknowledge\(\)/);
   assert.match(runtimeDueExecution, /build_delayed_delivery_terminal_receipt_v1/);
+  assert.match(runtimeBodyCleanup, /process_body_cleanup_once_v1/);
   assert.match(managedRuntime, /Operation::ClientDelivery/);
   assert.match(managedRuntime, /pump_client_realtime_once/);
   assert.match(managedRuntime, /consume_due_delivery_once/);
+  assert.match(managedRuntime, /process_body_cleanup_once/);
   assert.match(runtimeMain, /serve-inherited/);
   assert.match(runtimeMain, /as_millis/);
+  assert.match(runtimeMain, /process_body_cleanup_once/);
   assert.match(
     assemblyManifest,
     /owner = "communication_delayed_delivery"[\s\S]*surface = "assembly"/,
@@ -558,6 +604,8 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(conformanceTest, /ClaimDueExecutionOutcomeV1::Duplicate/);
   assert.match(conformanceTest, /SchedulerScheduleResultV1::TooLate/);
   assert.match(conformanceTest, /client_realtime_window/);
+  assert.match(conformanceTest, /cleanup retry must survive reconnect/);
+  assert.match(conformanceTest, /DeliveryCancelled/);
   assert.match(
     authenticatedStorageRunner,
     /HERMES_COMMUNICATION_DELAYED_DELIVERY_POSTGRES_TEST_FILTER/,
@@ -592,6 +640,8 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(managedFlow, /start_delayed_delivery_runtime/);
   assert.match(managedFlow, /scheduler_launch::start_from_reservation/);
   assert.match(managedFlow, /supervisor[\s\S]*is_active/);
+  assert.match(managedFlow, /assert_blob_release_committed/);
+  assert.match(managedFlow, /Blob deletion reservation must be committed/);
   assert.doesNotMatch(
     `${assemblySource}\n${assemblyMain}`,
     /scheduler_(?:implementation|persistence)|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
