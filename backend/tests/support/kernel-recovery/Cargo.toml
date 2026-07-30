@@ -53,6 +53,9 @@ hermes-communication-delayed-delivery-runtime = { path = "../../../src/communica
 hermes-communication-bulk-action-api = { path = "../../../src/communication-bulk-action-api" }
 hermes-communication-bulk-action-persistence = { path = "../../../src/communication-bulk-action-persistence" }
 hermes-communication-bulk-action-runtime = { path = "../../../src/communication-bulk-action-runtime" }
+hermes-review-attention-api = { path = "../../../src/review-attention-api" }
+hermes-review-attention-persistence = { path = "../../../src/review-attention-persistence" }
+hermes-review-attention-runtime = { path = "../../../src/review-attention-runtime" }
 hermes-mail-api = { path = "../../../src/mail-api" }
 hermes-mail-core = { path = "../../../src/mail-core" }
 hermes-mail-gmail = { path = "../../../src/mail-gmail", features = ["conformance-test-support"] }

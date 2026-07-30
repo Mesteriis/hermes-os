@@ -580,6 +580,10 @@ storage, второй — для provider/domain tenancy и client realtime.
 ADR-0351 открывает Review как отдельного domain owner для Hermes
 pending/reviewed/dismissed, pin, importance и snooze. Contract/core и
 owner-local idempotent command/query/realtime persistence units реализованы
-без Communications dependency. Самостоятельный managed Review runtime
-и отдельная unsigned release assembly реализованы;
-signed Kernel admission/Gateway/live gate остаётся закрытым.
+без Communications dependency. Самостоятельный managed Review runtime,
+отдельная unsigned release assembly, signed Kernel admission, Gateway и
+restart-safe shared SSE replay прошли live conformance; gate открыт.
+ADR-0352 делает Event Hub launch configuration capability-scoped: Kernel
+передаёт eventless pair только domain без approved event route requests, а
+client realtime продолжает идти через общий replayable SSE. Eventless Review
+live conformance подтверждает этот контракт без фиктивного NATS grant.

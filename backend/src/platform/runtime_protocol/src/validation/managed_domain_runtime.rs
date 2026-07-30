@@ -24,8 +24,10 @@ pub fn validate_managed_domain_runtime_configuration(
         || !valid_identifier(&configuration.runtime_instance_id)
         || configuration.runtime_generation == 0
         || configuration.grant_epoch == 0
-        || !valid_event_hub_endpoint(&configuration.event_hub_endpoint)
-        || configuration.event_credential_revision == 0
+        || !valid_event_hub_configuration(
+            &configuration.event_hub_endpoint,
+            configuration.event_credential_revision,
+        )
         || storage.logical_owner_id != configuration.logical_owner_id
         || storage.runtime_instance_id != configuration.runtime_instance_id
         || !valid_storage_configuration(storage)
@@ -69,6 +71,11 @@ fn valid_event_hub_endpoint(value: &str) -> bool {
         && value.len() <= MAX_ENDPOINT_BYTES
         && value.is_ascii()
         && !value.contains([' ', '\t', '\n', '\r', '#', '?', '@'])
+}
+
+fn valid_event_hub_configuration(endpoint: &str, credential_revision: u64) -> bool {
+    (endpoint.is_empty() && credential_revision == 0)
+        || (credential_revision != 0 && valid_event_hub_endpoint(endpoint))
 }
 
 #[cfg(test)]
@@ -120,6 +127,33 @@ mod tests {
         assert_eq!(
             validate_managed_domain_runtime_configuration(&configuration()),
             Ok(())
+        );
+    }
+
+    #[test]
+    fn accepts_an_exact_eventless_domain_configuration() {
+        let mut configuration = configuration();
+        configuration.event_hub_endpoint.clear();
+        configuration.event_credential_revision = 0;
+        assert_eq!(
+            validate_managed_domain_runtime_configuration(&configuration),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn rejects_a_partial_event_hub_configuration() {
+        let mut configuration = configuration();
+        configuration.event_credential_revision = 0;
+        assert_eq!(
+            validate_managed_domain_runtime_configuration(&configuration),
+            Err(ManagedDomainRuntimeValidationErrorV1::InvalidConfiguration),
+        );
+        configuration.event_hub_endpoint.clear();
+        configuration.event_credential_revision = 1;
+        assert_eq!(
+            validate_managed_domain_runtime_configuration(&configuration),
+            Err(ManagedDomainRuntimeValidationErrorV1::InvalidConfiguration),
         );
     }
 

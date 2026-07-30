@@ -4,13 +4,12 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: exact client contract, pure core и owner-local
-PostgreSQL command/query/realtime persistence реализованы. Managed runtime,
-с generated client dispatch, Vault-fenced Storage startup и shared realtime
-publisher реализован. Отдельная unsigned release assembly unit также
-реализована. Signed distribution/Kernel admission, Gateway routes и live
-conformance ещё не реализованы;
-`review_communications_attention_v1` остаётся planned.
+Состояние реализации: implemented. Exact client contract, pure core,
+owner-local PostgreSQL command/query/realtime persistence, managed runtime,
+unsigned release assembly и signed distribution composition реализованы.
+Exact Kernel admission, owner-neutral Gateway command/query routes, shared SSE
+и restart-safe durable replay подтверждены live managed conformance.
+`review_communications_attention_v1` открыт как implemented.
 
 Уточняет:
 
@@ -59,7 +58,7 @@ settings schema, Storage migration bundle и отсортированный unsi
 fragment. Assembly не запускает runtime, не импортирует Kernel/Gateway и не
 получает signing authority.
 
-Следующие units добавляются отдельными slices:
+Следующие units реализованы отдельными slices:
 
 - signed distribution и exact Kernel admission;
 - generated Gateway routes и shared owner-local SSE;
@@ -123,11 +122,22 @@ Communications не импортирует Review и не выполняет Rev
 
 ## Phase gate
 
-Этот ADR разрешает Review owner и только exact contract/core/persistence
-package inventory. Он не открывает `review_communications_attention_v1`. Gate
-открывается после:
+Этот ADR разрешает Review owner и exact
+contract/core/persistence/runtime/assembly package inventory.
+`review_communications_attention_v1` открыт после:
 
 1. release assembly and exact Kernel admission;
 2. generated command/query/realtime Gateway routes;
 3. restart, replay, stale revision, cross-owner and privacy-negative tests;
 4. live managed proof through Gateway and shared SSE.
+
+Live gate запускает подписанный Review runtime без Event Hub grant, применяет
+owner-local Storage bundle через Vault-fenced credential, выполняет generated
+command/query через Gateway, отклоняет stale revision, проверяет отсутствие
+source evidence ID в SSE и после successor restart восстанавливает тот же
+durable cursor. Отдельный identity-negative test отклоняет запрос другого
+authenticated human owner до business dispatch. Bounded nested dispatcher
+обрабатывает следующий client command во время ожидания ACK предыдущей
+realtime publication; восемь последовательных busy passes являются жёстким
+пределом, после которого runtime fail-closed перезапускается и дочитывает
+durable replay.

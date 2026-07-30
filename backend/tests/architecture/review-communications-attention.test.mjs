@@ -87,6 +87,7 @@ test('Review attention persistence is owner-local atomic and operation-idempoten
   assert.match(query, /ORDER BY attention_id ASC/);
   assert.match(query, /REVIEW_ATTENTION_MAX_PAGE_SIZE_V1: u16 = 100/);
   assert.match(realtime, /realtime_sequence > \$2/);
+  assert.match(realtime, /\.bind\(logical_owner_id\)/);
   assert.match(realtime, /REVIEW_ATTENTION_REALTIME_REPLAY_LIMIT_V1: u16 = 256/);
   assert.match(schema, /owner_id: "review"/);
   assert.match(migration, /hermes_data\.review_attention_state/);
@@ -128,6 +129,8 @@ test('Review managed runtime owns exact client dispatch and shared realtime repl
   assert.match(managedRuntime, /logical_human_owner_id == admission\.logical_owner_id/);
   assert.match(managedRuntime, /StorageVaultLeaseAdapterV1/);
   assert.match(managedRuntime, /request\.logical_owner_id == admission\.logical_human_owner_id/);
+  assert.match(managedRuntime, /ReviewAttentionNestedRequestDispatcherV1/);
+  assert.match(managedRuntime, /MAX_NESTED_REALTIME_PASSES_V1: u8 = 8/);
   assert.match(realtime, /request_next_with_dispatch/);
   assert.match(realtime, /review-attention\/\{\}/);
   assert.match(managedRuntime, /\.receive_request\(\)/);
@@ -166,8 +169,17 @@ test('Review release assembly is a separate unsigned domain build unit', async (
   );
 });
 
-test('Review owner admission does not prematurely open the managed gate', async () => {
-  const [adr, inventorySource, policySource] = await Promise.all([
+test('Review owner is admitted through signed Kernel Gateway and shared SSE conformance', async () => {
+  const [
+    adr,
+    eventlessAdr,
+    inventorySource,
+    policySource,
+    domainValidation,
+    ownerControl,
+    liveSetup,
+    liveFlow,
+  ] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0351-review-communications-attention-owner-admission.md',
@@ -175,8 +187,25 @@ test('Review owner admission does not prematurely open the managed gate', async 
       ),
       'utf8',
     ),
+    readFile(
+      new URL(
+        'docs/adr/ADR-0352-capability-scoped-domain-event-hub-launch-configuration.md',
+        REPOSITORY_ROOT,
+      ),
+      'utf8',
+    ),
     backendSource('architecture/communications-settings-reconstruction.json'),
     backendSource('architecture/policy.json'),
+    backendSource(
+      'src/platform/runtime_protocol/src/validation/managed_domain_runtime.rs',
+    ),
+    backendSource('src/kernel/src/identity/owner_control/dispatch.rs'),
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/review_attention_managed_setup.rs',
+    ),
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/review_attention_managed_flow.rs',
+    ),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -188,19 +217,40 @@ test('Review owner admission does not prematurely open the managed gate', async 
     gate: 'review_communications_attention_v1',
     role: 'domain',
     owner: 'review',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['communications_canonical_read_v2'],
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'review_communications_attention_release_assembly_v1',
+    'review_communications_attention_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.domains, [
     'communications',
     'review',
   ]);
+  assert.deepEqual(
+    policy.implementation.ownerInventory.businessCapabilities.filter(
+      (capability) => capability.startsWith('review.communication-attention.'),
+    ),
+    [
+      'review.communication-attention.command.v1',
+      'review.communication-attention.query.v1',
+      'review.communication-attention.realtime.v1',
+      'review.communication-attention.storage.v1',
+    ],
+  );
   assert.match(adr, /Review packages не зависят от Communications packages/);
-  assert.match(adr, /Он не открывает `review_communications_attention_v1`/);
+  assert.match(adr, /`review_communications_attention_v1` открыт как implemented/);
   assert.match(adr, /operation ID вместе с exact request hash/);
   assert.match(adr, /live managed proof through Gateway and shared SSE/);
+  assert.match(eventlessAdr, /eventless: endpoint == "" and credential_revision == 0/);
+  assert.match(domainValidation, /valid_event_hub_configuration/);
+  assert.match(domainValidation, /endpoint\.is_empty\(\) && credential_revision == 0/);
+  assert.match(ownerControl, /domain_event_hub_configuration/);
+  assert.match(ownerControl, /module_event_route_requests/);
+  assert.match(liveSetup, /event_hub_endpoint: String::new\(\)/);
+  assert.match(liveSetup, /event_credential_revision: 0/);
+  assert.match(liveFlow, /stale_response\.error_code, "stale_revision"/);
+  assert.match(liveFlow, /windows\(source_evidence_id\.len\(\)\)/);
+  assert.match(liveFlow, /assert_eq!\(replayed\.cursor, first_cursor\)/);
 });

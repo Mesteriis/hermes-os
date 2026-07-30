@@ -352,10 +352,8 @@ fn start_reserved_domain_runtime(
             vault.runtime_generation(),
             vault.hpke_public_key_x25519(),
         )?;
-        let event_topology = store
-            .platform_event_hub_topology()
-            .map_err(|_| "Event Hub topology is unavailable".to_owned())?
-            .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
+        let (event_hub_endpoint, event_credential_revision) =
+            domain_event_hub_configuration(store, &request.registration_id)?;
         let configuration = ManagedDomainRuntimeConfigurationV1 {
             major: 1,
             logical_owner_id: registration.owner_id().to_owned(),
@@ -364,8 +362,8 @@ fn start_reserved_domain_runtime(
             runtime_generation: reservation.runtime_generation(),
             grant_epoch: reservation.grant_epoch(),
             storage: Some(storage),
-            event_hub_endpoint: event_topology.nats_endpoint().to_owned(),
-            event_credential_revision: event_topology.credential_revision(),
+            event_hub_endpoint,
+            event_credential_revision,
             logical_human_owner_id: logical_human_owner.owner_id().to_owned(),
         };
         validate_managed_domain_runtime_configuration(&configuration)
@@ -384,6 +382,41 @@ fn start_reserved_domain_runtime(
             launch_state: "accepted".to_owned(),
         })
     })
+}
+
+fn domain_event_hub_configuration(
+    store: &SqliteControlStore,
+    registration_id: &str,
+) -> Result<(String, u64), String> {
+    let snapshot = store
+        .module_grant_snapshot(registration_id)
+        .map_err(|_| "managed domain grants are unavailable".to_owned())?
+        .ok_or_else(|| "managed domain grants are unavailable".to_owned())?;
+    let grants = snapshot
+        .effective_grants()
+        .ok_or_else(|| "managed domain grants are unavailable".to_owned())?;
+    let mut requires_event_hub = false;
+    for capability_id in grants.capability_ids() {
+        if !store
+            .module_event_route_requests(registration_id, capability_id)
+            .map_err(|_| "managed domain Event Hub routes are unavailable".to_owned())?
+            .is_empty()
+        {
+            requires_event_hub = true;
+            break;
+        }
+    }
+    if !requires_event_hub {
+        return Ok((String::new(), 0));
+    }
+    let topology = store
+        .platform_event_hub_topology()
+        .map_err(|_| "Event Hub topology is unavailable".to_owned())?
+        .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
+    Ok((
+        topology.nats_endpoint().to_owned(),
+        topology.credential_revision(),
+    ))
 }
 
 fn start_reserved_engine_runtime(

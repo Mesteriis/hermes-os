@@ -2877,6 +2877,14 @@ const REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_INVENTORY = {
   ].sort(),
 };
 
+const REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY = {
+  ...REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_INVENTORY,
+  businessCapabilities: [
+    ...REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_INVENTORY.businessCapabilities,
+    'review.communication-attention.storage.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -3726,6 +3734,19 @@ function expectedSlice(currentSlice) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: REVIEW_COMMUNICATIONS_ATTENTION_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        REVIEW_COMMUNICATIONS_ATTENTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        REVIEW_COMMUNICATIONS_ATTENTION_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'review_communications_attention_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY,
       cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
       packages: REVIEW_COMMUNICATIONS_ATTENTION_ASSEMBLY_PRODUCTION_PACKAGES,
       workspaceDependencies:

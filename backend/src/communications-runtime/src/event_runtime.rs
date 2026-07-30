@@ -60,7 +60,7 @@ use crate::{
         CallEvidenceClientRealtimeErrorV1, CallEvidenceClientRealtimePublisherV1,
     },
     canonical_outbox::CanonicalEventContextV1,
-    client_port::dispatch_module_client_request_v1,
+    client_port::{CommunicationsClientRequestDependenciesV1, dispatch_module_client_request_v1},
     consumer::{
         CommunicationsDeliveryErrorV1, CommunicationsEventConsumeErrorV1,
         consume_next_observation_v1,
@@ -237,13 +237,16 @@ impl ManagedControlRequestDispatcherV2<UnixStream> for CommunicationsNestedReque
             Some(Operation::ClientDelivery(delivery)) => match delivery.request {
                 Some(request) if validate_module_client_request_v1(&request).is_ok() => {
                     let mut reject_nested_request = RejectManagedControlRequestsV2;
+                    let dependencies = CommunicationsClientRequestDependenciesV1 {
+                        persistence: self.persistence,
+                        call_evidence_persistence: self.call_evidence_persistence,
+                        logical_human_owner_id: self.logical_owner_id,
+                        tickets: self.content_tickets,
+                    };
                     let response = tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(
                             dispatch_module_client_request_v1(
-                                self.persistence,
-                                self.call_evidence_persistence,
-                                self.logical_owner_id,
-                                self.content_tickets,
+                                &dependencies,
                                 self.search_access,
                                 channel,
                                 &mut reject_nested_request,
@@ -592,11 +595,14 @@ impl CommunicationsEventRuntimeV1 {
             .inner_mut()
             .set_nonblocking(false)
             .map_err(|_| unavailable_at("client_blocking"))?;
+        let dependencies = CommunicationsClientRequestDependenciesV1 {
+            persistence: &self.persistence,
+            call_evidence_persistence: &self.call_evidence_persistence,
+            logical_human_owner_id: &self.logical_human_owner_id,
+            tickets: &self.content_tickets,
+        };
         let response = dispatch_module_client_request_v1(
-            &self.persistence,
-            &self.call_evidence_persistence,
-            &self.logical_human_owner_id,
-            &self.content_tickets,
+            &dependencies,
             &mut self.search_access,
             &mut self.control_channel,
             &mut nested_dispatcher,

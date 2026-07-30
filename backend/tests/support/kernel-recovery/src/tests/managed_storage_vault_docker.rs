@@ -150,6 +150,10 @@ mod mail_operational_flow;
 mod mail_smtp_fixture;
 #[path = "managed_storage_vault_docker/mail_sync_health_flow.rs"]
 mod mail_sync_health_flow;
+#[path = "managed_storage_vault_docker/review_attention_managed_flow.rs"]
+mod review_attention_managed_flow;
+#[path = "managed_storage_vault_docker/review_attention_managed_setup.rs"]
+mod review_attention_managed_setup;
 use mail_attachment_flow::*;
 use mail_delivery_test_support::*;
 use mail_event_flow::*;
@@ -157,6 +161,7 @@ use mail_gmail_fixture::*;
 use mail_gmail_oauth_fixture::*;
 use mail_imap_fixture::*;
 use mail_smtp_fixture::*;
+use review_attention_managed_setup::*;
 #[path = "managed_storage_vault_docker/call_evidence_managed_flow.rs"]
 mod call_evidence_managed_flow;
 #[path = "managed_storage_vault_docker/telegram_managed_flow.rs"]

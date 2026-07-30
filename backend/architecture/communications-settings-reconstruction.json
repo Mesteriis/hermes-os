@@ -630,7 +630,7 @@
       "gate": "review_communications_attention_v1",
       "role": "domain",
       "owner": "review",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["communications_canonical_read_v2"]
     },
     {

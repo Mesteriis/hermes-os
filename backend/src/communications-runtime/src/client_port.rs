@@ -41,11 +41,15 @@ use crate::sender_insights_port::{
 
 const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
 
-pub async fn dispatch_module_client_request_v1(
-    persistence: &CommunicationsDurablePersistence,
-    call_evidence_persistence: &CommunicationsCallEvidencePersistenceV1,
-    logical_human_owner_id: &str,
-    tickets: &Arc<CommunicationsContentTicketStoreV1>,
+pub(crate) struct CommunicationsClientRequestDependenciesV1<'a> {
+    pub(crate) persistence: &'a CommunicationsDurablePersistence,
+    pub(crate) call_evidence_persistence: &'a CommunicationsCallEvidencePersistenceV1,
+    pub(crate) logical_human_owner_id: &'a str,
+    pub(crate) tickets: &'a Arc<CommunicationsContentTicketStoreV1>,
+}
+
+pub(crate) async fn dispatch_module_client_request_v1(
+    dependencies: &CommunicationsClientRequestDependenciesV1<'_>,
     search_access: &mut CommunicationsSearchAccessV1,
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
     nested_dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
@@ -56,15 +60,15 @@ pub async fn dispatch_module_client_request_v1(
         == Some(&communications_call_evidence_query_contract_reference_v1())
     {
         handle_call_evidence_client_request_v1(
-            call_evidence_persistence,
-            logical_human_owner_id,
+            dependencies.call_evidence_persistence,
+            dependencies.logical_human_owner_id,
             &encoded,
         )
         .await
         .map_err(map_call_evidence_error)
     } else if request.contract.as_ref() == Some(&communications_query_contract_reference_v1()) {
         handle_module_query_request_v1(
-            persistence,
+            dependencies.persistence,
             search_access,
             control_channel,
             nested_dispatcher,
@@ -75,20 +79,28 @@ pub async fn dispatch_module_client_request_v1(
     } else if request.contract.as_ref()
         == Some(&communications_content_ticket_contract_reference_v1())
     {
-        handle_module_content_ticket_request_v1(persistence, tickets, &encoded)
-            .await
-            .map_err(map_ticket_error)
+        handle_module_content_ticket_request_v1(
+            dependencies.persistence,
+            dependencies.tickets,
+            &encoded,
+        )
+        .await
+        .map_err(map_ticket_error)
     } else if request.contract.as_ref()
         == Some(&communications_content_read_contract_reference_v1())
     {
-        handle_module_content_blob_request_v1(persistence, tickets, &encoded)
-            .await
-            .map_err(map_blob_error)
+        handle_module_content_blob_request_v1(
+            dependencies.persistence,
+            dependencies.tickets,
+            &encoded,
+        )
+        .await
+        .map_err(map_blob_error)
     } else if request.contract.as_ref()
         == Some(&communications_saved_search_contract_reference_v1())
     {
         handle_module_saved_search_request_v1(
-            persistence,
+            dependencies.persistence,
             search_access,
             control_channel,
             nested_dispatcher,
@@ -99,7 +111,7 @@ pub async fn dispatch_module_client_request_v1(
     } else if request.contract.as_ref()
         == Some(&communications_sender_insights_contract_reference_v1())
     {
-        handle_module_sender_insights_request_v1(persistence, &encoded)
+        handle_module_sender_insights_request_v1(dependencies.persistence, &encoded)
             .await
             .map_err(map_sender_insights_error)
     } else {

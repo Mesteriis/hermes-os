@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_communications_attention_release_assembly_v1",
+    "currentSlice": "review_communications_attention_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -6350,7 +6350,8 @@
         "mail.sync.v1",
         "review.communication-attention.command.v1",
         "review.communication-attention.query.v1",
-        "review.communication-attention.realtime.v1"
+        "review.communication-attention.realtime.v1",
+        "review.communication-attention.storage.v1"
       ]
     },
     "kernelProfile": {

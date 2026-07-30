@@ -78,7 +78,10 @@ impl ReviewAttentionPersistenceV1 {
             ))
             .connect_with(options)
             .await
-            .map_err(|_| ReviewAttentionPersistenceErrorV1::StorageUnavailable)?;
+            .map_err(|error| {
+                report_developer_database_error("connect", &error);
+                ReviewAttentionPersistenceErrorV1::StorageUnavailable
+            })?;
         Ok(Self { pool })
     }
 
@@ -87,7 +90,10 @@ impl ReviewAttentionPersistenceV1 {
             .fetch_one(&self.pool)
             .await
             .map(|_| ())
-            .map_err(|_| ReviewAttentionPersistenceErrorV1::StorageUnavailable)
+            .map_err(|error| {
+                report_developer_database_error("readiness", &error);
+                ReviewAttentionPersistenceErrorV1::StorageUnavailable
+            })
     }
 
     pub async fn apply_operation(
@@ -167,6 +173,17 @@ impl ReviewAttentionPersistenceV1 {
             replayed: false,
         })
     }
+}
+
+fn report_developer_database_error(stage: &str, error: &sqlx::Error) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_none() {
+        return;
+    }
+    let code = error
+        .as_database_error()
+        .and_then(sqlx::error::DatabaseError::code)
+        .unwrap_or(std::borrow::Cow::Borrowed("transport"));
+    eprintln!("developer_review_attention_database_error stage={stage} code={code}");
 }
 
 async fn load_attention_for_update(

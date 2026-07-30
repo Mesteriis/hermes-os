@@ -46,6 +46,7 @@ impl ReviewAttentionPersistenceV1 {
              ORDER BY realtime_sequence ASC
              LIMIT $3",
         )
+        .bind(logical_owner_id)
         .bind(after_sequence.map(signed).transpose()?)
         .bind(i64::from(limit))
         .fetch_all(&self.pool)

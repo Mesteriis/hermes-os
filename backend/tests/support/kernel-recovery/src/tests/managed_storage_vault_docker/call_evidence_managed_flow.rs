@@ -245,13 +245,12 @@ fn wait_for_call_evidence(
 ) -> Vec<CallEvidenceSummaryV1> {
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
-        if let Some(evidence) = query_call_evidence(router, runtime, cookie) {
-            if evidence
+        if let Some(evidence) = query_call_evidence(router, runtime, cookie)
+            && evidence
                 .iter()
                 .any(|item| !excluded_ids.contains(&item.call_evidence_id))
-            {
-                return evidence;
-            }
+        {
+            return evidence;
         }
         assert!(
             std::time::Instant::now() < deadline,

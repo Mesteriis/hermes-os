@@ -4,8 +4,12 @@ use hermes_review_attention_api::{REVIEW_ATTENTION_MODULE_ID_V1, REVIEW_ATTENTIO
 use hermes_review_attention_persistence::{
     ReviewAttentionPersistenceErrorV1, ReviewAttentionPersistenceV1,
 };
+use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
 use hermes_runtime_protocol::{
-    managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
+    managed_control::{
+        ManagedControlChannelV2, ManagedControlRequestDispatcherV2, ManagedControlTransportErrorV2,
+        RejectManagedControlRequestsV2,
+    },
     v1::{
         ManagedRuntimeClientDeliveryResponseV1, ManagedRuntimeControlResponseV1,
         ManagedRuntimeReadyRequestV1, ManagedStorageRuntimeConfigurationV1, ModuleClientRequestV1,
@@ -30,6 +34,8 @@ use crate::{
     realtime::{ReviewAttentionRealtimeErrorV1, ReviewAttentionRealtimePublisherV1},
 };
 
+const MAX_NESTED_REALTIME_PASSES_V1: u8 = 8;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReviewAttentionRuntimeAdmissionV1 {
     pub logical_owner_id: String,
@@ -53,6 +59,54 @@ pub struct ReviewAttentionManagedRuntimeV1 {
     control_channel: ManagedControlChannelV2<UnixStream>,
     persistence: ReviewAttentionPersistenceV1,
     realtime: ReviewAttentionRealtimePublisherV1,
+}
+
+struct ReviewAttentionNestedRequestDispatcherV1<'a> {
+    persistence: &'a ReviewAttentionPersistenceV1,
+    admission: &'a ReviewAttentionRuntimeAdmissionV1,
+    publish_realtime_requested: bool,
+}
+
+impl ManagedControlRequestDispatcherV2<UnixStream>
+    for ReviewAttentionNestedRequestDispatcherV1<'_>
+{
+    fn dispatch_request(
+        &mut self,
+        channel: &mut ManagedControlChannelV2<UnixStream>,
+        correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+        request: hermes_runtime_protocol::v1::ManagedRuntimeControlRequestV1,
+    ) -> Result<(), ManagedControlTransportErrorV2> {
+        let response = match request.operation {
+            Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+                Some(request) if validate_module_client_request_v1(&request).is_ok() => {
+                    let (response, publish_realtime) = tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(dispatch_client(
+                            self.persistence,
+                            self.admission,
+                            request,
+                        ))
+                    });
+                    self.publish_realtime_requested |= publish_realtime;
+                    client_delivery_response(response)
+                }
+                Some(request) => client_delivery_response(ModuleClientResponseV1 {
+                    protocol_major: 1,
+                    request_id: request.request_id,
+                    response_payload: Vec::new(),
+                    error_code: "REJECTED".to_owned(),
+                }),
+                None => ManagedRuntimeControlResponseV1 {
+                    result: None,
+                    error_code: "managed_runtime_control_invalid_client_delivery".to_owned(),
+                },
+            },
+            _ => ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: "managed_runtime_control_unexpected_request".to_owned(),
+            },
+        };
+        channel.write_response(correlation_id, response)
+    }
 }
 
 impl ReviewAttentionManagedRuntimeV1 {
@@ -98,11 +152,11 @@ impl ReviewAttentionManagedRuntimeV1 {
             password,
         )
         .await
-        .map_err(ReviewAttentionManagedRuntimeErrorV1::Persistence)?;
+        .map_err(|error| persistence_error_at("connect", error))?;
         persistence
             .verify_storage_ready()
             .await
-            .map_err(ReviewAttentionManagedRuntimeErrorV1::Persistence)?;
+            .map_err(|error| persistence_error_at("readiness", error))?;
         let mut control_channel = leases.into_route_port().into_channel();
         let mut realtime = ReviewAttentionRealtimePublisherV1::default();
         let mut dispatcher = RejectManagedControlRequestsV2;
@@ -114,7 +168,7 @@ impl ReviewAttentionManagedRuntimeV1 {
                 &admission.logical_human_owner_id,
             )
             .await
-            .map_err(realtime_error)?;
+            .map_err(|error| realtime_error_at("replay", error))?;
         signal_ready(&mut control_channel, admission)?;
         Ok(Self {
             admission: admission.clone(),
@@ -168,18 +222,41 @@ impl ReviewAttentionManagedRuntimeV1 {
             .write_response(correlation_id, response)
             .map_err(|_| ReviewAttentionManagedRuntimeErrorV1::Unavailable)?;
         if publish_realtime {
-            let mut dispatcher = RejectManagedControlRequestsV2;
-            self.realtime
-                .publish_pending(
-                    &self.persistence,
-                    &mut self.control_channel,
-                    &mut dispatcher,
-                    &self.admission.logical_human_owner_id,
-                )
-                .await
-                .map_err(realtime_error)?;
+            for pass in 1..=MAX_NESTED_REALTIME_PASSES_V1 {
+                let mut dispatcher = ReviewAttentionNestedRequestDispatcherV1 {
+                    persistence: &self.persistence,
+                    admission: &self.admission,
+                    publish_realtime_requested: false,
+                };
+                self.realtime
+                    .publish_pending(
+                        &self.persistence,
+                        &mut self.control_channel,
+                        &mut dispatcher,
+                        &self.admission.logical_human_owner_id,
+                    )
+                    .await
+                    .map_err(realtime_error)?;
+                if !dispatcher.publish_realtime_requested {
+                    return Ok(true);
+                }
+                if pass == MAX_NESTED_REALTIME_PASSES_V1 {
+                    return Err(ReviewAttentionManagedRuntimeErrorV1::Unavailable);
+                }
+            }
         }
         Ok(true)
+    }
+}
+
+fn client_delivery_response(response: ModuleClientResponseV1) -> ManagedRuntimeControlResponseV1 {
+    ManagedRuntimeControlResponseV1 {
+        result: Some(ControlResult::ClientDelivery(
+            ManagedRuntimeClientDeliveryResponseV1 {
+                response: Some(response),
+            },
+        )),
+        error_code: String::new(),
     }
 }
 
@@ -188,11 +265,7 @@ async fn dispatch_client(
     admission: &ReviewAttentionRuntimeAdmissionV1,
     request: ModuleClientRequestV1,
 ) -> (ModuleClientResponseV1, bool) {
-    let valid_identity = request.protocol_major == 1
-        && request.module_id == REVIEW_ATTENTION_MODULE_ID_V1
-        && request.owner_id == REVIEW_ATTENTION_OWNER_V1
-        && request.logical_owner_id == admission.logical_human_owner_id;
-    let (payload, accepted, publish_realtime) = if !valid_identity {
+    let (payload, accepted, publish_realtime) = if !valid_client_identity(&request, admission) {
         (Vec::new(), false, false)
     } else if request.contract.as_ref() == Some(&review_attention_command_contract_v1()) {
         (
@@ -231,6 +304,16 @@ async fn dispatch_client(
     };
     debug_assert!(validate_module_client_response_v1(&response).is_ok());
     (response, publish_realtime)
+}
+
+fn valid_client_identity(
+    request: &ModuleClientRequestV1,
+    admission: &ReviewAttentionRuntimeAdmissionV1,
+) -> bool {
+    request.protocol_major == 1
+        && request.module_id == REVIEW_ATTENTION_MODULE_ID_V1
+        && request.owner_id == REVIEW_ATTENTION_OWNER_V1
+        && request.logical_owner_id == admission.logical_human_owner_id
 }
 
 fn validate_admission(
@@ -376,6 +459,26 @@ fn realtime_error(error: ReviewAttentionRealtimeErrorV1) -> ReviewAttentionManag
     }
 }
 
+fn realtime_error_at(
+    stage: &str,
+    error: ReviewAttentionRealtimeErrorV1,
+) -> ReviewAttentionManagedRuntimeErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_review_attention_runtime_error stage={stage} kind={error:?}");
+    }
+    realtime_error(error)
+}
+
+fn persistence_error_at(
+    stage: &str,
+    error: ReviewAttentionPersistenceErrorV1,
+) -> ReviewAttentionManagedRuntimeErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_review_attention_runtime_error stage={stage} kind={error:?}");
+    }
+    ReviewAttentionManagedRuntimeErrorV1::Persistence(error)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -397,5 +500,25 @@ mod tests {
             validate_admission(&invalid),
             Err(ReviewAttentionManagedRuntimeErrorV1::Admission)
         );
+    }
+
+    #[test]
+    fn client_identity_rejects_a_different_human_owner() {
+        let admission = ReviewAttentionRuntimeAdmissionV1 {
+            logical_owner_id: REVIEW_ATTENTION_OWNER_V1.to_owned(),
+            logical_human_owner_id: "owner-1".to_owned(),
+            registration_id: "review-registration".to_owned(),
+            runtime_instance_id: "runtime-1".to_owned(),
+            runtime_generation: 1,
+            grant_epoch: 1,
+        };
+        let request = ModuleClientRequestV1 {
+            protocol_major: 1,
+            module_id: REVIEW_ATTENTION_MODULE_ID_V1.to_owned(),
+            owner_id: REVIEW_ATTENTION_OWNER_V1.to_owned(),
+            logical_owner_id: "owner-2".to_owned(),
+            ..Default::default()
+        };
+        assert!(!valid_client_identity(&request, &admission));
     }
 }
