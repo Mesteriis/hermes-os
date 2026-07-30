@@ -36,7 +36,8 @@ workflow gate сам по себе.
 - [ADR-0282](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
 - [ADR-0330](ADR-0330-provider-neutral-communication-delivery-intent-workflow.md);
 - [ADR-0333](ADR-0333-delivery-intent-target-bound-blob-materialization.md);
-- [ADR-0339](ADR-0339-capability-routed-module-request-rpc.md).
+- [ADR-0339](ADR-0339-capability-routed-module-request-rpc.md);
+- [ADR-0343](ADR-0343-capability-routed-blob-custody-release.md).
 
 ## Контекст
 
