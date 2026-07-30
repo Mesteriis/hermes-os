@@ -17,7 +17,7 @@ bounds, cancellation-race policy и owner-local Storage bundle. Persistence
 operation. Создание operation
 и Ensure outbox атомарно, Cancel revision-fenced и атомарен со своим outbox,
 Scheduler result дедуплицируется по inbox ID/hash до mutation. Encrypted Blob
-custody materialization ещё не подключён. Persistence теперь также предоставляет
+custody receipt используется затем для one-use due execution. Persistence также предоставляет
 bounded exact Scheduler command/receipt outbox relay с hash-bound idempotent
 publication, owner-scoped Status с authoritative created/updated timestamps и
 атомарный replayable client-realtime transition log. Due command уже atomically проходит
@@ -43,7 +43,10 @@ Schedule/Cancel/Status routing и cursor-based client realtime publication в
 по ADR-0345. Runtime также получает fenced Event Hub credential, публикует exact
 Scheduler command/receipt outbox и принимает correlated schedule results только
 если causation ссылается на owner-local сохранённый command. Due-command
-execution, assembly, release admission и live end-to-end contour ещё не
+execution подключён к отдельным execution/runtime/store adapter units: exact
+Scheduler command декодируется до claim, Retryable не подтверждает JetStream
+delivery, а accepted/rejected подтверждает его только после durable terminal
+receipt. Assembly, release admission и live end-to-end contour ещё не
 реализованы. Этот ADR не открывает workflow gate сам по себе.
 
 Уточняет:

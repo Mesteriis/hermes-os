@@ -1832,11 +1832,19 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communication-delayed-delivery-execution",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-communication-delayed-delivery-persistence",
           "kind": "normal"
         },
         {
           "name": "hermes-communication-delayed-delivery-runtime-adapters",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-delayed-delivery-store-adapters",
           "kind": "normal"
         },
         {

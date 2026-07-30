@@ -4,6 +4,7 @@ mod admission;
 mod client_port;
 mod client_realtime;
 mod contracts;
+mod due_execution;
 mod managed_runtime;
 pub mod scheduler_outbox;
 mod scheduler_results;

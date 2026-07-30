@@ -43,6 +43,7 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     runtimeClientRealtime,
     runtimeSchedulerOutbox,
     runtimeSchedulerResults,
+    runtimeDueExecution,
     managedRuntime,
     runtimeMain,
     methodRoutingAdr,
@@ -268,6 +269,13 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     ),
     readFile(
       new URL(
+        'src/communication-delayed-delivery-runtime/src/due_execution.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-delayed-delivery-runtime/src/managed_runtime.rs',
         BACKEND_ROOT,
       ),
@@ -435,14 +443,20 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(runtimeSchedulerOutbox, /mark_scheduler_message_published/);
   assert.match(runtimeSchedulerResults, /scheduler_result_causation_id_v1/);
   assert.match(runtimeSchedulerResults, /owns_scheduler_command/);
+  assert.match(runtimeDueExecution, /decode_delayed_delivery_due_command_v1/);
+  assert.match(runtimeDueExecution, /execute_due_delivery_v1/);
+  assert.match(runtimeDueExecution, /DelayedDeliveryExecutionOutcomeV1::Retryable/);
+  assert.match(runtimeDueExecution, /\.acknowledge\(\)/);
+  assert.match(runtimeDueExecution, /build_delayed_delivery_terminal_receipt_v1/);
   assert.match(managedRuntime, /Operation::ClientDelivery/);
   assert.match(managedRuntime, /pump_client_realtime_once/);
+  assert.match(managedRuntime, /consume_due_delivery_once/);
   assert.match(runtimeMain, /serve-inherited/);
   assert.match(runtimeMain, /as_millis/);
   assert.match(methodRoutingAdr, /Schedule -> communication\.delayed_delivery\.schedule@1/);
   assert.match(methodRoutingAdr, /Cancel   -> communication\.delayed_delivery\.cancel@1/);
   assert.doesNotMatch(
-    `${runtimeAdmission}\n${runtimeClientPort}\n${runtimeClientRealtime}\n${managedRuntime}`,
+    `${runtimeAdmission}\n${runtimeClientPort}\n${runtimeClientRealtime}\n${runtimeDueExecution}\n${managedRuntime}`,
     /setInterval|polling|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
   );
   for (const source of [executionSource, executionPorts, executionWorker]) {

@@ -45,6 +45,10 @@ use crate::{
         delayed_delivery_cancel_command_contract_v1, delayed_delivery_query_contract_v1,
         delayed_delivery_schedule_command_contract_v1,
     },
+    due_execution::{
+        DelayedDeliveryDueExecutionContextV1, DelayedDeliveryDueExecutionErrorV1,
+        consume_due_delivery_v1,
+    },
     scheduler_outbox::{
         DelayedDeliverySchedulerOutboxErrorV1, relay_scheduler_commands_v1,
         relay_scheduler_receipts_v1,
@@ -76,7 +80,7 @@ pub struct DelayedDeliveryManagedRuntimeV1 {
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
     schedule_result_subscription: RuntimeSubscribePermitV1,
-    _due_subscription: RuntimeSubscribePermitV1,
+    due_subscription: RuntimeSubscribePermitV1,
     client_realtime: DelayedDeliveryClientRealtimePublisherV1,
 }
 
@@ -200,7 +204,7 @@ impl DelayedDeliveryManagedRuntimeV1 {
             event_connection,
             event_publish_permit,
             schedule_result_subscription,
-            _due_subscription: due_subscription,
+            due_subscription,
             client_realtime,
         })
     }
@@ -344,6 +348,37 @@ impl DelayedDeliveryManagedRuntimeV1 {
         )
         .await
         .map_err(scheduler_result_error)
+    }
+
+    pub async fn consume_due_delivery_once(
+        &mut self,
+        now_unix_millis: u64,
+    ) -> Result<bool, DelayedDeliveryManagedRuntimeErrorV1> {
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Unavailable)?;
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let result = consume_due_delivery_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.due_subscription,
+            &mut self.control_channel,
+            &mut dispatcher,
+            &DelayedDeliveryDueExecutionContextV1 {
+                logical_owner_id: self.admission.logical_owner_id.clone(),
+                runtime_instance_id: runtime_source_reference(&self.admission.runtime_instance_id),
+                runtime_generation: self.admission.runtime_generation,
+                grant_epoch: self.admission.grant_epoch,
+            },
+            now_unix_millis,
+        )
+        .await;
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Unavailable)?;
+        result.map_err(due_execution_error)
     }
 }
 
@@ -591,6 +626,20 @@ fn scheduler_result_error(
             DelayedDeliveryManagedRuntimeErrorV1::Persistence(error)
         }
         DelayedDeliverySchedulerResultErrorV1::EventUnavailable => {
+            DelayedDeliveryManagedRuntimeErrorV1::Unavailable
+        }
+    }
+}
+
+fn due_execution_error(
+    error: DelayedDeliveryDueExecutionErrorV1,
+) -> DelayedDeliveryManagedRuntimeErrorV1 {
+    match error {
+        DelayedDeliveryDueExecutionErrorV1::InvalidCommand => {
+            DelayedDeliveryManagedRuntimeErrorV1::InvalidTransition
+        }
+        DelayedDeliveryDueExecutionErrorV1::Store(_)
+        | DelayedDeliveryDueExecutionErrorV1::EventUnavailable => {
             DelayedDeliveryManagedRuntimeErrorV1::Unavailable
         }
     }

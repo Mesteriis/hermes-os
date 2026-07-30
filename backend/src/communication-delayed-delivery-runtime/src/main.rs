@@ -130,6 +130,11 @@ where
             Err(DelayedDeliveryManagedRuntimeErrorV1::Persistence(_)) => {}
             Err(error) => return Err(runtime_error(error)),
         }
+        match executor.block_on(runtime.consume_due_delivery_once(now)) {
+            Ok(_) | Err(DelayedDeliveryManagedRuntimeErrorV1::Unavailable) => {}
+            Err(DelayedDeliveryManagedRuntimeErrorV1::Persistence(_)) => {}
+            Err(error) => return Err(runtime_error(error)),
+        }
         match executor.block_on(runtime.pump_client_realtime_once()) {
             Ok(_) | Err(DelayedDeliveryManagedRuntimeErrorV1::Unavailable) => {}
             Err(DelayedDeliveryManagedRuntimeErrorV1::Persistence(_)) => {}
