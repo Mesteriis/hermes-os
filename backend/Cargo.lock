@@ -1773,6 +1773,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-cross-channel-forward-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-communication-cross-channel-forward-core"
+version = "0.1.0"
+
+[[package]]
 name = "hermes-communication-delayed-delivery-api"
 version = "0.1.0"
 dependencies = [

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_delayed_delivery_assembly_v1",
+    "currentSlice": "communication_cross_channel_forward_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -630,6 +630,18 @@
         "role": "workflow",
         "owner": "communication_delayed_delivery",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-communication-cross-channel-forward-api",
+        "role": "workflow",
+        "owner": "communication_cross_channel_forward",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-cross-channel-forward-core",
+        "role": "workflow",
+        "owner": "communication_cross_channel_forward",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1895,7 +1907,9 @@
           "name": "hermes-storage-protocol",
           "kind": "normal"
         }
-      ]
+      ],
+      "hermes-communication-cross-channel-forward-api": [],
+      "hermes-communication-cross-channel-forward-core": []
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-events-protocol": [
@@ -4931,7 +4945,42 @@
           "defaultFeatures": true,
           "features": []
         }
-      ]
+      ],
+      "hermes-communication-cross-channel-forward-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communication-cross-channel-forward-core": []
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -5365,6 +5414,14 @@
       },
       "hermes-communication-delayed-delivery-assembly": {
         "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-cross-channel-forward-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communication-cross-channel-forward-core": {
+        "primaryKind": "lib",
         "customBuildAllowed": false
       }
     },
