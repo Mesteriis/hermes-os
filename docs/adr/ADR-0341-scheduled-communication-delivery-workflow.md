@@ -48,7 +48,8 @@ Scheduler command декодируется до claim, Retryable не подтв
 delivery, а accepted/rejected подтверждает его только после durable terminal
 receipt. Отдельная assembly unit материализует runtime binary, exact descriptor,
 settings schema и Storage bundle как unsigned release fragment без runtime
-поведения. Release admission и live end-to-end contour ещё не реализованы.
+поведения. Development release compiler принимает этот exact fragment в общий
+подписываемый distribution input. Live end-to-end contour ещё не реализован.
 Этот ADR не открывает workflow gate сам по себе.
 
 Уточняет:

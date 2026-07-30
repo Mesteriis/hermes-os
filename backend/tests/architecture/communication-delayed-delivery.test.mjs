@@ -49,6 +49,7 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     assemblyManifest,
     assemblySource,
     assemblyMain,
+    developmentReleaseScript,
     methodRoutingAdr,
   ] = await Promise.all([
     readFile(
@@ -309,6 +310,7 @@ test('delayed delivery admits exact due commands in a separate adapter while its
       ),
       'utf8',
     ),
+    readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL(
         'docs/adr/ADR-0345-method-exact-delayed-delivery-client-command-routing.md',
@@ -486,6 +488,14 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(assemblySource, /communication_delayed_delivery\.storage\.v1/);
   assert.match(assemblySource, /write_new_private_file/);
   assert.match(assemblyMain, /--runtime/);
+  assert.match(
+    developmentReleaseScript,
+    /--package hermes-communication-delayed-delivery-assembly/,
+  );
+  assert.match(
+    developmentReleaseScript,
+    /communication_delayed_delivery\.release-artifacts\.json/,
+  );
   assert.doesNotMatch(
     `${assemblySource}\n${assemblyMain}`,
     /scheduler_(?:implementation|persistence)|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
