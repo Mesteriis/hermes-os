@@ -1878,7 +1878,7 @@ impl SchedulerRecoveryFixture {
         let runtime_dir = self.root.join("runtime");
         let kernel = self.release.kernel().to_path_buf();
         std::thread::spawn(move || {
-            scheduler_lifecycle::serve(store, &kernel, &runtime_dir, shutdown, supervisor)
+            scheduler_lifecycle::serve(store, &kernel, &runtime_dir, shutdown, supervisor, None)
         })
     }
 

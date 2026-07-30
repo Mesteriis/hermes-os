@@ -26,6 +26,7 @@ use hermes_scheduler_persistence::{
     SchedulerDispatchAdmissionV1, SchedulerMaterializationSourceV1, SchedulerPostgresEndpointV1,
     SchedulerPostgresStoreV1, scheduler_storage_binding_from_runtime,
 };
+use hermes_scheduler_protocol::SCHEDULER_RUNTIME_MODULE_ID_V1;
 use hermes_storage_vault::{StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1};
 use prost::Message;
 
@@ -39,6 +40,8 @@ use super::{
 };
 
 const CONTROL_IDLE: Duration = Duration::from_millis(25);
+const STORAGE_CONNECT_ATTEMPTS: u8 = 120;
+const STORAGE_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(250);
 
 pub(crate) fn serve_inherited(
     descriptor_bytes: Vec<u8>,
@@ -61,7 +64,7 @@ pub(crate) fn serve_inherited(
     let control_store = dependencies.store.clone();
     let runtime_instance_id = runtime_instance_id(&configuration.runtime_instance_id)?;
     let schedule_control_configuration = SchedulerScheduleControlWorkerConfigV1::from_runtime(
-        identity.registration_id(),
+        SCHEDULER_RUNTIME_MODULE_ID_V1,
         runtime_instance_id,
         identity.runtime_generation(),
         configuration.schedule_control.as_ref(),
@@ -193,10 +196,16 @@ async fn connect_storage(
     let endpoint =
         SchedulerPostgresEndpointV1::new(storage.pgbouncer_host.clone(), storage.pgbouncer_port)
             .map_err(|_| "Scheduler Storage endpoint is invalid".to_owned())?;
-    let store = SchedulerPostgresStoreV1::connect_runtime(&binding, &endpoint, password)
-        .await
-        .map_err(|_| "Scheduler Storage is unavailable".to_owned())?;
-    Ok(store)
+    for attempt in 1..=STORAGE_CONNECT_ATTEMPTS {
+        match SchedulerPostgresStoreV1::connect_runtime(&binding, &endpoint, password).await {
+            Ok(store) => return Ok(store),
+            Err(_) if attempt < STORAGE_CONNECT_ATTEMPTS => {
+                tokio::time::sleep(STORAGE_CONNECT_RETRY_DELAY).await;
+            }
+            Err(_) => return Err("Scheduler Storage is unavailable".to_owned()),
+        }
+    }
+    Err("Scheduler Storage is unavailable".to_owned())
 }
 
 async fn connect_dispatch_port(

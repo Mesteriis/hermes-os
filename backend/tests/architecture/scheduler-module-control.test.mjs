@@ -6,7 +6,7 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
 test('module-originated Scheduler control keeps its gate planned while protocol and persistence foundations are exact', async () => {
-  const [adr, inventorySource, proto, validation, runtimeContract, admission, mapping, resultEnvelope, migration, authorityMigration, persistence, jetstream, runtimeWorker, kernelTopology, eventCatalog, development, manifest] = await Promise.all([
+  const [adr, inventorySource, proto, schedulerProtocol, validation, runtimeContract, admission, mapping, resultEnvelope, migration, authorityMigration, persistence, schedulerConnection, jetstream, runtimeWorker, schedulerRuntimeControl, delayedDeliveryRuntime, delayedDeliverySchedulerResults, delayedDeliveryDueExecution, kernelTopology, schedulerLaunch, schedulerLifecycle, eventCatalog, development, manifest] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0342-module-originated-scheduler-control-events.md',
@@ -24,6 +24,13 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
     readFile(
       new URL(
         'src/platform/scheduler/protocol/proto/hermes/scheduler/v1/job_command.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/platform/scheduler/protocol/src/lib.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -86,6 +93,13 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
     ),
     readFile(
       new URL(
+        'src/platform/scheduler/persistence/src/store/connection.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/platform/scheduler/jetstream/src/transport/schedule_control.rs',
         BACKEND_ROOT,
       ),
@@ -100,7 +114,49 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
     ),
     readFile(
       new URL(
+        'src/platform/scheduler/runtime/src/control/runtime.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-runtime/src/managed_runtime.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-runtime/src/scheduler_results.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-runtime/src/due_execution.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/kernel/src/platform/scheduler/schedule_control.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/kernel/src/platform/scheduler/launch.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/kernel/src/platform/scheduler/lifecycle.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -142,6 +198,10 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
   assert.match(adr, /protocol, pure admission mapping и persistence foundation/);
   assert.match(adr, /DurableEnvelopeV1/);
   assert.match(proto, /message SchedulerScheduleControlCommandV1/);
+  assert.match(
+    schedulerProtocol,
+    /SCHEDULER_RUNTIME_MODULE_ID_V1: &str = "hermes-scheduler-runtime"/,
+  );
   assert.match(proto, /message SchedulerScheduleControlResultV1/);
   assert.match(proto, /EnsureOneShotScheduleV1 ensure_one_shot/);
   assert.match(proto, /CancelOneShotScheduleV1 cancel_one_shot/);
@@ -163,14 +223,58 @@ test('module-originated Scheduler control keeps its gate planned while protocol 
   assert.match(persistence, /exact_envelope_bytes/);
   assert.match(persistence, /SchedulerScheduleControlDecisionV1::TooLate/);
   assert.match(persistence, /ForeignAuthority/);
+  assert.doesNotMatch(schedulerConnection, /tokio::time::sleep/);
   assert.match(jetstream, /SchedulerJetStreamScheduleControlPortV1/);
   assert.match(runtimeWorker, /\.apply_schedule_control\(&request/);
   assert.match(runtimeWorker, /relay_results\(port, store\)\.await\?/);
+  assert.match(runtimeWorker, /admit_or_discard/);
   assert.match(runtimeWorker, /delivery\s*\.acknowledge\(\)\s*\.await/);
+  assert.doesNotMatch(runtimeWorker, /schedule_control_admission/);
+  assert.match(
+    schedulerRuntimeControl,
+    /SchedulerScheduleControlWorkerConfigV1::from_runtime\(\s*SCHEDULER_RUNTIME_MODULE_ID_V1,/,
+  );
+  assert.match(schedulerRuntimeControl, /STORAGE_CONNECT_ATTEMPTS: u8 = 120/);
+  assert.match(
+    schedulerRuntimeControl,
+    /STORAGE_CONNECT_RETRY_DELAY: Duration = Duration::from_millis\(250\)/,
+  );
+  assert.match(resultEnvelope, /module_id: source\.runtime_id\(\)\.to_owned\(\)/);
+  assert.match(
+    delayedDeliveryRuntime,
+    /u8::from_str_radix\(&runtime_instance_id\[index \* 2\.\.index \* 2 \+ 2\], 16\)/,
+  );
+  assert.doesNotMatch(
+    delayedDeliveryRuntime,
+    /Sha256::digest\(runtime_instance_id\.as_bytes\(\)\)/,
+  );
+  assert.match(
+    delayedDeliverySchedulerResults,
+    /discard_invalid_scheduler_result/,
+  );
+  assert.match(
+    delayedDeliverySchedulerResults,
+    /delivery\s*\.acknowledge\(\)\s*\.await/,
+  );
+  assert.match(delayedDeliveryDueExecution, /discard_invalid_due_command/);
+  assert.match(
+    delayedDeliveryDueExecution,
+    /delivery\s*\.acknowledge\(\)\s*\.await/,
+  );
   assert.match(kernelTopology, /current_managed_runtime_matches/);
   assert.match(kernelTopology, /command_publishers\.contains/);
   assert.match(kernelTopology, /result_consumers\.contains/);
   assert.match(kernelTopology, /scheduler_catalog::resolve/);
+  assert.match(schedulerLaunch, /topology_fingerprint/);
+  assert.match(schedulerLaunch, /schedule_control\.grants/);
+  assert.match(schedulerLaunch, /dispatch_publishers/);
+  assert.match(schedulerLaunch, /receipt_consumers/);
+  assert.match(schedulerLifecycle, /expected_topology_fingerprint/);
+  assert.match(schedulerLifecycle, /ReconcileOutcome::Refreshed/);
+  assert.match(schedulerLifecycle, /capture_active_topology_fingerprint/);
+  assert.match(schedulerLifecycle, /TOPOLOGY_STABLE_OBSERVATIONS/);
+  assert.match(schedulerLifecycle, /observe_stable_topology/);
+  assert.match(schedulerLifecycle, /successor::reserve/);
   assert.match(eventCatalog, /scheduler_dispatch_entries/);
   assert.match(eventCatalog, /module_scheduler_job_requests/);
   assert.match(eventCatalog, /SCHEDULER_DISPATCH_CAPABILITY_ID_V1/);

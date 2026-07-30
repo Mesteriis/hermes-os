@@ -9,9 +9,10 @@ use hermes_runtime_protocol::v1::{
     SchedulerRuntimeScheduleControlBindingV1, SchedulerRuntimeScheduleControlGrantV1,
 };
 use hermes_scheduler::{
-    SchedulerApprovedJobV1, SchedulerDispatchIdentityV1, SchedulerScheduleControlContractV1,
-    SchedulerScheduleControlGrantV1, SchedulerScheduleControlOperationV1,
-    admit_schedule_control_command_v1, build_schedule_control_result_envelope_v1,
+    SchedulerApprovedJobV1, SchedulerDispatchIdentityV1, SchedulerScheduleControlAdmissionErrorV1,
+    SchedulerScheduleControlContractV1, SchedulerScheduleControlGrantV1,
+    SchedulerScheduleControlOperationV1, admit_schedule_control_command_v1,
+    build_schedule_control_result_envelope_v1,
 };
 use hermes_scheduler_jetstream::SchedulerJetStreamScheduleControlPortV1;
 use hermes_scheduler_persistence::{
@@ -99,7 +100,6 @@ enum ScheduleControlWorkerFailureV1 {
     RelayResultPersistence,
     RelayResultPublisherUnavailable,
     Receive,
-    Admission,
     Clock,
     Request,
     Apply,
@@ -116,7 +116,6 @@ impl ScheduleControlWorkerFailureV1 {
                 "schedule_control_relay_result_publisher_unavailable"
             }
             Self::Receive => "schedule_control_receive",
-            Self::Admission => "schedule_control_admission",
             Self::Clock => "schedule_control_clock",
             Self::Request => "schedule_control_request",
             Self::Apply => "schedule_control_apply",
@@ -137,13 +136,15 @@ async fn run(
             .receive()
             .await
             .map_err(|_| ScheduleControlWorkerFailureV1::Receive)?;
-        let exact_bytes = delivery.exact_bytes().to_vec();
-        let admitted = admit_schedule_control_command_v1(
-            &exact_bytes,
+        let Some((delivery, admitted)) = admit_or_discard(
+            delivery,
             &configuration.command_contract,
             &configuration.grants,
         )
-        .map_err(|_| ScheduleControlWorkerFailureV1::Admission)?;
+        .await?
+        else {
+            continue;
+        };
         let reading = clock
             .read()
             .map_err(|_| ScheduleControlWorkerFailureV1::Clock)?;
@@ -176,6 +177,50 @@ async fn run(
             .acknowledge()
             .await
             .map_err(|_| ScheduleControlWorkerFailureV1::Acknowledge)?;
+    }
+}
+
+async fn admit_or_discard<D>(
+    delivery: D,
+    command_contract: &SchedulerScheduleControlContractV1,
+    grants: &[SchedulerScheduleControlGrantV1],
+) -> Result<
+    Option<(D, hermes_scheduler::SchedulerAdmittedScheduleControlV1)>,
+    ScheduleControlWorkerFailureV1,
+>
+where
+    D: SchedulerScheduleControlDeliveryV1,
+{
+    match admit_schedule_control_command_v1(delivery.exact_bytes(), command_contract, grants) {
+        Ok(admitted) => Ok(Some((delivery, admitted))),
+        Err(error) => {
+            // Invalid, foreign and stale-fenced broker input is untrusted data,
+            // not a Scheduler process failure. It receives no result authority,
+            // but must be acknowledged so one poison delivery cannot starve the
+            // exact durable consumer forever.
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!(
+                    "developer_scheduler_schedule_control_rejected={}",
+                    admission_error_code(error)
+                );
+            }
+            delivery
+                .acknowledge()
+                .await
+                .map_err(|_| ScheduleControlWorkerFailureV1::Acknowledge)?;
+            Ok(None)
+        }
+    }
+}
+
+const fn admission_error_code(error: SchedulerScheduleControlAdmissionErrorV1) -> &'static str {
+    match error {
+        SchedulerScheduleControlAdmissionErrorV1::InvalidEnvelope => "invalid_envelope",
+        SchedulerScheduleControlAdmissionErrorV1::InvalidContract => "invalid_contract",
+        SchedulerScheduleControlAdmissionErrorV1::InvalidGrant => "invalid_grant",
+        SchedulerScheduleControlAdmissionErrorV1::InvalidCommand => "invalid_command",
+        SchedulerScheduleControlAdmissionErrorV1::StaleFence => "stale_fence",
+        SchedulerScheduleControlAdmissionErrorV1::ForeignJobKind => "foreign_job_kind",
     }
 }
 
@@ -334,7 +379,28 @@ fn fixed<const N: usize>(value: &[u8]) -> Result<[u8; N], String> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     use super::*;
+
+    struct RejectedDeliveryV1 {
+        acknowledged: Arc<AtomicBool>,
+    }
+
+    impl SchedulerScheduleControlDeliveryV1 for RejectedDeliveryV1 {
+        fn exact_bytes(&self) -> &[u8] {
+            b"not-a-durable-envelope"
+        }
+
+        async fn acknowledge(
+            self,
+        ) -> Result<(), hermes_scheduler_protocol::SchedulerScheduleControlDeliveryErrorV1>
+        {
+            self.acknowledged.store(true, Ordering::Release);
+            Ok(())
+        }
+    }
 
     #[test]
     fn runtime_configuration_maps_exact_contract_and_grant_fences() {
@@ -400,5 +466,23 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn rejected_delivery_is_acknowledged_without_failing_the_worker() {
+        let acknowledged = Arc::new(AtomicBool::new(false));
+        let delivery = RejectedDeliveryV1 {
+            acknowledged: Arc::clone(&acknowledged),
+        };
+        let contract =
+            SchedulerScheduleControlContractV1::new(1, [7; 32]).expect("schedule-control contract");
+        let runtime = tokio::runtime::Runtime::new().expect("test runtime");
+
+        let outcome = runtime
+            .block_on(admit_or_discard(delivery, &contract, &[]))
+            .expect("rejected delivery is handled");
+
+        assert!(outcome.is_none());
+        assert!(acknowledged.load(Ordering::Acquire));
     }
 }

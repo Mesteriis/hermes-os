@@ -7,6 +7,7 @@ use hermes_events_protocol::{
     },
 };
 use hermes_scheduler_protocol::{
+    SCHEDULER_RUNTIME_MODULE_ID_V1,
     v1::{
         SchedulerScheduleControlCommandV1, SchedulerScheduleControlOutcomeV1,
         SchedulerScheduleControlResultV1,
@@ -175,7 +176,7 @@ pub fn decode_scheduler_result_v1(
         .source
         .as_ref()
         .map(|source| source.module_id.as_str())
-        != Some("hermes-scheduler-runtime")
+        != Some(SCHEDULER_RUNTIME_MODULE_ID_V1)
     {
         return Err(DelayedDeliverySchedulerAdapterErrorV1::WrongSource);
     }

@@ -9,6 +9,7 @@ use hermes_runtime_protocol::{
     validation::scheduler::validate_scheduler_runtime_configuration,
 };
 use prost::Message;
+use sha2::{Digest, Sha256};
 
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::platform::{
@@ -22,6 +23,72 @@ use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 const DISPATCH_BATCH_LIMIT: u32 = 32;
 const RECEIPT_BATCH_LIMIT: u32 = 32;
 const RECONCILE_INTERVAL_MILLIS: u32 = 1_000;
+
+pub(crate) fn topology_fingerprint(
+    store: &SqliteControlStore,
+    scheduler_registration_id: &str,
+    scheduler_grant_epoch: u64,
+) -> Result<[u8; 32], String> {
+    let event_topology = events_status::current_topology(store)?;
+    let contracts = catalog::resolve_contracts(store)?;
+    let topology = topology::plan(&contracts, &event_topology)?;
+    let schedule_control = super::schedule_control::derive(
+        store,
+        &contracts,
+        &topology,
+        scheduler_registration_id,
+        scheduler_grant_epoch,
+    )?;
+    let dispatch_publishers = topology::scheduler_dispatch_bindings(
+        &topology,
+        scheduler_registration_id,
+        scheduler_grant_epoch,
+    )
+    .map_err(|_| "Scheduler dispatch topology is unavailable".to_owned())?;
+    let receipt_consumers = topology::scheduler_receipt_bindings(
+        &topology,
+        scheduler_registration_id,
+        scheduler_grant_epoch,
+    )
+    .map_err(|_| "Scheduler receipt topology is unavailable".to_owned())?;
+    let mut digest = Sha256::new();
+    digest.update(b"hermes.scheduler.runtime-topology.v1");
+    digest.update(event_topology.revision().to_be_bytes());
+    digest.update(event_topology.credential_revision().to_be_bytes());
+    update_optional_message(
+        &mut digest,
+        b"schedule-control-binding",
+        schedule_control.binding.as_ref(),
+    );
+    for grant in &schedule_control.grants {
+        update_message(&mut digest, b"schedule-control-grant", grant);
+    }
+    for publisher in &dispatch_publishers {
+        update_message(&mut digest, b"dispatch-publisher", publisher);
+    }
+    for consumer in &receipt_consumers {
+        update_message(&mut digest, b"receipt-consumer", consumer);
+    }
+    Ok(digest.finalize().into())
+}
+
+fn update_optional_message<M: Message>(digest: &mut Sha256, label: &[u8], message: Option<&M>) {
+    match message {
+        Some(message) => update_message(digest, label, message),
+        None => update_bytes(digest, label, &[]),
+    }
+}
+
+fn update_message<M: Message>(digest: &mut Sha256, label: &[u8], message: &M) {
+    update_bytes(digest, label, &message.encode_to_vec());
+}
+
+fn update_bytes(digest: &mut Sha256, label: &[u8], bytes: &[u8]) {
+    digest.update((label.len() as u64).to_be_bytes());
+    digest.update(label);
+    digest.update((bytes.len() as u64).to_be_bytes());
+    digest.update(bytes);
+}
 
 /// Launches Scheduler only after its caller has durably reserved and bound the exact identity.
 pub(crate) fn start_from_reservation(
@@ -226,4 +293,39 @@ fn inherited_arguments(contracts: &StagedRuntimeContracts) -> Result<Vec<String>
         "--configuration-path".to_owned(),
         configuration.display().to_string(),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_runtime_protocol::v1::SchedulerRuntimeScheduleControlGrantV1;
+
+    use super::*;
+
+    #[test]
+    fn topology_digest_binds_the_source_runtime_generation() {
+        let mut first = SchedulerRuntimeScheduleControlGrantV1 {
+            source_module_id: "workflow".to_owned(),
+            source_runtime_instance_id: vec![3; 16],
+            source_runtime_generation: 1,
+            source_grant_epoch: 2,
+            source_owner: "workflow_owner".to_owned(),
+            job_owner: "workflow_owner".to_owned(),
+            job_name: "execute".to_owned(),
+            job_major: 1,
+            contract_name: "workflow_owner.execute".to_owned(),
+            contract_revision: 1,
+            contract_schema_sha256: vec![4; 32],
+        };
+        let first_digest = message_digest(&first);
+        first.source_runtime_generation = 2;
+
+        assert_ne!(first_digest, message_digest(&first));
+    }
+
+    fn message_digest(message: &impl Message) -> [u8; 32] {
+        let mut digest = Sha256::new();
+        digest.update(b"hermes.scheduler.runtime-topology.v1");
+        update_message(&mut digest, b"schedule-control-grant", message);
+        digest.finalize().into()
+    }
 }

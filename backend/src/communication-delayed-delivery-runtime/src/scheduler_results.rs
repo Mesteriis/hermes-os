@@ -7,7 +7,8 @@ use hermes_communication_delayed_delivery_persistence::{
     DelayedDeliveryPersistenceErrorV1, SchedulerScheduleResultV1,
 };
 use hermes_events_jetstream::{
-    RuntimeJetStreamConnection, RuntimeSubscribePermitV1, receive_runtime_pull_delivery,
+    RuntimeJetStreamConnection, RuntimePullDeliveryV1, RuntimeSubscribePermitV1,
+    receive_runtime_pull_delivery,
 };
 use hermes_scheduler_protocol::SCHEDULER_JOB_DESCRIPTOR_SET_V1;
 use sha2::{Digest, Sha256};
@@ -25,9 +26,11 @@ pub(crate) async fn consume_scheduler_result_v1(
     let delivery = receive_runtime_pull_delivery(connection, permit)
         .await
         .map_err(|_| DelayedDeliverySchedulerResultErrorV1::EventUnavailable)?;
-    let causation_id = scheduler_result_causation_id_v1(delivery.exact_bytes())
-        .map_err(|_| DelayedDeliverySchedulerResultErrorV1::InvalidResult)?;
-    let decoded = decode_scheduler_result_v1(
+    let causation_id = match scheduler_result_causation_id_v1(delivery.exact_bytes()) {
+        Ok(causation_id) => causation_id,
+        Err(_) => return discard_invalid_scheduler_result(delivery, "invalid_envelope").await,
+    };
+    let decoded = match decode_scheduler_result_v1(
         delivery.exact_bytes(),
         &DelayedDeliverySchedulerResultContextV1 {
             expected_command_message_id: causation_id,
@@ -35,8 +38,10 @@ pub(crate) async fn consume_scheduler_result_v1(
             contract_schema_sha256: Sha256::digest(SCHEDULER_JOB_DESCRIPTOR_SET_V1).into(),
             received_at_unix_millis,
         },
-    )
-    .map_err(|_| DelayedDeliverySchedulerResultErrorV1::InvalidResult)?;
+    ) {
+        Ok(decoded) => decoded,
+        Err(_) => return discard_invalid_scheduler_result(delivery, "invalid_contract").await,
+    };
     let owns_command = persistence
         .owns_scheduler_command(
             logical_owner_id,
@@ -46,7 +51,7 @@ pub(crate) async fn consume_scheduler_result_v1(
         .await
         .map_err(DelayedDeliverySchedulerResultErrorV1::Persistence)?;
     if !owns_command {
-        return Err(DelayedDeliverySchedulerResultErrorV1::InvalidResult);
+        return discard_invalid_scheduler_result(delivery, "foreign_command").await;
     }
     persistence
         .apply_scheduler_result(&ApplySchedulerResultV1 {
@@ -59,6 +64,20 @@ pub(crate) async fn consume_scheduler_result_v1(
         })
         .await
         .map_err(DelayedDeliverySchedulerResultErrorV1::Persistence)?;
+    delivery
+        .acknowledge()
+        .await
+        .map_err(|_| DelayedDeliverySchedulerResultErrorV1::EventUnavailable)?;
+    Ok(true)
+}
+
+async fn discard_invalid_scheduler_result(
+    delivery: RuntimePullDeliveryV1,
+    reason: &str,
+) -> Result<bool, DelayedDeliverySchedulerResultErrorV1> {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_delayed_delivery_scheduler_result_rejected={reason}");
+    }
     delivery
         .acknowledge()
         .await

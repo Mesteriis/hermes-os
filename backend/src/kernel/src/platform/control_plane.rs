@@ -62,6 +62,13 @@ pub fn serve(
         runtime_dir,
         browser_gateway.as_ref(),
     )?;
+    // Capture the exact Scheduler launch topology before registration and
+    // external-runtime workers can mutate module fences. This is the only
+    // race-free in-memory baseline for lifecycle reconciliation.
+    let scheduler_topology_fingerprint = scheduler_lifecycle::capture_active_topology_fingerprint(
+        &store,
+        &managed_runtime_supervisor,
+    )?;
     let browser_pairing = browser_pairing(
         &store,
         &managed_runtime_supervisor,
@@ -77,6 +84,7 @@ pub fn serve(
         client_realtime,
         browser_gateway,
         browser_pairing,
+        scheduler_topology_fingerprint,
     });
     let failure = supervise_workers(&receiver, &shutdown_requested);
     managed_runtime_supervisor.shutdown()?;
@@ -191,6 +199,7 @@ struct ControlPlaneWorkerInputV1 {
     client_realtime: InMemoryBrowserRealtimeSource,
     browser_gateway: Option<BrowserGatewayConfigurationV1>,
     browser_pairing: Option<Arc<BrowserPairingAdmissionV1>>,
+    scheduler_topology_fingerprint: Option<[u8; 32]>,
 }
 
 fn start_workers(
@@ -209,6 +218,7 @@ fn start_workers(
         client_realtime,
         browser_gateway,
         browser_pairing,
+        scheduler_topology_fingerprint,
     } = input;
     let (completed, receiver) = mpsc::channel::<WorkerCompletionV1>();
     let mut workers = Vec::with_capacity(7);
@@ -242,6 +252,7 @@ fn start_workers(
         Arc::clone(&store),
         runtime_dir,
         managed_runtime_supervisor.clone(),
+        scheduler_topology_fingerprint,
     ));
     if browser_gateway.is_some() {
         workers.push(start_system_status_realtime_worker(
@@ -329,6 +340,7 @@ fn start_scheduler_worker(
     store: Arc<SqliteControlStore>,
     runtime_dir: std::path::PathBuf,
     supervisor: ManagedRuntimeSupervisor,
+    initial_topology_fingerprint: Option<[u8; 32]>,
 ) -> std::thread::JoinHandle<()> {
     spawn_scheduler_lifecycle_worker(
         completed,
@@ -336,6 +348,7 @@ fn start_scheduler_worker(
         store,
         runtime_dir,
         supervisor,
+        initial_topology_fingerprint,
     )
 }
 
@@ -470,6 +483,7 @@ fn spawn_scheduler_lifecycle_worker(
     store: Arc<SqliteControlStore>,
     runtime_dir: std::path::PathBuf,
     managed_runtime_supervisor: ManagedRuntimeSupervisor,
+    initial_topology_fingerprint: Option<[u8; 32]>,
 ) -> std::thread::JoinHandle<()> {
     spawn_worker(
         completed,
@@ -485,6 +499,7 @@ fn spawn_scheduler_lifecycle_worker(
                 &runtime_dir,
                 shutdown,
                 managed_runtime_supervisor.clone(),
+                initial_topology_fingerprint,
             )
         },
     )

@@ -10,6 +10,7 @@ pub mod v1 {
 
 pub const SCHEDULER_JOB_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/hermes.scheduler.v1.bin"));
+pub const SCHEDULER_RUNTIME_MODULE_ID_V1: &str = "hermes-scheduler-runtime";
 
 pub use contracts::command::{ScheduledJobCommandBuildErrorV1, build_scheduled_job_command_v1};
 pub use contracts::job::{JobContractBindingV1, JobKindErrorV1, JobKindV1};

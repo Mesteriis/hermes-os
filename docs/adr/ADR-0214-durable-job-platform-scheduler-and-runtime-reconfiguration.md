@@ -91,6 +91,23 @@ verified artifact. Predecessor identity/lease не принимается и н�
 для уже admitted Scheduler: active Storage binding является единственным
 durable desired-running intent, `Revoking` binding не может resurrect-ить
 child, а missing child получает только fresh reserve/bind/start successor.
+Тот же worker вычисляет owner-neutral fingerprint exact dispatch/receipt
+topology, schedule-control grants и Event Hub revision. Изменение current
+runtime generation, grant epoch или approved JobKind запускает fenced
+Scheduler successor с новой Storage/Vault/Event credential identity; старый
+static grant snapshot не продолжает принимать команды.
+Kernel синхронно фиксирует initial Scheduler topology fingerprint после
+foundation launch и до запуска registration/external-runtime workers. Поэтому
+lifecycle worker сравнивает изменения с доказанным launch snapshot, а не с
+гонкой своего первого poll, и не создаёт лишний successor при каждом boot.
+Изменившийся fingerprint должен оставаться exact одинаковым в восьми
+последовательных reconcile observations (около двух секунд при current poll)
+до fence/launch successor. Это coalesces массовый module-plan refresh и не
+выдаёт Scheduler промежуточный topology snapshot.
+После Storage подтвердил новый binding, Scheduler persistence adapter делает
+не более 120 попыток PgBouncer readiness с bounded 250 ms backoff (не более
+30 секунд между быстрыми отказами); permanent
+authentication/endpoint failure остаётся launch failure и не маскируется.
 После трёх consecutive launch failures worker не retry-ит бесконечно и ждёт
 explicit healthy owner start/restart. Disposable PostgreSQL+JetStream
 conformance уже доказывает exact-byte relay, receipt commit до JetStream ACK,

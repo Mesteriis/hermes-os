@@ -15,7 +15,8 @@ use hermes_communication_delayed_delivery_persistence::CommunicationDelayedDeliv
 use hermes_communication_delayed_delivery_runtime_adapters::ManagedDelayedDeliveryRuntimePortV1;
 use hermes_communication_delayed_delivery_store_adapters::DelayedDeliveryExecutionStoreAdapterV1;
 use hermes_events_jetstream::{
-    RuntimeJetStreamConnection, RuntimeSubscribePermitV1, receive_runtime_pull_delivery,
+    RuntimeJetStreamConnection, RuntimePullDeliveryV1, RuntimeSubscribePermitV1,
+    receive_runtime_pull_delivery,
 };
 use hermes_runtime_protocol::managed_control::{
     ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
@@ -53,8 +54,10 @@ pub(crate) async fn consume_due_delivery_v1(
         .await
         .map_err(|_| DelayedDeliveryDueExecutionErrorV1::EventUnavailable)?;
     let due_context = due_runtime_context(context);
-    let due = decode_delayed_delivery_due_command_v1(delivery.exact_bytes(), &due_context)
-        .map_err(|_| DelayedDeliveryDueExecutionErrorV1::InvalidCommand)?;
+    let due = match decode_delayed_delivery_due_command_v1(delivery.exact_bytes(), &due_context) {
+        Ok(due) => due,
+        Err(_) => return discard_invalid_due_command(delivery).await,
+    };
     let command = execution_command(context, &due, now_unix_millis);
     let mut store = DelayedDeliveryExecutionStoreAdapterV1::new(persistence.clone());
     let mut runtime_port = ManagedDelayedDeliveryRuntimePortV1::new(
@@ -82,6 +85,19 @@ pub(crate) async fn consume_due_delivery_v1(
     })?;
     if matches!(outcome, DelayedDeliveryExecutionOutcomeV1::Retryable) {
         return Ok(false);
+    }
+    delivery
+        .acknowledge()
+        .await
+        .map_err(|_| DelayedDeliveryDueExecutionErrorV1::EventUnavailable)?;
+    Ok(true)
+}
+
+async fn discard_invalid_due_command(
+    delivery: RuntimePullDeliveryV1,
+) -> Result<bool, DelayedDeliveryDueExecutionErrorV1> {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_delayed_delivery_due_rejected=invalid_command");
     }
     delivery
         .acknowledge()

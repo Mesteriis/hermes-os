@@ -1,5 +1,28 @@
 use std::os::unix::net::UnixStream;
 
+use crate::{
+    COMMUNICATION_DELAYED_DELIVERY_BLOB_CAPABILITY_ID_V1,
+    client_port::{
+        DelayedDeliveryClientContextV1, cancel_delayed_delivery_payload_v1,
+        get_delayed_delivery_status_payload_v1, schedule_delayed_delivery_payload_v1,
+    },
+    client_realtime::{
+        DelayedDeliveryClientRealtimeErrorV1, DelayedDeliveryClientRealtimePublisherV1,
+    },
+    contracts::{
+        delayed_delivery_cancel_command_contract_v1, delayed_delivery_query_contract_v1,
+        delayed_delivery_schedule_command_contract_v1,
+    },
+    due_execution::{
+        DelayedDeliveryDueExecutionContextV1, DelayedDeliveryDueExecutionErrorV1,
+        consume_due_delivery_v1,
+    },
+    scheduler_outbox::{
+        DelayedDeliverySchedulerOutboxErrorV1, relay_scheduler_commands_v1,
+        relay_scheduler_receipts_v1,
+    },
+    scheduler_results::{DelayedDeliverySchedulerResultErrorV1, consume_scheduler_result_v1},
+};
 use hermes_communication_delayed_delivery_api::{
     COMMUNICATION_DELAYED_DELIVERY_MODULE_ID_V1, COMMUNICATION_DELAYED_DELIVERY_OWNER_V1,
 };
@@ -29,31 +52,6 @@ use hermes_storage_protocol::{
 };
 use hermes_storage_vault::{
     InheritedKernelVaultRouteV2, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
-};
-use sha2::{Digest, Sha256};
-
-use crate::{
-    COMMUNICATION_DELAYED_DELIVERY_BLOB_CAPABILITY_ID_V1,
-    client_port::{
-        DelayedDeliveryClientContextV1, cancel_delayed_delivery_payload_v1,
-        get_delayed_delivery_status_payload_v1, schedule_delayed_delivery_payload_v1,
-    },
-    client_realtime::{
-        DelayedDeliveryClientRealtimeErrorV1, DelayedDeliveryClientRealtimePublisherV1,
-    },
-    contracts::{
-        delayed_delivery_cancel_command_contract_v1, delayed_delivery_query_contract_v1,
-        delayed_delivery_schedule_command_contract_v1,
-    },
-    due_execution::{
-        DelayedDeliveryDueExecutionContextV1, DelayedDeliveryDueExecutionErrorV1,
-        consume_due_delivery_v1,
-    },
-    scheduler_outbox::{
-        DelayedDeliverySchedulerOutboxErrorV1, relay_scheduler_commands_v1,
-        relay_scheduler_receipts_v1,
-    },
-    scheduler_results::{DelayedDeliverySchedulerResultErrorV1, consume_scheduler_result_v1},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -367,7 +365,8 @@ impl DelayedDeliveryManagedRuntimeV1 {
             &mut dispatcher,
             &DelayedDeliveryDueExecutionContextV1 {
                 logical_owner_id: self.admission.logical_owner_id.clone(),
-                runtime_instance_id: runtime_source_reference(&self.admission.runtime_instance_id),
+                runtime_instance_id: runtime_source_reference(&self.admission.runtime_instance_id)
+                    .expect("validated runtime instance identity"),
                 runtime_generation: self.admission.runtime_generation,
                 grant_epoch: self.admission.grant_epoch,
             },
@@ -396,7 +395,8 @@ async fn dispatch_client(
         && request.logical_owner_id == admission.logical_owner_id;
     let context = DelayedDeliveryClientContextV1 {
         logical_owner_id: admission.logical_owner_id.clone(),
-        runtime_instance_id: runtime_source_reference(&admission.runtime_instance_id),
+        runtime_instance_id: runtime_source_reference(&admission.runtime_instance_id)
+            .expect("validated runtime instance identity"),
         runtime_generation: admission.runtime_generation,
         grant_epoch: admission.grant_epoch,
         authoritative_now_unix_millis,
@@ -453,11 +453,15 @@ async fn dispatch_client(
     }
 }
 
-fn runtime_source_reference(runtime_instance_id: &str) -> [u8; 16] {
-    let digest = Sha256::digest(runtime_instance_id.as_bytes());
-    digest[..16]
-        .try_into()
-        .expect("SHA-256 prefix has exact length")
+fn runtime_source_reference(runtime_instance_id: &str) -> Option<[u8; 16]> {
+    if runtime_instance_id.len() != 32 {
+        return None;
+    }
+    let mut bytes = [0; 16];
+    for (index, item) in bytes.iter_mut().enumerate() {
+        *item = u8::from_str_radix(&runtime_instance_id[index * 2..index * 2 + 2], 16).ok()?;
+    }
+    Some(bytes)
 }
 
 fn validate_admission(
@@ -465,13 +469,38 @@ fn validate_admission(
 ) -> Result<(), DelayedDeliveryManagedRuntimeErrorV1> {
     if admission.logical_owner_id.is_empty()
         || admission.registration_id.is_empty()
-        || admission.runtime_instance_id.is_empty()
+        || runtime_source_reference(&admission.runtime_instance_id).is_none()
         || admission.runtime_generation == 0
         || admission.grant_epoch == 0
     {
         return Err(DelayedDeliveryManagedRuntimeErrorV1::Admission);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::runtime_source_reference;
+
+    #[test]
+    fn runtime_source_reference_preserves_the_exact_managed_identity() {
+        assert_eq!(
+            runtime_source_reference("5a903dfad7f58b794797c33b781d84b1"),
+            Some([
+                0x5a, 0x90, 0x3d, 0xfa, 0xd7, 0xf5, 0x8b, 0x79, 0x47, 0x97, 0xc3, 0x3b, 0x78, 0x1d,
+                0x84, 0xb1,
+            ])
+        );
+    }
+
+    #[test]
+    fn runtime_source_reference_rejects_non_exact_identity_text() {
+        assert_eq!(runtime_source_reference("runtime-instance"), None);
+        assert_eq!(
+            runtime_source_reference("5a903dfad7f58b794797c33b781d84bz"),
+            None
+        );
+    }
 }
 
 fn authenticate(
@@ -620,6 +649,7 @@ fn scheduler_result_error(
 ) -> DelayedDeliveryManagedRuntimeErrorV1 {
     match error {
         DelayedDeliverySchedulerResultErrorV1::InvalidResult => {
+            eprintln!("developer_delayed_delivery_broker_rejected=invalid_scheduler_result");
             DelayedDeliveryManagedRuntimeErrorV1::InvalidTransition
         }
         DelayedDeliverySchedulerResultErrorV1::Persistence(error) => {
@@ -636,6 +666,7 @@ fn due_execution_error(
 ) -> DelayedDeliveryManagedRuntimeErrorV1 {
     match error {
         DelayedDeliveryDueExecutionErrorV1::InvalidCommand => {
+            eprintln!("developer_delayed_delivery_broker_rejected=invalid_due_command");
             DelayedDeliveryManagedRuntimeErrorV1::InvalidTransition
         }
         DelayedDeliveryDueExecutionErrorV1::Store(_)

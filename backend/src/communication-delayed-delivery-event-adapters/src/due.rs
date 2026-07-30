@@ -8,6 +8,7 @@ use hermes_events_protocol::{
     },
 };
 use hermes_scheduler_protocol::{
+    SCHEDULER_RUNTIME_MODULE_ID_V1,
     v1::{JobLeaseV1, JobRunOutcomeV1, JobRunReceiptV1, JobTriggerKindV1, ScheduledJobCommandV1},
     validate_job_run_receipt_v1, validate_scheduled_job_command_v1,
 };
@@ -15,7 +16,6 @@ use prost::Message;
 use prost_types::Timestamp;
 use sha2::{Digest, Sha256};
 
-const SCHEDULER_RUNTIME_MODULE_ID_V1: &str = "hermes-scheduler-runtime";
 const DELAYED_JOB_OWNER_V1: &str = "communication_delayed_delivery";
 const DELAYED_JOB_NAME_V1: &str = "execute";
 const DELAYED_JOB_MAJOR_V1: u32 = 1;

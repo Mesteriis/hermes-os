@@ -18,11 +18,13 @@ use crate::platform::storage::successor;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 const IDLE_POLL_INTERVAL: Duration = Duration::from_millis(250);
+const TOPOLOGY_STABLE_OBSERVATIONS: u8 = 8;
 
 enum ReconcileOutcome {
     Idle,
     Active,
     Started,
+    Refreshed,
 }
 
 /// Runs for the lifetime of the Kernel control plane. Reconciliation never
@@ -35,8 +37,12 @@ pub(crate) fn serve(
     runtime_dir: &Path,
     shutdown_requested: Arc<AtomicBool>,
     supervisor: ManagedRuntimeSupervisor,
+    initial_topology_fingerprint: Option<[u8; 32]>,
 ) -> Result<(), String> {
     let mut blocked = false;
+    let mut active_topology_fingerprint = initial_topology_fingerprint;
+    let mut pending_topology_fingerprint = None;
+    let mut pending_topology_observations = 0;
     while !shutdown_requested.load(Ordering::Acquire) {
         if blocked {
             if scheduler_is_active(&store, &supervisor)? {
@@ -49,7 +55,20 @@ pub(crate) fn serve(
             .ok()
             .flatten()
             .map(|binding| binding.registration_id().to_owned());
-        match reconcile_once(&store, kernel, runtime_dir, &supervisor) {
+        match reconcile_once(
+            &store,
+            kernel,
+            runtime_dir,
+            &supervisor,
+            &mut active_topology_fingerprint,
+            &mut pending_topology_fingerprint,
+            &mut pending_topology_observations,
+        ) {
+            Ok(ReconcileOutcome::Refreshed) => {
+                if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                    eprintln!("developer_scheduler_topology_refreshed");
+                }
+            }
             Ok(ReconcileOutcome::Idle | ReconcileOutcome::Active | ReconcileOutcome::Started) => {}
             Err(error) => {
                 if let Some(registration_id) = registration_id {
@@ -78,13 +97,58 @@ fn reconcile_once(
     kernel: &Path,
     runtime_dir: &Path,
     supervisor: &ManagedRuntimeSupervisor,
+    active_topology_fingerprint: &mut Option<[u8; 32]>,
+    pending_topology_fingerprint: &mut Option<[u8; 32]>,
+    pending_topology_observations: &mut u8,
 ) -> Result<ReconcileOutcome, String> {
     let Some(binding) = active_scheduler_binding(store)? else {
+        *active_topology_fingerprint = None;
+        clear_pending_topology(pending_topology_fingerprint, pending_topology_observations);
         return Ok(ReconcileOutcome::Idle);
     };
     if supervisor.is_active(binding.registration_id())? {
-        return Ok(ReconcileOutcome::Active);
+        let expected_topology_fingerprint =
+            launch::topology_fingerprint(store, binding.registration_id(), binding.grant_epoch())?;
+        if active_topology_fingerprint
+            .as_ref()
+            .is_some_and(|current| current == &expected_topology_fingerprint)
+        {
+            clear_pending_topology(pending_topology_fingerprint, pending_topology_observations);
+            return Ok(ReconcileOutcome::Active);
+        }
+        if active_topology_fingerprint.is_none() {
+            *active_topology_fingerprint = Some(expected_topology_fingerprint);
+            clear_pending_topology(pending_topology_fingerprint, pending_topology_observations);
+            return Ok(ReconcileOutcome::Active);
+        }
+        if !observe_stable_topology(
+            expected_topology_fingerprint,
+            pending_topology_fingerprint,
+            pending_topology_observations,
+        ) {
+            return Ok(ReconcileOutcome::Active);
+        }
+        let issue = successor::issue_after(&binding)?;
+        let (reservation, successor) = successor::reserve(
+            supervisor,
+            store,
+            binding.registration_id(),
+            binding.capability_id(),
+            issue,
+        )?;
+        launch::start_from_reservation(
+            supervisor,
+            store,
+            kernel,
+            runtime_dir,
+            reservation,
+            &successor,
+        )?;
+        *active_topology_fingerprint = Some(expected_topology_fingerprint);
+        clear_pending_topology(pending_topology_fingerprint, pending_topology_observations);
+        return Ok(ReconcileOutcome::Refreshed);
     }
+    clear_pending_topology(pending_topology_fingerprint, pending_topology_observations);
     let issue = successor::issue_after(&binding)?;
     let (reservation, successor) = successor::reserve(
         supervisor,
@@ -101,7 +165,44 @@ fn reconcile_once(
         reservation,
         &successor,
     )?;
+    *active_topology_fingerprint = Some(launch::topology_fingerprint(
+        store,
+        successor.registration_id(),
+        successor.grant_epoch(),
+    )?);
     Ok(ReconcileOutcome::Started)
+}
+
+fn observe_stable_topology(
+    fingerprint: [u8; 32],
+    pending_fingerprint: &mut Option<[u8; 32]>,
+    observations: &mut u8,
+) -> bool {
+    if pending_fingerprint.as_ref() == Some(&fingerprint) {
+        *observations = observations.saturating_add(1);
+    } else {
+        *pending_fingerprint = Some(fingerprint);
+        *observations = 1;
+    }
+    *observations >= TOPOLOGY_STABLE_OBSERVATIONS
+}
+
+fn clear_pending_topology(pending_fingerprint: &mut Option<[u8; 32]>, observations: &mut u8) {
+    *pending_fingerprint = None;
+    *observations = 0;
+}
+
+pub(crate) fn capture_active_topology_fingerprint(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+) -> Result<Option<[u8; 32]>, String> {
+    let Some(binding) = active_scheduler_binding(store)? else {
+        return Ok(None);
+    };
+    if !supervisor.is_active(binding.registration_id())? {
+        return Ok(None);
+    }
+    launch::topology_fingerprint(store, binding.registration_id(), binding.grant_epoch()).map(Some)
 }
 
 fn scheduler_is_active(

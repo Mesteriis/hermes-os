@@ -15,7 +15,16 @@ runtime worker с result-outbox-before-ACK recovery реализованы ка�
 foundation. Kernel теперь выводит runtime binding/grants только как пересечение
 Event Hub command/result topology, approved Scheduler JobKind catalog и current
 managed-runtime fence источника; stale или неполный источник не включает
-consumer. Managed live producer → Scheduler → result contour ещё не реализован;
+consumer. Invalid, foreign или stale-fenced broker delivery не получает
+result authority, но Scheduler ACK-ает её как untrusted poison input и
+продолжает durable consumer: одна недопустимая delivery не завершает runtime и
+не блокирует следующие current commands. По той же границе module consumer
+ACK-ает malformed, contract-invalid или foreign Scheduler result, а также
+malformed due command без mutation, чтобы сохранённая poison delivery не
+завершала producer runtime. Managed live producer → Scheduler Ensure → result
+contour проверен в development ensemble до durable состояния `scheduled`;
+Scheduler также создаёт и публикует due run, но terminal due-delivery обратно в
+producer runtime ещё не доказан;
 platform gate `scheduler_module_schedule_control_v1` остаётся закрыт.
 
 Уточняет:
@@ -81,6 +90,8 @@ fenced workers.
 Scheduler принимает Ensure только если:
 
 1. outer source runtime/grant fence current;
+   `SourceRefV1.runtime_instance_id` является exact 16-byte декодированием
+   managed launch identity, а не производным hash или module-local alias;
 2. source capability разрешает exact schedule-control command;
 3. requested JobKind принадлежит тому же module registration/capability;
 4. JobKind/revision/schema exact current approved Scheduler catalog;
@@ -129,6 +140,11 @@ ensured | cancelled | too_late | rejected
 Только `rejected` содержит bounded sanitized error code. Private content,
 provider/account identity, raw errors, runtime coordinates и executable paths
 запрещены.
+
+Scheduler result/due envelope использует стабильный
+`SCHEDULER_RUNTIME_MODULE_ID_V1 = hermes-scheduler-runtime` как source module;
+environment-specific registration ID (`scheduler_developer` и аналоги)
+остаётся control-plane identity и в durable data plane не публикуется.
 
 ## Cancellation race
 

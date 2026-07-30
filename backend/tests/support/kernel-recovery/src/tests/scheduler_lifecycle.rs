@@ -77,6 +77,7 @@ fn lifecycle_blocks_after_first_failed_successor_launch() {
             &runtime_dir,
             worker_shutdown,
             worker_supervisor,
+            None,
         )
     });
 
