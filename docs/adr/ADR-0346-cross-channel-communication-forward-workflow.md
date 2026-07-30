@@ -58,11 +58,11 @@ Attachments, arbitrary recipients, native same-provider forwarding и editable
 forward text не входят в V1.
 
 Runtime сначала сохраняет accepted operation в owner-local persistence. Worker
-вызывает exact Communications request
-`communications.cross_channel_forward_source.prepare.v1`. Communications
+публикует exact durable Communications command
+`cross_channel_forward_source_prepare.v1` по ADR-0347. Communications
 проверяет current owner, active source message, target conversation и отличие
 source/target channel, затем создаёт idempotent target-bound Blob delegation
-для consumer owner `communication_cross_channel_forward`. Ответ содержит только
+для consumer owner `communication_cross_channel_forward`. Durable result содержит только
 canonical identities, source revision, bounded content metadata, Blob
 reference и custody proof; body не проходит через Core RPC.
 
@@ -110,8 +110,8 @@ source-preparation ID или downstream delivery operation ID. Terminal state
 Kernel:
 
 - регистрирует workflow как отдельный `Workflow` owner;
-- выдаёт exact grants для ClientRpc, ClientRealtime, Communications request,
-  Blob read/release, Storage и delivery-intent request;
+- выдаёт exact grants для ClientRpc, ClientRealtime, Communications
+  command/result routes, Blob read/release, Storage и delivery-intent request;
 - проверяет current runtime/grant/storage generations;
 - не декодирует source metadata, content или delivery payload.
 
@@ -135,8 +135,8 @@ credential material.
 - Runtime координирует exact public ports.
 - Assembly создаёт descriptor/settings/storage/release artifacts и не
   исполняет workflow.
-- Communications расширяется отдельным source-preparation contract и adapter,
-  но не импортирует workflow implementation.
+- Communications расширяется отдельным event-backed source-preparation
+  contract и adapter, но не импортирует workflow implementation.
 - Delivery-intent остаётся независимым workflow и не знает о forwarding.
 
 Integration не является domain. Domain не является integration. Ни одна из
@@ -164,8 +164,8 @@ owner-scoped identity, state, causation, correlation и timestamps.
 
 1. exact public command/query/realtime contract и pure core;
 2. owner-local idempotent persistence, retry и replay;
-3. exact Communications source-preparation contract с target-bound Blob
-   delegation;
+3. exact event-backed Communications source-preparation contract с
+   target-bound Blob delegation;
 4. managed runtime с Storage/Vault/Blob/Communications/delivery-intent ports,
    generation fencing и revoke;
 5. method-exact Gateway command/status и shared SSE replay;

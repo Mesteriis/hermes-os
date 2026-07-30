@@ -186,3 +186,23 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
   assert.match(postgresConformance, /ClaimLost/);
   assert.match(storageRunner, /HERMES_COMMUNICATION_CROSS_CHANNEL_FORWARD_POSTGRES/);
 });
+
+test('cross-channel source preparation is event-only and Communications-owned', async () => {
+  const sourceAdr = await readFile(
+    new URL(
+      'docs/adr/ADR-0347-event-backed-cross-channel-forward-source-preparation.md',
+      PROJECT_ROOT,
+    ),
+    'utf8',
+  );
+
+  assert.match(sourceAdr, /cross_channel_forward_source_prepare\.v1\s+command/);
+  assert.match(sourceAdr, /cross_channel_forward_source_prepared\.v1\s+result/);
+  assert.match(sourceAdr, /cross_channel_forward_source_rejected\.v1\s+result/);
+  assert.match(sourceAdr, /communication_cross_channel_forward\.blob\.v1/);
+  assert.match(sourceAdr, /Producer сохраняет exact `DurableEnvelopeV1` bytes/);
+  assert.match(sourceAdr, /Consumer проверяет inbox message ID\/hash до mutation/);
+  assert.match(sourceAdr, /не участвует в module-to-module source preparation/);
+  assert.match(sourceAdr, /без direct RPC, cross-owner SQL или content leakage/);
+  assert.doesNotMatch(sourceAdr, /generic provider facade|execute\(any\)/);
+});

@@ -560,3 +560,7 @@ Communications подготавливает source evidence как target-bound 
 workflow сохраняет provenance и передаёт exact body в delivery-intent, а
 Kernel/Core только маршрутизируют exact contracts и не становятся provider
 facade.
+ADR-0347 фиксирует event-only source preparation для cross-channel forward:
+workflow публикует durable command, Communications отвечает durable result с
+target-bound Blob receipt, а direct RPC, generic content API и cross-owner SQL
+запрещены.
