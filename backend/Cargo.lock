@@ -1783,6 +1783,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-delayed-delivery-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-delayed-delivery-persistence",
+ "hermes-communication-delayed-delivery-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-communication-delayed-delivery-core"
 version = "0.1.0"
 

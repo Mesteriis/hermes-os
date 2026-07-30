@@ -46,8 +46,10 @@ Scheduler command/receipt outbox и принимает correlated schedule resul
 execution подключён к отдельным execution/runtime/store adapter units: exact
 Scheduler command декодируется до claim, Retryable не подтверждает JetStream
 delivery, а accepted/rejected подтверждает его только после durable terminal
-receipt. Assembly, release admission и live end-to-end contour ещё не
-реализованы. Этот ADR не открывает workflow gate сам по себе.
+receipt. Отдельная assembly unit материализует runtime binary, exact descriptor,
+settings schema и Storage bundle как unsigned release fragment без runtime
+поведения. Release admission и live end-to-end contour ещё не реализованы.
+Этот ADR не открывает workflow gate сам по себе.
 
 Уточняет:
 

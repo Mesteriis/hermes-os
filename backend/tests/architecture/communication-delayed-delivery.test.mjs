@@ -46,6 +46,9 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     runtimeDueExecution,
     managedRuntime,
     runtimeMain,
+    assemblyManifest,
+    assemblySource,
+    assemblyMain,
     methodRoutingAdr,
   ] = await Promise.all([
     readFile(
@@ -287,6 +290,27 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     ),
     readFile(
       new URL(
+        'src/communication-delayed-delivery-assembly/Cargo.toml',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-assembly/src/lib.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-assembly/src/main.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'docs/adr/ADR-0345-method-exact-delayed-delivery-client-command-routing.md',
         PROJECT_ROOT,
       ),
@@ -312,7 +336,7 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.equal(
     JSON.parse(await readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'))
       .implementation.currentSlice,
-    'communication_delayed_delivery_managed_runtime_v1',
+    'communication_delayed_delivery_assembly_v1',
   );
   assert.match(adr, /Состояние реализации: частично реализовано/);
   assert.match(
@@ -453,6 +477,19 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(managedRuntime, /consume_due_delivery_once/);
   assert.match(runtimeMain, /serve-inherited/);
   assert.match(runtimeMain, /as_millis/);
+  assert.match(
+    assemblyManifest,
+    /owner = "communication_delayed_delivery"[\s\S]*surface = "assembly"/,
+  );
+  assert.match(assemblySource, /materialize_delayed_delivery_release_assembly_v1/);
+  assert.match(assemblySource, /communication_delayed_delivery\.runtime\.v1/);
+  assert.match(assemblySource, /communication_delayed_delivery\.storage\.v1/);
+  assert.match(assemblySource, /write_new_private_file/);
+  assert.match(assemblyMain, /--runtime/);
+  assert.doesNotMatch(
+    `${assemblySource}\n${assemblyMain}`,
+    /scheduler_(?:implementation|persistence)|communications_runtime|mail_runtime|telegram_runtime|whatsapp_runtime|zulip_runtime/,
+  );
   assert.match(methodRoutingAdr, /Schedule -> communication\.delayed_delivery\.schedule@1/);
   assert.match(methodRoutingAdr, /Cancel   -> communication\.delayed_delivery\.cancel@1/);
   assert.doesNotMatch(

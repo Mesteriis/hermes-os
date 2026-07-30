@@ -67,6 +67,7 @@ members = [
   "src/communication-delayed-delivery-runtime-adapters",
   "src/communication-delayed-delivery-store-adapters",
   "src/communication-delayed-delivery-runtime",
+  "src/communication-delayed-delivery-assembly",
   "src/mail-delivery-intent-contract",
   "src/telegram-delivery-intent-contract",
   "src/whatsapp-delivery-intent-contract",
