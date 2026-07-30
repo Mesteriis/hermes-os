@@ -133,7 +133,10 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
   });
   assert.match(adr, /Caller не передаёт provider, account, provider chat locator или plaintext body/);
   assert.match(adr, /target-bound Blob delegation/);
-  assert.match(adr, /не\s+импортирует provider contracts, SDK, runtime или persistence/);
+  assert.match(
+    adr,
+    /не\s+импортирует provider contracts, SDK, runtime или\s+persistence/,
+  );
   assert.match(adr, /Kernel[\s\S]*не декодирует source metadata, content или delivery payload/);
   assert.match(adr, /Core capability router[\s\S]*не содержит cross-channel business method/);
   assert.match(adr, /не хранит plaintext body/);
@@ -311,4 +314,34 @@ test('cross-channel source preparation is event-only and Communications-owned', 
     `${sourceContract}\n${sourceApi}\n${sourceEnvelope}\n${sourcePersistence}\n${sourceRuntime}`,
     /provider_id|account_id|body_utf8|plaintext_body|arbitrary_target|\bAny\b|\bmap\s*</,
   );
+});
+
+test('delivery-intent workflow ingress is event-only and bodyless', async () => {
+  const ingressAdr = await readFile(
+    new URL(
+      'docs/adr/ADR-0348-event-backed-delivery-intent-workflow-ingress.md',
+      PROJECT_ROOT,
+    ),
+    'utf8',
+  );
+
+  assert.match(ingressAdr, /hermes-communication-delivery-intent-ingress-api/);
+  assert.match(ingressAdr, /communication_delivery_intent_submit\.v1\s+command/);
+  assert.match(
+    ingressAdr,
+    /communication_delivery_intent_submitted\.v1\s+result/,
+  );
+  assert.match(
+    ingressAdr,
+    /communication_delivery_intent_rejected\.v1\s+result/,
+  );
+  assert.match(ingressAdr, /communication_delivery_intent\.blob\.v1/);
+  assert.match(
+    ingressAdr,
+    /ACK разрешён только после commit\s+либо exact duplicate/,
+  );
+  assert.match(ingressAdr, /не участвует в module-to-module ingress/);
+  assert.match(ingressAdr, /без direct RPC или cross-owner SQL/);
+  assert.match(ingressAdr, /generic workflow command facade/);
+  assert.doesNotMatch(ingressAdr, /execute\(any\)/);
 });

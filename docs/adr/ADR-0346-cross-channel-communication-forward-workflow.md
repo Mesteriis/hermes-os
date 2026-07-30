@@ -72,12 +72,14 @@ source/target channel, затем создаёт idempotent target-bound Blob de
 canonical identities, source revision, bounded content metadata, Blob
 reference и custody proof; body не проходит через Core RPC.
 
-Workflow materializes Blob через собственный scoped capability, проверяет
-receipt/hash/size и передаёт exact UTF-8 bytes в public
-`communication.delivery_intent.command` с deterministic downstream operation
-ID. Delivery-intent самостоятельно разрешает target provider provenance через
-Communications и вызывает ровно одну integration. Cross-channel workflow не
-импортирует provider contracts, SDK, runtime или persistence.
+Workflow materializes source Blob через собственный scoped capability,
+проверяет receipt/hash/size, создаёт новый Blob с compile-time
+delivery-intent target binding и публикует exact durable
+`communication_delivery_intent_submit.v1` command по ADR-0348. Plaintext не
+попадает в event. Delivery-intent самостоятельно разрешает target provider
+provenance через Communications и вызывает ровно одну integration.
+Cross-channel workflow не импортирует provider contracts, SDK, runtime или
+persistence.
 
 Workflow хранит:
 
@@ -144,6 +146,8 @@ credential material.
 - Communications расширяется отдельным event-backed source-preparation
   contract и adapter, но не импортирует workflow implementation.
 - Delivery-intent остаётся независимым workflow и не знает о forwarding.
+- Delivery-intent event ingress является отдельной contract build unit и не
+  смешивается с client ConnectRPC API.
 
 Integration не является domain. Domain не является integration. Ни одна из
 этих единиц не импортирует другую business implementation.
