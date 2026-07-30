@@ -1,5 +1,12 @@
 //! Exact descriptor and capability admission for the Communications owner runtime.
 
+use hermes_communications_ai_source_api::{
+    communication_reply_source_prepare_consume_request_v1,
+    communication_reply_source_prepared_contract_reference_v1,
+    communication_reply_source_prepared_publish_request_v1,
+    communication_reply_source_rejected_contract_reference_v1,
+    communication_reply_source_rejected_publish_request_v1,
+};
 use hermes_communications_api::{
     COMMUNICATION_EVIDENCE_SCHEMA_SHA256, COMMUNICATIONS_QUERY_SCHEMA_SHA256,
 };
@@ -77,6 +84,9 @@ pub const COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID: &str =
     "communications.attachment.safety-verdict.observe.v1";
 pub const COMMUNICATIONS_QUERY_CAPABILITY_ID: &str = "communications.query.v1";
 pub const COMMUNICATIONS_CONTENT_CAPABILITY_ID: &str = "communications.content.v1";
+pub const COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID: &str = "communications.ai-reply-source.v1";
+pub const COMMUNICATIONS_AI_SOURCE_BLOB_CAPABILITY_ID: &str =
+    "communications.ai-reply-source.blob.v1";
 pub const COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID: &str = "communications.saved-search.v1";
 pub const COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID: &str = "communications.sender-insights.v1";
 pub const COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID: &str = "communications.export-source.v1";
@@ -103,6 +113,8 @@ pub const COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS: u32 = 60;
 #[must_use]
 pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
+        communications_ai_source_blob_capability_v1(),
+        communications_ai_source_capability_v1(),
         communications_attachment_blob_admission_observe_capability_v1(),
         communications_attachment_safety_verdict_observe_capability_v1(),
         communications_blob_capability_v1(),
@@ -121,6 +133,52 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_sender_insights_capability_v1(),
         communications_storage_capability_v1(),
     ]
+}
+
+#[must_use]
+pub fn communications_ai_source_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(communication_reply_source_prepared_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(communication_reply_source_rejected_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+        ],
+        requests: vec![
+            communication_reply_source_prepare_consume_request_v1(),
+            communication_reply_source_prepared_publish_request_v1(),
+            communication_reply_source_rejected_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
+}
+
+#[must_use]
+pub fn communications_ai_source_blob_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_AI_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+                max_bytes: COMMUNICATIONS_BLOB_QUOTA_BYTES,
+                custody_scope_id: COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID.to_owned(),
+                allowed_operations: vec![BlobQuotaOperationV1::Write as i32],
+            })),
+        }],
+        ..Default::default()
+    }
 }
 
 #[must_use]
@@ -727,6 +785,8 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                COMMUNICATIONS_AI_SOURCE_BLOB_CAPABILITY_ID,
+                COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID,
                 COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_BLOB_CAPABILITY_ID,

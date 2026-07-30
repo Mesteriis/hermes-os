@@ -2295,6 +2295,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
  "hermes-blob-client",
+ "hermes-communications-ai-source-api",
  "hermes-communications-api",
  "hermes-communications-attachment-contract",
  "hermes-communications-call-evidence-api",

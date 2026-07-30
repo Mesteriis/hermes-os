@@ -1,6 +1,7 @@
 //! Managed Communications runtime contracts.
 
 pub mod admission;
+mod ai_source;
 pub mod attachment_observation_consumer;
 pub mod attachment_safety;
 pub mod call_evidence_client_port;

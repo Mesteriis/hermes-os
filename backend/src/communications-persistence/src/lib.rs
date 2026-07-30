@@ -4,6 +4,7 @@ pub const PACKAGE: &str = "hermes-communications-persistence";
 
 use hermes_communications_api::CommunicationObservationIdV1;
 
+mod ai_source;
 mod canonical_read;
 mod content_read;
 mod custody_transfer;
@@ -15,6 +16,9 @@ mod schema;
 mod search;
 mod search_job;
 mod sender_insights;
+pub use ai_source::{
+    CommunicationsAiBodyReceiptV1, CommunicationsAiSourceErrorV1, CommunicationsAiSourceSnapshotV1,
+};
 pub use canonical_read::{
     CanonicalReadAfterV1, CanonicalReadPageV1, CanonicalReferenceReadAfterV1,
     CanonicalReferenceReadItemV1,

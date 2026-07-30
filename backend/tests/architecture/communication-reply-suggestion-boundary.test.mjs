@@ -120,3 +120,41 @@ test('Communications AI source is one provider-neutral event contract unit', asy
     /provider_id|provider_account|provider_locator|model_id|model_key|prompt|string target_owner|string target_module|string target_capability|message_body|body_text/,
   );
 });
+
+test('Communications AI source runtime commits an owner-bound event handoff before ack', async () => {
+  const [manifest, persistence, runtime, admission, eventRuntime] = await Promise.all([
+    backendSource('src/communications-runtime/Cargo.toml'),
+    backendSource('src/communications-persistence/src/ai_source.rs'),
+    backendSource('src/communications-runtime/src/ai_source.rs'),
+    backendSource('src/communications-runtime/src/admission.rs'),
+    backendSource('src/communications-runtime/src/event_runtime.rs'),
+  ]);
+
+  assert.match(manifest, /hermes-communications-ai-source-api/);
+  assert.match(persistence, /communications_event_inbox/);
+  assert.match(persistence, /communications_domain_outbox/);
+  assert.match(persistence, /canonical_revision/);
+  assert.match(persistence, /last_evidence_id/);
+  assert.match(persistence, /body_blob_reference_id/);
+  assert.match(persistence, /body_blob_declared_bytes/);
+  assert.match(persistence, /body_blob_sha256/);
+  assert.match(persistence, /transaction\s*\.commit\(\)/);
+  assert.match(runtime, /payload\.logical_owner_id != logical_human_owner_id/);
+  assert.match(runtime, /COMMUNICATION_REPLY_SOURCE_BLOB_TARGET_OWNER_ID_V1/);
+  assert.match(runtime, /COMMUNICATION_REPLY_SOURCE_BLOB_TARGET_MODULE_ID_V1/);
+  assert.match(runtime, /COMMUNICATION_REPLY_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1/);
+  assert.match(runtime, /COMMUNICATIONS_AI_SOURCE_BLOB_CAPABILITY_ID/);
+  assert.match(admission, /communications_ai_source_blob_capability_v1/);
+  assert.match(admission, /communications_ai_source_capability_v1/);
+  assert.match(eventRuntime, /communication_reply_source_prepare_contract_reference_v1/);
+  assert.match(eventRuntime, /CommunicationsConsumerV1::AiSourcePrepare/);
+
+  const persisted = runtime.indexOf('.persist_ai_source_result(');
+  const acknowledged = runtime.indexOf('delivery.acknowledge()', persisted);
+  assert.ok(persisted >= 0);
+  assert.ok(acknowledged > persisted);
+  assert.doesNotMatch(
+    `${persistence}\n${runtime}`,
+    /provider_id|provider_account|provider_locator|model_id|model_key|prompt|ollama/,
+  );
+});

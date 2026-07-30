@@ -2223,6 +2223,17 @@ const REVIEW_COMMUNICATIONS_ATTENTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = 
 
 const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...REVIEW_COMMUNICATIONS_ATTENTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-runtime':
+    REVIEW_COMMUNICATIONS_ATTENTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST[
+      'hermes-communications-runtime'
+    ].flatMap((dependency) => (
+      dependency.name === 'hermes-communications-attachment-contract'
+        ? [
+            { name: 'hermes-communications-ai-source-api', kind: 'normal' },
+            dependency,
+          ]
+        : [dependency]
+    )),
   'hermes-communications-ai-source-api': [
     { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
@@ -2919,6 +2930,7 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_INVENTORY = {
   ...REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY,
   businessCapabilities: [
     ...REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY.businessCapabilities,
+    'communications.ai-reply-source.blob.v1',
     'communications.ai-reply-source.v1',
   ].sort(),
 };

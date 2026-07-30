@@ -4,14 +4,16 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: architecture agreement и Communications-owned contract
-unit `hermes-communications-ai-source-api` реализованы. Durable
-command/prepared/rejected schemas, exact route requests, target-bound audience
-и envelope builders имеют Cargo/architecture evidence. Communications
-persistence/runtime handoff, AI engine, provider integration и workflow ещё не
-реализованы; gates `communications_ai_context_source_v1`, `ai_inference_v1`,
-`ollama_ai_provider_v1` и `communication_reply_suggestion_v1` остаются
-`planned`.
+Состояние реализации: architecture agreement, Communications-owned contract
+unit `hermes-communications-ai-source-api` и Communications
+persistence/runtime handoff реализованы. Durable command/prepared/rejected
+schemas, inbox/hash fencing, current-revision validation, target-bound Blob
+custody, commit-before-Ack и exact admission/event-runtime wiring имеют
+Cargo/architecture evidence. Live event-only preparation evidence ещё не
+получено, поэтому gate `communications_ai_context_source_v1` остаётся
+`planned`. AI engine, provider integration и workflow ещё не реализованы;
+gates `ai_inference_v1`, `ollama_ai_provider_v1` и
+`communication_reply_suggestion_v1` также остаются `planned`.
 
 Уточняет:
 
