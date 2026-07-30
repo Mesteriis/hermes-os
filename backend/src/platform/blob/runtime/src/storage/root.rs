@@ -16,6 +16,10 @@ pub(crate) fn prepare_metadata_root(path: &Path) -> Result<PathBuf, BlobStorageE
     prepare_private_child(path, "metadata")
 }
 
+pub(crate) fn prepare_release_root(path: &Path) -> Result<PathBuf, BlobStorageError> {
+    prepare_private_child(path, "custody-releases-v1")
+}
+
 fn prepare_private_child(path: &Path, child: &str) -> Result<PathBuf, BlobStorageError> {
     fs::create_dir_all(path).map_err(|_| BlobStorageError::Filesystem)?;
     validate_private_directory(path)?;

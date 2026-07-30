@@ -1,6 +1,7 @@
 //! Runs the encrypted Blob store behind the authenticated inherited channel.
 
 use hermes_blob_runtime::{
+    release::BlobCustodyReleaseLedgerV1,
     storage::BlobContentLifecycleStore,
     vault::{BlobVaultKeyLeaseAdapterV1, BlobVaultRouteContextV1},
 };
@@ -93,7 +94,7 @@ fn data_service(
         channel
             .try_clone()
             .map_err(|_| "Blob inherited control channel is unavailable".to_owned())?,
-        Box::new(move |request| response_for(request, &nested_status)),
+        Box::new(move |request| status_response_for(request, &nested_status)),
     )
     .map_err(|_| "Blob inherited control channel is unavailable".to_owned())?;
     let verifier = BlobDataSessionVerifierV1::new(
@@ -102,10 +103,14 @@ fn data_service(
         &configuration.kernel_authorization_public_key_sec1,
     )
     .map_err(|_| "Blob data session authority is invalid".to_owned())?;
+    let release = BlobCustodyReleaseLedgerV1::open(std::path::Path::new(&configuration.data_dir))
+        .map_err(|_| "Blob custody release ledger is unavailable".to_owned())?;
     Ok(BlobDataService::new(
         store,
         verifier,
         BlobVaultKeyLeaseAdapterV1::new(route, context),
+        release,
+        configuration.custody_release_grace_period_ms,
     ))
 }
 
@@ -139,7 +144,7 @@ fn serve_status_and_data(
                 BlobRuntimeControlRequestV1::decode(bytes.as_slice())
                     .map_err(|_| "Blob inherited control frame is invalid".to_owned())
             })
-            .map(|request| response_for(request, &status))
+            .map(|request| response_for(request, &status, &data))
             .unwrap_or_else(|error| {
                 if error == "Blob inherited control channel is unavailable" {
                     return error_response("idle");
@@ -156,14 +161,37 @@ fn serve_status_and_data(
 fn response_for(
     request: BlobRuntimeControlRequestV1,
     status: &BlobRuntimeControlResponseV1,
+    data: &BlobDataService<InheritedBlobVaultRouteV1>,
 ) -> BlobRuntimeControlResponseV1 {
     if validate_blob_runtime_control_request(&request).is_err() {
         return error_response("operation_not_available");
     }
     match request.operation {
         Some(Operation::GetStatus(GetBlobRuntimeStatusRequestV1 {})) => status.clone(),
-        Some(Operation::ReleaseCustody(_)) => error_response("operation_not_available"),
+        Some(Operation::ReleaseCustody(request)) => request
+            .grant
+            .as_ref()
+            .ok_or("custody_release_denied")
+            .and_then(|grant| data.release_custody(grant))
+            .map(|release| BlobRuntimeControlResponseV1 {
+                result: Some(ResponseResult::CustodyRelease(release)),
+                error_code: String::new(),
+            })
+            .unwrap_or_else(error_response),
         None => error_response("operation_not_available"),
+    }
+}
+
+fn status_response_for(
+    request: BlobRuntimeControlRequestV1,
+    status: &BlobRuntimeControlResponseV1,
+) -> BlobRuntimeControlResponseV1 {
+    if validate_blob_runtime_control_request(&request).is_err() {
+        return error_response("operation_not_available");
+    }
+    match request.operation {
+        Some(Operation::GetStatus(GetBlobRuntimeStatusRequestV1 {})) => status.clone(),
+        Some(Operation::ReleaseCustody(_)) | None => error_response("operation_not_available"),
     }
 }
 

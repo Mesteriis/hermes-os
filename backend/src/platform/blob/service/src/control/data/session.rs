@@ -6,8 +6,8 @@ use hermes_blob_protocol::{
     BlobAccessFenceV1, BlobBackupClassV1, BlobCustodyScopeV1, BlobQuotaGrantV1, BlobRefV1,
 };
 use hermes_runtime_protocol::v1::{
-    BlobBackupClassV1 as WireBackupClass, BlobCustodyTransferGrantV1, BlobDataOperationV1,
-    BlobDataSessionGrantV1,
+    BlobBackupClassV1 as WireBackupClass, BlobCustodyReleaseGrantV1, BlobCustodyReleaseReasonV1,
+    BlobCustodyTransferGrantV1, BlobDataOperationV1, BlobDataSessionGrantV1,
 };
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use prost::Message;
@@ -36,6 +36,36 @@ pub(super) struct VerifiedBlobCustodyTransferV1 {
     target_quota: BlobQuotaGrantV1,
     target_key_revision: u64,
     expected_plaintext_sha256: [u8; 32],
+}
+
+pub(super) struct VerifiedBlobCustodyReleaseV1 {
+    operation_id: [u8; 16],
+    fingerprint: [u8; 32],
+    reference: BlobRefV1,
+    access: BlobAccessFenceV1,
+    custody: BlobCustodyScopeV1,
+    issued_at_unix_ms: u64,
+}
+
+impl VerifiedBlobCustodyReleaseV1 {
+    pub(super) const fn operation_id(&self) -> &[u8; 16] {
+        &self.operation_id
+    }
+    pub(super) const fn fingerprint(&self) -> &[u8; 32] {
+        &self.fingerprint
+    }
+    pub(super) fn reference(&self) -> &BlobRefV1 {
+        &self.reference
+    }
+    pub(super) fn access(&self) -> &BlobAccessFenceV1 {
+        &self.access
+    }
+    pub(super) fn custody(&self) -> &BlobCustodyScopeV1 {
+        &self.custody
+    }
+    pub(super) const fn issued_at_unix_ms(&self) -> u64 {
+        self.issued_at_unix_ms
+    }
 }
 
 impl VerifiedBlobCustodyTransferV1 {
@@ -168,9 +198,75 @@ impl BlobDataSessionVerifierV1 {
         Ok(verified)
     }
 
+    pub(super) fn verify_custody_release(
+        &self,
+        grant: &BlobCustodyReleaseGrantV1,
+        now_unix_ms: u64,
+    ) -> Result<VerifiedBlobCustodyReleaseV1, ()> {
+        validate_signed_release(
+            &self.kernel_instance_id,
+            self.blob_runtime_generation,
+            &self.key,
+            grant,
+            now_unix_ms,
+        )?;
+        decode_release(grant)
+    }
+
     fn prune(&mut self, now_unix_ms: u64) {
         self.consumed.retain(|_, expiry| *expiry > now_unix_ms);
     }
+}
+
+fn validate_signed_release(
+    instance_id: &str,
+    blob_runtime_generation: u64,
+    key: &VerifyingKey,
+    grant: &BlobCustodyReleaseGrantV1,
+    now: u64,
+) -> Result<(), ()> {
+    let valid_reason = matches!(
+        BlobCustodyReleaseReasonV1::try_from(grant.reason),
+        Ok(
+            BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalAcceptedV1
+                | BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalRejectedV1
+                | BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalCancelledV1
+        )
+    );
+    if grant.major != 1
+        || grant.kernel_instance_id != instance_id
+        || grant.blob_runtime_generation != blob_runtime_generation
+        || grant.operation_id.len() != 16
+        || grant.operation_id.iter().all(|byte| *byte == 0)
+        || grant.reference_id.len() != 16
+        || grant.reference_id.iter().all(|byte| *byte == 0)
+        || grant.receipt_sha256.len() != 32
+        || grant.receipt_sha256.iter().all(|byte| *byte == 0)
+        || grant.custody_source_proof_sha256.len() != 32
+        || grant
+            .custody_source_proof_sha256
+            .iter()
+            .all(|byte| *byte == 0)
+        || !valid_reason
+        || grant.issued_at_unix_ms == 0
+        || grant.issued_at_unix_ms > now
+        || grant.expires_at_unix_ms <= now
+        || grant.expires_at_unix_ms
+            > grant
+                .issued_at_unix_ms
+                .checked_add(SESSION_TTL_LIMIT_MS)
+                .ok_or(())?
+        || grant.kernel_authorization_signature_raw.len() != 64
+    {
+        return Err(());
+    }
+    let signature =
+        Signature::from_slice(&grant.kernel_authorization_signature_raw).map_err(|_| ())?;
+    let mut unsigned = grant.clone();
+    unsigned.kernel_authorization_signature_raw.clear();
+    let mut message = b"hermes.blob-custody-release.v1\0".to_vec();
+    message.extend_from_slice(&unsigned.encode_to_vec());
+    key.verify(&message, &signature).map_err(|_| ())
 }
 
 fn validate_signed_transfer(
@@ -267,6 +363,38 @@ fn denied(stage: &str) {
 fn reject<T>(stage: &str) -> Result<T, ()> {
     denied(stage);
     Err(())
+}
+
+fn decode_release(grant: &BlobCustodyReleaseGrantV1) -> Result<VerifiedBlobCustodyReleaseV1, ()> {
+    let operation_id = grant.operation_id.as_slice().try_into().map_err(|_| ())?;
+    let reference = BlobRefV1::new(
+        grant.reference_id.as_slice().try_into().map_err(|_| ())?,
+        grant.owner_id.clone(),
+        grant.declared_size,
+        (grant.reference_expires_at_unix_ms != 0).then_some(grant.reference_expires_at_unix_ms),
+        backup_class(grant.backup_class)?,
+    )
+    .map_err(|_| ())?;
+    let access = BlobAccessFenceV1::new(
+        grant.owner_id.clone(),
+        grant.registration_id.clone(),
+        grant.capability_id.clone(),
+        grant.runtime_instance_id.clone(),
+        grant.runtime_generation,
+        grant.grant_epoch,
+    )
+    .map_err(|_| ())?;
+    let custody = BlobCustodyScopeV1::new(grant.owner_id.clone(), grant.custody_scope_id.clone())
+        .map_err(|_| ())?;
+    let fingerprint = Sha256::digest(grant.encode_to_vec()).into();
+    Ok(VerifiedBlobCustodyReleaseV1 {
+        operation_id,
+        fingerprint,
+        reference,
+        access,
+        custody,
+        issued_at_unix_ms: grant.issued_at_unix_ms,
+    })
 }
 
 fn decode_grant(grant: &BlobDataSessionGrantV1) -> Result<VerifiedBlobDataSessionV1, ()> {
@@ -435,10 +563,63 @@ fn backup_class(value: i32) -> Result<BlobBackupClassV1, ()> {
 #[cfg(test)]
 mod tests {
     use hermes_runtime_protocol::v1::{
-        BlobBackupClassV1 as WireBackupClass, BlobCustodySourceProofV1, BlobCustodyTransferGrantV1,
+        BlobBackupClassV1 as WireBackupClass, BlobCustodyReleaseGrantV1,
+        BlobCustodyReleaseReasonV1, BlobCustodySourceProofV1, BlobCustodyTransferGrantV1,
     };
+    use p256::ecdsa::{Signature, SigningKey, signature::Signer};
+    use prost::Message;
 
-    use super::decode_transfer;
+    use super::{BlobBackupClassV1, BlobDataSessionVerifierV1, decode_transfer};
+
+    #[test]
+    fn signed_release_preserves_exact_reference_and_rejects_tampering() {
+        let signer = SigningKey::from_bytes((&[9_u8; 32]).into()).expect("signing key");
+        let public_key = signer.verifying_key().to_sec1_point(false);
+        let mut grant = BlobCustodyReleaseGrantV1 {
+            major: 1,
+            kernel_instance_id: "kernel-1".to_owned(),
+            operation_id: vec![1; 16],
+            owner_id: "attachment_security".to_owned(),
+            registration_id: "attachment-security-registration".to_owned(),
+            capability_id: "attachment_security.blob.release.v1".to_owned(),
+            runtime_instance_id: "attachment-security-runtime".to_owned(),
+            runtime_generation: 3,
+            grant_epoch: 4,
+            reference_id: vec![2; 16],
+            declared_size: 64,
+            receipt_sha256: vec![3; 32],
+            custody_source_proof_sha256: vec![4; 32],
+            custody_scope_id: "attachment-security-scan".to_owned(),
+            reason: BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalAcceptedV1 as i32,
+            issued_at_unix_ms: 90,
+            expires_at_unix_ms: 110,
+            blob_runtime_generation: 7,
+            backup_class: WireBackupClass::BlobBackupClassRequiredV1 as i32,
+            reference_expires_at_unix_ms: 120,
+            ..Default::default()
+        };
+        let mut message = b"hermes.blob-custody-release.v1\0".to_vec();
+        message.extend_from_slice(&grant.encode_to_vec());
+        let signature: Signature = signer.sign(&message);
+        grant.kernel_authorization_signature_raw = signature.to_bytes().to_vec();
+        let verifier =
+            BlobDataSessionVerifierV1::new("kernel-1".to_owned(), 7, public_key.as_bytes())
+                .expect("verifier");
+
+        let verified = verifier
+            .verify_custody_release(&grant, 100)
+            .expect("verified release");
+        assert_eq!(verified.operation_id(), &[1; 16]);
+        assert_eq!(verified.reference().reference_id(), &[2; 16]);
+        assert_eq!(verified.reference().expires_at_unix_ms(), Some(120));
+        assert_eq!(
+            verified.reference().backup_class(),
+            BlobBackupClassV1::Required
+        );
+
+        grant.declared_size = 65;
+        assert!(verifier.verify_custody_release(&grant, 100).is_err());
+    }
 
     #[test]
     fn kernel_signed_transfer_keeps_distinct_cross_owner_fences() {

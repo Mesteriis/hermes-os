@@ -23,6 +23,7 @@ const BLOB_MODULE_ID: &str = "blob";
 const MAX_ATTEMPTS: u8 = 3;
 const MAX_RUNTIME: Duration = Duration::from_secs(300);
 const MAXIMUM_BLOB_BYTES: u64 = 64 * 1024 * 1024;
+const CUSTODY_RELEASE_GRACE_PERIOD_MS: u64 = 24 * 60 * 60 * 1_000;
 
 #[must_use]
 pub(crate) fn data_socket_path(data_dir: &Path) -> std::path::PathBuf {
@@ -204,6 +205,7 @@ fn runtime_configuration(
         data_socket_path: data_socket_path.display().to_string(),
         kernel_instance_id: vault_instance_id.to_owned(),
         kernel_authorization_public_key_sec1: signer.public_key_sec1().to_vec(),
+        custody_release_grace_period_ms: CUSTODY_RELEASE_GRACE_PERIOD_MS,
     };
     validate_blob_runtime_configuration(&configuration)
         .map_err(|_| "Blob runtime configuration is invalid".to_owned())?;

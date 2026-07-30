@@ -15,6 +15,8 @@ message BlobRuntimeConfigurationV1 {
   string data_socket_path = 6;
   string kernel_instance_id = 7;
   bytes kernel_authorization_public_key_sec1 = 8;
+  // Kernel-staged retention policy. It is not module-controlled settings.
+  uint64 custody_release_grace_period_ms = 9;
 }
 
 // A short-lived, one-use authorization for exactly one Blob data operation.
@@ -128,6 +130,9 @@ message BlobCustodyReleaseGrantV1 {
   uint64 expires_at_unix_ms = 17;
   uint64 blob_runtime_generation = 18;
   bytes kernel_authorization_signature_raw = 19;
+  BlobBackupClassV1 backup_class = 20;
+  // Zero preserves an unbounded BlobRefV1; non-zero is the exact reference expiry.
+  uint64 reference_expires_at_unix_ms = 21;
 }
 
 enum BlobCustodyReleaseReasonV1 {

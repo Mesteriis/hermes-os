@@ -5,8 +5,8 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const PROJECT_ROOT = new URL('../../../', import.meta.url);
 
-test('Blob custody release starts as a typed control-plane protocol, not data-plane delete', async () => {
-  const [adr, blobProto, managedProto, validation, service] = await Promise.all([
+test('Blob custody release has typed Blob-owned authority without a data-plane delete', async () => {
+  const [adr, blobProto, managedProto, validation, service, session, release] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0343-capability-routed-blob-custody-release.md',
@@ -36,16 +36,31 @@ test('Blob custody release starts as a typed control-plane protocol, not data-pl
       new URL('src/platform/blob/service/src/control/runtime.rs', BACKEND_ROOT),
       'utf8',
     ),
+    readFile(
+      new URL('src/platform/blob/service/src/control/data/session.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/platform/blob/runtime/src/release.rs', BACKEND_ROOT),
+      'utf8',
+    ),
   ]);
 
-  assert.match(adr, /Состояние реализации: не реализовано/);
+  assert.match(adr, /Состояние реализации: частично реализовано/);
+  assert.match(adr, /Kernel-staged platform configuration/);
   assert.match(blobProto, /message BlobCustodyReleaseGrantV1/);
   assert.match(blobProto, /message BlobCustodyReleaseRequestV1/);
   assert.match(blobProto, /message BlobCustodyReleaseResponseV1/);
+  assert.match(blobProto, /custody_release_grace_period_ms/);
+  assert.match(blobProto, /BlobBackupClassV1 backup_class = 20/);
   assert.match(managedProto, /ManagedRuntimeBlobCustodyReleaseRequestV1/);
   assert.match(managedProto, /release_blob_custody = 14/);
   assert.match(validation, /fn valid_release_grant/);
   assert.match(validation, /custody_source_proof_sha256/);
+  assert.match(session, /fn validate_signed_release/);
+  assert.match(session, /hermes\.blob-custody-release\.v1/);
+  assert.match(release, /struct BlobCustodyReleaseLedgerV1/);
+  assert.match(release, /reserve_deletion_exact/);
   const dataOperation = blobProto.match(
     /enum BlobDataOperationV1 \{[\s\S]*?\n\}/,
   )?.[0];
@@ -53,7 +68,7 @@ test('Blob custody release starts as a typed control-plane protocol, not data-pl
   assert.doesNotMatch(dataOperation, /RELEASE|DELETE/);
   assert.match(
     service,
-    /Some\(Operation::ReleaseCustody\(_\)\) => error_response\("operation_not_available"\)/,
+    /Some\(Operation::ReleaseCustody\(request\)\)/,
   );
   assert.doesNotMatch(managedProto, /filesystem|data_socket_path.*release_blob_custody/);
 });

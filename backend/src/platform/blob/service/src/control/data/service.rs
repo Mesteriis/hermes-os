@@ -7,10 +7,15 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_blob_runtime::{
     lease::BlobKeyLeaseV1,
+    release::{
+        BlobCustodyReleaseErrorV1, BlobCustodyReleaseLedgerV1,
+        BlobCustodyReleaseOutcomeV1 as RuntimeReleaseOutcome, BlobCustodyReleaseRequestV1,
+    },
     storage::{BlobContentLifecycleStore, BlobContentWriteRequestV1, BlobCustodyTransferRequestV1},
     vault::{BlobContentKeyFenceV1, BlobVaultKeyLeaseAdapterV1, BlobVaultRoutePortV1},
 };
 use hermes_runtime_protocol::v1::{
+    BlobCustodyReleaseGrantV1, BlobCustodyReleaseOutcomeV1, BlobCustodyReleaseResponseV1,
     BlobDataOperationV1, BlobDataRequestV1, BlobDataResponseV1, blob_data_request_v1::Operation,
 };
 use prost::Message;
@@ -19,7 +24,8 @@ use sha2::{Digest, Sha256};
 use super::{
     framing,
     session::{
-        BlobDataSessionVerifierV1, VerifiedBlobCustodyTransferV1, VerifiedBlobDataSessionV1,
+        BlobDataSessionVerifierV1, VerifiedBlobCustodyReleaseV1, VerifiedBlobCustodyTransferV1,
+        VerifiedBlobDataSessionV1,
     },
 };
 
@@ -27,6 +33,8 @@ pub(crate) struct BlobDataService<R> {
     store: BlobContentLifecycleStore,
     verifier: BlobDataSessionVerifierV1,
     keys: BlobVaultKeyLeaseAdapterV1<R>,
+    release: BlobCustodyReleaseLedgerV1,
+    release_grace_period_ms: u64,
 }
 
 impl<R> BlobDataService<R>
@@ -37,12 +45,73 @@ where
         store: BlobContentLifecycleStore,
         verifier: BlobDataSessionVerifierV1,
         keys: BlobVaultKeyLeaseAdapterV1<R>,
+        release: BlobCustodyReleaseLedgerV1,
+        release_grace_period_ms: u64,
     ) -> Self {
         Self {
             store,
             verifier,
             keys,
+            release,
+            release_grace_period_ms,
         }
+    }
+
+    pub(crate) fn release_custody(
+        &self,
+        grant: &BlobCustodyReleaseGrantV1,
+    ) -> Result<BlobCustodyReleaseResponseV1, &'static str> {
+        let now = now_unix_ms().map_err(|_| "custody_release_unavailable")?;
+        let release = self
+            .verifier
+            .verify_custody_release(grant, now)
+            .map_err(|_| "custody_release_denied")?;
+        self.reserve_release(release)
+    }
+
+    fn reserve_release(
+        &self,
+        release: VerifiedBlobCustodyReleaseV1,
+    ) -> Result<BlobCustodyReleaseResponseV1, &'static str> {
+        let delete_not_before_unix_ms = release
+            .issued_at_unix_ms()
+            .checked_add(self.release_grace_period_ms)
+            .ok_or("custody_release_unavailable")?;
+        let outcome =
+            self.store
+                .reserve_custody_release(
+                    &self.release,
+                    BlobCustodyReleaseRequestV1 {
+                        operation_id: *release.operation_id(),
+                        fingerprint: *release.fingerprint(),
+                        reference: release.reference(),
+                        access: release.access(),
+                        custody: release.custody(),
+                        not_before_unix_ms: delete_not_before_unix_ms,
+                    },
+                )
+                .map_err(|error| match error {
+                    BlobCustodyReleaseErrorV1::InvalidInput
+                    | BlobCustodyReleaseErrorV1::Conflict => "custody_release_denied",
+                    BlobCustodyReleaseErrorV1::Unavailable => "custody_release_unavailable",
+                })?;
+        let outcome = match outcome {
+            RuntimeReleaseOutcome::Accepted => {
+                BlobCustodyReleaseOutcomeV1::BlobCustodyReleaseOutcomeAcceptedV1
+            }
+            RuntimeReleaseOutcome::Existing => {
+                BlobCustodyReleaseOutcomeV1::BlobCustodyReleaseOutcomeExistingV1
+            }
+            RuntimeReleaseOutcome::AlreadyReleased => {
+                BlobCustodyReleaseOutcomeV1::BlobCustodyReleaseOutcomeAlreadyReleasedV1
+            }
+        };
+        Ok(BlobCustodyReleaseResponseV1 {
+            operation_id: release.operation_id().to_vec(),
+            outcome: outcome as i32,
+            delete_not_before_unix_ms,
+            error_code: String::new(),
+        })
     }
 
     pub(crate) fn serve_one(&mut self, stream: &mut UnixStream) -> Result<(), ()> {

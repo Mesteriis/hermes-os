@@ -1,16 +1,17 @@
 //! Structural validation for Blob managed-runtime configuration and status.
 
 use crate::v1::{
-    BlobCustodyReleaseGrantV1, BlobCustodyReleaseOutcomeV1, BlobCustodyReleaseReasonV1,
-    BlobCustodyReleaseResponseV1, BlobRuntimeConfigurationV1, BlobRuntimeControlRequestV1,
-    BlobRuntimeControlResponseV1, BlobRuntimeStateV1, BlobRuntimeStatusV1,
-    blob_runtime_control_request_v1::Operation as RequestOperation,
+    BlobBackupClassV1, BlobCustodyReleaseGrantV1, BlobCustodyReleaseOutcomeV1,
+    BlobCustodyReleaseReasonV1, BlobCustodyReleaseResponseV1, BlobRuntimeConfigurationV1,
+    BlobRuntimeControlRequestV1, BlobRuntimeControlResponseV1, BlobRuntimeStateV1,
+    BlobRuntimeStatusV1, blob_runtime_control_request_v1::Operation as RequestOperation,
     blob_runtime_control_response_v1::Result as ResponseResult,
 };
 
 const MAX_PATH_BYTES: usize = 4_096;
 const MAX_UNIX_SOCKET_PATH_BYTES: usize = 100;
 const MAX_BLOB_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_CUSTODY_RELEASE_GRACE_PERIOD_MS: u64 = 7 * 24 * 60 * 60 * 1_000;
 const ID_BYTES: usize = 16;
 const SHA256_BYTES: usize = 32;
 const P256_RAW_SIGNATURE_BYTES: usize = 64;
@@ -37,6 +38,8 @@ pub fn validate_blob_runtime_configuration(
         || configuration.vault_hpke_public_key_x25519.len() != 32
         || !valid_id(&configuration.kernel_instance_id)
         || configuration.kernel_authorization_public_key_sec1.len() != 65
+        || configuration.custody_release_grace_period_ms == 0
+        || configuration.custody_release_grace_period_ms > MAX_CUSTODY_RELEASE_GRACE_PERIOD_MS
     {
         return Err(BlobRuntimeValidationErrorV1::InvalidConfiguration);
     }
@@ -96,6 +99,12 @@ fn valid_release_grant(grant: &BlobCustodyReleaseGrantV1) -> bool {
         && grant.expires_at_unix_ms > grant.issued_at_unix_ms
         && grant.blob_runtime_generation > 0
         && grant.kernel_authorization_signature_raw.len() == P256_RAW_SIGNATURE_BYTES
+        && matches!(
+            BlobBackupClassV1::try_from(grant.backup_class),
+            Ok(BlobBackupClassV1::BlobBackupClassRequiredV1
+                | BlobBackupClassV1::BlobBackupClassRebuildableV1
+                | BlobBackupClassV1::BlobBackupClassExcludedV1)
+        )
 }
 
 fn validate_release_response(
@@ -208,6 +217,8 @@ mod tests {
             expires_at_unix_ms: 9,
             blob_runtime_generation: 10,
             kernel_authorization_signature_raw: vec![11; 64],
+            backup_class: BlobBackupClassV1::BlobBackupClassRequiredV1 as i32,
+            reference_expires_at_unix_ms: 0,
         }
     }
 }

@@ -4,10 +4,11 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: не реализовано. Blob runtime уже владеет
-grace-period deletion и reconciliation, но managed module пока не может
-освободить exact custody через public runtime protocol. До реализации,
-conformance и admission этого контракта delayed-delivery cleanup остаётся
+Состояние реализации: частично реализовано. Typed runtime protocol, Kernel-staged
+24-hour grace policy, Kernel-signature verification, crash-safe Blob-owned
+idempotency ledger и exact deletion reservation реализованы. Kernel issuance,
+managed-control routing, correlated Blob client, end-to-end conformance и
+admission ещё не реализованы. До их завершения delayed-delivery cleanup остаётся
 durable pending, а gate `communication_delayed_delivery_v1` — `planned`.
 
 Уточняет:
@@ -61,6 +62,12 @@ Blob service проверяет:
 deletion reservation. Физическое удаление выполняет только Blob lifecycle
 после policy grace period. Повторный exact request возвращает existing receipt;
 другой payload с тем же operation ID fail closed.
+
+Grace policy является Kernel-staged platform configuration, а не module setting:
+production Kernel передаёт 24 часа, runtime protocol принимает только
+положительное значение не более семи суток. `delete_not_before` вычисляется от
+подписанного `issued_at`, поэтому retry одного signed grant не двигает retention
+window.
 
 Ответ содержит только sanitized outcome:
 

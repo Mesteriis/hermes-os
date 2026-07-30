@@ -108,7 +108,6 @@ impl BlobMetadataLedger {
         now_unix_ms: u64,
         grace_period_ms: u64,
     ) -> Result<BlobDeletionReservationV1, BlobMetadataError> {
-        let _guard = self.lock()?;
         if grace_period_ms == 0
             || access.owner_id() != custody.owner_id()
             || reference.owner_id() != custody.owner_id()
@@ -118,8 +117,36 @@ impl BlobMetadataLedger {
         let not_before_unix_ms = now_unix_ms
             .checked_add(grace_period_ms)
             .ok_or(BlobMetadataError::InvalidGracePeriod)?;
+        self.reserve_deletion_exact(reference, access, custody, not_before_unix_ms)
+    }
+
+    pub fn reserve_deletion_exact(
+        &self,
+        reference: &BlobRefV1,
+        access: &BlobAccessFenceV1,
+        custody: &BlobCustodyScopeV1,
+        not_before_unix_ms: u64,
+    ) -> Result<BlobDeletionReservationV1, BlobMetadataError> {
+        let _guard = self.lock()?;
+        if not_before_unix_ms == 0
+            || access.owner_id() != custody.owner_id()
+            || reference.owner_id() != custody.owner_id()
+        {
+            return Err(BlobMetadataError::InvalidGracePeriod);
+        }
         let mut record = self.required(reference)?;
-        if !record.matches(reference, custody) || record.state() != BlobMetadataStateV1::Active {
+        if !record.matches(reference, custody) {
+            return Err(BlobMetadataError::ReservationMismatch);
+        }
+        if let BlobMetadataStateV1::DeleteReserved {
+            not_before_unix_ms: existing,
+        } = record.state()
+        {
+            return (existing == not_before_unix_ms)
+                .then(|| BlobDeletionReservationV1::new(reference, existing))
+                .ok_or(BlobMetadataError::ReservationMismatch);
+        }
+        if record.state() != BlobMetadataStateV1::Active {
             return Err(BlobMetadataError::ReservationMismatch);
         }
         record.reserve_deletion(not_before_unix_ms);

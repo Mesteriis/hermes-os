@@ -3,5 +3,6 @@
 pub mod lease;
 pub mod metadata;
 pub mod recovery;
+pub mod release;
 pub mod storage;
 pub mod vault;

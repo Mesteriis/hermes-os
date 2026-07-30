@@ -9,6 +9,10 @@ use sha2::{Digest, Sha256};
 
 use crate::lease::BlobKeyLeaseV1;
 use crate::metadata::{BlobDeletionReservationV1, BlobMetadataError, BlobMetadataLedger};
+use crate::release::{
+    BlobCustodyReleaseErrorV1, BlobCustodyReleaseLedgerV1, BlobCustodyReleaseOutcomeV1,
+    BlobCustodyReleaseRequestV1,
+};
 
 use super::{BlobStorageError, EncryptedBlobStore};
 
@@ -222,6 +226,14 @@ impl BlobContentLifecycleStore {
         self.metadata
             .reserve_deletion(reference, access, custody, now_unix_ms, grace_period_ms)
             .map_err(BlobLifecycleError::Metadata)
+    }
+
+    pub fn reserve_custody_release(
+        &self,
+        ledger: &BlobCustodyReleaseLedgerV1,
+        request: BlobCustodyReleaseRequestV1<'_>,
+    ) -> Result<BlobCustodyReleaseOutcomeV1, BlobCustodyReleaseErrorV1> {
+        ledger.reserve(&self.metadata, request)
     }
 
     pub fn delete_due(
