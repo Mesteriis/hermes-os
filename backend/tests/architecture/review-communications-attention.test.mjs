@@ -140,6 +140,32 @@ test('Review managed runtime owns exact client dispatch and shared realtime repl
   );
 });
 
+test('Review release assembly is a separate unsigned domain build unit', async () => {
+  const [manifest, assembly, main] = await Promise.all([
+    backendSource('src/review-attention-assembly/Cargo.toml'),
+    backendSource('src/review-attention-assembly/src/lib.rs'),
+    backendSource('src/review-attention-assembly/src/main.rs'),
+  ]);
+
+  assert.match(manifest, /role = "domain"/);
+  assert.match(manifest, /owner = "review"/);
+  assert.match(manifest, /surface = "assembly"/);
+  assert.match(manifest, /hermes-review-attention-persistence/);
+  assert.match(manifest, /hermes-review-attention-runtime/);
+  assert.doesNotMatch(manifest, /kernel|gateway|communications-|mail-|telegram-|whatsapp-|zulip-/);
+  assert.match(assembly, /review_attention_module_descriptor_v1/);
+  assert.match(assembly, /review_attention_settings_schema_v1/);
+  assert.match(assembly, /review_attention_storage_bundle_v1/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.match(assembly, /"module_runtime"/);
+  assert.match(assembly, /"storage_bundle"/);
+  assert.match(main, /materialize_review_attention_release_assembly_v1/);
+  assert.doesNotMatch(
+    `${assembly}\n${main}`,
+    /signing_key|private_key|DistributionManifestV1|ManagedControlChannel|serve-inherited/,
+  );
+});
+
 test('Review owner admission does not prematurely open the managed gate', async () => {
   const [adr, inventorySource, policySource] = await Promise.all([
     readFile(
@@ -167,7 +193,7 @@ test('Review owner admission does not prematurely open the managed gate', async 
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'review_communications_attention_managed_runtime_v1',
+    'review_communications_attention_release_assembly_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.domains, [
     'communications',

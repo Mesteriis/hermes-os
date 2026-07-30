@@ -581,4 +581,5 @@ ADR-0351 открывает Review как отдельного domain owner дл
 pending/reviewed/dismissed, pin, importance и snooze. Contract/core и
 owner-local idempotent command/query/realtime persistence units реализованы
 без Communications dependency. Самостоятельный managed Review runtime
-реализован; assembly/Kernel/Gateway/live gate остаётся закрытым.
+и отдельная unsigned release assembly реализованы;
+signed Kernel admission/Gateway/live gate остаётся закрытым.

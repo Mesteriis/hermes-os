@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_communications_attention_managed_runtime_v1",
+    "currentSlice": "review_communications_attention_release_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -720,6 +720,12 @@
         "role": "domain",
         "owner": "review",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-review-attention-assembly",
+        "role": "domain",
+        "owner": "review",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1250,6 +1256,24 @@
         },
         {
           "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-review-attention-assembly": [
+        {
+          "name": "hermes-review-attention-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-attention-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -3839,6 +3863,35 @@
           "features": []
         }
       ],
+      "hermes-review-attention-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-communications-attachment-contract": [
         {
           "name": "prost",
@@ -6177,6 +6230,10 @@
         "customBuildAllowed": false
       },
       "hermes-review-attention-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-review-attention-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       }

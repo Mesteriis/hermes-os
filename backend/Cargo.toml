@@ -47,6 +47,7 @@ members = [
   "src/review-attention-core",
   "src/review-attention-persistence",
   "src/review-attention-runtime",
+  "src/review-attention-assembly",
   "src/communications-content-api",
   "src/communications-saved-query-api",
   "src/communications-sender-insights-api",

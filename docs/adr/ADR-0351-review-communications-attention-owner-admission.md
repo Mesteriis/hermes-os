@@ -7,8 +7,9 @@
 Состояние реализации: exact client contract, pure core и owner-local
 PostgreSQL command/query/realtime persistence реализованы. Managed runtime,
 с generated client dispatch, Vault-fenced Storage startup и shared realtime
-publisher реализован. Assembly, Kernel/Gateway admission и live conformance
-ещё не реализованы;
+publisher реализован. Отдельная unsigned release assembly unit также
+реализована. Signed distribution/Kernel admission, Gateway routes и live
+conformance ещё не реализованы;
 `review_communications_attention_v1` остаётся planned.
 
 Уточняет:
@@ -53,9 +54,14 @@ Communications. Durable replay читается один раз при стар�
 этого новые client realtime frames публикуются только вследствие принятой
 Review command. Периодический query polling и таймерный pump отсутствуют.
 
+`hermes-review-attention-assembly` отдельно материализует canonical descriptor,
+settings schema, Storage migration bundle и отсортированный unsigned release
+fragment. Assembly не запускает runtime, не импортирует Kernel/Gateway и не
+получает signing authority.
+
 Следующие units добавляются отдельными slices:
 
-- release assembly и exact Kernel admission;
+- signed distribution и exact Kernel admission;
 - generated Gateway routes и shared owner-local SSE;
 - app composition, которая связывает opaque Review source reference с
   Communications canonical read только на клиентском/application уровне.

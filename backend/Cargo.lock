@@ -2809,6 +2809,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-review-attention-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-review-attention-persistence",
+ "hermes-review-attention-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-review-attention-core"
 version = "0.1.0"
 dependencies = [
