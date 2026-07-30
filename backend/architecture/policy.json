@@ -1171,6 +1171,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-communications-cross-channel-forward-source-api",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-communications-ingress",
           "kind": "normal"
         },

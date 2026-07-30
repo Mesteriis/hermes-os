@@ -1918,6 +1918,20 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOW
 
 const COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-runtime':
+    COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST[
+      'hermes-communications-runtime'
+    ].flatMap((dependency) => (
+      dependency.name === 'hermes-communications-evidence-export-source-api'
+        ? [
+            dependency,
+            {
+              name: 'hermes-communications-cross-channel-forward-source-api',
+              kind: 'normal',
+            },
+          ]
+        : [dependency]
+    )),
   'hermes-communications-cross-channel-forward-source-api': [
     { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },

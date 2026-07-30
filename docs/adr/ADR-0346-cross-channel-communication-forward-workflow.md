@@ -14,9 +14,11 @@ owner isolation и cleanup completion. Event-backed Communications
 source-preparation contract реализован отдельной domain-owned build unit.
 Communications persistence реализует owner-local source/target snapshot,
 channel-kind validation, revision fence и atomic inbox/result-outbox commit.
-Managed runtime Blob orchestration, workflow result adapter, delivery-intent
-adapter и live managed evidence ещё не реализованы. Production gate остаётся
-закрыт. Принятый ADR сам по себе не открывает
+Communications runtime adapter реализует exact command decode, verified Blob
+read, fixed target-bound Blob write, typed result и ACK-after-commit. Managed
+admission wiring, workflow result adapter, delivery-intent adapter и live
+managed evidence ещё не реализованы. Production gate остаётся закрыт.
+Принятый ADR сам по себе не открывает
 `communication_cross_channel_forward_v1`.
 
 ## Контекст

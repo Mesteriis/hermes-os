@@ -191,6 +191,7 @@ test('cross-channel source preparation is event-only and Communications-owned', 
     sourceEnvelope,
     sourceContract,
     sourcePersistence,
+    sourceRuntime,
     policySource,
   ] = await Promise.all([
     readFile(
@@ -231,6 +232,13 @@ test('cross-channel source preparation is event-only and Communications-owned', 
     readFile(
       new URL(
         'src/communications-persistence/src/forward_source.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communications-runtime/src/cross_channel_forward_source.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -283,8 +291,24 @@ test('cross-channel source preparation is event-only and Communications-owned', 
   assert.match(sourcePersistence, /InboxHashConflict/);
   assert.match(sourcePersistence, /StaleRevision/);
   assert.doesNotMatch(sourcePersistence, /pub (?:source|target)_provider/);
+  assert.match(
+    sourceRuntime,
+    /consume_next_cross_channel_forward_source_prepare_v1/,
+  );
+  assert.match(sourceRuntime, /receive_runtime_pull_delivery/);
+  assert.match(sourceRuntime, /request_managed_blob_session_v2/);
+  assert.match(sourceRuntime, /BlobDataOperationReadRangeV1/);
+  assert.match(sourceRuntime, /BlobDataOperationWriteV1/);
+  assert.match(
+    sourceRuntime,
+    /CROSS_CHANNEL_FORWARD_SOURCE_BLOB_TARGET_OWNER_ID_V1/,
+  );
+  assert.match(
+    sourceRuntime,
+    /persist_cross_channel_forward_source_result[\s\S]*acknowledge\(\)/,
+  );
   assert.doesNotMatch(
-    `${sourceContract}\n${sourceApi}\n${sourceEnvelope}\n${sourcePersistence}`,
+    `${sourceContract}\n${sourceApi}\n${sourceEnvelope}\n${sourcePersistence}\n${sourceRuntime}`,
     /provider_id|account_id|body_utf8|plaintext_body|arbitrary_target|\bAny\b|\bmap\s*</,
   );
 });

@@ -11,9 +11,11 @@ target-bound Blob audience и валидируемые `DurableEnvelopeV1` outbo
 без provider identity или plaintext. Communications persistence теперь
 предоставляет owner-local source/target snapshot, private channel-kind
 comparison, revision fencing и атомарный inbox/result-outbox commit с
-duplicate/hash-conflict semantics. Runtime Blob orchestration, workflow inbox
-adapter и live managed evidence ещё не реализованы; contract/runtime gate не
-закрыт.
+duplicate/hash-conflict semantics. Communications runtime adapter реализует
+exact command decode, Blob read/hash/UTF-8 verification, fixed target-bound
+Blob write, prepared/rejected result persistence и ACK-after-commit.
+Admission wiring в managed pump, workflow inbox adapter и live managed
+evidence ещё не реализованы; contract/runtime gate не закрыт.
 
 ## Контекст
 

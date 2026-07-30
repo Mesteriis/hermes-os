@@ -64,6 +64,8 @@ pub const COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID: &str = "communications.s
 pub const COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID: &str = "communications.export-source.v1";
 pub const COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID: &str =
     "communications.export-source.blob.v1";
+pub const COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_BLOB_CAPABILITY_ID: &str =
+    "communications.cross-channel-forward-source.blob.v1";
 pub const COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID: &str = "communications.search.index.v1";
 pub const COMMUNICATIONS_STORAGE_CAPABILITY_ID: &str = "communications.storage.v1";
 pub const COMMUNICATIONS_MODULE_ID: &str = COMMUNICATIONS_BLOB_CUSTODY_TARGET_MODULE_ID;
