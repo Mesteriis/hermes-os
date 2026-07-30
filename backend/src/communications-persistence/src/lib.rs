@@ -9,6 +9,7 @@ mod content_read;
 mod custody_transfer;
 mod durable;
 mod export_source;
+mod forward_source;
 mod saved_search;
 mod schema;
 mod search;
@@ -26,6 +27,10 @@ pub use durable::{CommunicationsDurablePersistence, PersistedCommunicationsObser
 pub use export_source::{
     CommunicationsEvidenceExportBodyReceiptV1, CommunicationsEvidenceExportSourceErrorV1,
     CommunicationsEvidenceExportSourceItemV1,
+};
+pub use forward_source::{
+    CommunicationsCrossChannelForwardBodyReceiptV1, CommunicationsCrossChannelForwardSourceErrorV1,
+    CommunicationsCrossChannelForwardSourceSnapshotV1,
 };
 pub use saved_search::{
     CommunicationsSavedSearchDefinitionV1, CommunicationsSavedSearchListAfterV1,

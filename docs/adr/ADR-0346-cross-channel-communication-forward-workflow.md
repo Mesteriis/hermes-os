@@ -12,9 +12,11 @@ lease/epoch work claims, bounded reconnect-safe retry, client realtime ledger
 PostgreSQL contour доказывает migration, reconnect, stale claim, retry deadline,
 owner isolation и cleanup completion. Event-backed Communications
 source-preparation contract реализован отдельной domain-owned build unit.
-Managed runtime, Communications transactional adapter, workflow result adapter,
-delivery-intent adapter и live managed evidence ещё не реализованы. Production
-gate остаётся закрыт. Принятый ADR сам по себе не открывает
+Communications persistence реализует owner-local source/target snapshot,
+channel-kind validation, revision fence и atomic inbox/result-outbox commit.
+Managed runtime Blob orchestration, workflow result adapter, delivery-intent
+adapter и live managed evidence ещё не реализованы. Production gate остаётся
+закрыт. Принятый ADR сам по себе не открывает
 `communication_cross_channel_forward_v1`.
 
 ## Контекст

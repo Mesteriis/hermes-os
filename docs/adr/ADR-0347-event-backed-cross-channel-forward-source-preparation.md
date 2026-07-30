@@ -8,9 +8,12 @@
 `hermes-communications-cross-channel-forward-source-api` реализован. Он
 фиксирует три exact durable contracts, direction-specific route requests,
 target-bound Blob audience и валидируемые `DurableEnvelopeV1` outbox records
-без provider identity или plaintext. Communications transactional
-inbox/outbox adapter, workflow inbox adapter и live managed evidence ещё не
-реализованы; contract/runtime gate не закрыт.
+без provider identity или plaintext. Communications persistence теперь
+предоставляет owner-local source/target snapshot, private channel-kind
+comparison, revision fencing и атомарный inbox/result-outbox commit с
+duplicate/hash-conflict semantics. Runtime Blob orchestration, workflow inbox
+adapter и live managed evidence ещё не реализованы; contract/runtime gate не
+закрыт.
 
 ## Контекст
 

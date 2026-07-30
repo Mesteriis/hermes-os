@@ -190,6 +190,7 @@ test('cross-channel source preparation is event-only and Communications-owned', 
     sourceApi,
     sourceEnvelope,
     sourceContract,
+    sourcePersistence,
     policySource,
   ] = await Promise.all([
     readFile(
@@ -223,6 +224,13 @@ test('cross-channel source preparation is event-only and Communications-owned', 
     readFile(
       new URL(
         'src/communications-cross-channel-forward-source-api/proto/hermes/communications/cross_channel_forward_source/v1/cross_channel_forward_source.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communications-persistence/src/forward_source.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -266,8 +274,17 @@ test('cross-channel source preparation is event-only and Communications-owned', 
   assert.match(sourceEnvelope, /Semantics::Result/);
   assert.match(sourceContract, /PrepareCrossChannelForwardSourceCommandV1/);
   assert.match(sourceContract, /CrossChannelForwardBodySourceReceiptV1/);
+  assert.match(sourcePersistence, /cross_channel_forward_source_snapshot/);
+  assert.match(sourcePersistence, /persist_cross_channel_forward_source_result/);
+  assert.match(sourcePersistence, /communications_event_inbox/);
+  assert.match(sourcePersistence, /communications_domain_outbox/);
+  assert.match(sourcePersistence, /ON CONFLICT \(message_id\) DO NOTHING/);
+  assert.match(sourcePersistence, /1 \| 4 \| 6 => Ok\(CommunicationChannelKindV1::Mail\)/);
+  assert.match(sourcePersistence, /InboxHashConflict/);
+  assert.match(sourcePersistence, /StaleRevision/);
+  assert.doesNotMatch(sourcePersistence, /pub (?:source|target)_provider/);
   assert.doesNotMatch(
-    `${sourceContract}\n${sourceApi}\n${sourceEnvelope}`,
+    `${sourceContract}\n${sourceApi}\n${sourceEnvelope}\n${sourcePersistence}`,
     /provider_id|account_id|body_utf8|plaintext_body|arbitrary_target|\bAny\b|\bmap\s*</,
   );
 });
