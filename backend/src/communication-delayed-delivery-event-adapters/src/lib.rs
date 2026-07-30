@@ -194,7 +194,7 @@ pub fn decode_scheduler_result_v1(
         .map_err(|_| DelayedDeliverySchedulerAdapterErrorV1::InvalidResult)?;
     validate_scheduler_schedule_control_result_v1(&payload)
         .map_err(|_| DelayedDeliverySchedulerAdapterErrorV1::InvalidResult)?;
-    let delayed_operation_id = id16(&payload.operation_id)
+    let delayed_operation_id = id16(&payload.schedule_id)
         .map_err(|_| DelayedDeliverySchedulerAdapterErrorV1::InvalidResult)?;
     if envelope.correlation_id != payload.operation_id
         || result_metadata.command_id != payload.operation_id
@@ -477,6 +477,10 @@ mod tests {
         assert_eq!(
             decoded.result,
             DecodedSchedulerScheduleResultV1::Rejected { error_code: 3 }
+        );
+        assert_eq!(
+            decoded.delayed_operation_id, [9; 16],
+            "workflow ownership follows Scheduler schedule_id, not command operation_id"
         );
     }
 }

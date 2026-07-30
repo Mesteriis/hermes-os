@@ -7,15 +7,18 @@ use std::time::Instant;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use hermes_communication_delayed_delivery_api::{
+    COMMUNICATION_DELAYED_DELIVERY_CANCEL_CONNECT_PATH_V1,
     COMMUNICATION_DELAYED_DELIVERY_CAPABILITY_ID_V1, COMMUNICATION_DELAYED_DELIVERY_MODULE_ID_V1,
     COMMUNICATION_DELAYED_DELIVERY_OWNER_V1,
     COMMUNICATION_DELAYED_DELIVERY_REALTIME_CONTRACT_NAME_V1,
     COMMUNICATION_DELAYED_DELIVERY_SCHEDULE_CONNECT_PATH_V1,
     COMMUNICATION_DELAYED_DELIVERY_STATUS_CONNECT_PATH_V1,
     wire::{
-        DelayedDeliveryErrorCodeV1, DelayedDeliveryStateV1, DelayedDeliveryStatusChangedV1,
-        GetDelayedDeliveryStatusRequestV1, GetDelayedDeliveryStatusResponseV1,
-        ScheduleDelayedDeliveryRequestV1, ScheduleDelayedDeliveryResponseV1,
+        CancelDelayedDeliveryRequestV1, CancelDelayedDeliveryResponseV1,
+        DelayedDeliveryErrorCodeV1, DelayedDeliveryReceiptKindV1, DelayedDeliveryStateV1,
+        DelayedDeliveryStatusChangedV1, GetDelayedDeliveryStatusRequestV1,
+        GetDelayedDeliveryStatusResponseV1, ScheduleDelayedDeliveryRequestV1,
+        ScheduleDelayedDeliveryResponseV1,
     },
 };
 use hermes_communication_delayed_delivery_runtime::COMMUNICATION_DELAYED_DELIVERY_STORAGE_CAPABILITY_ID_V1;
@@ -197,6 +200,14 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         0x71,
         2,
     );
+    assert_delayed_delivery_cancellation_round_trip(
+        &managed_contour,
+        &delayed_delivery.registration_id,
+        realtime.clone(),
+        conversation_id.clone(),
+        0xd1,
+        3,
+    );
     let predecessor = delayed_delivery;
     let stale_runtime_instance_id = predecessor.runtime_instance_id.clone();
     let stale_runtime_generation = predecessor.runtime_generation;
@@ -208,7 +219,7 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         &store,
         release.kernel(),
         &root.join("runtime"),
-        2,
+        3,
     );
     assert_stale_delayed_route_is_rejected(
         &store,
@@ -224,7 +235,7 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         realtime.clone(),
         conversation_id.clone(),
         0x81,
-        3,
+        4,
     );
     assert_delayed_delivery_survives_ambiguous_delivery_response(
         &managed_contour,
@@ -232,7 +243,7 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         realtime.clone(),
         conversation_id.clone(),
         0xc1,
-        4,
+        5,
         &ambiguous_request_probe,
     );
     let delayed_delivery = assert_delayed_delivery_survives_nats_outage(
@@ -241,7 +252,7 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         realtime.clone(),
         conversation_id.clone(),
         0x91,
-        5,
+        6,
     );
     assert_delayed_delivery_survives_scheduler_outage(
         &managed_contour,
@@ -249,7 +260,7 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         realtime,
         conversation_id,
         0xa1,
-        6,
+        7,
     );
     let (owner_runtime_dir, owner_control) =
         start_owner_control(&data, &store, &shutdown, &supervisor);
@@ -266,7 +277,7 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         &store,
         release.kernel(),
         &root.join("runtime"),
-        4,
+        5,
     );
     assert!(
         supervisor
@@ -426,6 +437,174 @@ fn assert_delayed_delivery_round_trip(
             .windows(private_body.len())
             .any(|window| window == private_body),
         "delayed-delivery realtime must not contain private content"
+    );
+}
+
+fn assert_delayed_delivery_cancellation_round_trip(
+    contour: &DelayedDeliveryManagedContour<'_>,
+    delayed_delivery_registration_id: &str,
+    realtime: hermes_gateway_runtime::InMemoryBrowserRealtimeSource,
+    conversation_id: Vec<u8>,
+    operation_byte: u8,
+    authentication_sign_count: u32,
+) {
+    let DelayedDeliveryManagedContour {
+        store,
+        supervisor,
+        root,
+        data,
+        kernel,
+    } = contour;
+    let runtime = tokio::runtime::Runtime::new().expect("Gateway runtime");
+    let router = super::delivery_intent_realtime_flow::delivery_intent_gateway(
+        store, supervisor, root, data, realtime,
+    );
+    let cookie = super::super::browser_gateway_session::authenticate_gateway_router_with_sign_count(
+        &router,
+        &runtime,
+        authentication_sign_count,
+    );
+    let delayed_operation_id = vec![operation_byte; 16];
+    let private_body = b"cancelled delayed private body must stay outside durable events";
+    let deliver_at_unix_millis =
+        u64::try_from(current_unix_millis()).expect("positive current time") + 30_000;
+    let scheduled = route_proto(
+        &router,
+        &runtime,
+        &cookie,
+        COMMUNICATION_DELAYED_DELIVERY_SCHEDULE_CONNECT_PATH_V1,
+        ScheduleDelayedDeliveryRequestV1 {
+            protocol_major: 1,
+            delayed_operation_id: delayed_operation_id.clone(),
+            delivery_operation_id: vec![operation_byte.wrapping_add(1); 16],
+            conversation_id,
+            reply_to_message_id: None,
+            body_utf8: private_body.to_vec(),
+            deliver_at_unix_millis,
+        }
+        .encode_to_vec(),
+    );
+    let scheduled =
+        ScheduleDelayedDeliveryResponseV1::decode(scheduled.as_slice()).expect("schedule response");
+    assert_eq!(
+        scheduled.error,
+        DelayedDeliveryErrorCodeV1::DelayedDeliveryErrorCodeUnspecified as i32
+    );
+    let scheduled = wait_for_status_state(
+        &router,
+        &runtime,
+        &cookie,
+        &delayed_operation_id,
+        deliver_at_unix_millis,
+        DelayedDeliveryStateV1::DelayedDeliveryStateScheduled,
+        supervisor,
+        delayed_delivery_registration_id,
+    );
+    let cancel_request = CancelDelayedDeliveryRequestV1 {
+        protocol_major: 1,
+        delayed_operation_id: delayed_operation_id.clone(),
+        expected_revision: scheduled.state_revision,
+    }
+    .encode_to_vec();
+
+    supervisor
+        .stop(SCHEDULER_REGISTRATION)
+        .expect("stop Scheduler before durable cancellation");
+    let accepted = route_proto(
+        &router,
+        &runtime,
+        &cookie,
+        COMMUNICATION_DELAYED_DELIVERY_CANCEL_CONNECT_PATH_V1,
+        cancel_request.clone(),
+    );
+    let accepted = CancelDelayedDeliveryResponseV1::decode(accepted.as_slice())
+        .expect("accepted cancel response");
+    assert_eq!(accepted.delayed_operation_id, delayed_operation_id);
+    assert_eq!(
+        accepted.state,
+        DelayedDeliveryStateV1::DelayedDeliveryStateCancelRequested as i32
+    );
+    assert_eq!(accepted.state_revision, scheduled.state_revision + 1);
+    assert_eq!(
+        accepted.receipt,
+        DelayedDeliveryReceiptKindV1::DelayedDeliveryReceiptKindAccepted as i32
+    );
+    assert_eq!(
+        accepted.error,
+        DelayedDeliveryErrorCodeV1::DelayedDeliveryErrorCodeUnspecified as i32
+    );
+    let repeated = route_proto(
+        &router,
+        &runtime,
+        &cookie,
+        COMMUNICATION_DELAYED_DELIVERY_CANCEL_CONNECT_PATH_V1,
+        cancel_request,
+    );
+    let repeated = CancelDelayedDeliveryResponseV1::decode(repeated.as_slice())
+        .expect("repeated cancel response");
+    assert_eq!(repeated.state, accepted.state);
+    assert_eq!(repeated.state_revision, accepted.state_revision);
+    assert_eq!(
+        repeated.receipt,
+        DelayedDeliveryReceiptKindV1::DelayedDeliveryReceiptKindExisting as i32
+    );
+    let stale = route_proto(
+        &router,
+        &runtime,
+        &cookie,
+        COMMUNICATION_DELAYED_DELIVERY_CANCEL_CONNECT_PATH_V1,
+        CancelDelayedDeliveryRequestV1 {
+            protocol_major: 1,
+            delayed_operation_id: delayed_operation_id.clone(),
+            expected_revision: accepted.state_revision,
+        }
+        .encode_to_vec(),
+    );
+    let stale =
+        CancelDelayedDeliveryResponseV1::decode(stale.as_slice()).expect("stale cancel response");
+    assert_eq!(
+        stale.error,
+        DelayedDeliveryErrorCodeV1::DelayedDeliveryErrorCodeStaleRevision as i32
+    );
+    assert_eq!(
+        stale.state,
+        DelayedDeliveryStateV1::DelayedDeliveryStateUnspecified as i32
+    );
+    assert!(
+        supervisor
+            .is_active(delayed_delivery_registration_id)
+            .expect("observe delayed-delivery runtime during Scheduler cancellation outage")
+    );
+    assert!(
+        !supervisor
+            .is_active(SCHEDULER_REGISTRATION)
+            .expect("observe stopped Scheduler before cancellation successor")
+    );
+    restart_scheduler_with_current_grants(supervisor, store, kernel, &root.join("runtime"), 2);
+    let cancelled = wait_for_status_state(
+        &router,
+        &runtime,
+        &cookie,
+        &delayed_operation_id,
+        deliver_at_unix_millis,
+        DelayedDeliveryStateV1::DelayedDeliveryStateCancelled,
+        supervisor,
+        delayed_delivery_registration_id,
+    );
+    assert_eq!(cancelled.state_revision, accepted.state_revision + 1);
+    let event = read_delayed_delivery_state_sse(
+        &router,
+        &runtime,
+        &cookie,
+        &delayed_operation_id,
+        DelayedDeliveryStateV1::DelayedDeliveryStateCancelled,
+    );
+    assert!(
+        !event
+            .encode_to_vec()
+            .windows(private_body.len())
+            .any(|window| window == private_body),
+        "cancelled delayed-delivery realtime must not contain private content"
     );
 }
 
@@ -727,7 +906,7 @@ fn assert_delayed_delivery_survives_scheduler_outage(
             .expect("observe delayed-delivery runtime during Scheduler outage"),
         "Scheduler outage must not stop the delayed-delivery runtime"
     );
-    restart_scheduler_with_current_grants(supervisor, store, kernel, &root.join("runtime"), 3);
+    restart_scheduler_with_current_grants(supervisor, store, kernel, &root.join("runtime"), 4);
     let terminal = wait_for_terminal_status(
         &router,
         &runtime,
@@ -1084,6 +1263,43 @@ fn wait_for_terminal_status(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn wait_for_status_state(
+    router: &super::delivery_intent_realtime_flow::DeliveryIntentGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    delayed_operation_id: &[u8],
+    deliver_at_unix_millis: u64,
+    expected_state: DelayedDeliveryStateV1,
+    supervisor: &ManagedRuntimeSupervisor,
+    delayed_delivery_registration_id: &str,
+) -> GetDelayedDeliveryStatusResponseV1 {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let status = delayed_delivery_status(
+            router,
+            runtime,
+            cookie,
+            delayed_operation_id,
+            deliver_at_unix_millis,
+        );
+        if status.state == expected_state as i32 {
+            return status;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "delayed delivery did not reach state {expected_state:?}: {}; delayed_active={:?}; \
+             delayed_failure={:?}; scheduler_active={:?}; scheduler_failure={:?}",
+            status.state,
+            supervisor.is_active(delayed_delivery_registration_id),
+            supervisor.last_failure(delayed_delivery_registration_id),
+            supervisor.is_active(SCHEDULER_REGISTRATION),
+            supervisor.last_failure(SCHEDULER_REGISTRATION),
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
 fn delayed_delivery_status(
     router: &super::delivery_intent_realtime_flow::DeliveryIntentGateway,
     runtime: &tokio::runtime::Runtime,
@@ -1155,6 +1371,22 @@ fn read_delayed_delivery_terminal_sse(
     cookie: &str,
     delayed_operation_id: &[u8],
 ) -> hermes_gateway_protocol::v1::ClientRealtimeEventV1 {
+    read_delayed_delivery_state_sse(
+        router,
+        runtime,
+        cookie,
+        delayed_operation_id,
+        DelayedDeliveryStateV1::DelayedDeliveryStateDeliveryAccepted,
+    )
+}
+
+fn read_delayed_delivery_state_sse(
+    router: &super::delivery_intent_realtime_flow::DeliveryIntentGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    delayed_operation_id: &[u8],
+    expected_state: DelayedDeliveryStateV1,
+) -> hermes_gateway_protocol::v1::ClientRealtimeEventV1 {
     let response = runtime.block_on(
         router.route(
             Request::builder()
@@ -1169,16 +1401,21 @@ fn read_delayed_delivery_terminal_sse(
     runtime.block_on(async {
         tokio::time::timeout(
             Duration::from_secs(8),
-            find_delayed_delivery_terminal_event(response.into_body(), delayed_operation_id),
+            find_delayed_delivery_state_event(
+                response.into_body(),
+                delayed_operation_id,
+                expected_state,
+            ),
         )
         .await
         .expect("delayed-delivery SSE event timeout")
     })
 }
 
-async fn find_delayed_delivery_terminal_event<B>(
+async fn find_delayed_delivery_state_event<B>(
     mut body: B,
     delayed_operation_id: &[u8],
+    expected_state: DelayedDeliveryStateV1,
 ) -> hermes_gateway_protocol::v1::ClientRealtimeEventV1
 where
     B: hyper::body::Body<Data = Bytes> + Unpin,
@@ -1211,8 +1448,7 @@ where
             let payload = DelayedDeliveryStatusChangedV1::decode(event.payload.as_slice())
                 .expect("decode delayed-delivery realtime event");
             if payload.delayed_operation_id == delayed_operation_id
-                && payload.state
-                    == DelayedDeliveryStateV1::DelayedDeliveryStateDeliveryAccepted as i32
+                && payload.state == expected_state as i32
             {
                 return event;
             }

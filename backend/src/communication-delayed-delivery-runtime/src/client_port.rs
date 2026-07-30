@@ -194,15 +194,22 @@ pub async fn cancel_delayed_delivery_payload_v1(
     };
     let repeated = status.state == DelayedDeliveryStateV1::CancelRequested
         && status.state_revision == request.expected_revision.saturating_add(1);
-    if !repeated
-        && request_cancellation_v1(
-            DelayedDeliveryLifecycleV1 {
-                state: status.state,
-                revision: status.state_revision,
-            },
-            request.expected_revision,
-        )
-        .is_err()
+    if repeated {
+        return cancel_response(
+            delayed_operation_id,
+            status.state,
+            status.state_revision,
+            WireReceipt::DelayedDeliveryReceiptKindExisting,
+        );
+    }
+    if request_cancellation_v1(
+        DelayedDeliveryLifecycleV1 {
+            state: status.state,
+            revision: status.state_revision,
+        },
+        request.expected_revision,
+    )
+    .is_err()
     {
         return cancel_error(
             response_id,
@@ -234,18 +241,12 @@ pub async fn cancel_delayed_delivery_payload_v1(
         })
         .await
     {
-        Ok(status) => CancelDelayedDeliveryResponseV1 {
-            delayed_operation_id: delayed_operation_id.to_vec(),
-            state: wire_state(status.state) as i32,
-            state_revision: status.state_revision,
-            receipt: if repeated {
-                WireReceipt::DelayedDeliveryReceiptKindExisting as i32
-            } else {
-                WireReceipt::DelayedDeliveryReceiptKindAccepted as i32
-            },
-            error: WireError::DelayedDeliveryErrorCodeUnspecified as i32,
-        }
-        .encode_to_vec(),
+        Ok(status) => cancel_response(
+            delayed_operation_id,
+            status.state,
+            status.state_revision,
+            WireReceipt::DelayedDeliveryReceiptKindAccepted,
+        ),
         Err(DelayedDeliveryPersistenceErrorV1::StaleRevision) => cancel_error(
             response_id,
             WireError::DelayedDeliveryErrorCodeStaleRevision,
@@ -454,6 +455,22 @@ fn cancel_error(delayed_operation_id: Vec<u8>, error: WireError) -> Vec<u8> {
         state_revision: 0,
         receipt: WireReceipt::DelayedDeliveryReceiptKindUnspecified as i32,
         error: error as i32,
+    }
+    .encode_to_vec()
+}
+
+fn cancel_response(
+    delayed_operation_id: [u8; 16],
+    state: DelayedDeliveryStateV1,
+    state_revision: u64,
+    receipt: WireReceipt,
+) -> Vec<u8> {
+    CancelDelayedDeliveryResponseV1 {
+        delayed_operation_id: delayed_operation_id.to_vec(),
+        state: wire_state(state) as i32,
+        state_revision,
+        receipt: receipt as i32,
+        error: WireError::DelayedDeliveryErrorCodeUnspecified as i32,
     }
     .encode_to_vec()
 }

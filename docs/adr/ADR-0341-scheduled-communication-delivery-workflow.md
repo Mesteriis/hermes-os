@@ -114,6 +114,20 @@ accepted receipt без повторной business mutation, workflow дохо�
 закрывает ambiguous request/result-loss item, но не подменяет отдельный
 cancellation-race contour.
 
+Live managed cancellation contour теперь сначала дожидается настоящего
+Scheduler `ensured`, останавливает только Scheduler и через generated Cancel
+route атомарно сохраняет `cancel_requested` вместе с exact CancelOneShot
+outbox. Exact повтор того же client request возвращает сохранённый `existing`
+receipt без пересборки time-dependent envelope, а новый expected revision
+возвращает typed `STALE_REVISION`. Fenced Scheduler successor получает уже
+опубликованную durable command, возвращает `cancelled`, workflow связывает
+результат с отдельным `schedule_id`, а не с Cancel command `operation_id`, и
+публикует sanitized terminal SSE без private body. Disposable PostgreSQL
+conformance отдельно сохраняет Scheduler-authoritative `too_late` race; live
+test не синтезирует этот result в обход Scheduler. Этот evidence закрывает
+managed Cancel routing, duplicate/stale negatives и cancellation-successor
+recovery.
+
 Этот ADR не открывает workflow gate сам по себе.
 
 Уточняет:
