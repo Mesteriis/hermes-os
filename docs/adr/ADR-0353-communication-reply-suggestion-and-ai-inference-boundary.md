@@ -17,8 +17,11 @@ source preparation ещё не доказано, поэтому gate
 `communications_ai_context_source_v1` остаётся `planned`.
 `hermes-ai-inference-core` также реализован как отдельная engine unit с
 revision-fenced lifecycle, fixed prompt/policy receipt и sanitized terminal
-results. Остальные три AI engine units, provider integration и workflow ещё не
-реализованы; gates
+results. `hermes-ai-inference-persistence` реализован отдельной owner-local
+PostgreSQL unit: typed lifecycle, request/source receipts, pre-execution
+settings revision, recoverable runs и terminal candidate сохраняются без
+source message body или cross-owner SQL. Остальные две AI engine units,
+provider integration и workflow ещё не реализованы; gates
 `ai_inference_v1`, `ollama_ai_provider_v1` и
 `communication_reply_suggestion_v1` также остаются `planned`.
 

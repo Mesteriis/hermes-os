@@ -744,6 +744,12 @@
         "role": "engine",
         "owner": "ai",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-ai-inference-persistence",
+        "role": "engine",
+        "owner": "ai",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1719,6 +1725,20 @@
       "hermes-ai-inference-core": [
         {
           "name": "hermes-ai-contracts",
+          "kind": "normal"
+        }
+      ],
+      "hermes-ai-inference-persistence": [
+        {
+          "name": "hermes-ai-contracts",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-ai-inference-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -4897,6 +4917,28 @@
           "features": []
         }
       ],
+      "hermes-ai-inference-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-communication-delivery-intent-ingress-api": [
         {
           "name": "prost",
@@ -6216,6 +6258,10 @@
         "customBuildAllowed": true
       },
       "hermes-ai-inference-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-ai-inference-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },

@@ -1576,6 +1576,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-ai-inference-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-ai-contracts",
+ "hermes-ai-inference-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-attachment-security-assembly"
 version = "0.1.0"
 dependencies = [

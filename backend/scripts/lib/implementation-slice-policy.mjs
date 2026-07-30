@@ -769,6 +769,12 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
     owner: 'ai',
     surface: 'implementation',
   },
+  {
+    name: 'hermes-ai-inference-persistence',
+    role: 'engine',
+    owner: 'ai',
+    surface: 'persistence',
+  },
 ];
 
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
@@ -2256,6 +2262,11 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-ai-inference-core': [
     { name: 'hermes-ai-contracts', kind: 'normal' },
   ],
+  'hermes-ai-inference-persistence': [
+    { name: 'hermes-ai-contracts', kind: 'normal' },
+    { name: 'hermes-ai-inference-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
 };
 
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
@@ -2655,6 +2666,10 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-ai-inference-core': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-ai-inference-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
   ],
 };
 

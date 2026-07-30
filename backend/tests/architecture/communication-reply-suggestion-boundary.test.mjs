@@ -215,3 +215,34 @@ test('AI inference core owns lifecycle and fixed policy without provider impleme
     /communications|reply-suggestion|ollama|reqwest|hyper|sqlx|gateway|kernel|settings_registry|provider_id|model_id|endpoint/,
   );
 });
+
+test('AI inference persistence is typed owner-local and stores no private source body', async () => {
+  const [manifest, api, model, repository, schema, migration] = await Promise.all([
+    backendSource('src/ai-inference-persistence/Cargo.toml'),
+    backendSource('src/ai-inference-persistence/src/lib.rs'),
+    backendSource('src/ai-inference-persistence/src/model.rs'),
+    backendSource('src/ai-inference-persistence/src/repository.rs'),
+    backendSource('src/ai-inference-persistence/src/schema.rs'),
+    backendSource('src/ai-inference-persistence/migrations/0001_ai_inference_runs.sql'),
+  ]);
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "ai"/);
+  assert.match(manifest, /surface = "persistence"/);
+  assert.match(api, /AiInferencePersistenceV1/);
+  assert.match(model, /validate_transition/);
+  assert.match(model, /provider_settings_revision/);
+  assert.match(repository, /accept_run/);
+  assert.match(repository, /persist_transition/);
+  assert.match(repository, /load_recoverable_runs/);
+  assert.match(repository, /selected_provider_settings_revision/);
+  assert.match(schema, /owner_id: "ai"/);
+  assert.match(migration, /CREATE TABLE hermes_data\.ai_inference_runs/);
+  assert.match(migration, /request_digest BYTEA/);
+  assert.match(migration, /source_reference_id BYTEA/);
+  assert.match(migration, /result_body_utf8 BYTEA/);
+  assert.doesNotMatch(
+    `${manifest}\n${api}\n${model}\n${repository}\n${migration}`,
+    /communications_|mail_|telegram_|whatsapp_|zulip_|message_body|provider_id|model_id|endpoint|prompt_text|serde_json|google\.protobuf\.Any|map</,
+  );
+});
