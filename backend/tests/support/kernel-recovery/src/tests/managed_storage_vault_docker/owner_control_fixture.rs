@@ -2,6 +2,8 @@
 
 use super::*;
 
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+
 use hermes_gateway_protocol::owner_control_client::{
     OwnerControlClientV1, OwnerControlProofSignerV1,
 };
@@ -44,7 +46,7 @@ pub(super) fn start_owner_control(
         )
     });
     for _ in 0..250 {
-        if runtime_dir.join("owner.sock").exists() {
+        if owner_control_socket_is_ready(&runtime_dir.join("owner.sock")) {
             return (runtime_dir, server);
         }
         if server.is_finished() {
@@ -54,6 +56,12 @@ pub(super) fn start_owner_control(
         std::thread::sleep(Duration::from_millis(20));
     }
     panic!("owner control socket did not become ready");
+}
+
+fn owner_control_socket_is_ready(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|metadata| {
+        metadata.file_type().is_socket() && metadata.permissions().mode() & 0o777 == 0o600
+    })
 }
 
 pub(super) fn transition_registration(

@@ -21,6 +21,7 @@ use hermes_runtime_protocol::v1::ManagedWorkflowRuntimeConfigurationV1;
 
 use crate::modules::capability::module_query::ModuleQueryRouteHandlerV1;
 use crate::platform::client_realtime::ClientRealtimePublishHandlerV1;
+use crate::runtime::lifecycle::control::ManagedRuntimeModuleRequestHandler;
 
 const DELIVERY_INTENT_RELEASE_ARTIFACT_ID: &str = "workflow.communication_delivery_intent";
 const DELIVERY_INTENT_RUNTIME_INSTANCE_ID: &str = "delivery-intent-runtime-1";
@@ -148,11 +149,32 @@ pub(super) fn configure_delivery_intent_runtime_routes(
     store: &Arc<SqliteControlStore>,
     client_realtime: InMemoryBrowserRealtimeSource,
 ) {
+    configure_delivery_intent_runtime_routes_with_request_handler(
+        supervisor,
+        store,
+        client_realtime,
+        delivery_intent_request_route_handler(supervisor, store),
+    );
+}
+
+pub(super) fn delivery_intent_request_route_handler(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &Arc<SqliteControlStore>,
+) -> Arc<dyn ManagedRuntimeModuleRequestHandler> {
+    Arc::new(ModuleRequestRouteHandlerV1::new(
+        Arc::clone(store),
+        supervisor.relay_port(),
+    ))
+}
+
+pub(super) fn configure_delivery_intent_runtime_routes_with_request_handler(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &Arc<SqliteControlStore>,
+    client_realtime: InMemoryBrowserRealtimeSource,
+    request_handler: Arc<dyn ManagedRuntimeModuleRequestHandler>,
+) {
     supervisor
-        .configure_module_request_handler(Arc::new(ModuleRequestRouteHandlerV1::new(
-            Arc::clone(store),
-            supervisor.relay_port(),
-        )))
+        .configure_module_request_handler(request_handler)
         .expect("configure managed module request handler");
     supervisor
         .configure_module_query_handler(Arc::new(ModuleQueryRouteHandlerV1::new(

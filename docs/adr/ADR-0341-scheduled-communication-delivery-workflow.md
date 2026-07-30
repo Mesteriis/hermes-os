@@ -102,6 +102,18 @@ operation и не сохраняет plaintext fallback, а delayed-delivery run
 exact те же protobuf request bytes, получает terminal delivery и доказывает
 отсутствие private body в realtime. Этот evidence закрывает Blob outage item.
 
+Отдельный live ambiguous-request contour пропускает первый delivery-intent
+`request_rpc` через настоящий Kernel capability route и настоящий
+Delivery Intent runtime до успешной provider-neutral mutation, после чего
+test-only transport decorator теряет только ответ вызывающему workflow.
+Delayed-delivery не подтверждает due command, получает его повторно после
+JetStream `ack_wait` и отправляет в Delivery Intent exact те же request bytes
+с тем же stable delivery operation ID. Delivery Intent возвращает существующий
+accepted receipt без повторной business mutation, workflow доходит до
+`delivery_accepted`, а terminal SSE не содержит private body. Этот evidence
+закрывает ambiguous request/result-loss item, но не подменяет отдельный
+cancellation-race contour.
+
 Этот ADR не открывает workflow gate сам по себе.
 
 Уточняет:

@@ -2,6 +2,7 @@
 
 use super::*;
 
+use std::sync::Mutex;
 use std::time::Instant;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -19,15 +20,22 @@ use hermes_communication_delayed_delivery_api::{
 };
 use hermes_communication_delayed_delivery_runtime::COMMUNICATION_DELAYED_DELIVERY_STORAGE_CAPABILITY_ID_V1;
 use hermes_communication_delayed_delivery_runtime::delayed_delivery_query_contract_v1;
+use hermes_communication_delivery_intent_api::wire::SubmitDeliveryIntentRequestV1;
 use hermes_gateway_protocol::v1::{
     ClientRealtimeFrameV1, client_realtime_frame_v1::Frame as RealtimeFrame,
 };
 use hermes_kernel_control_store::PlatformStorageBindingStateV1;
-use hermes_runtime_protocol::v1::ModuleClientRequestV1;
+use hermes_runtime_protocol::v1::{
+    ManagedRuntimeModuleRequestRequestV1, ManagedRuntimeModuleRequestResponseV1,
+    ModuleClientRequestV1,
+};
 use http_body_util::BodyExt as _;
 use hyper::{Request, StatusCode, body::Bytes};
 
 use crate::identity::device::signer::DeviceSigner;
+use crate::runtime::lifecycle::control::{
+    ManagedRuntimeExpectation, ManagedRuntimeModuleRequestHandler,
+};
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault, Storage, Blob, NATS, Scheduler, Communications, delayed-delivery and delivery-intent binaries"]
@@ -68,7 +76,16 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
     let realtime =
         hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(32).expect("realtime source");
     configure_route_handler(&supervisor, &store, &data);
-    configure_delivery_intent_runtime_routes(&supervisor, &store, realtime.clone());
+    let ambiguous_request_probe = Arc::new(AmbiguousDeliveryIntentRequestProbe::new([0xc2; 16]));
+    configure_delivery_intent_runtime_routes_with_request_handler(
+        &supervisor,
+        &store,
+        realtime.clone(),
+        Arc::new(AmbiguousDeliveryIntentRequestHandler {
+            inner: delivery_intent_request_route_handler(&supervisor, &store),
+            probe: Arc::clone(&ambiguous_request_probe),
+        }),
+    );
     supervisor
         .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
             Arc::clone(&store),
@@ -209,13 +226,22 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         0x81,
         3,
     );
+    assert_delayed_delivery_survives_ambiguous_delivery_response(
+        &managed_contour,
+        &delayed_delivery.registration_id,
+        realtime.clone(),
+        conversation_id.clone(),
+        0xc1,
+        4,
+        &ambiguous_request_probe,
+    );
     let delayed_delivery = assert_delayed_delivery_survives_nats_outage(
         &managed_contour,
         delayed_delivery,
         realtime.clone(),
         conversation_id.clone(),
         0x91,
-        4,
+        5,
     );
     assert_delayed_delivery_survives_scheduler_outage(
         &managed_contour,
@@ -223,7 +249,7 @@ fn managed_delayed_delivery_starts_with_scheduler_and_delivery_intent() {
         realtime,
         conversation_id,
         0xa1,
-        5,
+        6,
     );
     let (owner_runtime_dir, owner_control) =
         start_owner_control(&data, &store, &shutdown, &supervisor);
@@ -266,6 +292,62 @@ struct DelayedDeliveryManagedContour<'a> {
     root: &'a Path,
     data: &'a Path,
     kernel: &'a Path,
+}
+
+struct AmbiguousDeliveryIntentRequestProbe {
+    target_operation_id: [u8; 16],
+    successful_request_payloads: Mutex<Vec<Vec<u8>>>,
+}
+
+impl AmbiguousDeliveryIntentRequestProbe {
+    fn new(target_operation_id: [u8; 16]) -> Self {
+        Self {
+            target_operation_id,
+            successful_request_payloads: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn records_target(&self, request_payload: &[u8]) -> bool {
+        SubmitDeliveryIntentRequestV1::decode(request_payload)
+            .is_ok_and(|request| request.operation_id == self.target_operation_id)
+    }
+
+    fn record_successful_request(&self, request_payload: Vec<u8>) -> bool {
+        let mut requests = self
+            .successful_request_payloads
+            .lock()
+            .expect("lock ambiguous delivery-intent request probe");
+        requests.push(request_payload);
+        requests.len() == 1
+    }
+
+    fn successful_request_payloads(&self) -> Vec<Vec<u8>> {
+        self.successful_request_payloads
+            .lock()
+            .expect("read ambiguous delivery-intent request probe")
+            .clone()
+    }
+}
+
+struct AmbiguousDeliveryIntentRequestHandler {
+    inner: Arc<dyn ManagedRuntimeModuleRequestHandler>,
+    probe: Arc<AmbiguousDeliveryIntentRequestProbe>,
+}
+
+impl ManagedRuntimeModuleRequestHandler for AmbiguousDeliveryIntentRequestHandler {
+    fn route_module_request(
+        &self,
+        expectation: &ManagedRuntimeExpectation,
+        request: ManagedRuntimeModuleRequestRequestV1,
+    ) -> Result<ManagedRuntimeModuleRequestResponseV1, String> {
+        let target_request = self.probe.records_target(&request.request_payload);
+        let exact_request_payload = request.request_payload.clone();
+        let response = self.inner.route_module_request(expectation, request)?;
+        if target_request && self.probe.record_successful_request(exact_request_payload) {
+            return Err("simulated managed request response loss".to_owned());
+        }
+        Ok(response)
+    }
 }
 
 fn assert_delayed_delivery_round_trip(
@@ -344,6 +426,102 @@ fn assert_delayed_delivery_round_trip(
             .windows(private_body.len())
             .any(|window| window == private_body),
         "delayed-delivery realtime must not contain private content"
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn assert_delayed_delivery_survives_ambiguous_delivery_response(
+    contour: &DelayedDeliveryManagedContour<'_>,
+    delayed_delivery_registration_id: &str,
+    realtime: hermes_gateway_runtime::InMemoryBrowserRealtimeSource,
+    conversation_id: Vec<u8>,
+    operation_byte: u8,
+    authentication_sign_count: u32,
+    probe: &AmbiguousDeliveryIntentRequestProbe,
+) {
+    let DelayedDeliveryManagedContour {
+        store,
+        supervisor,
+        root,
+        data,
+        ..
+    } = contour;
+    let runtime = tokio::runtime::Runtime::new().expect("Gateway runtime");
+    let router = super::delivery_intent_realtime_flow::delivery_intent_gateway(
+        store, supervisor, root, data, realtime,
+    );
+    let cookie = super::super::browser_gateway_session::authenticate_gateway_router_with_sign_count(
+        &router,
+        &runtime,
+        authentication_sign_count,
+    );
+    let delayed_operation_id = vec![operation_byte; 16];
+    let delivery_operation_id = vec![operation_byte.wrapping_add(1); 16];
+    let private_body = b"delayed private body retained through ambiguous request outcome";
+    let deliver_at_unix_millis =
+        u64::try_from(current_unix_millis()).expect("positive current time") + 7_000;
+    let response = route_proto(
+        &router,
+        &runtime,
+        &cookie,
+        COMMUNICATION_DELAYED_DELIVERY_SCHEDULE_CONNECT_PATH_V1,
+        ScheduleDelayedDeliveryRequestV1 {
+            protocol_major: 1,
+            delayed_operation_id: delayed_operation_id.clone(),
+            delivery_operation_id: delivery_operation_id.clone(),
+            conversation_id,
+            reply_to_message_id: None,
+            body_utf8: private_body.to_vec(),
+            deliver_at_unix_millis,
+        }
+        .encode_to_vec(),
+    );
+    let response =
+        ScheduleDelayedDeliveryResponseV1::decode(response.as_slice()).expect("schedule response");
+    assert_eq!(response.delayed_operation_id, delayed_operation_id);
+    assert_eq!(
+        response.error,
+        DelayedDeliveryErrorCodeV1::DelayedDeliveryErrorCodeUnspecified as i32
+    );
+    assert_eq!(
+        response.state,
+        DelayedDeliveryStateV1::DelayedDeliveryStateSchedulePending as i32
+    );
+    let terminal = wait_for_terminal_status(
+        &router,
+        &runtime,
+        &cookie,
+        &delayed_operation_id,
+        deliver_at_unix_millis,
+        supervisor,
+        delayed_delivery_registration_id,
+    );
+    assert_eq!(
+        terminal.state,
+        DelayedDeliveryStateV1::DelayedDeliveryStateDeliveryAccepted as i32,
+        "the durable due command must retry after losing a successful provider response"
+    );
+    let requests = probe.successful_request_payloads();
+    assert_eq!(
+        requests.len(),
+        2,
+        "ambiguous response loss must produce one idempotent durable replay"
+    );
+    assert_eq!(
+        requests[0], requests[1],
+        "durable replay must preserve the exact delivery-intent request bytes"
+    );
+    let replayed = SubmitDeliveryIntentRequestV1::decode(requests[1].as_slice())
+        .expect("decode replayed delivery-intent request");
+    assert_eq!(replayed.operation_id, delivery_operation_id);
+    let event =
+        read_delayed_delivery_terminal_sse(&router, &runtime, &cookie, &delayed_operation_id);
+    assert!(
+        !event
+            .encode_to_vec()
+            .windows(private_body.len())
+            .any(|window| window == private_body),
+        "ambiguous request recovery realtime must not contain private content"
     );
 }
 

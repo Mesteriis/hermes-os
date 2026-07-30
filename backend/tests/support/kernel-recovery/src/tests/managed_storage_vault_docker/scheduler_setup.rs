@@ -9,8 +9,8 @@ pub(super) fn configured_scheduler_store(root: &Path, kernel: &Path) -> SqliteCo
 pub(super) fn record_scheduler_runtime(store: &SqliteControlStore) {
     let schema = scheduler_schema();
     let descriptor = scheduler_descriptor(&schema);
-    let grant_epoch = record_scheduler_registration(&store, &descriptor);
-    record_scheduler_runtime_fixture(&store, &schema, &descriptor, grant_epoch);
+    let grant_epoch = record_scheduler_registration(store, &descriptor);
+    record_scheduler_runtime_fixture(store, &schema, &descriptor, grant_epoch);
 }
 
 fn record_scheduler_registration(store: &SqliteControlStore, descriptor: &[u8]) -> u64 {
