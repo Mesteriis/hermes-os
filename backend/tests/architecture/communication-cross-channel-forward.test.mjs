@@ -138,10 +138,6 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
   assert.match(adr, /Core capability router[\s\S]*не содержит cross-channel business method/);
   assert.match(adr, /не хранит plaintext body/);
   assert.match(adr, /Принятый ADR сам по себе не\s+открывает/);
-  assert.equal(
-    policy.implementation.currentSlice,
-    'communication_cross_channel_forward_persistence_v1',
-  );
   assert.deepEqual(
     policy.implementation.productionPackages
       .filter(({ owner }) => owner === 'communication_cross_channel_forward')
@@ -188,13 +184,52 @@ test('cross-channel forward persistence is owner-local durable and bodyless', as
 });
 
 test('cross-channel source preparation is event-only and Communications-owned', async () => {
-  const sourceAdr = await readFile(
-    new URL(
-      'docs/adr/ADR-0347-event-backed-cross-channel-forward-source-preparation.md',
-      PROJECT_ROOT,
+  const [
+    sourceAdr,
+    sourceManifest,
+    sourceApi,
+    sourceEnvelope,
+    sourceContract,
+    policySource,
+  ] = await Promise.all([
+    readFile(
+      new URL(
+        'docs/adr/ADR-0347-event-backed-cross-channel-forward-source-preparation.md',
+        PROJECT_ROOT,
+      ),
+      'utf8',
     ),
-    'utf8',
-  );
+    readFile(
+      new URL(
+        'src/communications-cross-channel-forward-source-api/Cargo.toml',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communications-cross-channel-forward-source-api/src/lib.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communications-cross-channel-forward-source-api/src/envelope.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communications-cross-channel-forward-source-api/proto/hermes/communications/cross_channel_forward_source/v1/cross_channel_forward_source.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'),
+  ]);
+  const policy = JSON.parse(policySource);
 
   assert.match(sourceAdr, /cross_channel_forward_source_prepare\.v1\s+command/);
   assert.match(sourceAdr, /cross_channel_forward_source_prepared\.v1\s+result/);
@@ -205,4 +240,34 @@ test('cross-channel source preparation is event-only and Communications-owned', 
   assert.match(sourceAdr, /не участвует в module-to-module source preparation/);
   assert.match(sourceAdr, /без direct RPC, cross-owner SQL или content leakage/);
   assert.doesNotMatch(sourceAdr, /generic provider facade|execute\(any\)/);
+  assert.match(
+    sourceManifest,
+    /role = "domain"[\s\S]*owner = "communications"[\s\S]*surface = "contract"/,
+  );
+  assert.equal(
+    policy.implementation.currentSlice,
+    'communication_cross_channel_forward_source_contract_v1',
+  );
+  assert.ok(
+    policy.implementation.productionPackages.some(
+      ({ name, owner, surface }) =>
+        name === 'hermes-communications-cross-channel-forward-source-api'
+        && owner === 'communications'
+        && surface === 'contract',
+    ),
+  );
+  assert.match(sourceApi, /CROSS_CHANNEL_FORWARD_SOURCE_BLOB_TARGET_OWNER_ID_V1/);
+  assert.match(
+    sourceApi,
+    /"communication_cross_channel_forward\.blob\.v1"/,
+  );
+  assert.match(sourceEnvelope, /OutboxRecordV1/);
+  assert.match(sourceEnvelope, /Semantics::Command/);
+  assert.match(sourceEnvelope, /Semantics::Result/);
+  assert.match(sourceContract, /PrepareCrossChannelForwardSourceCommandV1/);
+  assert.match(sourceContract, /CrossChannelForwardBodySourceReceiptV1/);
+  assert.doesNotMatch(
+    `${sourceContract}\n${sourceApi}\n${sourceEnvelope}`,
+    /provider_id|account_id|body_utf8|plaintext_body|arbitrary_target|\bAny\b|\bmap\s*</,
+  );
 });

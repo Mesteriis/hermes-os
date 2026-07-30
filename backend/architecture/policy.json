@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_cross_channel_forward_persistence_v1",
+    "currentSlice": "communication_cross_channel_forward_source_contract_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -648,6 +648,12 @@
         "role": "workflow",
         "owner": "communication_cross_channel_forward",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-communications-cross-channel-forward-source-api",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "contract"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1482,6 +1488,16 @@
       "hermes-communications-saved-query-api": [],
       "hermes-communications-sender-insights-api": [],
       "hermes-communications-evidence-export-source-api": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communications-cross-channel-forward-source-api": [
         {
           "name": "hermes-events-protocol",
           "kind": "normal"
@@ -4164,6 +4180,56 @@
           "features": []
         }
       ],
+      "hermes-communications-cross-channel-forward-source-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-communications-export-api": [
         {
           "name": "prost",
@@ -5339,6 +5405,10 @@
         "customBuildAllowed": true
       },
       "hermes-communications-evidence-export-source-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communications-cross-channel-forward-source-api": {
         "primaryKind": "lib",
         "customBuildAllowed": true
       },

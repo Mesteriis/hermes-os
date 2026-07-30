@@ -4,10 +4,13 @@
 
 Дата: 2026-07-30
 
-Состояние реализации: решение принято, contract/runtime gate не закрыт.
-`hermes-communications-cross-channel-forward-source-api`, Communications
-outbox adapter, workflow inbox adapter и live managed evidence ещё не
-реализованы.
+Состояние реализации: generated provider-neutral contract build unit
+`hermes-communications-cross-channel-forward-source-api` реализован. Он
+фиксирует три exact durable contracts, direction-specific route requests,
+target-bound Blob audience и валидируемые `DurableEnvelopeV1` outbox records
+без provider identity или plaintext. Communications transactional
+inbox/outbox adapter, workflow inbox adapter и live managed evidence ещё не
+реализованы; contract/runtime gate не закрыт.
 
 ## Контекст
 

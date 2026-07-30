@@ -624,6 +624,16 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-communications-cross-channel-forward-source-api',
+    role: 'domain',
+    owner: 'communications',
+    surface: 'contract',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -1906,6 +1916,14 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOW
   ],
 };
 
+const COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-cross-channel-forward-source-api': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2156,6 +2174,18 @@ const COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALL
   'hermes-communication-cross-channel-forward-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
+const COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communications-cross-channel-forward-source-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
 };
 
@@ -2611,6 +2641,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-saved-query-api',
       'hermes-communications-sender-insights-api',
       'hermes-communications-evidence-export-source-api',
+      'hermes-communications-cross-channel-forward-source-api',
       'hermes-communications-export-api',
       'hermes-communication-delivery-intent-api',
       'hermes-communication-bulk-action-api',
@@ -3079,6 +3110,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATION_CROSS_CHANNEL_FORWARD_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_cross_channel_forward_source_contract_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_DELIVERY_INTENT_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        COMMUNICATION_CROSS_CHANNEL_FORWARD_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
