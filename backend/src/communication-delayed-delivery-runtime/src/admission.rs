@@ -7,11 +7,14 @@ use hermes_communication_delayed_delivery_api::{
 };
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
-    CapabilityRequestV1, ClientRpcRouteV1, ClockTimerRequestV1, ModuleDescriptorV1, ModuleKindV1,
-    ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1,
+    CapabilityRequestV1, ClientRpcRouteV1, ClockTimerRequestV1, ContractReferenceV1,
+    DurableEnvelopeKindV1, EventRouteDirectionV1, EventRouteRequestV1,
+    EventSubscriptionRequirementV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1,
+    ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1, SchedulerJobRequestV1,
     SettingsSchemaRefV1, SettingsSchemaV1, StorageNamespaceRequestV1,
     capability_request_v1::Request,
 };
+use hermes_scheduler_protocol::SCHEDULER_JOB_DESCRIPTOR_SET_V1;
 use prost::Message;
 use sha2::{Digest, Sha256};
 
@@ -32,6 +35,9 @@ pub const COMMUNICATION_DELAYED_DELIVERY_DELIVERY_DEPENDENCY_CAPABILITY_ID_V1: &
     "communication.delayed_delivery.delivery_intent.v1";
 pub const COMMUNICATION_DELAYED_DELIVERY_STORAGE_CONNECTION_BUDGET_V1: u32 = 4;
 pub const COMMUNICATION_DELAYED_DELIVERY_BLOB_QUOTA_BYTES_V1: u64 = 256 * 1024 * 1024;
+const EVENT_MAX_IN_FLIGHT_V1: u32 = 32;
+const EVENT_MAX_DELIVER_V1: u32 = 8;
+const EVENT_ACK_WAIT_MILLIS_V1: u32 = 30_000;
 
 #[must_use]
 pub fn communication_delayed_delivery_settings_schema_v1() -> SettingsSchemaV1 {
@@ -67,6 +73,10 @@ pub fn communication_delayed_delivery_module_descriptor_v1(build_id: &str) -> Mo
             blob_capability(),
             clock_capability(),
             delivery_dependency_capability(),
+            scheduler_due_capability(),
+            scheduler_receipt_capability(),
+            scheduler_schedule_command_capability(),
+            scheduler_schedule_result_capability(),
             storage_capability(),
             client_capability(),
         ],
@@ -83,6 +93,132 @@ pub fn communication_delayed_delivery_module_descriptor_v1(build_id: &str) -> Mo
             max_cpu_millis: 500,
         }),
         display_name: "Communication Delayed Delivery".to_owned(),
+    }
+}
+
+fn scheduler_due_capability() -> CapabilityDescriptorV1 {
+    let contract = scheduler_contract("communication_delayed_delivery", "execute");
+    CapabilityDescriptorV1 {
+        capability_id: "communication.delayed_delivery.scheduler_due.v1".to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![durable_surface(
+            ProvidedSurfaceKindV1::DurableConsumer,
+            contract.clone(),
+        )],
+        requests: vec![
+            consume_route(DurableEnvelopeKindV1::Command, contract.clone()),
+            CapabilityRequestV1 {
+                request: Some(Request::SchedulerJob(SchedulerJobRequestV1 {
+                    job_kind: Some(contract),
+                })),
+            },
+        ],
+        ..Default::default()
+    }
+}
+
+fn scheduler_receipt_capability() -> CapabilityDescriptorV1 {
+    let contract = scheduler_contract("scheduler", "job_receipt");
+    CapabilityDescriptorV1 {
+        capability_id: "communication.delayed_delivery.scheduler_receipt.v1".to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![durable_surface(
+            ProvidedSurfaceKindV1::DurablePublisher,
+            contract.clone(),
+        )],
+        requests: vec![
+            publish_route(DurableEnvelopeKindV1::Ack, contract.clone()),
+            publish_route(DurableEnvelopeKindV1::Result, contract),
+        ],
+        ..Default::default()
+    }
+}
+
+fn scheduler_schedule_command_capability() -> CapabilityDescriptorV1 {
+    let contract = scheduler_contract("scheduler", "schedule_control");
+    CapabilityDescriptorV1 {
+        capability_id: "communication.delayed_delivery.scheduler_schedule_command.v1".to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![durable_surface(
+            ProvidedSurfaceKindV1::DurablePublisher,
+            contract.clone(),
+        )],
+        requests: vec![publish_route(DurableEnvelopeKindV1::Command, contract)],
+        ..Default::default()
+    }
+}
+
+fn scheduler_schedule_result_capability() -> CapabilityDescriptorV1 {
+    let contract = scheduler_contract("scheduler", "schedule_control");
+    CapabilityDescriptorV1 {
+        capability_id: "communication.delayed_delivery.scheduler_schedule_result.v1".to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![durable_surface(
+            ProvidedSurfaceKindV1::DurableConsumer,
+            contract.clone(),
+        )],
+        requests: vec![consume_route(DurableEnvelopeKindV1::Result, contract)],
+        ..Default::default()
+    }
+}
+
+fn scheduler_contract(owner: &str, name: &str) -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: owner.to_owned(),
+        name: name.to_owned(),
+        major: 1,
+        revision: 1,
+        schema_sha256: Sha256::digest(SCHEDULER_JOB_DESCRIPTOR_SET_V1).to_vec(),
+    }
+}
+
+fn durable_surface(
+    kind: ProvidedSurfaceKindV1,
+    contract: ContractReferenceV1,
+) -> ProvidedSurfaceV1 {
+    ProvidedSurfaceV1 {
+        kind: kind as i32,
+        contract: Some(contract),
+        client_rpc_route: None,
+        client_blob_route: None,
+    }
+}
+
+fn publish_route(
+    kind: DurableEnvelopeKindV1,
+    contract: ContractReferenceV1,
+) -> CapabilityRequestV1 {
+    CapabilityRequestV1 {
+        request: Some(Request::EventRoute(EventRouteRequestV1 {
+            envelope_kind: kind as i32,
+            contract: Some(contract),
+            direction: EventRouteDirectionV1::Publish as i32,
+            max_in_flight: EVENT_MAX_IN_FLIGHT_V1,
+            subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
+            max_deliver: 0,
+            ack_wait_millis: 0,
+        })),
+    }
+}
+
+fn consume_route(
+    kind: DurableEnvelopeKindV1,
+    contract: ContractReferenceV1,
+) -> CapabilityRequestV1 {
+    CapabilityRequestV1 {
+        request: Some(Request::EventRoute(EventRouteRequestV1 {
+            envelope_kind: kind as i32,
+            contract: Some(contract),
+            direction: EventRouteDirectionV1::Consume as i32,
+            max_in_flight: EVENT_MAX_IN_FLIGHT_V1,
+            subscription_requirement: EventSubscriptionRequirementV1::Required as i32,
+            max_deliver: EVENT_MAX_DELIVER_V1,
+            ack_wait_millis: EVENT_ACK_WAIT_MILLIS_V1,
+        })),
     }
 }
 
@@ -206,7 +342,7 @@ mod tests {
         validate_settings_schema_v1(&communication_delayed_delivery_settings_schema_v1())
             .expect("settings");
 
-        assert_eq!(descriptor.capabilities.len(), 5);
+        assert_eq!(descriptor.capabilities.len(), 9);
         let client = descriptor
             .capabilities
             .iter()

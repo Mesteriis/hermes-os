@@ -1836,6 +1836,7 @@ const COMMUNICATION_DELAYED_DELIVERY_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWL
     { name: 'hermes-communication-delayed-delivery-persistence', kind: 'normal' },
     { name: 'hermes-communication-delayed-delivery-runtime-adapters', kind: 'normal' },
     { name: 'hermes-communication-delivery-intent-api', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-scheduler-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },

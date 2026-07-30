@@ -40,9 +40,11 @@ terminal-reason-bound custody release и exact delivery-intent `request_rpc`
 control authentication, owner-local Storage binding, method-exact
 Schedule/Cancel/Status routing и cursor-based client realtime publication в
 единый Gateway SSE stream. Schedule и Cancel используют разные exact contracts
-по ADR-0345. Scheduler event runtime, assembly, release admission и live
-end-to-end contour ещё не реализованы. Этот ADR не открывает workflow gate сам
-по себе.
+по ADR-0345. Runtime также получает fenced Event Hub credential, публикует exact
+Scheduler command/receipt outbox и принимает correlated schedule results только
+если causation ссылается на owner-local сохранённый command. Due-command
+execution, assembly, release admission и live end-to-end contour ещё не
+реализованы. Этот ADR не открывает workflow gate сам по себе.
 
 Уточняет:
 

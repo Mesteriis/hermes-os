@@ -23,6 +23,33 @@ pub struct DelayedDeliveryOutboxRecordV1 {
 }
 
 impl CommunicationDelayedDeliveryPersistenceV1 {
+    pub async fn owns_scheduler_command(
+        &self,
+        logical_owner_id: &str,
+        delayed_operation_id: &[u8; 16],
+        message_id: &[u8; 16],
+    ) -> Result<bool, DelayedDeliveryPersistenceErrorV1> {
+        if logical_owner_id.is_empty() || logical_owner_id.len() > 128 {
+            return Err(DelayedDeliveryPersistenceErrorV1::InvalidInput);
+        }
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (
+               SELECT 1
+               FROM hermes_data.communication_delayed_delivery_outbox
+               WHERE logical_owner_id = $1
+                 AND delayed_operation_id = $2
+                 AND message_id = $3
+                 AND contract_kind = 'scheduler.schedule.command.v1'
+             )",
+        )
+        .bind(logical_owner_id)
+        .bind(delayed_operation_id.as_slice())
+        .bind(message_id.as_slice())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|_| DelayedDeliveryPersistenceErrorV1::StorageUnavailable)
+    }
+
     pub async fn pending_scheduler_commands(
         &self,
         logical_owner_id: &str,

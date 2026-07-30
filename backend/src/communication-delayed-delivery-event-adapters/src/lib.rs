@@ -235,6 +235,24 @@ pub fn decode_scheduler_result_v1(
     })
 }
 
+pub fn scheduler_result_causation_id_v1(
+    exact_bytes: &[u8],
+) -> Result<[u8; 16], DelayedDeliverySchedulerAdapterErrorV1> {
+    let envelope = DurableEnvelopeV1::decode(exact_bytes)
+        .map_err(|_| DelayedDeliverySchedulerAdapterErrorV1::InvalidEnvelope)?;
+    validate_envelope_v1(&envelope)
+        .map_err(|_| DelayedDeliverySchedulerAdapterErrorV1::InvalidEnvelope)?;
+    let result = match envelope.semantics.as_ref() {
+        Some(Semantics::Result(result)) => result,
+        _ => return Err(DelayedDeliverySchedulerAdapterErrorV1::InvalidResult),
+    };
+    if envelope.causation_message_id != result.command_message_id {
+        return Err(DelayedDeliverySchedulerAdapterErrorV1::WrongCorrelation);
+    }
+    id16(&envelope.causation_message_id)
+        .map_err(|_| DelayedDeliverySchedulerAdapterErrorV1::WrongCorrelation)
+}
+
 fn validate_command_context(
     context: &DelayedDeliverySchedulerCommandContextV1,
 ) -> Result<(), DelayedDeliverySchedulerAdapterErrorV1> {
@@ -441,6 +459,10 @@ mod tests {
             payload: payload.encode_to_vec(),
         };
         let bytes = envelope.encode_to_vec();
+        assert_eq!(
+            scheduler_result_causation_id_v1(&bytes).expect("causation"),
+            command.message_id
+        );
         let decoded = decode_scheduler_result_v1(
             &bytes,
             &DelayedDeliverySchedulerResultContextV1 {

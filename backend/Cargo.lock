@@ -1829,6 +1829,7 @@ dependencies = [
  "hermes-communication-delayed-delivery-persistence",
  "hermes-communication-delayed-delivery-runtime-adapters",
  "hermes-communication-delivery-intent-api",
+ "hermes-events-jetstream",
  "hermes-runtime-protocol",
  "hermes-scheduler-protocol",
  "hermes-storage-protocol",

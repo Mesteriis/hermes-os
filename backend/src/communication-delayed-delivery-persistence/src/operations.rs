@@ -410,12 +410,12 @@ async fn verify_existing_outbox(
         "SELECT message_id, envelope_sha256, envelope_bytes
          FROM hermes_data.communication_delayed_delivery_outbox
          WHERE logical_owner_id = $1 AND delayed_operation_id = $2
-           AND contract_kind = 'scheduler.schedule.command.v1'
-         ORDER BY created_at_unix_millis, message_id
-         LIMIT 1",
+           AND message_id = $3
+           AND contract_kind = 'scheduler.schedule.command.v1'",
     )
     .bind(logical_owner_id)
     .bind(delayed_operation_id.as_slice())
+    .bind(message.message_id.as_slice())
     .fetch_one(&mut **transaction)
     .await
     .map_err(|_| DelayedDeliveryPersistenceErrorV1::StorageUnavailable)?;

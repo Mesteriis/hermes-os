@@ -105,6 +105,8 @@ where
             settings_schema,
             &admission,
             storage,
+            &configuration.event_hub_endpoint,
+            configuration.event_credential_revision,
         ))
         .map_err(runtime_error)?;
 
@@ -118,6 +120,16 @@ where
         executor
             .block_on(runtime.pump_control_once(now))
             .map_err(runtime_error)?;
+        match executor.block_on(runtime.relay_scheduler_outbox_once(now)) {
+            Ok(_) | Err(DelayedDeliveryManagedRuntimeErrorV1::Unavailable) => {}
+            Err(DelayedDeliveryManagedRuntimeErrorV1::Persistence(_)) => {}
+            Err(error) => return Err(runtime_error(error)),
+        }
+        match executor.block_on(runtime.consume_scheduler_result_once(now)) {
+            Ok(_) | Err(DelayedDeliveryManagedRuntimeErrorV1::Unavailable) => {}
+            Err(DelayedDeliveryManagedRuntimeErrorV1::Persistence(_)) => {}
+            Err(error) => return Err(runtime_error(error)),
+        }
         match executor.block_on(runtime.pump_client_realtime_once()) {
             Ok(_) | Err(DelayedDeliveryManagedRuntimeErrorV1::Unavailable) => {}
             Err(DelayedDeliveryManagedRuntimeErrorV1::Persistence(_)) => {}

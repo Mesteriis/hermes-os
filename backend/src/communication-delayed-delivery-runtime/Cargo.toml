@@ -23,6 +23,7 @@ hermes-communication-delayed-delivery-event-adapters = { path = "../communicatio
 hermes-communication-delayed-delivery-persistence = { path = "../communication-delayed-delivery-persistence" }
 hermes-communication-delayed-delivery-runtime-adapters = { path = "../communication-delayed-delivery-runtime-adapters" }
 hermes-communication-delivery-intent-api = { path = "../communication-delivery-intent-api" }
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-scheduler-protocol = { path = "../platform/scheduler/protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }

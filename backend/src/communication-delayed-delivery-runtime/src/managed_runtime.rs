@@ -7,6 +7,10 @@ use hermes_communication_delayed_delivery_persistence::{
     CommunicationDelayedDeliveryPersistenceV1, DelayedDeliveryPersistenceErrorV1,
 };
 use hermes_communication_delayed_delivery_runtime_adapters::ManagedDelayedDeliveryRuntimePortV1;
+use hermes_events_jetstream::{
+    JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
+    RuntimeSubscribePermitV1, request_managed_runtime_event_access_v2,
+};
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
     v1::{
@@ -41,6 +45,11 @@ use crate::{
         delayed_delivery_cancel_command_contract_v1, delayed_delivery_query_contract_v1,
         delayed_delivery_schedule_command_contract_v1,
     },
+    scheduler_outbox::{
+        DelayedDeliverySchedulerOutboxErrorV1, relay_scheduler_commands_v1,
+        relay_scheduler_receipts_v1,
+    },
+    scheduler_results::{DelayedDeliverySchedulerResultErrorV1, consume_scheduler_result_v1},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,6 +73,10 @@ pub struct DelayedDeliveryManagedRuntimeV1 {
     admission: DelayedDeliveryRuntimeAdmissionV1,
     control_channel: ManagedControlChannelV2<UnixStream>,
     persistence: CommunicationDelayedDeliveryPersistenceV1,
+    event_connection: RuntimeJetStreamConnection,
+    event_publish_permit: RuntimePublishPermitV1,
+    schedule_result_subscription: RuntimeSubscribePermitV1,
+    _due_subscription: RuntimeSubscribePermitV1,
     client_realtime: DelayedDeliveryClientRealtimePublisherV1,
 }
 
@@ -74,8 +87,13 @@ impl DelayedDeliveryManagedRuntimeV1 {
         settings_schema_bytes: Vec<u8>,
         admission: &DelayedDeliveryRuntimeAdmissionV1,
         storage_configuration: ManagedStorageRuntimeConfigurationV1,
+        event_hub_endpoint: &str,
+        event_credential_revision: u64,
     ) -> Result<Self, DelayedDeliveryManagedRuntimeErrorV1> {
         validate_admission(admission)?;
+        if event_hub_endpoint.trim().is_empty() || event_credential_revision == 0 {
+            return Err(DelayedDeliveryManagedRuntimeErrorV1::Admission);
+        }
         let mut control_channel = ManagedControlChannelV2::new(control_channel);
         authenticate(
             &mut control_channel,
@@ -117,6 +135,47 @@ impl DelayedDeliveryManagedRuntimeV1 {
             .map_err(DelayedDeliveryManagedRuntimeErrorV1::Persistence)?;
 
         let mut control_channel = leases.into_route_port().into_channel();
+        let event_access = request_managed_runtime_event_access_v2(
+            &mut control_channel,
+            &storage_configuration.logical_owner_id,
+            &admission.registration_id,
+            &admission.runtime_instance_id,
+            admission.runtime_generation,
+            admission.grant_epoch,
+            event_credential_revision,
+        )
+        .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Unavailable)?;
+        let event_identity = RuntimeNatsIdentity::new(
+            admission.runtime_instance_id.clone(),
+            admission.runtime_generation,
+            admission.grant_epoch,
+        )
+        .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Admission)?;
+        let event_publish_permit = event_access
+            .publish_permit(
+                &admission.registration_id,
+                &admission.runtime_instance_id,
+                admission.runtime_generation,
+                admission.grant_epoch,
+            )
+            .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Admission)?;
+        let (schedule_result_subscription, due_subscription) = bind_subscribe_permits(
+            event_access
+                .subscribe_permits(
+                    &admission.registration_id,
+                    &admission.runtime_instance_id,
+                    admission.runtime_generation,
+                    admission.grant_epoch,
+                )
+                .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Admission)?,
+        )?;
+        let event_connection = JetStreamClient::connect_runtime_with_jwt(
+            event_hub_endpoint,
+            event_identity,
+            event_access.into_credential(),
+        )
+        .await
+        .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Unavailable)?;
         let mut client_realtime = DelayedDeliveryClientRealtimePublisherV1::default();
         let mut dispatcher = RejectManagedControlRequestsV2;
         client_realtime
@@ -138,6 +197,10 @@ impl DelayedDeliveryManagedRuntimeV1 {
             admission: admission.clone(),
             control_channel,
             persistence,
+            event_connection,
+            event_publish_permit,
+            schedule_result_subscription,
+            _due_subscription: due_subscription,
             client_realtime,
         })
     }
@@ -241,6 +304,46 @@ impl DelayedDeliveryManagedRuntimeV1 {
             .set_nonblocking(true)
             .map_err(|_| DelayedDeliveryManagedRuntimeErrorV1::Unavailable)?;
         result
+    }
+
+    pub async fn relay_scheduler_outbox_once(
+        &self,
+        published_at_unix_millis: u64,
+    ) -> Result<bool, DelayedDeliveryManagedRuntimeErrorV1> {
+        let commands = relay_scheduler_commands_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.event_publish_permit,
+            &self.admission.logical_owner_id,
+            published_at_unix_millis,
+        )
+        .await
+        .map_err(scheduler_outbox_error)?;
+        let receipts = relay_scheduler_receipts_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.event_publish_permit,
+            &self.admission.logical_owner_id,
+            published_at_unix_millis,
+        )
+        .await
+        .map_err(scheduler_outbox_error)?;
+        Ok(commands + receipts > 0)
+    }
+
+    pub async fn consume_scheduler_result_once(
+        &self,
+        received_at_unix_millis: u64,
+    ) -> Result<bool, DelayedDeliveryManagedRuntimeErrorV1> {
+        consume_scheduler_result_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.schedule_result_subscription,
+            &self.admission.logical_owner_id,
+            received_at_unix_millis,
+        )
+        .await
+        .map_err(scheduler_result_error)
     }
 }
 
@@ -462,4 +565,63 @@ fn realtime_error(
             DelayedDeliveryManagedRuntimeErrorV1::Unavailable
         }
     }
+}
+
+fn scheduler_outbox_error(
+    error: DelayedDeliverySchedulerOutboxErrorV1,
+) -> DelayedDeliveryManagedRuntimeErrorV1 {
+    match error {
+        DelayedDeliverySchedulerOutboxErrorV1::Persistence(error) => {
+            DelayedDeliveryManagedRuntimeErrorV1::Persistence(error)
+        }
+        DelayedDeliverySchedulerOutboxErrorV1::EventUnavailable => {
+            DelayedDeliveryManagedRuntimeErrorV1::Unavailable
+        }
+    }
+}
+
+fn scheduler_result_error(
+    error: DelayedDeliverySchedulerResultErrorV1,
+) -> DelayedDeliveryManagedRuntimeErrorV1 {
+    match error {
+        DelayedDeliverySchedulerResultErrorV1::InvalidResult => {
+            DelayedDeliveryManagedRuntimeErrorV1::InvalidTransition
+        }
+        DelayedDeliverySchedulerResultErrorV1::Persistence(error) => {
+            DelayedDeliveryManagedRuntimeErrorV1::Persistence(error)
+        }
+        DelayedDeliverySchedulerResultErrorV1::EventUnavailable => {
+            DelayedDeliveryManagedRuntimeErrorV1::Unavailable
+        }
+    }
+}
+
+fn bind_subscribe_permits(
+    permits: Vec<RuntimeSubscribePermitV1>,
+) -> Result<
+    (RuntimeSubscribePermitV1, RuntimeSubscribePermitV1),
+    DelayedDeliveryManagedRuntimeErrorV1,
+> {
+    if permits.len() != 2 {
+        return Err(DelayedDeliveryManagedRuntimeErrorV1::Admission);
+    }
+    let schedule = permits
+        .iter()
+        .find(|permit| {
+            permit.contract().is_some_and(|contract| {
+                contract.owner == "scheduler" && contract.name == "schedule_control"
+            })
+        })
+        .cloned()
+        .ok_or(DelayedDeliveryManagedRuntimeErrorV1::Admission)?;
+    let due = permits
+        .iter()
+        .find(|permit| {
+            permit.contract().is_some_and(|contract| {
+                contract.owner == "communication_delayed_delivery" && contract.name == "execute"
+            })
+        })
+        .cloned()
+        .ok_or(DelayedDeliveryManagedRuntimeErrorV1::Admission)?;
+    Ok((schedule, due))
 }

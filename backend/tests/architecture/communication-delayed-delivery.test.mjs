@@ -41,6 +41,8 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     runtimeAdmission,
     runtimeClientPort,
     runtimeClientRealtime,
+    runtimeSchedulerOutbox,
+    runtimeSchedulerResults,
     managedRuntime,
     runtimeMain,
     methodRoutingAdr,
@@ -252,6 +254,20 @@ test('delayed delivery admits exact due commands in a separate adapter while its
     ),
     readFile(
       new URL(
+        'src/communication-delayed-delivery-runtime/src/scheduler_outbox.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-delayed-delivery-runtime/src/scheduler_results.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'src/communication-delayed-delivery-runtime/src/managed_runtime.rs',
         BACKEND_ROOT,
       ),
@@ -409,10 +425,16 @@ test('delayed delivery admits exact due commands in a separate adapter while its
   assert.match(runtimeAdmission, /ProvidedSurfaceKindV1::ClientRealtime/);
   assert.match(runtimeAdmission, /ClockTimerRequestV1/);
   assert.match(runtimeAdmission, /BlobQuotaOperationV1::ReleaseCustody/);
+  assert.match(runtimeAdmission, /EventRouteDirectionV1::Publish/);
+  assert.match(runtimeAdmission, /EventRouteDirectionV1::Consume/);
   assert.match(runtimeClientPort, /schedule_delayed_delivery_payload_v1/);
   assert.match(runtimeClientPort, /cancel_delayed_delivery_payload_v1/);
   assert.match(runtimeClientRealtime, /ManagedRuntimeClientRealtimePublishRequestV1/);
   assert.match(runtimeClientRealtime, /communication-delayed-delivery\/\{\}/);
+  assert.match(runtimeSchedulerOutbox, /publish_exact/);
+  assert.match(runtimeSchedulerOutbox, /mark_scheduler_message_published/);
+  assert.match(runtimeSchedulerResults, /scheduler_result_causation_id_v1/);
+  assert.match(runtimeSchedulerResults, /owns_scheduler_command/);
   assert.match(managedRuntime, /Operation::ClientDelivery/);
   assert.match(managedRuntime, /pump_client_realtime_once/);
   assert.match(runtimeMain, /serve-inherited/);

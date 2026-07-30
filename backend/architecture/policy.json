@@ -1844,6 +1844,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-runtime-protocol",
           "kind": "normal"
         },
