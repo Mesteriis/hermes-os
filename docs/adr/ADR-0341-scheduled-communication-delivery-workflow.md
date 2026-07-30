@@ -80,18 +80,27 @@ Live managed NATS-outage conformance теперь дополнительно д�
 Schedule RPC во время остановленного Event Hub сохраняет exact operation и
 Scheduler command в состоянии `schedule_pending`, не останавливая
 delayed-delivery runtime. После подтверждённого NATS reconnect тест дожидается
-terminal bounded failure прежнего Scheduler process, запускает его fenced
-successor и получает terminal delivery из прежнего durable command после
-контрактного JetStream `ack_wait`, без повторного Schedule RPC и без private
-body в realtime. Этот evidence закрывает только NATS outage item; отдельные
-outage items не выводятся из него.
+terminal delivery из прежнего durable command без повторного Schedule RPC и
+без private body в realtime. Scheduler остаётся active: transient
+receive/publish/ack failures проходят bounded exponential backoff, а
+cross-stream terminal-before-acceptance redelivery не превращается в process
+failure. Этот evidence закрывает только NATS outage item; отдельные outage
+items не выводятся из него.
 
 Отдельный live Scheduler-outage contour останавливает active Scheduler при
 здоровом NATS, принимает новый Schedule RPC в `schedule_pending` и подтверждает,
 что delayed-delivery runtime остаётся active. Fenced Scheduler successor затем
 завершает сохранённую operation из прежнего command/outbox без повторного
 Schedule RPC; terminal SSE снова не содержит private body. Этот evidence
-закрывает Scheduler outage item, но Blob outage всё ещё не пройден.
+закрывает Scheduler outage item.
+
+Отдельный live Blob-outage contour останавливает только active Blob и
+подтверждает typed `UNAVAILABLE` на Schedule RPC. Status того же operation ID
+возвращает `NOT_FOUND`: без custody receipt workflow не создаёт durable
+operation и не сохраняет plaintext fallback, а delayed-delivery runtime
+остаётся active. После запуска fenced Blob generation successor тест повторяет
+exact те же protobuf request bytes, получает terminal delivery и доказывает
+отсутствие private body в realtime. Этот evidence закрывает Blob outage item.
 
 Этот ADR не открывает workflow gate сам по себе.
 
