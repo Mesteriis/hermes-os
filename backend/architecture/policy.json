@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_communications_attention_read_realtime_persistence_v1",
+    "currentSlice": "review_communications_attention_managed_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -714,6 +714,12 @@
         "role": "domain",
         "owner": "review",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-review-attention-runtime",
+        "role": "domain",
+        "owner": "review",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1218,6 +1224,32 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-review-attention-runtime": [
+        {
+          "name": "hermes-review-attention-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-attention-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-attention-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ],
@@ -3762,6 +3794,51 @@
           ]
         }
       ],
+      "hermes-review-attention-runtime": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-communications-attachment-contract": [
         {
           "name": "prost",
@@ -6097,6 +6174,10 @@
       },
       "hermes-review-attention-persistence": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-review-attention-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       }
     },

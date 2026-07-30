@@ -580,4 +580,5 @@ storage, второй — для provider/domain tenancy и client realtime.
 ADR-0351 открывает Review как отдельного domain owner для Hermes
 pending/reviewed/dismissed, pin, importance и snooze. Contract/core и
 owner-local idempotent command/query/realtime persistence units реализованы
-без Communications dependency; runtime/live gate остаётся закрытым.
+без Communications dependency. Самостоятельный managed Review runtime
+реализован; assembly/Kernel/Gateway/live gate остаётся закрытым.

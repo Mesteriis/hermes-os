@@ -6,7 +6,9 @@
 
 Состояние реализации: exact client contract, pure core и owner-local
 PostgreSQL command/query/realtime persistence реализованы. Managed runtime,
-assembly, Gateway routes и live conformance ещё не реализованы;
+с generated client dispatch, Vault-fenced Storage startup и shared realtime
+publisher реализован. Assembly, Kernel/Gateway admission и live conformance
+ещё не реализованы;
 `review_communications_attention_v1` остаётся planned.
 
 Уточняет:
@@ -43,9 +45,16 @@ Owner-local persistence реализован отдельной unit
 paging, а каждое semantic изменение атомарно добавляет durable realtime
 transition для restart-safe SSE replay.
 
+`hermes-review-attention-runtime` является самостоятельным managed domain
+process. Он получает module owner `review` и отдельный authenticated human
+owner, использует только Review API/core/persistence и platform
+Runtime/Storage/Vault contracts, не запрашивает Event Hub и не импортирует
+Communications. Durable replay читается один раз при старте runtime; после
+этого новые client realtime frames публикуются только вследствие принятой
+Review command. Периодический query polling и таймерный pump отсутствуют.
+
 Следующие units добавляются отдельными slices:
 
-- managed Review runtime с distinct human/module owner context;
 - release assembly и exact Kernel admission;
 - generated Gateway routes и shared owner-local SSE;
 - app composition, которая связывает opaque Review source reference с
@@ -112,7 +121,7 @@ Communications не импортирует Review и не выполняет Rev
 package inventory. Он не открывает `review_communications_attention_v1`. Gate
 открывается после:
 
-1. managed runtime/assembly exact admission;
+1. release assembly and exact Kernel admission;
 2. generated command/query/realtime Gateway routes;
 3. restart, replay, stale revision, cross-owner and privacy-negative tests;
 4. live managed proof through Gateway and shared SSE.

@@ -2826,6 +2826,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-review-attention-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-review-attention-api",
+ "hermes-review-attention-core",
+ "hermes-review-attention-persistence",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-runtime-protocol"
 version = "0.1.0"
 dependencies = [

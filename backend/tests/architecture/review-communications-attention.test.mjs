@@ -100,6 +100,46 @@ test('Review attention persistence is owner-local atomic and operation-idempoten
   );
 });
 
+test('Review managed runtime owns exact client dispatch and shared realtime replay', async () => {
+  const [manifest, admission, clientPort, managedRuntime, realtime, main] = await Promise.all([
+    backendSource('src/review-attention-runtime/Cargo.toml'),
+    backendSource('src/review-attention-runtime/src/admission.rs'),
+    backendSource('src/review-attention-runtime/src/client_port.rs'),
+    backendSource('src/review-attention-runtime/src/managed_runtime.rs'),
+    backendSource('src/review-attention-runtime/src/realtime.rs'),
+    backendSource('src/review-attention-runtime/src/main.rs'),
+  ]);
+
+  assert.match(manifest, /role = "domain"/);
+  assert.match(manifest, /owner = "review"/);
+  assert.match(manifest, /surface = "runtime"/);
+  assert.doesNotMatch(
+    manifest,
+    /communications-|mail-|telegram-|whatsapp-|zulip-|events-jetstream/,
+  );
+  assert.match(admission, /ModuleKindV1::Domain/);
+  assert.match(admission, /REVIEW_ATTENTION_COMMAND_CAPABILITY_ID_V1/);
+  assert.match(admission, /REVIEW_ATTENTION_QUERY_CAPABILITY_ID_V1/);
+  assert.match(admission, /REVIEW_ATTENTION_REALTIME_CAPABILITY_ID_V1/);
+  assert.match(admission, /REVIEW_ATTENTION_STORAGE_CAPABILITY_ID_V1/);
+  assert.match(clientPort, /command_payload_v1/);
+  assert.match(clientPort, /query_payload_v1/);
+  assert.match(managedRuntime, /logical_human_owner_id/);
+  assert.match(managedRuntime, /logical_human_owner_id == admission\.logical_owner_id/);
+  assert.match(managedRuntime, /StorageVaultLeaseAdapterV1/);
+  assert.match(managedRuntime, /request\.logical_owner_id == admission\.logical_human_owner_id/);
+  assert.match(realtime, /request_next_with_dispatch/);
+  assert.match(realtime, /review-attention\/\{\}/);
+  assert.match(managedRuntime, /\.receive_request\(\)/);
+  assert.doesNotMatch(managedRuntime, /try_receive_request|set_nonblocking/);
+  assert.doesNotMatch(main, /sleep|pump_client_realtime_once/);
+  assert.match(main, /ManagedDomainRuntimeConfigurationV1/);
+  assert.doesNotMatch(
+    `${admission}\n${clientPort}\n${managedRuntime}\n${realtime}\n${main}`,
+    /hermes_communications|communication_observed|Event Hub|event_hub_endpoint|JetStream|provider_account/,
+  );
+});
+
 test('Review owner admission does not prematurely open the managed gate', async () => {
   const [adr, inventorySource, policySource] = await Promise.all([
     readFile(
@@ -127,7 +167,7 @@ test('Review owner admission does not prematurely open the managed gate', async 
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'review_communications_attention_read_realtime_persistence_v1',
+    'review_communications_attention_managed_runtime_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.domains, [
     'communications',

@@ -729,6 +729,16 @@ const REVIEW_COMMUNICATIONS_ATTENTION_PERSISTENCE_PRODUCTION_PACKAGES = [
   },
 ];
 
+const REVIEW_COMMUNICATIONS_ATTENTION_MANAGED_RUNTIME_PRODUCTION_PACKAGES = [
+  ...REVIEW_COMMUNICATIONS_ATTENTION_PERSISTENCE_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-review-attention-runtime',
+    role: 'domain',
+    owner: 'review',
+    surface: 'runtime',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2169,6 +2179,18 @@ const REVIEW_COMMUNICATIONS_ATTENTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST
   ],
 };
 
+const REVIEW_COMMUNICATIONS_ATTENTION_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...REVIEW_COMMUNICATIONS_ATTENTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-review-attention-runtime': [
+    { name: 'hermes-review-attention-api', kind: 'normal' },
+    { name: 'hermes-review-attention-core', kind: 'normal' },
+    { name: 'hermes-review-attention-persistence', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2524,6 +2546,17 @@ const REVIEW_COMMUNICATIONS_ATTENTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLI
   'hermes-review-attention-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
+const REVIEW_COMMUNICATIONS_ATTENTION_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...REVIEW_COMMUNICATIONS_ATTENTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-review-attention-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -3644,6 +3677,19 @@ function expectedSlice(currentSlice) {
         REVIEW_COMMUNICATIONS_ATTENTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         REVIEW_COMMUNICATIONS_ATTENTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'review_communications_attention_managed_runtime_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: REVIEW_COMMUNICATIONS_ATTENTION_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: REVIEW_COMMUNICATIONS_ATTENTION_MANAGED_RUNTIME_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        REVIEW_COMMUNICATIONS_ATTENTION_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        REVIEW_COMMUNICATIONS_ATTENTION_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
