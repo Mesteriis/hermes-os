@@ -25,9 +25,9 @@ source message body или cross-owner SQL. `hermes-ai-inference-runtime`
 provider-neutral outbound route и restart recovery; отдельный
 `hermes-ai-inference-assembly` материализует только unsigned descriptor,
 settings schema и Storage bundle inputs. Все пять AI engine build units
-реализованы, но live managed inference ещё не доказан. Provider integration и
-workflow ещё не завершены. Для Ollama реализованы отдельные staged
-все шесть Ollama units — `hermes-ollama-ai-api`,
+реализованы, но live managed inference ещё не доказан. Workflow ещё не
+завершён. Для Ollama реализованы все шесть отдельных staged units —
+`hermes-ollama-ai-api`,
 `hermes-ollama-ai-core`, `hermes-ollama-ai-http`,
 `hermes-ollama-ai-persistence`, `hermes-ollama-ai-runtime` и
 `hermes-ollama-ai-assembly`: exact non-secret settings, fixed
@@ -40,8 +40,15 @@ fail-closed response framing без redirects. Managed integration runtime
 реализует exact provider request RPC, commit-before-HTTP lifecycle, model
 digest confirmation после generation и crash recovery только в `uncertain`,
 без повторной отправки. Assembly материализует только unsigned descriptor,
-settings schema, owner-local Storage bundle и release fragment. Live provider
-evidence ещё отсутствует; gates
+settings schema, owner-local Storage bundle и release fragment. Dev release
+compiler включает exact runtime и Storage artifacts в подписанный distribution
+manifest. Real managed conformance запускает этот signed eventless Integration
+через Kernel с настоящими Vault/Storage и disposable PostgreSQL/PgBouncer,
+фиксирует terminal `ProviderUnavailable`, после restart возвращает exact
+persisted response без второй HTTP-попытки и отклоняет request-ID conflict.
+Это доказывает admission, storage binding и отрицательный replay contour, но не
+является live успешным inference: установленный Ollama runtime и успешный
+provider request на текущей машине отсутствуют. Поэтому gates
 `ai_inference_v1`, `ollama_ai_provider_v1` и
 `communication_reply_suggestion_v1` также остаются `planned`.
 
@@ -61,7 +68,9 @@ evidence ещё отсутствует; gates
 - [ADR-0253](ADR-0253-communications-legacy-surface-disposition-and-clean-room-completion.md);
 - [ADR-0282](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
 - [ADR-0315](ADR-0315-communications-message-body-content-read.md);
-- [ADR-0339](ADR-0339-capability-routed-module-request-rpc.md).
+- [ADR-0339](ADR-0339-capability-routed-module-request-rpc.md);
+- [ADR-0354](ADR-0354-integration-implemented-request-rpc-extension-ports.md);
+- [ADR-0355](ADR-0355-capability-scoped-integration-event-hub-launch-configuration.md).
 
 ## Контекст
 

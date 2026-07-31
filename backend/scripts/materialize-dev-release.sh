@@ -150,6 +150,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-communication-delayed-delivery-assembly \
 	--package hermes-attachment-security-runtime \
 	--package hermes-attachment-security-assembly \
+	--package hermes-ollama-ai-runtime \
+	--package hermes-ollama-ai-assembly \
 	--package hermes-mail-runtime \
 	--package hermes-mail-assembly \
 	--package hermes-telegram-runtime \
@@ -201,6 +203,7 @@ communication_bulk_action_assembly="$assembly_root/communication-bulk-action"
 communication_cross_channel_forward_assembly="$assembly_root/communication-cross-channel-forward"
 communication_delayed_delivery_assembly="$assembly_root/communication-delayed-delivery"
 attachment_security_assembly="$assembly_root/attachment-security"
+ollama_ai_assembly="$assembly_root/ollama-ai"
 mail_assembly="$assembly_root/mail"
 telegram_assembly="$assembly_root/telegram"
 whatsapp_assembly="$assembly_root/whatsapp"
@@ -234,6 +237,10 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$attachment_security_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-attachment-security-runtime"
+"$cargo_target_dir/debug/hermes-ollama-ai-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$ollama_ai_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-ollama-ai-runtime"
 "$cargo_target_dir/debug/hermes-mail-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$mail_assembly" \
@@ -288,6 +295,7 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$communication_cross_channel_forward_assembly/communication_cross_channel_forward.release-artifacts.json" \
 	--artifact-fragment "$communication_delayed_delivery_assembly/communication_delayed_delivery.release-artifacts.json" \
 	--artifact-fragment "$attachment_security_assembly/attachment-security.release-artifacts.json" \
+	--artifact-fragment "$ollama_ai_assembly/ollama-ai.release-artifacts.json" \
 	--artifact-fragment "$mail_assembly/mail.release-artifacts.json" \
 	--artifact-fragment "$telegram_assembly/telegram.release-artifacts.json" \
 	--artifact-fragment "$whatsapp_assembly/whatsapp.release-artifacts.json" \
