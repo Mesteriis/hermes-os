@@ -414,3 +414,21 @@ test('Ollama managed runtime owns provider execution and crash ambiguity fencing
     /hermes_communications|communications_|automatic.*download/i,
   );
 });
+
+test('Ollama assembly emits only unsigned runtime contracts and owner storage input', async () => {
+  const [manifest, assembly, cli] = await Promise.all([
+    backendSource('src/ollama-ai-assembly/Cargo.toml'),
+    backendSource('src/ollama-ai-assembly/src/lib.rs'),
+    backendSource('src/ollama-ai-assembly/src/main.rs'),
+  ]);
+
+  assert.match(manifest, /surface = "assembly"/);
+  assert.match(manifest, /hermes-ollama-ai-runtime/);
+  assert.match(assembly, /ollama_ai_module_descriptor_v1/);
+  assert.match(assembly, /ollama_ai_settings_schema_v1/);
+  assert.match(assembly, /ollama_ai_storage_bundle_v1/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.match(assembly, /mode\(0o600\)/);
+  assert.match(cli, /--runtime/);
+  assert.doesNotMatch(`${assembly}\n${cli}`, /signing|launch|\/api\/chat|communications_/i);
+});

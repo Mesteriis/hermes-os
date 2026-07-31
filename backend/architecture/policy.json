@@ -758,6 +758,12 @@
         "surface": "contract"
       },
       {
+        "name": "hermes-ollama-ai-assembly",
+        "role": "integration",
+        "owner": "ollama",
+        "surface": "assembly"
+      },
+      {
         "name": "hermes-ollama-ai-core",
         "role": "integration",
         "owner": "ollama",
@@ -1775,6 +1781,28 @@
       "hermes-ollama-ai-api": [
         {
           "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-ollama-ai-assembly": [
+        {
+          "name": "hermes-ollama-ai-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-ollama-ai-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-ollama-ai-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -5053,6 +5081,35 @@
           "features": []
         }
       ],
+      "hermes-ollama-ai-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-ollama-ai-core": [
         {
           "name": "serde",
@@ -6514,6 +6571,10 @@
       },
       "hermes-ollama-ai-api": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-ollama-ai-assembly": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       },
       "hermes-ollama-ai-core": {

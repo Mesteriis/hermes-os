@@ -60,6 +60,7 @@ members = [
   "src/ai-inference-runtime",
   "src/ai-inference-assembly",
   "src/ollama-ai-api",
+  "src/ollama-ai-assembly",
   "src/ollama-ai-core",
   "src/ollama-ai-http",
   "src/ollama-ai-persistence",

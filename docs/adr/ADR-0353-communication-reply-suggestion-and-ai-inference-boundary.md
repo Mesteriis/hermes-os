@@ -27,9 +27,10 @@ provider-neutral outbound route и restart recovery; отдельный
 settings schema и Storage bundle inputs. Все пять AI engine build units
 реализованы, но live managed inference ещё не доказан. Provider integration и
 workflow ещё не завершены. Для Ollama реализованы отдельные staged
-`hermes-ollama-ai-api`, `hermes-ollama-ai-core`,
-`hermes-ollama-ai-http` и
-`hermes-ollama-ai-persistence`, `hermes-ollama-ai-runtime`: exact non-secret settings, fixed
+все шесть Ollama units — `hermes-ollama-ai-api`,
+`hermes-ollama-ai-core`, `hermes-ollama-ai-http`,
+`hermes-ollama-ai-persistence`, `hermes-ollama-ai-runtime` и
+`hermes-ollama-ai-assembly`: exact non-secret settings, fixed
 loopback/model policy, request digest, structured result, owner-local
 revision-fenced PostgreSQL lifecycle и terminal `uncertain` transition без
 automatic retry. Persistence не хранит source content, prompt или HTTP request
@@ -38,8 +39,9 @@ exact model binding, fixed JSON/non-streaming/non-thinking request и
 fail-closed response framing без redirects. Managed integration runtime
 реализует exact provider request RPC, commit-before-HTTP lifecycle, model
 digest confirmation после generation и crash recovery только в `uncertain`,
-без повторной отправки. Assembly и live provider evidence ещё отсутствуют;
-gates
+без повторной отправки. Assembly материализует только unsigned descriptor,
+settings schema, owner-local Storage bundle и release fragment. Live provider
+evidence ещё отсутствует; gates
 `ai_inference_v1`, `ollama_ai_provider_v1` и
 `communication_reply_suggestion_v1` также остаются `planned`.
 

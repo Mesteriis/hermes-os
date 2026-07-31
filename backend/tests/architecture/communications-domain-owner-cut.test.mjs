@@ -157,6 +157,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'hermes-whatsapp-delivery-intent-contract',
       'hermes-zulip-delivery-intent-contract',
       'hermes-ollama-ai-api',
+      'hermes-ollama-ai-assembly',
       'hermes-ollama-ai-core',
       'hermes-ollama-ai-http',
       'hermes-ollama-ai-persistence',
