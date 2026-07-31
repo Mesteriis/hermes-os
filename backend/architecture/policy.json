@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_recipient_suggestion_contract_core_v1",
+    "currentSlice": "communication_recipient_suggestion_source_contract_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -960,6 +960,12 @@
         "role": "workflow",
         "owner": "communication_recipient_suggestion",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-communications-recipient-source-api",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "contract"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2954,7 +2960,11 @@
         { "name": "hermes-storage-protocol", "kind": "normal" }
       ],
       "hermes-communication-recipient-suggestion-api": [],
-      "hermes-communication-recipient-suggestion-core": []
+      "hermes-communication-recipient-suggestion-core": [],
+      "hermes-communications-recipient-source-api": [
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" }
+      ]
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-communication-summary-api": [
@@ -3033,6 +3043,14 @@
         { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
       ],
       "hermes-communication-recipient-suggestion-core": [],
+      "hermes-communications-recipient-source-api": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
       "hermes-events-protocol": [
         {
           "name": "prost",
@@ -7666,6 +7684,10 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-communications-recipient-source-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -7981,6 +8003,10 @@
         "communication_explanation.source_prepared.v1",
         "communication_explanation.source_rejected.v1",
         "communication_explanation.storage.v1",
+        "communication_recipient_suggestion.source.blob.v1",
+        "communication_recipient_suggestion.source_prepare.v1",
+        "communication_recipient_suggestion.source_prepared.v1",
+        "communication_recipient_suggestion.source_rejected.v1",
         "communication_summary.inference.v1",
         "communication_summary.source.blob.v1",
         "communication_summary.source_prepare.v1",
@@ -8013,6 +8039,7 @@
         "communications.export.v1",
         "communications.observe.v1",
         "communications.query.v1",
+        "communications.recipient-source.v1",
         "communications.saved-search.v1",
         "communications.search.index.v1",
         "communications.sender-insights.v1",

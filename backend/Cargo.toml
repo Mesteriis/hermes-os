@@ -54,6 +54,7 @@ members = [
   "src/communications-evidence-export-source-api",
   "src/communications-cross-channel-forward-source-api",
   "src/communications-ai-source-api",
+  "src/communications-recipient-source-api",
   "src/communication-reply-suggestion-api",
   "src/communication-reply-suggestion-core",
   "src/communication-reply-suggestion-persistence",
