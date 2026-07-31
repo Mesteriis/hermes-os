@@ -11,6 +11,8 @@ CREATE TABLE hermes_data.review_task_candidate_submissions (
     candidate_blob_declared_bytes BIGINT NOT NULL,
     candidate_blob_sha256 BYTEA NOT NULL,
     candidate_blob_custody_proof BYTEA NOT NULL,
+    materialized_blob_reference_id BYTEA,
+    cleanup_completed_at_unix_millis BIGINT,
     completed BOOLEAN NOT NULL DEFAULT FALSE,
     rejected BOOLEAN NOT NULL DEFAULT FALSE,
     review_id BYTEA,
@@ -30,6 +32,11 @@ CREATE TABLE hermes_data.review_task_candidate_submissions (
     CHECK (candidate_blob_declared_bytes BETWEEN 1 AND 16384),
     CHECK (length(candidate_blob_sha256) = 32),
     CHECK (length(candidate_blob_custody_proof) BETWEEN 1 AND 2048),
+    CHECK (materialized_blob_reference_id IS NULL OR length(materialized_blob_reference_id) = 16),
+    CHECK (cleanup_completed_at_unix_millis IS NULL OR (
+        materialized_blob_reference_id IS NOT NULL
+        AND cleanup_completed_at_unix_millis >= received_at_unix_millis
+    )),
     CHECK (received_at_unix_millis > 0),
     CHECK (
         (NOT completed AND NOT rejected AND review_id IS NULL AND completed_at_unix_millis IS NULL)

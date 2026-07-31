@@ -26,6 +26,13 @@ test('Review task-candidate is an exact domain capability, not an attention faca
     runtimeManifest,
     runtime,
     admission,
+    managedRuntime,
+    submission,
+    blobMaterialization,
+    clientPort,
+    clientRealtime,
+    eventOutbox,
+    runtimeMain,
   ] =
     await Promise.all([
       readFile(
@@ -65,10 +72,17 @@ test('Review task-candidate is an exact domain capability, not an attention faca
       readFile(new URL('src/review-task-candidate-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-runtime/src/lib.rs', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-runtime/src/submission.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-runtime/src/blob_materialization.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-runtime/src/client_port.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-runtime/src/client_realtime.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-runtime/src/event_outbox.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-runtime/src/main.rs', BACKEND_ROOT), 'utf8'),
     ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_runtime_admission_v1');
+  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_managed_runtime_v1');
   for (const unit of [
     'hermes-review-task-candidate-api',
     'hermes-review-task-candidate-core',
@@ -111,6 +125,8 @@ test('Review task-candidate is an exact domain capability, not an attention faca
   assert.match(persistence, /ReviewTaskCandidatePersistenceV1/);
   assert.match(repository, /reserve_submission/);
   assert.match(repository, /load_recoverable_submissions/);
+  assert.match(repository, /persist_materialization/);
+  assert.match(repository, /complete_blob_cleanup/);
   assert.match(repository, /review_task_candidate_operations/);
   assert.match(repository, /review_task_candidate_promotion_inbox/);
   assert.match(repository, /insert_outbox/);
@@ -120,6 +136,8 @@ test('Review task-candidate is an exact domain capability, not an attention faca
   assert.match(migration, /decision_fingerprint BYTEA/);
   assert.match(migration, /review_task_candidate_outbox/);
   assert.match(migration, /review_task_candidate_realtime/);
+  assert.match(migration, /materialized_blob_reference_id/);
+  assert.match(migration, /cleanup_completed_at_unix_millis/);
   assert.doesNotMatch(`${persistence}\n${repository}\n${migration}`, /review_attention|communications_|tasks_|provider_id|account_id|ollama|prompt|model_id/);
   assert.match(adr, /без[\s\S]*расширения `review-attention`/);
   assert.match(runtimeManifest, /role = "domain"/);
@@ -130,4 +148,21 @@ test('Review task-candidate is an exact domain capability, not an attention faca
   assert.match(admission, /review_task_candidate_submit_consume_request_v1/);
   assert.match(admission, /BlobQuotaOperationV1::Write/);
   assert.doesNotMatch(admission, /hermes_tasks|hermes_communications|ollama/);
+  assert.match(managedRuntime, /request_managed_runtime_event_access_v2/);
+  assert.match(managedRuntime, /logical_human_owner_id/);
+  assert.match(managedRuntime, /authenticated_device_id/);
+  assert.match(submission, /decode_envelope_v1/);
+  assert.match(submission, /reserve_submission/);
+  assert.match(submission, /transfer_review_candidate_v1/);
+  assert.match(submission, /cleanup_materialization/);
+  assert.match(blobMaterialization, /TASKS_REVIEWED_CANDIDATE_BLOB_TARGET_OWNER_ID_V1/);
+  assert.match(clientPort, /owner_device_actor_id/);
+  assert.match(clientPort, /build_review_task_candidate_approved_outbox_record_v1/);
+  assert.match(clientRealtime, /ManagedRuntimeClientRealtimePublishRequestV1/);
+  assert.match(eventOutbox, /publish_exact/);
+  assert.match(runtimeMain, /serve-inherited/);
+  assert.doesNotMatch(
+    `${managedRuntime}\n${submission}\n${blobMaterialization}\n${clientPort}`,
+    /hermes_tasks::|hermes_communications::|hermes_ollama/,
+  );
 });

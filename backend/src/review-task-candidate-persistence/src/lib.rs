@@ -7,9 +7,10 @@ mod schema;
 
 pub use model::{
     CompleteReviewTaskCandidateSubmissionV1, DecideReviewTaskCandidateOperationV1,
-    PersistReviewTaskCandidatePromotionResultV1, PersistedReviewTaskCandidateSubmissionV1,
-    RejectReviewTaskCandidateSubmissionV1, ReserveReviewTaskCandidateSubmissionOutcomeV1,
-    ReserveReviewTaskCandidateSubmissionV1, ReviewTaskCandidateBlobReceiptV1,
+    PersistReviewTaskCandidateMaterializationV1, PersistReviewTaskCandidatePromotionResultV1,
+    PersistedReviewTaskCandidateSubmissionV1, RejectReviewTaskCandidateSubmissionV1,
+    ReserveReviewTaskCandidateSubmissionOutcomeV1, ReserveReviewTaskCandidateSubmissionV1,
+    ReviewTaskCandidateBlobCleanupV1, ReviewTaskCandidateBlobReceiptV1,
     ReviewTaskCandidateDecisionOutcomeV1, ReviewTaskCandidateInboxOutcomeV1,
     ReviewTaskCandidateOutboxRecordV1, ReviewTaskCandidatePersistenceErrorV1,
     ReviewTaskCandidateRealtimeTransitionV1,

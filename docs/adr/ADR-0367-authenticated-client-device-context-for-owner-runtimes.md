@@ -5,9 +5,9 @@
 Дата: 2026-07-31
 
 Состояние реализации: реализовано в owner-neutral Gateway ClientRpc и
-client_blob delivery envelope. Review task-candidate является первым owner,
-который использует этот контекст как human decision evidence; его managed
-runtime и live conformance остаются частью ADR-0366.
+client_blob delivery envelope. Review task-candidate managed runtime является
+первым owner, который использует этот контекст как domain-separated bounded
+human decision evidence; live conformance остаётся частью ADR-0366.
 
 Уточняет:
 

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_task_candidate_runtime_admission_v1",
+    "currentSlice": "review_task_candidate_managed_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1618,6 +1618,18 @@
       ],
       "hermes-review-task-candidate-runtime": [
         {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-review-task-candidate-api",
           "kind": "normal"
         },
@@ -1631,6 +1643,14 @@
         },
         {
           "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ],
@@ -4954,6 +4974,14 @@
       ],
       "hermes-review-task-candidate-runtime": [
         {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
           "name": "prost",
           "kind": "normal",
           "source": "crates_io",
@@ -4967,6 +4995,25 @@
           "source": "crates_io",
           "version": "=0.11.0",
           "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
           "features": []
         }
       ],

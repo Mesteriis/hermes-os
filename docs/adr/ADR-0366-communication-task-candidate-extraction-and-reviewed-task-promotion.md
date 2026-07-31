@@ -21,12 +21,16 @@ submission до Blob read, хранит state/operation/inbox/outbox/realtime а
 восстанавливает незавершённые submission/promotion. Review public contract
 также строит exact submit/submitted/rejected/approved durable envelopes,
 отделяет module actor от authenticated owner-device actor и фиксирует distinct
-Review- и Tasks-target Blob audiences. Review runtime/assembly,
-signed admission/conformance и Tasks promotion ещё не реализованы. Staged
-Review runtime package уже фиксирует exact Domain descriptor, семь отдельных
-client/Blob/event/storage capabilities и пустую typed Settings schema, но пока
-не содержит managed processing loop, поэтому
-aggregate gate остаётся закрыт.
+Review- и Tasks-target Blob audiences. Review assembly, signed
+admission/conformance и Tasks promotion ещё не реализованы. Review managed
+runtime уже выполняет exact submission consume, target-bound Blob
+materialization, owner-local completion/rejection, outbox relay, authenticated
+owner-device approve/reject, Tasks-target-bound Blob write и replayable client
+realtime. Domain-separated 16-byte actor evidence строится только из
+`authenticated_device_id`, переданного Gateway вне client payload. Runtime
+package сохраняет exact Domain descriptor, семь отдельных
+client/Blob/event/storage capabilities и пустую typed Settings schema, но
+aggregate gate остаётся закрыт до assembly, Tasks и managed E2E.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 

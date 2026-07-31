@@ -11,15 +11,16 @@ use sqlx::{
 
 use crate::{
     CompleteReviewTaskCandidateSubmissionV1, DecideReviewTaskCandidateOperationV1,
-    PersistReviewTaskCandidatePromotionResultV1, PersistedReviewTaskCandidateSubmissionV1,
-    RejectReviewTaskCandidateSubmissionV1, ReserveReviewTaskCandidateSubmissionOutcomeV1,
-    ReserveReviewTaskCandidateSubmissionV1, ReviewTaskCandidateDecisionOutcomeV1,
-    ReviewTaskCandidateInboxOutcomeV1, ReviewTaskCandidateOutboxRecordV1,
-    ReviewTaskCandidatePersistenceErrorV1, ReviewTaskCandidateRealtimeTransitionV1,
+    PersistReviewTaskCandidateMaterializationV1, PersistReviewTaskCandidatePromotionResultV1,
+    PersistedReviewTaskCandidateSubmissionV1, RejectReviewTaskCandidateSubmissionV1,
+    ReserveReviewTaskCandidateSubmissionOutcomeV1, ReserveReviewTaskCandidateSubmissionV1,
+    ReviewTaskCandidateDecisionOutcomeV1, ReviewTaskCandidateInboxOutcomeV1,
+    ReviewTaskCandidateOutboxRecordV1, ReviewTaskCandidatePersistenceErrorV1,
+    ReviewTaskCandidateRealtimeTransitionV1,
     model::{
         REVIEW_TASK_CANDIDATE_OUTBOX_LIMIT_V1, REVIEW_TASK_CANDIDATE_REALTIME_LIMIT_V1,
         REVIEW_TASK_CANDIDATE_RECOVERY_LIMIT_V1, decision_fingerprint, nonzero, valid_blob,
-        valid_identity, valid_outbox,
+        valid_cleanup, valid_identity, valid_outbox,
     },
     row_codec::{
         SELECT_PENDING_PROMOTIONS, SELECT_RECOVERABLE_SUBMISSIONS, SELECT_REVIEW_BY_ID,
@@ -144,6 +145,103 @@ impl ReviewTaskCandidatePersistenceV1 {
             .into_iter()
             .map(submission_from_row)
             .collect()
+    }
+
+    pub async fn persist_materialization(
+        &self,
+        input: PersistReviewTaskCandidateMaterializationV1,
+    ) -> Result<PersistedReviewTaskCandidateSubmissionV1, ReviewTaskCandidatePersistenceErrorV1>
+    {
+        if !valid_identity(&input.logical_owner_id)
+            || !nonzero(&input.submission_message_id)
+            || !valid_cleanup(&input.materialization)
+            || input.materialized_at_unix_millis <= 0
+        {
+            return Err(ReviewTaskCandidatePersistenceErrorV1::InvalidInput);
+        }
+        let mut transaction = self.pool.begin().await.map_err(storage_error)?;
+        let current = load_submission_for_update(
+            &mut transaction,
+            &input.logical_owner_id,
+            &input.submission_message_id,
+        )
+        .await?;
+        if let Some(existing) = &current.materialization {
+            if existing != &input.materialization {
+                return Err(ReviewTaskCandidatePersistenceErrorV1::SubmissionConflict);
+            }
+            transaction.commit().await.map_err(storage_error)?;
+            return Ok(current);
+        }
+        let affected = sqlx::query(
+            "UPDATE hermes_data.review_task_candidate_submissions
+             SET materialized_blob_reference_id=$1
+             WHERE logical_owner_id=$2 AND submission_message_id=$3
+               AND materialized_blob_reference_id IS NULL",
+        )
+        .bind(input.materialization.reference_id.as_slice())
+        .bind(&input.logical_owner_id)
+        .bind(input.submission_message_id.as_slice())
+        .execute(&mut *transaction)
+        .await
+        .map_err(storage_error)?
+        .rows_affected();
+        if affected != 1 {
+            return Err(ReviewTaskCandidatePersistenceErrorV1::RevisionConflict);
+        }
+        transaction.commit().await.map_err(storage_error)?;
+        self.load_submission(&input.logical_owner_id, &input.submission_message_id)
+            .await
+    }
+
+    pub async fn complete_blob_cleanup(
+        &self,
+        logical_owner_id: &str,
+        submission_message_id: &[u8; 16],
+        materialization: &crate::ReviewTaskCandidateBlobCleanupV1,
+        completed_at_unix_millis: i64,
+    ) -> Result<(), ReviewTaskCandidatePersistenceErrorV1> {
+        if !valid_identity(logical_owner_id)
+            || !nonzero(submission_message_id)
+            || !valid_cleanup(materialization)
+            || completed_at_unix_millis <= 0
+        {
+            return Err(ReviewTaskCandidatePersistenceErrorV1::InvalidInput);
+        }
+        let affected = sqlx::query(
+            "UPDATE hermes_data.review_task_candidate_submissions
+             SET cleanup_completed_at_unix_millis=$1
+             WHERE logical_owner_id=$2 AND submission_message_id=$3
+               AND materialized_blob_reference_id=$4
+               AND candidate_blob_declared_bytes=$5
+               AND candidate_blob_sha256=$6
+               AND candidate_blob_custody_proof=$7
+               AND cleanup_completed_at_unix_millis IS NULL",
+        )
+        .bind(completed_at_unix_millis)
+        .bind(logical_owner_id)
+        .bind(submission_message_id.as_slice())
+        .bind(materialization.reference_id.as_slice())
+        .bind(signed(materialization.declared_bytes)?)
+        .bind(materialization.sha256.as_slice())
+        .bind(&materialization.custody_proof)
+        .execute(&self.pool)
+        .await
+        .map_err(storage_error)?
+        .rows_affected();
+        if affected == 1 {
+            return Ok(());
+        }
+        let current = self
+            .load_submission(logical_owner_id, submission_message_id)
+            .await?;
+        if current.materialization.as_ref() == Some(materialization)
+            && current.cleanup_completed_at_unix_millis.is_some()
+        {
+            Ok(())
+        } else {
+            Err(ReviewTaskCandidatePersistenceErrorV1::RevisionConflict)
+        }
     }
 
     pub async fn complete_submission(

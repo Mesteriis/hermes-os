@@ -5,8 +5,8 @@ use hermes_review_task_candidate_core::{
 use sqlx::{PgConnection, Row, postgres::PgRow};
 
 use crate::{
-    PersistedReviewTaskCandidateSubmissionV1, ReviewTaskCandidateBlobReceiptV1,
-    ReviewTaskCandidatePersistenceErrorV1,
+    PersistedReviewTaskCandidateSubmissionV1, ReviewTaskCandidateBlobCleanupV1,
+    ReviewTaskCandidateBlobReceiptV1, ReviewTaskCandidatePersistenceErrorV1,
 };
 
 pub(crate) const SELECT_REVIEW_BY_ID: &str =
@@ -42,7 +42,8 @@ pub(crate) const SELECT_SUBMISSION_BY_MESSAGE_ID: &str =
             submission_id, candidate_id, candidate_digest, source_evidence_id,
             source_evidence_revision, candidate_blob_reference_id,
             candidate_blob_declared_bytes, candidate_blob_sha256,
-            candidate_blob_custody_proof, completed, review_id, rejected,
+            candidate_blob_custody_proof, materialized_blob_reference_id,
+            cleanup_completed_at_unix_millis, completed, review_id, rejected,
             received_at_unix_millis
      FROM hermes_data.review_task_candidate_submissions
      WHERE logical_owner_id=$1 AND submission_message_id=$2";
@@ -52,7 +53,8 @@ pub(crate) const SELECT_SUBMISSION_FOR_UPDATE: &str =
             submission_id, candidate_id, candidate_digest, source_evidence_id,
             source_evidence_revision, candidate_blob_reference_id,
             candidate_blob_declared_bytes, candidate_blob_sha256,
-            candidate_blob_custody_proof, completed, review_id, rejected,
+            candidate_blob_custody_proof, materialized_blob_reference_id,
+            cleanup_completed_at_unix_millis, completed, review_id, rejected,
             received_at_unix_millis
      FROM hermes_data.review_task_candidate_submissions
      WHERE logical_owner_id=$1 AND submission_message_id=$2 FOR UPDATE";
@@ -62,10 +64,13 @@ pub(crate) const SELECT_RECOVERABLE_SUBMISSIONS: &str =
             submission_id, candidate_id, candidate_digest, source_evidence_id,
             source_evidence_revision, candidate_blob_reference_id,
             candidate_blob_declared_bytes, candidate_blob_sha256,
-            candidate_blob_custody_proof, completed, review_id, rejected,
+            candidate_blob_custody_proof, materialized_blob_reference_id,
+            cleanup_completed_at_unix_millis, completed, review_id, rejected,
             received_at_unix_millis
      FROM hermes_data.review_task_candidate_submissions
-     WHERE logical_owner_id=$1 AND NOT completed
+     WHERE logical_owner_id=$1
+       AND (NOT completed OR (materialized_blob_reference_id IS NOT NULL
+            AND cleanup_completed_at_unix_millis IS NULL))
      ORDER BY received_at_unix_millis, submission_message_id LIMIT $2";
 
 pub(crate) fn review_from_row(
@@ -110,6 +115,17 @@ pub(crate) fn review_from_row(
 pub(crate) fn submission_from_row(
     row: PgRow,
 ) -> Result<PersistedReviewTaskCandidateSubmissionV1, ReviewTaskCandidatePersistenceErrorV1> {
+    let materialized_reference_id: Option<[u8; 16]> =
+        optional_array(field(&row, "materialized_blob_reference_id")?)?;
+    let materialization = match materialized_reference_id {
+        Some(reference_id) => Some(ReviewTaskCandidateBlobCleanupV1 {
+            reference_id,
+            declared_bytes: unsigned(field(&row, "candidate_blob_declared_bytes")?)?,
+            sha256: array(field::<Vec<u8>>(&row, "candidate_blob_sha256")?)?,
+            custody_proof: field(&row, "candidate_blob_custody_proof")?,
+        }),
+        None => None,
+    };
     Ok(PersistedReviewTaskCandidateSubmissionV1 {
         logical_owner_id: field(&row, "logical_owner_id")?,
         submission_message_id: array(field::<Vec<u8>>(&row, "submission_message_id")?)?,
@@ -125,6 +141,8 @@ pub(crate) fn submission_from_row(
             sha256: array(field::<Vec<u8>>(&row, "candidate_blob_sha256")?)?,
             custody_transfer_source_proof: field(&row, "candidate_blob_custody_proof")?,
         },
+        materialization,
+        cleanup_completed_at_unix_millis: field(&row, "cleanup_completed_at_unix_millis")?,
         completed: field(&row, "completed")?,
         review_id: optional_array(field(&row, "review_id")?)?,
         rejected: field(&row, "rejected")?,

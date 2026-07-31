@@ -20,6 +20,14 @@ pub struct ReviewTaskCandidateBlobReceiptV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReviewTaskCandidateBlobCleanupV1 {
+    pub reference_id: [u8; 16],
+    pub declared_bytes: u64,
+    pub sha256: [u8; 32],
+    pub custody_proof: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReviewTaskCandidateOutboxRecordV1 {
     pub message_id: [u8; 16],
     pub envelope_sha256: [u8; 32],
@@ -51,10 +59,20 @@ pub struct PersistedReviewTaskCandidateSubmissionV1 {
     pub source_evidence_id: [u8; 16],
     pub source_evidence_revision: u64,
     pub candidate_content: ReviewTaskCandidateBlobReceiptV1,
+    pub materialization: Option<ReviewTaskCandidateBlobCleanupV1>,
+    pub cleanup_completed_at_unix_millis: Option<i64>,
     pub completed: bool,
     pub review_id: Option<[u8; 16]>,
     pub rejected: bool,
     pub received_at_unix_millis: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PersistReviewTaskCandidateMaterializationV1 {
+    pub logical_owner_id: String,
+    pub submission_message_id: [u8; 16],
+    pub materialization: ReviewTaskCandidateBlobCleanupV1,
+    pub materialized_at_unix_millis: i64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -180,6 +198,14 @@ pub(crate) fn valid_blob(value: &ReviewTaskCandidateBlobReceiptV1) -> bool {
         && !value.custody_transfer_source_proof.is_empty()
         && value.custody_transfer_source_proof.len()
             <= REVIEW_TASK_CANDIDATE_MAX_CUSTODY_PROOF_BYTES_V1
+}
+
+pub(crate) fn valid_cleanup(value: &ReviewTaskCandidateBlobCleanupV1) -> bool {
+    nonzero(&value.reference_id)
+        && (1..=REVIEW_TASK_CANDIDATE_MAX_BLOB_BYTES_V1).contains(&value.declared_bytes)
+        && nonzero(&value.sha256)
+        && !value.custody_proof.is_empty()
+        && value.custody_proof.len() <= REVIEW_TASK_CANDIDATE_MAX_CUSTODY_PROOF_BYTES_V1
 }
 
 #[cfg(test)]
