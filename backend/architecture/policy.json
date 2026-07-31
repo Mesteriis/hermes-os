@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_recipient_suggestion_source_contract_v1",
+    "currentSlice": "communication_recipient_suggestion_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -960,6 +960,12 @@
         "role": "workflow",
         "owner": "communication_recipient_suggestion",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-communication-recipient-suggestion-persistence",
+        "role": "workflow",
+        "owner": "communication_recipient_suggestion",
+        "surface": "persistence"
       },
       {
         "name": "hermes-communications-recipient-source-api",
@@ -2961,6 +2967,10 @@
       ],
       "hermes-communication-recipient-suggestion-api": [],
       "hermes-communication-recipient-suggestion-core": [],
+      "hermes-communication-recipient-suggestion-persistence": [
+        { "name": "hermes-communication-recipient-suggestion-core", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
+      ],
       "hermes-communications-recipient-source-api": [
         { "name": "hermes-events-protocol", "kind": "normal" },
         { "name": "hermes-runtime-protocol", "kind": "normal" }
@@ -3043,6 +3053,10 @@
         { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
       ],
       "hermes-communication-recipient-suggestion-core": [],
+      "hermes-communication-recipient-suggestion-persistence": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+      ],
       "hermes-communications-recipient-source-api": [
         { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
@@ -7684,6 +7698,10 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-communication-recipient-suggestion-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-communications-recipient-source-api": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -8007,6 +8025,7 @@
         "communication_recipient_suggestion.source_prepare.v1",
         "communication_recipient_suggestion.source_prepared.v1",
         "communication_recipient_suggestion.source_rejected.v1",
+        "communication_recipient_suggestion.storage.v1",
         "communication_summary.inference.v1",
         "communication_summary.source.blob.v1",
         "communication_summary.source_prepare.v1",

@@ -1,0 +1,157 @@
+CREATE TABLE hermes_data.communication_recipient_suggestion_runs (
+    logical_owner_id TEXT NOT NULL,
+    run_id BYTEA NOT NULL,
+    operation_id BYTEA NOT NULL,
+    request_fingerprint BYTEA NOT NULL,
+    source_message_id BYTEA NOT NULL,
+    expected_source_revision BIGINT NOT NULL,
+    state SMALLINT NOT NULL,
+    state_revision BIGINT NOT NULL,
+    source_evidence_id BYTEA,
+    source_evidence_revision BIGINT,
+    source_sha256 BYTEA,
+    evaluation_receipt_bytes BYTEA,
+    source_cleanup_reference_id BYTEA,
+    source_cleanup_declared_bytes BIGINT,
+    source_cleanup_sha256 BYTEA,
+    source_cleanup_custody_proof BYTEA,
+    cleanup_completed_at_unix_millis BIGINT,
+    candidate_bytes BYTEA,
+    rejection_code SMALLINT,
+    created_at_unix_millis BIGINT NOT NULL,
+    updated_at_unix_millis BIGINT NOT NULL,
+    PRIMARY KEY (logical_owner_id, run_id),
+    UNIQUE (logical_owner_id, operation_id),
+    CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
+    CHECK (length(run_id) = 16),
+    CHECK (length(operation_id) = 16),
+    CHECK (length(request_fingerprint) = 32),
+    CHECK (length(source_message_id) = 16),
+    CHECK (expected_source_revision > 0),
+    CHECK (state BETWEEN 1 AND 5),
+    CHECK (state_revision > 0),
+    CHECK (created_at_unix_millis > 0),
+    CHECK (updated_at_unix_millis >= created_at_unix_millis),
+    CHECK (
+        (state IN (1, 2) AND source_evidence_id IS NULL
+          AND source_evidence_revision IS NULL AND source_sha256 IS NULL)
+        OR
+        (state IN (3, 4) AND length(source_evidence_id) = 16
+          AND source_evidence_revision > 0 AND length(source_sha256) = 32)
+        OR state = 5
+    ),
+    CHECK (
+        (
+            evaluation_receipt_bytes IS NULL
+            AND source_cleanup_reference_id IS NULL
+            AND source_cleanup_declared_bytes IS NULL
+            AND source_cleanup_sha256 IS NULL
+            AND source_cleanup_custody_proof IS NULL
+        )
+        OR
+        (
+            length(evaluation_receipt_bytes) BETWEEN 1 AND 16384
+            AND length(source_cleanup_reference_id) = 16
+            AND source_cleanup_declared_bytes BETWEEN 1 AND 262144
+            AND length(source_cleanup_sha256) = 32
+            AND length(source_cleanup_custody_proof) BETWEEN 1 AND 2048
+        )
+    ),
+    CHECK (
+        (state IN (1, 2, 3) AND cleanup_completed_at_unix_millis IS NULL)
+        OR state IN (4, 5)
+    ),
+    CHECK (
+        (state IN (1, 2) AND evaluation_receipt_bytes IS NULL)
+        OR (state = 3 AND evaluation_receipt_bytes IS NOT NULL)
+        OR state IN (4, 5)
+    ),
+    CHECK (
+        state != 4
+        OR evaluation_receipt_bytes IS NOT NULL
+        OR cleanup_completed_at_unix_millis IS NOT NULL
+    ),
+    CHECK (
+        cleanup_completed_at_unix_millis IS NULL
+        OR cleanup_completed_at_unix_millis >= created_at_unix_millis
+    ),
+    CHECK (
+        (state = 4 AND candidate_bytes IS NOT NULL
+          AND length(candidate_bytes) BETWEEN 2 AND 23
+          AND rejection_code IS NULL)
+        OR
+        (state = 5 AND candidate_bytes IS NULL AND rejection_code BETWEEN 1 AND 4)
+        OR
+        (state IN (1, 2, 3) AND candidate_bytes IS NULL AND rejection_code IS NULL)
+    )
+);
+
+CREATE INDEX communication_recipient_suggestion_recoverable_idx
+ON hermes_data.communication_recipient_suggestion_runs (
+    logical_owner_id,
+    state,
+    state_revision
+);
+
+CREATE TABLE hermes_data.communication_recipient_suggestion_inbox (
+    logical_owner_id TEXT NOT NULL,
+    result_message_id BYTEA NOT NULL,
+    envelope_sha256 BYTEA NOT NULL,
+    run_id BYTEA NOT NULL,
+    processed_at_unix_millis BIGINT NOT NULL,
+    PRIMARY KEY (logical_owner_id, result_message_id),
+    CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
+    CHECK (length(result_message_id) = 16),
+    CHECK (length(envelope_sha256) = 32),
+    CHECK (length(run_id) = 16),
+    CHECK (processed_at_unix_millis > 0)
+);
+
+CREATE TABLE hermes_data.communication_recipient_suggestion_outbox (
+    logical_owner_id TEXT NOT NULL,
+    message_id BYTEA NOT NULL,
+    envelope_sha256 BYTEA NOT NULL,
+    envelope_bytes BYTEA NOT NULL,
+    created_at_unix_millis BIGINT NOT NULL,
+    published_at_unix_millis BIGINT,
+    PRIMARY KEY (logical_owner_id, message_id),
+    CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
+    CHECK (length(message_id) = 16),
+    CHECK (length(envelope_sha256) = 32),
+    CHECK (length(envelope_bytes) BETWEEN 1 AND 65536),
+    CHECK (created_at_unix_millis > 0),
+    CHECK (
+        published_at_unix_millis IS NULL
+        OR published_at_unix_millis >= created_at_unix_millis
+    )
+);
+
+CREATE INDEX communication_recipient_suggestion_outbox_pending_idx
+ON hermes_data.communication_recipient_suggestion_outbox (
+    logical_owner_id,
+    created_at_unix_millis,
+    message_id
+)
+WHERE published_at_unix_millis IS NULL;
+
+CREATE TABLE hermes_data.communication_recipient_suggestion_realtime (
+    realtime_sequence BIGSERIAL PRIMARY KEY,
+    logical_owner_id TEXT NOT NULL,
+    run_id BYTEA NOT NULL,
+    state SMALLINT NOT NULL,
+    state_revision BIGINT NOT NULL,
+    rejection_code SMALLINT,
+    occurred_at_unix_millis BIGINT NOT NULL,
+    CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
+    CHECK (length(run_id) = 16),
+    CHECK (state BETWEEN 1 AND 5),
+    CHECK (state_revision > 0),
+    CHECK (rejection_code IS NULL OR rejection_code BETWEEN 1 AND 4),
+    CHECK (occurred_at_unix_millis > 0)
+);
+
+CREATE INDEX communication_recipient_suggestion_realtime_owner_idx
+ON hermes_data.communication_recipient_suggestion_realtime (
+    logical_owner_id,
+    realtime_sequence
+);

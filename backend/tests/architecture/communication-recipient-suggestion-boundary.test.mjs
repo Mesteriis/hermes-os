@@ -20,6 +20,11 @@ test('recipient suggestion agreement separates source ownership from workflow de
     sourceApi,
     sourceProtocol,
     sourceEnvelope,
+    persistenceManifest,
+    persistenceSchema,
+    persistenceModel,
+    persistenceRepository,
+    persistenceRealtime,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -55,6 +60,29 @@ test('recipient suggestion agreement separates source ownership from workflow de
       'utf8',
     ),
     readFile(new URL('src/communications-recipient-source-api/src/envelope.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL('src/communication-recipient-suggestion-persistence/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-recipient-suggestion-persistence/migrations/0001_recipient_suggestion.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-recipient-suggestion-persistence/src/model.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-recipient-suggestion-persistence/src/repository.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-recipient-suggestion-persistence/src/realtime.rs', BACKEND_ROOT),
+      'utf8',
+    ),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -99,10 +127,11 @@ test('recipient suggestion agreement separates source ownership from workflow de
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_recipient_suggestion_source_contract_v1',
+    'communication_recipient_suggestion_persistence_v1',
   );
   assert.match(workspace, /"src\/communication-recipient-suggestion-api"/);
   assert.match(workspace, /"src\/communication-recipient-suggestion-core"/);
+  assert.match(workspace, /"src\/communication-recipient-suggestion-persistence"/);
   assert.match(workspace, /"src\/communications-recipient-source-api"/);
   assert.match(apiManifest, /owner = "communication_recipient_suggestion"/);
   assert.match(apiManifest, /surface = "contract"/);
@@ -135,6 +164,25 @@ test('recipient suggestion agreement separates source ownership from workflow de
     sourceProtocol,
     /email_address|contact_id|person_id|organization_id|provider_id|account_id|model_id|prompt|source_body|map</,
   );
+  assert.match(persistenceManifest, /owner = "communication_recipient_suggestion"/);
+  assert.match(persistenceManifest, /surface = "persistence"/);
+  assert.match(persistenceSchema, /communication_recipient_suggestion_realtime/);
+  assert.match(persistenceSchema, /evaluation_receipt_bytes/);
+  assert.match(persistenceSchema, /candidate_bytes/);
+  assert.match(persistenceModel, /encode_candidates/);
+  assert.match(persistenceRepository, /persist_evaluation_transition/);
+  assert.match(persistenceRealtime, /client_realtime_window/);
+  for (const privateOrForeign of [
+    'source_body',
+    'email_address',
+    'provider_id',
+    'account_id',
+    'model_id',
+    'prompt',
+    'communications_',
+  ]) {
+    assert.doesNotMatch(persistenceSchema, new RegExp(privateOrForeign));
+  }
   assert.ok(
     policy.implementation.ownerInventory.workflows.includes(
       'communication_recipient_suggestion',
@@ -151,6 +199,7 @@ test('recipient suggestion agreement separates source ownership from workflow de
     'communication_recipient_suggestion.source_prepare.v1',
     'communication_recipient_suggestion.source_prepared.v1',
     'communication_recipient_suggestion.source_rejected.v1',
+    'communication_recipient_suggestion.storage.v1',
   ]) {
     assert.ok(policy.implementation.ownerInventory.businessCapabilities.includes(capability));
   }

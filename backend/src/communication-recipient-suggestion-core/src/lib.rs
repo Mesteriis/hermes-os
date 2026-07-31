@@ -259,6 +259,54 @@ pub fn transition_communication_recipient_suggestion_v1(
     }
 }
 
+pub fn validate_communication_recipient_suggestion_status_v1(
+    status: &CommunicationRecipientSuggestionStatusV1,
+) -> Result<(), CommunicationRecipientSuggestionTransitionErrorV1> {
+    if status.state_revision == 0 {
+        return Err(CommunicationRecipientSuggestionTransitionErrorV1::InvalidTransition);
+    }
+    let source_absent = status.source_evidence_id.is_none()
+        && status.source_evidence_revision.is_none()
+        && status.source_sha256.is_none();
+    let source_present = status.source_evidence_id.is_some_and(|value| !zero(&value))
+        && status
+            .source_evidence_revision
+            .is_some_and(|value| value > 0)
+        && status.source_sha256.is_some_and(|value| !zero(&value));
+    match status.state {
+        CommunicationRecipientSuggestionStateV1::Accepted
+        | CommunicationRecipientSuggestionStateV1::PreparingSource => {
+            if !source_absent || status.candidates.is_some() || status.rejection.is_some() {
+                return Err(CommunicationRecipientSuggestionTransitionErrorV1::InvalidTransition);
+            }
+        }
+        CommunicationRecipientSuggestionStateV1::Evaluating => {
+            if !source_present || status.candidates.is_some() || status.rejection.is_some() {
+                return Err(CommunicationRecipientSuggestionTransitionErrorV1::InvalidTransition);
+            }
+        }
+        CommunicationRecipientSuggestionStateV1::Ready => {
+            let candidates = status
+                .candidates
+                .as_deref()
+                .ok_or(CommunicationRecipientSuggestionTransitionErrorV1::InvalidCandidates)?;
+            if !source_present || status.rejection.is_some() {
+                return Err(CommunicationRecipientSuggestionTransitionErrorV1::InvalidTransition);
+            }
+            validate_candidates(candidates)?;
+        }
+        CommunicationRecipientSuggestionStateV1::Rejected => {
+            if (!source_absent && !source_present)
+                || status.candidates.is_some()
+                || status.rejection.is_none()
+            {
+                return Err(CommunicationRecipientSuggestionTransitionErrorV1::InvalidTransition);
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_candidates(
     candidates: &[CommunicationRecipientCandidateV1],
 ) -> Result<(), CommunicationRecipientSuggestionTransitionErrorV1> {
