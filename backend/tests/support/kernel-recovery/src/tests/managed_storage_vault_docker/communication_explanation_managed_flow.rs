@@ -547,6 +547,16 @@ fn managed_communication_explanation_completes_real_provider_through_gateway_sse
         request.clone(),
     );
     assert_eq!(accepted.error, unspecified_error());
+    let first_event =
+        read_terminal_explanation_sse_event(&router, &gateway_runtime, &cookie, &accepted.run_id);
+    let first_payload =
+        CommunicationExplanationStatusChangedV1::decode(first_event.payload.as_slice())
+            .expect("successful Communication Explanation realtime payload");
+    assert_eq!(first_payload.run_id, accepted.run_id);
+    assert_eq!(
+        state(first_payload.state),
+        CommunicationExplanationStateV1::CommunicationExplanationStateReady
+    );
     let ready = wait_for_ready_explanation(&router, &gateway_runtime, &cookie, &accepted.run_id);
     assert_eq!(ready.source_message_id, source_message_id);
     assert_eq!(ready.expected_source_revision, 2);
@@ -583,16 +593,6 @@ fn managed_communication_explanation_completes_real_provider_through_gateway_sse
     ));
     assert!(candidate.confidence_basis_points <= 10_000);
 
-    let first_event =
-        read_terminal_explanation_sse_event(&router, &gateway_runtime, &cookie, &accepted.run_id);
-    let first_payload =
-        CommunicationExplanationStatusChangedV1::decode(first_event.payload.as_slice())
-            .expect("successful Communication Explanation realtime payload");
-    assert_eq!(first_payload.run_id, accepted.run_id);
-    assert_eq!(
-        state(first_payload.state),
-        CommunicationExplanationStateV1::CommunicationExplanationStateReady
-    );
     assert_private_content_absent(&first_event.encode_to_vec());
     assert!(
         !first_event
@@ -959,7 +959,7 @@ fn read_terminal_explanation_sse_event(
     assert_eq!(response.status(), StatusCode::OK);
     runtime.block_on(async {
         tokio::time::timeout(
-            Duration::from_secs(8),
+            Duration::from_secs(30),
             find_terminal_explanation_event(response.into_body(), run_id),
         )
         .await

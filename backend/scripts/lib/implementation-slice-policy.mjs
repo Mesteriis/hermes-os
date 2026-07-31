@@ -5152,6 +5152,17 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
+  if (currentSlice === 'communication_explanation_live_provider_conformance_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_RECIPIENT_SUGGESTION_SOURCE_PRODUCER_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_RECIPIENT_SUGGESTION_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies: COMMUNICATION_RECIPIENT_SUGGESTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: COMMUNICATION_RECIPIENT_SUGGESTION_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
   return null;
 }
 

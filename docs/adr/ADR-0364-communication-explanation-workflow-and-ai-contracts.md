@@ -4,10 +4,20 @@
 
 Дата: 2026-07-31
 
-Состояние реализации: planned. Решение фиксирует отдельного owner, typed reason
-candidates, event-only source flow, AI/provider границы и атомарный phase gate.
-Legacy `ExplainMessage`, уже реализованные Summary/Translation и frontend
-presentation не являются доказательством `communication_explanation_v1`.
+Состояние реализации: implemented. Пять отдельных workflow units, distinct
+Communications source events, owner-local persistence, AI Engine request и
+Ollama provider contract допущены как signed managed runtime graph. Реальный
+Ollama process подтверждён тестом
+`managed_communication_explanation_completes_real_provider_through_gateway_sse`:
+authenticated Gateway Start достигает workflow только через public capability,
+private source передаётся target-bound Blob, terminal result приходит через
+replayable SSE и затем читается через Get. Отдельный managed contour
+`managed_communication_explanation_reaches_ai_and_replays_through_gateway_sse`
+покрывает wrong-owner, stale-source, request-conflict, malformed/duplicate
+reasons, provider failure, restart replay, revoke, grant/generation fences и
+отсутствие private content в durable/realtime surfaces. Legacy
+`ExplainMessage`, Summary/Translation и frontend presentation не используются
+как facade или доказательство `communication_explanation_v1`.
 
 Уточняет:
 

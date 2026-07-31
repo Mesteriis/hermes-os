@@ -167,7 +167,7 @@ test('communication explanation agreement separates workflow domain engine and p
     gate: 'communication_explanation_v1',
     role: 'workflow',
     owner: 'communication_explanation',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'communications_ai_context_source_v1',
       'ai_inference_v1',
@@ -191,10 +191,10 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.match(adr, /Smart CC остаётся отдельным/);
   assert.match(adr, /exact reason kind\/source-basis enums/);
   assert.match(adr, /Kernel\/Gateway не компилируют[\s\S]*Explanation schema/);
-  assert.match(adr, /Состояние реализации: planned/);
+  assert.match(adr, /Состояние реализации: implemented/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns explanation/i);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_recipient_suggestion_managed_conformance_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_explanation_live_provider_conformance_v1');
   assert.match(workspace, /"src\/communication-explanation-api"/);
   assert.match(workspace, /"src\/communication-explanation-core"/);
   assert.match(workspace, /"src\/communication-explanation-persistence"/);

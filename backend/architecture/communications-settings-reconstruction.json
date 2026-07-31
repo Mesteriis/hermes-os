@@ -609,7 +609,7 @@
       "gate": "communication_explanation_v1",
       "role": "workflow",
       "owner": "communication_explanation",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "communications_ai_context_source_v1",
         "ai_inference_v1",
