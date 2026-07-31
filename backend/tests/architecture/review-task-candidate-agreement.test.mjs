@@ -6,7 +6,23 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../../../', import.meta.url);
 
 test('Review task-candidate is an exact domain capability, not an attention facade', async () => {
-  const [adr, policySource, workspace, apiManifest, api, protocol, coreManifest, core, model, lifecycle] =
+  const [
+    adr,
+    policySource,
+    workspace,
+    apiManifest,
+    api,
+    protocol,
+    coreManifest,
+    core,
+    model,
+    lifecycle,
+    persistenceManifest,
+    persistence,
+    repository,
+    schema,
+    migration,
+  ] =
     await Promise.all([
       readFile(
         new URL(
@@ -30,11 +46,26 @@ test('Review task-candidate is an exact domain capability, not an attention faca
       readFile(new URL('src/review-task-candidate-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-core/src/model.rs', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-core/src/lifecycle.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-persistence/src/lib.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-persistence/src/repository.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-persistence/src/schema.rs', BACKEND_ROOT), 'utf8'),
+      readFile(
+        new URL(
+          'src/review-task-candidate-persistence/migrations/0001_review_task_candidate.sql',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
     ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_core_v1');
-  for (const unit of ['hermes-review-task-candidate-api', 'hermes-review-task-candidate-core']) {
+  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_persistence_v1');
+  for (const unit of [
+    'hermes-review-task-candidate-api',
+    'hermes-review-task-candidate-core',
+    'hermes-review-task-candidate-persistence',
+  ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
     assert.match(adr, new RegExp(`\\b${unit}\\b`));
     assert.equal(policy.implementation.productionPackages.some(({ name }) => name === unit), true);
@@ -58,5 +89,20 @@ test('Review task-candidate is an exact domain capability, not an attention faca
   assert.match(lifecycle, /rejection_never_requests_promotion/);
   assert.match(lifecycle, /stale_revision_and_missing_human_actor_are_rejected/);
   assert.doesNotMatch(`${core}\n${model}\n${lifecycle}`, /review_attention|hermes_communications|hermes_tasks|ollama|sqlx|reqwest/);
+  assert.match(persistenceManifest, /owner = "review"/);
+  assert.match(persistenceManifest, /surface = "persistence"/);
+  assert.match(persistence, /ReviewTaskCandidatePersistenceV1/);
+  assert.match(repository, /reserve_submission/);
+  assert.match(repository, /load_recoverable_submissions/);
+  assert.match(repository, /review_task_candidate_operations/);
+  assert.match(repository, /review_task_candidate_promotion_inbox/);
+  assert.match(repository, /insert_outbox/);
+  assert.match(repository, /insert_realtime/);
+  assert.match(schema, /review_task_candidate_storage_bundle_v1/);
+  assert.match(migration, /request_sha256 BYTEA/);
+  assert.match(migration, /decision_fingerprint BYTEA/);
+  assert.match(migration, /review_task_candidate_outbox/);
+  assert.match(migration, /review_task_candidate_realtime/);
+  assert.doesNotMatch(`${persistence}\n${repository}\n${migration}`, /review_attention|communications_|tasks_|provider_id|account_id|ollama|prompt|model_id/);
   assert.match(adr, /без[\s\S]*расширения `review-attention`/);
 });

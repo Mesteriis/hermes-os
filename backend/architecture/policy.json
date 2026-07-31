@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_task_candidate_core_v1",
+    "currentSlice": "review_task_candidate_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1032,6 +1032,12 @@
         "role": "domain",
         "owner": "review",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-review-task-candidate-persistence",
+        "role": "domain",
+        "owner": "review",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1590,6 +1596,16 @@
         }
       ],
       "hermes-review-task-candidate-core": [],
+      "hermes-review-task-candidate-persistence": [
+        {
+          "name": "hermes-review-task-candidate-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-communications-attachment-contract": [
         {
           "name": "hermes-events-protocol",
@@ -4868,6 +4884,28 @@
           "version": "=0.11.0",
           "defaultFeatures": false,
           "features": []
+        }
+      ],
+      "hermes-review-task-candidate-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
         }
       ],
       "hermes-review-attention-persistence": [
@@ -8167,6 +8205,10 @@
       "hermes-review-task-candidate-core": {
         "primaryKind": "lib",
         "customBuildAllowed": false
+      },
+      "hermes-review-task-candidate-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -8352,6 +8394,7 @@
         "review.task-candidate.blob.v1",
         "review.task-candidate.client.v1",
         "review.task-candidate.promotion.v1",
+        "review.task-candidate.storage.v1",
         "review.task-candidate.submission.v1"
       ]
     },

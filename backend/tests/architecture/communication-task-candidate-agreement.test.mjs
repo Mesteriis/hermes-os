@@ -105,7 +105,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_core_v1');
+  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_persistence_v1');
   assert.match(adr, /Состояние реализации: planned/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);

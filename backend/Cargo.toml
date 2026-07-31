@@ -50,6 +50,7 @@ members = [
   "src/review-attention-assembly",
   "src/review-task-candidate-api",
   "src/review-task-candidate-core",
+  "src/review-task-candidate-persistence",
   "src/communications-content-api",
   "src/communications-saved-query-api",
   "src/communications-sender-insights-api",

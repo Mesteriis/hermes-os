@@ -16,9 +16,11 @@ typed subject/body только через target-bound Blob custody. Отдел
 distribution compiler. Review staged slice также реализует отдельные generated
 task-candidate API и pure Review core: deterministic review identity, immutable
 approve/reject, expected-revision fence и отдельный promotion lifecycle без
-расширения `review-attention`. Review persistence/runtime/assembly, signed
-admission/conformance и Tasks promotion ещё не реализованы, поэтому aggregate
-gate остаётся закрыт.
+расширения `review-attention`. Review owner-local persistence резервирует
+submission до Blob read, хранит state/operation/inbox/outbox/realtime атомарно и
+восстанавливает незавершённые submission/promotion. Review runtime/assembly,
+signed admission/conformance и Tasks promotion ещё не реализованы, поэтому
+aggregate gate остаётся закрыт.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 
