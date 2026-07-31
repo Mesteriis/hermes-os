@@ -209,7 +209,7 @@ test('communication translation agreement isolates workflow domain engine and pr
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_task_candidate_persistence_v1',
+    'communication_task_candidate_runtime_v1',
   );
   assert.match(workspace, /"src\/communication-translation-api"/);
   assert.match(workspace, /"src\/communication-translation-core"/);

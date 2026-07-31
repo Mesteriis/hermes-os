@@ -2504,6 +2504,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-task-candidate-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-blob-client",
+ "hermes-communication-task-candidate-api",
+ "hermes-communication-task-candidate-core",
+ "hermes-communication-task-candidate-persistence",
+ "hermes-communications-task-source-api",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-communication-translation-api"
 version = "0.1.0"
 dependencies = [

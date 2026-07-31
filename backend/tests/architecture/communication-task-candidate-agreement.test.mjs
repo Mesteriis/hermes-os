@@ -23,6 +23,11 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     persistenceModel,
     persistenceSchema,
     migration,
+    runtimeManifest,
+    runtime,
+    runtimeAdmission,
+    runtimeExtraction,
+    runtimeSourceResults,
     sourceManifest,
     sourceApi,
     sourceProtocol,
@@ -56,6 +61,11 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     readFile(new URL('src/communication-task-candidate-persistence/src/model.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-persistence/src/schema.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-persistence/migrations/0001_task_candidate.sql', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-runtime/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-runtime/src/extraction.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-runtime/src/source_results.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-task-source-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-task-source-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(
@@ -83,7 +93,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_persistence_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_runtime_v1');
   assert.match(adr, /Состояние реализации: planned/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);
@@ -106,6 +116,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     'hermes-communication-task-candidate-api',
     'hermes-communication-task-candidate-core',
     'hermes-communication-task-candidate-persistence',
+    'hermes-communication-task-candidate-runtime',
     'hermes-communications-task-source-api',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
@@ -136,6 +147,16 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(migration, /communication_task_candidate_extraction_outbox/);
   assert.match(migration, /communication_task_candidate_extraction_realtime/);
   assert.doesNotMatch(`${persistence}\n${persistenceModel}\n${migration}`, /communication_recipient_suggestion|hermes_communications|hermes_review|hermes_tasks|ollama|prompt|provider_id/);
+  assert.match(runtimeManifest, /owner = "communication_task_candidate_extraction"/);
+  assert.match(runtimeManifest, /surface = "runtime"/);
+  assert.match(runtime, /CommunicationTaskCandidateManagedRuntimeV1/);
+  assert.match(runtimeAdmission, /communication_task_candidate_extraction\.source\.blob\.v1/);
+  assert.match(runtimeAdmission, /ProvidedSurfaceKindV1::ClientRealtime/);
+  assert.match(runtimeExtraction, /extract_communication_task_candidates_v1/);
+  assert.match(runtimeExtraction, /CommunicationTaskSourceContentV1/);
+  assert.match(runtimeSourceResults, /source_read_receipt_bytes/);
+  assert.match(runtimeSourceResults, /materialize_task_source_v1/);
+  assert.doesNotMatch(`${runtime}\n${runtimeAdmission}\n${runtimeExtraction}\n${runtimeSourceResults}`, /recipient_suggestion|hermes_review|hermes_tasks|ollama|reqwest|prompt|provider_id/);
   assert.match(sourceManifest, /owner = "communications"/);
   assert.match(sourceManifest, /surface = "contract"/);
   assert.match(sourceApi, /communications\.task-source\.v1/);
