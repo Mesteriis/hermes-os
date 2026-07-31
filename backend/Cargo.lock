@@ -2896,6 +2896,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-ollama-ai-http"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "hermes-ollama-ai-api",
+ "hermes-ollama-ai-core",
+ "serde",
+ "serde_json",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-ollama-ai-persistence"
 version = "0.1.0"
 dependencies = [

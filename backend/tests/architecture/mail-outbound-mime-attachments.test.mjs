@@ -26,6 +26,7 @@ const PROVIDER_DELIVERY_CONTRACT_PACKAGES = [
 const STAGED_OLLAMA_PACKAGES = [
   'hermes-ollama-ai-api',
   'hermes-ollama-ai-core',
+  'hermes-ollama-ai-http',
   'hermes-ollama-ai-persistence',
 ];
 

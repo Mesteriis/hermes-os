@@ -788,6 +788,12 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
     surface: 'implementation',
   },
   {
+    name: 'hermes-ollama-ai-http',
+    role: 'integration',
+    owner: 'ollama',
+    surface: 'implementation',
+  },
+  {
     name: 'hermes-ollama-ai-persistence',
     role: 'integration',
     owner: 'ollama',
@@ -2292,6 +2298,10 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-ai-contracts', kind: 'normal' },
     { name: 'hermes-ollama-ai-api', kind: 'normal' },
   ],
+  'hermes-ollama-ai-http': [
+    { name: 'hermes-ollama-ai-api', kind: 'normal' },
+    { name: 'hermes-ollama-ai-core', kind: 'normal' },
+  ],
   'hermes-ollama-ai-persistence': [
     { name: 'hermes-ai-contracts', kind: 'normal' },
     { name: 'hermes-ollama-ai-core', kind: 'normal' },
@@ -2705,6 +2715,12 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
   ],
   'hermes-ollama-ai-core': [
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-ollama-ai-http': [
+    { name: 'async-std', kind: 'normal', source: 'crates_io', version: '=1.13.2', defaultFeatures: true, features: [] },
     { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
     { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },

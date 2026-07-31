@@ -341,6 +341,31 @@ test('Ollama API and core are separate integration units with fixed local policy
   );
 });
 
+test('Ollama HTTP owns one bounded loopback dialect without redirects or model substitution', async () => {
+  const [manifest, client, model, wire] = await Promise.all([
+    backendSource('src/ollama-ai-http/Cargo.toml'),
+    backendSource('src/ollama-ai-http/src/lib.rs'),
+    backendSource('src/ollama-ai-http/src/model.rs'),
+    backendSource('src/ollama-ai-http/src/wire.rs'),
+  ]);
+
+  assert.match(manifest, /role = "integration"/);
+  assert.match(manifest, /owner = "ollama"/);
+  assert.match(manifest, /hermes-ollama-ai-core/);
+  assert.match(client, /OLLAMA_AI_LOOPBACK_HOST_V1/);
+  assert.match(client, /"GET",\s*"\/api\/tags"/);
+  assert.match(client, /"POST",\s*"\/api\/chat"/);
+  assert.match(model, /stream: false/);
+  assert.match(model, /think: false/);
+  assert.match(model, /format: "json"/);
+  assert.match(model, /response\.model != plan\.model/);
+  assert.match(wire, /const LOOPBACK_HOST: &str = "127\.0\.0\.1"/);
+  assert.match(wire, /Accept-Encoding: identity/);
+  assert.match(wire, /\(300\.\.400\)\.contains\(&status\)/);
+  assert.match(wire, /MAX_RESPONSE_BYTES/);
+  assert.doesNotMatch(`${client}\n${model}\n${wire}`, /reqwest|ureq|automatic.*download/i);
+});
+
 test('Ollama persistence fences replay without storing private provider input', async () => {
   const [manifest, model, repository, schema, migration] = await Promise.all([
     backendSource('src/ollama-ai-persistence/Cargo.toml'),

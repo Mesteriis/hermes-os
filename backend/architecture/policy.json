@@ -764,6 +764,12 @@
         "surface": "implementation"
       },
       {
+        "name": "hermes-ollama-ai-http",
+        "role": "integration",
+        "owner": "ollama",
+        "surface": "implementation"
+      },
+      {
         "name": "hermes-ollama-ai-persistence",
         "role": "integration",
         "owner": "ollama",
@@ -1773,6 +1779,16 @@
         },
         {
           "name": "hermes-ollama-ai-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-ollama-ai-http": [
+        {
+          "name": "hermes-ollama-ai-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-ollama-ai-core",
           "kind": "normal"
         }
       ],
@@ -5026,6 +5042,43 @@
           "features": []
         }
       ],
+      "hermes-ollama-ai-http": [
+        {
+          "name": "async-std",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.13.2",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-ollama-ai-persistence": [
         {
           "name": "sha2",
@@ -6379,6 +6432,10 @@
         "customBuildAllowed": false
       },
       "hermes-ollama-ai-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-ollama-ai-http": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
