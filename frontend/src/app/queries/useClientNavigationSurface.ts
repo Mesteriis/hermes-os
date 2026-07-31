@@ -95,14 +95,14 @@ export function useClientNavigationSurface() {
 		if (target) selectedRouteId.value = target
 	}
 
-	async function refreshBootstrap(): Promise<void> {
+	async function refreshBootstrap(preserveSnapshotOnFailure = false): Promise<void> {
 		const startedAt = Date.now()
 		try {
 			bootstrap.value = await fetchClientBootstrap()
 			gatewayRoundTripMs.value = Math.max(0, Date.now() - startedAt)
 			bootstrapError.value = ''
 		} catch {
-			bootstrap.value = recoveryClientBootstrap()
+			if (!preserveSnapshotOnFailure) bootstrap.value = recoveryClientBootstrap()
 			gatewayRoundTripMs.value = null
 			bootstrapError.value = 'bootstrap_unavailable'
 		}
@@ -155,7 +155,7 @@ export function useClientNavigationSurface() {
 		realtimeSubscription?.close()
 		realtimeSubscription = undefined
 		try {
-			await refreshBootstrap()
+			await refreshBootstrap(true)
 			openRealtime()
 		} finally {
 			realtimeRecoveryActive = false

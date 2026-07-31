@@ -158,6 +158,16 @@ describe('compiled client navigation', () => {
 		expect(navigationSource).not.toContain('useCommunicationsWorkspaceSurface')
 		expect(navigationSource).not.toContain('useCommunicationsPageSurface')
 	})
+
+	it('keeps the last confirmed bootstrap while the SSE recovery request is unavailable', () => {
+		const navigationSource = readFileSync(new URL('./useClientNavigationSurface.ts', import.meta.url), 'utf8')
+
+		expect(navigationSource).toContain('refreshBootstrap(preserveSnapshotOnFailure = false)')
+		expect(navigationSource).toContain('if (!preserveSnapshotOnFailure) bootstrap.value = recoveryClientBootstrap()')
+		expect(navigationSource).toContain('await refreshBootstrap(true)')
+		expect(navigationSource).toContain('new BrowserGatewayRealtime().subscribe')
+		expect(navigationSource).not.toContain('setInterval(')
+	})
 })
 
 type NavigationTreeItem = {
