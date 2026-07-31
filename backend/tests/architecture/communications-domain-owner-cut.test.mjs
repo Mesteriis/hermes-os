@@ -58,7 +58,7 @@ test('Communications remains isolated after Review owner admission', async () =>
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_security_archive_delegation_runtime_v1',
+    'attachment_archive_inspection_managed_runtime_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'review'],
@@ -71,6 +71,12 @@ test('Communications remains isolated after Review owner admission', async () =>
     ],
     engines: ['ai', 'attachment_archive_inspection', 'attachment_security'],
     businessCapabilities: [
+      'attachment_archive_inspection.blob.v1',
+      'attachment_archive_inspection.candidate.observe.v1',
+      'attachment_archive_inspection.custody-request.publish.v1',
+      'attachment_archive_inspection.custody-result.consume.v1',
+      'attachment_archive_inspection.safety-state.observe.v1',
+      'attachment_archive_inspection.storage.v1',
       'attachment_security.archive-delegation-result.publish.v1',
       'attachment_security.archive-inspection-delegation.v1',
       'attachment_security.blob.v1',

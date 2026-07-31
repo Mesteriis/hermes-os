@@ -15,7 +15,8 @@ use sqlx::{
 
 pub use model::{
     ARCHIVE_INSPECTION_MAX_ATTEMPTS_V1, ARCHIVE_INSPECTION_REALTIME_LIMIT_V1,
-    ArchiveInspectionLeaseV1, ArchiveInspectionRealtimeTransitionV1, ClaimedArchiveInspectionJobV1,
+    ArchiveInspectionLeaseV1, ArchiveInspectionRealtimeTransitionV1,
+    ArchiveInspectionTargetBlobReceiptV1, ClaimedArchiveInspectionJobV1,
     CreateArchiveInspectionRunOutcomeV1, CreateArchiveInspectionRunV1,
     PendingArchiveInspectionCustodyDelegationV1, PersistArchiveInspectionCustodyResultOutcomeV1,
     PersistArchiveInspectionFactOutcomeV1, PersistedArchiveInspectionRunV1,

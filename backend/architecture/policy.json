@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_security_archive_delegation_runtime_v1",
+    "currentSlice": "attachment_archive_inspection_managed_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -846,6 +846,12 @@
         "role": "engine",
         "owner": "attachment_archive_inspection",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-attachment-archive-inspection-runtime",
+        "role": "engine",
+        "owner": "attachment_archive_inspection",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1686,6 +1692,60 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-archive-inspection-runtime": [
+        {
+          "name": "hermes-attachment-archive-inspection-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-archive-inspection-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-archive-inspection-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-archive-inspection-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-archive-inspection-zip",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-security-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-attachment-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ],
@@ -4798,6 +4858,59 @@
           ]
         }
       ],
+      "hermes-attachment-archive-inspection-runtime": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-mail-api": [
         {
           "name": "prost",
@@ -6981,6 +7094,10 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-attachment-archive-inspection-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
       "hermes-mail-api": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -7322,6 +7439,12 @@
       "attachment_security"
     ],
       "businessCapabilities": [
+        "attachment_archive_inspection.blob.v1",
+        "attachment_archive_inspection.candidate.observe.v1",
+        "attachment_archive_inspection.custody-request.publish.v1",
+        "attachment_archive_inspection.custody-result.consume.v1",
+        "attachment_archive_inspection.safety-state.observe.v1",
+        "attachment_archive_inspection.storage.v1",
         "attachment_security.archive-delegation-result.publish.v1",
         "attachment_security.archive-inspection-delegation.v1",
         "attachment_security.blob.v1",
@@ -7817,7 +7940,8 @@
   },
   "dependencies": {
     "engineEngineContractPackages": [
-      "hermes-attachment-archive-inspection-ingress"
+      "hermes-attachment-archive-inspection-ingress",
+      "hermes-attachment-security-contract"
     ],
     "engineDomainContractPackages": [
       "hermes-communications-attachment-contract"

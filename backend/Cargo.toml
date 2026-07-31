@@ -122,6 +122,7 @@ members = [
   "src/attachment-archive-inspection-core",
   "src/attachment-archive-inspection-persistence",
   "src/attachment-archive-inspection-zip",
+  "src/attachment-archive-inspection-runtime",
   "src/kernel/control_store/contract",
   "src/kernel/control_store/sqlite",
   "src/kernel",

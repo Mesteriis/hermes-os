@@ -35,7 +35,7 @@ test('archive inspection persistence is admitted without opening the planned gat
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_security_archive_delegation_runtime_v1',
+    'attachment_archive_inspection_managed_runtime_v1',
   );
   assert(policy.implementation.ownerInventory.engines.includes(
     'attachment_archive_inspection',
@@ -254,6 +254,76 @@ test('archive persistence owns replay, event join and fenced jobs without foreig
   assert.doesNotMatch(
     `${library}\n${observations}\n${custody}\n${jobs}`,
     /hermes_(?:communications|attachment_security|blob|kernel|mail|telegram|whatsapp|zulip)/,
+  );
+});
+
+test('archive runtime is a separate managed engine with event-only custody and receipt-bound Blob reads', async () => {
+  const [manifest, admission, runtime, blob, eventDecode, outbox, settings] = await Promise.all([
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/admission.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/runtime.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/blob.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/event_decode.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/outbox.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/settings.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "attachment_archive_inspection"/);
+  assert.match(manifest, /surface = "runtime"/);
+  assert.match(manifest, /hermes-attachment-security-contract/);
+  assert.match(manifest, /hermes-communications-attachment-contract/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:attachment-security-(?:core|persistence|runtime)|communications-(?:core|persistence|runtime)|mail|telegram|whatsapp|zulip)/,
+  );
+  assert.match(admission, /ATTACHMENT_ARCHIVE_INSPECTION_BLOB_TARGET_CAPABILITY_ID_V1/);
+  for (const capability of [
+    'attachment_archive_inspection.candidate.observe.v1',
+    'attachment_archive_inspection.custody-request.publish.v1',
+    'attachment_archive_inspection.custody-result.consume.v1',
+    'attachment_archive_inspection.safety-state.observe.v1',
+    'attachment_archive_inspection.storage.v1',
+  ]) {
+    assert.match(admission, new RegExp(capability.replaceAll('.', '\\.')));
+  }
+  assert.match(runtime, /ManagedControlChannelV2::new/);
+  assert.match(runtime, /request_managed_runtime_event_access_v2/);
+  assert.match(runtime, /storage_binding\(&storage_configuration, admission\)/);
+  assert.match(runtime, /record_target_blob_receipt/);
+  assert.match(runtime, /inspect_zip_bytes_v1/);
+  assert.match(blob, /request_managed_blob_custody_transfer_v2/);
+  assert.match(blob, /read_range/);
+  assert.match(blob, /delegation_result_envelope_sha256/);
+  assert.match(eventDecode, /Semantics::Observation/);
+  assert.match(eventDecode, /Semantics::Event/);
+  assert.match(eventDecode, /Semantics::Result/);
+  assert.match(outbox, /publish_exact\(permit, &record\.exact_envelope_bytes\)/);
+  assert.match(settings, /ApplyModeV1::Restart/);
+  assert.doesNotMatch(
+    `${admission}\n${runtime}\n${blob}\n${eventDecode}\n${outbox}\n${settings}`,
+    /hermes_(?:attachment_security_(?:core|persistence|runtime)|communications_(?:core|persistence|runtime)|mail|telegram|whatsapp|zulip)/,
   );
 });
 

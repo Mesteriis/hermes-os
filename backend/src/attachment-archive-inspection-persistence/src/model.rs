@@ -81,7 +81,9 @@ pub struct ClaimedArchiveInspectionJobV1 {
     pub safety_message_id: [u8; 16],
     pub delegation_request_id: [u8; 16],
     pub delegation_result_message_id: [u8; 16],
+    pub delegation_result_envelope_sha256: [u8; 32],
     pub source_reference_id: [u8; 16],
+    pub target_blob_receipt: Option<ArchiveInspectionTargetBlobReceiptV1>,
     pub declared_size: u64,
     pub blob_receipt_sha256: [u8; 32],
     pub custody_transfer_source_proof: Vec<u8>,
@@ -89,6 +91,12 @@ pub struct ClaimedArchiveInspectionJobV1 {
     pub attempt_count: u32,
     pub max_attempts: u32,
     pub lease: ArchiveInspectionLeaseV1,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArchiveInspectionTargetBlobReceiptV1 {
+    pub reference_id: [u8; 16],
+    pub receipt_sha256: [u8; 32],
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

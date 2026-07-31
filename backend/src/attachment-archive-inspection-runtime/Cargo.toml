@@ -1,0 +1,38 @@
+[package]
+name = "hermes-attachment-archive-inspection-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[[bin]]
+name = "hermes-attachment-archive-inspection-runtime"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "engine"
+owner = "attachment_archive_inspection"
+surface = "runtime"
+
+[dependencies]
+hermes-attachment-archive-inspection-api = { path = "../attachment-archive-inspection-api" }
+hermes-attachment-archive-inspection-core = { path = "../attachment-archive-inspection-core" }
+hermes-attachment-archive-inspection-ingress = { path = "../attachment-archive-inspection-ingress" }
+hermes-attachment-archive-inspection-persistence = { path = "../attachment-archive-inspection-persistence" }
+hermes-attachment-archive-inspection-zip = { path = "../attachment-archive-inspection-zip" }
+hermes-attachment-security-contract = { path = "../attachment-security-contract" }
+hermes-blob-client = { path = "../platform/blob/client" }
+hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-events-protocol = { path = "../platform/events" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-storage-vault = { path = "../platform/storage/vault" }
+libc = "=0.2.186"
+prost = "=0.14.4"
+prost-types = "=0.14.4"
+sha2 = { version = "=0.11.0", default-features = false }
+tokio = { version = "=1.52.4", default-features = false, features = ["rt-multi-thread", "time"] }
+zeroize = "=1.9.0"

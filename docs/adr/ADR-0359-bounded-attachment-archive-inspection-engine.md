@@ -23,9 +23,14 @@ identity, принимает exact command-linked delegated/rejected result inbo
 отдельные command-consumer/result-publisher capabilities, exact replay inbox,
 owner-local source verification по completed safe verdict и current Blob
 custody, fenced delegation jobs, ADR-0360 redelegation через managed control и
-exact delegated/rejected result outbox. Archive managed runtime, release
-assembly, Blob transfer/read, live PostgreSQL/NATS/Gateway conformance и
-production gate `attachment_archive_inspection_v1` остаются открыты.
+exact delegated/rejected result outbox. Archive managed runtime реализован
+отдельной engine unit: он открывает fenced Event Hub и Storage/Vault
+capabilities, принимает exact candidate/safety/delegation events, публикует
+сохранённые custody commands без re-encode, сохраняет target Blob receipt до
+использования, выполняет receipt-bound one-use read и вызывает bounded ZIP
+metadata adapter. Release assembly, Gateway Start/Get/shared SSE, live
+PostgreSQL/NATS/Blob/Gateway conformance и production gate
+`attachment_archive_inspection_v1` остаются открыты.
 
 Зависит от:
 
@@ -177,8 +182,10 @@ Request/result schema принадлежит target owner в отдельном
 persistence, runtime, parser или assembly. Это тот же target-owned ingress
 pattern, которым integrations публикуют Communications observations; contract
 dependency не превращает source engine в target engine и не создаёт
-engine-to-engine RPC. Executable dependency policy разрешает этот edge только
-через exact `engineEngineContractPackages` allowlist; произвольные
+engine-to-engine RPC. Обратный event-consumer edge импортирует только публичный
+`hermes-attachment-security-contract`, которому принадлежит scan-candidate
+observation. Executable dependency policy разрешает ровно эти две contract
+units через exact `engineEngineContractPackages` allowlist; произвольные
 engine-to-engine contract или implementation dependencies остаются запрещены.
 
 ### Единицы сборки

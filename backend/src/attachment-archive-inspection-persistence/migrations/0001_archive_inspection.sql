@@ -195,6 +195,8 @@ CREATE TABLE hermes_data.attachment_archive_inspection_jobs (
     delegation_result_message_id BYTEA NOT NULL,
     attachment_anchor_id BYTEA NOT NULL,
     source_reference_id BYTEA NOT NULL,
+    target_reference_id BYTEA,
+    target_receipt_sha256 BYTEA,
     declared_size BIGINT NOT NULL,
     blob_receipt_sha256 BYTEA NOT NULL,
     custody_transfer_source_proof BYTEA NOT NULL,
@@ -225,6 +227,16 @@ CREATE TABLE hermes_data.attachment_archive_inspection_jobs (
     CHECK (length(delegation_result_message_id) = 16),
     CHECK (length(attachment_anchor_id) = 16),
     CHECK (length(source_reference_id) = 16),
+    CHECK (
+        (
+            target_reference_id IS NULL
+            AND target_receipt_sha256 IS NULL
+        )
+        OR (
+            length(target_reference_id) = 16
+            AND length(target_receipt_sha256) = 32
+        )
+    ),
     CHECK (declared_size BETWEEN 1 AND 104857600),
     CHECK (length(blob_receipt_sha256) = 32),
     CHECK (length(custody_transfer_source_proof) BETWEEN 1 AND 2048),

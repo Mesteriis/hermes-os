@@ -662,7 +662,7 @@ test('Attachment Security remains one exact engine after Mail integration admiss
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_security_archive_delegation_runtime_v1',
+    'attachment_archive_inspection_managed_runtime_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.engines, [
     'ai',

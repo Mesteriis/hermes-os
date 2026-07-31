@@ -881,6 +881,16 @@ const ATTACHMENT_ARCHIVE_INSPECTION_PERSISTENCE_PRODUCTION_PACKAGES = [
   },
 ];
 
+const ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_ARCHIVE_INSPECTION_PERSISTENCE_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-attachment-archive-inspection-runtime',
+    role: 'engine',
+    owner: 'attachment_archive_inspection',
+    surface: 'runtime',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2459,6 +2469,25 @@ const ATTACHMENT_ARCHIVE_INSPECTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST =
   ],
 };
 
+const ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_ARCHIVE_INSPECTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-archive-inspection-runtime': [
+    { name: 'hermes-attachment-archive-inspection-api', kind: 'normal' },
+    { name: 'hermes-attachment-archive-inspection-core', kind: 'normal' },
+    { name: 'hermes-attachment-archive-inspection-ingress', kind: 'normal' },
+    { name: 'hermes-attachment-archive-inspection-persistence', kind: 'normal' },
+    { name: 'hermes-attachment-archive-inspection-zip', kind: 'normal' },
+    { name: 'hermes-attachment-security-contract', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communications-attachment-contract', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2949,6 +2978,18 @@ const ATTACHMENT_ARCHIVE_INSPECTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST
   ],
 };
 
+const ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_ARCHIVE_INSPECTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-archive-inspection-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -3272,6 +3313,19 @@ const ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_INVENTORY = {
     ...COMMUNICATIONS_AI_SOURCE_CONTRACT_INVENTORY.businessCapabilities,
     'attachment_security.archive-delegation-result.publish.v1',
     'attachment_security.archive-inspection-delegation.v1',
+  ].sort(),
+};
+
+const ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_INVENTORY = {
+  ...ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_INVENTORY,
+  businessCapabilities: [
+    ...ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_INVENTORY.businessCapabilities,
+    'attachment_archive_inspection.blob.v1',
+    'attachment_archive_inspection.candidate.observe.v1',
+    'attachment_archive_inspection.custody-request.publish.v1',
+    'attachment_archive_inspection.custody-result.consume.v1',
+    'attachment_archive_inspection.safety-state.observe.v1',
+    'attachment_archive_inspection.storage.v1',
   ].sort(),
 };
 
@@ -4180,6 +4234,19 @@ function expectedSlice(currentSlice) {
         ATTACHMENT_ARCHIVE_INSPECTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         ATTACHMENT_ARCHIVE_INSPECTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_archive_inspection_managed_runtime_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

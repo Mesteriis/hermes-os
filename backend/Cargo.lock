@@ -1683,6 +1683,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-attachment-archive-inspection-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-archive-inspection-api",
+ "hermes-attachment-archive-inspection-core",
+ "hermes-attachment-archive-inspection-ingress",
+ "hermes-attachment-archive-inspection-persistence",
+ "hermes-attachment-archive-inspection-zip",
+ "hermes-attachment-security-contract",
+ "hermes-blob-client",
+ "hermes-communications-attachment-contract",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "prost-types 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-attachment-archive-inspection-zip"
 version = "0.1.0"
 dependencies = [
