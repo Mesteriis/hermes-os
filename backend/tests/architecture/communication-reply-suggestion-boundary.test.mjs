@@ -81,8 +81,10 @@ test('reply suggestion agreement keeps domain workflow engine and integration se
   assert.match(adr, /hermes-ai-contracts/);
   assert.match(adr, /hermes-communication-reply-suggestion-api/);
   assert.match(adr, /hermes-ollama-ai-api/);
+  assert.match(adr, /hermes-ollama-ai-persistence/);
+  assert.match(adr, /Ollama `\/api\/chat` не предоставляет доказанного idempotency key/);
   assert.match(adr, /Client content ticket из ADR-0315 не используется/);
-  assert.match(adr, /Mock or canned response не\s+является production evidence/);
+  assert.match(adr, /Mock or canned response не\s+является production\s+evidence/);
   assert.doesNotMatch(
     adr,
     /Gateway (?:fetches|reads) (?:the )?message body|generic ai context workflow/i,

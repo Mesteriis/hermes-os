@@ -226,6 +226,7 @@ lease evidence.
 hermes-ollama-ai-api
 hermes-ollama-ai-core
 hermes-ollama-ai-http
+hermes-ollama-ai-persistence
 hermes-ollama-ai-runtime
 hermes-ollama-ai-assembly
 ```
@@ -240,6 +241,14 @@ caller URL, automatic model download и implicit model substitution запрещ
 Endpoint и model selection приходят только из Ollama-owned effective settings,
 согласованных Kernel Settings Registry через существующий integration settings
 apply. Availability не означает permission to download.
+
+Persistence хранит только request ID/digest, settings revision, selected model
+digest и bounded terminal provider result. Она не хранит private prompt/input,
+HTTP body, credentials или model response envelope. Exact replay того же
+request ID/digest возвращает сохранённый terminal result; другой digest для
+того же ID отклоняется. После неоднозначного HTTP outcome run остаётся typed
+`uncertain` и не отправляется в Ollama повторно автоматически, потому что
+Ollama `/api/chat` не предоставляет доказанного idempotency key.
 
 Private content передаётся integration runtime только через bounded typed local
 `request_rpc`; оно не входит в NATS, logs, traces, health или settings.
@@ -318,10 +327,11 @@ inference evidence.
 
 ### `ollama_ai_provider_v1`
 
-Открывается только с separate API/core/http/runtime/assembly units, loopback
-endpoint guard, exact settings, model/timeout/error conformance, private-content
-non-disclosure and live Ollama request evidence. Mock or canned response не
-является production evidence.
+Открывается только с separate API/core/http/persistence/runtime/assembly units,
+loopback endpoint guard, exact settings, request digest/idempotency/uncertain
+fencing, model/timeout/error conformance, private-content non-disclosure and
+live Ollama request evidence. Mock or canned response не является production
+evidence.
 
 ### `communication_reply_suggestion_v1`
 
