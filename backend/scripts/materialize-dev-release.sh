@@ -156,6 +156,12 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-communication-explanation-assembly \
 	--package hermes-communication-recipient-suggestion-runtime \
 	--package hermes-communication-recipient-suggestion-assembly \
+	--package hermes-communication-task-candidate-runtime \
+	--package hermes-communication-task-candidate-assembly \
+	--package hermes-review-task-candidate-runtime \
+	--package hermes-review-task-candidate-assembly \
+	--package hermes-tasks-runtime \
+	--package hermes-tasks-assembly \
 	--package hermes-communication-delayed-delivery-runtime \
 	--package hermes-communication-delayed-delivery-assembly \
 	--package hermes-attachment-security-runtime \
@@ -216,6 +222,9 @@ communication_summary_assembly="$assembly_root/communication-summary"
 communication_translation_assembly="$assembly_root/communication-translation"
 communication_explanation_assembly="$assembly_root/communication-explanation"
 communication_recipient_suggestion_assembly="$assembly_root/communication-recipient-suggestion"
+communication_task_candidate_assembly="$assembly_root/communication-task-candidate"
+review_task_candidate_assembly="$assembly_root/review-task-candidate"
+tasks_assembly="$assembly_root/tasks"
 communication_delayed_delivery_assembly="$assembly_root/communication-delayed-delivery"
 attachment_security_assembly="$assembly_root/attachment-security"
 ollama_ai_assembly="$assembly_root/ollama-ai"
@@ -264,6 +273,18 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$communication_recipient_suggestion_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-communication-recipient-suggestion-runtime"
+"$cargo_target_dir/debug/hermes-communication-task-candidate-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$communication_task_candidate_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-communication-task-candidate-runtime"
+"$cargo_target_dir/debug/hermes-review-task-candidate-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$review_task_candidate_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-review-task-candidate-runtime"
+"$cargo_target_dir/debug/hermes-tasks-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$tasks_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-tasks-runtime"
 "$cargo_target_dir/debug/hermes-communication-delayed-delivery-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$communication_delayed_delivery_assembly" \
@@ -333,6 +354,9 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$communication_translation_assembly/communication_translation.release-artifacts.json" \
 	--artifact-fragment "$communication_explanation_assembly/communication_explanation.release-artifacts.json" \
 	--artifact-fragment "$communication_recipient_suggestion_assembly/communication_recipient_suggestion.release-artifacts.json" \
+	--artifact-fragment "$communication_task_candidate_assembly/communication_task_candidate.release-artifacts.json" \
+	--artifact-fragment "$review_task_candidate_assembly/review-task-candidate.release-artifacts.json" \
+	--artifact-fragment "$tasks_assembly/tasks.release-artifacts.json" \
 	--artifact-fragment "$communication_delayed_delivery_assembly/communication_delayed_delivery.release-artifacts.json" \
 	--artifact-fragment "$attachment_security_assembly/attachment-security.release-artifacts.json" \
 	--artifact-fragment "$ollama_ai_assembly/ollama-ai.release-artifacts.json" \

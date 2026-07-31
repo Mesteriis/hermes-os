@@ -5737,6 +5737,17 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
+  if (currentSlice === 'communication_task_candidate_signed_release_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: TASKS_REVIEWED_CANDIDATE_PERSISTENCE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: TASKS_REVIEWED_CANDIDATE_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies: TASKS_REVIEWED_CANDIDATE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: TASKS_REVIEWED_CANDIDATE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
   return null;
 }
 

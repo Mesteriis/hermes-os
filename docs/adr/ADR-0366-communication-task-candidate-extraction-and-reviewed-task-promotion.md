@@ -44,8 +44,11 @@ terminal result перед Ack, освобождает Blob custody и relay-и�
 bytes. Он не импортирует Review, Communications или provider packages.
 Tasks assembly отдельно материализует canonical descriptor, пустую Settings
 schema, owner-local Storage bundle и unsigned release fragment без runtime
-launch или signing authority. Aggregate gate остаётся закрыт до signed
-admission, Gateway/SSE composition и managed E2E.
+launch или signing authority. Development release contour теперь собирает все
+три runtime/assembly пары и передаёт их exact artifact fragments единому
+distribution compiler для подписи; отдельный module не получает signing
+authority. Aggregate gate остаётся закрыт до live signed admission,
+Gateway/SSE composition и managed E2E.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 

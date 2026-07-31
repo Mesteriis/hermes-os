@@ -33,6 +33,7 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
     assemblyManifest,
     assembly,
     assemblyMain,
+    release,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -69,10 +70,11 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
     readFile(new URL('src/tasks-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/tasks-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/tasks-assembly/src/main.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'tasks_reviewed_candidate_assembly_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_signed_release_v1');
   for (const unit of [
     'hermes-tasks-command-api',
     'hermes-tasks-core',
@@ -163,4 +165,21 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
     `${assemblyManifest}\n${assembly}\n${assemblyMain}`,
     /hermes-review|hermes-communications|hermes-calendar|hermes-ollama|sign_distribution|SigningKey|launch_runtime/,
   );
+  for (const unit of [
+    'hermes-communication-task-candidate-runtime',
+    'hermes-communication-task-candidate-assembly',
+    'hermes-review-task-candidate-runtime',
+    'hermes-review-task-candidate-assembly',
+    'hermes-tasks-runtime',
+    'hermes-tasks-assembly',
+  ]) {
+    assert.match(release, new RegExp(`--package ${unit}\\b`));
+  }
+  for (const fragment of [
+    'communication_task_candidate.release-artifacts.json',
+    'review-task-candidate.release-artifacts.json',
+    'tasks.release-artifacts.json',
+  ]) {
+    assert.match(release, new RegExp(`--artifact-fragment .*${fragment.replaceAll('.', '\\.')}`));
+  }
 });

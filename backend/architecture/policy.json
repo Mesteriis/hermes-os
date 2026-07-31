@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "tasks_reviewed_candidate_assembly_v1",
+    "currentSlice": "communication_task_candidate_signed_release_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
