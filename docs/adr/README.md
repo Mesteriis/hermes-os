@@ -139,6 +139,7 @@ policy через ссылки из новых документов.
 - [ADR-0328: Storage bootstrap quarantine for policy-invalid owner bundles](ADR-0328-storage-bootstrap-quarantine-for-policy-invalid-owner-bundles.md)
 - [ADR-0329: Full-stack development Attachment scanner contour](ADR-0329-full-stack-development-attachment-scanner-contour.md)
 - [ADR-0365: Communication recipient suggestion workflow and source boundary](ADR-0365-communication-recipient-suggestion-workflow-and-source-boundary.md)
+- [ADR-0366: Communication task candidate extraction and reviewed Task promotion](ADR-0366-communication-task-candidate-extraction-and-reviewed-task-promotion.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -656,3 +657,10 @@ source events и target-bound Blob, workflow возвращает typed role/rat
 candidates и не меняет recipients. AI/Ollama, Contacts resolution, provider
 commands и presentation strings не входят в gate; Kernel/Gateway остаются
 owner-neutral и используют существующие admission, routing и shared SSE.
+ADR-0366 разделяет перенос task candidates между четырьмя owners:
+Communications передаёт source custody, отдельный extraction workflow создаёт
+immutable candidate, Review хранит human decision, а Tasks материализует Task
+только по typed durable approved-candidate command. Cross-owner flow идёт через
+events и target-bound Blob, существующий Review attention API не становится
+generic facade, а deterministic V1 не притягивает AI/Ollama без измеренной
+необходимости.

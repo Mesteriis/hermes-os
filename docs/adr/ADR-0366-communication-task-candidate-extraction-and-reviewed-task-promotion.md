@@ -1,0 +1,271 @@
+# ADR-0366: Communication task candidate extraction and reviewed Task promotion
+
+Статус: Принято
+
+Дата: 2026-07-31
+
+Состояние реализации: planned. Этот ADR фиксирует полный owner graph и phase
+gate до добавления production packages. Наличие документа, legacy task scanner,
+frontend card или отдельного extraction result не открывает
+`communication_task_candidate_extraction_v1`.
+
+Уточняет:
+
+- [ADR-0201](ADR-0201-core-module-communication-and-nats.md);
+- [ADR-0204](ADR-0204-bundled-integration-plugins-and-provider-neutral-context-boundary.md);
+- [ADR-0205](ADR-0205-core-gateway-and-client-transport.md);
+- [ADR-0207](ADR-0207-canonical-business-domain-registry.md);
+- [ADR-0212](ADR-0212-crate-topology-and-compile-isolation.md);
+- [ADR-0213](ADR-0213-code-ownership-and-module-autonomy.md);
+- [ADR-0220](ADR-0220-canonical-durable-envelope-and-contract-evolution.md);
+- [ADR-0226](ADR-0226-ai-context-acquisition-through-use-case-workflows.md);
+- [ADR-0253](ADR-0253-communications-legacy-surface-disposition-and-clean-room-completion.md);
+- [ADR-0282](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
+- [ADR-0315](ADR-0315-communications-message-body-content-read.md);
+- [ADR-0351](ADR-0351-review-communications-attention-owner-admission.md);
+- [ADR-0356](ADR-0356-renewable-blob-authority-for-durable-ai-workflows.md);
+- [ADR-0365](ADR-0365-communication-recipient-suggestion-workflow-and-source-boundary.md).
+
+## Контекст
+
+Legacy task-candidate path находился внутри Tasks implementation, читал
+Communications и Documents persistence, смешивал deterministic text scanning,
+Obligation Engine, generic Review records и немедленное создание Task при
+подтверждении. Его полезное observable поведение состоит в другом: сообщение с
+явным action/request signal создаёт reviewable candidate, а durable Task не
+появляется до явного решения владельца.
+
+Clean-room перенос не может вернуть этот код как Tasks facade над
+Communications, поместить Tasks state в Communications или дать Review доступ к
+чужим таблицам. Extraction, review decision и durable Task имеют разные причины
+изменения и разных owners.
+
+## Решение
+
+### Owners и build units
+
+Extraction принадлежит workflow owner
+`communication_task_candidate_extraction` и состоит из пяти units:
+
+- `hermes-communication-task-candidate-api` — generated Start/Get/realtime
+  contract;
+- `hermes-communication-task-candidate-core` — pure extraction lifecycle,
+  bounded deterministic V1 rules и validation;
+- `hermes-communication-task-candidate-persistence` — owner-local run state,
+  inbox/outbox и realtime replay;
+- `hermes-communication-task-candidate-runtime` — managed orchestration;
+- `hermes-communication-task-candidate-assembly` — descriptor, settings,
+  Storage bundle и release fragment.
+
+Communications отдельно публикует exact source contract unit
+`hermes-communications-task-source-api`; source producer остаётся в
+Communications runtime и persistence. Workflow не импортирует Communications
+implementation или storage.
+
+Review получает отдельный task-candidate capability, не режим существующего
+attention API:
+
+- `hermes-review-task-candidate-api`;
+- `hermes-review-task-candidate-core`;
+- `hermes-review-task-candidate-persistence`;
+- `hermes-review-task-candidate-runtime`;
+- `hermes-review-task-candidate-assembly`.
+
+Tasks получает минимальный production slice для создания Task только из
+подтверждённого candidate:
+
+- `hermes-tasks-command-api`;
+- `hermes-tasks-core`;
+- `hermes-tasks-persistence`;
+- `hermes-tasks-runtime`;
+- `hermes-tasks-assembly`.
+
+Одинаковый domain owner у нескольких units не объединяет их функциональные
+ответственности. Ни один domain package не импортирует implementation,
+persistence или runtime другого owner. Cross-owner runtime flow использует
+только typed durable commands/results/events и target-bound Blob custody.
+
+### Extraction contract
+
+Start принимает stable operation ID, canonical communication message ID и
+expected active source revision. Get возвращает run/source identity, monotonic
+revision, completeness и ordered bounded candidates.
+
+Каждый candidate содержит:
+
+- stable candidate ID и immutable candidate digest;
+- bounded owner-visible title;
+- optional bounded due-text hint без Calendar semantics;
+- optional bounded assignee-label hint без Contact/Persona identity claim;
+- exact source basis `subject`, `body` или `combined`;
+- signal kind `explicit_action`, `direct_request` или `follow_up`;
+- confidence basis points и source evidence reference.
+
+Candidate не является Task, Obligation, Decision, Calendar event или accepted
+business truth. V1 не содержит project ID, provider/account identity, parsed
+assignee identity, authoritative deadline, arbitrary JSON/map, prompt, model или
+provider selection.
+
+### Deterministic extraction V1
+
+V1 сохраняет bounded observable semantics legacy scanner без переноса его
+cross-domain coupling. Core анализирует только validated UTF-8 subject/body из
+exact Communications source receipt. Фиксированный versioned rule set находит:
+
+1. explicit action markers (`action`, `task`, `действие`, `задача` и принятые
+   локализованные варианты);
+2. direct request marker вместе с action verb;
+3. explicit follow-up/next-step marker.
+
+Из каждого matched line получается не более одного candidate; duplicate
+normalized title схлопывается детерминированно, порядок следует source order,
+а отсутствие сигнала возвращает пустой список. Due text и assignee label
+остаются hints. Obligation inference, broad natural-language extraction и AI
+не входят в V1.
+
+`AiContextReceiptV1`, AI Engine и Ollama не используются: ADR-0226 требует
+distinct typed AI request только когда use case действительно использует AI.
+Если measured quality потребует inference, новый revision обязан добавить
+отдельные AI/provider contracts; Ollama останется concrete integration, а не
+частью Communications, Tasks или workflow core.
+
+### Event-only source, review и promotion flow
+
+```text
+Authenticated client Start
+  -> communication_task_candidate_extraction client_rpc
+  -> durable PrepareCommunicationTaskSource command
+  -> Communications source producer
+  -> target-bound Blob + typed prepared/rejected result event
+  -> extraction workflow
+  -> owner-local immutable candidate result
+  -> durable SubmitTaskCandidateForReview command
+  -> Review task-candidate owner
+  -> explicit owner approve/reject command through Gateway
+  -> durable TaskCandidateApprovedForPromotion event
+  -> Tasks CreateTaskFromReviewedCandidate command consumer
+  -> Tasks owner-local Task + durable terminal result
+  -> Review promotion projection
+```
+
+Private source bytes и candidate presentation fields не попадают в durable
+envelopes. Communications передаёт source через target-bound Blob workflow
+audience. Workflow передаёт exact candidate payload в новую target-bound Blob
+custody Review. После approval Review создаёт новую Tasks-target-bound custody;
+Tasks сверяет candidate ID/digest, decision revision, human owner и fresh
+runtime/grant coordinates до mutation.
+
+Reject не вызывает Tasks. Approve не означает, что Task создан: terminal Tasks
+result приходит отдельным durable event. Review хранит decision и promotion
+status; Tasks хранит только durable Task и command receipt; extraction workflow
+хранит только run/candidate result. Клиент композирует эти public projections,
+а Gateway не становится task-candidate facade.
+
+### Review semantics
+
+Task-candidate Review имеет states `pending`, `approved`, `rejected` и отдельный
+promotion status `not_requested`, `pending`, `succeeded`, `failed`. Это exact
+capability Review owner, а не расширение generic attention oneof и не запись в
+workflow/Tasks таблицу.
+
+Approve/reject требует expected Review revision и authenticated human owner.
+Exact duplicate operation replayable; conflicting reuse operation ID и stale
+revision отклоняются. После terminal approve/reject решение immutable в V1.
+
+### Tasks command semantics
+
+`CreateTaskFromReviewedCandidateCommandV1` является exact durable command, а не
+generic `create(entity_kind, payload)`. Он принимает opaque candidate/decision
+references, digests, source evidence reference и Tasks-bound Blob receipt.
+Tasks создаёт bounded title, optional due-text/assignee hints и provenance;
+hints не материализуют Calendar, Contact, Persona, Project или Obligation.
+
+Idempotency ключуется `(logical_owner_id, approved_candidate_id)`. Duplicate с
+тем же digest возвращает тот же Task; conflicting digest отклоняется. Tasks не
+читает Communications, Review или workflow storage и не вызывает их runtime.
+
+### Persistence, replay и fences
+
+Каждый owner имеет собственные inbox/outbox, request fingerprints и atomic
+state/result transaction. Inbox сверяет event ID и exact envelope hash до
+mutation; outbox хранит exact `DurableEnvelopeV1` bytes без re-encode.
+
+Runtime generation, grant epoch, Storage binding, Blob custody и event route
+проверяются на каждом внешнем шаге. Restart восстанавливает только non-terminal
+work текущего authenticated owner. Suspend, revoke, stale source revision,
+stale review revision, stale Blob proof или stale runtime coordinate не может
+создать либо повторно создать Task.
+
+Client terminal extraction/review/promotion notifications идут через общий
+replayable SSE. Periodic polling не вводится. SSE содержит только stable IDs,
+revisions, typed states и error codes, но не source/candidate private text.
+
+### Kernel agreement
+
+Kernel, Gateway и Event Hub остаются owner-neutral. Новые Kernel API,
+owner-specific imports, generic business router или payload interpretation не
+добавляются. Kernel выдаёт только существующие exact capability grants,
+runtime generations, signed admission, Storage/Vault/Blob coordinates и NATS
+routes. Gateway компилирует generated client contracts только в owner adapters,
+но не extraction rules, Review semantics или Tasks core.
+
+## Phase gate
+
+`communication_task_candidate_extraction_v1` становится `implemented` только
+атомарно после:
+
+1. пяти отдельных extraction workflow units;
+2. distinct Communications task-source contract и runtime producer;
+3. пяти отдельных Review task-candidate units без attention facade;
+4. пяти отдельных Tasks units с exact reviewed-candidate command;
+5. typed event-only source, submission, decision, promotion и terminal-result
+   routes с target-bound Blob custody;
+6. deterministic multilingual extraction, empty-result and dedup conformance;
+7. owner-local persistence, inbox/outbox, replay и recovery каждого owner;
+8. signed release admission всех runtime/storage artifacts;
+9. authenticated Gateway Start/Get/Review commands и shared replayable SSE;
+10. end-to-end managed proof, что extraction не создаёт Task до approve, reject
+    никогда не создаёт Task, approve создаёт ровно один source-backed Task;
+11. wrong-owner, stale-source, stale-review, request conflict, duplicate event,
+    Blob expiry, restart, revoke, grant/generation fence и privacy negatives;
+12. architecture, Cargo boundaries, formatting, Clippy, workspace/integration,
+    frontend и full pre-push gates.
+
+Skeleton, legacy scanner внутри Tasks/Communications, direct service call,
+shared SQL, generic Review record, generic entity command, frontend-only card
+или extraction-only result не открывают aggregate gate.
+
+## Последствия
+
+- Communications остаётся canonical evidence/source owner.
+- Extraction остаётся workflow, а не Communications или Tasks submodule.
+- Review владеет human decision, Tasks — durable Task truth.
+- AI/Ollama не добавляются без отдельного measured revision.
+- Полный gate крупнее одного runtime, зато не скрывает незавершённую promotion
+  цепочку за facade или UI.
+
+## Отклонённые варианты
+
+### Вернуть legacy task scanner в Tasks
+
+Требует чтения Communications storage и смешивает extraction, review и Task
+mutation в одном domain implementation.
+
+### Хранить candidate и review state в Communications
+
+Делает Communications владельцем Tasks/Review semantics и нарушает SRP.
+
+### Подтверждать candidate прямым workflow-to-Tasks RPC
+
+Обходит Review owner, не оставляет durable decision evidence и связывает два
+runtime синхронной доступностью.
+
+### Использовать существующий Review attention oneof
+
+Attention и task promotion имеют разные lifecycle, payload, privacy и retry
+semantics. Mode switch превратил бы attention API в generic Review facade.
+
+### Сразу вызвать Ollama
+
+V1 имеет bounded deterministic reference behavior. Provider dependency без
+измеренной необходимости расширяет grants, privacy surface и failure modes.
