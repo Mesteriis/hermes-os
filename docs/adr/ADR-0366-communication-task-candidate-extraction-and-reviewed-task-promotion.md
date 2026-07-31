@@ -34,8 +34,11 @@ client/Blob/event/storage capabilities и пустую typed Settings schema, н
 Tasks staged slice теперь реализует отдельные `hermes-tasks-command-api` и
 `hermes-tasks-core`: exact target-owned durable command/results, deterministic
 Task identity, source/review provenance и hints без создания Calendar, Contact,
-Project или Obligation truth. Aggregate gate остаётся закрыт до Tasks
-persistence/runtime/assembly, signed admission и managed E2E.
+Project или Obligation truth. Tasks owner-local persistence теперь резервирует
+exact command envelope hash/fingerprint до Blob read, атомарно сохраняет Task и
+terminal outbox, восстанавливает незавершённую работу и отдельно завершает Blob
+cleanup без cross-owner SQL. Aggregate gate остаётся закрыт до Tasks
+runtime/assembly, signed admission и managed E2E.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 

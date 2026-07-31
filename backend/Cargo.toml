@@ -55,6 +55,7 @@ members = [
   "src/review-task-candidate-assembly",
   "src/tasks-command-api",
   "src/tasks-core",
+  "src/tasks-persistence",
   "src/communications-content-api",
   "src/communications-saved-query-api",
   "src/communications-sender-insights-api",

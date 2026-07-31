@@ -3837,6 +3837,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-tasks-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-storage-protocol",
+ "hermes-tasks-core",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-telegram-api"
 version = "0.1.0"
 dependencies = [

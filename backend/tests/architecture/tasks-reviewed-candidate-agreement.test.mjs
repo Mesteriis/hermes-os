@@ -18,6 +18,11 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
     core,
     model,
     creation,
+    persistenceManifest,
+    persistence,
+    repository,
+    schema,
+    migration,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -39,11 +44,16 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
     readFile(new URL('src/tasks-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/tasks-core/src/model.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/tasks-core/src/creation.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-persistence/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-persistence/src/repository.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-persistence/src/schema.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-persistence/migrations/0001_tasks.sql', BACKEND_ROOT), 'utf8'),
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'tasks_reviewed_candidate_contract_core_v1');
-  for (const unit of ['hermes-tasks-command-api', 'hermes-tasks-core']) {
+  assert.equal(policy.implementation.currentSlice, 'tasks_reviewed_candidate_persistence_v1');
+  for (const unit of ['hermes-tasks-command-api', 'hermes-tasks-core', 'hermes-tasks-persistence']) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
     assert.match(adr, new RegExp(`\\b${unit}\\b`));
     assert.equal(policy.implementation.productionPackages.some(({ name }) => name === unit), true);
@@ -73,5 +83,24 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
   assert.doesNotMatch(
     `${core}\n${model}\n${creation}`,
     /hermes_review|hermes_communications|hermes_calendar|hermes_contacts|hermes_projects|sqlx|reqwest/,
+  );
+  assert.match(persistenceManifest, /owner = "tasks"/);
+  assert.match(persistenceManifest, /surface = "persistence"/);
+  assert.match(persistence, /TasksPersistenceV1/);
+  assert.match(repository, /reserve_command/);
+  assert.match(repository, /complete_task/);
+  assert.match(repository, /reject_task/);
+  assert.match(repository, /load_recoverable_commands/);
+  assert.match(repository, /load_pending_outbox/);
+  assert.match(repository, /complete_blob_cleanup/);
+  assert.match(schema, /tasks_storage_bundle_v1/);
+  assert.match(migration, /tasks_reviewed_candidate_inbox/);
+  assert.match(migration, /command_envelope_sha256/);
+  assert.match(migration, /command_fingerprint/);
+  assert.match(migration, /tasks_state/);
+  assert.match(migration, /tasks_outbox/);
+  assert.doesNotMatch(
+    `${persistence}\n${repository}\n${migration}`,
+    /review_task_candidate_|communications_|calendar_|contacts_|projects_|obligations_|provider_id|account_id/,
   );
 });

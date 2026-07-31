@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "tasks_reviewed_candidate_contract_core_v1",
+    "currentSlice": "tasks_reviewed_candidate_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1062,6 +1062,12 @@
         "role": "domain",
         "owner": "tasks",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-tasks-persistence",
+        "role": "domain",
+        "owner": "tasks",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1701,6 +1707,16 @@
         }
       ],
       "hermes-tasks-core": [],
+      "hermes-tasks-persistence": [
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-tasks-core",
+          "kind": "normal"
+        }
+      ],
       "hermes-communications-attachment-contract": [
         {
           "name": "hermes-events-protocol",
@@ -5153,6 +5169,28 @@
           "features": []
         }
       ],
+      "hermes-tasks-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-review-attention-persistence": [
         {
           "name": "sha2",
@@ -8470,6 +8508,10 @@
       "hermes-tasks-core": {
         "primaryKind": "lib",
         "customBuildAllowed": false
+      },
+      "hermes-tasks-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -8659,7 +8701,8 @@
         "review.task-candidate.storage.v1",
         "review.task-candidate.submission.v1",
         "tasks.reviewed-candidate.blob.v1",
-        "tasks.reviewed-candidate.command.v1"
+        "tasks.reviewed-candidate.command.v1",
+        "tasks.storage.v1"
       ]
     },
     "kernelProfile": {
