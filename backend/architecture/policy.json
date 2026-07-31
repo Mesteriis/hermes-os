@@ -774,6 +774,12 @@
         "role": "integration",
         "owner": "ollama",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-ollama-ai-runtime",
+        "role": "integration",
+        "owner": "ollama",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1803,6 +1809,40 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-ollama-ai-runtime": [
+        {
+          "name": "hermes-ai-contracts",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-ollama-ai-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-ollama-ai-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-ollama-ai-http",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-ollama-ai-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ],
@@ -5101,6 +5141,51 @@
           ]
         }
       ],
+      "hermes-ollama-ai-runtime": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-communication-delivery-intent-ingress-api": [
         {
           "name": "prost",
@@ -6441,6 +6526,10 @@
       },
       "hermes-ollama-ai-persistence": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-ollama-ai-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       },
       "hermes-communication-delivery-intent-ingress-api": {

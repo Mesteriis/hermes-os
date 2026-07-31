@@ -63,6 +63,7 @@ members = [
   "src/ollama-ai-core",
   "src/ollama-ai-http",
   "src/ollama-ai-persistence",
+  "src/ollama-ai-runtime",
   "src/communications-export-api",
   "src/communications-export-core",
   "src/communications-export-persistence",

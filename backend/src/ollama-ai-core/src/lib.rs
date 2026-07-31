@@ -204,6 +204,38 @@ pub fn complete_ollama_request_v1(
     })
 }
 
+pub fn reject_ollama_request_v1(
+    run: &OllamaAiRunV1,
+    terminal_status: AiInferenceTerminalStatusV1,
+) -> Option<OllamaAiRunV1> {
+    if !matches!(
+        terminal_status,
+        AiInferenceTerminalStatusV1::AiInferenceTerminalStatusRejectedPolicy
+            | AiInferenceTerminalStatusV1::AiInferenceTerminalStatusRejectedInput
+            | AiInferenceTerminalStatusV1::AiInferenceTerminalStatusProviderRejected
+            | AiInferenceTerminalStatusV1::AiInferenceTerminalStatusProviderUnavailable
+    ) || !matches!(
+        run.state,
+        OllamaAiRunStateV1::Accepted | OllamaAiRunStateV1::Executing
+    ) || run.terminal_result.is_some()
+    {
+        return None;
+    }
+    let result = AiProviderReplyGenerationResultV1 {
+        request_id: run.request_id.to_vec(),
+        terminal_status: terminal_status as i32,
+        ..Default::default()
+    };
+    validate_provider_reply_generation_result_v1(&result)
+        .is_ok()
+        .then(|| OllamaAiRunV1 {
+            revision: run.revision + 1,
+            state: OllamaAiRunStateV1::Rejected,
+            terminal_result: Some(result),
+            ..run.clone()
+        })
+}
+
 #[must_use]
 pub fn mark_ollama_uncertain_v1(run: &OllamaAiRunV1) -> Option<OllamaAiRunV1> {
     (run.state == OllamaAiRunStateV1::Executing && run.terminal_result.is_none()).then(|| {
@@ -342,6 +374,21 @@ mod tests {
         assert!(
             begin_ollama_request_v1(&uncertain, &request, &settings(), [9; 32]).is_err(),
             "uncertain requests must not be sent again automatically"
+        );
+    }
+
+    #[test]
+    fn provider_unavailable_is_a_typed_terminal_rejection() {
+        let accepted = accept_ollama_request_v1(&request(), &settings()).expect("accepted request");
+        let rejected = reject_ollama_request_v1(
+            &accepted,
+            AiInferenceTerminalStatusV1::AiInferenceTerminalStatusProviderUnavailable,
+        )
+        .expect("typed rejection");
+        assert_eq!(rejected.state, OllamaAiRunStateV1::Rejected);
+        assert_eq!(
+            rejected.terminal_result.expect("result").terminal_status,
+            AiInferenceTerminalStatusV1::AiInferenceTerminalStatusProviderUnavailable as i32
         );
     }
 }

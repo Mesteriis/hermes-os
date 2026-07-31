@@ -2919,6 +2919,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-ollama-ai-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-ai-contracts",
+ "hermes-ollama-ai-api",
+ "hermes-ollama-ai-core",
+ "hermes-ollama-ai-http",
+ "hermes-ollama-ai-persistence",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-review-attention-api"
 version = "0.1.0"
 dependencies = [

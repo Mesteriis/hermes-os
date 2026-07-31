@@ -160,6 +160,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'hermes-ollama-ai-core',
       'hermes-ollama-ai-http',
       'hermes-ollama-ai-persistence',
+      'hermes-ollama-ai-runtime',
     ],
     'Mail admission plus provider delivery contracts must remain exact integration build units',
   );

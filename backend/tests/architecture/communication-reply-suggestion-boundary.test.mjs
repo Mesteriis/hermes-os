@@ -388,3 +388,29 @@ test('Ollama persistence fences replay without storing private provider input', 
   assert.doesNotMatch(`${repository}\n${migration}`, /prompt_utf8|input_utf8|http_body|communications_/i);
   assert.doesNotMatch(migration, /password|credentials?|provider_request/i);
 });
+
+test('Ollama managed runtime owns provider execution and crash ambiguity fencing', async () => {
+  const [manifest, admission, runtime, worker, processRoot] = await Promise.all([
+    backendSource('src/ollama-ai-runtime/Cargo.toml'),
+    backendSource('src/ollama-ai-runtime/src/admission.rs'),
+    backendSource('src/ollama-ai-runtime/src/managed_runtime.rs'),
+    backendSource('src/ollama-ai-runtime/src/worker.rs'),
+    backendSource('src/ollama-ai-runtime/src/main.rs'),
+  ]);
+
+  assert.match(manifest, /surface = "runtime"/);
+  assert.match(manifest, /hermes-ollama-ai-http/);
+  assert.match(admission, /ModuleKindV1::Integration/);
+  assert.match(admission, /ai_provider_reply_generation_contract_reference_v1/);
+  assert.match(runtime, /Operation::DeliverModuleRequest/);
+  assert.match(runtime, /delivery\.logical_owner_id/);
+  assert.match(worker, /persist_transition_v1\(persistence, &persisted, executing\)\.await/);
+  assert.match(worker, /mark_uncertain_v1\(persistence, persisted\)\.await/);
+  assert.match(worker, /confirmed\.digest != plan\.model_digest/);
+  assert.match(processRoot, /ManagedIntegrationRuntimeConfigurationV1/);
+  assert.match(processRoot, /serve-inherited/);
+  assert.doesNotMatch(
+    `${admission}\n${runtime}\n${worker}\n${processRoot}`,
+    /hermes_communications|communications_|automatic.*download/i,
+  );
+});
