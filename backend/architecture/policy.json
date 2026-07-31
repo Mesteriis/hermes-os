@@ -750,6 +750,18 @@
         "role": "engine",
         "owner": "ai",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-ollama-ai-api",
+        "role": "integration",
+        "owner": "ollama",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-ollama-ai-core",
+        "role": "integration",
+        "owner": "ollama",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1739,6 +1751,22 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-ollama-ai-api": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-ollama-ai-core": [
+        {
+          "name": "hermes-ai-contracts",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-ollama-ai-api",
           "kind": "normal"
         }
       ],
@@ -4939,6 +4967,45 @@
           ]
         }
       ],
+      "hermes-ollama-ai-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-ollama-ai-core": [
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-communication-delivery-intent-ingress-api": [
         {
           "name": "prost",
@@ -6265,6 +6332,14 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-ollama-ai-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-ollama-ai-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-communication-delivery-intent-ingress-api": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -6988,6 +7063,7 @@
       "hermes-communications-attachment-contract"
     ],
     "integrationEngineContractPackages": [
+      "hermes-ai-contracts",
       "hermes-attachment-security-contract"
     ],
     "integrationDomainContractPackages": [

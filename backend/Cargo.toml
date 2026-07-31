@@ -59,6 +59,8 @@ members = [
   "src/ai-inference-persistence",
   "src/ai-inference-runtime",
   "src/ai-inference-assembly",
+  "src/ollama-ai-api",
+  "src/ollama-ai-core",
   "src/communications-export-api",
   "src/communications-export-core",
   "src/communications-export-persistence",

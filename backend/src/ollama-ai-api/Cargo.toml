@@ -1,0 +1,17 @@
+[package]
+name = "hermes-ollama-ai-api"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "integration"
+owner = "ollama"
+surface = "contract"
+
+[dependencies]
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+prost = "=0.14.4"

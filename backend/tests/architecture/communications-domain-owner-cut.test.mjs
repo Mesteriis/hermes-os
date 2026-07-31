@@ -156,6 +156,8 @@ test('Communications remains isolated after Review owner admission', async () =>
       'hermes-telegram-delivery-intent-contract',
       'hermes-whatsapp-delivery-intent-contract',
       'hermes-zulip-delivery-intent-contract',
+      'hermes-ollama-ai-api',
+      'hermes-ollama-ai-core',
     ],
     'Mail admission plus provider delivery contracts must remain exact integration build units',
   );

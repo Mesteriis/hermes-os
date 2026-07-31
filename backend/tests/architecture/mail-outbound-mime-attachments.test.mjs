@@ -23,6 +23,11 @@ const PROVIDER_DELIVERY_CONTRACT_PACKAGES = [
   'hermes-zulip-delivery-intent-contract',
 ];
 
+const STAGED_OLLAMA_PACKAGES = [
+  'hermes-ollama-ai-api',
+  'hermes-ollama-ai-core',
+];
+
 const MAIL_CAPABILITIES = [
   'mail.attachment-anchor.consume.v1',
   'mail.attachment-blob-admission.publish.v1',
@@ -104,7 +109,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
     policy.implementation.productionPackages
       .filter(({ role }) => role === 'integration')
       .map(({ name }) => name),
-    [...MAIL_PACKAGES, ...PROVIDER_DELIVERY_CONTRACT_PACKAGES],
+    [...MAIL_PACKAGES, ...PROVIDER_DELIVERY_CONTRACT_PACKAGES, ...STAGED_OLLAMA_PACKAGES],
   );
   assert.deepEqual(
     inventory.businessCapabilities.filter((capability) => capability.startsWith('mail.')),

@@ -49,6 +49,13 @@ pub fn compute_reply_inference_request_digest_v1(
     Ok(Sha256::digest(canonical.encode_to_vec()).into())
 }
 
+pub fn compute_provider_reply_generation_request_digest_v1(
+    request: &AiProviderReplyGenerationRequestV1,
+) -> Result<[u8; 32], AiContractValidationErrorV1> {
+    validate_provider_reply_generation_request_v1(request)?;
+    Ok(Sha256::digest(request.encode_to_vec()).into())
+}
+
 pub fn validate_reply_inference_request_v1(
     request: &CommunicationReplySuggestionInferenceRequestV1,
 ) -> Result<(), AiContractValidationErrorV1> {

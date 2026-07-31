@@ -775,6 +775,18 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
     owner: 'ai',
     surface: 'persistence',
   },
+  {
+    name: 'hermes-ollama-ai-api',
+    role: 'integration',
+    owner: 'ollama',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-ollama-ai-core',
+    role: 'integration',
+    owner: 'ollama',
+    surface: 'implementation',
+  },
 ];
 
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
@@ -2267,6 +2279,13 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-ai-inference-core', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
+  'hermes-ollama-ai-api': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-ollama-ai-core': [
+    { name: 'hermes-ai-contracts', kind: 'normal' },
+    { name: 'hermes-ollama-ai-api', kind: 'normal' },
+  ],
 };
 
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
@@ -2670,6 +2689,14 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-ai-inference-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+  'hermes-ollama-ai-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+  ],
+  'hermes-ollama-ai-core': [
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
 };
 

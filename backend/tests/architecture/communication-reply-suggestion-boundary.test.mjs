@@ -313,3 +313,30 @@ test('AI inference assembly emits only unsigned engine runtime and storage input
     /communications|reply-suggestion|ollama|signing|private_key|provider_id|model_id|endpoint|prompt_text/,
   );
 });
+
+test('Ollama API and core are separate integration units with fixed local policy', async () => {
+  const [apiManifest, api, settings, coreManifest, core] = await Promise.all([
+    backendSource('src/ollama-ai-api/Cargo.toml'),
+    backendSource('src/ollama-ai-api/src/lib.rs'),
+    backendSource('src/ollama-ai-api/src/settings.rs'),
+    backendSource('src/ollama-ai-core/Cargo.toml'),
+    backendSource('src/ollama-ai-core/src/lib.rs'),
+  ]);
+
+  for (const manifest of [apiManifest, coreManifest]) {
+    assert.match(manifest, /role = "integration"/);
+    assert.match(manifest, /owner = "ollama"/);
+    assert.doesNotMatch(manifest, /communications|reply-suggestion|ai-inference/);
+  }
+  assert.match(api, /OLLAMA_AI_LOOPBACK_HOST_V1: &str = "127\.0\.0\.1"/);
+  assert.match(api, /OLLAMA_AI_MAX_TIMEOUT_MILLIS_V1: u64 = 30_000/);
+  assert.match(settings, /SettingTargetScopeV1::ConfigurationInstance/);
+  assert.match(settings, /SettingApplyModeV1::RestartModule/);
+  assert.match(core, /compute_provider_reply_generation_request_digest_v1/);
+  assert.match(core, /OllamaAiRunStateV1::Uncertain/);
+  assert.match(core, /No markdown/);
+  assert.doesNotMatch(
+    `${api}\n${settings}\n${core}`,
+    /https?:\/\/(?!127\.0\.0\.1)|provider_id|caller.*model|automatic.*download/i,
+  );
+});

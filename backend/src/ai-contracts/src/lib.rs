@@ -4,11 +4,12 @@ mod validation;
 
 use hermes_runtime_protocol::v1::ContractReferenceV1;
 pub use validation::{
-    AiContractValidationErrorV1, compute_reply_inference_request_digest_v1,
-    decode_reply_source_content_v1, encode_reply_source_content_v1,
-    seal_reply_inference_request_v1, validate_provider_reply_generation_request_v1,
-    validate_provider_reply_generation_result_v1, validate_reply_inference_request_v1,
-    validate_reply_inference_result_v1, validate_reply_source_content_v1,
+    AiContractValidationErrorV1, compute_provider_reply_generation_request_digest_v1,
+    compute_reply_inference_request_digest_v1, decode_reply_source_content_v1,
+    encode_reply_source_content_v1, seal_reply_inference_request_v1,
+    validate_provider_reply_generation_request_v1, validate_provider_reply_generation_result_v1,
+    validate_reply_inference_request_v1, validate_reply_inference_result_v1,
+    validate_reply_source_content_v1,
 };
 
 pub const PACKAGE: &str = "hermes-ai-contracts";
