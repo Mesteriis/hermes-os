@@ -1,7 +1,7 @@
 use hermes_attachment_archive_inspection_core::{
     ArchiveInspectionErrorV1, ArchiveInspectionReportV1, ArchiveInspectionRequestV1,
     ArchiveInspectionStateV1, ArchiveInspectionStatusV1, ArchiveInspectionTransitionV1,
-    ArchiveInspectionWorkItemV1, transition_archive_inspection_status_v1,
+    transition_archive_inspection_status_v1,
 };
 use sqlx::{Postgres, Row, Transaction};
 
@@ -19,6 +19,21 @@ use crate::{
 };
 
 const MAX_LEASE_MILLIS_V1: u64 = 300_000;
+
+pub(crate) struct ArchiveInspectionDelegatedWorkV1 {
+    pub run_id: [u8; 16],
+    pub operation_id: [u8; 16],
+    pub candidate_message_id: [u8; 16],
+    pub safety_message_id: [u8; 16],
+    pub delegation_request_id: [u8; 16],
+    pub delegation_result_message_id: [u8; 16],
+    pub attachment_anchor_id: [u8; 16],
+    pub source_reference_id: [u8; 16],
+    pub declared_size: u64,
+    pub blob_receipt_sha256: [u8; 32],
+    pub custody_transfer_source_proof: Vec<u8>,
+    pub safety_evidence_id: [u8; 16],
+}
 
 impl AttachmentArchiveInspectionPersistenceV1 {
     pub async fn claim_next_job(
@@ -250,7 +265,7 @@ impl AttachmentArchiveInspectionPersistenceV1 {
 pub(crate) async fn enqueue_archive_inspection_work(
     transaction: &mut Transaction<'_, Postgres>,
     logical_owner_id: &str,
-    work: &ArchiveInspectionWorkItemV1,
+    work: &ArchiveInspectionDelegatedWorkV1,
     created_at_unix_millis: i64,
 ) -> Result<[u8; 16], ArchiveInspectionPersistenceErrorV1> {
     let request = ArchiveInspectionRequestV1 {
@@ -258,18 +273,25 @@ pub(crate) async fn enqueue_archive_inspection_work(
         operation_id: work.operation_id,
         attachment_anchor_id: work.attachment_anchor_id,
     };
-    let job_id =
-        archive_inspection_job_id_v1(&request, work.candidate_message_id, work.safety_message_id);
+    let job_id = archive_inspection_job_id_v1(
+        &request,
+        work.candidate_message_id,
+        work.safety_message_id,
+        work.delegation_request_id,
+        work.delegation_result_message_id,
+    );
     sqlx::query(
-        "INSERT INTO hermes_data.attachment_archive_inspection_jobs (logical_owner_id, job_id, run_id, candidate_message_id, safety_message_id, attachment_anchor_id, blob_reference_id, declared_size, blob_receipt_sha256, custody_transfer_source_proof, safety_evidence_id, state, attempt_count, max_attempts, worker_id, runtime_generation, grant_epoch, lease_fence, lease_expires_at_unix_millis, created_at_unix_millis, updated_at_unix_millis) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1, 0, $12, NULL, NULL, NULL, 0, NULL, $13, $13) ON CONFLICT (logical_owner_id, run_id) DO NOTHING",
+        "INSERT INTO hermes_data.attachment_archive_inspection_jobs (logical_owner_id, job_id, run_id, candidate_message_id, safety_message_id, delegation_request_id, delegation_result_message_id, attachment_anchor_id, source_reference_id, declared_size, blob_receipt_sha256, custody_transfer_source_proof, safety_evidence_id, state, attempt_count, max_attempts, worker_id, runtime_generation, grant_epoch, lease_fence, lease_expires_at_unix_millis, created_at_unix_millis, updated_at_unix_millis) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, 0, $14, NULL, NULL, NULL, 0, NULL, $15, $15) ON CONFLICT (logical_owner_id, run_id) DO NOTHING",
     )
     .bind(logical_owner_id)
     .bind(job_id.as_slice())
     .bind(work.run_id.as_slice())
     .bind(work.candidate_message_id.as_slice())
     .bind(work.safety_message_id.as_slice())
+    .bind(work.delegation_request_id.as_slice())
+    .bind(work.delegation_result_message_id.as_slice())
     .bind(work.attachment_anchor_id.as_slice())
-    .bind(work.blob_reference_id.as_slice())
+    .bind(work.source_reference_id.as_slice())
     .bind(i64::try_from(work.declared_size).map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidInput)?)
     .bind(work.blob_receipt_sha256.as_slice())
     .bind(&work.custody_transfer_source_proof)
@@ -280,7 +302,7 @@ pub(crate) async fn enqueue_archive_inspection_work(
     .await
     .map_err(|_| ArchiveInspectionPersistenceErrorV1::StorageUnavailable)?;
     let row = sqlx::query(
-        "SELECT job_id, candidate_message_id, safety_message_id, attachment_anchor_id, blob_reference_id, declared_size, blob_receipt_sha256, custody_transfer_source_proof, safety_evidence_id FROM hermes_data.attachment_archive_inspection_jobs WHERE logical_owner_id = $1 AND run_id = $2",
+        "SELECT job_id, candidate_message_id, safety_message_id, delegation_request_id, delegation_result_message_id, attachment_anchor_id, source_reference_id, declared_size, blob_receipt_sha256, custody_transfer_source_proof, safety_evidence_id FROM hermes_data.attachment_archive_inspection_jobs WHERE logical_owner_id = $1 AND run_id = $2",
     )
     .bind(logical_owner_id)
     .bind(work.run_id.as_slice())
@@ -303,15 +325,25 @@ pub(crate) async fn enqueue_archive_inspection_work(
                 .as_slice(),
         )? == work.safety_message_id
         && id16(
+            row.try_get::<Vec<u8>, _>("delegation_request_id")
+                .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?
+                .as_slice(),
+        )? == work.delegation_request_id
+        && id16(
+            row.try_get::<Vec<u8>, _>("delegation_result_message_id")
+                .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?
+                .as_slice(),
+        )? == work.delegation_result_message_id
+        && id16(
             row.try_get::<Vec<u8>, _>("attachment_anchor_id")
                 .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?
                 .as_slice(),
         )? == work.attachment_anchor_id
         && id16(
-            row.try_get::<Vec<u8>, _>("blob_reference_id")
+            row.try_get::<Vec<u8>, _>("source_reference_id")
                 .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?
                 .as_slice(),
-        )? == work.blob_reference_id
+        )? == work.source_reference_id
         && unsigned(
             row.try_get("declared_size")
                 .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?,
@@ -342,7 +374,7 @@ async fn load_claimed_job(
     job_id: [u8; 16],
 ) -> Result<ClaimedArchiveInspectionJobV1, ArchiveInspectionPersistenceErrorV1> {
     let row = sqlx::query(
-        "SELECT jobs.job_id, jobs.run_id, runs.operation_id, jobs.candidate_message_id, jobs.safety_message_id, jobs.attachment_anchor_id, jobs.blob_reference_id, jobs.declared_size, jobs.blob_receipt_sha256, jobs.custody_transfer_source_proof, jobs.safety_evidence_id, jobs.attempt_count, jobs.max_attempts, jobs.worker_id, jobs.runtime_generation, jobs.grant_epoch, jobs.lease_fence, jobs.lease_expires_at_unix_millis FROM hermes_data.attachment_archive_inspection_jobs jobs JOIN hermes_data.attachment_archive_inspection_runs runs ON runs.logical_owner_id = jobs.logical_owner_id AND runs.run_id = jobs.run_id WHERE jobs.logical_owner_id = $1 AND jobs.job_id = $2 AND jobs.state = 2",
+        "SELECT jobs.job_id, jobs.run_id, runs.operation_id, jobs.candidate_message_id, jobs.safety_message_id, jobs.delegation_request_id, jobs.delegation_result_message_id, jobs.attachment_anchor_id, jobs.source_reference_id, jobs.declared_size, jobs.blob_receipt_sha256, jobs.custody_transfer_source_proof, jobs.safety_evidence_id, jobs.attempt_count, jobs.max_attempts, jobs.worker_id, jobs.runtime_generation, jobs.grant_epoch, jobs.lease_fence, jobs.lease_expires_at_unix_millis FROM hermes_data.attachment_archive_inspection_jobs jobs JOIN hermes_data.attachment_archive_inspection_runs runs ON runs.logical_owner_id = jobs.logical_owner_id AND runs.run_id = jobs.run_id WHERE jobs.logical_owner_id = $1 AND jobs.job_id = $2 AND jobs.state = 2",
     )
     .bind(logical_owner_id)
     .bind(job_id.as_slice())
@@ -380,8 +412,18 @@ async fn load_claimed_job(
                 .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?
                 .as_slice(),
         )?,
-        blob_reference_id: id16(
-            row.try_get::<Vec<u8>, _>("blob_reference_id")
+        delegation_request_id: id16(
+            row.try_get::<Vec<u8>, _>("delegation_request_id")
+                .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?
+                .as_slice(),
+        )?,
+        delegation_result_message_id: id16(
+            row.try_get::<Vec<u8>, _>("delegation_result_message_id")
+                .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?
+                .as_slice(),
+        )?,
+        source_reference_id: id16(
+            row.try_get::<Vec<u8>, _>("source_reference_id")
                 .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?
                 .as_slice(),
         )?,
@@ -594,7 +636,9 @@ fn valid_claim(claimed: &ClaimedArchiveInspectionJobV1) -> bool {
         && valid_id(&claimed.request.attachment_anchor_id)
         && valid_id(&claimed.candidate_message_id)
         && valid_id(&claimed.safety_message_id)
-        && valid_id(&claimed.blob_reference_id)
+        && valid_id(&claimed.delegation_request_id)
+        && valid_id(&claimed.delegation_result_message_id)
+        && valid_id(&claimed.source_reference_id)
         && claimed.declared_size > 0
         && valid_sha256(&claimed.blob_receipt_sha256)
         && (1..=2_048).contains(&claimed.custody_transfer_source_proof.len())
@@ -642,11 +686,13 @@ mod tests {
             },
             candidate_message_id: [5; 16],
             safety_message_id: [6; 16],
-            blob_reference_id: [7; 16],
+            delegation_request_id: [7; 16],
+            delegation_result_message_id: [8; 16],
+            source_reference_id: [9; 16],
             declared_size: 512,
-            blob_receipt_sha256: [8; 32],
-            custody_transfer_source_proof: vec![9; 64],
-            safety_evidence_id: [10; 16],
+            blob_receipt_sha256: [10; 32],
+            custody_transfer_source_proof: vec![11; 64],
+            safety_evidence_id: [12; 16],
             attempt_count: 1,
             max_attempts: 8,
             lease: ArchiveInspectionLeaseV1 {

@@ -68,6 +68,18 @@ pub fn archive_inspection_custody_delegation_request_id_v1(
 }
 
 #[must_use]
+pub fn archive_inspection_custody_delegated_message_id_v1(request_id: [u8; 16]) -> [u8; 16] {
+    custody_result_message_id_v1(b"delegated", request_id)
+}
+
+#[must_use]
+pub fn archive_inspection_custody_delegation_rejected_message_id_v1(
+    request_id: [u8; 16],
+) -> [u8; 16] {
+    custody_result_message_id_v1(b"rejected", request_id)
+}
+
+#[must_use]
 pub fn archive_inspection_custody_delegation_requested_contract_reference_v1() -> ContractReferenceV1
 {
     contract_reference(ARCHIVE_INSPECTION_CUSTODY_DELEGATION_REQUESTED_CONTRACT_NAME_V1)
@@ -180,6 +192,14 @@ fn event_route(
             ack_wait_millis: u32::from(direction == EventRouteDirectionV1::Consume) * 30_000,
         })),
     }
+}
+
+fn custody_result_message_id_v1(label: &[u8], request_id: [u8; 16]) -> [u8; 16] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"hermes.attachment-archive-inspection.custody-result.v1\0");
+    hasher.update(label);
+    hasher.update(request_id);
+    hasher.finalize()[..16].try_into().expect("digest prefix")
 }
 
 #[cfg(test)]

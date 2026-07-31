@@ -3,6 +3,7 @@ use hermes_attachment_archive_inspection_core::{
     ArchiveInspectionReportV1, ArchiveInspectionRequestV1, ArchiveInspectionStateV1,
     ArchiveInspectionStatusV1,
 };
+use hermes_attachment_archive_inspection_ingress::wire::RequestArchiveInspectionCustodyDelegationV1;
 use sha2::{Digest, Sha256};
 
 use crate::ArchiveInspectionPersistenceErrorV1;
@@ -44,6 +45,25 @@ pub enum PersistArchiveInspectionFactOutcomeV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingArchiveInspectionCustodyDelegationV1 {
+    pub request: RequestArchiveInspectionCustodyDelegationV1,
+    pub created_at_unix_millis: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnpublishedArchiveInspectionCustodyDelegationV1 {
+    pub message_id: [u8; 16],
+    pub envelope_sha256: [u8; 32],
+    pub exact_envelope_bytes: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PersistArchiveInspectionCustodyResultOutcomeV1 {
+    Recorded,
+    Duplicate,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ArchiveInspectionLeaseV1 {
     pub worker_id: String,
     pub runtime_generation: u64,
@@ -59,7 +79,9 @@ pub struct ClaimedArchiveInspectionJobV1 {
     pub request: ArchiveInspectionRequestV1,
     pub candidate_message_id: [u8; 16],
     pub safety_message_id: [u8; 16],
-    pub blob_reference_id: [u8; 16],
+    pub delegation_request_id: [u8; 16],
+    pub delegation_result_message_id: [u8; 16],
+    pub source_reference_id: [u8; 16],
     pub declared_size: u64,
     pub blob_receipt_sha256: [u8; 32],
     pub custody_transfer_source_proof: Vec<u8>,
@@ -100,6 +122,8 @@ pub fn archive_inspection_job_id_v1(
     request: &ArchiveInspectionRequestV1,
     candidate_message_id: [u8; 16],
     safety_message_id: [u8; 16],
+    delegation_request_id: [u8; 16],
+    delegation_result_message_id: [u8; 16],
 ) -> [u8; 16] {
     digest16(
         b"hermes.attachment-archive-inspection.job.v1\0",
@@ -108,6 +132,8 @@ pub fn archive_inspection_job_id_v1(
             &request.attachment_anchor_id,
             &candidate_message_id,
             &safety_message_id,
+            &delegation_request_id,
+            &delegation_result_message_id,
         ],
     )
 }
@@ -265,8 +291,8 @@ mod tests {
             attachment_anchor_id: [2; 16],
         };
         assert_ne!(
-            archive_inspection_job_id_v1(&request, [3; 16], [4; 16]),
-            archive_inspection_job_id_v1(&request, [3; 16], [5; 16])
+            archive_inspection_job_id_v1(&request, [3; 16], [4; 16], [5; 16], [6; 16]),
+            archive_inspection_job_id_v1(&request, [3; 16], [4; 16], [5; 16], [7; 16])
         );
         assert_ne!(
             archive_inspection_terminal_evidence_id_v1(

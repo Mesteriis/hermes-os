@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_archive_inspection_ingress_contract_v1",
+    "currentSlice": "attachment_archive_inspection_event_replay_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1666,6 +1666,14 @@
       "hermes-attachment-archive-inspection-persistence": [
         {
           "name": "hermes-attachment-archive-inspection-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-archive-inspection-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
           "kind": "normal"
         },
         {
@@ -4745,6 +4753,14 @@
         }
       ],
       "hermes-attachment-archive-inspection-persistence": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
         {
           "name": "sha2",
           "kind": "normal",

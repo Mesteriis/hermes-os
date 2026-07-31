@@ -35,7 +35,7 @@ test('archive inspection persistence is admitted without opening the planned gat
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_archive_inspection_ingress_contract_v1',
+    'attachment_archive_inspection_event_replay_persistence_v1',
   );
   assert(policy.implementation.ownerInventory.engines.includes(
     'attachment_archive_inspection',
@@ -133,13 +133,17 @@ test('archive ingress is a target-owned event contract without engine implementa
 });
 
 test('pure archive core owns policy without transport, storage or parser dependency', async () => {
-  const [manifest, source] = await Promise.all([
+  const [manifest, source, join] = await Promise.all([
     readFile(
       new URL('src/attachment-archive-inspection-core/Cargo.toml', BACKEND_ROOT),
       'utf8',
     ),
     readFile(
       new URL('src/attachment-archive-inspection-core/src/lib.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-core/src/join.rs', BACKEND_ROOT),
       'utf8',
     ),
   ]);
@@ -154,6 +158,15 @@ test('pure archive core owns policy without transport, storage or parser depende
   assert.match(source, /EncryptedEntry/);
   assert.match(source, /NestedArchive/);
   assert.match(source, /UnsupportedEntryType/);
+  assert.match(join, /ArchiveInspectionCustodyDelegationIntentV1/);
+  const intent = join.slice(
+    join.indexOf('struct ArchiveInspectionCustodyDelegationIntentV1'),
+    join.indexOf('enum ArchiveInspectionRejectionV1'),
+  );
+  assert.doesNotMatch(
+    intent,
+    /\b(?:blob_reference_id|declared_size|receipt_sha256|custody_transfer_source_proof)\b/,
+  );
   assert.doesNotMatch(
     source,
     /TcpStream|File::|sqlx|postgres|nats|jetstream|hermes_communications|hermes_attachment_security/,
@@ -161,7 +174,7 @@ test('pure archive core owns policy without transport, storage or parser depende
 });
 
 test('archive persistence owns replay, event join and fenced jobs without foreign implementations', async () => {
-  const [manifest, schema, library, observations, jobs] = await Promise.all([
+  const [manifest, schema, library, observations, custody, jobs] = await Promise.all([
     readFile(
       new URL('src/attachment-archive-inspection-persistence/Cargo.toml', BACKEND_ROOT),
       'utf8',
@@ -185,6 +198,10 @@ test('archive persistence owns replay, event join and fenced jobs without foreig
       'utf8',
     ),
     readFile(
+      new URL('src/attachment-archive-inspection-persistence/src/custody.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
       new URL('src/attachment-archive-inspection-persistence/src/jobs.rs', BACKEND_ROOT),
       'utf8',
     ),
@@ -194,16 +211,20 @@ test('archive persistence owns replay, event join and fenced jobs without foreig
   assert.match(manifest, /owner = "attachment_archive_inspection"/);
   assert.match(manifest, /surface = "persistence"/);
   assert.match(manifest, /hermes-attachment-archive-inspection-core/);
+  assert.match(manifest, /hermes-attachment-archive-inspection-ingress/);
+  assert.match(manifest, /hermes-events-protocol/);
   assert.match(manifest, /hermes-storage-protocol/);
   assert.doesNotMatch(
     manifest,
-    /hermes-(?:communications|attachment-security|blob|events|kernel|mail|telegram|whatsapp|zulip)/,
+    /hermes-(?:communications|attachment-security|blob|kernel|mail|telegram|whatsapp|zulip)/,
   );
   for (const table of [
     'attachment_archive_inspection_runs',
     'attachment_archive_inspection_event_inbox',
     'attachment_archive_inspection_scan_candidates',
     'attachment_archive_inspection_safety_facts',
+    'attachment_archive_inspection_custody_delegation_requests',
+    'attachment_archive_inspection_custody_result_inbox',
     'attachment_archive_inspection_jobs',
     'attachment_archive_inspection_reports',
     'attachment_archive_inspection_realtime',
@@ -221,11 +242,17 @@ test('archive persistence owns replay, event join and fenced jobs without foreig
   assert.match(observations, /persist_scan_candidate/);
   assert.match(observations, /persist_canonical_safety_fact/);
   assert.match(observations, /settle_anchor_runs/);
+  assert.match(library, /PendingArchiveInspectionCustodyDelegationV1/);
+  assert.match(custody, /pending_custody_delegation_requests/);
+  assert.match(custody, /store_custody_delegation_outbox/);
+  assert.match(custody, /persist_custody_delegated_result/);
+  assert.match(custody, /persist_custody_delegation_rejected_result/);
+  assert.match(custody, /insert_result_inbox/);
   assert.match(jobs, /claim_next_job/);
   assert.match(jobs, /recover_expired_jobs/);
   assert.match(jobs, /verify_claim/);
   assert.doesNotMatch(
-    `${library}\n${observations}\n${jobs}`,
+    `${library}\n${observations}\n${custody}\n${jobs}`,
     /hermes_(?:communications|attachment_security|blob|kernel|mail|telegram|whatsapp|zulip)/,
   );
 });

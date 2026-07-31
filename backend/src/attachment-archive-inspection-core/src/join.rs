@@ -43,16 +43,11 @@ pub struct ArchiveInspectionCanonicalSafetyFactV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ArchiveInspectionWorkItemV1 {
+pub struct ArchiveInspectionCustodyDelegationIntentV1 {
     pub run_id: [u8; 16],
-    pub operation_id: [u8; 16],
     pub candidate_message_id: [u8; 16],
     pub safety_message_id: [u8; 16],
     pub attachment_anchor_id: [u8; 16],
-    pub blob_reference_id: [u8; 16],
-    pub declared_size: u64,
-    pub blob_receipt_sha256: [u8; 32],
-    pub custody_transfer_source_proof: Vec<u8>,
     pub safety_evidence_id: [u8; 16],
 }
 
@@ -77,7 +72,7 @@ pub enum ArchiveInspectionRecordDecisionV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ArchiveInspectionJoinDecisionV1 {
     Waiting,
-    Runnable(ArchiveInspectionWorkItemV1),
+    CustodyDelegationRequired(ArchiveInspectionCustodyDelegationIntentV1),
     Reject(ArchiveInspectionRejectionV1),
 }
 
@@ -175,18 +170,15 @@ pub fn decide_archive_inspection_join_v1(
         return ArchiveInspectionJoinDecisionV1::Waiting;
     };
 
-    ArchiveInspectionJoinDecisionV1::Runnable(ArchiveInspectionWorkItemV1 {
-        run_id: request.run_id,
-        operation_id: request.operation_id,
-        candidate_message_id: candidate.message_id,
-        safety_message_id: safety.message_id,
-        attachment_anchor_id: request.attachment_anchor_id,
-        blob_reference_id: candidate.blob_reference_id,
-        declared_size: candidate.declared_size,
-        blob_receipt_sha256: candidate.blob_receipt_sha256,
-        custody_transfer_source_proof: candidate.custody_transfer_source_proof.clone(),
-        safety_evidence_id: safety.evidence_id,
-    })
+    ArchiveInspectionJoinDecisionV1::CustodyDelegationRequired(
+        ArchiveInspectionCustodyDelegationIntentV1 {
+            run_id: request.run_id,
+            candidate_message_id: candidate.message_id,
+            safety_message_id: safety.message_id,
+            attachment_anchor_id: request.attachment_anchor_id,
+            safety_evidence_id: safety.evidence_id,
+        },
+    )
 }
 
 #[must_use]
@@ -285,14 +277,14 @@ mod tests {
             decide_archive_inspection_join_v1(&request, None, Some(&safety)),
             ArchiveInspectionJoinDecisionV1::Waiting
         );
-        let ArchiveInspectionJoinDecisionV1::Runnable(work) =
+        let ArchiveInspectionJoinDecisionV1::CustodyDelegationRequired(intent) =
             decide_archive_inspection_join_v1(&request, Some(&candidate), Some(&safety))
         else {
-            panic!("safe evidence must become runnable");
+            panic!("safe evidence must require custody delegation");
         };
-        assert_eq!(work.run_id, request.run_id);
-        assert_eq!(work.blob_reference_id, candidate.blob_reference_id);
-        assert_eq!(work.safety_evidence_id, safety.evidence_id);
+        assert_eq!(intent.run_id, request.run_id);
+        assert_eq!(intent.candidate_message_id, candidate.message_id);
+        assert_eq!(intent.safety_evidence_id, safety.evidence_id);
     }
 
     #[test]

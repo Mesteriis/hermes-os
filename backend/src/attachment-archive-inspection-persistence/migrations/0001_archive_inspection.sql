@@ -94,14 +94,107 @@ CREATE TABLE hermes_data.attachment_archive_inspection_safety_facts (
     CHECK (length(evidence_id) = 16)
 );
 
+CREATE TABLE hermes_data.attachment_archive_inspection_custody_delegation_requests (
+    logical_owner_id TEXT NOT NULL,
+    request_id BYTEA NOT NULL,
+    run_id BYTEA NOT NULL,
+    attachment_anchor_id BYTEA NOT NULL,
+    candidate_message_id BYTEA NOT NULL,
+    candidate_envelope_sha256 BYTEA NOT NULL,
+    safety_message_id BYTEA NOT NULL,
+    safety_evidence_id BYTEA NOT NULL,
+    state SMALLINT NOT NULL,
+    envelope_sha256 BYTEA,
+    exact_envelope_bytes BYTEA,
+    published_at_unix_millis BIGINT,
+    result_message_id BYTEA,
+    created_at_unix_millis BIGINT NOT NULL,
+    updated_at_unix_millis BIGINT NOT NULL,
+    PRIMARY KEY (logical_owner_id, request_id),
+    UNIQUE (logical_owner_id, run_id),
+    FOREIGN KEY (logical_owner_id, run_id)
+        REFERENCES hermes_data.attachment_archive_inspection_runs (
+            logical_owner_id,
+            run_id
+        ),
+    CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
+    CHECK (length(request_id) = 16),
+    CHECK (length(run_id) = 16),
+    CHECK (length(attachment_anchor_id) = 16),
+    CHECK (length(candidate_message_id) = 16),
+    CHECK (length(candidate_envelope_sha256) = 32),
+    CHECK (length(safety_message_id) = 16),
+    CHECK (length(safety_evidence_id) = 16),
+    CHECK (state BETWEEN 1 AND 4),
+    CHECK (
+        (
+            state = 1
+            AND envelope_sha256 IS NULL
+            AND exact_envelope_bytes IS NULL
+            AND published_at_unix_millis IS NULL
+            AND result_message_id IS NULL
+        )
+        OR (
+            state = 2
+            AND length(envelope_sha256) = 32
+            AND length(exact_envelope_bytes) BETWEEN 1 AND 8192
+            AND result_message_id IS NULL
+        )
+        OR (
+            state IN (3, 4)
+            AND length(envelope_sha256) = 32
+            AND length(exact_envelope_bytes) BETWEEN 1 AND 8192
+            AND length(result_message_id) = 16
+        )
+    ),
+    CHECK (
+        published_at_unix_millis IS NULL
+        OR published_at_unix_millis >= created_at_unix_millis
+    ),
+    CHECK (created_at_unix_millis > 0),
+    CHECK (updated_at_unix_millis >= created_at_unix_millis)
+);
+
+CREATE INDEX attachment_archive_inspection_custody_delegation_outbox_idx
+ON hermes_data.attachment_archive_inspection_custody_delegation_requests (
+    logical_owner_id,
+    state,
+    published_at_unix_millis,
+    created_at_unix_millis,
+    request_id
+);
+
+CREATE TABLE hermes_data.attachment_archive_inspection_custody_result_inbox (
+    logical_owner_id TEXT NOT NULL,
+    message_id BYTEA NOT NULL,
+    envelope_sha256 BYTEA NOT NULL,
+    request_id BYTEA NOT NULL,
+    result_kind SMALLINT NOT NULL,
+    processed_at_unix_millis BIGINT NOT NULL,
+    PRIMARY KEY (logical_owner_id, message_id),
+    FOREIGN KEY (logical_owner_id, request_id)
+        REFERENCES hermes_data.attachment_archive_inspection_custody_delegation_requests (
+            logical_owner_id,
+            request_id
+        ),
+    CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
+    CHECK (length(message_id) = 16),
+    CHECK (length(envelope_sha256) = 32),
+    CHECK (length(request_id) = 16),
+    CHECK (result_kind IN (1, 2)),
+    CHECK (processed_at_unix_millis > 0)
+);
+
 CREATE TABLE hermes_data.attachment_archive_inspection_jobs (
     logical_owner_id TEXT NOT NULL,
     job_id BYTEA NOT NULL,
     run_id BYTEA NOT NULL,
     candidate_message_id BYTEA NOT NULL,
     safety_message_id BYTEA NOT NULL,
+    delegation_request_id BYTEA NOT NULL,
+    delegation_result_message_id BYTEA NOT NULL,
     attachment_anchor_id BYTEA NOT NULL,
-    blob_reference_id BYTEA NOT NULL,
+    source_reference_id BYTEA NOT NULL,
     declared_size BIGINT NOT NULL,
     blob_receipt_sha256 BYTEA NOT NULL,
     custody_transfer_source_proof BYTEA NOT NULL,
@@ -118,13 +211,20 @@ CREATE TABLE hermes_data.attachment_archive_inspection_jobs (
     updated_at_unix_millis BIGINT NOT NULL,
     PRIMARY KEY (logical_owner_id, job_id),
     UNIQUE (logical_owner_id, run_id),
+    FOREIGN KEY (logical_owner_id, delegation_request_id)
+        REFERENCES hermes_data.attachment_archive_inspection_custody_delegation_requests (
+            logical_owner_id,
+            request_id
+        ),
     CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
     CHECK (length(job_id) = 16),
     CHECK (length(run_id) = 16),
     CHECK (length(candidate_message_id) = 16),
     CHECK (length(safety_message_id) = 16),
+    CHECK (length(delegation_request_id) = 16),
+    CHECK (length(delegation_result_message_id) = 16),
     CHECK (length(attachment_anchor_id) = 16),
-    CHECK (length(blob_reference_id) = 16),
+    CHECK (length(source_reference_id) = 16),
     CHECK (declared_size BETWEEN 1 AND 104857600),
     CHECK (length(blob_receipt_sha256) = 32),
     CHECK (length(custody_transfer_source_proof) BETWEEN 1 AND 2048),

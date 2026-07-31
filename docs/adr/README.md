@@ -634,7 +634,10 @@ ingress contract: Archive публикует durable delegation command, Attachm
 Security сверяет собственный safe scan/current custody и возвращает fresh
 redelegated proof durable result event без engine-to-engine RPC. Ingress code,
 typed routes и bounded exact envelopes реализованы; owner-local handoff
-persistence, runtime/assembly и managed live gate остаются открыты.
+persistence на стороне Archive также реализует deterministic request outbox,
+exact result inbox и создаёт parser job только после fresh delegated proof.
+Attachment Security consumer/outbox, runtime/assembly и managed live gate
+остаются открыты.
 ADR-0360 вводит отдельную managed control operation для target-bound
 redelegation уже принятого Blob. Kernel проверяет predecessor proof, exact
 evidence lineage и current custodian runtime/grant, но не читает bytes или Blob

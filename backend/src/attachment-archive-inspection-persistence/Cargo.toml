@@ -14,6 +14,9 @@ surface = "persistence"
 
 [dependencies]
 hermes-attachment-archive-inspection-core = { path = "../attachment-archive-inspection-core" }
+hermes-attachment-archive-inspection-ingress = { path = "../attachment-archive-inspection-ingress" }
+hermes-events-protocol = { path = "../platform/events" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
+prost = "=0.14.4"
 sha2 = { version = "=0.11.0", default-features = false }
 sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }

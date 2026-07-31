@@ -11,12 +11,12 @@ mod join;
 mod lifecycle;
 
 pub use join::{
-    ArchiveInspectionCanonicalSafetyFactV1, ArchiveInspectionJoinDecisionV1,
-    ArchiveInspectionRecordDecisionV1, ArchiveInspectionRejectionV1, ArchiveInspectionRequestV1,
-    ArchiveInspectionSafetyStateV1, ArchiveInspectionScanCandidateV1, ArchiveInspectionWorkItemV1,
-    archive_inspection_rejection_evidence_id_v1, decide_archive_inspection_join_v1,
-    decide_archive_inspection_safety_record_v1, decide_archive_scan_candidate_record_v1,
-    validate_archive_inspection_request_v1,
+    ArchiveInspectionCanonicalSafetyFactV1, ArchiveInspectionCustodyDelegationIntentV1,
+    ArchiveInspectionJoinDecisionV1, ArchiveInspectionRecordDecisionV1,
+    ArchiveInspectionRejectionV1, ArchiveInspectionRequestV1, ArchiveInspectionSafetyStateV1,
+    ArchiveInspectionScanCandidateV1, archive_inspection_rejection_evidence_id_v1,
+    decide_archive_inspection_join_v1, decide_archive_inspection_safety_record_v1,
+    decide_archive_scan_candidate_record_v1, validate_archive_inspection_request_v1,
 };
 pub use lifecycle::{
     ArchiveInspectionErrorV1, ArchiveInspectionStateV1, ArchiveInspectionStatusV1,

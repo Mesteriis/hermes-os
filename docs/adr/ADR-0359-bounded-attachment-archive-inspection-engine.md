@@ -15,9 +15,13 @@ bounded report/realtime storage и job lease fencing по worker, runtime
 generation, grant epoch и monotonic fence. Отдельный target-owned
 `hermes-attachment-archive-inspection-ingress` реализует typed event routes,
 deterministic request/result envelopes, exact target constants и bounded
-private proof validation для event-only custody delegation. Owner-local
-request/result persistence, managed runtime, release assembly, event decoding,
-Blob custody/read, live PostgreSQL/NATS/Gateway conformance и production gate
+private proof validation для event-only custody delegation. Archive
+persistence после exact three-way join атомарно создаёт deterministic
+delegation intent, материализует exact command outbox отдельно от runtime
+identity, принимает exact command-linked delegated/rejected result inbox и
+создаёт parser job только после fresh proof. Attachment Security consumer и
+source-owner outbox, managed runtime, release assembly, event decoding, Blob
+custody/read, live PostgreSQL/NATS/Gateway conformance и production gate
 `attachment_archive_inspection_v1` остаются открыты.
 
 Зависит от:
@@ -74,11 +78,12 @@ Engine durably объединяет три независимо поступаю
    `attachment_security_scan_candidate_observed.v1`;
 3. canonical Communications transition в `safe_for_delivery`.
 
-Факты могут прийти в любом порядке. Runnable job появляется только после
-exact anchor join, exact candidate/safety event identities и transition
-`blob_admitted -> safe_for_delivery`. Safety event не содержит выдуманного
-correlation field. Exact replay идемпотентен; collision, stale generation,
-revoked permit или mismatched candidate fail closed.
+Факты могут прийти в любом порядке. Exact anchor join, exact candidate/safety
+event identities и transition `blob_admitted -> safe_for_delivery` создают
+только custody delegation intent. Runnable parser job появляется после exact
+command-linked delegated result с fresh proof. Safety event не содержит
+выдуманного correlation field. Exact replay идемпотентен; collision, stale
+generation, revoked permit или mismatched candidate fail closed.
 
 ```text
 client -> Gateway -> archive engine request_rpc

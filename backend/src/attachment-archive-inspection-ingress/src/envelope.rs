@@ -22,6 +22,8 @@ use crate::{
     ATTACHMENT_ARCHIVE_INSPECTION_MAX_PROOF_BYTES_V1,
     ATTACHMENT_ARCHIVE_INSPECTION_MAX_SOURCE_BYTES_V1,
     ATTACHMENT_SECURITY_ARCHIVE_DELEGATION_CAPABILITY_ID_V1,
+    archive_inspection_custody_delegated_message_id_v1,
+    archive_inspection_custody_delegation_rejected_message_id_v1,
     wire::{
         ArchiveInspectionCustodyDelegatedV1, ArchiveInspectionCustodyDelegationRejectedV1,
         RequestArchiveInspectionCustodyDelegationV1,
@@ -151,7 +153,11 @@ fn build_result(
     context: &ArchiveInspectionCustodyEnvelopeContextV1,
 ) -> Result<OutboxRecordV1, ArchiveInspectionCustodyEnvelopeBuildErrorV1> {
     build_envelope(
-        result_message_id(result.label, &result.request_id),
+        if result.label == b"delegated" {
+            archive_inspection_custody_delegated_message_id_v1(result.request_id)
+        } else {
+            archive_inspection_custody_delegation_rejected_message_id_v1(result.request_id)
+        },
         &result.archive_run_id,
         &result.command_message_id,
         result.contract_name,
@@ -298,14 +304,6 @@ fn timestamp(context: &ArchiveInspectionCustodyEnvelopeContextV1) -> Timestamp {
         seconds: context.recorded_at_unix_seconds,
         nanos: context.recorded_at_nanos,
     }
-}
-
-fn result_message_id(label: &[u8], request_id: &[u8; 16]) -> [u8; 16] {
-    let mut hasher = Sha256::new();
-    hasher.update(b"hermes.attachment-archive-inspection.custody-result.v1\0");
-    hasher.update(label);
-    hasher.update(request_id);
-    hasher.finalize()[..16].try_into().expect("digest prefix")
 }
 
 fn runtime_source_reference(runtime_instance_id: &str) -> [u8; 16] {

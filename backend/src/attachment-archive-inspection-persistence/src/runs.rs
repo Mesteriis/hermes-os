@@ -13,13 +13,14 @@ use crate::{
     ArchiveInspectionRealtimeTransitionV1, AttachmentArchiveInspectionPersistenceV1,
     CreateArchiveInspectionRunOutcomeV1, CreateArchiveInspectionRunV1,
     PersistedArchiveInspectionRunV1, archive_inspection_request_fingerprint_v1,
-    archive_inspection_run_id_v1, id16, id32,
-    jobs::enqueue_archive_inspection_work,
+    archive_inspection_run_id_v1,
+    custody::enqueue_archive_inspection_custody_delegation,
+    id16, id32,
     model::{
         entry_kind_from_code, error_code, error_from_code, state_code, state_from_code,
         validate_create,
     },
-    observations::{load_candidate, load_safety},
+    observations::{load_candidate, load_candidate_envelope_sha256, load_safety},
     unsigned,
 };
 
@@ -232,7 +233,7 @@ pub(crate) async fn settle_run(
         current.request.attachment_anchor_id,
     )
     .await?;
-    let (transition, rejection_evidence_id, work) = match decide_archive_inspection_join_v1(
+    let (transition, rejection_evidence_id) = match decide_archive_inspection_join_v1(
         &current.request,
         candidate.as_ref(),
         safety.as_ref(),
@@ -241,13 +242,29 @@ pub(crate) async fn settle_run(
             if current.status.state == ArchiveInspectionStateV1::AwaitingEvidence {
                 return Ok(false);
             }
-            (ArchiveInspectionTransitionV1::AwaitEvidence, None, None)
+            (ArchiveInspectionTransitionV1::AwaitEvidence, None)
         }
-        ArchiveInspectionJoinDecisionV1::Runnable(work) => (
-            ArchiveInspectionTransitionV1::BeginInspection,
-            None,
-            Some(work),
-        ),
+        ArchiveInspectionJoinDecisionV1::CustodyDelegationRequired(intent) => {
+            let candidate_envelope_sha256 = load_candidate_envelope_sha256(
+                transaction,
+                logical_owner_id,
+                current.request.attachment_anchor_id,
+            )
+            .await?
+            .ok_or(ArchiveInspectionPersistenceErrorV1::InvalidRow)?;
+            enqueue_archive_inspection_custody_delegation(
+                transaction,
+                logical_owner_id,
+                &intent,
+                candidate_envelope_sha256,
+                occurred_at_unix_millis,
+            )
+            .await?;
+            if current.status.state == ArchiveInspectionStateV1::AwaitingEvidence {
+                return Ok(false);
+            }
+            (ArchiveInspectionTransitionV1::AwaitEvidence, None)
+        }
         ArchiveInspectionJoinDecisionV1::Reject(rejection) => {
             let error = if rejection == ArchiveInspectionRejectionV1::NotSafe {
                 ArchiveInspectionErrorV1::NotSafe
@@ -260,19 +277,9 @@ pub(crate) async fn settle_run(
                     &current.request,
                     rejection,
                 )),
-                None,
             )
         }
     };
-    if let Some(work) = work.as_ref() {
-        enqueue_archive_inspection_work(
-            transaction,
-            logical_owner_id,
-            work,
-            occurred_at_unix_millis,
-        )
-        .await?;
-    }
     let next = transition_archive_inspection_status_v1(&current.status, transition)
         .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?;
     persist_status(
@@ -371,7 +378,7 @@ pub(crate) async fn lock_anchor(
         .map_err(|_| ArchiveInspectionPersistenceErrorV1::StorageUnavailable)
 }
 
-async fn load_run_for_update(
+pub(crate) async fn load_run_for_update(
     transaction: &mut Transaction<'_, Postgres>,
     logical_owner_id: &str,
     run_id: [u8; 16],

@@ -304,6 +304,31 @@ pub(crate) async fn load_candidate(
     .transpose()
 }
 
+pub(crate) async fn load_candidate_envelope_sha256(
+    transaction: &mut Transaction<'_, Postgres>,
+    logical_owner_id: &str,
+    attachment_anchor_id: [u8; 16],
+) -> Result<Option<[u8; 32]>, ArchiveInspectionPersistenceErrorV1> {
+    let row = sqlx::query(
+        "SELECT envelope_sha256
+         FROM hermes_data.attachment_archive_inspection_scan_candidates
+         WHERE logical_owner_id = $1 AND attachment_anchor_id = $2",
+    )
+    .bind(logical_owner_id)
+    .bind(attachment_anchor_id.as_slice())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(|_| ArchiveInspectionPersistenceErrorV1::StorageUnavailable)?;
+    row.map(|row| {
+        id32(
+            row.try_get::<Vec<u8>, _>("envelope_sha256")
+                .map_err(|_| ArchiveInspectionPersistenceErrorV1::InvalidRow)?
+                .as_slice(),
+        )
+    })
+    .transpose()
+}
+
 pub(crate) async fn load_safety(
     transaction: &mut Transaction<'_, Postgres>,
     logical_owner_id: &str,

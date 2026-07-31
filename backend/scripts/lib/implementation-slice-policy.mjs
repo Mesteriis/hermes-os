@@ -2450,6 +2450,8 @@ const ATTACHMENT_ARCHIVE_INSPECTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST =
   ...ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-attachment-archive-inspection-persistence': [
     { name: 'hermes-attachment-archive-inspection-core', kind: 'normal' },
+    { name: 'hermes-attachment-archive-inspection-ingress', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
 };
@@ -2938,6 +2940,7 @@ const ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLI
 const ATTACHMENT_ARCHIVE_INSPECTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-attachment-archive-inspection-persistence': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
   ],
@@ -4157,6 +4160,7 @@ function expectedSlice(currentSlice) {
     currentSlice === 'attachment_archive_inspection_persistence_join_v1'
     || currentSlice === 'blob_current_custodian_redelegation_v1'
     || currentSlice === 'attachment_archive_inspection_ingress_contract_v1'
+    || currentSlice === 'attachment_archive_inspection_event_replay_persistence_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,

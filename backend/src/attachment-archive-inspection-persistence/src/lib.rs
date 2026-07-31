@@ -1,5 +1,6 @@
 //! Owner-local persistence for archive-inspection requests, event joins and fenced jobs.
 
+mod custody;
 mod jobs;
 mod model;
 mod observations;
@@ -16,9 +17,11 @@ pub use model::{
     ARCHIVE_INSPECTION_MAX_ATTEMPTS_V1, ARCHIVE_INSPECTION_REALTIME_LIMIT_V1,
     ArchiveInspectionLeaseV1, ArchiveInspectionRealtimeTransitionV1, ClaimedArchiveInspectionJobV1,
     CreateArchiveInspectionRunOutcomeV1, CreateArchiveInspectionRunV1,
+    PendingArchiveInspectionCustodyDelegationV1, PersistArchiveInspectionCustodyResultOutcomeV1,
     PersistArchiveInspectionFactOutcomeV1, PersistedArchiveInspectionRunV1,
-    archive_inspection_job_id_v1, archive_inspection_request_fingerprint_v1,
-    archive_inspection_run_id_v1, archive_inspection_terminal_evidence_id_v1,
+    UnpublishedArchiveInspectionCustodyDelegationV1, archive_inspection_job_id_v1,
+    archive_inspection_request_fingerprint_v1, archive_inspection_run_id_v1,
+    archive_inspection_terminal_evidence_id_v1,
 };
 pub use schema::{
     ATTACHMENT_ARCHIVE_INSPECTION_SCHEMA_V1,
@@ -77,7 +80,7 @@ impl AttachmentArchiveInspectionPersistenceV1 {
 
     pub async fn verify_storage_ready(&self) -> Result<(), ArchiveInspectionPersistenceErrorV1> {
         sqlx::query(
-            "SELECT 1 FROM hermes_data.attachment_archive_inspection_runs, hermes_data.attachment_archive_inspection_event_inbox, hermes_data.attachment_archive_inspection_scan_candidates, hermes_data.attachment_archive_inspection_safety_facts, hermes_data.attachment_archive_inspection_jobs, hermes_data.attachment_archive_inspection_reports, hermes_data.attachment_archive_inspection_report_entries, hermes_data.attachment_archive_inspection_realtime LIMIT 0",
+            "SELECT 1 FROM hermes_data.attachment_archive_inspection_runs, hermes_data.attachment_archive_inspection_event_inbox, hermes_data.attachment_archive_inspection_scan_candidates, hermes_data.attachment_archive_inspection_safety_facts, hermes_data.attachment_archive_inspection_custody_delegation_requests, hermes_data.attachment_archive_inspection_custody_result_inbox, hermes_data.attachment_archive_inspection_jobs, hermes_data.attachment_archive_inspection_reports, hermes_data.attachment_archive_inspection_report_entries, hermes_data.attachment_archive_inspection_realtime LIMIT 0",
         )
         .execute(&self.pool)
         .await
