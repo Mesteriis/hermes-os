@@ -178,8 +178,21 @@ where
             Ok(_) => {}
             Err(error) => developer_diagnostic("scan", error),
         }
+        match executor.block_on(runtime.process_next_archive_delegation(seconds, nanos)) {
+            Ok(
+                hermes_attachment_security_runtime::runtime::AttachmentSecurityArchiveDelegationTickV1::RetryScheduled,
+            ) => developer_diagnostic(
+                "archive-delegation-retry",
+                hermes_attachment_security_runtime::runtime::AttachmentSecurityRuntimeErrorV1::Unavailable,
+            ),
+            Ok(_) => {}
+            Err(error) => developer_diagnostic("archive-delegation", error),
+        }
         if let Err(error) = executor.block_on(runtime.relay_verdict_outbox(seconds)) {
             developer_diagnostic("outbox", error);
+        }
+        if let Err(error) = executor.block_on(runtime.relay_archive_delegation_outbox(seconds)) {
+            developer_diagnostic("archive-delegation-outbox", error);
         }
     }
 }

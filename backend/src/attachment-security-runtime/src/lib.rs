@@ -1,6 +1,7 @@
 //! Managed process root for the owner-neutral Attachment Security engine.
 
 pub mod admission;
+mod delegation;
 mod event_decode;
 mod outbox;
 pub mod runtime;

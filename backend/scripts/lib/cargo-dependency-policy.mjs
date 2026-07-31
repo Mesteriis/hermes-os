@@ -61,6 +61,8 @@ function isAllowedDependency(policy, source, target, targetPackageName) {
       );
     case 'engine':
       return target.role === 'platform'
+        || (target.role === 'engine'
+          && policy.dependencies.engineEngineContractPackages.includes(targetPackageName))
         || (target.role === 'domain'
           && policy.dependencies.engineDomainContractPackages.includes(targetPackageName));
     case 'platform':
@@ -379,6 +381,19 @@ export function validateDependencyEdges(policy, packages, descriptors) {
           'integration_domain_contract_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
           'integrations may publish domain-neutral evidence only through an explicitly allowed ingress package',
+        ));
+        continue;
+      }
+
+      if (source.role === 'engine'
+        && target.role === 'engine'
+        && source.owner !== target.owner
+        && target.surface === 'contract'
+        && !policy.dependencies.engineEngineContractPackages.includes(dependency.name)) {
+        violations.push(violation(
+          'engine_engine_contract_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'engines may exchange durable facts only through an explicitly allowed target-owned contract package',
         ));
         continue;
       }

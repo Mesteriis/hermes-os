@@ -19,10 +19,13 @@ private proof validation для event-only custody delegation. Archive
 persistence после exact three-way join атомарно создаёт deterministic
 delegation intent, материализует exact command outbox отдельно от runtime
 identity, принимает exact command-linked delegated/rejected result inbox и
-создаёт parser job только после fresh proof. Attachment Security consumer и
-source-owner outbox, managed runtime, release assembly, event decoding, Blob
-custody/read, live PostgreSQL/NATS/Gateway conformance и production gate
-`attachment_archive_inspection_v1` остаются открыты.
+создаёт parser job только после fresh proof. Attachment Security реализует
+отдельные command-consumer/result-publisher capabilities, exact replay inbox,
+owner-local source verification по completed safe verdict и current Blob
+custody, fenced delegation jobs, ADR-0360 redelegation через managed control и
+exact delegated/rejected result outbox. Archive managed runtime, release
+assembly, Blob transfer/read, live PostgreSQL/NATS/Gateway conformance и
+production gate `attachment_archive_inspection_v1` остаются открыты.
 
 Зависит от:
 
@@ -174,7 +177,9 @@ Request/result schema принадлежит target owner в отдельном
 persistence, runtime, parser или assembly. Это тот же target-owned ingress
 pattern, которым integrations публикуют Communications observations; contract
 dependency не превращает source engine в target engine и не создаёт
-engine-to-engine RPC.
+engine-to-engine RPC. Executable dependency policy разрешает этот edge только
+через exact `engineEngineContractPackages` allowlist; произвольные
+engine-to-engine contract или implementation dependencies остаются запрещены.
 
 ### Единицы сборки
 

@@ -96,8 +96,10 @@ test('Attachment Security persistence owns the durable join, bounded jobs and ex
     retryPolicySchema,
     retryPolicyIndexSchema,
     scannerRetryPolicyIndexSchema,
+    archiveDelegationSchema,
     observation,
     jobs,
+    delegation,
     recovery,
     runtime,
   ] = await Promise.all([
@@ -138,10 +140,21 @@ test('Attachment Security persistence owns the durable join, bounded jobs and ex
       'utf8',
     ),
     readFile(
+      new URL(
+        'src/attachment-security-persistence/migrations/0006_attachment_security_archive_delegation.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
       new URL('src/attachment-security-persistence/src/observation.rs', BACKEND_ROOT),
       'utf8',
     ),
     readFile(new URL('src/attachment-security-persistence/src/jobs.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL('src/attachment-security-persistence/src/delegation.rs', BACKEND_ROOT),
+      'utf8',
+    ),
     readFile(
       new URL('src/attachment-security-persistence/src/recovery.rs', BACKEND_ROOT),
       'utf8',
@@ -166,6 +179,12 @@ test('Attachment Security persistence owns the durable join, bounded jobs and ex
   assert.match(custodySchema, /octet_length\(custody_transfer_source_proof\) BETWEEN 1 AND 2048/);
   assert.match(custodySchema, /target_blob_reference_id BYTEA/);
   assert.match(custodySchema, /attachment_security_target_blob_receipt_complete/);
+  assert.match(archiveDelegationSchema, /attachment_security_archive_delegation_inbox/);
+  assert.match(archiveDelegationSchema, /attachment_security_archive_delegation_jobs/);
+  assert.match(archiveDelegationSchema, /attachment_security_archive_delegation_outbox/);
+  assert.match(delegation, /candidate_inbox\.envelope_sha256 = \$3/);
+  assert.match(delegation, /payload\.verdict == AttachmentSafetyVerdictV1::SafeForDelivery/);
+  assert.match(delegation, /insert_result_outbox/);
   assert.match(retryPolicySchema, /retry_policy_revision SMALLINT NOT NULL DEFAULT 1/);
   assert.doesNotMatch(retryPolicySchema, /\bUPDATE\b|ALTER COLUMN/);
   assert.match(
@@ -257,11 +276,12 @@ test('Mail publishes scan candidates through one exact contract and a separate d
 });
 
 test('Attachment Security runtime is a managed engine with event-only business boundaries', async () => {
-  const [manifest, admission, runtime, scanner, decoder, outbox] = await Promise.all([
+  const [manifest, admission, runtime, scanner, delegation, decoder, outbox] = await Promise.all([
     readFile(new URL('src/attachment-security-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-security-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-security-runtime/src/runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-security-runtime/src/scan.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-security-runtime/src/delegation.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-security-runtime/src/event_decode.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-security-runtime/src/outbox.rs', BACKEND_ROOT), 'utf8'),
   ]);
@@ -274,6 +294,7 @@ test('Attachment Security runtime is a managed engine with event-only business b
     'hermes-attachment-security-core',
     'hermes-attachment-security-clamav',
     'hermes-attachment-security-persistence',
+    'hermes-attachment-archive-inspection-ingress',
     'hermes-communications-attachment-contract',
     'hermes-blob-client',
     'hermes-events-jetstream',
@@ -289,6 +310,7 @@ test('Attachment Security runtime is a managed engine with event-only business b
       /pub const ATTACHMENT_SECURITY_[A-Z_]+_CAPABILITY_ID: &str =\s*"([^"]+)";/g,
     )].map(([, capability]) => capability).sort(),
     [
+      'attachment_security.archive-delegation-result.publish.v1',
       'attachment_security.candidate.observe.v1',
       'attachment_security.communications-state.observe.v1',
       'attachment_security.storage.v1',
@@ -305,6 +327,11 @@ test('Attachment Security runtime is a managed engine with event-only business b
   assert.match(scanner, /receipt_sha256: Some\(&target_blob\.receipt_sha256\)/);
   assert.match(scanner, /receipt_sha256: &claimed\.job\.blob_receipt_sha256/);
   assert.match(scanner, /request_managed_blob_custody_transfer_v2/);
+  assert.match(delegation, /request_managed_blob_custody_delegation_v2/);
+  assert.match(delegation, /ATTACHMENT_ARCHIVE_INSPECTION_BLOB_TARGET_OWNER_ID_V1/);
+  assert.match(delegation, /predecessor_evidence_envelope_sha256/);
+  assert.match(runtime, /persist_archive_delegation_request/);
+  assert.match(runtime, /complete_archive_delegation_with_outbox/);
   assert.match(scanner, /scan_clamav_loopback_v1/);
   assert.match(runtime, /retry_scan_job/);
   assert.match(runtime, /complete_scan_job_with_outbox/);
@@ -314,7 +341,7 @@ test('Attachment Security runtime is a managed engine with event-only business b
   assert.match(decoder, /BlobAdmitted/);
   assert.match(outbox, /publish_exact\(permit, record\.exact_bytes\(\)\)/);
   assert.doesNotMatch(
-    `${runtime}\n${scanner}\n${decoder}\n${outbox}`,
+    `${runtime}\n${scanner}\n${delegation}\n${decoder}\n${outbox}`,
     /hermes_(?:communications_(?:domain|runtime|persistence|api)|mail|telegram|whatsapp|zulip|kernel)/,
   );
 });
@@ -635,7 +662,7 @@ test('Attachment Security remains one exact engine after Mail integration admiss
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_archive_inspection_event_replay_persistence_v1',
+    'attachment_security_archive_delegation_runtime_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.engines, [
     'ai',
@@ -660,6 +687,8 @@ test('Attachment Security remains one exact engine after Mail integration admiss
       (capability) => capability.startsWith('attachment_security.'),
     ),
     [
+      'attachment_security.archive-delegation-result.publish.v1',
+      'attachment_security.archive-inspection-delegation.v1',
       'attachment_security.blob.v1',
       'attachment_security.candidate.observe.v1',
       'attachment_security.communications-state.observe.v1',

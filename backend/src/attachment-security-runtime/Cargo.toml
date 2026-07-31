@@ -18,6 +18,7 @@ owner = "attachment_security"
 surface = "runtime"
 
 [dependencies]
+hermes-attachment-archive-inspection-ingress = { path = "../attachment-archive-inspection-ingress" }
 hermes-attachment-security-clamav = { path = "../attachment-security-clamav" }
 hermes-attachment-security-contract = { path = "../attachment-security-contract" }
 hermes-attachment-security-core = { path = "../attachment-security-core" }

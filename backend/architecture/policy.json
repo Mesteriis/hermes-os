@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_archive_inspection_event_replay_persistence_v1",
+    "currentSlice": "attachment_security_archive_delegation_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1560,6 +1560,10 @@
       ],
       "hermes-attachment-security-persistence": [
         {
+          "name": "hermes-attachment-archive-inspection-ingress",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-attachment-security-core",
           "kind": "normal"
         },
@@ -1577,6 +1581,10 @@
         }
       ],
       "hermes-attachment-security-runtime": [
+        {
+          "name": "hermes-attachment-archive-inspection-ingress",
+          "kind": "normal"
+        },
         {
           "name": "hermes-attachment-security-clamav",
           "kind": "normal"
@@ -4544,6 +4552,14 @@
       ],
       "hermes-attachment-security-persistence": [
         {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
           "name": "sha2",
           "kind": "normal",
           "source": "crates_io",
@@ -7306,6 +7322,8 @@
       "attachment_security"
     ],
       "businessCapabilities": [
+        "attachment_security.archive-delegation-result.publish.v1",
+        "attachment_security.archive-inspection-delegation.v1",
         "attachment_security.blob.v1",
         "attachment_security.candidate.observe.v1",
         "attachment_security.communications-state.observe.v1",
@@ -7798,6 +7816,9 @@
     "test": "test"
   },
   "dependencies": {
+    "engineEngineContractPackages": [
+      "hermes-attachment-archive-inspection-ingress"
+    ],
     "engineDomainContractPackages": [
       "hermes-communications-attachment-contract"
     ],

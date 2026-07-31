@@ -783,12 +783,16 @@ export function validatePolicy(policy) {
     violations.push(violation('telemetry_policy', 'telemetry', 'Telemetry Collector forbidden dependencies must be explicit'));
   }
   const packagePrefix = policy?.cargo?.packagePrefix;
+  const engineEngineContracts = list(policy?.dependencies?.engineEngineContractPackages);
   const engineDomainContracts = list(policy?.dependencies?.engineDomainContractPackages);
   const integrationEngineContracts = list(
     policy?.dependencies?.integrationEngineContractPackages,
   );
   const integrationDomainContracts = list(policy?.dependencies?.integrationDomainContractPackages);
-  if (!engineDomainContracts.length
+  if (!engineEngineContracts.length
+    || engineEngineContracts.some((packageName) => typeof packagePrefix !== 'string'
+      || !packageName.startsWith(packagePrefix))
+    || !engineDomainContracts.length
     || engineDomainContracts.some((packageName) => typeof packagePrefix !== 'string'
       || !packageName.startsWith(packagePrefix))
     || !integrationEngineContracts.length
@@ -800,7 +804,7 @@ export function validatePolicy(policy) {
     violations.push(violation(
       'dependency_policy',
       'dependencies',
-      'engine-domain, integration-engine and integration-domain contracts must use explicit package allowlists',
+      'engine-engine, engine-domain, integration-engine and integration-domain contracts must use explicit package allowlists',
     ));
   }
   const forbiddenAggregatePackages = list(policy?.compileIsolation?.forbiddenAggregatePackages);

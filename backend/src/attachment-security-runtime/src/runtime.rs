@@ -5,6 +5,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use hermes_attachment_archive_inspection_ingress::archive_inspection_custody_delegation_requested_contract_reference_v1;
 use hermes_attachment_security_contract::admission::attachment_security_scan_candidate_observed_contract_reference_v1;
 use hermes_attachment_security_core::{
     AttachmentSecurityJoinPolicyV1, AttachmentSecurityVerdictV1,
@@ -12,7 +13,8 @@ use hermes_attachment_security_core::{
 };
 use hermes_attachment_security_persistence::{
     AttachmentSecurityPersistenceErrorV1, AttachmentSecurityPersistenceV1,
-    AttachmentSecurityRetryPolicyV1, ClaimedAttachmentSecurityScanJobV1,
+    AttachmentSecurityRetryPolicyV1, ClaimedAttachmentSecurityArchiveDelegationV1,
+    ClaimedAttachmentSecurityScanJobV1,
 };
 use hermes_communications_attachment_contract::{
     AttachmentObservationEnvelopeContextV1, AttachmentSafetyExpectedStateV1,
@@ -40,8 +42,15 @@ use hermes_storage_vault::{
 
 use crate::{
     admission::{ATTACHMENT_SECURITY_MODULE_ID, ATTACHMENT_SECURITY_OWNER_ID},
+    delegation::{
+        AttachmentSecurityArchiveDelegationErrorV1, materialize_archive_delegation_exhausted_v1,
+        materialize_archive_delegation_result_v1,
+    },
     event_decode::{decode_canonical_state_v1, decode_scan_candidate_v1},
-    outbox::relay_attachment_security_verdict_outbox_once_v1,
+    outbox::{
+        relay_attachment_security_archive_delegation_outbox_once_v1,
+        relay_attachment_security_verdict_outbox_once_v1,
+    },
     scan::AttachmentSecurityScannerV1,
     settings::AttachmentSecurityRuntimeSettingsV1,
 };
@@ -49,6 +58,8 @@ use crate::{
 const SCAN_JOB_WORKER_ID: &str = "attachment-security-runtime";
 const SCAN_JOB_MAX_ATTEMPTS: u32 = 8;
 const SCAN_JOB_LEASE_SECONDS: i64 = 180;
+const ARCHIVE_DELEGATION_WORKER_ID: &str = "attachment-security-archive-delegation";
+const ARCHIVE_DELEGATION_LEASE_SECONDS: i64 = 30;
 const EVENT_POLL_WAIT: Duration = Duration::from_millis(250);
 
 pub struct AttachmentSecurityRuntimeAdmissionV1 {
@@ -211,6 +222,7 @@ impl AttachmentSecurityRuntimeV1 {
         let permit = match consumer {
             AttachmentSecurityConsumerV1::Candidate => &self.permits.candidate,
             AttachmentSecurityConsumerV1::CanonicalState => &self.permits.canonical_state,
+            AttachmentSecurityConsumerV1::ArchiveDelegation => &self.permits.archive_delegation,
         };
         let delivery = match tokio::time::timeout(
             EVENT_POLL_WAIT,
@@ -235,7 +247,8 @@ impl AttachmentSecurityRuntimeV1 {
                             self.retry_policy,
                             consumed_at_unix_seconds,
                         )
-                        .await,
+                        .await
+                        .map(|_| ()),
                 )
             }
             AttachmentSecurityConsumerV1::CanonicalState => {
@@ -251,11 +264,21 @@ impl AttachmentSecurityRuntimeV1 {
                                 self.retry_policy,
                                 consumed_at_unix_seconds,
                             )
-                            .await,
+                            .await
+                            .map(|_| ()),
                     ),
                     None => None,
                 }
             }
+            AttachmentSecurityConsumerV1::ArchiveDelegation => Some(
+                self.persistence
+                    .persist_archive_delegation_request(
+                        delivery.exact_bytes(),
+                        consumed_at_unix_seconds,
+                    )
+                    .await
+                    .map(|_| ()),
+            ),
         };
         if let Some(result) = result {
             result.map_err(persistence_error)?;
@@ -372,6 +395,117 @@ impl AttachmentSecurityRuntimeV1 {
         .map_err(|_| AttachmentSecurityRuntimeErrorV1::Unavailable)
     }
 
+    pub async fn process_next_archive_delegation(
+        &mut self,
+        observed_at_unix_seconds: i64,
+        observed_at_nanos: i32,
+    ) -> Result<AttachmentSecurityArchiveDelegationTickV1, AttachmentSecurityRuntimeErrorV1> {
+        let lease_expires_at = observed_at_unix_seconds
+            .checked_add(ARCHIVE_DELEGATION_LEASE_SECONDS)
+            .ok_or(AttachmentSecurityRuntimeErrorV1::Unavailable)?;
+        let Some(claimed) = self
+            .persistence
+            .claim_next_archive_delegation(
+                ARCHIVE_DELEGATION_WORKER_ID,
+                observed_at_unix_seconds,
+                lease_expires_at,
+            )
+            .await
+            .map_err(persistence_error)?
+        else {
+            return Ok(AttachmentSecurityArchiveDelegationTickV1::Idle);
+        };
+        let result = materialize_archive_delegation_result_v1(
+            &mut self.control_channel,
+            &claimed,
+            &self.runtime_instance_id,
+            self.runtime_generation,
+            observed_at_unix_seconds,
+            observed_at_nanos,
+        );
+        let record = match result {
+            Ok(record) => record,
+            Err(AttachmentSecurityArchiveDelegationErrorV1::Unavailable) => {
+                return self
+                    .retry_archive_delegation(&claimed, observed_at_unix_seconds, observed_at_nanos)
+                    .await;
+            }
+            Err(AttachmentSecurityArchiveDelegationErrorV1::Rejected) => {
+                materialize_archive_delegation_exhausted_v1(
+                    &claimed,
+                    &self.runtime_instance_id,
+                    self.runtime_generation,
+                    observed_at_unix_seconds,
+                    observed_at_nanos,
+                )
+                .map_err(|_| AttachmentSecurityRuntimeErrorV1::InvalidJob)?
+            }
+            Err(AttachmentSecurityArchiveDelegationErrorV1::InvalidEvidence) => {
+                return Err(AttachmentSecurityRuntimeErrorV1::InvalidJob);
+            }
+        };
+        self.persistence
+            .complete_archive_delegation_with_outbox(&claimed, &record, observed_at_unix_seconds)
+            .await
+            .map_err(persistence_error)?;
+        Ok(AttachmentSecurityArchiveDelegationTickV1::Completed)
+    }
+
+    pub async fn relay_archive_delegation_outbox(
+        &self,
+        published_at_unix_seconds: i64,
+    ) -> Result<usize, AttachmentSecurityRuntimeErrorV1> {
+        relay_attachment_security_archive_delegation_outbox_once_v1(
+            &self.persistence,
+            &self.connection,
+            &self.verdict_publish_permit,
+            published_at_unix_seconds,
+        )
+        .await
+        .map_err(|_| AttachmentSecurityRuntimeErrorV1::Unavailable)
+    }
+
+    async fn retry_archive_delegation(
+        &self,
+        claimed: &ClaimedAttachmentSecurityArchiveDelegationV1,
+        recorded_at_unix_seconds: i64,
+        recorded_at_nanos: i32,
+    ) -> Result<AttachmentSecurityArchiveDelegationTickV1, AttachmentSecurityRuntimeErrorV1> {
+        let exponent = claimed.attempt_count.saturating_sub(1).min(6);
+        let next_attempt = recorded_at_unix_seconds
+            .checked_add((5_i64 << exponent).min(300))
+            .ok_or(AttachmentSecurityRuntimeErrorV1::Unavailable)?;
+        match self
+            .persistence
+            .retry_archive_delegation(claimed, recorded_at_unix_seconds, next_attempt)
+            .await
+            .map_err(persistence_error)?
+        {
+            hermes_attachment_security_persistence::RetryAttachmentSecurityArchiveDelegationOutcomeV1::Scheduled => {
+                Ok(AttachmentSecurityArchiveDelegationTickV1::RetryScheduled)
+            }
+            hermes_attachment_security_persistence::RetryAttachmentSecurityArchiveDelegationOutcomeV1::Exhausted => {
+                let record = materialize_archive_delegation_exhausted_v1(
+                    claimed,
+                    &self.runtime_instance_id,
+                    self.runtime_generation,
+                    recorded_at_unix_seconds,
+                    recorded_at_nanos,
+                )
+                .map_err(|_| AttachmentSecurityRuntimeErrorV1::InvalidJob)?;
+                self.persistence
+                    .complete_archive_delegation_with_outbox(
+                        claimed,
+                        &record,
+                        recorded_at_unix_seconds,
+                    )
+                    .await
+                    .map_err(persistence_error)?;
+                Ok(AttachmentSecurityArchiveDelegationTickV1::Rejected)
+            }
+        }
+    }
+
     async fn retry_claim(
         &self,
         claimed: &ClaimedAttachmentSecurityScanJobV1,
@@ -404,6 +538,7 @@ impl AttachmentSecurityRuntimeV1 {
 struct AttachmentSecuritySubscribePermitsV1 {
     candidate: RuntimeSubscribePermitV1,
     canonical_state: RuntimeSubscribePermitV1,
+    archive_delegation: RuntimeSubscribePermitV1,
 }
 
 impl AttachmentSecuritySubscribePermitsV1 {
@@ -412,8 +547,11 @@ impl AttachmentSecuritySubscribePermitsV1 {
     ) -> Result<Self, AttachmentSecurityRuntimeErrorV1> {
         let candidate = attachment_security_scan_candidate_observed_contract_reference_v1();
         let canonical_state = communication_attachment_safety_state_changed_contract_reference_v1();
+        let archive_delegation =
+            archive_inspection_custody_delegation_requested_contract_reference_v1();
         let mut candidate_permit = None;
         let mut canonical_state_permit = None;
+        let mut archive_delegation_permit = None;
         for permit in permits {
             let Some(contract) = permit.contract() else {
                 return Err(AttachmentSecurityRuntimeErrorV1::Admission);
@@ -422,6 +560,8 @@ impl AttachmentSecuritySubscribePermitsV1 {
                 replace_once(&mut candidate_permit, permit)?;
             } else if exact_contract(contract, &canonical_state) {
                 replace_once(&mut canonical_state_permit, permit)?;
+            } else if exact_contract(contract, &archive_delegation) {
+                replace_once(&mut archive_delegation_permit, permit)?;
             } else {
                 return Err(AttachmentSecurityRuntimeErrorV1::Admission);
             }
@@ -429,6 +569,8 @@ impl AttachmentSecuritySubscribePermitsV1 {
         Ok(Self {
             candidate: candidate_permit.ok_or(AttachmentSecurityRuntimeErrorV1::Admission)?,
             canonical_state: canonical_state_permit
+                .ok_or(AttachmentSecurityRuntimeErrorV1::Admission)?,
+            archive_delegation: archive_delegation_permit
                 .ok_or(AttachmentSecurityRuntimeErrorV1::Admission)?,
         })
     }
@@ -438,13 +580,15 @@ impl AttachmentSecuritySubscribePermitsV1 {
 enum AttachmentSecurityConsumerV1 {
     Candidate,
     CanonicalState,
+    ArchiveDelegation,
 }
 
 impl AttachmentSecurityConsumerV1 {
     const fn successor(self) -> Self {
         match self {
             Self::Candidate => Self::CanonicalState,
-            Self::CanonicalState => Self::Candidate,
+            Self::CanonicalState => Self::ArchiveDelegation,
+            Self::ArchiveDelegation => Self::Candidate,
         }
     }
 }
@@ -495,7 +639,8 @@ fn persistence_error(
     match error {
         AttachmentSecurityPersistenceErrorV1::InvalidInput
         | AttachmentSecurityPersistenceErrorV1::InvalidRow
-        | AttachmentSecurityPersistenceErrorV1::OutboxHashConflict => {
+        | AttachmentSecurityPersistenceErrorV1::OutboxHashConflict
+        | AttachmentSecurityPersistenceErrorV1::EvidenceConflict => {
             AttachmentSecurityRuntimeErrorV1::InvalidJob
         }
         AttachmentSecurityPersistenceErrorV1::StorageUnavailable
@@ -630,6 +775,14 @@ pub enum AttachmentSecurityScanTickV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AttachmentSecurityArchiveDelegationTickV1 {
+    Idle,
+    Completed,
+    RetryScheduled,
+    Rejected,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AttachmentSecurityRuntimeErrorV1 {
     Admission,
     InvalidDelivery,
@@ -660,6 +813,10 @@ mod tests {
         ));
         assert!(matches!(
             AttachmentSecurityConsumerV1::CanonicalState.successor(),
+            AttachmentSecurityConsumerV1::ArchiveDelegation
+        ));
+        assert!(matches!(
+            AttachmentSecurityConsumerV1::ArchiveDelegation.successor(),
             AttachmentSecurityConsumerV1::Candidate
         ));
     }

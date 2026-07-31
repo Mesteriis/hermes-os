@@ -1193,12 +1193,14 @@ const ATTACHMENT_SECURITY_ENGINE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-attachment-security-core', kind: 'normal' },
   ],
   'hermes-attachment-security-persistence': [
+    { name: 'hermes-attachment-archive-inspection-ingress', kind: 'normal' },
     { name: 'hermes-attachment-security-core', kind: 'normal' },
     { name: 'hermes-communications-attachment-contract', kind: 'normal' },
     { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
   'hermes-attachment-security-runtime': [
+    { name: 'hermes-attachment-archive-inspection-ingress', kind: 'normal' },
     { name: 'hermes-attachment-security-clamav', kind: 'normal' },
     { name: 'hermes-attachment-security-contract', kind: 'normal' },
     { name: 'hermes-attachment-security-core', kind: 'normal' },
@@ -1862,6 +1864,7 @@ const ATTACHMENT_SECURITY_ENGINE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
   'hermes-attachment-security-persistence': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
   ],
@@ -3265,6 +3268,11 @@ const ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_INVENTORY = {
     ...COMMUNICATIONS_AI_SOURCE_CONTRACT_INVENTORY.engines,
     'attachment_archive_inspection',
   ].sort(),
+  businessCapabilities: [
+    ...COMMUNICATIONS_AI_SOURCE_CONTRACT_INVENTORY.businessCapabilities,
+    'attachment_security.archive-delegation-result.publish.v1',
+    'attachment_security.archive-inspection-delegation.v1',
+  ].sort(),
 };
 
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
@@ -4161,6 +4169,7 @@ function expectedSlice(currentSlice) {
     || currentSlice === 'blob_current_custodian_redelegation_v1'
     || currentSlice === 'attachment_archive_inspection_ingress_contract_v1'
     || currentSlice === 'attachment_archive_inspection_event_replay_persistence_v1'
+    || currentSlice === 'attachment_security_archive_delegation_runtime_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,

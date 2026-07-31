@@ -1,5 +1,13 @@
 //! Exact descriptor and capability admission for the Attachment Security engine.
 
+use hermes_attachment_archive_inspection_ingress::{
+    ATTACHMENT_SECURITY_ARCHIVE_DELEGATION_CAPABILITY_ID_V1,
+    archive_inspection_custody_delegated_contract_reference_v1,
+    archive_inspection_custody_delegated_publish_request_v1,
+    archive_inspection_custody_delegation_rejected_contract_reference_v1,
+    archive_inspection_custody_delegation_rejected_publish_request_v1,
+    archive_inspection_custody_delegation_requested_contract_reference_v1,
+};
 use hermes_attachment_security_contract::admission::{
     ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
     ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID,
@@ -32,6 +40,10 @@ pub const ATTACHMENT_SECURITY_COMMUNICATIONS_STATE_OBSERVE_CAPABILITY_ID: &str =
     "attachment_security.communications-state.observe.v1";
 pub const ATTACHMENT_SECURITY_VERDICT_PUBLISH_CAPABILITY_ID: &str =
     "attachment_security.verdict.publish.v1";
+pub const ATTACHMENT_SECURITY_ARCHIVE_DELEGATION_CONSUME_CAPABILITY_ID: &str =
+    ATTACHMENT_SECURITY_ARCHIVE_DELEGATION_CAPABILITY_ID_V1;
+pub const ATTACHMENT_SECURITY_ARCHIVE_DELEGATION_RESULT_PUBLISH_CAPABILITY_ID: &str =
+    "attachment_security.archive-delegation-result.publish.v1";
 pub const ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID: &str =
     ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID;
 pub const ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID: &str = "attachment_security.storage.v1";
@@ -47,6 +59,13 @@ pub const ATTACHMENT_SECURITY_EVENT_ACK_WAIT_MILLIS: u32 = 30_000;
 #[must_use]
 pub fn attachment_security_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
     vec![
+        archive_delegation_result_publisher(),
+        durable_consumer(
+            ATTACHMENT_SECURITY_ARCHIVE_DELEGATION_CONSUME_CAPABILITY_ID,
+            archive_inspection_custody_delegation_requested_contract_reference_v1(),
+            DurableEnvelopeKindV1::Command,
+            ATTACHMENT_SECURITY_MAX_IN_FLIGHT,
+        ),
         blob_custody(),
         durable_consumer(
             ATTACHMENT_SECURITY_CANDIDATE_OBSERVE_CAPABILITY_ID,
@@ -146,6 +165,36 @@ fn verdict_publisher() -> CapabilityDescriptorV1 {
     }
 }
 
+fn archive_delegation_result_publisher() -> CapabilityDescriptorV1 {
+    let delegated = archive_inspection_custody_delegated_contract_reference_v1();
+    let rejected = archive_inspection_custody_delegation_rejected_contract_reference_v1();
+    CapabilityDescriptorV1 {
+        capability_id: ATTACHMENT_SECURITY_ARCHIVE_DELEGATION_RESULT_PUBLISH_CAPABILITY_ID
+            .to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(delegated),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(rejected),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+        ],
+        requests: vec![
+            archive_inspection_custody_delegated_publish_request_v1(),
+            archive_inspection_custody_delegation_rejected_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
+}
+
 fn blob_custody() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID.to_owned(),
@@ -188,7 +237,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn descriptor_is_a_five_capability_engine_with_exact_owner_boundaries() {
+    fn descriptor_is_a_seven_capability_engine_with_exact_owner_boundaries() {
         let descriptor = attachment_security_module_descriptor_v1("test");
         assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
         assert_eq!(descriptor.module_kind, ModuleKindV1::Engine as i32);
@@ -200,6 +249,8 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                ATTACHMENT_SECURITY_ARCHIVE_DELEGATION_RESULT_PUBLISH_CAPABILITY_ID,
+                ATTACHMENT_SECURITY_ARCHIVE_DELEGATION_CONSUME_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_CANDIDATE_OBSERVE_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_COMMUNICATIONS_STATE_OBSERVE_CAPABILITY_ID,
