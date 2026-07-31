@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_task_candidate_source_producer_v1",
+    "currentSlice": "communication_task_candidate_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1014,6 +1014,12 @@
         "role": "workflow",
         "owner": "communication_task_candidate_extraction",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-communication-task-candidate-assembly",
+        "role": "workflow",
+        "owner": "communication_task_candidate_extraction",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -3061,6 +3067,12 @@
         { "name": "hermes-storage-protocol", "kind": "normal" },
         { "name": "hermes-storage-vault", "kind": "normal" }
       ],
+      "hermes-communication-task-candidate-assembly": [
+        { "name": "hermes-communication-task-candidate-persistence", "kind": "normal" },
+        { "name": "hermes-communication-task-candidate-runtime", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
+      ],
       "hermes-communications-task-source-api": [
         { "name": "hermes-events-protocol", "kind": "normal" },
         { "name": "hermes-runtime-protocol", "kind": "normal" }
@@ -3186,6 +3198,11 @@
         { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
         { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
         { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+      ],
+      "hermes-communication-task-candidate-assembly": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
+        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
       ],
       "hermes-communications-task-source-api": [
         { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
@@ -7857,6 +7874,10 @@
         "customBuildAllowed": false
       },
       "hermes-communication-task-candidate-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-task-candidate-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       },

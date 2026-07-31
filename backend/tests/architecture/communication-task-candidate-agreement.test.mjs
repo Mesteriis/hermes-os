@@ -28,6 +28,8 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     runtimeAdmission,
     runtimeExtraction,
     runtimeSourceResults,
+    assemblyManifest,
+    assembly,
     sourceManifest,
     sourceApi,
     sourceProtocol,
@@ -70,6 +72,8 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     readFile(new URL('src/communication-task-candidate-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-runtime/src/extraction.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-runtime/src/source_results.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-task-source-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-task-source-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(
@@ -101,7 +105,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_source_producer_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_assembly_v1');
   assert.match(adr, /Состояние реализации: planned/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);
@@ -125,6 +129,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     'hermes-communication-task-candidate-core',
     'hermes-communication-task-candidate-persistence',
     'hermes-communication-task-candidate-runtime',
+    'hermes-communication-task-candidate-assembly',
     'hermes-communications-task-source-api',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
@@ -165,6 +170,12 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(runtimeSourceResults, /source_read_receipt_bytes/);
   assert.match(runtimeSourceResults, /materialize_task_source_v1/);
   assert.doesNotMatch(`${runtime}\n${runtimeAdmission}\n${runtimeExtraction}\n${runtimeSourceResults}`, /recipient_suggestion|hermes_review|hermes_tasks|ollama|reqwest|prompt|provider_id/);
+  assert.match(assemblyManifest, /owner = "communication_task_candidate_extraction"/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
+  assert.match(assembly, /communication_task_candidate_extraction_storage_bundle_v1/);
+  assert.match(assembly, /communication_task_candidate_extraction\.runtime\.v1/);
+  assert.match(assembly, /communication_task_candidate_extraction\.storage\.v1/);
+  assert.doesNotMatch(assembly, /recipient_suggestion|hermes_communications|hermes_review|hermes_tasks|ollama|provider_id/);
   assert.match(sourceManifest, /owner = "communications"/);
   assert.match(sourceManifest, /surface = "contract"/);
   assert.match(sourceApi, /communications\.task-source\.v1/);
