@@ -2370,6 +2370,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-translation-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-translation-persistence",
+ "hermes-communication-translation-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-communication-translation-core"
 version = "0.1.0"
 

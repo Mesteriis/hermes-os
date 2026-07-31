@@ -42,6 +42,9 @@ test('communication translation agreement isolates workflow domain engine and pr
     ollamaTranslationWorker,
     ollamaRuntimeAdmission,
     ollamaManagedRuntime,
+    assemblyManifest,
+    assembly,
+    release,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -141,6 +144,9 @@ test('communication translation agreement isolates workflow domain engine and pr
     readFile(new URL('src/ollama-ai-runtime/src/translation_worker.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ollama-ai-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ollama-ai-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-translation-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-translation-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -179,11 +185,12 @@ test('communication translation agreement isolates workflow domain engine and pr
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_translation_ollama_runtime_v1',
+    'communication_translation_assembly_v1',
   );
   assert.match(workspace, /"src\/communication-translation-api"/);
   assert.match(workspace, /"src\/communication-translation-core"/);
   assert.match(workspace, /"src\/communication-translation-runtime"/);
+  assert.match(workspace, /"src\/communication-translation-assembly"/);
   assert.match(apiManifest, /owner = "communication_translation"/);
   assert.match(apiManifest, /surface = "contract"/);
   assert.match(api, /COMMUNICATION_TRANSLATION_CAPABILITY_ID_V1/);
@@ -279,4 +286,14 @@ test('communication translation agreement isolates workflow domain engine and pr
     `${runtimeAdmission}\n${runtimeInference}\n${runtimeSourceResults}\n${managedRuntime}`,
     /communication_summary|CommunicationSummary|mail_|telegram_|whatsapp_|zulip_|provider_id|model_id|prompt/,
   );
+  assert.match(assemblyManifest, /owner = "communication_translation"/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
+  assert.match(assembly, /communication_translation_module_descriptor_v1/);
+  assert.match(assembly, /communication_translation_storage_bundle_v1/);
+  assert.match(assembly, /communication_translation\.runtime\.v1/);
+  assert.match(assembly, /communication_translation\.storage\.v1/);
+  assert.match(release, /--package hermes-communication-translation-runtime/);
+  assert.match(release, /--package hermes-communication-translation-assembly/);
+  assert.match(release, /communication_translation\.release-artifacts\.json/);
+  assert.doesNotMatch(assembly, /communication_summary|ollama|ai_inference|communications_domain/);
 });

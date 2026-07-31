@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_translation_ollama_runtime_v1",
+    "currentSlice": "communication_translation_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -912,6 +912,12 @@
         "role": "workflow",
         "owner": "communication_translation",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-communication-translation-assembly",
+        "role": "workflow",
+        "owner": "communication_translation",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2213,6 +2219,24 @@
           "kind": "normal"
         }
       ],
+      "hermes-communication-translation-assembly": [
+        {
+          "name": "hermes-communication-translation-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-translation-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-ai-contracts": [
         {
           "name": "hermes-runtime-protocol",
@@ -2898,6 +2922,11 @@
         { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
         { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
         { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+      ],
+      "hermes-communication-translation-assembly": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
+        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
       ],
       "hermes-events-protocol": [
         {
@@ -7497,6 +7526,10 @@
         "customBuildAllowed": false
       },
       "hermes-communication-translation-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-translation-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       },

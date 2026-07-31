@@ -180,7 +180,7 @@ test('summary runtime and assembly expose only exact event request and release b
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_translation_ollama_runtime_v1',
+    'communication_translation_assembly_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages
