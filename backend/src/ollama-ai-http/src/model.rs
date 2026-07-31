@@ -1,4 +1,6 @@
-use hermes_ollama_ai_core::{OllamaGenerationPlanV1, OllamaHttpGenerationV1};
+use hermes_ollama_ai_core::{
+    OllamaGenerationPlanV1, OllamaHttpGenerationV1, OllamaSummaryGenerationPlanV1,
+};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
@@ -43,6 +45,16 @@ struct ChatRequestV1<'a> {
 }
 
 #[derive(Serialize)]
+struct SummaryChatRequestV1<'a> {
+    model: &'a str,
+    messages: [ChatMessageV1<'a>; 1],
+    stream: bool,
+    think: bool,
+    format: SummaryJsonSchemaV1,
+    options: ChatOptionsV1,
+}
+
+#[derive(Serialize)]
 struct ReplyJsonSchemaV1 {
     #[serde(rename = "type")]
     kind: &'static str,
@@ -56,6 +68,22 @@ struct ReplyJsonSchemaV1 {
 struct ReplyJsonPropertiesV1 {
     subject: JsonStringSchemaV1,
     body: JsonStringSchemaV1,
+    language: JsonLanguageSchemaV1,
+}
+
+#[derive(Serialize)]
+struct SummaryJsonSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    properties: SummaryJsonPropertiesV1,
+    required: [&'static str; 2],
+    #[serde(rename = "additionalProperties")]
+    additional_properties: bool,
+}
+
+#[derive(Serialize)]
+struct SummaryJsonPropertiesV1 {
+    summary: JsonStringSchemaV1,
     language: JsonLanguageSchemaV1,
 }
 
@@ -147,6 +175,29 @@ pub(crate) fn encode_chat_request_v1(
     .map_err(|_| OllamaAiHttpErrorV1::InvalidRequest)
 }
 
+pub(crate) fn encode_summary_chat_request_v1(
+    plan: &OllamaSummaryGenerationPlanV1,
+) -> Result<Zeroizing<Vec<u8>>, OllamaAiHttpErrorV1> {
+    let prompt =
+        std::str::from_utf8(&plan.prompt_utf8).map_err(|_| OllamaAiHttpErrorV1::InvalidRequest)?;
+    serde_json::to_vec(&SummaryChatRequestV1 {
+        model: &plan.model,
+        messages: [ChatMessageV1 {
+            role: "user",
+            content: prompt,
+        }],
+        stream: false,
+        think: false,
+        format: summary_json_schema_v1(),
+        options: ChatOptionsV1 {
+            temperature: 0,
+            num_predict: plan.maximum_output_tokens,
+        },
+    })
+    .map(Zeroizing::new)
+    .map_err(|_| OllamaAiHttpErrorV1::InvalidRequest)
+}
+
 fn reply_json_schema_v1() -> ReplyJsonSchemaV1 {
     ReplyJsonSchemaV1 {
         kind: "object",
@@ -163,9 +214,49 @@ fn reply_json_schema_v1() -> ReplyJsonSchemaV1 {
     }
 }
 
+fn summary_json_schema_v1() -> SummaryJsonSchemaV1 {
+    SummaryJsonSchemaV1 {
+        kind: "object",
+        properties: SummaryJsonPropertiesV1 {
+            summary: JsonStringSchemaV1 { kind: "string" },
+            language: JsonLanguageSchemaV1 {
+                kind: "string",
+                allowed: ["english", "spanish", "russian"],
+            },
+        },
+        required: ["summary", "language"],
+        additional_properties: false,
+    }
+}
+
 pub(crate) fn decode_chat_response_v1(
     body: &[u8],
     plan: &OllamaGenerationPlanV1,
+) -> Result<OllamaHttpGenerationV1, OllamaAiHttpErrorV1> {
+    let mut response: ChatResponseV1 =
+        serde_json::from_slice(body).map_err(|_| OllamaAiHttpErrorV1::Protocol)?;
+    if response.model != plan.model
+        || !response.done
+        || response.message.role != "assistant"
+        || !response.message.thinking.is_empty()
+        || response.message.content.is_empty()
+        || response.message.content.len() > plan.maximum_output_bytes as usize
+    {
+        return Err(OllamaAiHttpErrorV1::ModelMismatch);
+    }
+    Ok(OllamaHttpGenerationV1 {
+        content_json_utf8: Zeroizing::new(
+            std::mem::take(&mut response.message.content).into_bytes(),
+        ),
+        model_digest: plan.model_digest,
+        input_tokens: response.prompt_eval_count,
+        output_tokens: response.eval_count,
+    })
+}
+
+pub(crate) fn decode_summary_chat_response_v1(
+    body: &[u8],
+    plan: &OllamaSummaryGenerationPlanV1,
 ) -> Result<OllamaHttpGenerationV1, OllamaAiHttpErrorV1> {
     let mut response: ChatResponseV1 =
         serde_json::from_slice(body).map_err(|_| OllamaAiHttpErrorV1::Protocol)?;
@@ -230,6 +321,14 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&reply_json_schema_v1()).expect("reply JSON schema"),
             r#"{"type":"object","properties":{"subject":{"type":"string"},"body":{"type":"string"},"language":{"type":"string","enum":["english","spanish","russian"]}},"required":["subject","body","language"],"additionalProperties":false}"#
+        );
+    }
+
+    #[test]
+    fn summary_schema_is_closed_and_has_no_extraction_fields() {
+        assert_eq!(
+            serde_json::to_string(&summary_json_schema_v1()).expect("summary JSON schema"),
+            r#"{"type":"object","properties":{"summary":{"type":"string"},"language":{"type":"string","enum":["english","spanish","russian"]}},"required":["summary","language"],"additionalProperties":false}"#
         );
     }
 }

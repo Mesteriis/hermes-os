@@ -1,5 +1,13 @@
 #![forbid(unsafe_code)]
 
+mod summary;
+
+pub use summary::{
+    OllamaSummaryGenerationPlanV1, OllamaSummaryRunV1, accept_ollama_summary_request_v1,
+    begin_ollama_summary_request_v1, complete_ollama_summary_request_v1,
+    mark_ollama_summary_uncertain_v1, reject_ollama_summary_request_v1,
+};
+
 use hermes_ai_contracts::{
     AI_MAX_SUBJECT_BYTES_V1, compute_provider_reply_generation_request_digest_v1,
     validate_provider_reply_generation_request_v1, validate_provider_reply_generation_result_v1,
