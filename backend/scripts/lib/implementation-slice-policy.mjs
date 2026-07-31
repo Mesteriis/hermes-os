@@ -4624,7 +4624,7 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'communication_translation_assembly_v1') {
+  if (currentSlice === 'communication_translation_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: COMMUNICATION_TRANSLATION_RUNTIME_INVENTORY,

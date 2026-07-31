@@ -4,10 +4,12 @@
 
 Дата: 2026-07-31
 
-Состояние реализации: planned. Решение фиксирует owner, exact contracts,
-event-only source flow, AI/provider границы и атомарный phase gate до создания
-production packages. Наличие legacy TranslateMessage и реализованного Summary
-не является доказательством `communication_translation_v1`.
+Состояние реализации: implemented. Gate `communication_translation_v1` закрыт
+атомарно: distinct contracts, Communications source events, AI Engine и Ollama
+translation paths, пять отдельных workflow units, owner-local persistence и
+replay, signed release artifacts, authenticated Gateway Start/Get, replayable
+SSE, managed negative/restart/revoke/fencing contour и положительный live
+contour через настоящий Ollama process доказаны независимо от Summary.
 
 Уточняет:
 

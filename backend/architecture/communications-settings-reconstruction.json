@@ -596,7 +596,7 @@
       "gate": "communication_translation_v1",
       "role": "workflow",
       "owner": "communication_translation",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "communications_ai_context_source_v1",
         "ai_inference_v1",

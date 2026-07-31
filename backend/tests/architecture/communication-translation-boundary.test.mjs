@@ -23,6 +23,9 @@ test('communication translation agreement isolates workflow domain engine and pr
     runtimeInference,
     runtimeSourceResults,
     managedRuntime,
+    communicationsTranslationSource,
+    communicationsAdmission,
+    communicationsEventRuntime,
     communicationsSourceProtocol,
     aiProtocol,
     aiContracts,
@@ -45,6 +48,9 @@ test('communication translation agreement isolates workflow domain engine and pr
     assemblyManifest,
     assembly,
     release,
+    managedSetup,
+    managedFlow,
+    managedScript,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -98,6 +104,9 @@ test('communication translation agreement isolates workflow domain engine and pr
       new URL('src/communication-translation-runtime/src/managed_runtime.rs', BACKEND_ROOT),
       'utf8',
     ),
+    readFile(new URL('src/communications-runtime/src/translation_source.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/event_runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL(
         'src/communications-ai-source-api/proto/hermes/communications/ai_source/v1/ai_source.proto',
@@ -147,6 +156,21 @@ test('communication translation agreement isolates workflow domain engine and pr
     readFile(new URL('src/communication-translation-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-translation-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communication_translation_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communication_translation_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -156,7 +180,7 @@ test('communication translation agreement isolates workflow domain engine and pr
     gate: 'communication_translation_v1',
     role: 'workflow',
     owner: 'communication_translation',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'communications_ai_context_source_v1',
       'ai_inference_v1',
@@ -180,12 +204,12 @@ test('communication translation agreement isolates workflow domain engine and pr
   assert.match(adr, /Attachment translation[\s\S]*отдельным/);
   assert.match(adr, /Thread translation[\s\S]*не\s+является неявным batch mode/);
   assert.match(adr, /Kernel\/Gateway не компилируют Translation\s+schema/);
-  assert.match(adr, /Состояние реализации: planned/);
+  assert.match(adr, /Gate[\s\S]*`communication_translation_v1`[\s\S]*закрыт/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns translation/i);
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_translation_assembly_v1',
+    'communication_translation_v1',
   );
   assert.match(workspace, /"src\/communication-translation-api"/);
   assert.match(workspace, /"src\/communication-translation-core"/);
@@ -215,6 +239,18 @@ test('communication translation agreement isolates workflow domain engine and pr
   assert.match(communicationsSourceProtocol, /PrepareCommunicationTranslationSourceCommandV1/);
   assert.match(communicationsSourceProtocol, /CommunicationTranslationSourcePreparedV1/);
   assert.match(communicationsSourceProtocol, /CommunicationTranslationSourceRejectedV1/);
+  assert.match(communicationsTranslationSource, /consume_next_translation_source_prepare_v1/);
+  assert.match(communicationsTranslationSource, /write_target_bound_source/);
+  assert.match(communicationsTranslationSource, /delivery\.acknowledge\(\)/);
+  assert.doesNotMatch(
+    communicationsTranslationSource,
+    /hermes_communication_translation_runtime|hermes_ai_inference|hermes_ollama|provider_id|model_id|prompt/,
+  );
+  assert.match(communicationsAdmission, /communications_translation_source_capability_v1/);
+  assert.match(communicationsAdmission, /communications_translation_source_blob_capability_v1/);
+  assert.match(communicationsAdmission, /communication_translation_source_prepare_consume_request_v1/);
+  assert.match(communicationsEventRuntime, /translation_source_prepare: RuntimeSubscribePermitV1/);
+  assert.match(communicationsEventRuntime, /consume_next_translation_source_prepare_v1/);
   assert.match(aiProtocol, /CommunicationTranslationInferenceRequestV1/);
   assert.match(aiProtocol, /AiProviderTranslationRequestV1/);
   assert.match(aiContracts, /AI_TRANSLATION_REQUEST_CAPABILITY_ID_V1/);
@@ -296,4 +332,19 @@ test('communication translation agreement isolates workflow domain engine and pr
   assert.match(release, /--package hermes-communication-translation-assembly/);
   assert.match(release, /communication_translation\.release-artifacts\.json/);
   assert.doesNotMatch(assembly, /communication_summary|ollama|ai_inference|communications_domain/);
+  assert.match(managedSetup, /InstalledSignedBundle::install/);
+  assert.match(managedSetup, /start_reserved_workflow/);
+  assert.match(managedFlow, /managed_communication_translation_reaches_ai_and_replays_through_gateway_sse/);
+  assert.match(managedFlow, /COMMUNICATION_TRANSLATION_COMMAND_CONNECT_PATH_V1/);
+  assert.match(managedFlow, /COMMUNICATION_TRANSLATION_QUERY_CONNECT_PATH_V1/);
+  assert.match(managedFlow, /read_terminal_translation_sse_event/);
+  assert.match(managedFlow, /restart_communication_translation_runtime_v1/);
+  assert.match(managedFlow, /assert_communication_translation_runtime_fences/);
+  assert.match(managedFlow, /stale Communication Translation runtime generation/);
+  assert.match(managedFlow, /stale Communication Translation grant epoch/);
+  assert.match(managedFlow, /CommunicationTranslationErrorCodeSourceRejected/);
+  assert.match(managedFlow, /managed_communication_translation_completes_real_provider_through_gateway_sse/);
+  assert.match(managedFlow, /HERMES_OLLAMA_LIVE_PORT/);
+  assert.match(managedScript, /HERMES_COMMUNICATION_TRANSLATION_RUNTIME_BIN/);
+  assert.match(managedScript, /managed_communication_translation_reaches_ai_and_replays_through_gateway_sse/);
 });
