@@ -3,6 +3,7 @@ use std::os::unix::net::UnixStream;
 use hermes_ai_contracts::{
     AI_OWNER_V1, communication_reply_inference_contract_reference_v1,
     communication_summary_inference_contract_reference_v1,
+    communication_translation_inference_contract_reference_v1,
 };
 use hermes_ai_inference_persistence::{AiInferencePersistenceErrorV1, AiInferencePersistenceV1};
 use hermes_runtime_protocol::{
@@ -28,6 +29,7 @@ use hermes_storage_vault::{
 use crate::{
     managed_ports::ManagedAiInferenceExecutionPortsV1,
     summary_worker::{execute_summary_payload_v1, recover_pending_summaries_v1},
+    translation_worker::{execute_translation_payload_v1, recover_pending_translations_v1},
     worker::{AiInferenceWorkerErrorV1, execute_payload_v1, recover_pending_v1},
 };
 
@@ -136,14 +138,24 @@ impl AiInferenceManagedRuntimeV1 {
         )
         .await
         .map_err(runtime_error);
+        let translations = recover_pending_translations_v1(
+            &self.persistence,
+            &mut ports,
+            &self.logical_human_owner_id,
+        )
+        .await
+        .map_err(runtime_error);
         self.control_channel
             .inner_mut()
             .set_nonblocking(true)
             .map_err(|_| AiInferenceManagedRuntimeErrorV1::Unavailable)?;
-        summaries.and_then(|summaries| {
-            replies
-                .checked_add(summaries)
-                .ok_or(AiInferenceManagedRuntimeErrorV1::Unavailable)
+        translations.and_then(|translations| {
+            summaries.and_then(|summaries| {
+                replies
+                    .checked_add(summaries)
+                    .and_then(|count| count.checked_add(translations))
+                    .ok_or(AiInferenceManagedRuntimeErrorV1::Unavailable)
+            })
         })
     }
 
@@ -163,8 +175,10 @@ impl AiInferenceManagedRuntimeV1 {
                     contract == Some(&communication_reply_inference_contract_reference_v1());
                 let is_summary =
                     contract == Some(&communication_summary_inference_contract_reference_v1());
+                let is_translation =
+                    contract == Some(&communication_translation_inference_contract_reference_v1());
                 let response = if validate_module_request_delivery_v1(&delivery).is_err()
-                    || (!is_reply && !is_summary)
+                    || (!is_reply && !is_summary && !is_translation)
                     || delivery.logical_owner_id != self.logical_human_owner_id
                 {
                     rejected(request_id)
@@ -178,7 +192,15 @@ impl AiInferenceManagedRuntimeV1 {
                         control_channel: &mut self.control_channel,
                         dispatcher: &mut dispatcher,
                     };
-                    let executed = if is_summary {
+                    let executed = if is_translation {
+                        execute_translation_payload_v1(
+                            &self.persistence,
+                            &mut ports,
+                            &self.logical_human_owner_id,
+                            &delivery.request_payload,
+                        )
+                        .await
+                    } else if is_summary {
                         execute_summary_payload_v1(
                             &self.persistence,
                             &mut ports,

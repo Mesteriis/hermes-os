@@ -27,6 +27,13 @@ test('communication translation agreement isolates workflow domain engine and pr
     aiProtocol,
     aiContracts,
     aiTranslationValidation,
+    aiTranslationCore,
+    aiTranslationSchema,
+    aiTranslationRepository,
+    aiTranslationWorker,
+    aiRuntimeAdmission,
+    aiManagedPorts,
+    aiManagedRuntime,
     ollamaApi,
   ] = await Promise.all([
     readFile(
@@ -91,6 +98,25 @@ test('communication translation agreement isolates workflow domain engine and pr
     readFile(new URL('src/ai-contracts/proto/hermes/ai/contracts/v1/ai.proto', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-contracts/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-contracts/src/translation.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-core/src/translation.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/ai-inference-persistence/migrations/0003_ai_translation_runs.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/ai-inference-persistence/src/translation_repository.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/ai-inference-runtime/src/translation_worker.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(new URL('src/ai-inference-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-runtime/src/managed_ports.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ollama-ai-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
@@ -130,7 +156,7 @@ test('communication translation agreement isolates workflow domain engine and pr
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_translation_managed_runtime_v1',
+    'communication_translation_ai_runtime_v1',
   );
   assert.match(workspace, /"src\/communication-translation-api"/);
   assert.match(workspace, /"src\/communication-translation-core"/);
@@ -165,6 +191,25 @@ test('communication translation agreement isolates workflow domain engine and pr
   assert.match(aiContracts, /AI_PROVIDER_TRANSLATION_CAPABILITY_ID_V1/);
   assert.match(aiTranslationValidation, /seal_translation_inference_request_v1/);
   assert.doesNotMatch(aiTranslationValidation, /CommunicationSummary|CommunicationReply/);
+  assert.match(aiTranslationCore, /build_translation_provider_input_v1/);
+  assert.match(aiTranslationCore, /body_utf8/);
+  assert.match(aiTranslationCore, /provider_result\.target_language != run\.request\.target_language/);
+  assert.match(aiTranslationSchema, /hermes_data\.ai_translation_runs/);
+  assert.match(aiTranslationSchema, /result_translated_text_utf8/);
+  assert.match(aiTranslationSchema, /result_detected_source_language/);
+  assert.match(aiTranslationRepository, /ON CONFLICT \(logical_owner_id, run_id\) DO NOTHING/);
+  assert.match(aiTranslationRepository, /load_recoverable_translation_runs/);
+  assert.match(aiTranslationWorker, /execute_translation_payload_v1/);
+  assert.match(aiTranslationWorker, /materialize_translation_source/);
+  assert.match(aiTranslationWorker, /ports\.translate/);
+  assert.doesNotMatch(
+    `${aiTranslationCore}\n${aiTranslationSchema}\n${aiTranslationRepository}\n${aiTranslationWorker}`,
+    /CommunicationSummary|CommunicationReply|communication_summary|communication_reply|ollama|provider_id|model_id|endpoint/,
+  );
+  assert.match(aiRuntimeAdmission, /AI_TRANSLATION_REQUEST_CAPABILITY_ID_V1/);
+  assert.match(aiRuntimeAdmission, /AI_PROVIDER_TRANSLATION_CAPABILITY_ID_V1/);
+  assert.match(aiManagedPorts, /ai_provider_translation_contract_reference_v1/);
+  assert.match(aiManagedRuntime, /communication_translation_inference_contract_reference_v1/);
   assert.match(ollamaApi, /OLLAMA_AI_TRANSLATION_CAPABILITY_ID_V1/);
   assert.doesNotMatch(aiProtocol, /provider_id|model_id|map</);
   assert.match(persistenceManifest, /owner = "communication_translation"/);

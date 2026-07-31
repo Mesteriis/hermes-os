@@ -1,12 +1,19 @@
 #![forbid(unsafe_code)]
 
 mod summary;
+mod translation;
 
 pub use summary::{
     AI_SUMMARY_SOURCE_BODY_EXCERPT_BYTES_V1, AiSummaryExecutionPlanV1, AiSummaryRunV1,
     accept_summary_inference_v1, begin_summary_inference_v1, build_summary_provider_input_v1,
     complete_summary_inference_v1, reject_summary_inference_v1,
     summary_inference_execution_plan_v1, summary_prompt_policy_sha256_v1,
+};
+pub use translation::{
+    AiTranslationExecutionPlanV1, AiTranslationRunV1, accept_translation_inference_v1,
+    begin_translation_inference_v1, build_translation_provider_input_v1,
+    complete_translation_inference_v1, reject_translation_inference_v1,
+    translation_inference_execution_plan_v1, translation_prompt_policy_sha256_v1,
 };
 
 use hermes_ai_contracts::{

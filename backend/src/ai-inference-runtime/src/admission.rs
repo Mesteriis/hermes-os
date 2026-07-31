@@ -2,10 +2,13 @@ use hermes_ai_contracts::{
     AI_INFERENCE_BLOB_CAPABILITY_ID_V1, AI_INFERENCE_MODULE_ID_V1,
     AI_INFERENCE_REQUEST_CAPABILITY_ID_V1, AI_MAX_PRIVATE_SOURCE_BYTES_V1, AI_OWNER_V1,
     AI_PROVIDER_GENERATION_CAPABILITY_ID_V1, AI_PROVIDER_SUMMARY_CAPABILITY_ID_V1,
-    AI_SUMMARY_REQUEST_CAPABILITY_ID_V1, ai_provider_reply_generation_contract_reference_v1,
+    AI_PROVIDER_TRANSLATION_CAPABILITY_ID_V1, AI_SUMMARY_REQUEST_CAPABILITY_ID_V1,
+    AI_TRANSLATION_REQUEST_CAPABILITY_ID_V1, ai_provider_reply_generation_contract_reference_v1,
     ai_provider_summary_generation_contract_reference_v1,
+    ai_provider_translation_contract_reference_v1,
     communication_reply_inference_contract_reference_v1,
     communication_summary_inference_contract_reference_v1,
+    communication_translation_inference_contract_reference_v1,
 };
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
@@ -58,7 +61,9 @@ pub fn ai_inference_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
             storage_capability(),
             provider_dependency_capability(),
             summary_provider_dependency_capability(),
+            translation_provider_dependency_capability(),
             summary_request_capability(),
+            translation_request_capability(),
         ],
         settings_schema_ref: Some(SettingsSchemaRefV1 {
             major: 1,
@@ -126,6 +131,31 @@ fn summary_provider_dependency_capability() -> CapabilityDescriptorV1 {
     }
 }
 
+fn translation_request_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: AI_TRANSLATION_REQUEST_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: ProvidedSurfaceKindV1::RequestRpc as i32,
+            contract: Some(communication_translation_inference_contract_reference_v1()),
+            client_rpc_route: None,
+            client_blob_route: None,
+        }],
+        ..Default::default()
+    }
+}
+
+fn translation_provider_dependency_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: AI_PROVIDER_TRANSLATION_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        dependencies: vec![ai_provider_translation_contract_reference_v1()],
+        ..Default::default()
+    }
+}
+
 fn blob_capability() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: AI_INFERENCE_BLOB_CAPABILITY_ID_V1.to_owned(),
@@ -170,7 +200,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn descriptor_has_separate_reply_and_summary_capabilities() {
+    fn descriptor_has_separate_reply_summary_and_translation_capabilities() {
         let descriptor = ai_inference_module_descriptor_v1("test");
         validate_descriptor_v1(&descriptor).expect("descriptor");
         validate_settings_schema_v1(&ai_inference_settings_schema_v1()).expect("settings");
@@ -188,7 +218,9 @@ mod tests {
                 AI_INFERENCE_STORAGE_CAPABILITY_ID_V1,
                 AI_PROVIDER_GENERATION_CAPABILITY_ID_V1,
                 AI_PROVIDER_SUMMARY_CAPABILITY_ID_V1,
+                AI_PROVIDER_TRANSLATION_CAPABILITY_ID_V1,
                 AI_SUMMARY_REQUEST_CAPABILITY_ID_V1,
+                AI_TRANSLATION_REQUEST_CAPABILITY_ID_V1,
             ]
         );
         assert_eq!(
@@ -198,6 +230,10 @@ mod tests {
         assert_eq!(
             descriptor.capabilities[4].dependencies,
             vec![ai_provider_summary_generation_contract_reference_v1()]
+        );
+        assert_eq!(
+            descriptor.capabilities[5].dependencies,
+            vec![ai_provider_translation_contract_reference_v1()]
         );
     }
 }
