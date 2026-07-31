@@ -38,6 +38,9 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     communicationsAdmission,
     communicationsEventRuntime,
     communicationsTaskSource,
+    managedSetup,
+    managedFlow,
+    authenticatedStorage,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -88,6 +91,21 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     readFile(new URL('src/communications-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-runtime/src/event_runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-runtime/src/task_source.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/task_candidate_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/task_candidate_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -105,7 +123,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_signed_release_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_managed_admission_v1');
   assert.match(adr, /Состояние реализации: planned/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);
@@ -195,4 +213,18 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(communicationsTaskSource, /write_target_bound_source/);
   assert.match(communicationsTaskSource, /persist_source_result/);
   assert.doesNotMatch(communicationsTaskSource, /provider_id|account_id|model_id|prompt|ollama|reqwest/);
+  assert.match(managedSetup, /installed_task_candidate_ensemble_release_v1/);
+  assert.match(managedSetup, /communication_task_candidate_extraction\.runtime\.v1/);
+  assert.match(managedSetup, /review\.task-candidate\.runtime\.v1/);
+  assert.match(managedSetup, /tasks\.runtime\.v1/);
+  assert.match(managedSetup, /ManagedWorkflowRuntimeConfigurationV1/);
+  assert.match(managedSetup, /ManagedDomainRuntimeConfigurationV1/);
+  assert.match(managedFlow, /managed_task_candidate_chain_starts_from_one_signed_release/);
+  assert.match(managedFlow, /configure_communications_jetstream/);
+  assert.match(managedFlow, /start_communications_domain/);
+  assert.match(managedFlow, /start_task_candidate_ensemble_v1/);
+  assert.match(
+    authenticatedStorage,
+    /HERMES_STORAGE_MANAGED_TEST_FILTER[\s\S]*managed_task_candidate_chain_starts_from_one_signed_release/,
+  );
 });

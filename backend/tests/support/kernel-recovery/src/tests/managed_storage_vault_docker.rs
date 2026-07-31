@@ -196,6 +196,10 @@ mod ollama_ai_managed_setup;
 mod review_attention_managed_flow;
 #[path = "managed_storage_vault_docker/review_attention_managed_setup.rs"]
 mod review_attention_managed_setup;
+#[path = "managed_storage_vault_docker/task_candidate_managed_flow.rs"]
+mod task_candidate_managed_flow;
+#[path = "managed_storage_vault_docker/task_candidate_managed_setup.rs"]
+mod task_candidate_managed_setup;
 use ai_inference_blob_fixture::*;
 use ai_inference_managed_setup::*;
 use mail_attachment_flow::*;
@@ -207,6 +211,7 @@ use mail_imap_fixture::*;
 use mail_smtp_fixture::*;
 use ollama_ai_managed_setup::*;
 use review_attention_managed_setup::*;
+use task_candidate_managed_setup::*;
 #[path = "managed_storage_vault_docker/call_evidence_managed_flow.rs"]
 mod call_evidence_managed_flow;
 #[path = "managed_storage_vault_docker/telegram_managed_flow.rs"]
@@ -556,6 +561,7 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
             request_id,
             request_payload,
             logical_owner_id: logical_owner_id.to_owned(),
+            authenticated_device_id: "desktop-1".to_owned(),
         }
         .encode_to_vec();
         let launch = store

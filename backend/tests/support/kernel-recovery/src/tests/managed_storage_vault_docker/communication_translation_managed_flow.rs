@@ -767,6 +767,7 @@ fn encode_communication_translation_module_request_as(
         request_id,
         request_payload: request.encode_to_vec(),
         logical_owner_id: logical_owner_id.to_owned(),
+        authenticated_device_id: "desktop-1".to_owned(),
     }
     .encode_to_vec()
 }

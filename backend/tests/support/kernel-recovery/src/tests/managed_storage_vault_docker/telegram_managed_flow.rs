@@ -2104,6 +2104,7 @@ fn route_telegram_calls_client(
         request_id,
         request_payload: request_payload.to_vec(),
         logical_owner_id: String::new(),
+        authenticated_device_id: String::new(),
     }
     .encode_to_vec();
     let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
@@ -2200,6 +2201,7 @@ fn route_telegram_automation_client(
         request_id,
         request_payload: request_payload.to_vec(),
         logical_owner_id: String::new(),
+        authenticated_device_id: String::new(),
     }
     .encode_to_vec();
     let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(

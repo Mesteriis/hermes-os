@@ -95,6 +95,7 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS, COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
     COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID, COMMUNICATIONS_STORAGE_CAPABILITY_ID,
     COMMUNICATIONS_SUMMARY_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_SUMMARY_SOURCE_CAPABILITY_ID,
+    COMMUNICATIONS_TASK_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID,
     COMMUNICATIONS_TRANSLATION_SOURCE_BLOB_CAPABILITY_ID,
     COMMUNICATIONS_TRANSLATION_SOURCE_CAPABILITY_ID,
     communication_evidence_recorded_contract_reference_v1, communications_module_descriptor_v1,
@@ -111,6 +112,11 @@ use hermes_communications_sender_insights_api::{
     COMMUNICATIONS_SENDER_INSIGHTS_SCHEMA_SHA256, SENDER_INSIGHTS_CONNECT_PATH_V1,
     SENDER_INSIGHTS_CONTRACT_MAJOR_V1, SENDER_INSIGHTS_CONTRACT_NAME_V1,
     SENDER_INSIGHTS_CONTRACT_REVISION_V1,
+};
+use hermes_communications_task_source_api::{
+    communication_task_source_prepare_contract_reference_v1,
+    communication_task_source_prepared_contract_reference_v1,
+    communication_task_source_rejected_contract_reference_v1,
 };
 use hermes_kernel_control_store::{
     ModuleBlobOperationV1, ModuleBlobQuotaRequestV1, ModuleClientBlobContractVersionV1,
@@ -2671,6 +2677,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_STORAGE_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_TASK_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID.to_owned(),
     ];
     let storage = ModuleStorageRequestV1::new(
         COMMUNICATIONS_REGISTRATION,
@@ -2725,6 +2733,14 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
     let summary_source_blob = ModuleBlobQuotaRequestV1::new(
         COMMUNICATIONS_REGISTRATION,
         COMMUNICATIONS_SUMMARY_SOURCE_BLOB_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        COMMUNICATIONS_BLOB_QUOTA_BYTES,
+        COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
+        vec![ModuleBlobOperationV1::Write],
+    );
+    let task_source_blob = ModuleBlobQuotaRequestV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_TASK_SOURCE_BLOB_CAPABILITY_ID,
         COMMUNICATIONS_OWNER_ID,
         COMMUNICATIONS_BLOB_QUOTA_BYTES,
         COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
@@ -2794,6 +2810,9 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
     let summary_source_prepare = communication_summary_source_prepare_contract_reference_v1();
     let summary_source_prepared = communication_summary_source_prepared_contract_reference_v1();
     let summary_source_rejected = communication_summary_source_rejected_contract_reference_v1();
+    let task_source_prepare = communication_task_source_prepare_contract_reference_v1();
+    let task_source_prepared = communication_task_source_prepared_contract_reference_v1();
+    let task_source_rejected = communication_task_source_rejected_contract_reference_v1();
     let translation_source_prepare =
         communication_translation_source_prepare_contract_reference_v1();
     let translation_source_prepared =
@@ -2973,6 +2992,24 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             ModuleEventRouteDirectionV1::Publish,
         ),
         communications_event_route(
+            COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Command,
+            &task_source_prepare,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &task_source_prepared,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &task_source_rejected,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
             COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID,
             ModuleEventEnvelopeKindV1::Result,
             &ai_source_rejected,
@@ -3099,6 +3136,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
                     cross_channel_forward_source_blob,
                     ai_source_blob,
                     summary_source_blob,
+                    task_source_blob,
                     translation_source_blob,
                     explanation_source_blob,
                     recipient_source_blob,

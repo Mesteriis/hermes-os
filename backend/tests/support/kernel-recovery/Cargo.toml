@@ -73,6 +73,10 @@ hermes-communication-recipient-suggestion-api = { path = "../../../src/communica
 hermes-communication-recipient-suggestion-persistence = { path = "../../../src/communication-recipient-suggestion-persistence" }
 hermes-communication-recipient-suggestion-runtime = { path = "../../../src/communication-recipient-suggestion-runtime" }
 hermes-communications-recipient-source-api = { path = "../../../src/communications-recipient-source-api" }
+hermes-communications-task-source-api = { path = "../../../src/communications-task-source-api" }
+hermes-communication-task-candidate-api = { path = "../../../src/communication-task-candidate-api" }
+hermes-communication-task-candidate-persistence = { path = "../../../src/communication-task-candidate-persistence" }
+hermes-communication-task-candidate-runtime = { path = "../../../src/communication-task-candidate-runtime" }
 hermes-ai-contracts = { path = "../../../src/ai-contracts" }
 hermes-ai-inference-persistence = { path = "../../../src/ai-inference-persistence" }
 hermes-ai-inference-runtime = { path = "../../../src/ai-inference-runtime" }
@@ -82,6 +86,12 @@ hermes-ollama-ai-runtime = { path = "../../../src/ollama-ai-runtime" }
 hermes-review-attention-api = { path = "../../../src/review-attention-api" }
 hermes-review-attention-persistence = { path = "../../../src/review-attention-persistence" }
 hermes-review-attention-runtime = { path = "../../../src/review-attention-runtime" }
+hermes-review-task-candidate-api = { path = "../../../src/review-task-candidate-api" }
+hermes-review-task-candidate-persistence = { path = "../../../src/review-task-candidate-persistence" }
+hermes-review-task-candidate-runtime = { path = "../../../src/review-task-candidate-runtime" }
+hermes-tasks-command-api = { path = "../../../src/tasks-command-api" }
+hermes-tasks-persistence = { path = "../../../src/tasks-persistence" }
+hermes-tasks-runtime = { path = "../../../src/tasks-runtime" }
 hermes-mail-api = { path = "../../../src/mail-api" }
 hermes-mail-core = { path = "../../../src/mail-core" }
 hermes-mail-gmail = { path = "../../../src/mail-gmail", features = ["conformance-test-support"] }

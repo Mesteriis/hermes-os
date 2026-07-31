@@ -22,8 +22,7 @@ submission до Blob read, хранит state/operation/inbox/outbox/realtime а
 также строит exact submit/submitted/rejected/approved durable envelopes,
 отделяет module actor от authenticated owner-device actor и фиксирует distinct
 Review- и Tasks-target Blob audiences. Review assembly формирует отдельные
-unsigned descriptor/settings/storage/release inputs; signed admission/conformance
-и Tasks promotion ещё не реализованы. Review managed
+unsigned descriptor/settings/storage/release inputs. Review managed
 runtime уже выполняет exact submission consume, target-bound Blob
 materialization, owner-local completion/rejection, outbox relay, authenticated
 owner-device approve/reject, Tasks-target-bound Blob write и replayable client
@@ -47,8 +46,14 @@ schema, owner-local Storage bundle и unsigned release fragment без runtime
 launch или signing authority. Development release contour теперь собирает все
 три runtime/assembly пары и передаёт их exact artifact fragments единому
 distribution compiler для подписи; отдельный module не получает signing
-authority. Aggregate gate остаётся закрыт до live signed admission,
-Gateway/SSE composition и managed E2E.
+authority. Live managed contour теперь устанавливает одну signed release,
+регистрирует и authorizes exact Communications producer, extraction workflow,
+Review domain и Tasks domain, выдаёт каждому отдельный owner-local Storage
+binding и поднимает их через реальные Vault, Blob, PostgreSQL/PgBouncer и NATS
+границы. Kernel admission использует exact descriptor requests, а conformance
+фиксирует distinct module/owner identities и runtime generations. Aggregate
+gate остаётся закрыт до Gateway/SSE business-flow composition, полного managed
+approve/reject E2E и обязательных negative/restart/revoke/privacy доказательств.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 

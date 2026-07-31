@@ -5737,7 +5737,7 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'communication_task_candidate_signed_release_v1') {
+  if (currentSlice === 'communication_task_candidate_managed_admission_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: TASKS_REVIEWED_CANDIDATE_PERSISTENCE_INVENTORY,

@@ -90,6 +90,7 @@ impl WhatsAppHostBridgeTestClient {
             request_id,
             request_payload,
             logical_owner_id: String::new(),
+            authenticated_device_id: String::new(),
         };
         write_frame(&mut self.stream, &request.encode_to_vec());
         let response = ModuleClientResponseV1::decode(read_frame(&mut self.stream).as_slice())
