@@ -2,6 +2,7 @@
 
 pub mod admission;
 mod managed_runtime;
+mod summary_worker;
 mod worker;
 
 pub use admission::ollama_ai_module_descriptor_v1;

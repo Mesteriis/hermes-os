@@ -12,6 +12,7 @@ pub const PACKAGE: &str = "hermes-ollama-ai-api";
 pub const OLLAMA_OWNER_ID_V1: &str = "ollama";
 pub const OLLAMA_AI_MODULE_ID_V1: &str = "hermes-ollama-ai-runtime";
 pub const OLLAMA_AI_PROVIDER_CAPABILITY_ID_V1: &str = "ai.provider.generate.v1";
+pub const OLLAMA_AI_SUMMARY_CAPABILITY_ID_V1: &str = "ai.provider.summarize.v1";
 pub const OLLAMA_AI_STORAGE_CAPABILITY_ID_V1: &str = "ollama.ai.storage.v1";
 pub const OLLAMA_AI_LOOPBACK_HOST_V1: &str = "127.0.0.1";
 pub const OLLAMA_AI_MAX_MODEL_BYTES_V1: usize = 128;
