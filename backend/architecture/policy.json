@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_translation_ai_runtime_v1",
+    "currentSlice": "communication_translation_ollama_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {

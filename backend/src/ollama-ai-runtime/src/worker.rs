@@ -41,6 +41,12 @@ pub(crate) trait OllamaAiExecutionPortV1 {
         settings: &OllamaAiRuntimeSettingsV1,
         plan: &hermes_ollama_ai_core::OllamaSummaryGenerationPlanV1,
     ) -> Result<OllamaHttpGenerationV1, OllamaAiHttpErrorV1>;
+
+    async fn generate_translation(
+        &mut self,
+        settings: &OllamaAiRuntimeSettingsV1,
+        plan: &hermes_ollama_ai_core::OllamaTranslationPlanV1,
+    ) -> Result<OllamaHttpGenerationV1, OllamaAiHttpErrorV1>;
 }
 
 pub(crate) struct LocalOllamaAiExecutionPortV1;
@@ -67,6 +73,14 @@ impl OllamaAiExecutionPortV1 for LocalOllamaAiExecutionPortV1 {
         plan: &hermes_ollama_ai_core::OllamaSummaryGenerationPlanV1,
     ) -> Result<OllamaHttpGenerationV1, OllamaAiHttpErrorV1> {
         hermes_ollama_ai_http::generate_summary_v1(settings, plan).await
+    }
+
+    async fn generate_translation(
+        &mut self,
+        settings: &OllamaAiRuntimeSettingsV1,
+        plan: &hermes_ollama_ai_core::OllamaTranslationPlanV1,
+    ) -> Result<OllamaHttpGenerationV1, OllamaAiHttpErrorV1> {
+        hermes_ollama_ai_http::generate_translation_v1(settings, plan).await
     }
 }
 

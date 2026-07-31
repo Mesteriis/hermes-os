@@ -1,11 +1,17 @@
 #![forbid(unsafe_code)]
 
 mod summary;
+mod translation;
 
 pub use summary::{
     OllamaSummaryGenerationPlanV1, OllamaSummaryRunV1, accept_ollama_summary_request_v1,
     begin_ollama_summary_request_v1, complete_ollama_summary_request_v1,
     mark_ollama_summary_uncertain_v1, reject_ollama_summary_request_v1,
+};
+pub use translation::{
+    OllamaTranslationPlanV1, OllamaTranslationRunV1, accept_ollama_translation_request_v1,
+    begin_ollama_translation_request_v1, complete_ollama_translation_request_v1,
+    mark_ollama_translation_uncertain_v1, reject_ollama_translation_request_v1,
 };
 
 use hermes_ai_contracts::{

@@ -1,5 +1,6 @@
 use hermes_ollama_ai_core::{
     OllamaGenerationPlanV1, OllamaHttpGenerationV1, OllamaSummaryGenerationPlanV1,
+    OllamaTranslationPlanV1,
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -55,6 +56,16 @@ struct SummaryChatRequestV1<'a> {
 }
 
 #[derive(Serialize)]
+struct TranslationChatRequestV1<'a> {
+    model: &'a str,
+    messages: [ChatMessageV1<'a>; 1],
+    stream: bool,
+    think: bool,
+    format: TranslationJsonSchemaV1,
+    options: ChatOptionsV1,
+}
+
+#[derive(Serialize)]
 struct ReplyJsonSchemaV1 {
     #[serde(rename = "type")]
     kind: &'static str,
@@ -88,6 +99,22 @@ struct SummaryJsonPropertiesV1 {
 }
 
 #[derive(Serialize)]
+struct TranslationJsonSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    properties: TranslationJsonPropertiesV1,
+    required: [&'static str; 2],
+    #[serde(rename = "additionalProperties")]
+    additional_properties: bool,
+}
+
+#[derive(Serialize)]
+struct TranslationJsonPropertiesV1 {
+    translated_text: JsonStringSchemaV1,
+    detected_source_language: JsonDetectedLanguageSchemaV1,
+}
+
+#[derive(Serialize)]
 struct JsonStringSchemaV1 {
     #[serde(rename = "type")]
     kind: &'static str,
@@ -99,6 +126,14 @@ struct JsonLanguageSchemaV1 {
     kind: &'static str,
     #[serde(rename = "enum")]
     allowed: [&'static str; 3],
+}
+
+#[derive(Serialize)]
+struct JsonDetectedLanguageSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    #[serde(rename = "enum")]
+    allowed: [&'static str; 4],
 }
 
 #[derive(Serialize)]
@@ -198,6 +233,29 @@ pub(crate) fn encode_summary_chat_request_v1(
     .map_err(|_| OllamaAiHttpErrorV1::InvalidRequest)
 }
 
+pub(crate) fn encode_translation_chat_request_v1(
+    plan: &OllamaTranslationPlanV1,
+) -> Result<Zeroizing<Vec<u8>>, OllamaAiHttpErrorV1> {
+    let prompt =
+        std::str::from_utf8(&plan.prompt_utf8).map_err(|_| OllamaAiHttpErrorV1::InvalidRequest)?;
+    serde_json::to_vec(&TranslationChatRequestV1 {
+        model: &plan.model,
+        messages: [ChatMessageV1 {
+            role: "user",
+            content: prompt,
+        }],
+        stream: false,
+        think: false,
+        format: translation_json_schema_v1(),
+        options: ChatOptionsV1 {
+            temperature: 0,
+            num_predict: plan.maximum_output_tokens,
+        },
+    })
+    .map(Zeroizing::new)
+    .map_err(|_| OllamaAiHttpErrorV1::InvalidRequest)
+}
+
 fn reply_json_schema_v1() -> ReplyJsonSchemaV1 {
     ReplyJsonSchemaV1 {
         kind: "object",
@@ -225,6 +283,21 @@ fn summary_json_schema_v1() -> SummaryJsonSchemaV1 {
             },
         },
         required: ["summary", "language"],
+        additional_properties: false,
+    }
+}
+
+fn translation_json_schema_v1() -> TranslationJsonSchemaV1 {
+    TranslationJsonSchemaV1 {
+        kind: "object",
+        properties: TranslationJsonPropertiesV1 {
+            translated_text: JsonStringSchemaV1 { kind: "string" },
+            detected_source_language: JsonDetectedLanguageSchemaV1 {
+                kind: "string",
+                allowed: ["unknown", "english", "spanish", "russian"],
+            },
+        },
+        required: ["translated_text", "detected_source_language"],
         additional_properties: false,
     }
 }
@@ -257,6 +330,31 @@ pub(crate) fn decode_chat_response_v1(
 pub(crate) fn decode_summary_chat_response_v1(
     body: &[u8],
     plan: &OllamaSummaryGenerationPlanV1,
+) -> Result<OllamaHttpGenerationV1, OllamaAiHttpErrorV1> {
+    let mut response: ChatResponseV1 =
+        serde_json::from_slice(body).map_err(|_| OllamaAiHttpErrorV1::Protocol)?;
+    if response.model != plan.model
+        || !response.done
+        || response.message.role != "assistant"
+        || !response.message.thinking.is_empty()
+        || response.message.content.is_empty()
+        || response.message.content.len() > plan.maximum_output_bytes as usize
+    {
+        return Err(OllamaAiHttpErrorV1::ModelMismatch);
+    }
+    Ok(OllamaHttpGenerationV1 {
+        content_json_utf8: Zeroizing::new(
+            std::mem::take(&mut response.message.content).into_bytes(),
+        ),
+        model_digest: plan.model_digest,
+        input_tokens: response.prompt_eval_count,
+        output_tokens: response.eval_count,
+    })
+}
+
+pub(crate) fn decode_translation_chat_response_v1(
+    body: &[u8],
+    plan: &OllamaTranslationPlanV1,
 ) -> Result<OllamaHttpGenerationV1, OllamaAiHttpErrorV1> {
     let mut response: ChatResponseV1 =
         serde_json::from_slice(body).map_err(|_| OllamaAiHttpErrorV1::Protocol)?;
@@ -329,6 +427,14 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&summary_json_schema_v1()).expect("summary JSON schema"),
             r#"{"type":"object","properties":{"summary":{"type":"string"},"language":{"type":"string","enum":["english","spanish","russian"]}},"required":["summary","language"],"additionalProperties":false}"#
+        );
+    }
+
+    #[test]
+    fn translation_schema_is_closed_and_detected_language_can_be_unknown() {
+        assert_eq!(
+            serde_json::to_string(&translation_json_schema_v1()).expect("translation JSON schema"),
+            r#"{"type":"object","properties":{"translated_text":{"type":"string"},"detected_source_language":{"type":"string","enum":["unknown","english","spanish","russian"]}},"required":["translated_text","detected_source_language"],"additionalProperties":false}"#
         );
     }
 }
