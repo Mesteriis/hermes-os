@@ -138,6 +138,7 @@ policy через ссылки из новых документов.
 - [ADR-0327: Durable target-bound Blob delegation across source successors](ADR-0327-durable-target-bound-blob-delegation-across-source-successors.md)
 - [ADR-0328: Storage bootstrap quarantine for policy-invalid owner bundles](ADR-0328-storage-bootstrap-quarantine-for-policy-invalid-owner-bundles.md)
 - [ADR-0329: Full-stack development Attachment scanner contour](ADR-0329-full-stack-development-attachment-scanner-contour.md)
+- [ADR-0365: Communication recipient suggestion workflow and source boundary](ADR-0365-communication-recipient-suggestion-workflow-and-source-boundary.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -649,3 +650,9 @@ event и выполняет обычный transfer, где Blob runtime ост�
 authority. Runtime protocol, Kernel issuance, typed Blob client и Blob
 data-plane lineage validation реализованы; первый business event flow и live
 conformance остаются в Archive Inspection gate.
+ADR-0365 выделяет Smart CC в отдельный `communication_recipient_suggestion`
+workflow. Communications передаёт bounded body только через distinct durable
+source events и target-bound Blob, workflow возвращает typed role/rationale
+candidates и не меняет recipients. AI/Ollama, Contacts resolution, provider
+commands и presentation strings не входят в gate; Kernel/Gateway остаются
+owner-neutral и используют существующие admission, routing и shared SSE.

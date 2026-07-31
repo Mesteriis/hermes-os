@@ -252,7 +252,7 @@ Outbox UI is an app composition over workflow receipts and provider operation
 status. `accepted` never means delivered. Undo is available only when the exact
 workflow/provider state declares it safe.
 
-### AI use-case workflows
+### Content-derived and AI use-case workflows
 
 The following are separate use cases, not modes of a generic AI endpoint:
 
@@ -269,8 +269,10 @@ The following are separate use cases, not modes of a generic AI endpoint:
 Each workflow:
 
 1. queries exact public owner contracts;
-2. assembles a distinct typed AI request with `AiContextReceiptV1`;
-3. records source revisions, completeness, policy and model receipt;
+2. assembles a distinct typed AI request with `AiContextReceiptV1` when the
+   admitted use case actually uses AI; deterministic recipient suggestion uses
+   its own typed source receipt and does not acquire an AI/provider dependency;
+3. records source revisions, completeness and applicable policy/model receipt;
 4. returns a candidate/result without mutating Communications or another
    business domain;
 5. promotes a task, note or Review item only through a target-domain command;
@@ -433,6 +435,7 @@ runtime не является domain, а app composition не становитс
 | Summary | `communication_summary` workflow | `communication_summary_v1` |
 | Translation | `communication_translation` workflow | `communication_translation_v1` |
 | Explanation | `communication_explanation` workflow | `communication_explanation_v1` |
+| Recipient suggestion source handoff | Communications | `communications_recipient_source_v1` |
 | Smart CC/recipient suggestion | `communication_recipient_suggestion` workflow | `communication_recipient_suggestion_v1` |
 | Task extraction | `communication_task_candidate_extraction` workflow plus Tasks command | `communication_task_candidate_extraction_v1` |
 | Note extraction | `communication_note_candidate_extraction` workflow plus target command | `communication_note_candidate_extraction_v1` |

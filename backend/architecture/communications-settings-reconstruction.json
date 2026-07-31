@@ -619,11 +619,26 @@
       ]
     },
     {
+      "gate": "communications_recipient_source_v1",
+      "role": "domain",
+      "owner": "communications",
+      "state": "planned",
+      "dependsOn": [
+        "communications_canonical_read_v2",
+        "blob_v1",
+        "nats_data_plane_v1"
+      ]
+    },
+    {
       "gate": "communication_recipient_suggestion_v1",
       "role": "workflow",
       "owner": "communication_recipient_suggestion",
       "state": "planned",
-      "dependsOn": ["communications_content_read_v1"]
+      "dependsOn": [
+        "communications_recipient_source_v1",
+        "client_gateway_v1",
+        "blob_v1"
+      ]
     },
     {
       "gate": "communication_task_candidate_extraction_v1",
