@@ -23,6 +23,9 @@ test('Review task-candidate is an exact domain capability, not an attention faca
     repository,
     schema,
     migration,
+    runtimeManifest,
+    runtime,
+    admission,
   ] =
     await Promise.all([
       readFile(
@@ -59,14 +62,18 @@ test('Review task-candidate is an exact domain capability, not an attention faca
         ),
         'utf8',
       ),
+      readFile(new URL('src/review-task-candidate-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-runtime/src/lib.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
     ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_event_contracts_v1');
+  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_runtime_admission_v1');
   for (const unit of [
     'hermes-review-task-candidate-api',
     'hermes-review-task-candidate-core',
     'hermes-review-task-candidate-persistence',
+    'hermes-review-task-candidate-runtime',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
     assert.match(adr, new RegExp(`\\b${unit}\\b`));
@@ -115,4 +122,12 @@ test('Review task-candidate is an exact domain capability, not an attention faca
   assert.match(migration, /review_task_candidate_realtime/);
   assert.doesNotMatch(`${persistence}\n${repository}\n${migration}`, /review_attention|communications_|tasks_|provider_id|account_id|ollama|prompt|model_id/);
   assert.match(adr, /без[\s\S]*расширения `review-attention`/);
+  assert.match(runtimeManifest, /role = "domain"/);
+  assert.match(runtimeManifest, /owner = "review"/);
+  assert.match(runtimeManifest, /surface = "runtime"/);
+  assert.match(runtime, /review_task_candidate_module_descriptor_v1/);
+  assert.match(admission, /ModuleKindV1::Domain/);
+  assert.match(admission, /review_task_candidate_submit_consume_request_v1/);
+  assert.match(admission, /BlobQuotaOperationV1::Write/);
+  assert.doesNotMatch(admission, /hermes_tasks|hermes_communications|ollama/);
 });

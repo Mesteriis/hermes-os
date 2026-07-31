@@ -22,7 +22,10 @@ submission до Blob read, хранит state/operation/inbox/outbox/realtime а
 также строит exact submit/submitted/rejected/approved durable envelopes,
 отделяет module actor от authenticated owner-device actor и фиксирует distinct
 Review- и Tasks-target Blob audiences. Review runtime/assembly,
-signed admission/conformance и Tasks promotion ещё не реализованы, поэтому
+signed admission/conformance и Tasks promotion ещё не реализованы. Staged
+Review runtime package уже фиксирует exact Domain descriptor, семь отдельных
+client/Blob/event/storage capabilities и пустую typed Settings schema, но пока
+не содержит managed processing loop, поэтому
 aggregate gate остаётся закрыт.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.

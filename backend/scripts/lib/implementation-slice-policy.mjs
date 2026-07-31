@@ -1014,6 +1014,11 @@ const REVIEW_TASK_CANDIDATE_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-review-task-candidate-persistence', role: 'domain', owner: 'review', surface: 'persistence' },
 ];
 
+const REVIEW_TASK_CANDIDATE_RUNTIME_ADMISSION_PRODUCTION_PACKAGES = [
+  ...REVIEW_TASK_CANDIDATE_PERSISTENCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-review-task-candidate-runtime', role: 'domain', owner: 'review', surface: 'runtime' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2870,6 +2875,16 @@ const REVIEW_TASK_CANDIDATE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const REVIEW_TASK_CANDIDATE_RUNTIME_ADMISSION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...REVIEW_TASK_CANDIDATE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-review-task-candidate-runtime': [
+    { name: 'hermes-review-task-candidate-api', kind: 'normal' },
+    { name: 'hermes-review-task-candidate-core', kind: 'normal' },
+    { name: 'hermes-review-task-candidate-persistence', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3626,6 +3641,14 @@ const REVIEW_TASK_CANDIDATE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-review-task-candidate-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
+const REVIEW_TASK_CANDIDATE_RUNTIME_ADMISSION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...REVIEW_TASK_CANDIDATE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-review-task-candidate-runtime': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
 };
 
@@ -5488,6 +5511,17 @@ function expectedSlice(currentSlice) {
       packages: REVIEW_TASK_CANDIDATE_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: REVIEW_TASK_CANDIDATE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: REVIEW_TASK_CANDIDATE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'review_task_candidate_runtime_admission_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: REVIEW_TASK_CANDIDATE_PERSISTENCE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: REVIEW_TASK_CANDIDATE_RUNTIME_ADMISSION_PRODUCTION_PACKAGES,
+      workspaceDependencies: REVIEW_TASK_CANDIDATE_RUNTIME_ADMISSION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: REVIEW_TASK_CANDIDATE_RUNTIME_ADMISSION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

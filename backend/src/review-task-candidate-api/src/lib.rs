@@ -42,6 +42,8 @@ pub const REVIEW_TASK_CANDIDATE_APPROVED_CONTRACT_NAME_V1: &str =
     "review_task_candidate_approved_for_promotion";
 pub const REVIEW_TASK_CANDIDATE_REALTIME_CONTRACT_NAME_V1: &str =
     "review.task-candidate.status_changed";
+pub const REVIEW_TASK_CANDIDATE_COMMAND_CONTRACT_NAME_V1: &str = "review.task-candidate.command";
+pub const REVIEW_TASK_CANDIDATE_QUERY_CONTRACT_NAME_V1: &str = "review.task-candidate.query";
 pub const REVIEW_TASK_CANDIDATE_REALTIME_EVENT_KIND_V1: &str =
     "review.task-candidate.status_changed";
 
