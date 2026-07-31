@@ -152,6 +152,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-communication-summary-assembly \
 	--package hermes-communication-translation-runtime \
 	--package hermes-communication-translation-assembly \
+	--package hermes-communication-explanation-runtime \
+	--package hermes-communication-explanation-assembly \
 	--package hermes-communication-delayed-delivery-runtime \
 	--package hermes-communication-delayed-delivery-assembly \
 	--package hermes-attachment-security-runtime \
@@ -210,6 +212,7 @@ communication_cross_channel_forward_assembly="$assembly_root/communication-cross
 communication_reply_suggestion_assembly="$assembly_root/communication-reply-suggestion"
 communication_summary_assembly="$assembly_root/communication-summary"
 communication_translation_assembly="$assembly_root/communication-translation"
+communication_explanation_assembly="$assembly_root/communication-explanation"
 communication_delayed_delivery_assembly="$assembly_root/communication-delayed-delivery"
 attachment_security_assembly="$assembly_root/attachment-security"
 ollama_ai_assembly="$assembly_root/ollama-ai"
@@ -250,6 +253,10 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$communication_translation_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-communication-translation-runtime"
+"$cargo_target_dir/debug/hermes-communication-explanation-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$communication_explanation_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-communication-explanation-runtime"
 "$cargo_target_dir/debug/hermes-communication-delayed-delivery-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$communication_delayed_delivery_assembly" \
@@ -317,6 +324,7 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$communication_reply_suggestion_assembly/communication_reply_suggestion.release-artifacts.json" \
 	--artifact-fragment "$communication_summary_assembly/communication_summary.release-artifacts.json" \
 	--artifact-fragment "$communication_translation_assembly/communication_translation.release-artifacts.json" \
+	--artifact-fragment "$communication_explanation_assembly/communication_explanation.release-artifacts.json" \
 	--artifact-fragment "$communication_delayed_delivery_assembly/communication_delayed_delivery.release-artifacts.json" \
 	--artifact-fragment "$attachment_security_assembly/attachment-security.release-artifacts.json" \
 	--artifact-fragment "$ollama_ai_assembly/ollama-ai.release-artifacts.json" \

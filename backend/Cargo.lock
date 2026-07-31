@@ -2252,6 +2252,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-explanation-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-explanation-persistence",
+ "hermes-communication-explanation-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-communication-explanation-core"
 version = "0.1.0"
 

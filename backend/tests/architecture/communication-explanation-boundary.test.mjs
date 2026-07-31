@@ -46,6 +46,9 @@ test('communication explanation agreement separates workflow domain engine and p
     runtimeInference,
     runtimeSourceResults,
     managedRuntime,
+    assemblyManifest,
+    assembly,
+    release,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -128,6 +131,9 @@ test('communication explanation agreement separates workflow domain engine and p
     readFile(new URL('src/communication-explanation-runtime/src/inference.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-explanation-runtime/src/source_results.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-explanation-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-explanation-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-explanation-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -164,11 +170,12 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.match(adr, /Состояние реализации: planned/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns explanation/i);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_explanation_ollama_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_explanation_assembly_v1');
   assert.match(workspace, /"src\/communication-explanation-api"/);
   assert.match(workspace, /"src\/communication-explanation-core"/);
   assert.match(workspace, /"src\/communication-explanation-persistence"/);
   assert.match(workspace, /"src\/communication-explanation-runtime"/);
+  assert.match(workspace, /"src\/communication-explanation-assembly"/);
   assert.match(apiManifest, /owner = "communication_explanation"/);
   assert.match(apiManifest, /surface = "contract"/);
   assert.match(coreManifest, /owner = "communication_explanation"/);
@@ -304,5 +311,18 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.doesNotMatch(
     `${runtimeAdmission}\n${runtimeClientPort}\n${runtimeInference}\n${runtimeSourceResults}\n${managedRuntime}`,
     /communication_summary|CommunicationSummary|communication_translation|CommunicationTranslation|mail_|telegram_|whatsapp_|zulip_|provider_id|model_id|prompt|target_language|translated_text/,
+  );
+  assert.match(assemblyManifest, /owner = "communication_explanation"/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
+  assert.match(assembly, /communication_explanation_module_descriptor_v1/);
+  assert.match(assembly, /communication_explanation_storage_bundle_v1/);
+  assert.match(assembly, /communication_explanation\.runtime\.v1/);
+  assert.match(assembly, /communication_explanation\.storage\.v1/);
+  assert.match(release, /--package hermes-communication-explanation-runtime/);
+  assert.match(release, /--package hermes-communication-explanation-assembly/);
+  assert.match(release, /communication_explanation\.release-artifacts\.json/);
+  assert.doesNotMatch(
+    assembly,
+    /communication_summary|communication_translation|ollama|ai_inference|communications_domain/,
   );
 });
