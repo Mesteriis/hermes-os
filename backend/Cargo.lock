@@ -3546,6 +3546,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-review-task-candidate-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-review-task-candidate-persistence",
+ "hermes-review-task-candidate-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-review-task-candidate-core"
 version = "0.1.0"
 dependencies = [
