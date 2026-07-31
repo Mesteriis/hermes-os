@@ -4,16 +4,16 @@
 
 Дата: 2026-07-31
 
-Состояние реализации: реализовано в AI contracts, AI inference persistence и
-`hermes-communication-reply-suggestion-runtime`. Workflow принимает
+Состояние реализации: реализовано в AI contracts, AI inference persistence,
+`hermes-communication-reply-suggestion-runtime` и отдельной unsigned
+`hermes-communication-reply-suggestion-assembly`. Workflow принимает
 Communications event, переносит custody в собственный runtime, проверяет
 bounded UTF-8 body, материализует отдельный AI-target-bound Blob, сохраняет
 bounded request/cleanup receipts и подтверждает source event только после
 terminal inference и освобождения обоих Blob. Semantic request digest не
 включает короткоживущий custody proof; non-terminal exact replay может обновить
-только этот proof. Unsigned workflow assembly и live managed orchestration ещё
-не реализованы, поэтому `communication_reply_suggestion_v1` остаётся
-`planned`.
+только этот proof. Signed live managed orchestration ещё не реализована,
+поэтому `communication_reply_suggestion_v1` остаётся `planned`.
 
 Уточняет:
 

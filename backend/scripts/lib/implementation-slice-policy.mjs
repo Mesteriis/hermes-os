@@ -782,6 +782,12 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
     surface: 'runtime',
   },
   {
+    name: 'hermes-communication-reply-suggestion-assembly',
+    role: 'workflow',
+    owner: 'communication_reply_suggestion',
+    surface: 'assembly',
+  },
+  {
     name: 'hermes-ai-contracts',
     role: 'engine',
     owner: 'ai',
@@ -2335,6 +2341,12 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-storage-protocol', kind: 'normal' },
     { name: 'hermes-storage-vault', kind: 'normal' },
   ],
+  'hermes-communication-reply-suggestion-assembly': [
+    { name: 'hermes-communication-reply-suggestion-persistence', kind: 'normal' },
+    { name: 'hermes-communication-reply-suggestion-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
   'hermes-ai-contracts': [
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
@@ -2786,6 +2798,11 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-communication-reply-suggestion-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
   'hermes-ai-contracts': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },

@@ -758,6 +758,12 @@
         "surface": "runtime"
       },
       {
+        "name": "hermes-communication-reply-suggestion-assembly",
+        "role": "workflow",
+        "owner": "communication_reply_suggestion",
+        "surface": "assembly"
+      },
+      {
         "name": "hermes-ai-contracts",
         "role": "engine",
         "owner": "ai",
@@ -1831,6 +1837,24 @@
         },
         {
           "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-reply-suggestion-assembly": [
+        {
+          "name": "hermes-communication-reply-suggestion-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-reply-suggestion-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -5223,6 +5247,35 @@
           "features": []
         }
       ],
+      "hermes-communication-reply-suggestion-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-ai-inference-core": [
         {
           "name": "sha2",
@@ -6754,6 +6807,10 @@
         "customBuildAllowed": false
       },
       "hermes-communication-reply-suggestion-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-reply-suggestion-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       },

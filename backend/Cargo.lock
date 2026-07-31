@@ -2137,6 +2137,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-reply-suggestion-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-reply-suggestion-persistence",
+ "hermes-communication-reply-suggestion-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-communication-reply-suggestion-core"
 version = "0.1.0"
 

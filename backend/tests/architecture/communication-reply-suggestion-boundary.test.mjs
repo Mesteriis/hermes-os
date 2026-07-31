@@ -300,6 +300,30 @@ test('reply suggestion runtime coordinates event source, AI request, Blob custod
   );
 });
 
+test('reply suggestion assembly emits only unsigned workflow runtime and storage inputs', async () => {
+  const [manifest, assembly, cli] = await Promise.all([
+    backendSource('src/communication-reply-suggestion-assembly/Cargo.toml'),
+    backendSource('src/communication-reply-suggestion-assembly/src/lib.rs'),
+    backendSource('src/communication-reply-suggestion-assembly/src/main.rs'),
+  ]);
+
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "communication_reply_suggestion"/);
+  assert.match(manifest, /surface = "assembly"/);
+  assert.match(assembly, /communication_reply_suggestion_module_descriptor_v1/);
+  assert.match(assembly, /communication_reply_suggestion_settings_schema_v1/);
+  assert.match(assembly, /communication_reply_suggestion_storage_bundle_v1/);
+  assert.match(assembly, /artifact_kind: "module_runtime"/);
+  assert.match(assembly, /artifact_kind: "storage_bundle"/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.match(assembly, /mode\(0o600\)/);
+  assert.match(cli, /--runtime/);
+  assert.doesNotMatch(
+    `${manifest}\n${assembly}\n${cli}`,
+    /signing|private_key|launch|hermes-communications|hermes-ollama|\bprovider_id\b|\bmodel_id\b|prompt_text/,
+  );
+});
+
 test('AI public contracts are one concrete provider-neutral engine unit', async () => {
   const [manifest, api, validation, proto] = await Promise.all([
     backendSource('src/ai-contracts/Cargo.toml'),
