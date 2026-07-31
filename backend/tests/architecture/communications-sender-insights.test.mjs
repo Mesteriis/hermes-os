@@ -90,7 +90,7 @@ test('sender projection is incoming-only and excludes provider or Review truth',
   assert.match(persistence, /COUNT\(\*\).*message_count/s);
   assert.match(persistence, /COUNT\(DISTINCT messages\.conversation_id\)/);
   assert.match(durable, /participant_display_label/);
-  assert.match(mail, /draft_ingress_observation_with_sender_body/);
+  assert.match(mail, /draft_ingress_observation_with_sender_subject_body/);
   assert.match(telegram, /sender_display_name/);
   for (const source of [migration, persistence, proto]) {
     assert.doesNotMatch(source, /provider_locator|source_cursor|message_body|importance_score/i);

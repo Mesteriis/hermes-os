@@ -48,6 +48,7 @@ pub enum CommunicationsDomainError {
     MissingMessageScope,
     InvalidAttachmentScope,
     InvalidParticipantMetadata,
+    InvalidMessageSubject,
     InvalidAttachmentSafetyTransition,
 }
 
@@ -73,6 +74,15 @@ pub fn accept_command(
     {
         return Err(CommunicationsDomainError::InvalidParticipantMetadata);
     }
+    if command.message_subject.as_ref().is_some_and(|subject| {
+        !requires_message_scope(command.kind)
+            || subject.is_empty()
+            || subject.len() > 998
+            || subject.trim() != subject
+            || subject.chars().any(char::is_control)
+    }) {
+        return Err(CommunicationsDomainError::InvalidMessageSubject);
+    }
     if requires_message_scope(command.kind)
         && (command.account_cursor.is_none() || command.conversation_cursor.is_none())
     {
@@ -93,6 +103,7 @@ pub fn accept_command(
         conversation_cursor: command.conversation_cursor,
         participant_cursor: command.participant_cursor,
         participant_display_label: command.participant_display_label,
+        message_subject: command.message_subject,
         media_cursor: command.media_cursor,
         reply_to_source_cursor: command.reply_to_source_cursor,
         forward_origin_source_cursor: command.forward_origin_source_cursor,
@@ -356,7 +367,8 @@ pub fn convert_client_query_error(error: CommunicationsDomainError) -> Communica
             CommunicationsClientError::DraftValidationFailed
         }
         CommunicationsDomainError::InvalidAttachmentScope
-        | CommunicationsDomainError::InvalidParticipantMetadata => {
+        | CommunicationsDomainError::InvalidParticipantMetadata
+        | CommunicationsDomainError::InvalidMessageSubject => {
             CommunicationsClientError::DraftValidationFailed
         }
         CommunicationsDomainError::InvalidAttachmentSafetyTransition => {
@@ -388,6 +400,7 @@ mod tests {
             conversation_cursor: Some(cursor(4)),
             participant_cursor: Some(cursor(5)),
             participant_display_label: None,
+            message_subject: Some("Quarterly update".to_owned()),
             media_cursor: None,
             reply_to_source_cursor: None,
             forward_origin_source_cursor: None,
@@ -414,6 +427,10 @@ mod tests {
         ));
         assert_eq!(first.summary.causation_message_id, None);
         assert_eq!(
+            first.summary.message_subject.as_deref(),
+            Some("Quarterly update")
+        );
+        assert_eq!(
             first.summary.correlation_id,
             CommunicationObservationIdV1::new([6; 16])
         );
@@ -432,6 +449,7 @@ mod tests {
             conversation_cursor: Some(cursor(4)),
             participant_cursor: None,
             participant_display_label: None,
+            message_subject: None,
             media_cursor: None,
             reply_to_source_cursor: None,
             forward_origin_source_cursor: None,
@@ -467,6 +485,7 @@ mod tests {
             conversation_cursor: None,
             participant_cursor: None,
             participant_display_label: None,
+            message_subject: None,
             media_cursor: None,
             reply_to_source_cursor: None,
             forward_origin_source_cursor: None,
@@ -510,6 +529,7 @@ mod tests {
             conversation_cursor: Some(cursor(4)),
             participant_cursor: None,
             participant_display_label: None,
+            message_subject: None,
             media_cursor: None,
             reply_to_source_cursor: Some(cursor(5)),
             forward_origin_source_cursor: Some(cursor(6)),
@@ -554,6 +574,7 @@ mod tests {
             conversation_cursor: Some(cursor(4)),
             participant_cursor: Some(cursor(5)),
             participant_display_label: Some("Ada <ada@example.test>".to_owned()),
+            message_subject: None,
             media_cursor: None,
             reply_to_source_cursor: None,
             forward_origin_source_cursor: None,

@@ -6,7 +6,7 @@ use hermes_communications_ingress::{
     AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1, CommunicationDirectionV1,
     CommunicationEvidenceKindV1, CommunicationObservationDraft, ProviderProvenanceV1,
     SourceEnvelope, SourceScopeEnvelope, new_scoped_communication_observation_draft,
-    with_attachment_descriptor, with_participant_display_label,
+    with_attachment_descriptor, with_message_subject, with_participant_display_label,
 };
 use hermes_mail_api::{
     DEFAULT_WINDOW, MAX_PLAIN_TEXT_BYTES, MAX_WINDOWS, MailContractError::WindowLimitExceeded,
@@ -264,12 +264,13 @@ pub fn draft_ingress_observation_with_body(
     .map_err(|_| MailContractError::InvalidPayload)
 }
 
-pub fn draft_ingress_observation_with_sender_body(
+pub fn draft_ingress_observation_with_sender_subject_body(
     operation_id: &str,
     provider: ProviderProvenanceV1,
     account_id: impl Into<String>,
     source_id: impl Into<String>,
     sender: Option<String>,
+    subject: Option<String>,
     body: BodyAvailabilityV1,
 ) -> Result<CommunicationObservationDraft, MailContractError> {
     let source_id = source_id.into();
@@ -294,8 +295,9 @@ pub fn draft_ingress_observation_with_sender_body(
         None,
     )
     .map_err(|_| MailContractError::InvalidPayload)?;
-    with_participant_display_label(draft, sender.map(|sender| sender.display_label))
-        .map_err(|_| MailContractError::InvalidPayload)
+    let draft = with_participant_display_label(draft, sender.map(|sender| sender.display_label))
+        .map_err(|_| MailContractError::InvalidPayload)?;
+    with_message_subject(draft, subject).map_err(|_| MailContractError::InvalidPayload)
 }
 
 struct MailSenderMetadataV1 {
@@ -443,5 +445,30 @@ mod rfc822_composition_tests {
                 .and_then(|scope| scope.external_conversation_id.as_deref()),
             Some("thread-1")
         );
+    }
+
+    #[test]
+    fn inbound_observation_preserves_sender_identity_and_subject() {
+        let draft = draft_ingress_observation_with_sender_subject_body(
+            "operation-inbound",
+            ProviderProvenanceV1::MailImap,
+            "account-1",
+            "message-1",
+            Some("Alice Example <Alice@Example.test>".to_owned()),
+            Some("Quarterly update".to_owned()),
+            BodyAvailabilityV1::MetadataOnly,
+        )
+        .expect("valid inbound observation");
+
+        let scope = draft.source.scope.expect("provider scope");
+        assert_eq!(
+            scope.external_participant_id.as_deref(),
+            Some("alice@example.test")
+        );
+        assert_eq!(
+            draft.participant_display_label.as_deref(),
+            Some("Alice Example <Alice@Example.test>")
+        );
+        assert_eq!(draft.message_subject.as_deref(), Some("Quarterly update"));
     }
 }

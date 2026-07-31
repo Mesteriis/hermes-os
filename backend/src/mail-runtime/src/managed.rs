@@ -157,7 +157,7 @@ use hermes_mail_core::{
     MAX_OUTBOUND_ATTACHMENT_BYTES, OutboundAttachmentDispositionV1, OutboundAttachmentV1,
     bounded_window, compose_rfc822, compose_rfc822_with_attachments,
     draft_attachment_ingress_observation, draft_delivery_observation,
-    draft_ingress_observation_with_sender_body, validate_sync_request,
+    draft_ingress_observation_with_sender_subject_body, validate_sync_request,
 };
 use hermes_mail_gmail::{
     GmailAdapterErrorV1, GmailApiClientV1, GmailMutableMessageFlagV1, GmailRawMessageV1,
@@ -2778,6 +2778,7 @@ impl MailAdmittedRuntime {
                 connection_id,
                 message_id.clone(),
                 message.sender.clone(),
+                Some(message.subject.clone()),
                 message.plain_text_body.clone(),
             )?;
             let record = build_observation_outbox_record_v1(
@@ -2938,6 +2939,10 @@ impl MailAdmittedRuntime {
                 .as_deref()
                 .and_then(gmail_internal_date_unix_seconds);
             let preview = operational_preview(&bytes);
+            let subject = preview
+                .as_ref()
+                .and_then(|preview| preview.subject.clone())
+                .filter(|value| !value.trim().is_empty());
             let observation = self.draft_inbound_body_observation(
                 &inbound_observation_id(
                     ProviderProvenanceV1::MailGmail,
@@ -2949,6 +2954,7 @@ impl MailAdmittedRuntime {
                 connection_id,
                 format!("{connection_id}:{provider_record_id}"),
                 preview.as_ref().and_then(|preview| preview.sender.clone()),
+                subject.clone(),
                 direct_plain_text_body(&bytes),
             )?;
             let primary_record = build_observation_outbox_record_v1(
@@ -2962,10 +2968,7 @@ impl MailAdmittedRuntime {
             )
             .map_err(|_| MailBootstrapError::Admission)?;
             let observation_anchor_id = *primary_record.message_id();
-            let subject = preview
-                .as_ref()
-                .and_then(|preview| preview.subject.clone())
-                .unwrap_or_default();
+            let subject = subject.unwrap_or_default();
             let sender = preview.as_ref().and_then(|preview| preview.sender.clone());
             let recipients = preview
                 .as_ref()
@@ -3095,6 +3098,7 @@ impl MailAdmittedRuntime {
         connection_id: &str,
         source_id: String,
         sender: Option<String>,
+        subject: Option<String>,
         plaintext: Option<Vec<u8>>,
     ) -> Result<CommunicationObservationDraft, MailBootstrapError> {
         let Some(plaintext) = plaintext else {
@@ -3104,17 +3108,19 @@ impl MailAdmittedRuntime {
                 connection_id,
                 source_id,
                 sender,
+                subject,
                 BodyAdmissionFailureV1::PolicyRejected,
             );
         };
         match self.admit_plain_text_body(&plaintext) {
             Ok(receipt) => with_admitted_body_blob(
-                draft_ingress_observation_with_sender_body(
+                draft_ingress_observation_with_sender_subject_body(
                     operation_id,
                     provider,
                     connection_id,
                     source_id,
                     sender,
+                    subject,
                     BodyAvailabilityV1::AdmittedBlob,
                 )
                 .map_err(|_| MailBootstrapError::Provider)?,
@@ -3127,6 +3133,7 @@ impl MailAdmittedRuntime {
                 connection_id,
                 source_id,
                 sender,
+                subject,
                 failure,
             ),
         }
@@ -3901,15 +3908,17 @@ fn unavailable_body_observation(
     connection_id: &str,
     source_id: String,
     sender: Option<String>,
+    subject: Option<String>,
     failure: BodyAdmissionFailureV1,
 ) -> Result<CommunicationObservationDraft, MailBootstrapError> {
     with_body_admission_failure(
-        draft_ingress_observation_with_sender_body(
+        draft_ingress_observation_with_sender_subject_body(
             operation_id,
             provider,
             connection_id,
             source_id,
             sender,
+            subject,
             BodyAvailabilityV1::Unavailable,
         )
         .map_err(|_| MailBootstrapError::Provider)?,

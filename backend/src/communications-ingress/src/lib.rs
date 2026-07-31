@@ -34,6 +34,7 @@ pub const MAX_OBSERVATION_ID_LEN: usize = 256;
 pub const MAX_EXTERNAL_RECORD_ID_LEN: usize = 512;
 pub const MAX_SOURCE_SCOPE_ID_LEN: usize = 512;
 pub const MAX_PARTICIPANT_DISPLAY_LABEL_BYTES: usize = 256;
+pub const MAX_MESSAGE_SUBJECT_BYTES: usize = 998;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProviderProvenanceV1 {
@@ -155,6 +156,7 @@ pub struct CommunicationObservationDraft {
     pub body_admission_failure: Option<BodyAdmissionFailureV1>,
     pub attachment_descriptor: Option<AttachmentDescriptorV1>,
     pub participant_display_label: Option<String>,
+    pub message_subject: Option<String>,
     pub observed_at_unix_seconds: Option<i64>,
 }
 
@@ -179,6 +181,7 @@ pub enum IngressDraftError {
     InvalidAttachmentDescriptor,
     InvalidBodyAdmission,
     InvalidParticipantDisplayLabel,
+    InvalidMessageSubject,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -230,6 +233,7 @@ pub fn new_communication_observation_draft(
         body_admission_failure: None,
         attachment_descriptor: None,
         participant_display_label: None,
+        message_subject: None,
         observed_at_unix_seconds,
     })
 }
@@ -281,6 +285,16 @@ pub fn with_participant_display_label(
 ) -> Result<CommunicationObservationDraft, IngressDraftError> {
     draft.participant_display_label = display_label
         .map(|value| normalize_participant_display_label(&value))
+        .transpose()?;
+    Ok(draft)
+}
+
+pub fn with_message_subject(
+    mut draft: CommunicationObservationDraft,
+    message_subject: Option<String>,
+) -> Result<CommunicationObservationDraft, IngressDraftError> {
+    draft.message_subject = message_subject
+        .map(|value| normalize_message_subject(&value))
         .transpose()?;
     Ok(draft)
 }
@@ -371,6 +385,7 @@ pub fn build_observation_outbox_record_v1(
             .map(body_admission_failure_value)
             .unwrap_or_default(),
         participant_display_label: draft.participant_display_label.clone(),
+        message_subject: draft.message_subject.clone(),
     }
     .encode_to_vec();
     let envelope = DurableEnvelopeV1 {
@@ -378,10 +393,10 @@ pub fn build_observation_outbox_record_v1(
         envelope_revision: 1,
         message_id: message_id.to_vec(),
         contract: Some(ContractRefV1 {
-            owner: "communications".to_owned(),
-            name: "communication_observed".to_owned(),
-            major: 1,
-            revision: 1,
+            owner: admission::COMMUNICATION_OBSERVED_CONTRACT_OWNER.to_owned(),
+            name: admission::COMMUNICATION_OBSERVED_CONTRACT_NAME.to_owned(),
+            major: admission::COMMUNICATION_OBSERVED_CONTRACT_MAJOR,
+            revision: admission::COMMUNICATION_OBSERVED_CONTRACT_REVISION,
             schema_sha256: COMMUNICATION_OBSERVATION_SCHEMA_SHA256.to_vec(),
         }),
         source: Some(SourceRefV1 {
@@ -838,6 +853,17 @@ fn normalize_participant_display_label(value: &str) -> Result<String, IngressDra
     Ok(value.to_owned())
 }
 
+fn normalize_message_subject(value: &str) -> Result<String, IngressDraftError> {
+    let value = value.trim();
+    if value.is_empty()
+        || value.len() > MAX_MESSAGE_SUBJECT_BYTES
+        || value.chars().any(char::is_control)
+    {
+        return Err(IngressDraftError::InvalidMessageSubject);
+    }
+    Ok(value.to_owned())
+}
+
 fn valid_body_blob_receipt(value: &BodyBlobReceiptV1) -> bool {
     !value.blob_ref.trim().is_empty()
         && value.blob_ref.len() <= 512
@@ -959,5 +985,38 @@ mod body_admission_tests {
             vec![7; 16]
         );
         assert_eq!(payload.body_admission_failure, 0);
+    }
+
+    #[test]
+    fn subject_is_bounded_normalized_and_control_free() {
+        let draft = new_communication_observation_draft(
+            "observation-subject",
+            SourceEnvelope {
+                provider: ProviderProvenanceV1::MailImap,
+                external_record_id: "provider-record-subject".to_owned(),
+                scope: None,
+            },
+            CommunicationEvidenceKindV1::EmailMessage,
+            BodyAvailabilityV1::MetadataOnly,
+            CommunicationDirectionV1::Incoming,
+            Some(1_782_504_000),
+        )
+        .expect("draft");
+
+        let draft = with_message_subject(draft, Some("  Quarterly update  ".to_owned()))
+            .expect("normalized subject");
+        assert_eq!(draft.message_subject.as_deref(), Some("Quarterly update"));
+
+        assert_eq!(
+            with_message_subject(draft.clone(), Some("line one\nline two".to_owned())),
+            Err(IngressDraftError::InvalidMessageSubject)
+        );
+        assert_eq!(
+            with_message_subject(
+                draft,
+                Some("x".repeat(MAX_MESSAGE_SUBJECT_BYTES.saturating_add(1)))
+            ),
+            Err(IngressDraftError::InvalidMessageSubject)
+        );
     }
 }

@@ -4,6 +4,8 @@ use sqlx::Row;
 use crate::{CommunicationsConsumeOutcomeV1, CommunicationsDurablePersistence};
 
 const MAX_AI_SOURCE_BYTES_V1: u64 = 256 * 1024;
+const MAX_AI_SOURCE_SENDER_BYTES_V1: usize = 256;
+const MAX_AI_SOURCE_SUBJECT_BYTES_V1: usize = 998;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommunicationsAiBodyReceiptV1 {
@@ -17,6 +19,8 @@ pub struct CommunicationsAiSourceSnapshotV1 {
     pub source_message_id: [u8; 16],
     pub evidence_id: [u8; 16],
     pub evidence_revision: u64,
+    pub sender_utf8: Vec<u8>,
+    pub subject_utf8: Vec<u8>,
     pub body: CommunicationsAiBodyReceiptV1,
 }
 
@@ -45,6 +49,7 @@ impl CommunicationsDurablePersistence {
         let row = sqlx::query(
             "SELECT message.message_id, message.last_evidence_id AS evidence_id,
                message.canonical_revision, evidence.body_state,
+               evidence.participant_display_label, evidence.message_subject,
                evidence.body_blob_reference_id, evidence.body_blob_declared_bytes,
                evidence.body_blob_sha256
              FROM hermes_data.communications_messages message
@@ -79,6 +84,16 @@ impl CommunicationsDurablePersistence {
         if !(1..=MAX_AI_SOURCE_BYTES_V1).contains(&declared_bytes) {
             return Err(CommunicationsAiSourceErrorV1::ContentLimit);
         }
+        let sender = row
+            .try_get::<Option<String>, _>("participant_display_label")
+            .map_err(|_| CommunicationsAiSourceErrorV1::InvalidRow)?
+            .unwrap_or_default()
+            .into_bytes();
+        let subject = row
+            .try_get::<Option<String>, _>("message_subject")
+            .map_err(|_| CommunicationsAiSourceErrorV1::InvalidRow)?
+            .unwrap_or_default()
+            .into_bytes();
         Ok(CommunicationsAiSourceSnapshotV1 {
             source_message_id: id16(
                 &row.try_get::<Vec<u8>, _>("message_id")
@@ -89,6 +104,8 @@ impl CommunicationsDurablePersistence {
                     .map_err(|_| CommunicationsAiSourceErrorV1::InvalidRow)?,
             )?,
             evidence_revision: revision,
+            sender_utf8: sender,
+            subject_utf8: subject,
             body: CommunicationsAiBodyReceiptV1 {
                 reference_id: id16(
                     &row.try_get::<Vec<u8>, _>("body_blob_reference_id")
@@ -238,6 +255,10 @@ fn validate_snapshot(
     if !valid_id16(&snapshot.source_message_id)
         || !valid_id16(&snapshot.evidence_id)
         || snapshot.evidence_revision == 0
+        || snapshot.sender_utf8.len() > MAX_AI_SOURCE_SENDER_BYTES_V1
+        || snapshot.subject_utf8.len() > MAX_AI_SOURCE_SUBJECT_BYTES_V1
+        || std::str::from_utf8(&snapshot.sender_utf8).is_err()
+        || std::str::from_utf8(&snapshot.subject_utf8).is_err()
         || !valid_id16(&snapshot.body.reference_id)
         || !(1..=MAX_AI_SOURCE_BYTES_V1).contains(&snapshot.body.declared_bytes)
         || !valid_sha256(&snapshot.body.sha256)
@@ -288,6 +309,8 @@ mod tests {
             source_message_id: [1; 16],
             evidence_id: [2; 16],
             evidence_revision: 3,
+            sender_utf8: b"Ada <ada@example.test>".to_vec(),
+            subject_utf8: b"Quarterly update".to_vec(),
             body: CommunicationsAiBodyReceiptV1 {
                 reference_id: [4; 16],
                 declared_bytes: 5,

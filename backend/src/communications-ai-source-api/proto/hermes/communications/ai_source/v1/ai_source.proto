@@ -16,7 +16,7 @@ message CommunicationReplySourcePreparedV1 {
   bytes source_message_id = 2;
   bytes source_evidence_id = 3;
   uint64 source_evidence_revision = 4;
-  CommunicationReplyBodySourceReceiptV1 body_source = 5;
+  CommunicationReplySourceContentReceiptV1 source_content = 5;
   string logical_owner_id = 6;
 }
 
@@ -26,11 +26,19 @@ message CommunicationReplySourceRejectedV1 {
   string logical_owner_id = 3;
 }
 
-message CommunicationReplyBodySourceReceiptV1 {
+message CommunicationReplySourceContentReceiptV1 {
   bytes reference_id = 1;
   uint64 declared_bytes = 2;
   bytes sha256 = 3;
   bytes custody_transfer_source_proof = 4;
+}
+
+// Exact plaintext schema inside the target-bound source Blob. The durable
+// result carries only the receipt above, never these private bytes.
+message CommunicationReplySourceContentV1 {
+  bytes sender_utf8 = 1;
+  bytes subject_utf8 = 2;
+  bytes body_utf8 = 3;
 }
 
 enum CommunicationReplySourceRejectCodeV1 {

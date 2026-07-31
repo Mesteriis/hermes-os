@@ -30,6 +30,8 @@ const SENDER_INSIGHTS_PROJECTION_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0013_communications_sender_insights_projection.sql");
 const EVIDENCE_EXPORT_SOURCE_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0014_communications_evidence_export_source.sql");
+const MESSAGE_SUBJECT_SCHEMA: &[u8] =
+    include_bytes!("../../migrations/0015_communications_message_subject.sql");
 
 pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 14;
 
@@ -125,6 +127,12 @@ pub fn communications_storage_bundle_v1() -> StorageBundleV1 {
                 migration_id: "communications_evidence_export_source".to_owned(),
                 forward_sql_utf8: EVIDENCE_EXPORT_SOURCE_SCHEMA.to_vec(),
                 sha256: Sha256::digest(EVIDENCE_EXPORT_SOURCE_SCHEMA).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: 15,
+                migration_id: "communications_message_subject".to_owned(),
+                forward_sql_utf8: MESSAGE_SUBJECT_SCHEMA.to_vec(),
+                sha256: Sha256::digest(MESSAGE_SUBJECT_SCHEMA).to_vec(),
             },
         ],
     }

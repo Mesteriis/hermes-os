@@ -183,8 +183,8 @@ impl CommunicationsDurablePersistence {
         let inserted_summary = sqlx::query(
             r#"
             INSERT INTO hermes_data.communications_evidence_summaries
-                (observation_id, source_cursor_sha256, account_cursor_sha256, conversation_cursor_sha256, participant_cursor_sha256, participant_display_label, media_cursor_sha256, reply_to_source_cursor_sha256, forward_origin_source_cursor_sha256, provider, direction, evidence_kind, body_state, body_blob_ref, body_blob_reference_id, body_blob_declared_bytes, body_blob_sha256, body_admission_failure, observed_at_unix_seconds)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                (observation_id, source_cursor_sha256, account_cursor_sha256, conversation_cursor_sha256, participant_cursor_sha256, participant_display_label, message_subject, media_cursor_sha256, reply_to_source_cursor_sha256, forward_origin_source_cursor_sha256, provider, direction, evidence_kind, body_state, body_blob_ref, body_blob_reference_id, body_blob_declared_bytes, body_blob_sha256, body_admission_failure, observed_at_unix_seconds)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             ON CONFLICT (observation_id) DO NOTHING
             "#,
         )
@@ -194,6 +194,7 @@ impl CommunicationsDurablePersistence {
         .bind(summary.conversation_cursor.map(|value| value.bytes().to_vec()))
         .bind(summary.participant_cursor.map(|value| value.bytes().to_vec()))
         .bind(&summary.participant_display_label)
+        .bind(&summary.message_subject)
         .bind(summary.media_cursor.map(|value| value.bytes().to_vec()))
         .bind(summary.reply_to_source_cursor.map(|value| value.bytes().to_vec()))
         .bind(summary.forward_origin_source_cursor.map(|value| value.bytes().to_vec()))
@@ -567,7 +568,7 @@ impl CommunicationsDurablePersistence {
         evidence_id: CommunicationObservationIdV1,
     ) -> Result<Option<CommunicationSummary>, CommunicationsPersistenceError> {
         let row = sqlx::query(
-            "SELECT summary.observation_id, lineage.causation_message_id, COALESCE(lineage.correlation_id, summary.observation_id) AS correlation_id, summary.source_cursor_sha256, summary.account_cursor_sha256, summary.conversation_cursor_sha256, summary.participant_cursor_sha256, summary.participant_display_label, summary.media_cursor_sha256, summary.reply_to_source_cursor_sha256, summary.forward_origin_source_cursor_sha256, summary.provider, summary.direction, summary.evidence_kind, summary.body_state, summary.body_blob_ref, summary.body_blob_reference_id, summary.body_blob_declared_bytes, summary.body_blob_sha256, summary.body_admission_failure, summary.observed_at_unix_seconds, COALESCE(lineage.recorded_at_unix_seconds, summary.observed_at_unix_seconds) AS recorded_at_unix_seconds, COALESCE(lineage.recorded_at_nanos, 0) AS recorded_at_nanos FROM hermes_data.communications_evidence_summaries summary LEFT JOIN hermes_data.communications_evidence_audit_lineage lineage ON lineage.evidence_id = summary.observation_id WHERE summary.observation_id = $1",
+            "SELECT summary.observation_id, lineage.causation_message_id, COALESCE(lineage.correlation_id, summary.observation_id) AS correlation_id, summary.source_cursor_sha256, summary.account_cursor_sha256, summary.conversation_cursor_sha256, summary.participant_cursor_sha256, summary.participant_display_label, summary.message_subject, summary.media_cursor_sha256, summary.reply_to_source_cursor_sha256, summary.forward_origin_source_cursor_sha256, summary.provider, summary.direction, summary.evidence_kind, summary.body_state, summary.body_blob_ref, summary.body_blob_reference_id, summary.body_blob_declared_bytes, summary.body_blob_sha256, summary.body_admission_failure, summary.observed_at_unix_seconds, COALESCE(lineage.recorded_at_unix_seconds, summary.observed_at_unix_seconds) AS recorded_at_unix_seconds, COALESCE(lineage.recorded_at_nanos, 0) AS recorded_at_nanos FROM hermes_data.communications_evidence_summaries summary LEFT JOIN hermes_data.communications_evidence_audit_lineage lineage ON lineage.evidence_id = summary.observation_id WHERE summary.observation_id = $1",
         )
         .bind(evidence_id.bytes().as_slice())
         .fetch_optional(&self.pool)
@@ -597,6 +598,9 @@ impl CommunicationsDurablePersistence {
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let participant_display_label: Option<String> = row
                 .try_get("participant_display_label")
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+            let message_subject: Option<String> = row
+                .try_get("message_subject")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let media_cursor: Option<Vec<u8>> = row
                 .try_get("media_cursor_sha256")
@@ -752,6 +756,7 @@ impl CommunicationsDurablePersistence {
                 conversation_cursor,
                 participant_cursor,
                 participant_display_label,
+                message_subject,
                 media_cursor,
                 reply_to_source_cursor,
                 forward_origin_source_cursor,

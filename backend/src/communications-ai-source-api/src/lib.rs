@@ -1,7 +1,12 @@
 #![forbid(unsafe_code)]
 
+mod content;
 mod envelope;
 
+pub use content::{
+    CommunicationReplySourceContentErrorV1, decode_communication_reply_source_content_v1,
+    encode_communication_reply_source_content_v1, validate_communication_reply_source_content_v1,
+};
 pub use envelope::{
     CommunicationReplySourceEnvelopeBuildErrorV1, CommunicationReplySourceEnvelopeContextV1,
     build_communication_reply_source_prepare_outbox_record_v1,
@@ -22,7 +27,7 @@ pub const COMMUNICATION_REPLY_SOURCE_PREPARED_CONTRACT_NAME_V1: &str =
 pub const COMMUNICATION_REPLY_SOURCE_REJECTED_CONTRACT_NAME_V1: &str =
     "communication_reply_source_rejected";
 pub const COMMUNICATIONS_AI_SOURCE_CONTRACT_MAJOR_V1: u32 = 1;
-pub const COMMUNICATIONS_AI_SOURCE_CONTRACT_REVISION_V1: u32 = 1;
+pub const COMMUNICATIONS_AI_SOURCE_CONTRACT_REVISION_V1: u32 = 2;
 pub const COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1: u64 = 256 * 1024;
 pub const COMMUNICATION_REPLY_SOURCE_MAX_PROOF_BYTES_V1: usize = 2_048;
 pub const COMMUNICATION_REPLY_SOURCE_MAX_IN_FLIGHT_V1: u32 = 32;

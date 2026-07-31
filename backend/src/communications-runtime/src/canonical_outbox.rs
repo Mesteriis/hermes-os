@@ -23,6 +23,8 @@ use prost::Message;
 use prost_types::Timestamp;
 use sha2::{Digest, Sha256};
 
+use crate::admission::COMMUNICATION_EVIDENCE_CONTRACT_REVISION;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CanonicalEventContextV1 {
     pub runtime_instance_id: String,
@@ -79,6 +81,7 @@ pub fn build_evidence_recorded_outbox_v1(
             .forward_origin_source_cursor
             .map_or_else(Vec::new, |value| value.bytes().to_vec()),
         participant_display_label: summary.participant_display_label.clone(),
+        message_subject: summary.message_subject.clone(),
         provider: provider_value(summary.provider),
         kind: kind_value(summary.kind),
         body: body_value(summary.body),
@@ -94,7 +97,7 @@ pub fn build_evidence_recorded_outbox_v1(
             owner: "communications".to_owned(),
             name: "communication_evidence_recorded".to_owned(),
             major: 1,
-            revision: 1,
+            revision: COMMUNICATION_EVIDENCE_CONTRACT_REVISION,
             schema_sha256: COMMUNICATION_EVIDENCE_SCHEMA_SHA256.to_vec(),
         }),
         source: Some(SourceRefV1 {
@@ -381,6 +384,7 @@ mod tests {
             conversation_cursor: Some(CommunicationSourceCursorV1::new([6; 32])),
             participant_cursor: None,
             participant_display_label: None,
+            message_subject: None,
             media_cursor: None,
             reply_to_source_cursor: None,
             forward_origin_source_cursor: None,
@@ -410,6 +414,10 @@ mod tests {
             .expect("canonical evidence event");
         let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("envelope");
 
+        assert_eq!(
+            envelope.contract.as_ref().map(|contract| contract.revision),
+            Some(COMMUNICATION_EVIDENCE_CONTRACT_REVISION)
+        );
         assert_eq!(envelope.causation_message_id, [7; 16]);
         assert_eq!(envelope.correlation_id, [3; 16]);
         assert_eq!(
@@ -428,6 +436,7 @@ mod tests {
         };
         let mut summary = evidence_summary();
         summary.provider = CommunicationProviderProvenanceV1::MailGmail;
+        summary.message_subject = Some("Quarterly update".to_owned());
 
         let record = build_evidence_recorded_outbox_v1(&summary, [7; 16], &context)
             .expect("canonical Gmail evidence event");
@@ -437,6 +446,7 @@ mod tests {
         )
         .expect("canonical evidence payload");
 
+        assert_eq!(payload.message_subject.as_deref(), Some("Quarterly update"));
         assert_eq!(
             hermes_communications_api::wire::CommunicationProviderProvenanceV1::try_from(
                 payload.provider,

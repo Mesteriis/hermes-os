@@ -89,12 +89,14 @@ business intent.
 - provider integration не видит Communications contract или workflow state;
 - Gateway доставляет client-safe invalidation через общий replayable SSE.
 
-## Ограничение первой revision
+## Typed source content
 
-Текущий Communications source contract передаёт только body. Поэтому workflow
-кодирует `AiReplySourceContentV1` с пустыми sender и subject, не фабрикуя эти
-поля. Reference parity, требующая sender/subject context, остаётся отдельным
-незакрытым contract slice и не считается реализованной этим ADR.
+ADR-0357 перевёл Communications source contract на coordinated revision 2.
+Communications формирует один bounded typed sender/subject/body Blob из одного
+canonical evidence snapshot, а workflow после custody transfer декодирует его
+и создаёт отдельный AI-target-bound `AiReplySourceContentV1`. Raw private
+content по-прежнему не сохраняется в workflow persistence и не публикуется в
+event payload.
 
 ## Phase gate
 

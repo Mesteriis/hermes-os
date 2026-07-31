@@ -66,11 +66,10 @@ materialization для AI, exact inference `request_rpc`, terminal cleanup до 
 descriptor, settings schema, owner-local Storage bundle и release fragment;
 dev release compiler включает exact runtime и Storage artifacts в подписанный
 distribution manifest. Persistence не хранит source body, prompt или provider
-metadata. Signed Kernel admission и live orchestration evidence ещё
-отсутствуют; Communications source v1 пока
-передаёт только body, поэтому sender/subject context не фабрикуется и остаётся
-отдельным открытым contract slice. Этот staged slice не открывает workflow
-gate.
+metadata. ADR-0357 реализовал Communications source revision 2 с bounded typed
+sender/subject/body content без provider facade. Signed Kernel admission, live
+orchestration evidence и успешный Ollama inference ещё отсутствуют, поэтому
+workflow gate остаётся закрытым.
 
 Уточняет:
 

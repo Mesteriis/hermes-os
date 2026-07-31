@@ -75,6 +75,7 @@ use sha2::{Digest, Sha256};
 pub const COMMUNICATIONS_BLOB_CAPABILITY_ID: &str =
     COMMUNICATIONS_BLOB_CUSTODY_TARGET_CAPABILITY_ID;
 pub const COMMUNICATIONS_EVENTS_CAPABILITY_ID: &str = "communications.events.v1";
+pub const COMMUNICATION_EVIDENCE_CONTRACT_REVISION: u32 = 2;
 pub const COMMUNICATIONS_OBSERVE_CAPABILITY_ID: &str = "communications.observe.v1";
 pub const COMMUNICATIONS_CALL_EVIDENCE_OBSERVE_CAPABILITY_ID: &str =
     "communications.call-evidence.observe.v1";
@@ -705,7 +706,7 @@ pub fn communication_evidence_recorded_contract_reference_v1() -> ContractRefere
         owner: COMMUNICATIONS_OWNER_ID.to_owned(),
         name: "communication_evidence_recorded".to_owned(),
         major: 1,
-        revision: 1,
+        revision: COMMUNICATION_EVIDENCE_CONTRACT_REVISION,
         schema_sha256: COMMUNICATION_EVIDENCE_SCHEMA_SHA256.to_vec(),
     }
 }

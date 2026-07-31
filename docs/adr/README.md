@@ -607,7 +607,14 @@ integration — exact `empty + 0`. Half-configured пары и фиктивны�
 ADR-0356 отделяет semantic AI request identity от обновляемого Blob authority:
 reply workflow переносит Communications custody, создаёт отдельный
 AI-target-bound Blob, хранит только bounded recovery receipts и Ack-ает source
-event после terminal inference и cleanup обоих Blob. Runtime unit реализована;
-unsigned assembly реализована отдельно; signed live orchestration и
-sender/subject context остаются открыты. Dev release compiler уже включает
-exact runtime и Storage artifacts в подписанный manifest.
+event после terminal inference и cleanup обоих Blob. Runtime unit, unsigned
+assembly и signed release artifacts реализованы; live managed orchestration
+остаётся открыта. Dev release compiler уже включает exact runtime и Storage
+artifacts в подписанный manifest.
+ADR-0357 вводит bounded canonical `message_subject` и coordinated revision 2
+для Communications ingress/AI source: Mail передаёт exact IMAP/Gmail subject,
+Communications сохраняет его как evidence и формирует один typed
+sender/subject/body Blob, а reply workflow переводит его в отдельный AI-owned
+content contract без integration import, raw private-content persistence или
+body-only compatibility facade. Slice реализован; canonical evidence major 1
+также переведён на revision 2 с новым schema digest.

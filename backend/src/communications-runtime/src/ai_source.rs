@@ -11,14 +11,16 @@ use hermes_communications_ai_source_api::{
     COMMUNICATION_REPLY_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1,
     COMMUNICATION_REPLY_SOURCE_BLOB_TARGET_MODULE_ID_V1,
     COMMUNICATION_REPLY_SOURCE_BLOB_TARGET_OWNER_ID_V1, COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1,
-    COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID_V1, CommunicationReplySourceEnvelopeContextV1,
+    COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID_V1, CommunicationReplySourceContentErrorV1,
+    CommunicationReplySourceEnvelopeContextV1,
     build_communication_reply_source_prepared_outbox_record_v1,
     build_communication_reply_source_rejected_outbox_record_v1,
     communication_reply_source_prepare_contract_reference_v1,
+    encode_communication_reply_source_content_v1,
     wire::{
-        CommunicationReplyBodySourceReceiptV1, CommunicationReplySourcePreparedV1,
-        CommunicationReplySourceRejectCodeV1, CommunicationReplySourceRejectedV1,
-        PrepareCommunicationReplySourceCommandV1,
+        CommunicationReplySourceContentReceiptV1, CommunicationReplySourceContentV1,
+        CommunicationReplySourcePreparedV1, CommunicationReplySourceRejectCodeV1,
+        CommunicationReplySourceRejectedV1, PrepareCommunicationReplySourceCommandV1,
     },
 };
 use hermes_communications_persistence::{
@@ -95,14 +97,14 @@ pub async fn consume_next_ai_source_prepare_v1(
             return Err(CommunicationsAiSourceDeliveryErrorV1::Unavailable);
         }
     };
-    let body_source = match write_target_bound_source(
+    let source_content = match write_target_bound_source(
         control_channel,
         dispatcher,
         decoded.run_id,
         &snapshot,
         plaintext,
     ) {
-        Ok(body_source) => body_source,
+        Ok(source_content) => source_content,
         Err(BodyMaterializationErrorV1::Policy(code)) => {
             let outcome = persist_rejection(persistence, &record, &decoded, code, context).await?;
             delivery.acknowledge().await.map_err(delivery_error)?;
@@ -119,7 +121,7 @@ pub async fn consume_next_ai_source_prepare_v1(
             source_message_id: snapshot.source_message_id.to_vec(),
             source_evidence_id: snapshot.evidence_id.to_vec(),
             source_evidence_revision: snapshot.evidence_revision,
-            body_source: Some(body_source),
+            source_content: Some(source_content),
             logical_owner_id: decoded.logical_owner_id.clone(),
         },
         &ai_source_envelope_context(context),
@@ -248,7 +250,18 @@ fn write_target_bound_source(
     run_id: [u8; 16],
     snapshot: &CommunicationsAiSourceSnapshotV1,
     bytes: Vec<u8>,
-) -> Result<CommunicationReplyBodySourceReceiptV1, BodyMaterializationErrorV1> {
+) -> Result<CommunicationReplySourceContentReceiptV1, BodyMaterializationErrorV1> {
+    let bytes = encode_communication_reply_source_content_v1(&CommunicationReplySourceContentV1 {
+        sender_utf8: snapshot.sender_utf8.clone(),
+        subject_utf8: snapshot.subject_utf8.clone(),
+        body_utf8: bytes,
+    })
+    .map_err(|error| match error {
+        CommunicationReplySourceContentErrorV1::Invalid => BodyMaterializationErrorV1::Policy(
+            CommunicationReplySourceRejectCodeV1::CommunicationReplySourceRejectCodePolicy,
+        ),
+        CommunicationReplySourceContentErrorV1::Limit => content_limit_error(),
+    })?;
     let declared_bytes = u64::try_from(bytes.len()).map_err(|_| content_limit_error())?;
     if declared_bytes == 0 || declared_bytes > COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1 {
         return Err(content_limit_error());
@@ -282,7 +295,7 @@ fn write_target_bound_source(
     BlobDataClient::new(session.data_socket_path)
         .and_then(|client| client.write(session.grant, session.channel_binding, bytes))
         .map_err(|_| BodyMaterializationErrorV1::Unavailable)?;
-    Ok(CommunicationReplyBodySourceReceiptV1 {
+    Ok(CommunicationReplySourceContentReceiptV1 {
         reference_id: reference_id.to_vec(),
         declared_bytes,
         sha256: sha256.to_vec(),
@@ -428,6 +441,8 @@ mod tests {
             source_message_id: [1; 16],
             evidence_id: [2; 16],
             evidence_revision: 3,
+            sender_utf8: b"Ada <ada@example.test>".to_vec(),
+            subject_utf8: b"Quarterly update".to_vec(),
             body: CommunicationsAiBodyReceiptV1 {
                 reference_id: [4; 16],
                 declared_bytes: 5,

@@ -22,6 +22,10 @@ message CommunicationObservationV1 {
   // Bounded provider-neutral display metadata. It is not an identity, cursor,
   // authorization input or provider locator.
   optional string participant_display_label = 14;
+  // Bounded provider-neutral message evidence. Integrations leave it absent
+  // when the provider has no exact subject; it is never fabricated from a
+  // conversation title or used for routing/authorization.
+  optional string message_subject = 15;
 }
 
 message BodyBlobReceiptV1 {

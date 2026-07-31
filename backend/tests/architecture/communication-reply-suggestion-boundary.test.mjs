@@ -120,10 +120,66 @@ test('Communications AI source is one provider-neutral event contract unit', asy
   assert.match(envelope, /target_capability: COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID_V1/);
   assert.match(envelope, /validate_envelope_v1/);
   assert.match(proto, /uint64 expected_source_revision = 3/);
+  assert.match(proto, /message CommunicationReplySourceContentV1/);
+  assert.match(proto, /bytes sender_utf8 = 1/);
+  assert.match(proto, /bytes subject_utf8 = 2/);
+  assert.match(proto, /bytes body_utf8 = 3/);
+  assert.match(proto, /CommunicationReplySourceContentReceiptV1 source_content = 5/);
   assert.match(proto, /bytes custody_transfer_source_proof = 4/);
+  assert.doesNotMatch(proto, /CommunicationReplyBodySourceReceiptV1|body_source/);
   assert.doesNotMatch(
     `${api}\n${envelope}\n${proto}`,
     /provider_id|provider_account|provider_locator|model_id|model_key|prompt|string target_owner|string target_module|string target_capability|message_body|body_text/,
+  );
+});
+
+test('canonical Mail subject and sender reach reply source content without a provider facade', async () => {
+  const [
+    ingressProto,
+    ingress,
+    mailCore,
+    mailRuntime,
+    canonicalApi,
+    migration,
+    persistence,
+    sourceRuntime,
+    workflowRuntime,
+  ] = await Promise.all([
+    backendSource(
+      'src/communications-ingress/proto/hermes/communications/ingress/v1/observation.proto',
+    ),
+    backendSource('src/communications-ingress/src/lib.rs'),
+    backendSource('src/mail-core/src/lib.rs'),
+    backendSource('src/mail-runtime/src/managed.rs'),
+    backendSource('src/communications-api/src/lib.rs'),
+    backendSource(
+      'src/communications-persistence/migrations/0015_communications_message_subject.sql',
+    ),
+    backendSource('src/communications-persistence/src/ai_source.rs'),
+    backendSource('src/communications-runtime/src/ai_source.rs'),
+    backendSource('src/communication-reply-suggestion-runtime/src/blob_materialization.rs'),
+  ]);
+
+  assert.match(ingressProto, /optional string message_subject = 15/);
+  assert.match(ingress, /MAX_MESSAGE_SUBJECT_BYTES/);
+  assert.match(ingress, /with_message_subject/);
+  assert.match(mailCore, /draft_ingress_observation_with_sender_subject_body/);
+  assert.match(mailCore, /with_message_subject/);
+  assert.match(mailRuntime, /message\.subject\.clone\(\)/);
+  assert.match(mailRuntime, /preview\.subject\.clone\(\)/);
+  assert.match(canonicalApi, /pub message_subject: Option<String>/);
+  assert.match(migration, /ADD COLUMN message_subject TEXT/);
+  assert.match(persistence, /evidence\.message_subject/);
+  assert.match(persistence, /sender_utf8/);
+  assert.match(persistence, /subject_utf8/);
+  assert.match(sourceRuntime, /CommunicationReplySourceContentV1/);
+  assert.match(sourceRuntime, /encode_communication_reply_source_content_v1/);
+  assert.match(workflowRuntime, /decode_communication_reply_source_content_v1/);
+  assert.match(workflowRuntime, /sender_utf8: source_content\.sender_utf8/);
+  assert.match(workflowRuntime, /subject_utf8: source_content\.subject_utf8/);
+  assert.doesNotMatch(
+    `${mailCore}\n${sourceRuntime}\n${workflowRuntime}`,
+    /provider\s*==|match\s+provider|MailImap\s*=>|MailGmail\s*=>/,
   );
 });
 

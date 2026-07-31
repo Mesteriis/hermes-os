@@ -8,10 +8,10 @@ use hermes_communications_domain::{
     COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1, accept_command, canonicalize_communication,
     decide_search_index_v1,
 };
-use hermes_communications_ingress::v1::CommunicationObservationV1;
 use hermes_communications_ingress::{
     BodyAvailabilityV1, CommunicationDirectionV1 as IngressDirectionV1,
     CommunicationEvidenceKindV1, ProviderProvenanceV1,
+    admission::communication_observed_contract_reference_v1, v1::CommunicationObservationV1,
 };
 use hermes_communications_persistence::{
     CommunicationsConsumeOutcomeV1, CommunicationsDurablePersistence,
@@ -174,10 +174,12 @@ fn command_from_envelope(
     let Some(Semantics::Observation(metadata)) = envelope.semantics.as_ref() else {
         return Err(CommunicationsEventConsumeErrorV1::WrongContract);
     };
-    if contract.owner != "communications"
-        || contract.name != "communication_observed"
-        || contract.major != 1
-        || contract.revision != 1
+    let expected_contract = communication_observed_contract_reference_v1();
+    if contract.owner != expected_contract.owner
+        || contract.name != expected_contract.name
+        || contract.major != expected_contract.major
+        || contract.revision != expected_contract.revision
+        || contract.schema_sha256 != expected_contract.schema_sha256
         || metadata.observation_id != envelope.message_id
         || metadata.source_cursor_sha256.len() != 32
     {
@@ -209,6 +211,7 @@ fn command_from_envelope(
             participant_display_label: participant_display_label_from_wire(
                 payload.participant_display_label,
             )?,
+            message_subject: message_subject_from_wire(payload.message_subject)?,
             media_cursor: optional_cursor(&payload.media_cursor_sha256)?,
             reply_to_source_cursor: optional_cursor(&payload.reply_to_source_cursor_sha256)?,
             forward_origin_source_cursor: optional_cursor(
@@ -456,6 +459,24 @@ fn participant_display_label_from_wire(
                 return Err(CommunicationsEventConsumeErrorV1::InvalidPayload);
             }
             Ok(normalized.to_owned())
+        })
+        .transpose()
+}
+
+fn message_subject_from_wire(
+    value: Option<String>,
+) -> Result<Option<String>, CommunicationsEventConsumeErrorV1> {
+    value
+        .map(|value| {
+            let normalized = value.trim();
+            if normalized.is_empty()
+                || normalized.len() > 998
+                || normalized != value
+                || normalized.chars().any(char::is_control)
+            {
+                return Err(CommunicationsEventConsumeErrorV1::InvalidPayload);
+            }
+            Ok(value)
         })
         .transpose()
 }

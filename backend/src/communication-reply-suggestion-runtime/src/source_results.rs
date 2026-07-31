@@ -91,7 +91,7 @@ pub async fn consume_reply_source_prepared_once_v1(
         return Ok(true);
     }
     let source = prepared
-        .body_source
+        .source_content
         .as_ref()
         .ok_or(ReplySuggestionSourceResultErrorV1::InvalidPayload)?;
     let materialized = materialize_reply_source_for_ai_v1(
@@ -248,8 +248,8 @@ struct PreparedSourceV1 {
     source_message_id: [u8; 16],
     source_evidence_id: [u8; 16],
     source_evidence_revision: u64,
-    body_source:
-        Option<hermes_communications_ai_source_api::wire::CommunicationReplyBodySourceReceiptV1>,
+    source_content:
+        Option<hermes_communications_ai_source_api::wire::CommunicationReplySourceContentReceiptV1>,
 }
 
 struct RejectedSourceV1 {
@@ -290,7 +290,7 @@ fn decode_prepared(
         source_evidence_revision: (payload.source_evidence_revision > 0)
             .then_some(payload.source_evidence_revision)
             .ok_or(ReplySuggestionSourceResultErrorV1::InvalidPayload)?,
-        body_source: payload.body_source,
+        source_content: payload.source_content,
     })
 }
 

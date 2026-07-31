@@ -20,7 +20,7 @@ use crate::{
     COMMUNICATIONS_AI_SOURCE_CONTRACT_REVISION_V1, COMMUNICATIONS_AI_SOURCE_OWNER_V1,
     COMMUNICATIONS_AI_SOURCE_SCHEMA_SHA256,
     wire::{
-        CommunicationReplyBodySourceReceiptV1, CommunicationReplySourcePreparedV1,
+        CommunicationReplySourceContentReceiptV1, CommunicationReplySourcePreparedV1,
         CommunicationReplySourceRejectedV1, PrepareCommunicationReplySourceCommandV1,
     },
 };
@@ -238,7 +238,7 @@ fn validate_prepared_payload(
     if payload.source_evidence_revision == 0
         || !valid_logical_owner_id(&payload.logical_owner_id)
         || payload
-            .body_source
+            .source_content
             .as_ref()
             .is_none_or(|receipt| !valid_source_receipt(receipt))
     {
@@ -247,7 +247,7 @@ fn validate_prepared_payload(
     Ok(run_id)
 }
 
-fn valid_source_receipt(receipt: &CommunicationReplyBodySourceReceiptV1) -> bool {
+fn valid_source_receipt(receipt: &CommunicationReplySourceContentReceiptV1) -> bool {
     receipt.reference_id.len() == 16
         && receipt.reference_id.iter().any(|byte| *byte != 0)
         && (1..=COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1).contains(&receipt.declared_bytes)
@@ -346,7 +346,7 @@ mod tests {
             source_message_id: vec![2; 16],
             source_evidence_id: vec![3; 16],
             source_evidence_revision: 9,
-            body_source: Some(CommunicationReplyBodySourceReceiptV1 {
+            source_content: Some(CommunicationReplySourceContentReceiptV1 {
                 reference_id: vec![4; 16],
                 declared_bytes: COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1 + 1,
                 sha256: vec![5; 32],

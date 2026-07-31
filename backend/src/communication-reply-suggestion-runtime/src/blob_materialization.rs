@@ -12,6 +12,7 @@ use hermes_blob_client::{
     request_managed_blob_session_v2,
 };
 use hermes_communication_reply_suggestion_persistence::ReplySuggestionBlobCleanupV1;
+use hermes_communications_ai_source_api::decode_communication_reply_source_content_v1;
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, ManagedControlRequestDispatcherV2},
     v1::{BlobCustodyReleaseReasonV1, BlobDataOperationV1},
@@ -70,21 +71,20 @@ pub(crate) fn materialize_reply_source_for_ai_v1(
     BlobDataClient::new(&transfer.data_socket_path)
         .and_then(|client| client.custody_transfer(transfer.grant, transfer.channel_binding))
         .map_err(|_| ReplySuggestionBlobErrorV1::Unavailable)?;
-    let raw_body = read_exact(
+    let raw_source = read_exact(
         channel,
         dispatcher,
         &local_reference,
         source.declared_bytes,
         &source.sha256,
     )?;
-    if std::str::from_utf8(&raw_body).is_err() {
-        return Err(ReplySuggestionBlobErrorV1::InvalidReceipt);
-    }
+    let source_content = decode_communication_reply_source_content_v1(&raw_source)
+        .map_err(|_| ReplySuggestionBlobErrorV1::InvalidReceipt)?;
     let encoded = Zeroizing::new(
         encode_reply_source_content_v1(&AiReplySourceContentV1 {
-            sender_utf8: Vec::new(),
-            subject_utf8: Vec::new(),
-            body_utf8: raw_body.to_vec(),
+            sender_utf8: source_content.sender_utf8,
+            subject_utf8: source_content.subject_utf8,
+            body_utf8: source_content.body_utf8,
         })
         .map_err(|_| ReplySuggestionBlobErrorV1::InvalidReceipt)?,
     );

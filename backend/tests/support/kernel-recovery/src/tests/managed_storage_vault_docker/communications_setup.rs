@@ -877,7 +877,7 @@ pub(super) fn assert_communications_ingress_delivery(
                     if contract.owner == "communications"
                         && contract.name == "communication_evidence_recorded"
                         && contract.major == 1
-                        && contract.revision == 1
+                        && contract.revision == 2
             ));
             assert_eq!(envelope.causation_message_id, record.message_id().to_vec());
             assert_eq!(envelope.correlation_id, ingress.correlation_id);
