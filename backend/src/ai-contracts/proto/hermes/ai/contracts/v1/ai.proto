@@ -5,6 +5,22 @@ package hermes.ai.contracts.v1;
 enum AiUseCaseV1 {
   AI_USE_CASE_UNSPECIFIED = 0;
   AI_USE_CASE_COMMUNICATION_REPLY_SUGGESTION = 1;
+  AI_USE_CASE_COMMUNICATION_SUMMARY = 2;
+}
+
+enum AiSummaryLanguageV1 {
+  AI_SUMMARY_LANGUAGE_UNSPECIFIED = 0;
+  AI_SUMMARY_LANGUAGE_AUTO = 1;
+  AI_SUMMARY_LANGUAGE_ENGLISH = 2;
+  AI_SUMMARY_LANGUAGE_SPANISH = 3;
+  AI_SUMMARY_LANGUAGE_RUSSIAN = 4;
+}
+
+enum AiSummaryLengthV1 {
+  AI_SUMMARY_LENGTH_UNSPECIFIED = 0;
+  AI_SUMMARY_LENGTH_SHORT = 1;
+  AI_SUMMARY_LENGTH_STANDARD = 2;
+  AI_SUMMARY_LENGTH_DETAILED = 3;
 }
 
 enum AiReplyToneV1 {
@@ -65,6 +81,12 @@ message AiReplySourceContentV1 {
   bytes body_utf8 = 3;
 }
 
+message AiSummarySourceContentV1 {
+  bytes sender_utf8 = 1;
+  bytes subject_utf8 = 2;
+  bytes body_utf8 = 3;
+}
+
 message AiContextReceiptV1 {
   bytes context_id = 1;
   AiUseCaseV1 use_case = 2;
@@ -111,6 +133,32 @@ message CommunicationReplySuggestionInferenceResultV1 {
   AiInferenceTerminalStatusV1 terminal_status = 11;
 }
 
+message CommunicationSummaryInferenceRequestV1 {
+  bytes run_id = 1;
+  AiContextReceiptV1 context = 2;
+  AiPrivateSourceReceiptV1 source = 3;
+  AiSummaryLanguageV1 language = 4;
+  AiSummaryLengthV1 length = 5;
+  uint32 maximum_output_bytes = 6;
+  uint32 maximum_output_tokens = 7;
+  AiEgressPolicyV1 egress_policy = 8;
+  uint32 egress_policy_revision = 9;
+  string logical_owner_id = 10;
+}
+
+message CommunicationSummaryInferenceResultV1 {
+  bytes run_id = 1;
+  bytes request_digest = 2;
+  bytes source_sha256 = 3;
+  bytes summary_utf8 = 4;
+  AiSummaryLanguageV1 resolved_language = 5;
+  AiSummaryLengthV1 resolved_length = 6;
+  AiInferenceReceiptV1 inference_receipt = 7;
+  AiInferenceCompletenessV1 completeness = 8;
+  uint32 confidence_basis_points = 9;
+  AiInferenceTerminalStatusV1 terminal_status = 10;
+}
+
 // Private-content request_rpc from the AI engine to an approved provider.
 // Provider/model/endpoint selection is descriptor and effective-settings owned.
 message AiProviderReplyGenerationRequestV1 {
@@ -138,4 +186,29 @@ message AiProviderReplyGenerationResultV1 {
   AiInferenceCompletenessV1 completeness = 10;
   uint32 confidence_basis_points = 11;
   uint64 provider_settings_revision = 12;
+}
+
+message AiProviderSummaryGenerationRequestV1 {
+  bytes request_id = 1;
+  bytes input_utf8 = 2;
+  AiSummaryLanguageV1 language = 3;
+  AiSummaryLengthV1 length = 4;
+  uint32 maximum_output_bytes = 5;
+  uint32 maximum_output_tokens = 6;
+  AiEgressPolicyV1 egress_policy = 7;
+  uint32 egress_policy_revision = 8;
+}
+
+message AiProviderSummaryGenerationResultV1 {
+  bytes request_id = 1;
+  bytes summary_utf8 = 2;
+  AiSummaryLanguageV1 resolved_language = 3;
+  AiSummaryLengthV1 resolved_length = 4;
+  bytes model_revision_sha256 = 5;
+  uint32 input_tokens = 6;
+  uint32 output_tokens = 7;
+  AiInferenceTerminalStatusV1 terminal_status = 8;
+  AiInferenceCompletenessV1 completeness = 9;
+  uint32 confidence_basis_points = 10;
+  uint64 provider_settings_revision = 11;
 }

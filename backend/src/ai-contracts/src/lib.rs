@@ -5,11 +5,17 @@ mod validation;
 use hermes_runtime_protocol::v1::ContractReferenceV1;
 pub use validation::{
     AiContractValidationErrorV1, compute_provider_reply_generation_request_digest_v1,
-    compute_reply_inference_request_digest_v1, decode_reply_source_content_v1,
-    encode_reply_source_content_v1, seal_reply_inference_request_v1,
+    compute_provider_summary_generation_request_digest_v1,
+    compute_reply_inference_request_digest_v1, compute_summary_inference_request_digest_v1,
+    decode_reply_source_content_v1, decode_summary_source_content_v1,
+    encode_reply_source_content_v1, encode_summary_source_content_v1,
+    seal_reply_inference_request_v1, seal_summary_inference_request_v1,
     validate_provider_reply_generation_request_v1, validate_provider_reply_generation_result_v1,
-    validate_reply_inference_request_v1, validate_reply_inference_result_v1,
-    validate_reply_source_content_v1,
+    validate_provider_summary_generation_request_v1,
+    validate_provider_summary_generation_result_v1, validate_reply_inference_request_v1,
+    validate_reply_inference_result_v1, validate_reply_source_content_v1,
+    validate_summary_inference_request_v1, validate_summary_inference_result_v1,
+    validate_summary_source_content_v1,
 };
 
 pub const PACKAGE: &str = "hermes-ai-contracts";
@@ -19,8 +25,13 @@ pub const AI_CONTRACT_REVISION_V1: u32 = 1;
 pub const COMMUNICATION_REPLY_INFERENCE_CONTRACT_NAME_V1: &str =
     "communication_reply_suggestion_inference";
 pub const AI_PROVIDER_REPLY_GENERATION_CONTRACT_NAME_V1: &str = "ai_provider_reply_generation";
+pub const COMMUNICATION_SUMMARY_INFERENCE_CONTRACT_NAME_V1: &str =
+    "communication_summary_inference";
+pub const AI_PROVIDER_SUMMARY_GENERATION_CONTRACT_NAME_V1: &str = "ai_provider_summary_generation";
 pub const AI_INFERENCE_REQUEST_CAPABILITY_ID_V1: &str = "ai.inference.request.v1";
 pub const AI_PROVIDER_GENERATION_CAPABILITY_ID_V1: &str = "ai.provider.generate.v1";
+pub const AI_SUMMARY_REQUEST_CAPABILITY_ID_V1: &str = "ai.summary.request.v1";
+pub const AI_PROVIDER_SUMMARY_CAPABILITY_ID_V1: &str = "ai.provider.summarize.v1";
 pub const AI_INFERENCE_BLOB_CAPABILITY_ID_V1: &str = "ai.inference.blob.v1";
 pub const AI_INFERENCE_MODULE_ID_V1: &str = "hermes-ai-inference-runtime";
 pub const AI_MAX_PRIVATE_SOURCE_BYTES_V1: u64 = 256 * 1024;
@@ -48,6 +59,16 @@ pub fn communication_reply_inference_contract_reference_v1() -> ContractReferenc
 #[must_use]
 pub fn ai_provider_reply_generation_contract_reference_v1() -> ContractReferenceV1 {
     contract_reference(AI_PROVIDER_REPLY_GENERATION_CONTRACT_NAME_V1)
+}
+
+#[must_use]
+pub fn communication_summary_inference_contract_reference_v1() -> ContractReferenceV1 {
+    contract_reference(COMMUNICATION_SUMMARY_INFERENCE_CONTRACT_NAME_V1)
+}
+
+#[must_use]
+pub fn ai_provider_summary_generation_contract_reference_v1() -> ContractReferenceV1 {
+    contract_reference(AI_PROVIDER_SUMMARY_GENERATION_CONTRACT_NAME_V1)
 }
 
 fn contract_reference(name: &str) -> ContractReferenceV1 {
@@ -81,6 +102,14 @@ mod tests {
         assert_eq!(
             ai_provider_reply_generation_contract_reference_v1().owner,
             "ai"
+        );
+        assert_eq!(
+            communication_summary_inference_contract_reference_v1().name,
+            "communication_summary_inference"
+        );
+        assert_eq!(
+            ai_provider_summary_generation_contract_reference_v1().name,
+            "ai_provider_summary_generation"
         );
     }
 }
