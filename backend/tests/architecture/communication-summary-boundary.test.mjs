@@ -49,3 +49,29 @@ test('communication summary agreement keeps workflow domain engine and integrati
   assert.match(adr, /Gate[\s\S]*`communication_summary_v1`[\s\S]*остаётся `planned`/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns summary/i);
 });
+
+test('Communications summary source is a distinct event and target-bound Blob handoff', async () => {
+  const [runtime, admission, eventRuntime, sourceApi, replyRuntime] = await Promise.all([
+    readFile(new URL('src/communications-runtime/src/summary_source.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/event_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-ai-source-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/ai_source.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+
+  assert.match(runtime, /PrepareCommunicationSummarySourceCommandV1/);
+  assert.match(runtime, /build_communication_summary_source_prepared_outbox_record_v1/);
+  assert.match(runtime, /build_communication_summary_source_rejected_outbox_record_v1/);
+  assert.match(runtime, /COMMUNICATION_SUMMARY_SOURCE_BLOB_TARGET_OWNER_ID_V1/);
+  assert.match(runtime, /COMMUNICATION_SUMMARY_SOURCE_BLOB_TARGET_MODULE_ID_V1/);
+  assert.match(runtime, /COMMUNICATION_SUMMARY_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1/);
+  assert.match(runtime, /communications-ai-summary-source-copy-v1/);
+  assert.match(admission, /communications\.ai-summary-source\.v1/);
+  assert.match(admission, /communications\.ai-summary-source\.blob\.v1/);
+  assert.match(eventRuntime, /communication_summary_source_prepare_contract_reference_v1/);
+  assert.match(eventRuntime, /CommunicationsConsumerV1::SummarySourcePrepare/);
+  assert.match(sourceApi, /"communication_summary"/);
+  assert.match(sourceApi, /"hermes-communication-summary-runtime"/);
+  assert.doesNotMatch(runtime, /hermes_ollama|ollama|provider_sdk|provider identity/i);
+  assert.doesNotMatch(replyRuntime, /PrepareCommunicationSummarySourceCommandV1/);
+});

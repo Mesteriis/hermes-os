@@ -33,3 +33,4 @@ pub mod search_query;
 pub mod search_worker;
 pub mod sender_insights_port;
 pub mod storage_bundle;
+mod summary_source;

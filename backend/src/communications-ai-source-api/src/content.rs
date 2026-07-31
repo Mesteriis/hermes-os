@@ -1,7 +1,7 @@
 use prost::Message;
 
 use crate::{
-    COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1,
+    COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1, COMMUNICATION_SUMMARY_SOURCE_MAX_BYTES_V1,
     wire::{CommunicationReplySourceContentV1, CommunicationSummarySourceContentV1},
 };
 
@@ -97,7 +97,7 @@ pub fn validate_communication_summary_source_content_v1(
     }
     let encoded_len = content.encoded_len();
     if encoded_len == 0
-        || encoded_len > usize::try_from(COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1).unwrap_or(0)
+        || encoded_len > usize::try_from(COMMUNICATION_SUMMARY_SOURCE_MAX_BYTES_V1).unwrap_or(0)
     {
         return Err(CommunicationSummarySourceContentErrorV1::Limit);
     }

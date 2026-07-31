@@ -3330,6 +3330,8 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_INVENTORY = {
     ...REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY.businessCapabilities,
     'communications.ai-reply-source.blob.v1',
     'communications.ai-reply-source.v1',
+    'communications.ai-summary-source.blob.v1',
+    'communications.ai-summary-source.v1',
   ].sort(),
 };
 

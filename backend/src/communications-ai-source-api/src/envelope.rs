@@ -16,6 +16,7 @@ use crate::{
     COMMUNICATION_REPLY_SOURCE_PREPARE_CONTRACT_NAME_V1,
     COMMUNICATION_REPLY_SOURCE_PREPARED_CONTRACT_NAME_V1,
     COMMUNICATION_REPLY_SOURCE_REJECTED_CONTRACT_NAME_V1,
+    COMMUNICATION_SUMMARY_SOURCE_MAX_BYTES_V1, COMMUNICATION_SUMMARY_SOURCE_MAX_PROOF_BYTES_V1,
     COMMUNICATION_SUMMARY_SOURCE_PREPARE_CONTRACT_NAME_V1,
     COMMUNICATION_SUMMARY_SOURCE_PREPARED_CONTRACT_NAME_V1,
     COMMUNICATION_SUMMARY_SOURCE_REJECTED_CONTRACT_NAME_V1,
@@ -399,12 +400,12 @@ fn validate_summary_prepared_payload(
 fn valid_summary_source_receipt(receipt: &CommunicationSummarySourceContentReceiptV1) -> bool {
     receipt.reference_id.len() == 16
         && receipt.reference_id.iter().any(|byte| *byte != 0)
-        && (1..=COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1).contains(&receipt.declared_bytes)
+        && (1..=COMMUNICATION_SUMMARY_SOURCE_MAX_BYTES_V1).contains(&receipt.declared_bytes)
         && receipt.sha256.len() == 32
         && receipt.sha256.iter().any(|byte| *byte != 0)
         && !receipt.custody_transfer_source_proof.is_empty()
         && receipt.custody_transfer_source_proof.len()
-            <= COMMUNICATION_REPLY_SOURCE_MAX_PROOF_BYTES_V1
+            <= COMMUNICATION_SUMMARY_SOURCE_MAX_PROOF_BYTES_V1
 }
 
 fn valid_source_receipt(receipt: &CommunicationReplySourceContentReceiptV1) -> bool {
