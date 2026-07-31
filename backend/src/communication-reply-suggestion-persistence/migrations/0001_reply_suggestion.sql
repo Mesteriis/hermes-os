@@ -13,6 +13,12 @@ CREATE TABLE hermes_data.communication_reply_suggestion_runs (
     source_evidence_revision BIGINT,
     source_sha256 BYTEA,
     inference_request_digest BYTEA,
+    inference_request_bytes BYTEA,
+    source_cleanup_reference_id BYTEA,
+    source_cleanup_declared_bytes BIGINT,
+    source_cleanup_sha256 BYTEA,
+    source_cleanup_custody_proof BYTEA,
+    cleanup_completed_at_unix_millis BIGINT,
     candidate_subject_utf8 BYTEA,
     candidate_body_utf8 BYTEA,
     candidate_resolved_tone SMALLINT,
@@ -45,6 +51,41 @@ CREATE TABLE hermes_data.communication_reply_suggestion_runs (
           AND source_evidence_revision > 0 AND length(source_sha256) = 32
           AND length(inference_request_digest) = 32)
         OR state = 5
+    ),
+    CHECK (
+        (
+            inference_request_bytes IS NULL
+            AND source_cleanup_reference_id IS NULL
+            AND source_cleanup_declared_bytes IS NULL
+            AND source_cleanup_sha256 IS NULL
+            AND source_cleanup_custody_proof IS NULL
+        )
+        OR
+        (
+            length(inference_request_bytes) BETWEEN 1 AND 16384
+            AND length(source_cleanup_reference_id) = 16
+            AND source_cleanup_declared_bytes BETWEEN 1 AND 262144
+            AND length(source_cleanup_sha256) = 32
+            AND length(source_cleanup_custody_proof) BETWEEN 1 AND 2048
+        )
+    ),
+    CHECK (
+        (state IN (1, 2, 3) AND cleanup_completed_at_unix_millis IS NULL)
+        OR state IN (4, 5)
+    ),
+    CHECK (
+        (state IN (1, 2) AND inference_request_bytes IS NULL)
+        OR (state = 3 AND inference_request_bytes IS NOT NULL)
+        OR state IN (4, 5)
+    ),
+    CHECK (
+        state != 4
+        OR inference_request_bytes IS NOT NULL
+        OR cleanup_completed_at_unix_millis IS NOT NULL
+    ),
+    CHECK (
+        cleanup_completed_at_unix_millis IS NULL
+        OR cleanup_completed_at_unix_millis >= created_at_unix_millis
     ),
     CHECK (
         (state = 4 AND candidate_subject_utf8 IS NOT NULL

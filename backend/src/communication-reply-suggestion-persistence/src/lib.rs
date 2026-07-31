@@ -8,8 +8,8 @@ mod schema;
 
 pub use model::{
     CreateReplySuggestionOutcomeV1, CreateReplySuggestionRunV1, PersistedReplySuggestionRunV1,
-    ReplySuggestionInboxResultV1, ReplySuggestionPersistenceErrorV1, ReplySuggestionSourceResultV1,
-    UnpublishedReplySuggestionEventV1,
+    ReplySuggestionBlobCleanupV1, ReplySuggestionInboxResultV1, ReplySuggestionPersistenceErrorV1,
+    ReplySuggestionSourceResultV1, UnpublishedReplySuggestionEventV1,
 };
 pub use realtime::ReplySuggestionRealtimeTransitionV1;
 pub use repository::CommunicationReplySuggestionPersistenceV1;

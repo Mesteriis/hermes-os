@@ -122,12 +122,51 @@ impl AiInferencePersistenceV1 {
         .rows_affected()
             == 1;
 
-        let persisted = self
+        let mut persisted = self
             .load_run(&request.logical_owner_id, id16(&request.run_id)?)
             .await?
             .ok_or(AiInferencePersistenceErrorV1::InvalidRow)?;
         if !inserted && persisted.run.request != run.request {
-            return Err(AiInferencePersistenceErrorV1::RequestConflict);
+            if !same_semantic_request(&persisted.run.request, &run.request) {
+                return Err(AiInferencePersistenceErrorV1::RequestConflict);
+            }
+            if matches!(
+                persisted.run.state,
+                AiInferenceRunStateV1::Accepted | AiInferenceRunStateV1::Executing
+            ) {
+                let source = run
+                    .request
+                    .source
+                    .as_ref()
+                    .ok_or(AiInferencePersistenceErrorV1::InvalidInput)?;
+                let updated = sqlx::query(
+                    "UPDATE hermes_data.ai_inference_runs
+                     SET source_custody_proof = $1
+                     WHERE logical_owner_id = $2 AND run_id = $3
+                       AND request_digest = $4 AND run_state IN (1, 2)",
+                )
+                .bind(&source.custody_transfer_source_proof)
+                .bind(&run.request.logical_owner_id)
+                .bind(&run.request.run_id)
+                .bind(
+                    &run.request
+                        .context
+                        .as_ref()
+                        .ok_or(AiInferencePersistenceErrorV1::InvalidInput)?
+                        .request_digest,
+                )
+                .execute(&self.pool)
+                .await
+                .map_err(storage_error)?
+                .rows_affected();
+                if updated != 1 {
+                    return Err(AiInferencePersistenceErrorV1::RevisionConflict);
+                }
+                persisted = self
+                    .load_run(&request.logical_owner_id, id16(&request.run_id)?)
+                    .await?
+                    .ok_or(AiInferencePersistenceErrorV1::InvalidRow)?;
+            }
         }
         Ok(AiInferencePersistenceOutcomeV1 {
             persisted,
@@ -236,6 +275,58 @@ impl AiInferencePersistenceV1 {
             run: transition.next_run,
             selected_provider_settings_revision: selected_revision,
         })
+    }
+}
+
+fn same_semantic_request(
+    left: &CommunicationReplySuggestionInferenceRequestV1,
+    right: &CommunicationReplySuggestionInferenceRequestV1,
+) -> bool {
+    let mut left = left.clone();
+    let mut right = right.clone();
+    let Some(left_source) = left.source.as_mut() else {
+        return false;
+    };
+    let Some(right_source) = right.source.as_mut() else {
+        return false;
+    };
+    left_source.custody_transfer_source_proof.clear();
+    right_source.custody_transfer_source_proof.clear();
+    left == right
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_ai_contracts::wire::AiPrivateSourceReceiptV1;
+
+    use super::*;
+
+    #[test]
+    fn semantic_replay_allows_only_custody_proof_renewal() {
+        let mut original = CommunicationReplySuggestionInferenceRequestV1 {
+            run_id: vec![1; 16],
+            source: Some(AiPrivateSourceReceiptV1 {
+                reference_id: vec![2; 16],
+                declared_bytes: 32,
+                sha256: vec![3; 32],
+                custody_transfer_source_proof: vec![4; 48],
+            }),
+            logical_owner_id: "owner-1".to_owned(),
+            ..Default::default()
+        };
+        let mut renewed = original.clone();
+        renewed
+            .source
+            .as_mut()
+            .expect("source")
+            .custody_transfer_source_proof = vec![5; 48];
+        assert!(same_semantic_request(&original, &renewed));
+
+        renewed.source.as_mut().expect("source").sha256[0] ^= 1;
+        assert!(!same_semantic_request(&original, &renewed));
+
+        original.source = None;
+        assert!(!same_semantic_request(&original, &renewed));
     }
 }
 

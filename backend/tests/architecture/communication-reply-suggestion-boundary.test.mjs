@@ -9,6 +9,10 @@ const ADR_PATH = new URL(
   'docs/adr/ADR-0353-communication-reply-suggestion-and-ai-inference-boundary.md',
   REPOSITORY_ROOT,
 );
+const RENEWABLE_AUTHORITY_ADR_PATH = new URL(
+  'docs/adr/ADR-0356-renewable-blob-authority-for-durable-ai-workflows.md',
+  REPOSITORY_ROOT,
+);
 const POLICY_PATH = new URL('architecture/policy.json', BACKEND_ROOT);
 const INVENTORY_PATH = new URL(
   'architecture/communications-settings-reconstruction.json',
@@ -249,6 +253,50 @@ test('reply suggestion persistence is owner-local atomic replay state without pr
   assert.doesNotMatch(
     `${manifest}\n${model}\n${repository}\n${outbox}\n${realtime}\n${migration}`,
     /communications_|mail_|telegram_|whatsapp_|zulip_|source_body|prompt|provider_id|model_id|endpoint|serde_json|google\.protobuf\.Any|map</,
+  );
+});
+
+test('reply suggestion runtime coordinates event source, AI request, Blob custody, and client SSE', async () => {
+  const [adr, manifest, admission, sourceResults, materialization, inference, realtime, runtime, processRoot] =
+    await Promise.all([
+      readFile(RENEWABLE_AUTHORITY_ADR_PATH, 'utf8'),
+      backendSource('src/communication-reply-suggestion-runtime/Cargo.toml'),
+      backendSource('src/communication-reply-suggestion-runtime/src/admission.rs'),
+      backendSource('src/communication-reply-suggestion-runtime/src/source_results.rs'),
+      backendSource('src/communication-reply-suggestion-runtime/src/blob_materialization.rs'),
+      backendSource('src/communication-reply-suggestion-runtime/src/inference.rs'),
+      backendSource('src/communication-reply-suggestion-runtime/src/client_realtime.rs'),
+      backendSource('src/communication-reply-suggestion-runtime/src/managed_runtime.rs'),
+      backendSource('src/communication-reply-suggestion-runtime/src/main.rs'),
+    ]);
+
+  assert.match(adr, /Digest не включает `custody_transfer_source_proof`/);
+  assert.match(adr, /только затем подтверждает source event/);
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "communication_reply_suggestion"/);
+  assert.match(manifest, /surface = "runtime"/);
+  assert.match(admission, /ModuleKindV1::Workflow/);
+  assert.match(admission, /ProvidedSurfaceKindV1::ClientRpc/);
+  assert.match(admission, /ProvidedSurfaceKindV1::DurablePublisher/);
+  assert.match(admission, /ProvidedSurfaceKindV1::DurableConsumer/);
+  assert.match(admission, /communication_reply_inference_contract_reference_v1/);
+  assert.match(admission, /BlobQuotaOperationV1::CustodyTransfer/);
+  assert.match(sourceResults, /receive_runtime_pull_delivery/);
+  assert.match(sourceResults, /materialize_reply_source_for_ai_v1/);
+  assert.match(sourceResults, /complete_blob_cleanup/);
+  assert.match(sourceResults, /delivery\.acknowledge\(\)/);
+  assert.match(materialization, /request_managed_blob_custody_transfer_v2/);
+  assert.match(materialization, /AI_INFERENCE_BLOB_CAPABILITY_ID_V1/);
+  assert.match(materialization, /release_reply_source_blobs_v1/);
+  assert.match(inference, /Operation::RouteModuleRequest/);
+  assert.match(inference, /persist_inference_transition/);
+  assert.match(realtime, /client_realtime_window/);
+  assert.match(realtime, /Operation::PublishClientRealtime/);
+  assert.match(runtime, /publish_pending/);
+  assert.match(processRoot, /ManagedWorkflowRuntimeConfigurationV1/);
+  assert.doesNotMatch(
+    `${manifest}\n${admission}\n${sourceResults}\n${materialization}\n${inference}\n${runtime}`,
+    /hermes-mail|hermes-telegram|hermes-whatsapp|hermes-zulip|hermes-ollama|\bprovider_id\b|\bmodel_id\b|\bprompt_text\b|reqwest|hyper/,
   );
 });
 

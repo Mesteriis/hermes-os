@@ -8,6 +8,16 @@ pub const REPLY_SUGGESTION_RECOVERY_LIMIT_V1: u16 = 128;
 pub const REPLY_SUGGESTION_REALTIME_LIMIT_V1: u16 = 1_024;
 pub const REPLY_SUGGESTION_OUTBOX_LIMIT_V1: u16 = 128;
 pub const REPLY_SUGGESTION_MAX_EVENT_BYTES_V1: usize = 64 * 1024;
+pub const REPLY_SUGGESTION_MAX_INFERENCE_REQUEST_BYTES_V1: usize = 16 * 1024;
+pub const REPLY_SUGGESTION_MAX_CUSTODY_PROOF_BYTES_V1: usize = 2_048;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReplySuggestionBlobCleanupV1 {
+    pub reference_id: [u8; 16],
+    pub declared_bytes: u64,
+    pub sha256: [u8; 32],
+    pub custody_proof: Vec<u8>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CreateReplySuggestionRunV1 {
@@ -25,6 +35,9 @@ pub struct PersistedReplySuggestionRunV1 {
     pub draft: ReplySuggestionDraftV1,
     pub request_fingerprint: [u8; 32],
     pub status: ReplySuggestionStatusV1,
+    pub inference_request_bytes: Option<Vec<u8>>,
+    pub source_cleanup: Option<ReplySuggestionBlobCleanupV1>,
+    pub cleanup_completed_at_unix_millis: Option<i64>,
     pub created_at_unix_millis: i64,
     pub updated_at_unix_millis: i64,
 }
@@ -42,6 +55,8 @@ pub struct ReplySuggestionSourceResultV1 {
     pub logical_owner_id: String,
     pub run_id: [u8; 16],
     pub transition: ReplySuggestionTransitionV1,
+    pub inference_request_bytes: Option<Vec<u8>>,
+    pub source_cleanup: Option<ReplySuggestionBlobCleanupV1>,
     pub occurred_at_unix_millis: i64,
 }
 

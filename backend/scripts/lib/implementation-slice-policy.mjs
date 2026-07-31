@@ -776,6 +776,12 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
     surface: 'persistence',
   },
   {
+    name: 'hermes-communication-reply-suggestion-runtime',
+    role: 'workflow',
+    owner: 'communication_reply_suggestion',
+    surface: 'runtime',
+  },
+  {
     name: 'hermes-ai-contracts',
     role: 'engine',
     owner: 'ai',
@@ -2316,6 +2322,19 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-communication-reply-suggestion-core', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
+  'hermes-communication-reply-suggestion-runtime': [
+    { name: 'hermes-ai-contracts', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communication-reply-suggestion-api', kind: 'normal' },
+    { name: 'hermes-communication-reply-suggestion-core', kind: 'normal' },
+    { name: 'hermes-communication-reply-suggestion-persistence', kind: 'normal' },
+    { name: 'hermes-communications-ai-source-api', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
   'hermes-ai-contracts': [
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
@@ -2760,6 +2779,13 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-communication-reply-suggestion-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+  'hermes-communication-reply-suggestion-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
   'hermes-ai-contracts': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },

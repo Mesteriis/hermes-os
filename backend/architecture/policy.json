@@ -752,6 +752,12 @@
         "surface": "persistence"
       },
       {
+        "name": "hermes-communication-reply-suggestion-runtime",
+        "role": "workflow",
+        "owner": "communication_reply_suggestion",
+        "surface": "runtime"
+      },
+      {
         "name": "hermes-ai-contracts",
         "role": "engine",
         "owner": "ai",
@@ -1779,6 +1785,52 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-reply-suggestion-runtime": [
+        {
+          "name": "hermes-ai-contracts",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-reply-suggestion-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-reply-suggestion-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-reply-suggestion-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-ai-source-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ],
@@ -5126,6 +5178,51 @@
           ]
         }
       ],
+      "hermes-communication-reply-suggestion-runtime": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-ai-inference-core": [
         {
           "name": "sha2",
@@ -6654,6 +6751,10 @@
       },
       "hermes-communication-reply-suggestion-persistence": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-reply-suggestion-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       },
       "hermes-ai-contracts": {

@@ -51,16 +51,21 @@ persisted response без второй HTTP-попытки и отклоняет
 provider request на текущей машине отсутствуют. Поэтому gates
 `ai_inference_v1`, `ollama_ai_provider_v1` и
 `communication_reply_suggestion_v1` также остаются `planned`. Для reply
-workflow реализованы первые три из пяти отдельных units:
+workflow реализованы первые четыре из пяти отдельных units:
 `hermes-communication-reply-suggestion-api` с concrete generated
 Start/Get/realtime contract и
 `hermes-communication-reply-suggestion-core` с revision/digest-fenced
 state machine, а также `hermes-communication-reply-suggestion-persistence` с
 owner-local idempotent run state, source-result inbox/hash fence, exact
 source-prepare outbox, recoverable state и client-safe realtime replay.
-Persistence не хранит source body, prompt или provider metadata. Managed
-runtime, assembly и live orchestration evidence ещё отсутствуют, поэтому этот
-staged slice не открывает workflow gate.
+`hermes-communication-reply-suggestion-runtime` реализует managed Workflow
+admission, event-only source consumption, отдельную target-bound Blob
+materialization для AI, exact inference `request_rpc`, terminal cleanup до Ack
+и client-safe invalidation через общий replayable SSE. Persistence не хранит
+source body, prompt или provider metadata. Assembly и live orchestration
+evidence ещё отсутствуют; Communications source v1 пока передаёт только body,
+поэтому sender/subject context не фабрикуется и остаётся отдельным открытым
+contract slice. Этот staged slice не открывает workflow gate.
 
 Уточняет:
 

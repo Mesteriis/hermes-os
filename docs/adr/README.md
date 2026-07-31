@@ -604,3 +604,8 @@ ADR-0355 расширяет capability-scoped Event Hub launch на Integration 
 eventful integration получает exact endpoint/credential pair, eventless
 integration — exact `empty + 0`. Half-configured пары и фиктивные NATS grants
 запрещены; первым live consumer является локальная Ollama integration.
+ADR-0356 отделяет semantic AI request identity от обновляемого Blob authority:
+reply workflow переносит Communications custody, создаёт отдельный
+AI-target-bound Blob, хранит только bounded recovery receipts и Ack-ает source
+event после terminal inference и cleanup обоих Blob. Runtime unit реализована;
+assembly, live orchestration и sender/subject context остаются открыты.

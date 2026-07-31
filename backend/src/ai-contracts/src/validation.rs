@@ -46,6 +46,12 @@ pub fn compute_reply_inference_request_digest_v1(
         .as_mut()
         .ok_or(AiContractValidationErrorV1::InvalidReceipt)?;
     context.request_digest.clear();
+    canonical
+        .source
+        .as_mut()
+        .ok_or(AiContractValidationErrorV1::InvalidSource)?
+        .custody_transfer_source_proof
+        .clear();
     Ok(Sha256::digest(canonical.encode_to_vec()).into())
 }
 
@@ -376,6 +382,17 @@ mod tests {
     fn request_digest_is_deterministic_and_context_bound() {
         let request = seal_reply_inference_request_v1(request()).expect("request");
         validate_reply_inference_request_v1(&request).expect("valid");
+        let mut renewed = request.clone();
+        renewed
+            .source
+            .as_mut()
+            .expect("source")
+            .custody_transfer_source_proof = vec![9; 80];
+        renewed = seal_reply_inference_request_v1(renewed).expect("renewed request");
+        assert_eq!(
+            request.context.as_ref().expect("context").request_digest,
+            renewed.context.as_ref().expect("context").request_digest
+        );
         let mut changed = request.clone();
         changed.maximum_output_tokens += 1;
         assert_eq!(
