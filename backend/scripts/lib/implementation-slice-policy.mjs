@@ -910,6 +910,12 @@ const COMMUNICATION_SUMMARY_BUILD_UNITS_PRODUCTION_PACKAGES = [
   { name: 'hermes-communication-summary-assembly', role: 'workflow', owner: 'communication_summary', surface: 'assembly' },
 ];
 
+const COMMUNICATION_TRANSLATION_CONTRACT_CORE_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_SUMMARY_BUILD_UNITS_PRODUCTION_PACKAGES,
+  { name: 'hermes-communication-translation-api', role: 'workflow', owner: 'communication_translation', surface: 'contract' },
+  { name: 'hermes-communication-translation-core', role: 'workflow', owner: 'communication_translation', surface: 'implementation' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2547,6 +2553,12 @@ const COMMUNICATION_SUMMARY_BUILD_UNITS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATION_TRANSLATION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_SUMMARY_BUILD_UNITS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-translation-api': [],
+  'hermes-communication-translation-core': [],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3085,6 +3097,17 @@ const COMMUNICATION_SUMMARY_BUILD_UNITS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATION_TRANSLATION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_SUMMARY_BUILD_UNITS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-translation-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communication-translation-core': [],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -3452,6 +3475,18 @@ const COMMUNICATION_SUMMARY_BUILD_UNITS_INVENTORY = {
   ].sort(),
 };
 
+const COMMUNICATION_TRANSLATION_CONTRACT_CORE_INVENTORY = {
+  ...COMMUNICATION_SUMMARY_BUILD_UNITS_INVENTORY,
+  workflows: [
+    ...COMMUNICATION_SUMMARY_BUILD_UNITS_INVENTORY.workflows,
+    'communication_translation',
+  ].sort(),
+  businessCapabilities: [
+    ...COMMUNICATION_SUMMARY_BUILD_UNITS_INVENTORY.businessCapabilities,
+    'communication.translation.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -3655,6 +3690,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-ai-source-api',
       'hermes-communication-reply-suggestion-api',
       'hermes-communication-summary-api',
+      'hermes-communication-translation-api',
       'hermes-ai-contracts',
       'hermes-attachment-archive-inspection-api',
       'hermes-attachment-archive-inspection-ingress',
@@ -4413,6 +4449,17 @@ function expectedSlice(currentSlice) {
       packages: COMMUNICATION_SUMMARY_BUILD_UNITS_PRODUCTION_PACKAGES,
       workspaceDependencies: COMMUNICATION_SUMMARY_BUILD_UNITS_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: COMMUNICATION_SUMMARY_BUILD_UNITS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_translation_contract_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_TRANSLATION_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_TRANSLATION_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies: COMMUNICATION_TRANSLATION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: COMMUNICATION_TRANSLATION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_summary_v1",
+    "currentSlice": "communication_translation_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -888,6 +888,18 @@
         "role": "workflow",
         "owner": "communication_summary",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-communication-translation-api",
+        "role": "workflow",
+        "owner": "communication_translation",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-translation-core",
+        "role": "workflow",
+        "owner": "communication_translation",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2131,6 +2143,8 @@
           "kind": "normal"
         }
       ],
+      "hermes-communication-translation-api": [],
+      "hermes-communication-translation-core": [],
       "hermes-ai-contracts": [
         {
           "name": "hermes-runtime-protocol",
@@ -2799,6 +2813,13 @@
         { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
         { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
       ],
+      "hermes-communication-translation-api": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-communication-translation-core": [],
       "hermes-events-protocol": [
         {
           "name": "prost",
@@ -7384,6 +7405,14 @@
         "primaryKind": "bin",
         "customBuildAllowed": false
       },
+      "hermes-communication-translation-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communication-translation-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -7642,6 +7671,7 @@
       "communication_delivery_intent",
       "communication_reply_suggestion",
       "communication_summary",
+      "communication_translation",
       "communications_export"
     ],
     "engines": [
@@ -7666,6 +7696,7 @@
         "attachment_security.verdict.publish.v1",
         "communication.cross_channel_forward.v1",
         "communication.summary.v1",
+        "communication.translation.v1",
         "communication_cross_channel_forward.blob.v1",
         "communication_cross_channel_forward.delivery_rejected.v1",
         "communication_cross_channel_forward.delivery_submit.v1",

@@ -6,7 +6,8 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../../../', import.meta.url);
 
 test('communication translation agreement isolates workflow domain engine and provider', async () => {
-  const [adr, inventorySource] = await Promise.all([
+  const [adr, inventorySource, policySource, workspace, apiManifest, api, protocol, core] =
+    await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0363-communication-translation-workflow-and-ai-contracts.md',
@@ -15,8 +16,21 @@ test('communication translation agreement isolates workflow domain engine and pr
       'utf8',
     ),
     readFile(new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT)),
+    readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-translation-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-translation-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/communication-translation-api/proto/hermes/communication_translation/v1/translation.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('src/communication-translation-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
+  const policy = JSON.parse(policySource);
   const slice = inventory.slices.find(({ gate }) => gate === 'communication_translation_v1');
 
   assert.deepEqual(slice, {
@@ -49,4 +63,19 @@ test('communication translation agreement isolates workflow domain engine and pr
   assert.match(adr, /Kernel\/Gateway не компилируют Translation\s+schema/);
   assert.match(adr, /Состояние реализации: planned/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns translation/i);
+
+  assert.equal(policy.implementation.currentSlice, 'communication_translation_contract_core_v1');
+  assert.match(workspace, /"src\/communication-translation-api"/);
+  assert.match(workspace, /"src\/communication-translation-core"/);
+  assert.match(apiManifest, /owner = "communication_translation"/);
+  assert.match(apiManifest, /surface = "contract"/);
+  assert.match(api, /COMMUNICATION_TRANSLATION_CAPABILITY_ID_V1/);
+  assert.match(protocol, /CommunicationTranslationCandidateV1/);
+  assert.match(protocol, /COMMUNICATION_TRANSLATION_LANGUAGE_ENGLISH/);
+  assert.match(protocol, /COMMUNICATION_TRANSLATION_LANGUAGE_RUSSIAN/);
+  assert.match(protocol, /COMMUNICATION_TRANSLATION_LANGUAGE_SPANISH/);
+  assert.doesNotMatch(protocol, /provider_id|model_id|endpoint|prompt|source_body|thread_id|attachment_id|map</);
+  assert.match(core, /transition_communication_translation_v1/);
+  assert.match(core, /DigestMismatch/);
+  assert.doesNotMatch(core, /communication_summary|hermes_ai|ollama|communications_domain/);
 });

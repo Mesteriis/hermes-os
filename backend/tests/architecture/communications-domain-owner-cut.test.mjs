@@ -58,7 +58,7 @@ test('Communications remains isolated after Review owner admission', async () =>
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_summary_v1',
+    'communication_translation_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'review'],
@@ -68,6 +68,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication_delivery_intent',
       'communication_reply_suggestion',
       'communication_summary',
+      'communication_translation',
       'communications_export',
     ],
     engines: ['ai', 'attachment_archive_inspection', 'attachment_security'],
@@ -88,6 +89,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'attachment_security.verdict.publish.v1',
       'communication.cross_channel_forward.v1',
       'communication.summary.v1',
+      'communication.translation.v1',
       'communication_cross_channel_forward.blob.v1',
       'communication_cross_channel_forward.delivery_rejected.v1',
       'communication_cross_channel_forward.delivery_submit.v1',

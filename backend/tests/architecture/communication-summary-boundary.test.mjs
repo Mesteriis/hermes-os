@@ -178,7 +178,10 @@ test('summary runtime and assembly expose only exact event request and release b
     ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_summary_v1');
+  assert.equal(
+    policy.implementation.currentSlice,
+    'communication_translation_contract_core_v1',
+  );
   assert.deepEqual(
     policy.implementation.productionPackages
       .filter(({ owner }) => owner === 'communication_summary')
