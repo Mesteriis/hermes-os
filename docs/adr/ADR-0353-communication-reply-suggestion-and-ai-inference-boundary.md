@@ -50,7 +50,14 @@ persisted response без второй HTTP-попытки и отклоняет
 является live успешным inference: установленный Ollama runtime и успешный
 provider request на текущей машине отсутствуют. Поэтому gates
 `ai_inference_v1`, `ollama_ai_provider_v1` и
-`communication_reply_suggestion_v1` также остаются `planned`.
+`communication_reply_suggestion_v1` также остаются `planned`. Для reply
+workflow реализованы первые две из пяти отдельных units:
+`hermes-communication-reply-suggestion-api` с concrete generated
+Start/Get/realtime contract и
+`hermes-communication-reply-suggestion-core` с revision/digest-fenced
+state machine. Persistence, managed runtime, assembly и live orchestration
+evidence ещё отсутствуют, поэтому этот staged contract/core slice не открывает
+workflow gate.
 
 Уточняет:
 

@@ -734,6 +734,18 @@
         "surface": "contract"
       },
       {
+        "name": "hermes-communication-reply-suggestion-api",
+        "role": "workflow",
+        "owner": "communication_reply_suggestion",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-reply-suggestion-core",
+        "role": "workflow",
+        "owner": "communication_reply_suggestion",
+        "surface": "implementation"
+      },
+      {
         "name": "hermes-ai-contracts",
         "role": "engine",
         "owner": "ai",
@@ -1752,6 +1764,8 @@
           "kind": "normal"
         }
       ],
+      "hermes-communication-reply-suggestion-api": [],
+      "hermes-communication-reply-suggestion-core": [],
       "hermes-ai-contracts": [
         {
           "name": "hermes-runtime-protocol",
@@ -5039,6 +5053,41 @@
           "features": []
         }
       ],
+      "hermes-communication-reply-suggestion-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-communication-reply-suggestion-core": [],
       "hermes-ai-inference-core": [
         {
           "name": "sha2",
@@ -6557,6 +6606,14 @@
         "primaryKind": "lib",
         "customBuildAllowed": true
       },
+      "hermes-communication-reply-suggestion-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communication-reply-suggestion-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -6810,10 +6867,11 @@
       "integrations": [
         "mail"
       ],
-      "workflows": [
-        "communication_cross_channel_forward",
-        "communication_delivery_intent",
-        "communications_export"
+    "workflows": [
+      "communication_cross_channel_forward",
+      "communication_delivery_intent",
+      "communication_reply_suggestion",
+      "communications_export"
       ],
       "engines": [
         "ai",

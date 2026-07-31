@@ -161,6 +161,56 @@ test('Communications AI source runtime commits an owner-bound event handoff befo
   );
 });
 
+test('reply suggestion client API is one concrete provider-neutral workflow contract', async () => {
+  const [manifest, api, proto] = await Promise.all([
+    backendSource('src/communication-reply-suggestion-api/Cargo.toml'),
+    backendSource('src/communication-reply-suggestion-api/src/lib.rs'),
+    backendSource(
+      'src/communication-reply-suggestion-api/proto/hermes/communication_reply_suggestion/v1/reply_suggestion.proto',
+    ),
+  ]);
+
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "communication_reply_suggestion"/);
+  assert.match(manifest, /surface = "contract"/);
+  assert.match(api, /communication\.reply_suggestion\.v1/);
+  assert.match(api, /CommunicationReplySuggestionCommandService\/Start/);
+  assert.match(api, /CommunicationReplySuggestionQueryService\/Get/);
+  assert.match(proto, /message StartReplySuggestionRequestV1/);
+  assert.match(proto, /uint64 expected_source_revision = 4/);
+  assert.match(proto, /message ReplySuggestionCandidateV1/);
+  assert.match(proto, /REPLY_SUGGESTION_TONE_PROFESSIONAL/);
+  assert.match(proto, /REPLY_SUGGESTION_LANGUAGE_SPANISH/);
+  assert.doesNotMatch(manifest, /communications-|ai-inference|ollama/);
+  assert.doesNotMatch(api, /communications-|ai-inference|ollama/);
+  assert.doesNotMatch(
+    proto,
+    /provider_id|model_id|endpoint|prompt|source_body|google\.protobuf\.Any|map</,
+  );
+});
+
+test('reply suggestion core owns only the bounded workflow state machine', async () => {
+  const [manifest, core] = await Promise.all([
+    backendSource('src/communication-reply-suggestion-core/Cargo.toml'),
+    backendSource('src/communication-reply-suggestion-core/src/lib.rs'),
+  ]);
+
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "communication_reply_suggestion"/);
+  assert.match(manifest, /surface = "implementation"/);
+  assert.match(core, /validate_reply_suggestion_draft_v1/);
+  assert.match(core, /transition_reply_suggestion_v1/);
+  assert.match(core, /ReplySuggestionStateV1::PreparingSource/);
+  assert.match(core, /ReplySuggestionStateV1::AwaitingInference/);
+  assert.match(core, /ReplySuggestionStateV1::Ready/);
+  assert.match(core, /current\.inference_request_digest != Some\(candidate\.request_digest\)/);
+  assert.match(core, /current\.source_sha256 != Some\(candidate\.source_sha256\)/);
+  assert.doesNotMatch(
+    `${manifest}\n${core}`,
+    /communications|ai-inference|ollama|provider|model|endpoint|prompt|sqlx|kernel|gateway|reqwest|async.nats/,
+  );
+});
+
 test('AI public contracts are one concrete provider-neutral engine unit', async () => {
   const [manifest, api, validation, proto] = await Promise.all([
     backendSource('src/ai-contracts/Cargo.toml'),

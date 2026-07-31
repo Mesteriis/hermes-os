@@ -66,6 +66,7 @@ test('Communications remains isolated after Review owner admission', async () =>
     workflows: [
       'communication_cross_channel_forward',
       'communication_delivery_intent',
+      'communication_reply_suggestion',
       'communications_export',
     ],
     engines: ['ai', 'attachment_security'],

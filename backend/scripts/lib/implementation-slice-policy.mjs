@@ -758,6 +758,18 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
     surface: 'contract',
   },
   {
+    name: 'hermes-communication-reply-suggestion-api',
+    role: 'workflow',
+    owner: 'communication_reply_suggestion',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-communication-reply-suggestion-core',
+    role: 'workflow',
+    owner: 'communication_reply_suggestion',
+    surface: 'implementation',
+  },
+  {
     name: 'hermes-ai-contracts',
     role: 'engine',
     owner: 'ai',
@@ -2292,6 +2304,8 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
+  'hermes-communication-reply-suggestion-api': [],
+  'hermes-communication-reply-suggestion-core': [],
   'hermes-ai-contracts': [
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
@@ -2726,6 +2740,13 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
+  'hermes-communication-reply-suggestion-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communication-reply-suggestion-core': [],
   'hermes-ai-contracts': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
@@ -3070,6 +3091,10 @@ const REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY = {
 
 const COMMUNICATIONS_AI_SOURCE_CONTRACT_INVENTORY = {
   ...REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY,
+  workflows: [
+    ...REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY.workflows,
+    'communication_reply_suggestion',
+  ].sort(),
   engines: [
     ...REVIEW_COMMUNICATIONS_ATTENTION_LIVE_INVENTORY.engines,
     'ai',
@@ -3282,6 +3307,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-evidence-export-source-api',
       'hermes-communications-cross-channel-forward-source-api',
       'hermes-communications-ai-source-api',
+      'hermes-communication-reply-suggestion-api',
       'hermes-ai-contracts',
       'hermes-communications-export-api',
       'hermes-communication-delivery-intent-api',

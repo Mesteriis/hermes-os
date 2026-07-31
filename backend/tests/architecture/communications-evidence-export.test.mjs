@@ -115,6 +115,7 @@ test('Communications export is one exact workflow family with a public domain so
   assert.deepEqual(policy.implementation.ownerInventory.workflows, [
     'communication_cross_channel_forward',
     'communication_delivery_intent',
+    'communication_reply_suggestion',
     'communications_export',
   ]);
   assert.deepEqual(

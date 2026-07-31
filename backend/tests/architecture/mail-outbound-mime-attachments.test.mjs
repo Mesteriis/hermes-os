@@ -106,6 +106,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
   assert.deepEqual(inventory.workflows, [
     'communication_cross_channel_forward',
     'communication_delivery_intent',
+    'communication_reply_suggestion',
     'communications_export',
   ]);
   assert.deepEqual(inventory.engines, ['ai', 'attachment_security']);
