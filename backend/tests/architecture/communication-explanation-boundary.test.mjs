@@ -29,6 +29,13 @@ test('communication explanation agreement separates workflow domain engine and p
     aiExplanationWorker,
     aiManagedRuntime,
     ollamaApi,
+    ollamaExplanationCore,
+    ollamaExplanationSchema,
+    ollamaExplanationRepository,
+    ollamaHttpModel,
+    ollamaRuntimeAdmission,
+    ollamaExplanationWorker,
+    ollamaManagedRuntime,
     persistenceManifest,
     persistenceSchema,
     persistenceModel,
@@ -80,6 +87,22 @@ test('communication explanation agreement separates workflow domain engine and p
     readFile(new URL('src/ai-inference-runtime/src/explanation_worker.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-inference-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ollama-ai-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ollama-ai-core/src/explanation.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/ollama-ai-persistence/migrations/0004_ollama_ai_explanation_runs.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/ollama-ai-persistence/src/explanation_repository.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(new URL('src/ollama-ai-http/src/model.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ollama-ai-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ollama-ai-runtime/src/explanation_worker.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ollama-ai-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL('src/communication-explanation-persistence/Cargo.toml', BACKEND_ROOT),
       'utf8',
@@ -141,7 +164,7 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.match(adr, /Состояние реализации: planned/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns explanation/i);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_explanation_ai_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_explanation_ollama_runtime_v1');
   assert.match(workspace, /"src\/communication-explanation-api"/);
   assert.match(workspace, /"src\/communication-explanation-core"/);
   assert.match(workspace, /"src\/communication-explanation-persistence"/);
@@ -211,6 +234,25 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.doesNotMatch(
     `${aiExplanationCore}\n${aiExplanationRepository}\n${aiExplanationWorker}`,
     /communication_summary|CommunicationSummary|communication_translation|CommunicationTranslation|ollama|provider_id|model_id|endpoint/,
+  );
+  assert.match(ollamaExplanationCore, /OLLAMA_EXPLANATION_POLICY_V1/);
+  assert.match(ollamaExplanationCore, /complete_ollama_explanation_request_v1/);
+  assert.match(ollamaExplanationCore, /allows_empty_reason_list/);
+  assert.match(ollamaExplanationSchema, /ollama_ai_explanation_runs/);
+  assert.match(ollamaExplanationSchema, /result_exact_bytes/);
+  assert.match(ollamaExplanationRepository, /encode_provider_explanation_result_v1/);
+  assert.match(ollamaExplanationRepository, /decode_provider_explanation_result_v1/);
+  assert.match(ollamaHttpModel, /ExplanationJsonSchemaV1/);
+  assert.match(ollamaHttpModel, /additional_properties: false/);
+  assert.match(ollamaHttpModel, /maximum_reason_text_bytes/);
+  assert.match(ollamaRuntimeAdmission, /OLLAMA_AI_EXPLANATION_CAPABILITY_ID_V1/);
+  assert.match(ollamaRuntimeAdmission, /ai_provider_explanation_contract_reference_v1/);
+  assert.match(ollamaExplanationWorker, /execute_explanation_payload_v1/);
+  assert.match(ollamaExplanationWorker, /port\.generate_explanation/);
+  assert.match(ollamaManagedRuntime, /is_explanation/);
+  assert.doesNotMatch(
+    `${ollamaExplanationCore}\n${ollamaExplanationSchema}\n${ollamaExplanationRepository}\n${ollamaExplanationWorker}`,
+    /hermes_communications_domain|communication_summary|CommunicationSummary|communication_translation|CommunicationTranslation|result_translated_text|source_body|prompt_text/,
   );
   for (const capability of [
     'ai.explanation.request.v1',

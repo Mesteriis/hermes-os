@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod explanation_model;
+mod explanation_repository;
 mod model;
 mod repository;
 pub mod schema;
@@ -8,6 +10,10 @@ mod summary_repository;
 mod translation_model;
 mod translation_repository;
 
+pub use explanation_model::{
+    OllamaExplanationPersistenceOutcomeV1, OllamaExplanationTransitionV1,
+    PersistedOllamaExplanationRunV1,
+};
 pub use model::{
     OllamaAiPersistenceErrorV1, OllamaAiPersistenceOutcomeV1, OllamaAiTransitionV1,
     PersistedOllamaAiRunV1,

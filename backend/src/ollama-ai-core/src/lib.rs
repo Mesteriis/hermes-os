@@ -1,8 +1,14 @@
 #![forbid(unsafe_code)]
 
+mod explanation;
 mod summary;
 mod translation;
 
+pub use explanation::{
+    OllamaExplanationPlanV1, OllamaExplanationRunV1, accept_ollama_explanation_request_v1,
+    begin_ollama_explanation_request_v1, complete_ollama_explanation_request_v1,
+    mark_ollama_explanation_uncertain_v1, reject_ollama_explanation_request_v1,
+};
 pub use summary::{
     OllamaSummaryGenerationPlanV1, OllamaSummaryRunV1, accept_ollama_summary_request_v1,
     begin_ollama_summary_request_v1, complete_ollama_summary_request_v1,

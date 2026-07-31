@@ -218,6 +218,25 @@ pub fn validate_provider_explanation_result_v1(
     Ok(())
 }
 
+pub fn encode_provider_explanation_result_v1(
+    result: &AiProviderExplanationResultV1,
+) -> Result<Vec<u8>, AiContractValidationErrorV1> {
+    validate_provider_explanation_result_v1(result)?;
+    Ok(result.encode_to_vec())
+}
+
+pub fn decode_provider_explanation_result_v1(
+    bytes: &[u8],
+) -> Result<AiProviderExplanationResultV1, AiContractValidationErrorV1> {
+    let result = AiProviderExplanationResultV1::decode(bytes)
+        .map_err(|_| AiContractValidationErrorV1::InvalidResult)?;
+    validate_provider_explanation_result_v1(&result)?;
+    if result.encode_to_vec() != bytes {
+        return Err(AiContractValidationErrorV1::InvalidResult);
+    }
+    Ok(result)
+}
+
 fn validate_reasons(reasons: &[AiExplanationReasonV1]) -> Result<(), AiContractValidationErrorV1> {
     if reasons.len() > AI_MAX_EXPLANATION_REASONS_V1 as usize {
         return Err(AiContractValidationErrorV1::InvalidResult);

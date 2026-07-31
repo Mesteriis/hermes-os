@@ -1,6 +1,7 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_ai_contracts::{
+    ai_provider_explanation_contract_reference_v1,
     ai_provider_reply_generation_contract_reference_v1,
     ai_provider_summary_generation_contract_reference_v1,
     ai_provider_translation_contract_reference_v1,
@@ -28,6 +29,7 @@ use hermes_storage_vault::{
 };
 
 use crate::{
+    explanation_worker::execute_explanation_payload_v1,
     summary_worker::execute_summary_payload_v1,
     translation_worker::execute_translation_payload_v1,
     worker::{LocalOllamaAiExecutionPortV1, OllamaAiWorkerErrorV1, execute_payload_v1},
@@ -136,6 +138,8 @@ impl OllamaAiManagedRuntimeV1 {
             Some(Operation::DeliverModuleRequest(delivery)) => {
                 let request_id = delivery.request_id.clone();
                 let contract = delivery.contract.as_ref();
+                let is_explanation =
+                    contract == Some(&ai_provider_explanation_contract_reference_v1());
                 let is_reply =
                     contract == Some(&ai_provider_reply_generation_contract_reference_v1());
                 let is_summary =
@@ -143,13 +147,22 @@ impl OllamaAiManagedRuntimeV1 {
                 let is_translation =
                     contract == Some(&ai_provider_translation_contract_reference_v1());
                 let response = if validate_module_request_delivery_v1(&delivery).is_err()
-                    || (!is_reply && !is_summary && !is_translation)
+                    || (!is_explanation && !is_reply && !is_summary && !is_translation)
                     || delivery.logical_owner_id != self.logical_human_owner_id
                 {
                     rejected_v1(request_id)
                 } else {
                     let mut port = LocalOllamaAiExecutionPortV1;
-                    let executed = if is_translation {
+                    let executed = if is_explanation {
+                        execute_explanation_payload_v1(
+                            &self.persistence,
+                            &mut port,
+                            &self.logical_human_owner_id,
+                            &self.settings,
+                            &delivery.request_payload,
+                        )
+                        .await
+                    } else if is_translation {
                         execute_translation_payload_v1(
                             &self.persistence,
                             &mut port,

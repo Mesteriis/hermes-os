@@ -1,6 +1,6 @@
 use hermes_ollama_ai_core::{
-    OllamaGenerationPlanV1, OllamaHttpGenerationV1, OllamaSummaryGenerationPlanV1,
-    OllamaTranslationPlanV1,
+    OllamaExplanationPlanV1, OllamaGenerationPlanV1, OllamaHttpGenerationV1,
+    OllamaSummaryGenerationPlanV1, OllamaTranslationPlanV1,
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -66,6 +66,16 @@ struct TranslationChatRequestV1<'a> {
 }
 
 #[derive(Serialize)]
+struct ExplanationChatRequestV1<'a> {
+    model: &'a str,
+    messages: [ChatMessageV1<'a>; 1],
+    stream: bool,
+    think: bool,
+    format: ExplanationJsonSchemaV1,
+    options: ChatOptionsV1,
+}
+
+#[derive(Serialize)]
 struct ReplyJsonSchemaV1 {
     #[serde(rename = "type")]
     kind: &'static str,
@@ -112,6 +122,90 @@ struct TranslationJsonSchemaV1 {
 struct TranslationJsonPropertiesV1 {
     translated_text: JsonStringSchemaV1,
     detected_source_language: JsonDetectedLanguageSchemaV1,
+}
+
+#[derive(Serialize)]
+struct ExplanationJsonSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    properties: ExplanationJsonPropertiesV1,
+    required: [&'static str; 3],
+    #[serde(rename = "additionalProperties")]
+    additional_properties: bool,
+}
+
+#[derive(Serialize)]
+struct ExplanationJsonPropertiesV1 {
+    reasons: ExplanationReasonArraySchemaV1,
+    completeness: JsonCompletenessSchemaV1,
+    confidence_basis_points: JsonBasisPointsSchemaV1,
+}
+
+#[derive(Serialize)]
+struct ExplanationReasonArraySchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    items: ExplanationReasonSchemaV1,
+    #[serde(rename = "maxItems")]
+    max_items: u32,
+}
+
+#[derive(Serialize)]
+struct ExplanationReasonSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    properties: ExplanationReasonPropertiesV1,
+    required: [&'static str; 4],
+    #[serde(rename = "additionalProperties")]
+    additional_properties: bool,
+}
+
+#[derive(Serialize)]
+struct ExplanationReasonPropertiesV1 {
+    kind: JsonReasonKindSchemaV1,
+    explanation: JsonBoundedStringSchemaV1,
+    source_basis: JsonSourceBasisSchemaV1,
+    confidence_basis_points: JsonBasisPointsSchemaV1,
+}
+
+#[derive(Serialize)]
+struct JsonReasonKindSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    #[serde(rename = "enum")]
+    allowed: [&'static str; 8],
+}
+
+#[derive(Serialize)]
+struct JsonSourceBasisSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    #[serde(rename = "enum")]
+    allowed: [&'static str; 4],
+}
+
+#[derive(Serialize)]
+struct JsonCompletenessSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    #[serde(rename = "enum")]
+    allowed: [&'static str; 2],
+}
+
+#[derive(Serialize)]
+struct JsonBoundedStringSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    #[serde(rename = "maxLength")]
+    max_length: u32,
+}
+
+#[derive(Serialize)]
+struct JsonBasisPointsSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    minimum: u32,
+    maximum: u32,
 }
 
 #[derive(Serialize)]
@@ -256,6 +350,29 @@ pub(crate) fn encode_translation_chat_request_v1(
     .map_err(|_| OllamaAiHttpErrorV1::InvalidRequest)
 }
 
+pub(crate) fn encode_explanation_chat_request_v1(
+    plan: &OllamaExplanationPlanV1,
+) -> Result<Zeroizing<Vec<u8>>, OllamaAiHttpErrorV1> {
+    let prompt =
+        std::str::from_utf8(&plan.prompt_utf8).map_err(|_| OllamaAiHttpErrorV1::InvalidRequest)?;
+    serde_json::to_vec(&ExplanationChatRequestV1 {
+        model: &plan.model,
+        messages: [ChatMessageV1 {
+            role: "user",
+            content: prompt,
+        }],
+        stream: false,
+        think: false,
+        format: explanation_json_schema_v1(plan),
+        options: ChatOptionsV1 {
+            temperature: 0,
+            num_predict: plan.maximum_output_tokens,
+        },
+    })
+    .map(Zeroizing::new)
+    .map_err(|_| OllamaAiHttpErrorV1::InvalidRequest)
+}
+
 fn reply_json_schema_v1() -> ReplyJsonSchemaV1 {
     ReplyJsonSchemaV1 {
         kind: "object",
@@ -298,6 +415,67 @@ fn translation_json_schema_v1() -> TranslationJsonSchemaV1 {
             },
         },
         required: ["translated_text", "detected_source_language"],
+        additional_properties: false,
+    }
+}
+
+fn explanation_json_schema_v1(plan: &OllamaExplanationPlanV1) -> ExplanationJsonSchemaV1 {
+    ExplanationJsonSchemaV1 {
+        kind: "object",
+        properties: ExplanationJsonPropertiesV1 {
+            reasons: ExplanationReasonArraySchemaV1 {
+                kind: "array",
+                max_items: plan.maximum_reasons,
+                items: ExplanationReasonSchemaV1 {
+                    kind: "object",
+                    properties: ExplanationReasonPropertiesV1 {
+                        kind: JsonReasonKindSchemaV1 {
+                            kind: "string",
+                            allowed: [
+                                "urgency",
+                                "financial_attention",
+                                "legal_or_contractual",
+                                "reply_requested",
+                                "deadline",
+                                "attachment_reference",
+                                "marketing_or_bulk",
+                                "other_attention",
+                            ],
+                        },
+                        explanation: JsonBoundedStringSchemaV1 {
+                            kind: "string",
+                            max_length: plan.maximum_reason_text_bytes,
+                        },
+                        source_basis: JsonSourceBasisSchemaV1 {
+                            kind: "string",
+                            allowed: ["subject", "body", "canonical_metadata", "combined"],
+                        },
+                        confidence_basis_points: JsonBasisPointsSchemaV1 {
+                            kind: "integer",
+                            minimum: 0,
+                            maximum: 10_000,
+                        },
+                    },
+                    required: [
+                        "kind",
+                        "explanation",
+                        "source_basis",
+                        "confidence_basis_points",
+                    ],
+                    additional_properties: false,
+                },
+            },
+            completeness: JsonCompletenessSchemaV1 {
+                kind: "string",
+                allowed: ["complete", "partial"],
+            },
+            confidence_basis_points: JsonBasisPointsSchemaV1 {
+                kind: "integer",
+                minimum: 0,
+                maximum: 10_000,
+            },
+        },
+        required: ["reasons", "completeness", "confidence_basis_points"],
         additional_properties: false,
     }
 }
@@ -377,6 +555,31 @@ pub(crate) fn decode_translation_chat_response_v1(
     })
 }
 
+pub(crate) fn decode_explanation_chat_response_v1(
+    body: &[u8],
+    plan: &OllamaExplanationPlanV1,
+) -> Result<OllamaHttpGenerationV1, OllamaAiHttpErrorV1> {
+    let mut response: ChatResponseV1 =
+        serde_json::from_slice(body).map_err(|_| OllamaAiHttpErrorV1::Protocol)?;
+    if response.model != plan.model
+        || !response.done
+        || response.message.role != "assistant"
+        || !response.message.thinking.is_empty()
+        || response.message.content.is_empty()
+        || response.message.content.len() > plan.maximum_response_bytes as usize
+    {
+        return Err(OllamaAiHttpErrorV1::ModelMismatch);
+    }
+    Ok(OllamaHttpGenerationV1 {
+        content_json_utf8: Zeroizing::new(
+            std::mem::take(&mut response.message.content).into_bytes(),
+        ),
+        model_digest: plan.model_digest,
+        input_tokens: response.prompt_eval_count,
+        output_tokens: response.eval_count,
+    })
+}
+
 fn decode_sha256_hex_v1(value: &str) -> Result<[u8; 32], OllamaAiHttpErrorV1> {
     if value.len() != 64 {
         return Err(OllamaAiHttpErrorV1::Protocol);
@@ -435,6 +638,28 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&translation_json_schema_v1()).expect("translation JSON schema"),
             r#"{"type":"object","properties":{"translated_text":{"type":"string"},"detected_source_language":{"type":"string","enum":["unknown","english","spanish","russian"]}},"required":["translated_text","detected_source_language"],"additionalProperties":false}"#
+        );
+    }
+
+    #[test]
+    fn explanation_schema_is_closed_and_uses_exact_bounded_taxonomy() {
+        let plan = OllamaExplanationPlanV1 {
+            request_id: [1; 16],
+            request_digest: [2; 32],
+            model: "gemma3:latest".to_owned(),
+            model_digest: [3; 32],
+            prompt_utf8: Zeroizing::new(b"source".to_vec()),
+            maximum_output_tokens: 512,
+            timeout_millis: 5_000,
+            settings_revision: 1,
+            maximum_reasons: 8,
+            maximum_reason_text_bytes: 512,
+            maximum_response_bytes: 5_376,
+        };
+        assert_eq!(
+            serde_json::to_string(&explanation_json_schema_v1(&plan))
+                .expect("explanation JSON schema"),
+            r#"{"type":"object","properties":{"reasons":{"type":"array","items":{"type":"object","properties":{"kind":{"type":"string","enum":["urgency","financial_attention","legal_or_contractual","reply_requested","deadline","attachment_reference","marketing_or_bulk","other_attention"]},"explanation":{"type":"string","maxLength":512},"source_basis":{"type":"string","enum":["subject","body","canonical_metadata","combined"]},"confidence_basis_points":{"type":"integer","minimum":0,"maximum":10000}},"required":["kind","explanation","source_basis","confidence_basis_points"],"additionalProperties":false},"maxItems":8},"completeness":{"type":"string","enum":["complete","partial"]},"confidence_basis_points":{"type":"integer","minimum":0,"maximum":10000}},"required":["reasons","completeness","confidence_basis_points"],"additionalProperties":false}"#
         );
     }
 }

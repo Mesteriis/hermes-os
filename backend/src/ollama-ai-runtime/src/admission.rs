@@ -1,12 +1,14 @@
 use hermes_ai_contracts::{
+    ai_provider_explanation_contract_reference_v1,
     ai_provider_reply_generation_contract_reference_v1,
     ai_provider_summary_generation_contract_reference_v1,
     ai_provider_translation_contract_reference_v1,
 };
 use hermes_ollama_ai_api::{
-    OLLAMA_AI_MODULE_ID_V1, OLLAMA_AI_PROVIDER_CAPABILITY_ID_V1,
-    OLLAMA_AI_STORAGE_CAPABILITY_ID_V1, OLLAMA_AI_SUMMARY_CAPABILITY_ID_V1,
-    OLLAMA_AI_TRANSLATION_CAPABILITY_ID_V1, OLLAMA_OWNER_ID_V1, ollama_ai_settings_schema_bytes_v1,
+    OLLAMA_AI_EXPLANATION_CAPABILITY_ID_V1, OLLAMA_AI_MODULE_ID_V1,
+    OLLAMA_AI_PROVIDER_CAPABILITY_ID_V1, OLLAMA_AI_STORAGE_CAPABILITY_ID_V1,
+    OLLAMA_AI_SUMMARY_CAPABILITY_ID_V1, OLLAMA_AI_TRANSLATION_CAPABILITY_ID_V1, OLLAMA_OWNER_ID_V1,
+    ollama_ai_settings_schema_bytes_v1,
 };
 use hermes_runtime_protocol::v1::{
     CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1, ModuleDescriptorV1,
@@ -36,6 +38,7 @@ pub fn ollama_ai_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
             minimum_revision: 1,
         }),
         capabilities: vec![
+            explanation_capability_v1(),
             provider_capability_v1(),
             summary_capability_v1(),
             translation_capability_v1(),
@@ -54,6 +57,21 @@ pub fn ollama_ai_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
             max_cpu_millis: 1_000,
         }),
         display_name: "Ollama AI".to_owned(),
+    }
+}
+
+fn explanation_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: OLLAMA_AI_EXPLANATION_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: ProvidedSurfaceKindV1::RequestRpc as i32,
+            contract: Some(ai_provider_explanation_contract_reference_v1()),
+            client_rpc_route: None,
+            client_blob_route: None,
+        }],
+        ..Default::default()
     }
 }
 
@@ -125,7 +143,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn descriptor_has_distinct_reply_summary_and_translation_provider_capabilities() {
+    fn descriptor_has_distinct_explanation_reply_summary_and_translation_provider_capabilities() {
         let descriptor = ollama_ai_module_descriptor_v1("test");
         validate_descriptor_v1(&descriptor).expect("descriptor");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Integration as i32);
@@ -137,6 +155,7 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                OLLAMA_AI_EXPLANATION_CAPABILITY_ID_V1,
                 OLLAMA_AI_PROVIDER_CAPABILITY_ID_V1,
                 OLLAMA_AI_SUMMARY_CAPABILITY_ID_V1,
                 OLLAMA_AI_TRANSLATION_CAPABILITY_ID_V1,

@@ -222,7 +222,7 @@ test('Review owner is admitted through signed Kernel Gateway and shared SSE conf
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_explanation_ai_runtime_v1',
+    'communication_explanation_ollama_runtime_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.domains, [
     'communications',
