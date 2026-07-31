@@ -256,11 +256,14 @@ struct OllamaReplyJsonV1 {
 }
 
 fn resolved_language(requested: i32, reported: &str) -> Result<i32, OllamaAiCoreErrorV1> {
-    let resolved = match reported {
-        "english" => AiReplyLanguageV1::AiReplyLanguageEnglish,
-        "spanish" => AiReplyLanguageV1::AiReplyLanguageSpanish,
-        "russian" => AiReplyLanguageV1::AiReplyLanguageRussian,
-        _ => return Err(OllamaAiCoreErrorV1::InvalidProviderResponse),
+    let resolved = if reported.eq_ignore_ascii_case("english") {
+        AiReplyLanguageV1::AiReplyLanguageEnglish
+    } else if reported.eq_ignore_ascii_case("spanish") {
+        AiReplyLanguageV1::AiReplyLanguageSpanish
+    } else if reported.eq_ignore_ascii_case("russian") {
+        AiReplyLanguageV1::AiReplyLanguageRussian
+    } else {
+        return Err(OllamaAiCoreErrorV1::InvalidProviderResponse);
     };
     if requested != AiReplyLanguageV1::AiReplyLanguageAuto as i32 && requested != resolved as i32 {
         return Err(OllamaAiCoreErrorV1::InvalidProviderResponse);
@@ -389,6 +392,22 @@ mod tests {
         assert_eq!(
             rejected.terminal_result.expect("result").terminal_status,
             AiInferenceTerminalStatusV1::AiInferenceTerminalStatusProviderUnavailable as i32
+        );
+    }
+
+    #[test]
+    fn provider_language_token_accepts_ascii_case_but_not_free_form() {
+        assert_eq!(
+            resolved_language(AiReplyLanguageV1::AiReplyLanguageEnglish as i32, "English"),
+            Ok(AiReplyLanguageV1::AiReplyLanguageEnglish as i32)
+        );
+        assert_eq!(
+            resolved_language(AiReplyLanguageV1::AiReplyLanguageEnglish as i32, " english"),
+            Err(OllamaAiCoreErrorV1::InvalidProviderResponse)
+        );
+        assert_eq!(
+            resolved_language(AiReplyLanguageV1::AiReplyLanguageEnglish as i32, "en"),
+            Err(OllamaAiCoreErrorV1::InvalidProviderResponse)
         );
     }
 }

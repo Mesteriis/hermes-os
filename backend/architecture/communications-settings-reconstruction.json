@@ -561,7 +561,7 @@
       "gate": "ollama_ai_provider_v1",
       "role": "integration",
       "owner": "ollama",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "capability_routed_module_request_rpc_v1",
         "managed_integration_settings_apply_v1"

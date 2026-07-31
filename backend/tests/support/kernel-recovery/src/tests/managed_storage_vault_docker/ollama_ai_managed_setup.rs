@@ -289,7 +289,7 @@ fn ollama_ai_settings_snapshot_v1(ollama_port: u16) -> SettingsSnapshotV1 {
                 "ollama.port",
                 Value::UnsignedIntegerValue(u64::from(ollama_port)),
             ),
-            setting_entry_v1("ollama.timeout_millis", Value::UnsignedIntegerValue(1_000)),
+            setting_entry_v1("ollama.timeout_millis", Value::UnsignedIntegerValue(30_000)),
         ],
     }
 }

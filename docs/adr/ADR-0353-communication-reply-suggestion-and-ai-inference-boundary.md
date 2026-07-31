@@ -54,11 +54,16 @@ manifest. Real managed conformance запускает этот signed eventless 
 через Kernel с настоящими Vault/Storage и disposable PostgreSQL/PgBouncer,
 фиксирует terminal `ProviderUnavailable`, после restart возвращает exact
 persisted response без второй HTTP-попытки и отклоняет request-ID conflict.
-Это доказывает admission, storage binding и отрицательный replay contour, но не
-является live успешным inference: установленный Ollama service/model и
-успешный provider request на текущей машине отсутствуют. Поэтому gates
-`ai_inference_v1`, `ollama_ai_provider_v1` и
-`communication_reply_suggestion_v1` также остаются `planned`. Для reply
+Дополнительный live managed conformance использует отдельный официальный
+Ollama process и реальную локальную модель: exact `/api/tags` discovery,
+`/api/chat`, повторное подтверждение model digest и typed `Ready` result
+проходят через signed Integration runtime. Provider dialect нормализует только
+ASCII-регистр трёх закрытых language tokens; whitespace, aliases и free-form
+значения отклоняются. Runtime связывает request tenancy с authenticated human
+owner из managed launch и отклоняет wrong-owner delivery до persistence или
+provider HTTP. Gate `ollama_ai_provider_v1` реализован независимо от
+Communications, AI Engine и reply workflow. Gates `ai_inference_v1` и
+`communication_reply_suggestion_v1` остаются `planned`. Для reply
 workflow реализованы все пять отдельных units:
 `hermes-communication-reply-suggestion-api` с concrete generated
 Start/Get/realtime contract и
@@ -109,6 +114,7 @@ candidate всё ещё отсутствуют, поэтому workflow gate о�
 - [ADR-0282](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
 - [ADR-0315](ADR-0315-communications-message-body-content-read.md);
 - [ADR-0339](ADR-0339-capability-routed-module-request-rpc.md);
+- [ADR-0350](ADR-0350-explicit-human-owner-context-for-managed-domain-and-integration-runtimes.md);
 - [ADR-0354](ADR-0354-integration-implemented-request-rpc-extension-ports.md);
 - [ADR-0355](ADR-0355-capability-scoped-integration-event-hub-launch-configuration.md).
 
@@ -391,11 +397,12 @@ inference evidence.
 
 ### `ollama_ai_provider_v1`
 
-Открывается только с separate API/core/http/persistence/runtime/assembly units,
+Реализован: separate API/core/http/persistence/runtime/assembly units,
 loopback endpoint guard, exact settings, request digest/idempotency/uncertain
-fencing, model/timeout/error conformance, private-content non-disclosure and
-live Ollama request evidence. Mock or canned response не является production
-evidence.
+fencing, model/timeout/error conformance, private-content non-disclosure,
+authenticated human-owner fencing и live request к отдельному настоящему
+Ollama process проверяются managed conformance. Mock or canned response не
+является production evidence.
 
 ### `communication_reply_suggestion_v1`
 

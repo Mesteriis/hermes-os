@@ -68,7 +68,7 @@ test('reply suggestion agreement keeps domain workflow engine and integration se
     gate: 'ollama_ai_provider_v1',
     role: 'integration',
     owner: 'ollama',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'capability_routed_module_request_rpc_v1',
       'managed_integration_settings_apply_v1',
@@ -667,12 +667,19 @@ test('Ollama persistence fences replay without storing private provider input', 
 });
 
 test('Ollama managed runtime owns provider execution and crash ambiguity fencing', async () => {
-  const [manifest, admission, runtime, worker, processRoot] = await Promise.all([
+  const [manifest, admission, runtime, worker, processRoot, managedFlow, managedSetup] =
+    await Promise.all([
     backendSource('src/ollama-ai-runtime/Cargo.toml'),
     backendSource('src/ollama-ai-runtime/src/admission.rs'),
     backendSource('src/ollama-ai-runtime/src/managed_runtime.rs'),
     backendSource('src/ollama-ai-runtime/src/worker.rs'),
     backendSource('src/ollama-ai-runtime/src/main.rs'),
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/ollama_ai_managed_flow.rs',
+    ),
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/ollama_ai_managed_setup.rs',
+    ),
   ]);
 
   assert.match(manifest, /surface = "runtime"/);
@@ -680,12 +687,24 @@ test('Ollama managed runtime owns provider execution and crash ambiguity fencing
   assert.match(admission, /ModuleKindV1::Integration/);
   assert.match(admission, /ai_provider_reply_generation_contract_reference_v1/);
   assert.match(runtime, /Operation::DeliverModuleRequest/);
-  assert.match(runtime, /delivery\.logical_owner_id/);
+  assert.match(runtime, /delivery\.logical_owner_id != self\.logical_human_owner_id/);
+  assert.match(runtime, /&self\.logical_human_owner_id/);
   assert.match(worker, /persist_transition_v1\(persistence, &persisted, executing\)\.await/);
   assert.match(worker, /mark_uncertain_v1\(persistence, persisted\)\.await/);
   assert.match(worker, /confirmed\.digest != plan\.model_digest/);
   assert.match(processRoot, /ManagedIntegrationRuntimeConfigurationV1/);
+  assert.match(processRoot, /logical_human_owner_id: configuration\.logical_human_owner_id/);
   assert.match(processRoot, /serve-inherited/);
+  assert.match(
+    managedFlow,
+    /fn managed_ollama_ai_runtime_completes_real_provider_generation\(\)/,
+  );
+  assert.match(managedFlow, /required\("HERMES_OLLAMA_LIVE_PORT"\)/);
+  assert.match(managedFlow, /AiInferenceTerminalStatusReady/);
+  assert.match(managedFlow, /"owner-2"/);
+  assert.match(managedSetup, /"hermes-conformance:latest"/);
+  assert.match(managedSetup, /Value::UnsignedIntegerValue\(30_000\)/);
+  assert.doesNotMatch(managedFlow, /canned|OllamaAiHttpFixture/i);
   assert.doesNotMatch(
     `${admission}\n${runtime}\n${worker}\n${processRoot}`,
     /hermes_communications|communications_|automatic.*download/i,

@@ -27,7 +27,8 @@ use crate::worker::{LocalOllamaAiExecutionPortV1, OllamaAiWorkerErrorV1, execute
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OllamaAiRuntimeAdmissionV1 {
-    pub logical_owner_id: String,
+    pub module_owner_id: String,
+    pub logical_human_owner_id: String,
     pub configuration_instance_id: String,
     pub registration_id: String,
     pub runtime_instance_id: String,
@@ -46,6 +47,7 @@ pub struct OllamaAiManagedRuntimeV1 {
     control_channel: ManagedControlChannelV2<UnixStream>,
     persistence: OllamaAiPersistenceV1,
     settings: OllamaAiRuntimeSettingsV1,
+    logical_human_owner_id: String,
 }
 
 impl OllamaAiManagedRuntimeV1 {
@@ -110,6 +112,7 @@ impl OllamaAiManagedRuntimeV1 {
             control_channel,
             persistence,
             settings,
+            logical_human_owner_id: admission.logical_human_owner_id.clone(),
         })
     }
 
@@ -127,7 +130,7 @@ impl OllamaAiManagedRuntimeV1 {
                 let response = if validate_module_request_delivery_v1(&delivery).is_err()
                     || delivery.contract.as_ref()
                         != Some(&ai_provider_reply_generation_contract_reference_v1())
-                    || delivery.logical_owner_id.is_empty()
+                    || delivery.logical_owner_id != self.logical_human_owner_id
                 {
                     rejected_v1(request_id)
                 } else {
@@ -135,7 +138,7 @@ impl OllamaAiManagedRuntimeV1 {
                     match execute_payload_v1(
                         &self.persistence,
                         &mut port,
-                        &delivery.logical_owner_id,
+                        &self.logical_human_owner_id,
                         &self.settings,
                         &delivery.request_payload,
                     )
@@ -193,7 +196,8 @@ fn unavailable_v1(request_id: Vec<u8>) -> ManagedRuntimeModuleRequestResponseV1 
 fn validate_admission_v1(
     admission: &OllamaAiRuntimeAdmissionV1,
 ) -> Result<(), OllamaAiManagedRuntimeErrorV1> {
-    if admission.logical_owner_id != OLLAMA_OWNER_ID_V1
+    if admission.module_owner_id != OLLAMA_OWNER_ID_V1
+        || !valid_owner_id_v1(&admission.logical_human_owner_id)
         || admission.configuration_instance_id.is_empty()
         || admission.registration_id.is_empty()
         || admission.runtime_instance_id.is_empty()
@@ -203,6 +207,14 @@ fn validate_admission_v1(
         return Err(OllamaAiManagedRuntimeErrorV1::Admission);
     }
     Ok(())
+}
+
+fn valid_owner_id_v1(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 fn authenticate_v1(
@@ -270,7 +282,7 @@ fn storage_binding_v1(
     admission: &OllamaAiRuntimeAdmissionV1,
 ) -> Result<StorageBindingV1, OllamaAiManagedRuntimeErrorV1> {
     if configuration.runtime_instance_id != admission.runtime_instance_id
-        || configuration.logical_owner_id != admission.logical_owner_id
+        || configuration.logical_owner_id != admission.module_owner_id
         || configuration.owner != OLLAMA_OWNER_ID_V1
         || configuration.storage_bundle_digest.len() != 32
         || configuration.storage_generation == 0
@@ -327,7 +339,8 @@ mod tests {
     #[test]
     fn admission_is_exactly_ollama_owned_and_generation_fenced() {
         let valid = OllamaAiRuntimeAdmissionV1 {
-            logical_owner_id: OLLAMA_OWNER_ID_V1.to_owned(),
+            module_owner_id: OLLAMA_OWNER_ID_V1.to_owned(),
+            logical_human_owner_id: "owner-1".to_owned(),
             configuration_instance_id: "ollama-local".to_owned(),
             registration_id: OLLAMA_AI_MODULE_ID_V1.to_owned(),
             runtime_instance_id: "runtime-1".to_owned(),
@@ -336,7 +349,13 @@ mod tests {
         };
         assert_eq!(validate_admission_v1(&valid), Ok(()));
         let mut invalid = valid;
-        invalid.logical_owner_id = "communications".to_owned();
+        invalid.module_owner_id = "communications".to_owned();
+        assert_eq!(
+            validate_admission_v1(&invalid),
+            Err(OllamaAiManagedRuntimeErrorV1::Admission)
+        );
+        invalid.module_owner_id = OLLAMA_OWNER_ID_V1.to_owned();
+        invalid.logical_human_owner_id.clear();
         assert_eq!(
             validate_admission_v1(&invalid),
             Err(OllamaAiManagedRuntimeErrorV1::Admission)

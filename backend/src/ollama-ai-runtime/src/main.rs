@@ -91,7 +91,8 @@ where
         .clone()
         .ok_or_else(|| "Ollama AI storage is unavailable".to_owned())?;
     let admission = OllamaAiRuntimeAdmissionV1 {
-        logical_owner_id: configuration.logical_owner_id,
+        module_owner_id: configuration.logical_owner_id,
+        logical_human_owner_id: configuration.logical_human_owner_id,
         configuration_instance_id: configuration.configuration_instance_id,
         registration_id: configuration.registration_id,
         runtime_instance_id: configuration.runtime_instance_id,

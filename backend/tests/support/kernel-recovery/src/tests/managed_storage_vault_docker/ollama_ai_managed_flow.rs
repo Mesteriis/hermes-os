@@ -1,4 +1,4 @@
-//! Managed Ollama negative conformance without installing or simulating a provider.
+//! Managed Ollama conformance against unavailable and explicitly supplied live providers.
 
 use std::io::ErrorKind;
 use std::net::TcpListener;
@@ -8,9 +8,9 @@ use super::*;
 use hermes_ai_contracts::{
     AI_LOCAL_EGRESS_POLICY_REVISION_V1, ai_provider_reply_generation_contract_reference_v1,
     wire::{
-        AiEgressPolicyV1, AiInferenceTerminalStatusV1, AiProviderReplyGenerationRequestV1,
-        AiProviderReplyGenerationResultV1, AiReplyLanguageV1, AiReplySubjectPolicyV1,
-        AiReplyToneV1,
+        AiEgressPolicyV1, AiInferenceCompletenessV1, AiInferenceTerminalStatusV1,
+        AiProviderReplyGenerationRequestV1, AiProviderReplyGenerationResultV1, AiReplyLanguageV1,
+        AiReplySubjectPolicyV1, AiReplyToneV1,
     },
 };
 use hermes_runtime_protocol::v1::{
@@ -121,6 +121,98 @@ fn managed_ollama_ai_runtime_replays_provider_unavailable_without_second_http_at
     std::fs::remove_dir_all(root).expect("remove Ollama AI fixture");
 }
 
+#[test]
+#[ignore = "requires disposable Docker plus a real loopback Ollama service with hermes-conformance:latest"]
+fn managed_ollama_ai_runtime_completes_real_provider_generation() {
+    assert_eq!(
+        std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
+        Ok("1")
+    );
+    let ollama_port = required("HERMES_OLLAMA_LIVE_PORT")
+        .parse::<u16>()
+        .expect("valid live Ollama port");
+    let root = unique_target_root("hermes-managed-ollama-ai-live");
+    let data = private_directory(root.join("kernel"));
+    initialize_vault(
+        &private_directory(data.join("vault")),
+        &credential_directory(),
+    );
+    let release = installed_ollama_ai_release_v1(&root);
+    unsafe {
+        std::env::set_var("HERMES_TEST_KERNEL_EXECUTABLE", release.kernel());
+    }
+    let store = Arc::new(configured_store(&root, release.kernel()));
+    store
+        .claim_initial_owner(&hermes_kernel_control_store::InitialOwnerIdentity::new(
+            OLLAMA_AI_LOGICAL_OWNER_ID_V1,
+            "desktop-1",
+            [4; 65],
+        ))
+        .expect("claim live Ollama AI logical owner");
+    let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
+    let admitted = admit_ollama_ai_runtime_v1(&store);
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
+    configure_route_handler(&supervisor, &store, &data);
+    start_vault(&supervisor, &store, &data, release.kernel());
+    start_storage(
+        &supervisor,
+        &store,
+        release.kernel(),
+        &storage_runtime_directory(),
+    );
+    let admitted = prepare_ollama_ai_runtime_v1(&supervisor, &store, admitted);
+    let runtime = start_ollama_ai_runtime_v1(
+        &supervisor,
+        &store,
+        &data,
+        &root.join("runtime"),
+        admitted,
+        ollama_port,
+    );
+
+    let mut request = provider_request_v1();
+    request.subject_policy = AiReplySubjectPolicyV1::AiReplySubjectPolicyGenerateIfMissing as i32;
+    let response = deliver_provider_request_v1(&supervisor, &runtime.registration_id, &request);
+    assert!(response.error_code.is_empty());
+    let result = AiProviderReplyGenerationResultV1::decode(response.response_payload.as_slice())
+        .expect("typed successful Ollama result");
+    assert_eq!(result.request_id, request.request_id);
+    assert_eq!(
+        result.terminal_status,
+        AiInferenceTerminalStatusV1::AiInferenceTerminalStatusReady as i32
+    );
+    assert_eq!(
+        result.completeness,
+        AiInferenceCompletenessV1::AiInferenceCompletenessComplete as i32
+    );
+    assert_eq!(
+        result.resolved_language,
+        AiReplyLanguageV1::AiReplyLanguageEnglish as i32
+    );
+    assert!(!result.body_utf8.is_empty());
+    assert_eq!(result.model_revision_sha256.len(), 32);
+    assert!(result.input_tokens > 0);
+    assert!(result.output_tokens > 0);
+    assert_eq!(result.provider_settings_revision, 1);
+
+    let wrong_owner = deliver_provider_request_for_owner_v1(
+        &supervisor,
+        &runtime.registration_id,
+        "owner-2",
+        &request,
+    );
+    assert_eq!(wrong_owner.request_id, request.request_id);
+    assert_eq!(wrong_owner.error_code, "REJECTED");
+    assert!(wrong_owner.response_payload.is_empty());
+
+    supervisor.shutdown().expect("stop managed processes");
+    unsafe {
+        std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
+    }
+    std::fs::remove_dir_all(root).expect("remove live Ollama AI fixture");
+}
+
 fn provider_request_v1() -> AiProviderReplyGenerationRequestV1 {
     AiProviderReplyGenerationRequestV1 {
         request_id: vec![0x61; 16],
@@ -140,9 +232,23 @@ fn deliver_provider_request_v1(
     registration_id: &str,
     request: &AiProviderReplyGenerationRequestV1,
 ) -> ManagedRuntimeModuleRequestResponseV1 {
+    deliver_provider_request_for_owner_v1(
+        supervisor,
+        registration_id,
+        OLLAMA_AI_LOGICAL_OWNER_ID_V1,
+        request,
+    )
+}
+
+fn deliver_provider_request_for_owner_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    registration_id: &str,
+    logical_owner_id: &str,
+    request: &AiProviderReplyGenerationRequestV1,
+) -> ManagedRuntimeModuleRequestResponseV1 {
     let delivery = ManagedRuntimeModuleRequestDeliveryV1 {
         request_id: request.request_id.clone(),
-        logical_owner_id: OLLAMA_AI_LOGICAL_OWNER_ID_V1.to_owned(),
+        logical_owner_id: logical_owner_id.to_owned(),
         contract: Some(ai_provider_reply_generation_contract_reference_v1()),
         request_payload: request.encode_to_vec(),
     };

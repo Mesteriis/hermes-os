@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_archive_inspection_v1",
+    "currentSlice": "ollama_ai_provider_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
