@@ -123,6 +123,7 @@ mod tests {
             request_id: 7,
             request_payload: payload,
             logical_owner_id: String::new(),
+            authenticated_device_id: String::new(),
         };
 
         let (request_id, request) =
@@ -148,6 +149,7 @@ mod tests {
             request_id: 8,
             request_payload: claim,
             logical_owner_id: String::new(),
+            authenticated_device_id: String::new(),
         };
 
         let (_, request) =

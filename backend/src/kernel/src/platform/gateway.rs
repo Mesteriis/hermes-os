@@ -383,7 +383,10 @@ pub(crate) fn gateway_service(
         let relay = supervisor.relay_port();
         let request_id_sequence = Arc::clone(&request_id_sequence);
         Arc::new(
-            move |route: &ClientRpcRouteV1, logical_owner_id: &str, request_payload: &[u8]| {
+            move |route: &ClientRpcRouteV1,
+                  logical_owner_id: &str,
+                  authenticated_device_id: &str,
+                  request_payload: &[u8]| {
                 // A browser session is authorized for the logical human owner. A
                 // route owner is the admitted module/domain namespace, such as
                 // `communications`; these identifiers intentionally never match.
@@ -420,6 +423,7 @@ pub(crate) fn gateway_service(
                     snapshot.registration().module_id(),
                     route,
                     logical_owner_id,
+                    authenticated_device_id,
                     request_id,
                     request_payload,
                 )
@@ -674,10 +678,15 @@ fn encode_owner_client_rpc_module_request(
     module_id: &str,
     route: &ClientRpcRouteV1,
     logical_owner_id: &str,
+    authenticated_device_id: &str,
     request_id: u64,
     request_payload: &[u8],
 ) -> Result<Vec<u8>, ()> {
-    if module_id.is_empty() || logical_owner_id.is_empty() || request_id == 0 {
+    if module_id.is_empty()
+        || logical_owner_id.is_empty()
+        || authenticated_device_id.is_empty()
+        || request_id == 0
+    {
         return Err(());
     }
     Ok(ModuleClientRequestV1 {
@@ -694,6 +703,7 @@ fn encode_owner_client_rpc_module_request(
         request_id,
         request_payload: request_payload.to_vec(),
         logical_owner_id: logical_owner_id.to_owned(),
+        authenticated_device_id: authenticated_device_id.to_owned(),
     }
     .encode_to_vec())
 }
@@ -737,12 +747,15 @@ mod client_rpc_request_tests {
             "/owner.catalog.v1.CatalogService/List",
         );
 
-        let bytes = encode_owner_client_rpc_module_request("module", &route, "owner", 1, &[])
-            .expect("empty protobuf request envelope");
+        let bytes =
+            encode_owner_client_rpc_module_request("module", &route, "owner", "device", 1, &[])
+                .expect("empty protobuf request envelope");
         let request =
             ModuleClientRequestV1::decode(bytes.as_slice()).expect("module client request");
 
         assert!(request.request_payload.is_empty());
+        assert_eq!(request.logical_owner_id, "owner");
+        assert_eq!(request.authenticated_device_id, "device");
     }
 
     #[test]

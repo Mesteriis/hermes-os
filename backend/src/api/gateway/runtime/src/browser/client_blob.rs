@@ -122,7 +122,7 @@ pub struct ClientBlobRouter<A> {
 }
 
 pub type ClientBlobRouteHandler = Arc<
-    dyn Fn(&ClientBlobRouteV1, &str, &[u8]) -> Result<Vec<u8>, ClientBlobRouteErrorV1>
+    dyn Fn(&ClientBlobRouteV1, &str, &str, &[u8]) -> Result<Vec<u8>, ClientBlobRouteErrorV1>
         + Send
         + Sync,
 >;
@@ -190,11 +190,12 @@ where
             return error_response(StatusCode::BAD_REQUEST, "invalid_argument");
         }
         let owner_id = session.owner_id().to_owned();
+        let device_id = session.device_id().to_owned();
         let route = self.route.clone();
         let handler = Arc::clone(&self.handler);
         let content = match timeout_at(
             deadline,
-            task::spawn_blocking(move || handler(&route, &owner_id, &body)),
+            task::spawn_blocking(move || handler(&route, &owner_id, &device_id, &body)),
         )
         .await
         {

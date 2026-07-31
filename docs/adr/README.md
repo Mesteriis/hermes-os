@@ -140,6 +140,7 @@ policy через ссылки из новых документов.
 - [ADR-0329: Full-stack development Attachment scanner contour](ADR-0329-full-stack-development-attachment-scanner-contour.md)
 - [ADR-0365: Communication recipient suggestion workflow and source boundary](ADR-0365-communication-recipient-suggestion-workflow-and-source-boundary.md)
 - [ADR-0366: Communication task candidate extraction and reviewed Task promotion](ADR-0366-communication-task-candidate-extraction-and-reviewed-task-promotion.md)
+- [ADR-0367: Authenticated client device context for owner runtimes](ADR-0367-authenticated-client-device-context-for-owner-runtimes.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -664,3 +665,7 @@ immutable candidate, Review хранит human decision, а Tasks материа
 events и target-bound Blob, существующий Review attention API не становится
 generic facade, а deterministic V1 не притягивает AI/Ollama без измеренной
 необходимости.
+ADR-0367 проводит уже аутентифицированный browser device principal через
+owner-neutral Gateway client envelope до exact managed runtime. Actor не берётся
+из business payload, Kernel не интерпретирует owner semantics, а Review может
+сохранять отзываемое human decision evidence без Gateway facade.

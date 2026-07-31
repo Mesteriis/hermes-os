@@ -98,7 +98,9 @@ pub struct ClientRpcRouter<A> {
     handler: ClientRpcRouteHandler,
 }
 pub type ClientRpcRouteHandler = Arc<
-    dyn Fn(&ClientRpcRouteV1, &str, &[u8]) -> Result<Vec<u8>, ClientRpcRouteErrorV1> + Send + Sync,
+    dyn Fn(&ClientRpcRouteV1, &str, &str, &[u8]) -> Result<Vec<u8>, ClientRpcRouteErrorV1>
+        + Send
+        + Sync,
 >;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ClientRpcRouteErrorV1 {
@@ -163,11 +165,12 @@ where
             Err(_) => return deadline_exceeded(),
         };
         let owner_id = session.owner_id().to_owned();
+        let device_id = session.device_id().to_owned();
         let route = self.route.clone();
         let handler = Arc::clone(&self.handler);
         let response_payload = match timeout_at(
             deadline,
-            task::spawn_blocking(move || handler(&route, &owner_id, &body)),
+            task::spawn_blocking(move || handler(&route, &owner_id, &device_id, &body)),
         )
         .await
         {
@@ -334,8 +337,9 @@ mod tests {
             [7; 32],
             "/owner.catalog.v1.CatalogService/List",
         );
-        let handler: ClientRpcRouteHandler = Arc::new(|_, owner_id, payload| {
+        let handler: ClientRpcRouteHandler = Arc::new(|_, owner_id, device_id, payload| {
             assert_eq!(owner_id, "owner");
+            assert_eq!(device_id, "device");
             assert!(payload.is_empty());
             Ok(vec![1])
         });

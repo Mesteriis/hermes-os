@@ -646,6 +646,7 @@ mod tests {
             request_id: 1,
             request_payload: payload,
             logical_owner_id: String::new(),
+            authenticated_device_id: String::new(),
         }
         .encode_to_vec()
     }

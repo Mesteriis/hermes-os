@@ -17,6 +17,10 @@ message ModuleClientRequestV1 {
   // Logical human owner authenticated by Core Gateway. Empty only for
   // non-client test/internal callers that cannot authorize client_blob.
   string logical_owner_id = 7;
+  // Device principal authenticated by Core Gateway for this exact request.
+  // The client payload cannot set or override this value. Empty only when
+  // logical_owner_id is empty for non-client test/internal callers.
+  string authenticated_device_id = 8;
 }
 
 message ModuleClientResponseV1 {

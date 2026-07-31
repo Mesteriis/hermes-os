@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_task_candidate_persistence_v1",
+    "currentSlice": "authenticated_client_device_context_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
