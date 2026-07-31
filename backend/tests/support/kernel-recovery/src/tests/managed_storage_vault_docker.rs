@@ -116,6 +116,12 @@ use telegram_event_flow::*;
 #[path = "managed_storage_vault_docker/telegram_managed_setup.rs"]
 mod telegram_managed_setup;
 use telegram_managed_setup::*;
+#[path = "managed_storage_vault_docker/ai_inference_blob_fixture.rs"]
+mod ai_inference_blob_fixture;
+#[path = "managed_storage_vault_docker/ai_inference_managed_flow.rs"]
+mod ai_inference_managed_flow;
+#[path = "managed_storage_vault_docker/ai_inference_managed_setup.rs"]
+mod ai_inference_managed_setup;
 #[path = "managed_storage_vault_docker/attachment_security_blob_fixture.rs"]
 mod attachment_security_blob_fixture;
 #[path = "managed_storage_vault_docker/attachment_security_clamav_fixture.rs"]
@@ -158,6 +164,8 @@ mod ollama_ai_managed_setup;
 mod review_attention_managed_flow;
 #[path = "managed_storage_vault_docker/review_attention_managed_setup.rs"]
 mod review_attention_managed_setup;
+use ai_inference_blob_fixture::*;
+use ai_inference_managed_setup::*;
 use mail_attachment_flow::*;
 use mail_delivery_test_support::*;
 use mail_event_flow::*;

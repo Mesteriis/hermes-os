@@ -46,15 +46,19 @@ pub(super) fn installed_ollama_ai_release_v1(root: &Path) -> InstalledSignedBund
                 vault_binary(),
                 descriptor("vault").encode_to_vec(),
             ),
-            SignedRuntimeArtifact::new(
-                OLLAMA_AI_RELEASE_ARTIFACT_ID_V1,
-                ollama_ai_binary(),
-                ollama_ai_module_descriptor_v1("managed-ollama-ai-negative").encode_to_vec(),
-            )
-            .with_settings_schema(ollama_ai_settings_schema_bytes_v1()),
+            ollama_ai_release_artifact_v1(),
         ],
     )
     .expect("install signed Ollama AI release")
+}
+
+pub(super) fn ollama_ai_release_artifact_v1() -> SignedRuntimeArtifact {
+    SignedRuntimeArtifact::new(
+        OLLAMA_AI_RELEASE_ARTIFACT_ID_V1,
+        ollama_ai_binary(),
+        ollama_ai_module_descriptor_v1("managed-ollama-ai-negative").encode_to_vec(),
+    )
+    .with_settings_schema(ollama_ai_settings_schema_bytes_v1())
 }
 
 pub(super) fn admit_ollama_ai_runtime_v1(store: &SqliteControlStore) -> AdmittedOllamaAiRuntimeV1 {

@@ -21,8 +21,10 @@ pub fn validate_managed_engine_runtime_configuration(
         || !valid_identifier(&configuration.runtime_instance_id)
         || configuration.runtime_generation == 0
         || configuration.grant_epoch == 0
-        || !valid_event_hub_endpoint(&configuration.event_hub_endpoint)
-        || configuration.event_credential_revision == 0
+        || !valid_event_hub_configuration(
+            &configuration.event_hub_endpoint,
+            configuration.event_credential_revision,
+        )
         || configuration.settings_revision == 0
         || storage.logical_owner_id != configuration.logical_owner_id
         || storage.runtime_instance_id != configuration.runtime_instance_id
@@ -66,6 +68,11 @@ fn valid_event_hub_endpoint(value: &str) -> bool {
         && value.len() <= MAX_ENDPOINT_BYTES
         && value.starts_with("nats://")
         && !value.bytes().any(|byte| byte.is_ascii_control())
+}
+
+fn valid_event_hub_configuration(endpoint: &str, credential_revision: u64) -> bool {
+    (endpoint.is_empty() && credential_revision == 0)
+        || (credential_revision != 0 && valid_event_hub_endpoint(endpoint))
 }
 
 #[cfg(test)]
@@ -113,6 +120,34 @@ mod tests {
         assert_eq!(
             validate_managed_engine_runtime_configuration(&configuration()),
             Ok(())
+        );
+    }
+
+    #[test]
+    fn accepts_an_exact_eventless_engine_configuration() {
+        let mut configuration = configuration();
+        configuration.event_hub_endpoint.clear();
+        configuration.event_credential_revision = 0;
+        assert_eq!(
+            validate_managed_engine_runtime_configuration(&configuration),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn rejects_a_partial_event_hub_configuration() {
+        let mut endpoint_without_revision = configuration();
+        endpoint_without_revision.event_credential_revision = 0;
+        assert_eq!(
+            validate_managed_engine_runtime_configuration(&endpoint_without_revision),
+            Err(ManagedEngineRuntimeValidationErrorV1::InvalidConfiguration)
+        );
+
+        let mut revision_without_endpoint = configuration();
+        revision_without_endpoint.event_hub_endpoint.clear();
+        assert_eq!(
+            validate_managed_engine_runtime_configuration(&revision_without_endpoint),
+            Err(ManagedEngineRuntimeValidationErrorV1::InvalidConfiguration)
         );
     }
 

@@ -1,14 +1,13 @@
 #![forbid(unsafe_code)]
 
 use hermes_ai_contracts::{
-    AiContractValidationErrorV1, decode_reply_source_content_v1, encode_reply_source_content_v1,
+    AiContractValidationErrorV1, decode_reply_source_content_v1,
     validate_provider_reply_generation_result_v1, validate_reply_inference_request_v1,
     validate_reply_inference_result_v1,
     wire::{
         AiInferenceCompletenessV1, AiInferenceReceiptV1, AiInferenceTerminalStatusV1,
         AiPrivateSourceReceiptV1, AiProviderReplyGenerationResultV1, AiReplyLanguageV1,
-        AiReplySourceContentV1, AiReplySubjectPolicyV1, AiReplyToneV1,
-        CommunicationReplySuggestionInferenceRequestV1,
+        AiReplySubjectPolicyV1, AiReplyToneV1, CommunicationReplySuggestionInferenceRequestV1,
         CommunicationReplySuggestionInferenceResultV1,
     },
 };
@@ -313,11 +312,12 @@ fn contract_request_error(_: AiContractValidationErrorV1) -> AiInferenceCoreErro
 mod tests {
     use hermes_ai_contracts::{
         AI_CONTRACT_MAJOR_V1, AI_CONTRACT_REVISION_V1, AI_CONTRACTS_SCHEMA_SHA256,
-        AI_LOCAL_EGRESS_POLICY_REVISION_V1, seal_reply_inference_request_v1,
+        AI_LOCAL_EGRESS_POLICY_REVISION_V1, encode_reply_source_content_v1,
+        seal_reply_inference_request_v1,
         wire::{
             AiContextReceiptV1, AiEgressPolicyV1, AiPrivateSourceReceiptV1,
-            AiProviderReplyGenerationResultV1, AiReplyLanguageV1, AiReplySubjectPolicyV1,
-            AiReplyToneV1, AiUseCaseV1,
+            AiProviderReplyGenerationResultV1, AiReplyLanguageV1, AiReplySourceContentV1,
+            AiReplySubjectPolicyV1, AiReplyToneV1, AiUseCaseV1,
         },
     };
 

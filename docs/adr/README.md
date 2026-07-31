@@ -618,3 +618,10 @@ sender/subject/body Blob, а reply workflow переводит его в отд�
 content contract без integration import, raw private-content persistence или
 body-only compatibility facade. Slice реализован; canonical evidence major 1
 также переведён на revision 2 с новым schema digest.
+ADR-0358 расширяет capability-scoped Event Hub launch на Engine runtime:
+event-backed engine получает exact endpoint/credential pair, а engine без
+approved event route получает `empty + 0` и не требует Event Hub topology.
+Half-configured пары, фиктивные credentials и пустые event capabilities
+запрещены. Runtime protocol, Kernel composition и signed managed AI negative
+conformance реализованы; первым eventless consumer является AI inference
+engine.

@@ -804,12 +804,13 @@ pub(super) fn assert_communications_ingress_delivery(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
 ) {
-    let draft = hermes_mail_core::draft_ingress_observation_with_sender_body(
+    let draft = hermes_mail_core::draft_ingress_observation_with_sender_subject_body(
         "managed-ingress-observation-1",
         hermes_communications_ingress::ProviderProvenanceV1::MailImap,
         "integration-private-account-1",
         "integration-private-record-1",
         Some("Fixture Sender <sender@example.test>".to_owned()),
+        Some("Managed ingress subject".to_owned()),
         hermes_communications_ingress::BodyAvailabilityV1::MetadataOnly,
     )
     .expect("build typed Mail ingress draft");
@@ -881,6 +882,14 @@ pub(super) fn assert_communications_ingress_delivery(
             ));
             assert_eq!(envelope.causation_message_id, record.message_id().to_vec());
             assert_eq!(envelope.correlation_id, ingress.correlation_id);
+            let payload = hermes_communications_api::wire::CommunicationEvidenceRecordedV1::decode(
+                envelope.payload.as_slice(),
+            )
+            .expect("canonical Communications payload");
+            assert_eq!(
+                payload.message_subject.as_deref(),
+                Some("Managed ingress subject")
+            );
             context
                 .publish(
                     "hermes.observation.v1.communications.communication_observed.v1",
@@ -3262,8 +3271,7 @@ pub(super) fn communications_release_artifacts() -> Vec<SignedRuntimeArtifact> {
             vault_binary(),
             descriptor("vault").encode_to_vec(),
         ),
-        SignedRuntimeArtifact::new("platform.blob", blob_binary(), blob_descriptor())
-            .with_settings_schema(blob_settings_schema()),
+        blob_release_artifact(),
         SignedRuntimeArtifact::new(
             "domain.communications",
             communications_binary(),
@@ -3278,6 +3286,11 @@ pub(super) fn communications_release_artifacts() -> Vec<SignedRuntimeArtifact> {
         )
         .with_settings_schema(communications_export_settings_schema_bytes_v1()),
     ]
+}
+
+pub(super) fn blob_release_artifact() -> SignedRuntimeArtifact {
+    SignedRuntimeArtifact::new("platform.blob", blob_binary(), blob_descriptor())
+        .with_settings_schema(blob_settings_schema())
 }
 
 fn communications_binary() -> PathBuf {

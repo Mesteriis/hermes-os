@@ -54,6 +54,8 @@ hermes-communication-bulk-action-api = { path = "../../../src/communication-bulk
 hermes-communication-bulk-action-persistence = { path = "../../../src/communication-bulk-action-persistence" }
 hermes-communication-bulk-action-runtime = { path = "../../../src/communication-bulk-action-runtime" }
 hermes-ai-contracts = { path = "../../../src/ai-contracts" }
+hermes-ai-inference-persistence = { path = "../../../src/ai-inference-persistence" }
+hermes-ai-inference-runtime = { path = "../../../src/ai-inference-runtime" }
 hermes-ollama-ai-api = { path = "../../../src/ollama-ai-api" }
 hermes-ollama-ai-persistence = { path = "../../../src/ollama-ai-persistence" }
 hermes-ollama-ai-runtime = { path = "../../../src/ollama-ai-runtime" }

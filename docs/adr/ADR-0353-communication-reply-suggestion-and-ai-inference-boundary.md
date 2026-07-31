@@ -25,8 +25,14 @@ source message body или cross-owner SQL. `hermes-ai-inference-runtime`
 provider-neutral outbound route и restart recovery; отдельный
 `hermes-ai-inference-assembly` материализует только unsigned descriptor,
 settings schema и Storage bundle inputs. Все пять AI engine build units
-реализованы, но live managed inference ещё не доказан. Workflow ещё не
-завершён. Для Ollama реализованы все шесть отдельных staged units —
+реализованы. Signed managed conformance запускает eventless AI Engine с
+настоящими Vault/Storage/Blob, маршрутизирует typed provider request в
+отдельную Ollama integration, сохраняет terminal `ProviderUnavailable`, после
+engine restart возвращает exact persisted response без повторного provider
+request и отклоняет request-ID conflict. Это доказывает admission, Blob
+custody, storage binding и отрицательный replay contour, но не successful
+inference. Workflow ещё не завершён. Для Ollama реализованы все шесть
+отдельных staged units —
 `hermes-ollama-ai-api`,
 `hermes-ollama-ai-core`, `hermes-ollama-ai-http`,
 `hermes-ollama-ai-persistence`, `hermes-ollama-ai-runtime` и
@@ -47,8 +53,8 @@ manifest. Real managed conformance запускает этот signed eventless 
 фиксирует terminal `ProviderUnavailable`, после restart возвращает exact
 persisted response без второй HTTP-попытки и отклоняет request-ID conflict.
 Это доказывает admission, storage binding и отрицательный replay contour, но не
-является live успешным inference: установленный Ollama runtime и успешный
-provider request на текущей машине отсутствуют. Поэтому gates
+является live успешным inference: установленный Ollama service/model и
+успешный provider request на текущей машине отсутствуют. Поэтому gates
 `ai_inference_v1`, `ollama_ai_provider_v1` и
 `communication_reply_suggestion_v1` также остаются `planned`. Для reply
 workflow реализованы все пять отдельных units:

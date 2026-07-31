@@ -2693,6 +2693,8 @@ dependencies = [
  "h3",
  "h3-quinn",
  "hermes-ai-contracts",
+ "hermes-ai-inference-persistence",
+ "hermes-ai-inference-runtime",
  "hermes-attachment-security-contract",
  "hermes-attachment-security-persistence",
  "hermes-attachment-security-runtime",

@@ -388,18 +388,33 @@ fn domain_event_hub_configuration(
     store: &SqliteControlStore,
     registration_id: &str,
 ) -> Result<(String, u64), String> {
+    capability_scoped_event_hub_configuration(store, registration_id, "managed domain")
+}
+
+fn engine_event_hub_configuration(
+    store: &SqliteControlStore,
+    registration_id: &str,
+) -> Result<(String, u64), String> {
+    capability_scoped_event_hub_configuration(store, registration_id, "managed engine")
+}
+
+fn capability_scoped_event_hub_configuration(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    runtime_kind: &str,
+) -> Result<(String, u64), String> {
     let snapshot = store
         .module_grant_snapshot(registration_id)
-        .map_err(|_| "managed domain grants are unavailable".to_owned())?
-        .ok_or_else(|| "managed domain grants are unavailable".to_owned())?;
+        .map_err(|_| format!("{runtime_kind} grants are unavailable"))?
+        .ok_or_else(|| format!("{runtime_kind} grants are unavailable"))?;
     let grants = snapshot
         .effective_grants()
-        .ok_or_else(|| "managed domain grants are unavailable".to_owned())?;
+        .ok_or_else(|| format!("{runtime_kind} grants are unavailable"))?;
     let mut requires_event_hub = false;
     for capability_id in grants.capability_ids() {
         if !store
             .module_event_route_requests(registration_id, capability_id)
-            .map_err(|_| "managed domain Event Hub routes are unavailable".to_owned())?
+            .map_err(|_| format!("{runtime_kind} Event Hub routes are unavailable"))?
             .is_empty()
         {
             requires_event_hub = true;
@@ -448,10 +463,8 @@ fn start_reserved_engine_runtime(
             vault.runtime_generation(),
             vault.hpke_public_key_x25519(),
         )?;
-        let event_topology = store
-            .platform_event_hub_topology()
-            .map_err(|_| "Event Hub topology is unavailable".to_owned())?
-            .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
+        let (event_hub_endpoint, event_credential_revision) =
+            engine_event_hub_configuration(store, &request.registration_id)?;
         let settings_snapshot = managed_integration_launch::admitted_settings_snapshot(
             store,
             &request.registration_id,
@@ -464,8 +477,8 @@ fn start_reserved_engine_runtime(
             runtime_generation: reservation.runtime_generation(),
             grant_epoch: reservation.grant_epoch(),
             storage: Some(storage),
-            event_hub_endpoint: event_topology.nats_endpoint().to_owned(),
-            event_credential_revision: event_topology.credential_revision(),
+            event_hub_endpoint,
+            event_credential_revision,
             settings_revision: settings_snapshot.revision,
         };
         validate_managed_engine_runtime_configuration(&configuration)
