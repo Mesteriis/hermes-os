@@ -685,7 +685,7 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   );
   assert.equal(
     policy.implementation.currentSlice,
-    'authenticated_client_device_context_v1',
+    'review_task_candidate_event_contracts_v1',
   );
   assert.ok(
     policy.implementation.productionPackages.some(

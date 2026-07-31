@@ -12,6 +12,7 @@ test('Review task-candidate is an exact domain capability, not an attention faca
     workspace,
     apiManifest,
     api,
+    envelope,
     protocol,
     coreManifest,
     core,
@@ -35,6 +36,7 @@ test('Review task-candidate is an exact domain capability, not an attention faca
       readFile(new URL('Cargo.toml', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-api/src/envelope.rs', BACKEND_ROOT), 'utf8'),
       readFile(
         new URL(
           'src/review-task-candidate-api/proto/hermes/review/task_candidate/v1/task_candidate.proto',
@@ -60,7 +62,7 @@ test('Review task-candidate is an exact domain capability, not an attention faca
     ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'authenticated_client_device_context_v1');
+  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_event_contracts_v1');
   for (const unit of [
     'hermes-review-task-candidate-api',
     'hermes-review-task-candidate-core',
@@ -78,6 +80,14 @@ test('Review task-candidate is an exact domain capability, not an attention faca
   assert.match(coreManifest, /surface = "implementation"/);
   assert.match(api, /review\.task-candidate\.submission\.v1/);
   assert.match(api, /review\.task-candidate\.promotion\.v1/);
+  assert.match(api, /TASKS_REVIEWED_CANDIDATE_BLOB_TARGET_OWNER_ID_V1/);
+  assert.match(envelope, /build_submit_review_task_candidate_outbox_record_v1/);
+  assert.match(envelope, /build_review_task_candidate_approved_outbox_record_v1/);
+  assert.match(envelope, /ActorKindV1::OwnerDevice/);
+  assert.doesNotMatch(
+    envelope.split('#[cfg(test)]')[0],
+    /title|due_text_hint|assignee_label_hint/,
+  );
   assert.match(protocol, /SubmitTaskCandidateForReviewCommandV1/);
   assert.match(protocol, /TaskCandidateApprovedForPromotionV1/);
   assert.match(protocol, /ReviewTargetBoundCandidateReceiptV1/);

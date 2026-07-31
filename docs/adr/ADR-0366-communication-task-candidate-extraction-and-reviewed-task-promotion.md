@@ -18,7 +18,10 @@ task-candidate API и pure Review core: deterministic review identity, immutable
 approve/reject, expected-revision fence и отдельный promotion lifecycle без
 расширения `review-attention`. Review owner-local persistence резервирует
 submission до Blob read, хранит state/operation/inbox/outbox/realtime атомарно и
-восстанавливает незавершённые submission/promotion. Review runtime/assembly,
+восстанавливает незавершённые submission/promotion. Review public contract
+также строит exact submit/submitted/rejected/approved durable envelopes,
+отделяет module actor от authenticated owner-device actor и фиксирует distinct
+Review- и Tasks-target Blob audiences. Review runtime/assembly,
 signed admission/conformance и Tasks promotion ещё не реализованы, поэтому
 aggregate gate остаётся закрыт.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction

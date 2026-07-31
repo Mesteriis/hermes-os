@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "authenticated_client_device_context_v1",
+    "currentSlice": "review_task_candidate_event_contracts_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1590,6 +1590,10 @@
         }
       ],
       "hermes-review-task-candidate-api": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
         {
           "name": "hermes-runtime-protocol",
           "kind": "normal"
@@ -4849,6 +4853,22 @@
           "source": "crates_io",
           "version": "=0.14.4",
           "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
           "features": []
         },
         {

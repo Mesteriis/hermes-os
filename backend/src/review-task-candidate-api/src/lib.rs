@@ -1,5 +1,15 @@
 #![forbid(unsafe_code)]
 
+mod envelope;
+
+pub use envelope::{
+    ReviewTaskCandidateEnvelopeBuildErrorV1, ReviewTaskCandidateEnvelopeContextV1,
+    build_review_task_candidate_approved_outbox_record_v1,
+    build_review_task_candidate_submission_rejected_outbox_record_v1,
+    build_review_task_candidate_submitted_outbox_record_v1,
+    build_submit_review_task_candidate_outbox_record_v1,
+};
+
 use hermes_runtime_protocol::v1::{
     CapabilityRequestV1, ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
     EventRouteRequestV1, EventSubscriptionRequirementV1, capability_request_v1::Request,
@@ -14,6 +24,14 @@ pub const REVIEW_TASK_CANDIDATE_SUBMISSION_CAPABILITY_ID_V1: &str =
 pub const REVIEW_TASK_CANDIDATE_PROMOTION_CAPABILITY_ID_V1: &str =
     "review.task-candidate.promotion.v1";
 pub const REVIEW_TASK_CANDIDATE_BLOB_CAPABILITY_ID_V1: &str = "review.task-candidate.blob.v1";
+pub const REVIEW_TASK_CANDIDATE_BLOB_TARGET_OWNER_ID_V1: &str = "review";
+pub const REVIEW_TASK_CANDIDATE_BLOB_TARGET_MODULE_ID_V1: &str = REVIEW_TASK_CANDIDATE_MODULE_ID_V1;
+pub const REVIEW_TASK_CANDIDATE_BLOB_TARGET_CAPABILITY_ID_V1: &str =
+    REVIEW_TASK_CANDIDATE_BLOB_CAPABILITY_ID_V1;
+pub const TASKS_REVIEWED_CANDIDATE_BLOB_TARGET_OWNER_ID_V1: &str = "tasks";
+pub const TASKS_REVIEWED_CANDIDATE_BLOB_TARGET_MODULE_ID_V1: &str = "hermes-tasks-runtime";
+pub const TASKS_REVIEWED_CANDIDATE_BLOB_TARGET_CAPABILITY_ID_V1: &str =
+    "tasks.reviewed-candidate.blob.v1";
 
 pub const REVIEW_TASK_CANDIDATE_SUBMIT_CONTRACT_NAME_V1: &str = "review_task_candidate_submit";
 pub const REVIEW_TASK_CANDIDATE_SUBMITTED_CONTRACT_NAME_V1: &str =
@@ -100,6 +118,16 @@ pub fn review_task_candidate_submitted_publish_request_v1() -> CapabilityRequest
 }
 
 #[must_use]
+pub fn review_task_candidate_submitted_consume_request_v1() -> CapabilityRequestV1 {
+    event_route(
+        DurableEnvelopeKindV1::Result,
+        review_task_candidate_submitted_contract_reference_v1(),
+        EventRouteDirectionV1::Consume,
+        EventSubscriptionRequirementV1::Required,
+    )
+}
+
+#[must_use]
 pub fn review_task_candidate_submission_rejected_publish_request_v1() -> CapabilityRequestV1 {
     event_route(
         DurableEnvelopeKindV1::Result,
@@ -110,12 +138,32 @@ pub fn review_task_candidate_submission_rejected_publish_request_v1() -> Capabil
 }
 
 #[must_use]
+pub fn review_task_candidate_submission_rejected_consume_request_v1() -> CapabilityRequestV1 {
+    event_route(
+        DurableEnvelopeKindV1::Result,
+        review_task_candidate_submission_rejected_contract_reference_v1(),
+        EventRouteDirectionV1::Consume,
+        EventSubscriptionRequirementV1::Required,
+    )
+}
+
+#[must_use]
 pub fn review_task_candidate_approved_publish_request_v1() -> CapabilityRequestV1 {
     event_route(
         DurableEnvelopeKindV1::Event,
         review_task_candidate_approved_contract_reference_v1(),
         EventRouteDirectionV1::Publish,
         EventSubscriptionRequirementV1::Unspecified,
+    )
+}
+
+#[must_use]
+pub fn review_task_candidate_approved_consume_request_v1() -> CapabilityRequestV1 {
+    event_route(
+        DurableEnvelopeKindV1::Event,
+        review_task_candidate_approved_contract_reference_v1(),
+        EventRouteDirectionV1::Consume,
+        EventSubscriptionRequirementV1::Required,
     )
 }
 

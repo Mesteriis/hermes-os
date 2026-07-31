@@ -2856,6 +2856,7 @@ const COMMUNICATION_TASK_CANDIDATE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
 const REVIEW_TASK_CANDIDATE_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATION_TASK_CANDIDATE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-review-task-candidate-api': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
   'hermes-review-task-candidate-core': [],
@@ -3609,6 +3610,8 @@ const REVIEW_TASK_CANDIDATE_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATION_TASK_CANDIDATE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-review-task-candidate-api': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
@@ -5467,6 +5470,17 @@ function expectedSlice(currentSlice) {
     };
   }
   if (currentSlice === 'authenticated_client_device_context_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: REVIEW_TASK_CANDIDATE_PERSISTENCE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: REVIEW_TASK_CANDIDATE_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies: REVIEW_TASK_CANDIDATE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: REVIEW_TASK_CANDIDATE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'review_task_candidate_event_contracts_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: REVIEW_TASK_CANDIDATE_PERSISTENCE_INVENTORY,
