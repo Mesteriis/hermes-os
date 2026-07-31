@@ -3533,6 +3533,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-review-task-candidate-api"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-review-task-candidate-core"
+version = "0.1.0"
+dependencies = [
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-runtime-protocol"
 version = "0.1.0"
 dependencies = [

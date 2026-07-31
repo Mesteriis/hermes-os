@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_task_candidate_assembly_v1",
+    "currentSlice": "review_task_candidate_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1020,6 +1020,18 @@
         "role": "workflow",
         "owner": "communication_task_candidate_extraction",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-review-task-candidate-api",
+        "role": "domain",
+        "owner": "review",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-review-task-candidate-core",
+        "role": "domain",
+        "owner": "review",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1571,6 +1583,13 @@
           "kind": "normal"
         }
       ],
+      "hermes-review-task-candidate-api": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-review-task-candidate-core": [],
       "hermes-communications-attachment-contract": [
         {
           "name": "hermes-events-protocol",
@@ -4798,6 +4817,50 @@
         }
       ],
       "hermes-review-attention-core": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-review-task-candidate-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-review-task-candidate-core": [
         {
           "name": "sha2",
           "kind": "normal",
@@ -8096,6 +8159,14 @@
       "hermes-review-attention-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
+      },
+      "hermes-review-task-candidate-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-review-task-candidate-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -8277,7 +8348,11 @@
         "review.communication-attention.command.v1",
         "review.communication-attention.query.v1",
         "review.communication-attention.realtime.v1",
-        "review.communication-attention.storage.v1"
+        "review.communication-attention.storage.v1",
+        "review.task-candidate.blob.v1",
+        "review.task-candidate.client.v1",
+        "review.task-candidate.promotion.v1",
+        "review.task-candidate.submission.v1"
       ]
     },
     "kernelProfile": {

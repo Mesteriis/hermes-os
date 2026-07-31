@@ -13,8 +13,12 @@ Communications source producer уже consume-ит exact task-source command,
 атомарно пишет prepared/rejected result через Communications outbox и передаёт
 typed subject/body только через target-bound Blob custody. Отдельная assembly
 формирует unsigned descriptor/settings/storage/release fragment для generic
-distribution compiler. Signed admission/conformance, Review decision и Tasks
-promotion ещё не реализованы, поэтому aggregate gate остаётся закрыт.
+distribution compiler. Review staged slice также реализует отдельные generated
+task-candidate API и pure Review core: deterministic review identity, immutable
+approve/reject, expected-revision fence и отдельный promotion lifecycle без
+расширения `review-attention`. Review persistence/runtime/assembly, signed
+admission/conformance и Tasks promotion ещё не реализованы, поэтому aggregate
+gate остаётся закрыт.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 

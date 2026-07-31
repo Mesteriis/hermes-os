@@ -171,7 +171,7 @@ test('recipient suggestion agreement separates source ownership from workflow de
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_task_candidate_assembly_v1',
+    'review_task_candidate_core_v1',
   );
   assert.match(workspace, /"src\/communication-recipient-suggestion-api"/);
   assert.match(workspace, /"src\/communication-recipient-suggestion-core"/);
