@@ -103,7 +103,6 @@ pub fn compute_provider_summary_generation_request_digest_v1(
     validate_provider_summary_generation_request_v1(request)?;
     Ok(Sha256::digest(request.encode_to_vec()).into())
 }
-
 pub fn validate_reply_inference_request_v1(
     request: &CommunicationReplySuggestionInferenceRequestV1,
 ) -> Result<(), AiContractValidationErrorV1> {
@@ -242,7 +241,6 @@ pub fn decode_summary_source_content_v1(
     validate_summary_source_content_v1(&content)?;
     Ok(content)
 }
-
 pub fn validate_summary_inference_result_v1(
     result: &CommunicationSummaryInferenceResultV1,
 ) -> Result<(), AiContractValidationErrorV1> {
@@ -491,7 +489,6 @@ fn provider_summary_rejection_is_sanitized(
         && result.confidence_basis_points == 0
         && result.provider_settings_revision == 0
 }
-
 fn validate_private_source(
     source: Option<&AiPrivateSourceReceiptV1>,
 ) -> Result<(), AiContractValidationErrorV1> {
@@ -631,7 +628,6 @@ fn valid_summary_length(value: i32) -> bool {
             | AiSummaryLengthV1::AiSummaryLengthDetailed)
     )
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

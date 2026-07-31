@@ -6,8 +6,21 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../../../', import.meta.url);
 
 test('communication translation agreement isolates workflow domain engine and provider', async () => {
-  const [adr, inventorySource, policySource, workspace, apiManifest, api, protocol, core] =
-    await Promise.all([
+  const [
+    adr,
+    inventorySource,
+    policySource,
+    workspace,
+    apiManifest,
+    api,
+    protocol,
+    core,
+    communicationsSourceProtocol,
+    aiProtocol,
+    aiContracts,
+    aiTranslationValidation,
+    ollamaApi,
+  ] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0363-communication-translation-workflow-and-ai-contracts.md',
@@ -28,6 +41,17 @@ test('communication translation agreement isolates workflow domain engine and pr
       'utf8',
     ),
     readFile(new URL('src/communication-translation-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/communications-ai-source-api/proto/hermes/communications/ai_source/v1/ai_source.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('src/ai-contracts/proto/hermes/ai/contracts/v1/ai.proto', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-contracts/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-contracts/src/translation.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ollama-ai-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -64,7 +88,10 @@ test('communication translation agreement isolates workflow domain engine and pr
   assert.match(adr, /Состояние реализации: planned/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns translation/i);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_translation_contract_core_v1');
+  assert.equal(
+    policy.implementation.currentSlice,
+    'communication_translation_cross_owner_contracts_v1',
+  );
   assert.match(workspace, /"src\/communication-translation-api"/);
   assert.match(workspace, /"src\/communication-translation-core"/);
   assert.match(apiManifest, /owner = "communication_translation"/);
@@ -78,4 +105,24 @@ test('communication translation agreement isolates workflow domain engine and pr
   assert.match(core, /transition_communication_translation_v1/);
   assert.match(core, /DigestMismatch/);
   assert.doesNotMatch(core, /communication_summary|hermes_ai|ollama|communications_domain/);
+  for (const capability of [
+    'ai.provider.translate.v1',
+    'ai.translation.request.v1',
+    'communication.translation.v1',
+    'communication_translation.source.blob.v1',
+    'communications.ai-translation-source.v1',
+  ]) {
+    assert.ok(policy.implementation.ownerInventory.businessCapabilities.includes(capability));
+  }
+  assert.match(communicationsSourceProtocol, /PrepareCommunicationTranslationSourceCommandV1/);
+  assert.match(communicationsSourceProtocol, /CommunicationTranslationSourcePreparedV1/);
+  assert.match(communicationsSourceProtocol, /CommunicationTranslationSourceRejectedV1/);
+  assert.match(aiProtocol, /CommunicationTranslationInferenceRequestV1/);
+  assert.match(aiProtocol, /AiProviderTranslationRequestV1/);
+  assert.match(aiContracts, /AI_TRANSLATION_REQUEST_CAPABILITY_ID_V1/);
+  assert.match(aiContracts, /AI_PROVIDER_TRANSLATION_CAPABILITY_ID_V1/);
+  assert.match(aiTranslationValidation, /seal_translation_inference_request_v1/);
+  assert.doesNotMatch(aiTranslationValidation, /CommunicationSummary|CommunicationReply/);
+  assert.match(ollamaApi, /OLLAMA_AI_TRANSLATION_CAPABILITY_ID_V1/);
+  assert.doesNotMatch(aiProtocol, /provider_id|model_id|map</);
 });

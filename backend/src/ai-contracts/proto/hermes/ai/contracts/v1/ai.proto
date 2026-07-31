@@ -6,6 +6,22 @@ enum AiUseCaseV1 {
   AI_USE_CASE_UNSPECIFIED = 0;
   AI_USE_CASE_COMMUNICATION_REPLY_SUGGESTION = 1;
   AI_USE_CASE_COMMUNICATION_SUMMARY = 2;
+  AI_USE_CASE_COMMUNICATION_TRANSLATION = 3;
+}
+
+enum AiTranslationLanguageV1 {
+  AI_TRANSLATION_LANGUAGE_UNSPECIFIED = 0;
+  AI_TRANSLATION_LANGUAGE_ENGLISH = 1;
+  AI_TRANSLATION_LANGUAGE_SPANISH = 2;
+  AI_TRANSLATION_LANGUAGE_RUSSIAN = 3;
+}
+
+enum AiDetectedLanguageV1 {
+  AI_DETECTED_LANGUAGE_UNSPECIFIED = 0;
+  AI_DETECTED_LANGUAGE_UNKNOWN = 1;
+  AI_DETECTED_LANGUAGE_ENGLISH = 2;
+  AI_DETECTED_LANGUAGE_SPANISH = 3;
+  AI_DETECTED_LANGUAGE_RUSSIAN = 4;
 }
 
 enum AiSummaryLanguageV1 {
@@ -87,6 +103,12 @@ message AiSummarySourceContentV1 {
   bytes body_utf8 = 3;
 }
 
+message AiTranslationSourceContentV1 {
+  bytes sender_utf8 = 1;
+  bytes subject_utf8 = 2;
+  bytes body_utf8 = 3;
+}
+
 message AiContextReceiptV1 {
   bytes context_id = 1;
   AiUseCaseV1 use_case = 2;
@@ -159,6 +181,31 @@ message CommunicationSummaryInferenceResultV1 {
   AiInferenceTerminalStatusV1 terminal_status = 10;
 }
 
+message CommunicationTranslationInferenceRequestV1 {
+  bytes run_id = 1;
+  AiContextReceiptV1 context = 2;
+  AiPrivateSourceReceiptV1 source = 3;
+  AiTranslationLanguageV1 target_language = 4;
+  uint32 maximum_output_bytes = 5;
+  uint32 maximum_output_tokens = 6;
+  AiEgressPolicyV1 egress_policy = 7;
+  uint32 egress_policy_revision = 8;
+  string logical_owner_id = 9;
+}
+
+message CommunicationTranslationInferenceResultV1 {
+  bytes run_id = 1;
+  bytes request_digest = 2;
+  bytes source_sha256 = 3;
+  bytes translated_text_utf8 = 4;
+  AiDetectedLanguageV1 detected_source_language = 5;
+  AiTranslationLanguageV1 target_language = 6;
+  AiInferenceReceiptV1 inference_receipt = 7;
+  AiInferenceCompletenessV1 completeness = 8;
+  uint32 confidence_basis_points = 9;
+  AiInferenceTerminalStatusV1 terminal_status = 10;
+}
+
 // Private-content request_rpc from the AI engine to an approved provider.
 // Provider/model/endpoint selection is descriptor and effective-settings owned.
 message AiProviderReplyGenerationRequestV1 {
@@ -204,6 +251,30 @@ message AiProviderSummaryGenerationResultV1 {
   bytes summary_utf8 = 2;
   AiSummaryLanguageV1 resolved_language = 3;
   AiSummaryLengthV1 resolved_length = 4;
+  bytes model_revision_sha256 = 5;
+  uint32 input_tokens = 6;
+  uint32 output_tokens = 7;
+  AiInferenceTerminalStatusV1 terminal_status = 8;
+  AiInferenceCompletenessV1 completeness = 9;
+  uint32 confidence_basis_points = 10;
+  uint64 provider_settings_revision = 11;
+}
+
+message AiProviderTranslationRequestV1 {
+  bytes request_id = 1;
+  bytes input_utf8 = 2;
+  AiTranslationLanguageV1 target_language = 3;
+  uint32 maximum_output_bytes = 4;
+  uint32 maximum_output_tokens = 5;
+  AiEgressPolicyV1 egress_policy = 6;
+  uint32 egress_policy_revision = 7;
+}
+
+message AiProviderTranslationResultV1 {
+  bytes request_id = 1;
+  bytes translated_text_utf8 = 2;
+  AiDetectedLanguageV1 detected_source_language = 3;
+  AiTranslationLanguageV1 target_language = 4;
   bytes model_revision_sha256 = 5;
   uint32 input_tokens = 6;
   uint32 output_tokens = 7;
