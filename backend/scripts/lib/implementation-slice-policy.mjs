@@ -843,6 +843,28 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
   },
 ];
 
+const ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_PRODUCTION_PACKAGES = [
+  ...COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-attachment-archive-inspection-api',
+    role: 'engine',
+    owner: 'attachment_archive_inspection',
+    surface: 'contract',
+  },
+  {
+    name: 'hermes-attachment-archive-inspection-core',
+    role: 'engine',
+    owner: 'attachment_archive_inspection',
+    surface: 'implementation',
+  },
+  {
+    name: 'hermes-attachment-archive-inspection-zip',
+    role: 'engine',
+    owner: 'attachment_archive_inspection',
+    surface: 'implementation',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2393,6 +2415,17 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-archive-inspection-api': [],
+  'hermes-attachment-archive-inspection-core': [
+    { name: 'hermes-attachment-archive-inspection-api', kind: 'normal' },
+  ],
+  'hermes-attachment-archive-inspection-zip': [
+    { name: 'hermes-attachment-archive-inspection-core', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2850,6 +2883,20 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-archive-inspection-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-archive-inspection-core': [],
+  'hermes-attachment-archive-inspection-zip': [
+    { name: 'zip', kind: 'normal', source: 'crates_io', version: '=6.0.0', defaultFeatures: false, features: ['deflate-flate2-zlib-rs'] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -3163,6 +3210,14 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_INVENTORY = {
   ].sort(),
 };
 
+const ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_INVENTORY = {
+  ...COMMUNICATIONS_AI_SOURCE_CONTRACT_INVENTORY,
+  engines: [
+    ...COMMUNICATIONS_AI_SOURCE_CONTRACT_INVENTORY.engines,
+    'attachment_archive_inspection',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -3366,6 +3421,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-ai-source-api',
       'hermes-communication-reply-suggestion-api',
       'hermes-ai-contracts',
+      'hermes-attachment-archive-inspection-api',
       'hermes-communications-export-api',
       'hermes-communication-delivery-intent-api',
       'hermes-communication-delivery-intent-ingress-api',
@@ -4034,6 +4090,19 @@ function expectedSlice(currentSlice) {
         COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_archive_inspection_contract_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

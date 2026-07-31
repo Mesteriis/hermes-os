@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_communications_attention_v1",
+    "currentSlice": "attachment_archive_inspection_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -816,6 +816,24 @@
         "role": "integration",
         "owner": "ollama",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-attachment-archive-inspection-api",
+        "role": "engine",
+        "owner": "attachment_archive_inspection",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-attachment-archive-inspection-core",
+        "role": "engine",
+        "owner": "attachment_archive_inspection",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-archive-inspection-zip",
+        "role": "engine",
+        "owner": "attachment_archive_inspection",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1607,6 +1625,19 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-archive-inspection-api": [],
+      "hermes-attachment-archive-inspection-core": [
+        {
+          "name": "hermes-attachment-archive-inspection-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-archive-inspection-zip": [
+        {
+          "name": "hermes-attachment-archive-inspection-core",
           "kind": "normal"
         }
       ],
@@ -4575,6 +4606,53 @@
           "features": []
         }
       ],
+      "hermes-attachment-archive-inspection-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-attachment-archive-inspection-core": [],
+      "hermes-attachment-archive-inspection-zip": [
+        {
+          "name": "zip",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=6.0.0",
+          "defaultFeatures": false,
+          "features": [
+            "deflate-flate2-zlib-rs"
+          ]
+        }
+      ],
       "hermes-mail-api": [
         {
           "name": "prost",
@@ -6738,6 +6816,18 @@
         "primaryKind": "bin",
         "customBuildAllowed": false
       },
+      "hermes-attachment-archive-inspection-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-attachment-archive-inspection-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-archive-inspection-zip": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-mail-api": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -7073,10 +7163,11 @@
       "communication_reply_suggestion",
       "communications_export"
       ],
-      "engines": [
-        "ai",
-        "attachment_security"
-      ],
+    "engines": [
+      "ai",
+      "attachment_archive_inspection",
+      "attachment_security"
+    ],
       "businessCapabilities": [
         "attachment_security.blob.v1",
         "attachment_security.candidate.observe.v1",

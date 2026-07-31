@@ -1,0 +1,17 @@
+[package]
+name = "hermes-attachment-archive-inspection-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "engine"
+owner = "attachment_archive_inspection"
+surface = "implementation"
+
+[dependencies]
+hermes-attachment-archive-inspection-api = { path = "../attachment-archive-inspection-api" }
+

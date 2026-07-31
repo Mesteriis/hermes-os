@@ -625,3 +625,9 @@ Half-configured пары, фиктивные credentials и пустые event c
 запрещены. Runtime protocol, Kernel composition и signed managed AI negative
 conformance реализованы; первым eventless consumer является AI inference
 engine.
+ADR-0359 выделяет attachment archive inspection из Communications в отдельный
+bounded engine. On-demand request, provider-neutral scan candidate и canonical
+`safe_for_delivery` объединяются owner-local, source bytes переходят только
+через target-bound Blob custody, а ZIP adapter читает metadata без extraction.
+API/core/ZIP units реализованы; persistence/runtime/assembly и managed live
+gate остаются открыты.
