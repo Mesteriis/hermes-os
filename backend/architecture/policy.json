@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_translation_cross_owner_contracts_v1",
+    "currentSlice": "communication_translation_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -900,6 +900,12 @@
         "role": "workflow",
         "owner": "communication_translation",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-communication-translation-persistence",
+        "role": "workflow",
+        "owner": "communication_translation",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2145,6 +2151,16 @@
       ],
       "hermes-communication-translation-api": [],
       "hermes-communication-translation-core": [],
+      "hermes-communication-translation-persistence": [
+        {
+          "name": "hermes-communication-translation-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-ai-contracts": [
         {
           "name": "hermes-runtime-protocol",
@@ -2820,6 +2836,10 @@
         { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
       ],
       "hermes-communication-translation-core": [],
+      "hermes-communication-translation-persistence": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+      ],
       "hermes-events-protocol": [
         {
           "name": "prost",
@@ -7413,6 +7433,10 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-communication-translation-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -7727,6 +7751,7 @@
         "communication_translation.source_prepare.v1",
         "communication_translation.source_prepared.v1",
         "communication_translation.source_rejected.v1",
+        "communication_translation.storage.v1",
         "communications.ai-reply-source.blob.v1",
         "communications.ai-reply-source.v1",
         "communications.ai-summary-source.blob.v1",

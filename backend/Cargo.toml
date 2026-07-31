@@ -66,6 +66,7 @@ members = [
   "src/communication-summary-assembly",
   "src/communication-translation-api",
   "src/communication-translation-core",
+  "src/communication-translation-persistence",
   "src/ai-contracts",
   "src/ai-inference-core",
   "src/ai-inference-persistence",

@@ -15,6 +15,9 @@ test('communication translation agreement isolates workflow domain engine and pr
     api,
     protocol,
     core,
+    persistenceManifest,
+    persistenceSchema,
+    persistenceRepository,
     communicationsSourceProtocol,
     aiProtocol,
     aiContracts,
@@ -41,6 +44,21 @@ test('communication translation agreement isolates workflow domain engine and pr
       'utf8',
     ),
     readFile(new URL('src/communication-translation-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL('src/communication-translation-persistence/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-translation-persistence/migrations/0001_translation.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-translation-persistence/src/repository.rs', BACKEND_ROOT),
+      'utf8',
+    ),
     readFile(
       new URL(
         'src/communications-ai-source-api/proto/hermes/communications/ai_source/v1/ai_source.proto',
@@ -90,7 +108,7 @@ test('communication translation agreement isolates workflow domain engine and pr
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_translation_cross_owner_contracts_v1',
+    'communication_translation_persistence_v1',
   );
   assert.match(workspace, /"src\/communication-translation-api"/);
   assert.match(workspace, /"src\/communication-translation-core"/);
@@ -110,6 +128,7 @@ test('communication translation agreement isolates workflow domain engine and pr
     'ai.translation.request.v1',
     'communication.translation.v1',
     'communication_translation.source.blob.v1',
+    'communication_translation.storage.v1',
     'communications.ai-translation-source.v1',
   ]) {
     assert.ok(policy.implementation.ownerInventory.businessCapabilities.includes(capability));
@@ -125,4 +144,16 @@ test('communication translation agreement isolates workflow domain engine and pr
   assert.doesNotMatch(aiTranslationValidation, /CommunicationSummary|CommunicationReply/);
   assert.match(ollamaApi, /OLLAMA_AI_TRANSLATION_CAPABILITY_ID_V1/);
   assert.doesNotMatch(aiProtocol, /provider_id|model_id|map</);
+  assert.match(persistenceManifest, /owner = "communication_translation"/);
+  assert.match(persistenceManifest, /surface = "persistence"/);
+  assert.match(persistenceSchema, /communication_translation_runs/);
+  assert.match(persistenceSchema, /request_fingerprint/);
+  assert.match(persistenceSchema, /communication_translation_inbox/);
+  assert.match(persistenceSchema, /communication_translation_outbox/);
+  assert.match(persistenceSchema, /communication_translation_realtime/);
+  assert.match(persistenceRepository, /ON CONFLICT \(logical_owner_id, operation_id\)/);
+  assert.doesNotMatch(
+    `${persistenceSchema}\n${persistenceRepository}`,
+    /communication_summary|communications_|mail_|telegram_|whatsapp_|zulip_|source_body|provider_id|model_id|endpoint/,
+  );
 });
