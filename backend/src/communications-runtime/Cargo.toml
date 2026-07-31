@@ -34,6 +34,7 @@ hermes-communications-domain = { path = "../communications-domain" }
 hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-communications-persistence = { path = "../communications-persistence" }
 hermes-communications-recipient-source-api = { path = "../communications-recipient-source-api" }
+hermes-communications-task-source-api = { path = "../communications-task-source-api" }
 hermes-blob-client = { path = "../platform/blob/client" }
 hermes-events-jetstream = { path = "../platform/events/jetstream" }
 hermes-events-protocol = { path = "../platform/events" }

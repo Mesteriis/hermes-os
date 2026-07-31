@@ -194,7 +194,7 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.match(adr, /Состояние реализации: implemented/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns explanation/i);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_source_producer_v1');
   assert.match(workspace, /"src\/communication-explanation-api"/);
   assert.match(workspace, /"src\/communication-explanation-core"/);
   assert.match(workspace, /"src\/communication-explanation-persistence"/);

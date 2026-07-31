@@ -9,8 +9,11 @@ API/core/persistence/runtime units и Communications-owned task-source event
 contract с exact envelope builders. Managed runtime предоставляет typed
 Start/Get/replayable realtime, event outbox, owner-local recovery и
 target-bound Blob materialization для детерминированной extraction.
-Communications source producer, assembly/release admission, Review decision и
-Tasks promotion ещё не реализованы, поэтому aggregate gate остаётся закрыт.
+Communications source producer уже consume-ит exact task-source command,
+атомарно пишет prepared/rejected result через Communications outbox и передаёт
+typed subject/body только через target-bound Blob custody. Assembly/release
+admission, Review decision и Tasks promotion ещё не реализованы, поэтому
+aggregate gate остаётся закрыт.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 

@@ -84,6 +84,14 @@ use hermes_communications_sender_insights_api::{
     SENDER_INSIGHTS_CONTRACT_MAJOR_V1, SENDER_INSIGHTS_CONTRACT_NAME_V1,
     SENDER_INSIGHTS_CONTRACT_REVISION_V1,
 };
+use hermes_communications_task_source_api::{
+    COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID_V1,
+    communication_task_source_prepare_consume_request_v1,
+    communication_task_source_prepared_contract_reference_v1,
+    communication_task_source_prepared_publish_request_v1,
+    communication_task_source_rejected_contract_reference_v1,
+    communication_task_source_rejected_publish_request_v1,
+};
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
     CapabilityRequestV1, ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
@@ -126,6 +134,10 @@ pub const COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID: &str =
     COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID_V1;
 pub const COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID: &str =
     "communications.recipient-source.blob.v1";
+pub const COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID: &str =
+    COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID_V1;
+pub const COMMUNICATIONS_TASK_SOURCE_BLOB_CAPABILITY_ID: &str =
+    "communications.task-source.blob.v1";
 pub const COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID: &str = "communications.saved-search.v1";
 pub const COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID: &str = "communications.sender-insights.v1";
 pub const COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID: &str = "communications.export-source.v1";
@@ -179,7 +191,55 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_search_index_capability_v1(),
         communications_sender_insights_capability_v1(),
         communications_storage_capability_v1(),
+        communications_task_source_blob_capability_v1(),
+        communications_task_source_capability_v1(),
     ]
+}
+
+#[must_use]
+pub fn communications_task_source_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(communication_task_source_prepared_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(communication_task_source_rejected_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+        ],
+        requests: vec![
+            communication_task_source_prepare_consume_request_v1(),
+            communication_task_source_prepared_publish_request_v1(),
+            communication_task_source_rejected_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
+}
+
+#[must_use]
+pub fn communications_task_source_blob_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_TASK_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+                max_bytes: COMMUNICATIONS_BLOB_QUOTA_BYTES,
+                custody_scope_id: COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID.to_owned(),
+                allowed_operations: vec![BlobQuotaOperationV1::Write as i32],
+            })),
+        }],
+        ..Default::default()
+    }
 }
 
 #[must_use]
@@ -1043,6 +1103,8 @@ mod tests {
                 COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
                 COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID,
                 COMMUNICATIONS_STORAGE_CAPABILITY_ID,
+                COMMUNICATIONS_TASK_SOURCE_BLOB_CAPABILITY_ID,
+                COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID,
             ]
         );
         assert!(

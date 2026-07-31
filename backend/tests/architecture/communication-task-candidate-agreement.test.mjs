@@ -32,6 +32,10 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     sourceApi,
     sourceProtocol,
     sourceEnvelope,
+    communicationsRuntimeManifest,
+    communicationsAdmission,
+    communicationsEventRuntime,
+    communicationsTaskSource,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -76,6 +80,10 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
       'utf8',
     ),
     readFile(new URL('src/communications-task-source-api/src/envelope.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/event_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/task_source.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -93,7 +101,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_source_producer_v1');
   assert.match(adr, /Состояние реализации: planned/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);
@@ -167,4 +175,13 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(sourceProtocol, /CommunicationTaskSourceRejectedV1/);
   assert.doesNotMatch(sourceProtocol, /provider_id|account_id|model_id|prompt|map</);
   assert.match(sourceEnvelope, /target_capability: COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID_V1/);
+  assert.match(communicationsRuntimeManifest, /hermes-communications-task-source-api/);
+  assert.match(communicationsAdmission, /communications_task_source_capability_v1/);
+  assert.match(communicationsAdmission, /communications\.task-source\.blob\.v1/);
+  assert.match(communicationsEventRuntime, /consume_next_task_source_prepare_v1/);
+  assert.match(communicationsTaskSource, /CommunicationTaskSourceContentV1/);
+  assert.match(communicationsTaskSource, /subject_utf8: snapshot\.subject_utf8\.clone\(\)/);
+  assert.match(communicationsTaskSource, /write_target_bound_source/);
+  assert.match(communicationsTaskSource, /persist_source_result/);
+  assert.doesNotMatch(communicationsTaskSource, /provider_id|account_id|model_id|prompt|ollama|reqwest/);
 });

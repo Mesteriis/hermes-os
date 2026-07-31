@@ -2842,6 +2842,7 @@ dependencies = [
  "hermes-communications-recipient-source-api",
  "hermes-communications-saved-query-api",
  "hermes-communications-sender-insights-api",
+ "hermes-communications-task-source-api",
  "hermes-events-jetstream",
  "hermes-events-protocol",
  "hermes-managed-vault-client",
