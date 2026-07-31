@@ -14,6 +14,10 @@ pub(crate) fn validate_module_request_contracts(
         .iter()
         .map(String::as_str)
         .collect::<BTreeSet<_>>();
+    // Descriptor admission has already enforced ADR-0354: only an Integration
+    // may implement a foreign-owned request contract. The private store keeps
+    // the exact provider inventory; it must not rewrite contract ownership to
+    // the registration owner.
     let mut exact_contracts = BTreeSet::new();
     contracts
         .iter()
@@ -25,7 +29,6 @@ pub(crate) fn validate_module_request_contracts(
                 && valid_identity_token(contract.name())
                 && contract.major() > 0
                 && contract.revision() > 0
-                && contract.owner() == registration.owner_id()
                 && exact_contracts.insert((
                     contract.capability_id(),
                     contract.owner(),

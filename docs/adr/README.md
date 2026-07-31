@@ -594,3 +594,13 @@ private body не проходит через NATS/Gateway, а все четыр
 закрыты до отдельных build units и live inference evidence. Первый
 Communications-owned source contract build unit уже реализован, но сам source
 handoff gate ждёт persistence/runtime и live event evidence.
+ADR-0354 вводит узкое delegated implementation правило для provider extension
+ports: только Integration module может реализовать exact foreign-owned
+`request_rpc` после explicit capability approval. Domain/workflow/engine,
+query/client/realtime surfaces и event authority сохраняют same-owner
+ограничения. Первым consumer является Ollama integration, реализующая
+AI-owned provider generation port без присвоения AI business authority.
+ADR-0355 расширяет capability-scoped Event Hub launch на Integration runtime:
+eventful integration получает exact endpoint/credential pair, eventless
+integration — exact `empty + 0`. Half-configured пары и фиктивные NATS grants
+запрещены; первым live consumer является локальная Ollama integration.

@@ -32,8 +32,10 @@ pub fn validate_managed_integration_runtime_configuration(
         || !valid_identifier(&configuration.configuration_instance_id)
         || configuration.runtime_generation == 0
         || configuration.grant_epoch == 0
-        || !valid_event_hub_endpoint(&configuration.event_hub_endpoint)
-        || configuration.event_credential_revision == 0
+        || !valid_event_hub_configuration(
+            &configuration.event_hub_endpoint,
+            configuration.event_credential_revision,
+        )
         || storage.logical_owner_id != configuration.logical_owner_id
         || storage.runtime_instance_id != configuration.runtime_instance_id
         || !valid_storage_configuration(storage)
@@ -169,6 +171,11 @@ fn valid_event_hub_endpoint(value: &str) -> bool {
         && !value.contains([' ', '\t', '\n', '\r', '#', '?', '@'])
 }
 
+fn valid_event_hub_configuration(endpoint: &str, credential_revision: u64) -> bool {
+    (endpoint.is_empty() && credential_revision == 0)
+        || (credential_revision != 0 && valid_event_hub_endpoint(endpoint))
+}
+
 #[cfg(test)]
 mod tests {
     use prost::Message;
@@ -220,6 +227,24 @@ mod tests {
             "account-2",
             "/private/hermes/state/telegram/account-1",
         )];
+        assert!(validate_managed_integration_runtime_configuration(&configuration).is_err());
+    }
+
+    #[test]
+    fn event_hub_configuration_is_an_exact_present_or_absent_pair() {
+        let mut configuration = valid_configuration();
+        configuration.event_hub_endpoint.clear();
+        configuration.event_credential_revision = 0;
+        assert_eq!(
+            validate_managed_integration_runtime_configuration(&configuration),
+            Ok(())
+        );
+
+        configuration.event_credential_revision = 1;
+        assert!(validate_managed_integration_runtime_configuration(&configuration).is_err());
+
+        configuration.event_hub_endpoint = "nats://127.0.0.1:4222".to_owned();
+        configuration.event_credential_revision = 0;
         assert!(validate_managed_integration_runtime_configuration(&configuration).is_err());
     }
 

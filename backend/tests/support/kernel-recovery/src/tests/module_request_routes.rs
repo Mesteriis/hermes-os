@@ -75,7 +75,7 @@ fn request_providers_are_approval_gated_and_dependencies_remain_capability_scope
 }
 
 #[test]
-fn request_provider_contract_must_be_owned_by_the_registered_module_owner() {
+fn only_an_integration_may_implement_a_foreign_owned_request_contract() {
     let root = unique_target_root("hermes-module-request-foreign-owner");
     std::fs::create_dir_all(&root).expect("create fixture directory");
     let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
@@ -86,13 +86,37 @@ fn request_provider_contract_must_be_owned_by_the_registered_module_owner() {
 
     assert!(
         registry::register(&store, &descriptor("owner_other").encode_to_vec()).is_err(),
-        "provider route cannot claim another owner contract",
+        "a domain cannot claim another owner request contract",
     );
+    let mut integration = descriptor("owner_other");
+    integration.module_kind = ModuleKindV1::Integration as i32;
+    let registration = registry::register(&store, &integration.encode_to_vec())
+        .expect("register integration implementation of exact request port");
     assert!(
         store
             .approved_module_request_rpc_routes()
-            .expect("read routes")
+            .expect("read pending routes")
             .is_empty()
+    );
+    store
+        .approve_module_registration(
+            registration.registration_id(),
+            &[CALLER_CAPABILITY.to_owned(), PROVIDER_CAPABILITY.to_owned()],
+        )
+        .expect("approve exact integration implementation capability");
+    assert_eq!(
+        store
+            .approved_module_request_rpc_routes()
+            .expect("read approved integration route"),
+        vec![ModuleRequestContractV1::new(
+            registration.registration_id(),
+            PROVIDER_CAPABILITY,
+            "owner_other",
+            "notes.command.submit",
+            1,
+            1,
+            [7; 32],
+        )]
     );
     std::fs::remove_dir_all(root).expect("remove fixture directory");
 }

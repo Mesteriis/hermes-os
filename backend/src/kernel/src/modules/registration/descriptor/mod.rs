@@ -11,8 +11,9 @@ use hermes_kernel_control_store::{
 use hermes_runtime_protocol::{
     v1::{
         BlobQuotaOperationV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
-        EventSubscriptionRequirementV1, ProvidedSurfaceKindV1, VaultActionV1, VaultSecretClassV1,
-        VaultTargetScopeV1, capability_request_v1::Request as CapabilityRequest,
+        EventSubscriptionRequirementV1, ModuleKindV1, ProvidedSurfaceKindV1, VaultActionV1,
+        VaultSecretClassV1, VaultTargetScopeV1,
+        capability_request_v1::Request as CapabilityRequest,
     },
     validation::descriptor::decode_descriptor_v1,
 };
@@ -458,7 +459,10 @@ fn request_rpc_routes(
                 .contract
                 .as_ref()
                 .ok_or_else(|| "module Request RPC contract is invalid".to_owned())?;
-            if contract.owner != descriptor.owner_id {
+            if contract.owner != descriptor.owner_id
+                && ModuleKindV1::try_from(descriptor.module_kind).ok()
+                    != Some(ModuleKindV1::Integration)
+            {
                 return Err("module Request RPC contract owner is invalid".to_owned());
             }
             routes.push(descriptor_query_contract(

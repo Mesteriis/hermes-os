@@ -135,6 +135,18 @@ exclusive lock и explicit target по ADR-0218.
 Contract выбирает один delivery mode. Одна и та же операция не отправляется
 одновременно как RPC и NATS command.
 
+Provided `request_rpc` по умолчанию принадлежит owner provider module. Узкое
+исключение ADR-0354 разрешает только `Integration` module реализовать exact
+foreign-owned provider extension port после explicit capability approval.
+Contract/schema authority при этом не переходит integration; `query_rpc`,
+client surfaces, events и все остальные module kinds сохраняют same-owner
+правило.
+
+Event Hub launch configuration является capability-scoped и для Domain, и для
+Integration runtimes: eventful runtime получает exact endpoint/credential
+revision pair, eventless runtime — только `empty + 0`. Фиктивный NATS grant
+ради общего launch shape запрещён ADR-0352 и ADR-0355.
+
 Interaction kind `projection` зарезервирован контрактом, но production
 projection packages, runtimes, schemas и consumers запрещены ADR-0208 до
 отдельной разблокировки.
