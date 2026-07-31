@@ -219,3 +219,41 @@ test('summary runtime and assembly expose only exact event request and release b
     /hermes-communications-runtime|hermes-ai-inference-(core|runtime|persistence)|hermes-ollama/,
   );
 });
+
+test('signed Summary conformance crosses Gateway SSE event and request boundaries', async () => {
+  const [setup, flow, managedScript] = await Promise.all([
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communication_summary_managed_setup.rs',
+    ),
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communication_summary_managed_flow.rs',
+    ),
+    backendSource('scripts/test-authenticated-storage.mjs'),
+  ]);
+
+  assert.match(setup, /communication_summary_release_artifact_v1/);
+  assert.match(setup, /communication_summary_storage_bundle_v1/);
+  assert.match(setup, /start_communication_summary_runtime_v1/);
+  assert.match(setup, /restart_communication_summary_runtime_v1/);
+  assert.match(flow, /managed_communication_summary_reaches_ai_and_replays_through_gateway_sse/);
+  assert.match(flow, /managed_communication_summary_completes_real_provider_through_gateway_sse/);
+  assert.match(flow, /authenticate_gateway_router/);
+  assert.match(flow, /COMMUNICATION_SUMMARY_COMMAND_CONNECT_PATH_V1/);
+  assert.match(flow, /COMMUNICATION_SUMMARY_QUERY_CONNECT_PATH_V1/);
+  assert.match(flow, /read_terminal_summary_sse_event/);
+  assert.match(flow, /route_communication_summary_as/);
+  assert.match(flow, /conflicting_request/);
+  assert.match(flow, /CommunicationSummaryErrorCodeInvalidRequest/);
+  assert.match(flow, /CommunicationSummaryErrorCodeSourceRejected/);
+  assert.match(flow, /transition_registration/);
+  assert.match(flow, /assert_private_content_absent/);
+  assert.match(managedScript, /hermes-communication-summary-runtime/);
+  assert.match(
+    managedScript,
+    /managed_communication_summary_reaches_ai_and_replays_through_gateway_sse/,
+  );
+  assert.doesNotMatch(
+    `${setup}\n${flow}`,
+    /hermes_communication_reply_suggestion|hermes_mail_runtime|hermes_telegram_runtime|hermes_whatsapp_runtime|hermes_zulip_runtime/,
+  );
+});

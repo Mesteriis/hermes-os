@@ -87,6 +87,11 @@ mod communications_ai_source_managed_flow;
 #[path = "managed_storage_vault_docker/reply_suggestion_managed_setup.rs"]
 mod reply_suggestion_managed_setup;
 use reply_suggestion_managed_setup::*;
+#[path = "managed_storage_vault_docker/communication_summary_managed_setup.rs"]
+mod communication_summary_managed_setup;
+use communication_summary_managed_setup::*;
+#[path = "managed_storage_vault_docker/communication_summary_managed_flow.rs"]
+mod communication_summary_managed_flow;
 #[path = "managed_storage_vault_docker/communications_export_race.rs"]
 mod communications_export_race;
 #[path = "managed_storage_vault_docker/reply_suggestion_managed_flow.rs"]

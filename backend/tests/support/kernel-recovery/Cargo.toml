@@ -60,6 +60,9 @@ hermes-communication-bulk-action-runtime = { path = "../../../src/communication-
 hermes-communication-reply-suggestion-api = { path = "../../../src/communication-reply-suggestion-api" }
 hermes-communication-reply-suggestion-persistence = { path = "../../../src/communication-reply-suggestion-persistence" }
 hermes-communication-reply-suggestion-runtime = { path = "../../../src/communication-reply-suggestion-runtime" }
+hermes-communication-summary-api = { path = "../../../src/communication-summary-api" }
+hermes-communication-summary-persistence = { path = "../../../src/communication-summary-persistence" }
+hermes-communication-summary-runtime = { path = "../../../src/communication-summary-runtime" }
 hermes-ai-contracts = { path = "../../../src/ai-contracts" }
 hermes-ai-inference-persistence = { path = "../../../src/ai-inference-persistence" }
 hermes-ai-inference-runtime = { path = "../../../src/ai-inference-runtime" }

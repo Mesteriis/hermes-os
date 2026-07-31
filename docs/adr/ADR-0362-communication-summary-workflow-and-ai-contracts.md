@@ -4,9 +4,14 @@
 
 Дата: 2026-07-31
 
-Состояние реализации: architecture agreement. Gate
-`communication_summary_v1` остаётся `planned`; отсутствие runtime evidence не
-маскируется существующим Reply Suggestion contour.
+Состояние реализации: partial implementation. Реализованы distinct contracts,
+Communications source events, AI Engine и Ollama summary paths, пять отдельных
+workflow units, owner-local persistence/replay, signed release artifacts,
+authenticated Gateway Start/Get, replayable SSE и managed negative/restart/
+revoke contour. Gate `communication_summary_v1` остаётся `planned` до
+положительного live contour через настоящий Ollama process, завершения полного
+набора negative/fencing evidence и full pre-push; существующий Reply Suggestion
+contour не используется как доказательство Summary.
 
 Уточняет:
 
