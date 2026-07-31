@@ -28,8 +28,11 @@ exact delegated/rejected result outbox. Archive managed runtime реализов
 capabilities, принимает exact candidate/safety/delegation events, публикует
 сохранённые custody commands без re-encode, сохраняет target Blob receipt до
 использования, выполняет receipt-bound one-use read и вызывает bounded ZIP
-metadata adapter. Release assembly, Gateway Start/Get/shared SSE, live
-PostgreSQL/NATS/Blob/Gateway conformance и production gate
+metadata adapter. Отдельная assembly unit детерминированно материализует
+descriptor, restart-applied settings schema, owner-local Storage bundle и
+unsigned sorted release fragment; она не запускает runtime и не подписывает
+manifest. Gateway Start/Get/shared SSE, live PostgreSQL/NATS/Blob/Gateway
+conformance и production gate
 `attachment_archive_inspection_v1` остаются открыты.
 
 Зависит от:

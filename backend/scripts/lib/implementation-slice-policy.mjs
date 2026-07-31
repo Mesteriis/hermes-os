@@ -891,6 +891,16 @@ const ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_PRODUCTION_PACKAGES = [
   },
 ];
 
+const ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_PRODUCTION_PACKAGES,
+  {
+    name: 'hermes-attachment-archive-inspection-assembly',
+    role: 'engine',
+    owner: 'attachment_archive_inspection',
+    surface: 'assembly',
+  },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2488,6 +2498,17 @@ const ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-archive-inspection-assembly': [
+    { name: 'hermes-attachment-archive-inspection-api', kind: 'normal' },
+    { name: 'hermes-attachment-archive-inspection-persistence', kind: 'normal' },
+    { name: 'hermes-attachment-archive-inspection-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -2987,6 +3008,15 @@ const ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
+const ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-archive-inspection-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -4247,6 +4277,19 @@ function expectedSlice(currentSlice) {
         ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_archive_inspection_release_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

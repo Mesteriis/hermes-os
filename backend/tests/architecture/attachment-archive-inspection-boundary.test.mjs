@@ -35,7 +35,7 @@ test('archive inspection persistence is admitted without opening the planned gat
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_archive_inspection_managed_runtime_v1',
+    'attachment_archive_inspection_release_assembly_v1',
   );
   assert(policy.implementation.ownerInventory.engines.includes(
     'attachment_archive_inspection',
@@ -325,6 +325,42 @@ test('archive runtime is a separate managed engine with event-only custody and r
     `${admission}\n${runtime}\n${blob}\n${eventDecode}\n${outbox}\n${settings}`,
     /hermes_(?:attachment_security_(?:core|persistence|runtime)|communications_(?:core|persistence|runtime)|mail|telegram|whatsapp|zulip)/,
   );
+});
+
+test('archive release assembly is a separate unsigned engine unit', async () => {
+  const [manifest, library, binary] = await Promise.all([
+    readFile(
+      new URL('src/attachment-archive-inspection-assembly/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-assembly/src/lib.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-assembly/src/main.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "attachment_archive_inspection"/);
+  assert.match(manifest, /surface = "assembly"/);
+  assert.match(manifest, /hermes-attachment-archive-inspection-runtime/);
+  assert.match(manifest, /hermes-attachment-archive-inspection-persistence/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:attachment-security|communications|mail|telegram|whatsapp|zulip)/,
+  );
+  assert.match(library, /attachment_archive_inspection_module_descriptor_v1/);
+  assert.match(library, /attachment_archive_inspection_settings_schema_v1/);
+  assert.match(library, /attachment_archive_inspection_storage_bundle_v1/);
+  assert.match(library, /create_new\(true\)/);
+  assert.match(library, /mode\(0o600\)/);
+  assert.match(library, /attachment-archive-inspection\.release-artifacts\.json/);
+  assert.doesNotMatch(library, /signing_key|signature_bytes|launch_runtime|Command::new/);
+  assert.match(binary, /materialize_archive_inspection_release_assembly_v1/);
+  assert.doesNotMatch(binary, /ManagedControlChannel|tokio|spawn/);
 });
 
 test('ZIP adapter is exact, metadata-only and cannot extract to disk', async () => {

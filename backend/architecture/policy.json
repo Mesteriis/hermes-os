@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_archive_inspection_managed_runtime_v1",
+    "currentSlice": "attachment_archive_inspection_release_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -852,6 +852,12 @@
         "role": "engine",
         "owner": "attachment_archive_inspection",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-attachment-archive-inspection-assembly",
+        "role": "engine",
+        "owner": "attachment_archive_inspection",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1746,6 +1752,28 @@
         },
         {
           "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-archive-inspection-assembly": [
+        {
+          "name": "hermes-attachment-archive-inspection-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-archive-inspection-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-archive-inspection-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -4911,6 +4939,35 @@
           "features": []
         }
       ],
+      "hermes-attachment-archive-inspection-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-mail-api": [
         {
           "name": "prost",
@@ -7095,6 +7152,10 @@
         "customBuildAllowed": false
       },
       "hermes-attachment-archive-inspection-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-archive-inspection-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       },

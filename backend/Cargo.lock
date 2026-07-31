@@ -1649,6 +1649,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-attachment-archive-inspection-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-archive-inspection-api",
+ "hermes-attachment-archive-inspection-persistence",
+ "hermes-attachment-archive-inspection-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-attachment-archive-inspection-core"
 version = "0.1.0"
 dependencies = [
