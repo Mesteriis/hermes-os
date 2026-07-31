@@ -60,8 +60,8 @@ CREATE TABLE hermes_data.ai_inference_runs (
         OR selected_provider_settings_revision > 0
     ),
     CHECK (
-        (run_state = 1 AND selected_provider_settings_revision IS NULL)
-        OR run_state IN (2, 3, 4)
+        (run_state IN (1, 2, 4) AND selected_provider_settings_revision IS NULL)
+        OR (run_state = 3 AND selected_provider_settings_revision IS NOT NULL)
     ),
     CHECK (
         (

@@ -4,11 +4,12 @@ use sha2::{Digest, Sha256};
 use crate::{
     AI_CONTRACT_MAJOR_V1, AI_CONTRACT_REVISION_V1, AI_CONTRACTS_SCHEMA_SHA256,
     AI_LOCAL_EGRESS_POLICY_REVISION_V1, AI_MAX_CUSTODY_PROOF_BYTES_V1, AI_MAX_OUTPUT_BYTES_V1,
-    AI_MAX_OUTPUT_TOKENS_V1, AI_MAX_PRIVATE_SOURCE_BYTES_V1, AI_MAX_SUBJECT_BYTES_V1,
+    AI_MAX_OUTPUT_TOKENS_V1, AI_MAX_PRIVATE_SOURCE_BYTES_V1, AI_MAX_SENDER_BYTES_V1,
+    AI_MAX_SUBJECT_BYTES_V1,
     wire::{
         AiEgressPolicyV1, AiInferenceCompletenessV1, AiInferenceTerminalStatusV1,
         AiProviderReplyGenerationRequestV1, AiProviderReplyGenerationResultV1, AiReplyLanguageV1,
-        AiReplySubjectPolicyV1, AiReplyToneV1, AiUseCaseV1,
+        AiReplySourceContentV1, AiReplySubjectPolicyV1, AiReplyToneV1, AiUseCaseV1,
         CommunicationReplySuggestionInferenceRequestV1,
         CommunicationReplySuggestionInferenceResultV1,
     },
@@ -92,6 +93,39 @@ pub fn validate_reply_inference_request_v1(
         return Err(AiContractValidationErrorV1::InvalidSource);
     }
     Ok(())
+}
+
+pub fn validate_reply_source_content_v1(
+    content: &AiReplySourceContentV1,
+) -> Result<(), AiContractValidationErrorV1> {
+    if content.sender_utf8.len() > AI_MAX_SENDER_BYTES_V1
+        || content.subject_utf8.len() > AI_MAX_SUBJECT_BYTES_V1
+        || content.body_utf8.is_empty()
+        || content.body_utf8.len() > AI_MAX_PRIVATE_SOURCE_BYTES_V1 as usize
+        || content.encoded_len() > AI_MAX_PRIVATE_SOURCE_BYTES_V1 as usize
+        || std::str::from_utf8(&content.sender_utf8).is_err()
+        || std::str::from_utf8(&content.subject_utf8).is_err()
+        || std::str::from_utf8(&content.body_utf8).is_err()
+    {
+        return Err(AiContractValidationErrorV1::InvalidSource);
+    }
+    Ok(())
+}
+
+pub fn encode_reply_source_content_v1(
+    content: &AiReplySourceContentV1,
+) -> Result<Vec<u8>, AiContractValidationErrorV1> {
+    validate_reply_source_content_v1(content)?;
+    Ok(content.encode_to_vec())
+}
+
+pub fn decode_reply_source_content_v1(
+    bytes: &[u8],
+) -> Result<AiReplySourceContentV1, AiContractValidationErrorV1> {
+    let content = AiReplySourceContentV1::decode(bytes)
+        .map_err(|_| AiContractValidationErrorV1::InvalidSource)?;
+    validate_reply_source_content_v1(&content)?;
+    Ok(content)
 }
 
 pub fn validate_reply_inference_result_v1(
@@ -192,6 +226,7 @@ pub fn validate_provider_reply_generation_result_v1(
                 | AiInferenceCompletenessV1::AiInferenceCompletenessPartial)
         )
         || result.confidence_basis_points > 10_000
+        || result.provider_settings_revision == 0
     {
         return Err(AiContractValidationErrorV1::InvalidResult);
     }
@@ -228,6 +263,7 @@ fn provider_rejection_is_sanitized(
         && result.completeness
             == AiInferenceCompletenessV1::AiInferenceCompletenessUnspecified as i32
         && result.confidence_basis_points == 0
+        && result.provider_settings_revision == 0
 }
 
 fn rejection_status(status: AiInferenceTerminalStatusV1) -> bool {
@@ -342,6 +378,28 @@ mod tests {
     }
 
     #[test]
+    fn reply_source_content_is_utf8_and_bounded_as_one_blob() {
+        let mut content = AiReplySourceContentV1 {
+            sender_utf8: b"sender@example.test".to_vec(),
+            subject_utf8: b"Subject".to_vec(),
+            body_utf8: b"Private source body".to_vec(),
+        };
+        validate_reply_source_content_v1(&content).expect("source content");
+
+        content.body_utf8 = vec![b'a'; AI_MAX_PRIVATE_SOURCE_BYTES_V1 as usize];
+        assert_eq!(
+            validate_reply_source_content_v1(&content),
+            Err(AiContractValidationErrorV1::InvalidSource)
+        );
+
+        content.body_utf8 = vec![0xff];
+        assert_eq!(
+            validate_reply_source_content_v1(&content),
+            Err(AiContractValidationErrorV1::InvalidSource)
+        );
+    }
+
+    #[test]
     fn provider_request_has_no_caller_selected_identity_or_remote_egress() {
         let request = AiProviderReplyGenerationRequestV1 {
             request_id: vec![1; 16],
@@ -371,6 +429,7 @@ mod tests {
             terminal_status: AiInferenceTerminalStatusV1::AiInferenceTerminalStatusReady as i32,
             completeness: AiInferenceCompletenessV1::AiInferenceCompletenessComplete as i32,
             confidence_basis_points: 8_000,
+            provider_settings_revision: 11,
         };
         validate_provider_reply_generation_result_v1(&result).expect("provider result");
         result.confidence_basis_points = 10_001;

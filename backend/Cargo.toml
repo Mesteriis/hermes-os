@@ -57,6 +57,8 @@ members = [
   "src/ai-contracts",
   "src/ai-inference-core",
   "src/ai-inference-persistence",
+  "src/ai-inference-runtime",
+  "src/ai-inference-assembly",
   "src/communications-export-api",
   "src/communications-export-core",
   "src/communications-export-persistence",

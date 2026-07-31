@@ -18,10 +18,15 @@ source preparation ещё не доказано, поэтому gate
 `hermes-ai-inference-core` также реализован как отдельная engine unit с
 revision-fenced lifecycle, fixed prompt/policy receipt и sanitized terminal
 results. `hermes-ai-inference-persistence` реализован отдельной owner-local
-PostgreSQL unit: typed lifecycle, request/source receipts, pre-execution
-settings revision, recoverable runs и terminal candidate сохраняются без
-source message body или cross-owner SQL. Остальные две AI engine units,
-provider integration и workflow ещё не реализованы; gates
+PostgreSQL unit: typed lifecycle, request/source receipts, provider-reported
+effective settings revision, recoverable runs и terminal candidate сохраняются без
+source message body или cross-owner SQL. `hermes-ai-inference-runtime`
+реализует exact managed `request_rpc`, target-bound Blob custody/read,
+provider-neutral outbound route и restart recovery; отдельный
+`hermes-ai-inference-assembly` материализует только unsigned descriptor,
+settings schema и Storage bundle inputs. Все пять AI engine build units
+реализованы, но live managed inference ещё не доказан. Provider integration и
+workflow ещё не реализованы; gates
 `ai_inference_v1`, `ollama_ai_provider_v1` и
 `communication_reply_suggestion_v1` также остаются `planned`.
 
@@ -153,6 +158,8 @@ Public unit `hermes-ai-contracts` принадлежит engine owner `ai` и с
 - normalized tone enum;
 - normalized language enum;
 - reply subject policy;
+- target-bound typed private source content with bounded provider-neutral
+  sender, subject and body needed by reply semantics;
 - maximum output bytes/tokens;
 - local-only egress policy revision.
 
@@ -191,6 +198,10 @@ generic context cache. Runtime принимает only exact AI requests, чит
 target-bound source bytes и вызывает единственный descriptor-approved Ollama
 provider contract через capability router. Multi-provider routing и AI-owned
 runtime settings не входят в V1 и требуют отдельного gate.
+Core применяет deterministic UTF-8-safe context framing и bounded 2000-byte
+body excerpt, сохраняя reference-поведение без unsafe Unicode slicing; поэтому
+private provider request остаётся внутри конституционного 64 KiB/30-second
+`request_rpc` bound и не расширяет platform transport скрытым исключением.
 
 AI engine:
 

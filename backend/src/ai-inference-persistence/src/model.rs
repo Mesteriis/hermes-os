@@ -15,7 +15,6 @@ pub struct PersistedAiInferenceRunV1 {
 pub struct AiInferenceTransitionV1 {
     pub current_revision: u64,
     pub next_run: AiInferenceRunV1,
-    pub selected_provider_settings_revision: Option<u64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -74,36 +73,19 @@ pub(crate) fn validate_transition(
         return Err(AiInferencePersistenceErrorV1::RevisionConflict);
     }
     let selected = match (current.run.state, transition.next_run.state) {
-        (AiInferenceRunStateV1::Accepted, AiInferenceRunStateV1::Executing) => {
-            let selected = transition
-                .selected_provider_settings_revision
-                .filter(|value| *value > 0)
-                .ok_or(AiInferencePersistenceErrorV1::InvalidTransition)?;
-            Some(selected)
-        }
-        (AiInferenceRunStateV1::Accepted, AiInferenceRunStateV1::Rejected) => {
-            if transition.selected_provider_settings_revision.is_some() {
-                return Err(AiInferencePersistenceErrorV1::InvalidTransition);
-            }
-            None
-        }
-        (
-            AiInferenceRunStateV1::Executing,
-            AiInferenceRunStateV1::Ready | AiInferenceRunStateV1::Rejected,
-        ) => {
-            if transition.selected_provider_settings_revision.is_some() {
-                return Err(AiInferencePersistenceErrorV1::InvalidTransition);
-            }
-            current.selected_provider_settings_revision
-        }
+        (AiInferenceRunStateV1::Accepted, AiInferenceRunStateV1::Executing)
+        | (AiInferenceRunStateV1::Accepted, AiInferenceRunStateV1::Rejected)
+        | (AiInferenceRunStateV1::Executing, AiInferenceRunStateV1::Rejected) => None,
+        (AiInferenceRunStateV1::Executing, AiInferenceRunStateV1::Ready) => transition
+            .next_run
+            .terminal_result
+            .as_ref()
+            .and_then(|value| value.inference_receipt.as_ref())
+            .map(|receipt| receipt.provider_settings_revision),
         _ => return Err(AiInferencePersistenceErrorV1::InvalidTransition),
     };
-    if let Some(receipt) = transition
-        .next_run
-        .terminal_result
-        .as_ref()
-        .and_then(|value| value.inference_receipt.as_ref())
-        && Some(receipt.provider_settings_revision) != selected
+    if current.selected_provider_settings_revision.is_some()
+        || transition.next_run.state == AiInferenceRunStateV1::Ready && selected.is_none()
     {
         return Err(AiInferencePersistenceErrorV1::InvalidTransition);
     }
@@ -114,17 +96,19 @@ pub(crate) fn validate_persisted_settings(
     persisted: &PersistedAiInferenceRunV1,
 ) -> Result<(), AiInferencePersistenceErrorV1> {
     match persisted.run.state {
-        AiInferenceRunStateV1::Accepted
+        AiInferenceRunStateV1::Accepted | AiInferenceRunStateV1::Executing
             if persisted.selected_provider_settings_revision.is_none() =>
         {
             Ok(())
         }
-        AiInferenceRunStateV1::Executing | AiInferenceRunStateV1::Ready
-            if persisted.selected_provider_settings_revision.is_some() =>
+        AiInferenceRunStateV1::Ready if persisted.selected_provider_settings_revision.is_some() => {
+            Ok(())
+        }
+        AiInferenceRunStateV1::Rejected
+            if persisted.selected_provider_settings_revision.is_none() =>
         {
             Ok(())
         }
-        AiInferenceRunStateV1::Rejected => Ok(()),
         _ => Err(AiInferencePersistenceErrorV1::InvalidRow),
     }
 }
@@ -180,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_settings_are_selected_before_execution() {
+    fn provider_settings_are_not_fabricated_before_execution() {
         let accepted = PersistedAiInferenceRunV1 {
             run: accepted(),
             selected_provider_settings_revision: None,
@@ -191,15 +175,14 @@ mod tests {
             &AiInferenceTransitionV1 {
                 current_revision: 1,
                 next_run: executing,
-                selected_provider_settings_revision: Some(7),
             },
         )
         .expect("transition");
-        assert_eq!(selected, Some(7));
+        assert_eq!(selected, None);
     }
 
     #[test]
-    fn accepted_rejection_cannot_claim_provider_settings() {
+    fn accepted_rejection_has_no_provider_settings() {
         let accepted = PersistedAiInferenceRunV1 {
             run: accepted(),
             selected_provider_settings_revision: None,
@@ -216,10 +199,9 @@ mod tests {
                 &AiInferenceTransitionV1 {
                     current_revision: 1,
                     next_run: rejected,
-                    selected_provider_settings_revision: Some(7),
                 },
             ),
-            Err(AiInferencePersistenceErrorV1::InvalidTransition)
+            Ok(None)
         );
     }
 }

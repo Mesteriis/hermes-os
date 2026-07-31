@@ -1,12 +1,14 @@
 #![forbid(unsafe_code)]
 
 use hermes_ai_contracts::{
-    AiContractValidationErrorV1, validate_provider_reply_generation_result_v1,
-    validate_reply_inference_request_v1, validate_reply_inference_result_v1,
+    AiContractValidationErrorV1, decode_reply_source_content_v1, encode_reply_source_content_v1,
+    validate_provider_reply_generation_result_v1, validate_reply_inference_request_v1,
+    validate_reply_inference_result_v1,
     wire::{
         AiInferenceCompletenessV1, AiInferenceReceiptV1, AiInferenceTerminalStatusV1,
         AiPrivateSourceReceiptV1, AiProviderReplyGenerationResultV1, AiReplyLanguageV1,
-        AiReplyToneV1, CommunicationReplySuggestionInferenceRequestV1,
+        AiReplySourceContentV1, AiReplySubjectPolicyV1, AiReplyToneV1,
+        CommunicationReplySuggestionInferenceRequestV1,
         CommunicationReplySuggestionInferenceResultV1,
     },
 };
@@ -14,7 +16,9 @@ use sha2::{Digest, Sha256};
 
 pub const PACKAGE: &str = "hermes-ai-inference-core";
 pub const AI_INFERENCE_PROVIDER_POLICY_REVISION_V1: u32 = 1;
-const AI_REPLY_PROMPT_POLICY_V1: &[u8] = b"hermes-ai-reply-prompt-policy-v1";
+pub const AI_REPLY_SOURCE_BODY_EXCERPT_BYTES_V1: usize = 2_000;
+const AI_REPLY_PROMPT_POLICY_V1: &[u8] =
+    b"hermes-ai-reply-context-v1;sender-subject-body;utf8-prefix-bytes=2000";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AiInferenceRunStateV1 {
@@ -76,6 +80,26 @@ pub fn begin_reply_inference_v1(
     if run.state != AiInferenceRunStateV1::Accepted || run.terminal_result.is_some() {
         return Err(AiInferenceCoreErrorV1::InvalidTransition);
     }
+    let plan = reply_inference_execution_plan_v1(run)?;
+    let next = AiInferenceRunV1 {
+        request: run.request.clone(),
+        revision: run.revision + 1,
+        state: AiInferenceRunStateV1::Executing,
+        terminal_result: None,
+    };
+    Ok((next, plan))
+}
+
+pub fn reply_inference_execution_plan_v1(
+    run: &AiInferenceRunV1,
+) -> Result<AiInferenceExecutionPlanV1, AiInferenceCoreErrorV1> {
+    if !matches!(
+        run.state,
+        AiInferenceRunStateV1::Accepted | AiInferenceRunStateV1::Executing
+    ) || run.terminal_result.is_some()
+    {
+        return Err(AiInferenceCoreErrorV1::InvalidTransition);
+    }
     let context = run
         .request
         .context
@@ -86,40 +110,55 @@ pub fn begin_reply_inference_v1(
         .source
         .clone()
         .ok_or(AiInferenceCoreErrorV1::InvalidRequest)?;
-    let next = AiInferenceRunV1 {
-        request: run.request.clone(),
-        revision: run.revision + 1,
-        state: AiInferenceRunStateV1::Executing,
-        terminal_result: None,
-    };
-    Ok((
-        next,
-        AiInferenceExecutionPlanV1 {
-            run_id: id16(&run.request.run_id)?,
-            logical_owner_id: run.request.logical_owner_id.clone(),
-            request_digest: id32(&context.request_digest)?,
-            source,
-            tone: run.request.tone,
-            language: run.request.language,
-            subject_policy: run.request.subject_policy,
-            maximum_output_bytes: run.request.maximum_output_bytes,
-            maximum_output_tokens: run.request.maximum_output_tokens,
-            egress_policy: run.request.egress_policy,
-            egress_policy_revision: run.request.egress_policy_revision,
-        },
-    ))
+    Ok(AiInferenceExecutionPlanV1 {
+        run_id: id16(&run.request.run_id)?,
+        logical_owner_id: run.request.logical_owner_id.clone(),
+        request_digest: id32(&context.request_digest)?,
+        source,
+        tone: run.request.tone,
+        language: run.request.language,
+        subject_policy: run.request.subject_policy,
+        maximum_output_bytes: run.request.maximum_output_bytes,
+        maximum_output_tokens: run.request.maximum_output_tokens,
+        egress_policy: run.request.egress_policy,
+        egress_policy_revision: run.request.egress_policy_revision,
+    })
+}
+
+pub fn build_reply_provider_input_v1(
+    plan: &AiInferenceExecutionPlanV1,
+    source_content_bytes: &[u8],
+) -> Result<Vec<u8>, AiInferenceCoreErrorV1> {
+    if source_content_bytes.is_empty()
+        || u64::try_from(source_content_bytes.len()).ok() != Some(plan.source.declared_bytes)
+    {
+        return Err(AiInferenceCoreErrorV1::InvalidRequest);
+    }
+    let content = decode_reply_source_content_v1(source_content_bytes)
+        .map_err(|_| AiInferenceCoreErrorV1::InvalidRequest)?;
+    if plan.subject_policy == AiReplySubjectPolicyV1::AiReplySubjectPolicyPreserve as i32
+        && content.subject_utf8.is_empty()
+    {
+        return Err(AiInferenceCoreErrorV1::InvalidRequest);
+    }
+    let sender = std::str::from_utf8(&content.sender_utf8)
+        .map_err(|_| AiInferenceCoreErrorV1::InvalidRequest)?;
+    let subject = std::str::from_utf8(&content.subject_utf8)
+        .map_err(|_| AiInferenceCoreErrorV1::InvalidRequest)?;
+    let body = std::str::from_utf8(&content.body_utf8)
+        .map_err(|_| AiInferenceCoreErrorV1::InvalidRequest)?;
+    let body = utf8_prefix(body, AI_REPLY_SOURCE_BODY_EXCERPT_BYTES_V1);
+    Ok(format!("Sender: {sender}\nSubject: {subject}\nBody:\n{body}").into_bytes())
 }
 
 pub fn complete_reply_inference_v1(
     run: &AiInferenceRunV1,
     expected_revision: u64,
     provider_result: AiProviderReplyGenerationResultV1,
-    provider_settings_revision: u64,
 ) -> Result<AiInferenceRunV1, AiInferenceCoreErrorV1> {
     require_revision(run, expected_revision)?;
     if run.state != AiInferenceRunStateV1::Executing
         || run.terminal_result.is_some()
-        || provider_settings_revision == 0
         || provider_result.request_id != run.request.run_id
     {
         return Err(AiInferenceCoreErrorV1::InvalidTransition);
@@ -150,7 +189,7 @@ pub fn complete_reply_inference_v1(
         inference_receipt: ready.then(|| AiInferenceReceiptV1 {
             model_revision_sha256: provider_result.model_revision_sha256,
             prompt_policy_sha256: prompt_policy_sha256_v1().to_vec(),
-            provider_settings_revision,
+            provider_settings_revision: provider_result.provider_settings_revision,
             provider_policy_revision: AI_INFERENCE_PROVIDER_POLICY_REVISION_V1,
         }),
         completeness: provider_result.completeness,
@@ -255,6 +294,17 @@ fn id32(value: &[u8]) -> Result<[u8; 32], AiInferenceCoreErrorV1> {
         .ok_or(AiInferenceCoreErrorV1::InvalidRequest)
 }
 
+fn utf8_prefix(value: &str, maximum_bytes: usize) -> &str {
+    if value.len() <= maximum_bytes {
+        return value;
+    }
+    let mut end = maximum_bytes;
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    &value[..end]
+}
+
 fn contract_request_error(_: AiContractValidationErrorV1) -> AiInferenceCoreErrorV1 {
     AiInferenceCoreErrorV1::InvalidRequest
 }
@@ -263,8 +313,7 @@ fn contract_request_error(_: AiContractValidationErrorV1) -> AiInferenceCoreErro
 mod tests {
     use hermes_ai_contracts::{
         AI_CONTRACT_MAJOR_V1, AI_CONTRACT_REVISION_V1, AI_CONTRACTS_SCHEMA_SHA256,
-        AI_LOCAL_EGRESS_POLICY_REVISION_V1, AI_MAX_OUTPUT_TOKENS_V1,
-        seal_reply_inference_request_v1,
+        AI_LOCAL_EGRESS_POLICY_REVISION_V1, seal_reply_inference_request_v1,
         wire::{
             AiContextReceiptV1, AiEgressPolicyV1, AiPrivateSourceReceiptV1,
             AiProviderReplyGenerationResultV1, AiReplyLanguageV1, AiReplySubjectPolicyV1,
@@ -327,8 +376,8 @@ mod tests {
                 terminal_status: AiInferenceTerminalStatusV1::AiInferenceTerminalStatusReady as i32,
                 completeness: AiInferenceCompletenessV1::AiInferenceCompletenessComplete as i32,
                 confidence_basis_points: 8_000,
+                provider_settings_revision: 11,
             },
-            11,
         )
         .expect("ready");
         assert_eq!(ready.state, AiInferenceRunStateV1::Ready);
@@ -362,6 +411,23 @@ mod tests {
     #[test]
     fn core_has_one_fixed_prompt_policy_and_no_provider_selector() {
         assert_ne!(prompt_policy_sha256_v1(), [0; 32]);
-        assert!(AI_MAX_OUTPUT_TOKENS_V1 >= 512);
+        let run = accepted();
+        let plan = reply_inference_execution_plan_v1(&run).expect("plan");
+        let body = "a".repeat(AI_REPLY_SOURCE_BODY_EXCERPT_BYTES_V1 - 1) + "Ж";
+        let content = encode_reply_source_content_v1(&AiReplySourceContentV1 {
+            sender_utf8: b"sender@example.test".to_vec(),
+            subject_utf8: b"Subject".to_vec(),
+            body_utf8: body.into_bytes(),
+        })
+        .expect("content");
+        let mut run = run;
+        run.request.source.as_mut().expect("source").declared_bytes = content.len() as u64;
+        let plan = AiInferenceExecutionPlanV1 {
+            source: run.request.source.expect("source"),
+            ..plan
+        };
+        let input = build_reply_provider_input_v1(&plan, &content).expect("input");
+        assert!(std::str::from_utf8(&input).is_ok());
+        assert!(input.len() < 64 * 1024);
     }
 }

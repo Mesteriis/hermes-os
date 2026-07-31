@@ -155,15 +155,12 @@ impl AiInferencePersistenceV1 {
 
     pub async fn load_recoverable_runs(
         &self,
-        logical_owner_id: &str,
         limit: u32,
     ) -> Result<Vec<PersistedAiInferenceRunV1>, AiInferencePersistenceErrorV1> {
-        if !valid_owner(logical_owner_id) || !(1..=AI_INFERENCE_RECOVERY_LIMIT_V1).contains(&limit)
-        {
+        if !(1..=AI_INFERENCE_RECOVERY_LIMIT_V1).contains(&limit) {
             return Err(AiInferencePersistenceErrorV1::InvalidInput);
         }
         sqlx::query(SELECT_RECOVERABLE_RUNS)
-            .bind(logical_owner_id)
             .bind(i64::from(limit))
             .fetch_all(&self.pool)
             .await
@@ -283,9 +280,9 @@ const SELECT_RECOVERABLE_RUNS: &str = "
         result_prompt_policy_sha256, result_provider_policy_revision,
         result_completeness, result_confidence_basis_points, result_terminal_status
  FROM hermes_data.ai_inference_runs
- WHERE logical_owner_id = $1 AND run_state IN (1, 2)
- ORDER BY state_revision, run_id
- LIMIT $2";
+ WHERE run_state IN (1, 2)
+ ORDER BY logical_owner_id, state_revision, run_id
+ LIMIT $1";
 
 fn persisted_from_row(
     row: &PgRow,

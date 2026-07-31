@@ -5,9 +5,10 @@ mod validation;
 use hermes_runtime_protocol::v1::ContractReferenceV1;
 pub use validation::{
     AiContractValidationErrorV1, compute_reply_inference_request_digest_v1,
+    decode_reply_source_content_v1, encode_reply_source_content_v1,
     seal_reply_inference_request_v1, validate_provider_reply_generation_request_v1,
     validate_provider_reply_generation_result_v1, validate_reply_inference_request_v1,
-    validate_reply_inference_result_v1,
+    validate_reply_inference_result_v1, validate_reply_source_content_v1,
 };
 
 pub const PACKAGE: &str = "hermes-ai-contracts";
@@ -24,6 +25,7 @@ pub const AI_INFERENCE_MODULE_ID_V1: &str = "hermes-ai-inference-runtime";
 pub const AI_MAX_PRIVATE_SOURCE_BYTES_V1: u64 = 256 * 1024;
 pub const AI_MAX_OUTPUT_BYTES_V1: u32 = 64 * 1024;
 pub const AI_MAX_OUTPUT_TOKENS_V1: u32 = 4_096;
+pub const AI_MAX_SENDER_BYTES_V1: usize = 512;
 pub const AI_MAX_SUBJECT_BYTES_V1: usize = 998;
 pub const AI_MAX_CUSTODY_PROOF_BYTES_V1: usize = 2_048;
 pub const AI_LOCAL_EGRESS_POLICY_REVISION_V1: u32 = 1;

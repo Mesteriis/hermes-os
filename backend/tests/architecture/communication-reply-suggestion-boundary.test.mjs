@@ -175,6 +175,7 @@ test('AI public contracts are one concrete provider-neutral engine unit', async 
   assert.match(api, /AI_INFERENCE_REQUEST_CAPABILITY_ID_V1/);
   assert.match(api, /AI_PROVIDER_GENERATION_CAPABILITY_ID_V1/);
   assert.match(validation, /compute_reply_inference_request_digest_v1/);
+  assert.match(validation, /content\.encoded_len\(\) > AI_MAX_PRIVATE_SOURCE_BYTES_V1/);
   assert.match(validation, /AI_CONTRACTS_SCHEMA_SHA256/);
   assert.match(validation, /AiEgressPolicyLocalOnly/);
   assert.match(proto, /message AiContextReceiptV1/);
@@ -182,10 +183,15 @@ test('AI public contracts are one concrete provider-neutral engine unit', async 
   assert.match(proto, /message CommunicationReplySuggestionInferenceResultV1/);
   assert.match(proto, /message AiProviderReplyGenerationRequestV1/);
   assert.match(proto, /message AiProviderReplyGenerationResultV1/);
+  assert.match(proto, /message AiReplySourceContentV1/);
+  assert.match(proto, /bytes sender_utf8 = 1/);
+  assert.match(proto, /bytes subject_utf8 = 2/);
+  assert.match(proto, /bytes body_utf8 = 3/);
   assert.match(proto, /uint32 maximum_output_bytes/);
   assert.match(proto, /uint32 maximum_output_tokens/);
   assert.match(proto, /AiInferenceCompletenessV1 completeness = 10/);
   assert.match(proto, /uint32 confidence_basis_points = 11/);
+  assert.match(proto, /uint64 provider_settings_revision = 12/);
   assert.doesNotMatch(
     `${api}\n${validation}\n${proto}`,
     /(?:string|bytes)\s+(?:provider_id|provider_name|model_id|model_name|endpoint|prompt_text)\b|google\.protobuf\.Any|map<|string target_owner|string target_module|string target_capability/,
@@ -210,6 +216,8 @@ test('AI inference core owns lifecycle and fixed policy without provider impleme
   assert.match(core, /reject_reply_inference_v1/);
   assert.match(core, /AI_INFERENCE_PROVIDER_POLICY_REVISION_V1/);
   assert.match(core, /prompt_policy_sha256_v1/);
+  assert.match(core, /build_reply_provider_input_v1/);
+  assert.match(core, /AI_REPLY_SOURCE_BODY_EXCERPT_BYTES_V1/);
   assert.doesNotMatch(
     `${manifest}\n${core}`,
     /communications|reply-suggestion|ollama|reqwest|hyper|sqlx|gateway|kernel|settings_registry|provider_id|model_id|endpoint/,
@@ -244,5 +252,62 @@ test('AI inference persistence is typed owner-local and stores no private source
   assert.doesNotMatch(
     `${manifest}\n${api}\n${model}\n${repository}\n${migration}`,
     /communications_|mail_|telegram_|whatsapp_|zulip_|message_body|provider_id|model_id|endpoint|prompt_text|serde_json|google\.protobuf\.Any|map</,
+  );
+});
+
+test('AI inference runtime owns exact managed execution without provider implementation', async () => {
+  const [manifest, admission, ports, worker, runtime, processRoot] = await Promise.all([
+    backendSource('src/ai-inference-runtime/Cargo.toml'),
+    backendSource('src/ai-inference-runtime/src/admission.rs'),
+    backendSource('src/ai-inference-runtime/src/managed_ports.rs'),
+    backendSource('src/ai-inference-runtime/src/worker.rs'),
+    backendSource('src/ai-inference-runtime/src/managed_runtime.rs'),
+    backendSource('src/ai-inference-runtime/src/main.rs'),
+  ]);
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "ai"/);
+  assert.match(manifest, /surface = "runtime"/);
+  assert.match(admission, /ModuleKindV1::Engine/);
+  assert.match(admission, /ProvidedSurfaceKindV1::RequestRpc/);
+  assert.match(admission, /ai_provider_reply_generation_contract_reference_v1/);
+  assert.match(admission, /BlobQuotaOperationV1::CustodyTransfer/);
+  assert.match(admission, /StorageNamespaceRequestV1/);
+  assert.match(ports, /request_managed_blob_custody_transfer_v2/);
+  assert.match(ports, /BlobDataOperationReadRangeV1/);
+  assert.match(ports, /Operation::RouteModuleRequest/);
+  assert.match(worker, /accept_reply_inference_v1/);
+  assert.match(worker, /persist_transition/);
+  assert.match(worker, /complete_reply_inference_v1/);
+  assert.match(worker, /reject_reply_inference_v1/);
+  assert.match(worker, /load_recoverable_runs/);
+  assert.match(runtime, /Operation::DeliverModuleRequest/);
+  assert.match(runtime, /recover_pending_v1/);
+  assert.match(processRoot, /ManagedEngineRuntimeConfigurationV1/);
+  assert.match(processRoot, /validate_settings_snapshot_against_schema_v1/);
+  assert.doesNotMatch(
+    `${manifest}\n${admission}\n${ports}\n${worker}\n${runtime}`,
+    /hermes-communications|communication-reply-suggestion|hermes-ollama|reqwest|hyper|nats|\bprovider_id\b|\bmodel_id\b|endpoint|prompt_text/,
+  );
+});
+
+test('AI inference assembly emits only unsigned engine runtime and storage inputs', async () => {
+  const [manifest, assembly] = await Promise.all([
+    backendSource('src/ai-inference-assembly/Cargo.toml'),
+    backendSource('src/ai-inference-assembly/src/lib.rs'),
+  ]);
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "ai"/);
+  assert.match(manifest, /surface = "assembly"/);
+  assert.match(assembly, /ai_inference_module_descriptor_v1/);
+  assert.match(assembly, /ai_inference_settings_schema_v1/);
+  assert.match(assembly, /ai_inference_storage_bundle_v1/);
+  assert.match(assembly, /module_runtime/);
+  assert.match(assembly, /storage_bundle/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.doesNotMatch(
+    `${manifest}\n${assembly}`,
+    /communications|reply-suggestion|ollama|signing|private_key|provider_id|model_id|endpoint|prompt_text/,
   );
 });
