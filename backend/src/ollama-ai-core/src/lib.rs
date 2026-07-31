@@ -30,6 +30,8 @@ pub struct OllamaAiRunV1 {
     pub request_id: [u8; 16],
     pub request_digest: [u8; 32],
     pub settings_revision: u64,
+    pub selected_model_digest: Option<[u8; 32]>,
+    pub revision: u64,
     pub state: OllamaAiRunStateV1,
     pub terminal_result: Option<AiProviderReplyGenerationResultV1>,
 }
@@ -38,6 +40,7 @@ pub struct OllamaGenerationPlanV1 {
     pub request_id: [u8; 16],
     pub request_digest: [u8; 32],
     pub model: String,
+    pub model_digest: [u8; 32],
     pub prompt_utf8: Zeroizing<Vec<u8>>,
     pub maximum_output_tokens: u32,
     pub timeout_millis: u64,
@@ -85,6 +88,8 @@ pub fn accept_ollama_request_v1(
         request_digest: compute_provider_reply_generation_request_digest_v1(request)
             .map_err(|_| OllamaAiCoreErrorV1::InvalidRequest)?,
         settings_revision: settings.settings_revision,
+        selected_model_digest: None,
+        revision: 1,
         state: OllamaAiRunStateV1::Accepted,
         terminal_result: None,
     })
@@ -94,6 +99,7 @@ pub fn begin_ollama_request_v1(
     run: &OllamaAiRunV1,
     request: &AiProviderReplyGenerationRequestV1,
     settings: &OllamaAiRuntimeSettingsV1,
+    model_digest: [u8; 32],
 ) -> Result<(OllamaAiRunV1, OllamaGenerationPlanV1), OllamaAiCoreErrorV1> {
     if run.state != OllamaAiRunStateV1::Accepted
         || run.terminal_result.is_some()
@@ -102,6 +108,8 @@ pub fn begin_ollama_request_v1(
             != compute_provider_reply_generation_request_digest_v1(request)
                 .map_err(|_| OllamaAiCoreErrorV1::InvalidRequest)?
         || run.settings_revision != settings.settings_revision
+        || run.selected_model_digest.is_some()
+        || model_digest == [0; 32]
     {
         return Err(OllamaAiCoreErrorV1::InvalidTransition);
     }
@@ -115,6 +123,8 @@ pub fn begin_ollama_request_v1(
         subject_policy = subject_policy_name(request.subject_policy)?,
     );
     let next = OllamaAiRunV1 {
+        selected_model_digest: Some(model_digest),
+        revision: run.revision + 1,
         state: OllamaAiRunStateV1::Executing,
         ..run.clone()
     };
@@ -122,6 +132,7 @@ pub fn begin_ollama_request_v1(
         request_id: run.request_id,
         request_digest: run.request_digest,
         model: settings.chat_model.clone(),
+        model_digest,
         prompt_utf8: Zeroizing::new(prompt.into_bytes()),
         maximum_output_tokens: request.maximum_output_tokens,
         timeout_millis: settings.timeout_millis,
@@ -144,6 +155,8 @@ pub fn complete_ollama_request_v1(
         || run.request_id != plan.request_id
         || run.request_digest != plan.request_digest
         || run.settings_revision != plan.settings_revision
+        || run.selected_model_digest != Some(plan.model_digest)
+        || response.model_digest != plan.model_digest
     {
         return Err(OllamaAiCoreErrorV1::InvalidTransition);
     }
@@ -172,7 +185,7 @@ pub fn complete_ollama_request_v1(
         body_utf8: std::mem::take(&mut candidate.body).into_bytes(),
         resolved_tone: plan.tone,
         resolved_language,
-        model_revision_sha256: response.model_digest.to_vec(),
+        model_revision_sha256: plan.model_digest.to_vec(),
         input_tokens: response.input_tokens,
         output_tokens: response.output_tokens,
         terminal_status: AiInferenceTerminalStatusV1::AiInferenceTerminalStatusReady as i32,
@@ -184,6 +197,7 @@ pub fn complete_ollama_request_v1(
         return Err(OllamaAiCoreErrorV1::InvalidProviderResponse);
     }
     Ok(OllamaAiRunV1 {
+        revision: run.revision + 1,
         state: OllamaAiRunStateV1::Ready,
         terminal_result: Some(result),
         ..run.clone()
@@ -194,6 +208,7 @@ pub fn complete_ollama_request_v1(
 pub fn mark_ollama_uncertain_v1(run: &OllamaAiRunV1) -> Option<OllamaAiRunV1> {
     (run.state == OllamaAiRunStateV1::Executing && run.terminal_result.is_none()).then(|| {
         OllamaAiRunV1 {
+            revision: run.revision + 1,
             state: OllamaAiRunStateV1::Uncertain,
             ..run.clone()
         }
@@ -291,7 +306,7 @@ mod tests {
         let request = request();
         let accepted = accept_ollama_request_v1(&request, &settings()).expect("accepted");
         let (executing, plan) =
-            begin_ollama_request_v1(&accepted, &request, &settings()).expect("plan");
+            begin_ollama_request_v1(&accepted, &request, &settings(), [9; 32]).expect("plan");
         assert!(
             std::str::from_utf8(&plan.prompt_utf8)
                 .expect("prompt")
@@ -321,11 +336,11 @@ mod tests {
         let request = request();
         let accepted = accept_ollama_request_v1(&request, &settings()).expect("accepted");
         let (executing, _) =
-            begin_ollama_request_v1(&accepted, &request, &settings()).expect("plan");
+            begin_ollama_request_v1(&accepted, &request, &settings(), [9; 32]).expect("plan");
         let uncertain = mark_ollama_uncertain_v1(&executing).expect("uncertain");
         assert_eq!(uncertain.state, OllamaAiRunStateV1::Uncertain);
         assert!(
-            begin_ollama_request_v1(&uncertain, &request, &settings()).is_err(),
+            begin_ollama_request_v1(&uncertain, &request, &settings(), [9; 32]).is_err(),
             "uncertain requests must not be sent again automatically"
         );
     }

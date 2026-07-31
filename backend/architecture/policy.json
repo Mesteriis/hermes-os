@@ -762,6 +762,12 @@
         "role": "integration",
         "owner": "ollama",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-ollama-ai-persistence",
+        "role": "integration",
+        "owner": "ollama",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1767,6 +1773,20 @@
         },
         {
           "name": "hermes-ollama-ai-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-ollama-ai-persistence": [
+        {
+          "name": "hermes-ai-contracts",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-ollama-ai-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -5006,6 +5026,28 @@
           "features": []
         }
       ],
+      "hermes-ollama-ai-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-communication-delivery-intent-ingress-api": [
         {
           "name": "prost",
@@ -6337,6 +6379,10 @@
         "customBuildAllowed": false
       },
       "hermes-ollama-ai-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-ollama-ai-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },

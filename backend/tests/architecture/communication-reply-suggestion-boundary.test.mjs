@@ -340,3 +340,26 @@ test('Ollama API and core are separate integration units with fixed local policy
     /https?:\/\/(?!127\.0\.0\.1)|provider_id|caller.*model|automatic.*download/i,
   );
 });
+
+test('Ollama persistence fences replay without storing private provider input', async () => {
+  const [manifest, model, repository, schema, migration] = await Promise.all([
+    backendSource('src/ollama-ai-persistence/Cargo.toml'),
+    backendSource('src/ollama-ai-persistence/src/model.rs'),
+    backendSource('src/ollama-ai-persistence/src/repository.rs'),
+    backendSource('src/ollama-ai-persistence/src/schema.rs'),
+    backendSource('src/ollama-ai-persistence/migrations/0001_ollama_ai_runs.sql'),
+  ]);
+
+  assert.match(manifest, /role = "integration"/);
+  assert.match(manifest, /owner = "ollama"/);
+  assert.match(manifest, /surface = "persistence"/);
+  assert.match(model, /OllamaAiRunStateV1::Uncertain/);
+  assert.match(model, /current\.run\.request_digest != transition\.next_run\.request_digest/);
+  assert.match(repository, /ON CONFLICT \(logical_owner_id, request_id\) DO NOTHING/);
+  assert.match(repository, /SELECT_RUN_FOR_UPDATE/);
+  assert.match(schema, /owner_id: "ollama"/);
+  assert.match(migration, /selected_model_revision_sha256/);
+  assert.match(migration, /result_provider_settings_revision = settings_revision/);
+  assert.doesNotMatch(`${repository}\n${migration}`, /prompt_utf8|input_utf8|http_body|communications_/i);
+  assert.doesNotMatch(migration, /password|credentials?|provider_request/i);
+});
