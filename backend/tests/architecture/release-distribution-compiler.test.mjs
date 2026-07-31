@@ -862,6 +862,111 @@ test('signs the exact Review attention runtime and Storage entries emitted by it
   }
 });
 
+test('signs distinct extraction Review and Tasks runtime and Storage entries', async () => {
+  const root = canonicalTemporaryDirectory('hermes-task-candidate-release-fragments-');
+  try {
+    const privateKeyPath = join(root, 'release-key.pem');
+    const keyPair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    writeFileSync(
+      privateKeyPath,
+      keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      { mode: 0o600 },
+    );
+    const units = [
+      {
+        package: 'hermes-communication-task-candidate-assembly',
+        runtimeName: 'hermes-communication-task-candidate-runtime',
+        fragmentName: 'communication_task_candidate.release-artifacts.json',
+        owner: 'communication_task_candidate_extraction',
+        ids: [
+          'communication_task_candidate_extraction.runtime.v1',
+          'communication_task_candidate_extraction.storage.v1',
+        ],
+      },
+      {
+        package: 'hermes-review-task-candidate-assembly',
+        runtimeName: 'hermes-review-task-candidate-runtime',
+        fragmentName: 'review-task-candidate.release-artifacts.json',
+        owner: 'review',
+        ids: ['review.task-candidate.runtime.v1', 'review.task-candidate.storage.v1'],
+      },
+      {
+        package: 'hermes-tasks-assembly',
+        runtimeName: 'hermes-tasks-runtime',
+        fragmentName: 'tasks.release-artifacts.json',
+        owner: 'tasks',
+        ids: ['tasks.runtime.v1', 'tasks.storage.v1'],
+      },
+    ];
+    const fragments = [];
+    for (const [index, unit] of units.entries()) {
+      const runtime = join(root, unit.runtimeName);
+      const output = join(root, `assembly-${index}`);
+      writeFileSync(runtime, `${unit.runtimeName} bytes`, { mode: 0o700 });
+      execFileSync('cargo', [
+        'run',
+        '--quiet',
+        '-p',
+        unit.package,
+        '--',
+        '--build-id',
+        'build-task-candidate-chain',
+        '--output-dir',
+        output,
+        '--runtime',
+        runtime,
+      ], { cwd: process.cwd(), stdio: 'pipe' });
+      const fragment = JSON.parse(readFileSync(join(output, unit.fragmentName), 'utf8'));
+      assert.equal(fragment.owner_id, unit.owner);
+      assert.equal(fragment.module_id, unit.runtimeName);
+      assert.deepEqual(fragment.artifacts.map(({ artifact_id }) => artifact_id), unit.ids);
+      fragments.push(fragment);
+    }
+
+    const input = composeReleaseCompilerInput({
+      verification_key_id: 'release-2026',
+      trust_root_revision: 1,
+      revision: 1,
+      distribution_id: 'hermes-desktop',
+      release_version: '1.0.0',
+      build_id: 'build-task-candidate-chain',
+      target_triple: 'aarch64-apple-darwin',
+      generation: 1,
+      ...releaseProvenance,
+      additional_verification_keys: [],
+      artifacts: [{
+        artifact_kind: 'browser_bootstrap_bundle',
+        artifact_id: 'browser.bootstrap',
+        relative_path: 'browser/bootstrap.html',
+        source_path: browserBootstrapSource,
+        required: true,
+      }],
+    }, fragments);
+    const release = await compileReleaseDistribution(input, loadReleaseSigningKey(privateKeyPath));
+    const signed = decodeFields(release.signedManifest);
+    const manifest = decodeFields(signed.get(2)[0]);
+    const artifacts = manifest.get(8).map(decodeFields);
+    assert.deepEqual(
+      artifacts.map((artifact) => [fieldString(artifact, 2), artifact.get(1)[0]]),
+      [
+        ['browser.bootstrap', 4n],
+        ['communication_task_candidate_extraction.runtime.v1', 1n],
+        ['communication_task_candidate_extraction.storage.v1', 3n],
+        ['review.task-candidate.runtime.v1', 1n],
+        ['review.task-candidate.storage.v1', 3n],
+        ['tasks.runtime.v1', 1n],
+        ['tasks.storage.v1', 3n],
+      ],
+    );
+    for (const artifact of artifacts.filter((value) => value.get(1)[0] === 1n)) {
+      assert.equal(artifact.get(6)[0].length, 32);
+      assert.equal(artifact.get(7)[0].length, 32);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('signs the exact Reply Suggestion runtime and Storage entries emitted by its assembly', async () => {
   const root = canonicalTemporaryDirectory('hermes-reply-suggestion-release-fragment-');
   try {
