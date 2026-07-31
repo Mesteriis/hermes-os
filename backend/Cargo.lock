@@ -2301,6 +2301,65 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-summary-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-communication-summary-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-summary-persistence",
+ "hermes-communication-summary-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hermes-communication-summary-core"
+version = "0.1.0"
+
+[[package]]
+name = "hermes-communication-summary-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-summary-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
+name = "hermes-communication-summary-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-ai-contracts",
+ "hermes-blob-client",
+ "hermes-communication-summary-api",
+ "hermes-communication-summary-core",
+ "hermes-communication-summary-persistence",
+ "hermes-communications-ai-source-api",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-communications-ai-source-api"
 version = "0.1.0"
 dependencies = [

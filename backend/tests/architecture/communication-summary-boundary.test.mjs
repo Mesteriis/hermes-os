@@ -5,6 +5,10 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../../../', import.meta.url);
 
+async function backendSource(path) {
+  return readFile(new URL(path, BACKEND_ROOT), 'utf8');
+}
+
 test('communication summary agreement keeps workflow domain engine and integration separate', async () => {
   const [adr, inventorySource] = await Promise.all([
     readFile(
@@ -74,4 +78,130 @@ test('Communications summary source is a distinct event and target-bound Blob ha
   assert.match(sourceApi, /"hermes-communication-summary-runtime"/);
   assert.doesNotMatch(runtime, /hermes_ollama|ollama|provider_sdk|provider identity/i);
   assert.doesNotMatch(replyRuntime, /PrepareCommunicationSummarySourceCommandV1/);
+});
+
+test('summary API and core are isolated concrete workflow units', async () => {
+  const [apiManifest, api, proto, coreManifest, core] = await Promise.all([
+    backendSource('src/communication-summary-api/Cargo.toml'),
+    backendSource('src/communication-summary-api/src/lib.rs'),
+    backendSource(
+      'src/communication-summary-api/proto/hermes/communication_summary/v1/summary.proto',
+    ),
+    backendSource('src/communication-summary-core/Cargo.toml'),
+    backendSource('src/communication-summary-core/src/lib.rs'),
+  ]);
+
+  for (const manifest of [apiManifest, coreManifest]) {
+    assert.match(manifest, /role = "workflow"/);
+    assert.match(manifest, /owner = "communication_summary"/);
+    assert.doesNotMatch(
+      manifest,
+      /hermes-communications-|hermes-ai-inference|hermes-ollama|hermes-mail|hermes-telegram/,
+    );
+  }
+  assert.match(apiManifest, /surface = "contract"/);
+  assert.match(coreManifest, /surface = "implementation"/);
+  assert.match(api, /communication\.summary\.v1/);
+  assert.match(proto, /message StartCommunicationSummaryRequestV1/);
+  assert.match(proto, /message CommunicationSummaryCandidateV1/);
+  assert.match(proto, /COMMUNICATION_SUMMARY_LANGUAGE_SPANISH/);
+  assert.match(proto, /COMMUNICATION_SUMMARY_LENGTH_DETAILED/);
+  assert.match(core, /transition_communication_summary_v1/);
+  assert.match(core, /CommunicationSummaryStateV1::PreparingSource/);
+  assert.match(core, /CommunicationSummaryStateV1::AwaitingInference/);
+  assert.match(core, /CommunicationSummaryStateV1::Ready/);
+  assert.doesNotMatch(
+    proto,
+    /provider_id|model_id|endpoint|prompt|source_body|action_items|deadlines|map</,
+  );
+  assert.doesNotMatch(
+    `${coreManifest}\n${core}`,
+    /communications|ai-inference|ollama|provider|model|prompt|sqlx|kernel|gateway|reqwest/,
+  );
+});
+
+test('summary persistence owns atomic workflow state without foreign storage or private content', async () => {
+  const [manifest, repository, outbox, realtime, schema, migration] = await Promise.all([
+    backendSource('src/communication-summary-persistence/Cargo.toml'),
+    backendSource('src/communication-summary-persistence/src/repository.rs'),
+    backendSource('src/communication-summary-persistence/src/outbox.rs'),
+    backendSource('src/communication-summary-persistence/src/realtime.rs'),
+    backendSource('src/communication-summary-persistence/src/schema.rs'),
+    backendSource('src/communication-summary-persistence/migrations/0001_summary.sql'),
+  ]);
+
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "communication_summary"/);
+  assert.match(manifest, /surface = "persistence"/);
+  assert.match(repository, /create_run/);
+  assert.match(repository, /persist_source_result/);
+  assert.match(repository, /persist_inference_transition/);
+  assert.match(repository, /load_recoverable_runs/);
+  assert.match(repository, /transaction\.commit\(\)/);
+  assert.match(outbox, /unpublished_source_prepare_events/);
+  assert.match(realtime, /client_realtime_window/);
+  assert.match(schema, /owner_id: "communication_summary"/);
+  assert.match(migration, /CREATE TABLE hermes_data\.communication_summary_runs/);
+  assert.match(migration, /UNIQUE \(logical_owner_id, operation_id\)/);
+  assert.match(migration, /CREATE TABLE hermes_data\.communication_summary_inbox/);
+  assert.match(migration, /CREATE TABLE hermes_data\.communication_summary_outbox/);
+  assert.match(migration, /CREATE TABLE hermes_data\.communication_summary_realtime/);
+  assert.doesNotMatch(
+    `${manifest}\n${migration}`,
+    /communications_|mail_|telegram_|whatsapp_|zulip_|source_body|prompt|provider_id|model_id|endpoint/,
+  );
+});
+
+test('summary runtime and assembly expose only exact event request and release boundaries', async () => {
+  const [policySource, manifest, admission, sourceResults, inference, realtime, managed, assemblyManifest, assembly] =
+    await Promise.all([
+      backendSource('architecture/policy.json'),
+      backendSource('src/communication-summary-runtime/Cargo.toml'),
+      backendSource('src/communication-summary-runtime/src/admission.rs'),
+      backendSource('src/communication-summary-runtime/src/source_results.rs'),
+      backendSource('src/communication-summary-runtime/src/inference.rs'),
+      backendSource('src/communication-summary-runtime/src/client_realtime.rs'),
+      backendSource('src/communication-summary-runtime/src/managed_runtime.rs'),
+      backendSource('src/communication-summary-assembly/Cargo.toml'),
+      backendSource('src/communication-summary-assembly/src/lib.rs'),
+    ]);
+  const policy = JSON.parse(policySource);
+
+  assert.equal(policy.implementation.currentSlice, 'communication_summary_build_units_v1');
+  assert.deepEqual(
+    policy.implementation.productionPackages
+      .filter(({ owner }) => owner === 'communication_summary')
+      .map(({ name, surface }) => [name, surface]),
+    [
+      ['hermes-communication-summary-api', 'contract'],
+      ['hermes-communication-summary-core', 'implementation'],
+      ['hermes-communication-summary-persistence', 'persistence'],
+      ['hermes-communication-summary-runtime', 'runtime'],
+      ['hermes-communication-summary-assembly', 'assembly'],
+    ],
+  );
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "communication_summary"/);
+  assert.match(manifest, /surface = "runtime"/);
+  assert.match(admission, /ModuleKindV1::Workflow/);
+  assert.match(admission, /ProvidedSurfaceKindV1::ClientRpc/);
+  assert.match(admission, /ProvidedSurfaceKindV1::ClientRealtime/);
+  assert.match(admission, /ProvidedSurfaceKindV1::DurablePublisher/);
+  assert.match(admission, /ProvidedSurfaceKindV1::DurableConsumer/);
+  assert.match(admission, /communication_summary_inference_contract_reference_v1/);
+  assert.match(admission, /BlobQuotaOperationV1::CustodyTransfer/);
+  assert.match(sourceResults, /receive_runtime_pull_delivery/);
+  assert.match(sourceResults, /materialize_summary_source_for_ai_v1/);
+  assert.match(sourceResults, /delivery\.acknowledge\(\)/);
+  assert.match(inference, /Operation::RouteModuleRequest/);
+  assert.match(inference, /persist_inference_transition/);
+  assert.match(realtime, /Operation::PublishClientRealtime/);
+  assert.match(managed, /recover_accepted_communication_summary_once_v1/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
+  assert.match(assembly, /communication_summary\.release-artifacts\.json/);
+  assert.match(assembly, /communication_summary_storage_bundle_v1/);
+  assert.doesNotMatch(
+    `${manifest}\n${assemblyManifest}`,
+    /hermes-communications-runtime|hermes-ai-inference-(core|runtime|persistence)|hermes-ollama/,
+  );
 });

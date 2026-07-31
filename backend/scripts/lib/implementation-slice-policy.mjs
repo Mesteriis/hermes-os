@@ -901,6 +901,15 @@ const ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_PRODUCTION_PACKAGES = [
   },
 ];
 
+const COMMUNICATION_SUMMARY_BUILD_UNITS_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_PRODUCTION_PACKAGES,
+  { name: 'hermes-communication-summary-api', role: 'workflow', owner: 'communication_summary', surface: 'contract' },
+  { name: 'hermes-communication-summary-core', role: 'workflow', owner: 'communication_summary', surface: 'implementation' },
+  { name: 'hermes-communication-summary-persistence', role: 'workflow', owner: 'communication_summary', surface: 'persistence' },
+  { name: 'hermes-communication-summary-runtime', role: 'workflow', owner: 'communication_summary', surface: 'runtime' },
+  { name: 'hermes-communication-summary-assembly', role: 'workflow', owner: 'communication_summary', surface: 'assembly' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2509,6 +2518,35 @@ const ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATION_SUMMARY_BUILD_UNITS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-summary-api': [],
+  'hermes-communication-summary-core': [],
+  'hermes-communication-summary-persistence': [
+    { name: 'hermes-communication-summary-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+  'hermes-communication-summary-runtime': [
+    { name: 'hermes-ai-contracts', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communication-summary-api', kind: 'normal' },
+    { name: 'hermes-communication-summary-core', kind: 'normal' },
+    { name: 'hermes-communication-summary-persistence', kind: 'normal' },
+    { name: 'hermes-communications-ai-source-api', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+  'hermes-communication-summary-assembly': [
+    { name: 'hermes-communication-summary-persistence', kind: 'normal' },
+    { name: 'hermes-communication-summary-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3020,6 +3058,33 @@ const ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = 
   ],
 };
 
+const COMMUNICATION_SUMMARY_BUILD_UNITS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-summary-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communication-summary-core': [],
+  'hermes-communication-summary-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+  'hermes-communication-summary-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-communication-summary-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -3369,6 +3434,24 @@ const ATTACHMENT_ARCHIVE_INSPECTION_CLIENT_INVENTORY = {
   ].sort(),
 };
 
+const COMMUNICATION_SUMMARY_BUILD_UNITS_INVENTORY = {
+  ...ATTACHMENT_ARCHIVE_INSPECTION_CLIENT_INVENTORY,
+  workflows: [
+    ...ATTACHMENT_ARCHIVE_INSPECTION_CLIENT_INVENTORY.workflows,
+    'communication_summary',
+  ].sort(),
+  businessCapabilities: [
+    ...ATTACHMENT_ARCHIVE_INSPECTION_CLIENT_INVENTORY.businessCapabilities,
+    'communication.summary.v1',
+    'communication_summary.inference.v1',
+    'communication_summary.source.blob.v1',
+    'communication_summary.source_prepare.v1',
+    'communication_summary.source_prepared.v1',
+    'communication_summary.source_rejected.v1',
+    'communication_summary.storage.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -3571,6 +3654,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-cross-channel-forward-source-api',
       'hermes-communications-ai-source-api',
       'hermes-communication-reply-suggestion-api',
+      'hermes-communication-summary-api',
       'hermes-ai-contracts',
       'hermes-attachment-archive-inspection-api',
       'hermes-attachment-archive-inspection-ingress',
@@ -4318,6 +4402,17 @@ function expectedSlice(currentSlice) {
         ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies:
         ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_summary_build_units_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_SUMMARY_BUILD_UNITS_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_SUMMARY_BUILD_UNITS_PRODUCTION_PACKAGES,
+      workspaceDependencies: COMMUNICATION_SUMMARY_BUILD_UNITS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: COMMUNICATION_SUMMARY_BUILD_UNITS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

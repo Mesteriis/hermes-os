@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_reply_suggestion_v1",
+    "currentSlice": "communication_summary_build_units_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -857,6 +857,36 @@
         "name": "hermes-attachment-archive-inspection-assembly",
         "role": "engine",
         "owner": "attachment_archive_inspection",
+        "surface": "assembly"
+      },
+      {
+        "name": "hermes-communication-summary-api",
+        "role": "workflow",
+        "owner": "communication_summary",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-summary-core",
+        "role": "workflow",
+        "owner": "communication_summary",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-communication-summary-persistence",
+        "role": "workflow",
+        "owner": "communication_summary",
+        "surface": "persistence"
+      },
+      {
+        "name": "hermes-communication-summary-runtime",
+        "role": "workflow",
+        "owner": "communication_summary",
+        "surface": "runtime"
+      },
+      {
+        "name": "hermes-communication-summary-assembly",
+        "role": "workflow",
+        "owner": "communication_summary",
         "surface": "assembly"
       }
     ],
@@ -2025,6 +2055,82 @@
           "kind": "normal"
         }
       ],
+      "hermes-communication-summary-api": [],
+      "hermes-communication-summary-core": [],
+      "hermes-communication-summary-persistence": [
+        {
+          "name": "hermes-communication-summary-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-summary-runtime": [
+        {
+          "name": "hermes-ai-contracts",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-summary-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-summary-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-summary-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-ai-source-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communication-summary-assembly": [
+        {
+          "name": "hermes-communication-summary-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-summary-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-ai-contracts": [
         {
           "name": "hermes-runtime-protocol",
@@ -2670,6 +2776,29 @@
       ]
     },
     "thirdPartyDependencyAllowlist": {
+      "hermes-communication-summary-api": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-communication-summary-core": [],
+      "hermes-communication-summary-persistence": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+      ],
+      "hermes-communication-summary-runtime": [
+        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
+        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+      ],
+      "hermes-communication-summary-assembly": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
+        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+      ],
       "hermes-events-protocol": [
         {
           "name": "prost",
@@ -7235,6 +7364,26 @@
         "primaryKind": "bin",
         "customBuildAllowed": false
       },
+      "hermes-communication-summary-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communication-summary-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-summary-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-summary-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-summary-assembly": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -7492,8 +7641,9 @@
       "communication_cross_channel_forward",
       "communication_delivery_intent",
       "communication_reply_suggestion",
+      "communication_summary",
       "communications_export"
-      ],
+    ],
     "engines": [
       "ai",
       "attachment_archive_inspection",
@@ -7515,6 +7665,7 @@
         "attachment_security.storage.v1",
         "attachment_security.verdict.publish.v1",
         "communication.cross_channel_forward.v1",
+        "communication.summary.v1",
         "communication_cross_channel_forward.blob.v1",
         "communication_cross_channel_forward.delivery_rejected.v1",
         "communication_cross_channel_forward.delivery_submit.v1",
@@ -7532,6 +7683,12 @@
         "communication_delivery_intent.telegram.events.v1",
         "communication_delivery_intent.whatsapp.events.v1",
         "communication_delivery_intent.zulip.events.v1",
+        "communication_summary.inference.v1",
+        "communication_summary.source.blob.v1",
+        "communication_summary.source_prepare.v1",
+        "communication_summary.source_prepared.v1",
+        "communication_summary.source_rejected.v1",
+        "communication_summary.storage.v1",
         "communications.ai-reply-source.blob.v1",
         "communications.ai-reply-source.v1",
         "communications.ai-summary-source.blob.v1",
