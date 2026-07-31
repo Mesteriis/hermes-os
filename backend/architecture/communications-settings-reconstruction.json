@@ -597,7 +597,13 @@
       "role": "workflow",
       "owner": "communication_translation",
       "state": "planned",
-      "dependsOn": ["communications_content_read_v1"]
+      "dependsOn": [
+        "communications_ai_context_source_v1",
+        "ai_inference_v1",
+        "ollama_ai_provider_v1",
+        "capability_routed_module_request_rpc_v1",
+        "blob_v1"
+      ]
     },
     {
       "gate": "communication_explanation_v1",
