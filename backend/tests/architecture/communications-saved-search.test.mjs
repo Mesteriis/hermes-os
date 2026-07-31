@@ -60,7 +60,7 @@ test('saved search is one exact Communications build-unit capability', async () 
   assert.equal(gate.state, 'implemented');
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_explanation_live_provider_conformance_v1',
+    'communication_task_candidate_contract_core_source_v1',
   );
   assert.ok(policy.implementation.ownerInventory.businessCapabilities.includes(
     'communications.saved-search.v1',

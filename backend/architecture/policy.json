@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_explanation_live_provider_conformance_v1",
+    "currentSlice": "communication_task_candidate_contract_core_source_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -984,6 +984,24 @@
         "role": "workflow",
         "owner": "communication_recipient_suggestion",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-communication-task-candidate-api",
+        "role": "workflow",
+        "owner": "communication_task_candidate_extraction",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-task-candidate-core",
+        "role": "workflow",
+        "owner": "communication_task_candidate_extraction",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-communications-task-source-api",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "contract"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -3008,6 +3026,12 @@
       "hermes-communications-recipient-source-api": [
         { "name": "hermes-events-protocol", "kind": "normal" },
         { "name": "hermes-runtime-protocol", "kind": "normal" }
+      ],
+      "hermes-communication-task-candidate-api": [],
+      "hermes-communication-task-candidate-core": [],
+      "hermes-communications-task-source-api": [
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" }
       ]
     },
     "thirdPartyDependencyAllowlist": {
@@ -3104,6 +3128,23 @@
         { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
       ],
       "hermes-communications-recipient-source-api": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-communication-task-candidate-api": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-communication-task-candidate-core": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-communications-task-source-api": [
         { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
@@ -7760,6 +7801,18 @@
         "primaryKind": "bin",
         "customBuildAllowed": false
       },
+      "hermes-communication-task-candidate-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-communication-task-candidate-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communications-task-source-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -8020,6 +8073,7 @@
       "communication_recipient_suggestion",
       "communication_reply_suggestion",
       "communication_summary",
+      "communication_task_candidate_extraction",
       "communication_translation",
       "communications_export"
     ],
@@ -8051,6 +8105,7 @@
         "communication.explanation.v1",
         "communication.recipient-suggestion.v1",
         "communication.summary.v1",
+        "communication.task-candidate-extraction.v1",
         "communication.translation.v1",
         "communication_cross_channel_forward.blob.v1",
         "communication_cross_channel_forward.delivery_rejected.v1",
@@ -8086,6 +8141,10 @@
         "communication_summary.source_prepared.v1",
         "communication_summary.source_rejected.v1",
         "communication_summary.storage.v1",
+        "communication_task_candidate_extraction.source.blob.v1",
+        "communication_task_candidate_extraction.source_prepare.v1",
+        "communication_task_candidate_extraction.source_prepared.v1",
+        "communication_task_candidate_extraction.source_rejected.v1",
         "communication_translation.inference.v1",
         "communication_translation.source.blob.v1",
         "communication_translation.source_prepare.v1",
@@ -8118,6 +8177,7 @@
         "communications.search.index.v1",
         "communications.sender-insights.v1",
         "communications.storage.v1",
+        "communications.task-source.v1",
         "communications_export.blob.v1",
         "communications_export.events.v1",
         "communications_export.storage.v1",

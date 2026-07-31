@@ -2477,6 +2477,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-task-candidate-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-communication-task-candidate-core"
+version = "0.1.0"
+dependencies = [
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-communication-translation-api"
 version = "0.1.0"
 dependencies = [
@@ -2824,6 +2841,19 @@ version = "0.1.0"
 dependencies = [
  "prost 0.14.4",
  "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-communications-task-source-api"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "prost-types 0.14.4",
  "protoc-bin-vendored",
  "sha2 0.11.0",
 ]

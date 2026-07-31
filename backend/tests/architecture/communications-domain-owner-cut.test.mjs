@@ -58,7 +58,7 @@ test('Communications remains isolated after Review owner admission', async () =>
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_explanation_live_provider_conformance_v1',
+    'communication_task_candidate_contract_core_source_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'review'],
@@ -70,6 +70,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication_recipient_suggestion',
       'communication_reply_suggestion',
       'communication_summary',
+      'communication_task_candidate_extraction',
       'communication_translation',
       'communications_export',
     ],
@@ -97,6 +98,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication.explanation.v1',
       'communication.recipient-suggestion.v1',
       'communication.summary.v1',
+      'communication.task-candidate-extraction.v1',
       'communication.translation.v1',
       'communication_cross_channel_forward.blob.v1',
       'communication_cross_channel_forward.delivery_rejected.v1',
@@ -132,6 +134,10 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication_summary.source_prepared.v1',
       'communication_summary.source_rejected.v1',
       'communication_summary.storage.v1',
+      'communication_task_candidate_extraction.source.blob.v1',
+      'communication_task_candidate_extraction.source_prepare.v1',
+      'communication_task_candidate_extraction.source_prepared.v1',
+      'communication_task_candidate_extraction.source_rejected.v1',
       'communication_translation.inference.v1',
       'communication_translation.source.blob.v1',
       'communication_translation.source_prepare.v1',
@@ -164,6 +170,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communications.search.index.v1',
       'communications.sender-insights.v1',
       'communications.storage.v1',
+      'communications.task-source.v1',
       'communications_export.blob.v1',
       'communications_export.events.v1',
       'communications_export.storage.v1',

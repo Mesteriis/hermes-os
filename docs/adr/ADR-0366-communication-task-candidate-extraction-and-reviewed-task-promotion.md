@@ -4,10 +4,12 @@
 
 Дата: 2026-07-31
 
-Состояние реализации: planned. Этот ADR фиксирует полный owner graph и phase
-gate до добавления production packages. Наличие документа, legacy task scanner,
-frontend card или отдельного extraction result не открывает
-`communication_task_candidate_extraction_v1`.
+Состояние реализации: planned. Staged slice уже реализует отдельные extraction
+API/core units и Communications-owned task-source event contract с exact
+envelope builders. Persistence/runtime, Communications source producer, Review
+decision и Tasks promotion ещё не реализованы, поэтому aggregate gate остаётся
+закрыт. Наличие документа, legacy task scanner, frontend card или отдельного
+extraction result не открывает `communication_task_candidate_extraction_v1`.
 
 Уточняет:
 
