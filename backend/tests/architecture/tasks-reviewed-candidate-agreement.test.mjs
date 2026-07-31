@@ -23,6 +23,13 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
     repository,
     schema,
     migration,
+    runtimeManifest,
+    runtime,
+    admission,
+    command,
+    blob,
+    eventOutbox,
+    runtimeMain,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -49,11 +56,23 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
     readFile(new URL('src/tasks-persistence/src/repository.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/tasks-persistence/src/schema.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/tasks-persistence/migrations/0001_tasks.sql', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-runtime/src/command.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-runtime/src/blob.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-runtime/src/event_outbox.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-runtime/src/main.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'tasks_reviewed_candidate_persistence_v1');
-  for (const unit of ['hermes-tasks-command-api', 'hermes-tasks-core', 'hermes-tasks-persistence']) {
+  assert.equal(policy.implementation.currentSlice, 'tasks_reviewed_candidate_managed_runtime_v1');
+  for (const unit of [
+    'hermes-tasks-command-api',
+    'hermes-tasks-core',
+    'hermes-tasks-persistence',
+    'hermes-tasks-runtime',
+  ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
     assert.match(adr, new RegExp(`\\b${unit}\\b`));
     assert.equal(policy.implementation.productionPackages.some(({ name }) => name === unit), true);
@@ -102,5 +121,27 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
   assert.doesNotMatch(
     `${persistence}\n${repository}\n${migration}`,
     /review_task_candidate_|communications_|calendar_|contacts_|projects_|obligations_|provider_id|account_id/,
+  );
+  assert.match(runtimeManifest, /role = "domain"/);
+  assert.match(runtimeManifest, /owner = "tasks"/);
+  assert.match(runtimeManifest, /surface = "runtime"/);
+  assert.match(runtimeMain, /serve-inherited/);
+  assert.match(runtimeMain, /recover_command_once/);
+  assert.match(admission, /ModuleKindV1::Domain/);
+  assert.match(admission, /BlobQuotaOperationV1::ReadRange/);
+  assert.match(admission, /BlobQuotaOperationV1::ReleaseCustody/);
+  assert.doesNotMatch(admission, /CustodyTransfer as i32|Write as i32/);
+  assert.match(runtime, /request_managed_runtime_event_access_v2/);
+  assert.match(runtime, /exact_subscription/);
+  assert.match(command, /reserve_command/);
+  assert.match(command, /recover_task_command_once_v1/);
+  assert.match(command, /complete_task/);
+  assert.match(command, /reject_task/);
+  assert.match(command, /delivery\.acknowledge\(\)/);
+  assert.match(blob, /request_managed_blob_custody_release_v2/);
+  assert.match(eventOutbox, /publish_exact/);
+  assert.doesNotMatch(
+    `${runtimeManifest}\n${runtime}\n${admission}\n${command}\n${blob}\n${eventOutbox}\n${runtimeMain}`,
+    /hermes-review|hermes-communications|hermes-calendar|hermes-contacts|hermes-projects|hermes-ollama|reqwest/,
   );
 });

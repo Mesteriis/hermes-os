@@ -3847,6 +3847,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-tasks-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-blob-client",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "hermes-tasks-command-api",
+ "hermes-tasks-core",
+ "hermes-tasks-persistence",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-telegram-api"
 version = "0.1.0"
 dependencies = [

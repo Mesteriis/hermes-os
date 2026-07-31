@@ -1035,6 +1035,11 @@ const TASKS_REVIEWED_CANDIDATE_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-tasks-persistence', role: 'domain', owner: 'tasks', surface: 'persistence' },
 ];
 
+const TASKS_REVIEWED_CANDIDATE_MANAGED_RUNTIME_PRODUCTION_PACKAGES = [
+  ...TASKS_REVIEWED_CANDIDATE_PERSISTENCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-tasks-runtime', role: 'domain', owner: 'tasks', surface: 'runtime' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2933,6 +2938,21 @@ const TASKS_REVIEWED_CANDIDATE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const TASKS_REVIEWED_CANDIDATE_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...TASKS_REVIEWED_CANDIDATE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-tasks-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+    { name: 'hermes-tasks-command-api', kind: 'normal' },
+    { name: 'hermes-tasks-core', kind: 'normal' },
+    { name: 'hermes-tasks-persistence', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3732,6 +3752,17 @@ const TASKS_REVIEWED_CANDIDATE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-tasks-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
+const TASKS_REVIEWED_CANDIDATE_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...TASKS_REVIEWED_CANDIDATE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-tasks-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -5657,6 +5688,17 @@ function expectedSlice(currentSlice) {
       packages: TASKS_REVIEWED_CANDIDATE_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: TASKS_REVIEWED_CANDIDATE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: TASKS_REVIEWED_CANDIDATE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'tasks_reviewed_candidate_managed_runtime_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: TASKS_REVIEWED_CANDIDATE_PERSISTENCE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: TASKS_REVIEWED_CANDIDATE_MANAGED_RUNTIME_PRODUCTION_PACKAGES,
+      workspaceDependencies: TASKS_REVIEWED_CANDIDATE_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: TASKS_REVIEWED_CANDIDATE_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

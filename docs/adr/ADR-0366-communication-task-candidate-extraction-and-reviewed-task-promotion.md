@@ -37,8 +37,13 @@ Task identity, source/review provenance и hints без создания Calenda
 Project или Obligation truth. Tasks owner-local persistence теперь резервирует
 exact command envelope hash/fingerprint до Blob read, атомарно сохраняет Task и
 terminal outbox, восстанавливает незавершённую работу и отдельно завершает Blob
-cleanup без cross-owner SQL. Aggregate gate остаётся закрыт до Tasks
-runtime/assembly, signed admission и managed E2E.
+cleanup без cross-owner SQL. Отдельный Tasks managed runtime consume-ит только
+Tasks-owned durable command, читает уже Tasks-bound Blob, применяет deadline и
+owner/generation fences, восстанавливает inbox до новых delivery, сохраняет
+terminal result перед Ack, освобождает Blob custody и relay-ит exact outbox
+bytes. Он не импортирует Review, Communications или provider packages.
+Aggregate gate остаётся закрыт до Tasks assembly, signed admission и managed
+E2E.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 

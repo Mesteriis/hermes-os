@@ -1,5 +1,9 @@
+use hermes_storage_protocol::StorageBindingV1;
 use hermes_tasks_core::{TaskStatusV1, TaskV1, create_task_from_reviewed_candidate_v1};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{
+    PgPool, Postgres, Transaction,
+    postgres::{PgConnectOptions, PgPoolOptions},
+};
 
 use crate::model::{
     TASKS_OUTBOX_LIMIT_V1, TASKS_RECOVERY_LIMIT_V1, valid_cleanup, valid_identity, valid_outbox,
@@ -26,6 +30,48 @@ pub struct TasksPersistenceV1 {
 }
 
 impl TasksPersistenceV1 {
+    pub async fn connect_runtime(
+        binding: &StorageBindingV1,
+        database_id: &str,
+        pgbouncer_host: &str,
+        pgbouncer_port: u32,
+        password: &str,
+    ) -> Result<Self, TasksPersistenceErrorV1> {
+        if pgbouncer_host.is_empty()
+            || pgbouncer_port == 0
+            || database_id.is_empty()
+            || database_id != binding.identity().database_id()
+            || binding.access().runtime_principal().is_empty()
+        {
+            return Err(TasksPersistenceErrorV1::StorageUnavailable);
+        }
+        let options = PgConnectOptions::new()
+            .host(pgbouncer_host)
+            .port(
+                u16::try_from(pgbouncer_port)
+                    .map_err(|_| TasksPersistenceErrorV1::StorageUnavailable)?,
+            )
+            .username(binding.access().runtime_principal())
+            .password(password)
+            .database(binding.access().pool_alias());
+        let pool = PgPoolOptions::new()
+            .max_connections(u32::from(
+                binding.access().effective_budgets().max_connections(),
+            ))
+            .connect_with(options)
+            .await
+            .map_err(storage)?;
+        Ok(Self { pool })
+    }
+
+    pub async fn verify_storage_ready(&self) -> Result<(), TasksPersistenceErrorV1> {
+        sqlx::query_scalar::<_, i32>("SELECT 1")
+            .fetch_one(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(storage)
+    }
+
     #[must_use]
     pub fn new(pool: PgPool) -> Self {
         Self { pool }

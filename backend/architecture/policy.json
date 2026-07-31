@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "tasks_reviewed_candidate_persistence_v1",
+    "currentSlice": "tasks_reviewed_candidate_managed_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1068,6 +1068,12 @@
         "role": "domain",
         "owner": "tasks",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-tasks-runtime",
+        "role": "domain",
+        "owner": "tasks",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1714,6 +1720,44 @@
         },
         {
           "name": "hermes-tasks-core",
+          "kind": "normal"
+        }
+      ],
+      "hermes-tasks-runtime": [
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-tasks-command-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-tasks-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-tasks-persistence",
           "kind": "normal"
         }
       ],
@@ -5191,6 +5235,51 @@
           ]
         }
       ],
+      "hermes-tasks-runtime": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-review-attention-persistence": [
         {
           "name": "sha2",
@@ -8511,6 +8600,10 @@
       },
       "hermes-tasks-persistence": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-tasks-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       }
     },
