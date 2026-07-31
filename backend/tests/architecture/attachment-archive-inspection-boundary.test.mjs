@@ -5,7 +5,7 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../', BACKEND_ROOT);
 
-test('archive inspection is admitted as a separate planned engine slice', async () => {
+test('archive inspection persistence is admitted without opening the planned gate', async () => {
   const [inventorySource, policySource, adr] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
@@ -35,10 +35,17 @@ test('archive inspection is admitted as a separate planned engine slice', async 
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_archive_inspection_contract_core_v1',
+    'attachment_archive_inspection_persistence_join_v1',
   );
   assert(policy.implementation.ownerInventory.engines.includes(
     'attachment_archive_inspection',
+  ));
+  assert(policy.implementation.productionPackages.some(
+    ({ name, role, owner, surface }) =>
+      name === 'hermes-attachment-archive-inspection-persistence'
+      && role === 'engine'
+      && owner === 'attachment_archive_inspection'
+      && surface === 'persistence',
   ));
   assert.match(adr, /До выполнения всех пунктов inventory state остаётся `planned`/);
   assert.match(adr, /не распаковывает entry bytes/);
@@ -104,6 +111,76 @@ test('pure archive core owns policy without transport, storage or parser depende
   assert.doesNotMatch(
     source,
     /TcpStream|File::|sqlx|postgres|nats|jetstream|hermes_communications|hermes_attachment_security/,
+  );
+});
+
+test('archive persistence owns replay, event join and fenced jobs without foreign implementations', async () => {
+  const [manifest, schema, library, observations, jobs] = await Promise.all([
+    readFile(
+      new URL('src/attachment-archive-inspection-persistence/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/attachment-archive-inspection-persistence/migrations/0001_archive_inspection.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-persistence/src/lib.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/attachment-archive-inspection-persistence/src/observations.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-persistence/src/jobs.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "attachment_archive_inspection"/);
+  assert.match(manifest, /surface = "persistence"/);
+  assert.match(manifest, /hermes-attachment-archive-inspection-core/);
+  assert.match(manifest, /hermes-storage-protocol/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:communications|attachment-security|blob|events|kernel|mail|telegram|whatsapp|zulip)/,
+  );
+  for (const table of [
+    'attachment_archive_inspection_runs',
+    'attachment_archive_inspection_event_inbox',
+    'attachment_archive_inspection_scan_candidates',
+    'attachment_archive_inspection_safety_facts',
+    'attachment_archive_inspection_jobs',
+    'attachment_archive_inspection_reports',
+    'attachment_archive_inspection_realtime',
+  ]) {
+    assert.match(schema, new RegExp(table));
+  }
+  assert.match(schema, /runtime_generation BIGINT/);
+  assert.match(schema, /grant_epoch BIGINT/);
+  assert.match(schema, /lease_fence BIGINT/);
+  assert.doesNotMatch(
+    schema,
+    /\b(?:provider_id|provider_path|message_body|archive_bytes|extracted_content)\b/,
+  );
+  assert.match(library, /verify_storage_ready/);
+  assert.match(observations, /persist_scan_candidate/);
+  assert.match(observations, /persist_canonical_safety_fact/);
+  assert.match(observations, /settle_anchor_runs/);
+  assert.match(jobs, /claim_next_job/);
+  assert.match(jobs, /recover_expired_jobs/);
+  assert.match(jobs, /verify_claim/);
+  assert.doesNotMatch(
+    `${library}\n${observations}\n${jobs}`,
+    /hermes_(?:communications|attachment_security|blob|kernel|mail|telegram|whatsapp|zulip)/,
   );
 });
 

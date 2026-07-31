@@ -1653,6 +1653,17 @@ name = "hermes-attachment-archive-inspection-core"
 version = "0.1.0"
 dependencies = [
  "hermes-attachment-archive-inspection-api",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-attachment-archive-inspection-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-archive-inspection-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
 ]
 
 [[package]]

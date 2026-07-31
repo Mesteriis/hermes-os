@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_archive_inspection_contract_core_v1",
+    "currentSlice": "attachment_archive_inspection_persistence_join_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -834,6 +834,12 @@
         "role": "engine",
         "owner": "attachment_archive_inspection",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-archive-inspection-persistence",
+        "role": "engine",
+        "owner": "attachment_archive_inspection",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1638,6 +1644,16 @@
       "hermes-attachment-archive-inspection-zip": [
         {
           "name": "hermes-attachment-archive-inspection-core",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-archive-inspection-persistence": [
+        {
+          "name": "hermes-attachment-archive-inspection-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -4640,7 +4656,16 @@
           "features": []
         }
       ],
-      "hermes-attachment-archive-inspection-core": [],
+      "hermes-attachment-archive-inspection-core": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-attachment-archive-inspection-zip": [
         {
           "name": "zip",
@@ -4650,6 +4675,28 @@
           "defaultFeatures": false,
           "features": [
             "deflate-flate2-zlib-rs"
+          ]
+        }
+      ],
+      "hermes-attachment-archive-inspection-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
           ]
         }
       ],
@@ -6825,6 +6872,10 @@
         "customBuildAllowed": false
       },
       "hermes-attachment-archive-inspection-zip": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-archive-inspection-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },

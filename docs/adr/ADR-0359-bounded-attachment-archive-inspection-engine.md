@@ -9,7 +9,11 @@
 `hermes-attachment-archive-inspection-core` и
 `hermes-attachment-archive-inspection-zip` units реализуют provider-neutral
 client contract, pure bounded policy и ZIP metadata adapter без extraction.
-Persistence, managed runtime, release assembly, event/Blob conformance и
+`hermes-attachment-archive-inspection-persistence` реализует owner-local
+request idempotency, exact message/hash inbox, порядок-независимый join,
+bounded report/realtime storage и job lease fencing по worker, runtime
+generation, grant epoch и monotonic fence. Managed runtime, release assembly,
+event decoding, Blob custody/read, live PostgreSQL/NATS/Gateway conformance и
 production gate `attachment_archive_inspection_v1` остаются открыты.
 
 Зависит от:
@@ -67,9 +71,10 @@ Engine durably объединяет три независимо поступаю
 3. canonical Communications transition в `safe_for_delivery`.
 
 Факты могут прийти в любом порядке. Runnable job появляется только после
-exact anchor/correlation join и current `safe_for_delivery`. Exact replay
-идемпотентен; collision, stale generation, revoked permit или mismatched
-candidate fail closed.
+exact anchor join, exact candidate/safety event identities и transition
+`blob_admitted -> safe_for_delivery`. Safety event не содержит выдуманного
+correlation field. Exact replay идемпотентен; collision, stale generation,
+revoked permit или mismatched candidate fail closed.
 
 ```text
 client -> Gateway -> archive engine request_rpc
@@ -201,4 +206,3 @@ path/symlink/race surface без продуктовой необходимост
 
 Отклонено: archive result не является safety verdict, а parser failure не
 может повышать trust.
-
