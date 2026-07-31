@@ -74,12 +74,18 @@ test('reply suggestion agreement keeps domain workflow engine and integration se
       'managed_integration_settings_apply_v1',
     ],
   });
-  assert.deepEqual(slices.get('communication_reply_suggestion_v1').dependsOn, [
-    'communications_ai_context_source_v1',
-    'ai_inference_v1',
-    'capability_routed_module_request_rpc_v1',
-    'blob_v1',
-  ]);
+  assert.deepEqual(slices.get('communication_reply_suggestion_v1'), {
+    gate: 'communication_reply_suggestion_v1',
+    role: 'workflow',
+    owner: 'communication_reply_suggestion',
+    state: 'implemented',
+    dependsOn: [
+      'communications_ai_context_source_v1',
+      'ai_inference_v1',
+      'capability_routed_module_request_rpc_v1',
+      'blob_v1',
+    ],
+  });
 
   assert.match(adr, /hermes-communications-ai-source-api/);
   assert.match(adr, /hermes-ai-contracts/);
@@ -362,6 +368,7 @@ test('reply suggestion runtime coordinates event source, AI request, Blob custod
   assert.match(realtime, /client_realtime_window/);
   assert.match(realtime, /Operation::PublishClientRealtime/);
   assert.match(runtime, /publish_pending/);
+  assert.match(runtime, /request\.logical_owner_id == admission\.logical_owner_id/);
   assert.match(processRoot, /ManagedWorkflowRuntimeConfigurationV1/);
   assert.doesNotMatch(
     `${manifest}\n${admission}\n${sourceResults}\n${materialization}\n${inference}\n${runtime}`,
@@ -387,6 +394,11 @@ test('signed Reply Suggestion conformance crosses only event and request RPC bou
   assert.match(setup, /reply_suggestion_release_artifact_v1/);
   assert.match(setup, /ManagedWorkflowRuntimeConfigurationV1/);
   assert.match(flow, /managed_reply_suggestion_reaches_ai_and_replays_through_gateway_sse/);
+  assert.match(
+    flow,
+    /managed_reply_suggestion_completes_real_provider_through_gateway_sse/,
+  );
+  assert.match(flow, /required\("HERMES_OLLAMA_LIVE_PORT"\)/);
   assert.match(flow, /start_communications_domain/);
   assert.match(flow, /start_reply_suggestion_runtime_v1/);
   assert.match(flow, /start_ai_inference_runtime_v1/);
@@ -394,8 +406,14 @@ test('signed Reply Suggestion conformance crosses only event and request RPC bou
   assert.match(flow, /COMMUNICATION_REPLY_SUGGESTION_COMMAND_CONNECT_PATH_V1/);
   assert.match(flow, /\/api\/realtime\/v1\/events/);
   assert.match(flow, /restart_reply_suggestion_runtime_v1/);
-  assert.match(flow, /drain_ollama_connections/);
-  assert.match(flow, /assert_no_ollama_connection/);
+  assert.match(flow, /UnavailableOllamaProbeV1/);
+  assert.match(flow, /route_reply_suggestion_as/);
+  assert.match(flow, /"owner-2"/);
+  assert.match(flow, /transition_registration/);
+  assert.match(flow, /ModuleRegistrationState::Revoked/);
+  assert.match(flow, /PlatformStorageBindingStateV1::Revoking/);
+  assert.match(flow, /ReplySuggestionStateReady/);
+  assert.match(flow, /stop\(&ollama\.registration_id\)/);
   assert.match(flow, /ReplySuggestionErrorCodeSourceRejected/);
   assert.match(flow, /assert_private_content_absent/);
   assert.match(managedScript, /hermes-communication-reply-suggestion-runtime/);

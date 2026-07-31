@@ -71,9 +71,8 @@ ASCII-регистр трёх закрытых language tokens; whitespace, alia
 значения отклоняются. Runtime связывает request tenancy с authenticated human
 owner из managed launch и отклоняет wrong-owner delivery до persistence или
 provider HTTP. Gate `ollama_ai_provider_v1` реализован независимо от
-Communications, AI Engine и reply workflow. Gate
-`communication_reply_suggestion_v1` остаётся `planned`. Для reply
-workflow реализованы все пять отдельных units:
+Communications, AI Engine и reply workflow. Для reply workflow реализованы все
+пять отдельных units:
 `hermes-communication-reply-suggestion-api` с concrete generated
 Start/Get/realtime contract и
 `hermes-communication-reply-suggestion-core` с revision/digest-fenced
@@ -103,9 +102,20 @@ replay после workflow restart не повторяет HTTP, conflicting ope
 Заодно Storage authority workflow исправлена: human logical owner больше не
 подменяет owner namespace отдельной Storage unit, а временный
 `RUNTIME_UNAVAILABLE` Gateway отображает как 503, не как internal 500.
-Успешный inference на уровне отдельного AI Engine уже доказан, но успешный
-full-ensemble workflow contour, его revoke/wrong-owner matrix и typed candidate
-через Gateway/SSE всё ещё отсутствуют, поэтому workflow gate остаётся закрытым.
+Дополнительный positive full-ensemble conformance запускает тот же signed
+контур против отдельного настоящего Ollama process и локальной модели:
+authenticated Gateway Start/Get доходит через Communications event source,
+target-bound Blob, AI Engine и Ollama Integration до typed `Ready` candidate.
+Terminal state приходит через replayable SSE без private source content и
+source identity. После остановки provider и restart только workflow exact
+query/event/operation replay возвращается из owner-local persistence без нового
+provider request. Wrong-owner client delivery отклоняется runtime до
+persistence и provider boundary. Owner-authorized revoke повышает grant epoch,
+переводит только workflow Storage binding в `Revoking`, останавливает только
+Reply Suggestion process, сохраняет Communications, AI Engine и Ollama
+Integration активными и удаляет Gateway capability route с fail-closed `404`.
+Gate `communication_reply_suggestion_v1` реализован независимо от
+Communications domain, AI Engine и Ollama Integration.
 
 Уточняет:
 
@@ -130,9 +140,10 @@ full-ensemble workflow contour, его revoke/wrong-owner matrix и typed candid
 
 ## Контекст
 
-Clean-room inventory требует `communication_reply_suggestion_v1`, но active
-backend пока не имеет AI public contract, inference owner, provider adapter или
-разрешённого module-to-module body handoff.
+На момент принятия решения clean-room inventory требовал
+`communication_reply_suggestion_v1`, но active backend ещё не имел AI public
+contract, inference owner, provider adapter или разрешённого module-to-module
+body handoff. Текущее состояние реализации описано выше.
 
 Существующий `communications_content_read_v1` нельзя переиспользовать как
 workflow port. Он выдаёт one-use capability только authenticated client session,
@@ -417,11 +428,12 @@ Ollama process проверяются managed conformance. Mock or canned respon
 
 ### `communication_reply_suggestion_v1`
 
-Открывается атомарно только после трёх dependency gates и при наличии five
-workflow units, generated Start/Get/realtime contracts, durable source and AI
-orchestration, exact typed candidate, restart/replay/revoke/owner/stale/privacy
-negative matrix, Gateway/SSE/browser review flow and full architecture/Cargo/
-Clippy/test gates.
+Реализован: five workflow units, generated Start/Get/realtime contracts,
+durable event-only source orchestration, target-bound Blob custody, separate AI
+Engine request RPC, exact typed candidate, authenticated Gateway/SSE flow,
+restart/replay, wrong-owner, revoke, stale-source, provider-unavailable и
+privacy conformance. Communications, workflow, AI Engine и Ollama Integration
+остаются отдельными build/runtime owners.
 
 Наличие ADR, prompt unit test, skeleton или frontend card не открывает ни один
 gate.

@@ -35,7 +35,7 @@ test('archive inspection production gate is implemented as an exact engine inven
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'ai_inference_v1',
+    'communication_reply_suggestion_v1',
   );
   assert(policy.implementation.ownerInventory.engines.includes(
     'attachment_archive_inspection',

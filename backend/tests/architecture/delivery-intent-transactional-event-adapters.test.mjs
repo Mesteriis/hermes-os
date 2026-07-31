@@ -82,7 +82,7 @@ test('delivery intent event adapters preserve four exact routes without a provid
 
   assert.equal(
     policy.implementation.currentSlice,
-    'ai_inference_v1',
+    'communication_reply_suggestion_v1',
   );
   assert.equal(
     reconstruction.slices.find(({ gate }) => gate === 'communication_delivery_intent_v1')

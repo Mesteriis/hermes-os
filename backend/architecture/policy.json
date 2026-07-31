@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "ai_inference_v1",
+    "currentSlice": "communication_reply_suggestion_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {

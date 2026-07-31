@@ -372,7 +372,8 @@ async fn dispatch_client(
 ) -> ModuleClientResponseV1 {
     let valid_identity = request.protocol_major == 1
         && request.module_id == COMMUNICATION_REPLY_SUGGESTION_MODULE_ID_V1
-        && request.owner_id == COMMUNICATION_REPLY_SUGGESTION_OWNER_V1;
+        && request.owner_id == COMMUNICATION_REPLY_SUGGESTION_OWNER_V1
+        && request.logical_owner_id == admission.logical_owner_id;
     let (response_payload, accepted_route) = if valid_identity {
         if request.contract.as_ref() == Some(&reply_suggestion_command_contract_v1()) {
             (

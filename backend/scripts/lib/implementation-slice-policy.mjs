@@ -4305,6 +4305,7 @@ function expectedSlice(currentSlice) {
     currentSlice === 'attachment_archive_inspection_v1'
     || currentSlice === 'ollama_ai_provider_v1'
     || currentSlice === 'ai_inference_v1'
+    || currentSlice === 'communication_reply_suggestion_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,

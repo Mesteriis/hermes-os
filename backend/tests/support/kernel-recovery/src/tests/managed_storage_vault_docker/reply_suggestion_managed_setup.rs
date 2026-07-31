@@ -32,6 +32,7 @@ pub(super) struct StartedReplySuggestionRuntimeV1 {
     pub(super) registration_id: String,
     pub(super) runtime_instance_id: String,
     pub(super) runtime_generation: u64,
+    pub(super) grant_epoch: u64,
     capability_ids: Vec<String>,
 }
 
@@ -270,6 +271,7 @@ fn start_reserved_reply_suggestion_runtime_v1(
         registration_id: admitted.registration_id,
         runtime_instance_id,
         runtime_generation,
+        grant_epoch,
         capability_ids: admitted.capability_ids,
     }
 }

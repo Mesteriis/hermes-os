@@ -571,7 +571,7 @@
       "gate": "communication_reply_suggestion_v1",
       "role": "workflow",
       "owner": "communication_reply_suggestion",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "communications_ai_context_source_v1",
         "ai_inference_v1",

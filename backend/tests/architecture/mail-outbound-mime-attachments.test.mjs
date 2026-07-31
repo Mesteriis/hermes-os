@@ -99,7 +99,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'ai_inference_v1',
+    'communication_reply_suggestion_v1',
   );
   assert.deepEqual(inventory.domains, ['communications', 'review']);
   assert.deepEqual(inventory.integrations, ['mail']);
