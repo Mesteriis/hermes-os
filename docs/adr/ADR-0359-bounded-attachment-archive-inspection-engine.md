@@ -12,7 +12,9 @@ client contract, pure bounded policy и ZIP metadata adapter без extraction.
 `hermes-attachment-archive-inspection-persistence` реализует owner-local
 request idempotency, exact message/hash inbox, порядок-независимый join,
 bounded report/realtime storage и job lease fencing по worker, runtime
-generation, grant epoch и monotonic fence. Managed runtime, release assembly,
+generation, grant epoch и monotonic fence. Согласован отдельный target-owned
+`hermes-attachment-archive-inspection-ingress` contract для event-only
+custody delegation request/result; его код, managed runtime, release assembly,
 event decoding, Blob custody/read, live PostgreSQL/NATS/Gateway conformance и
 production gate `attachment_archive_inspection_v1` остаются открыты.
 
@@ -80,6 +82,14 @@ revoked permit или mismatched candidate fail closed.
 client -> Gateway -> archive engine request_rpc
 provider scan candidate event -----------\
 Communications safe_for_delivery event ----> owner-local durable join
+                                            -> delegation command outbox
+
+archive delegation command
+  -> Attachment Security inbox
+  -> exact safe scan/current custody check
+  -> Kernel current-custodian redelegation
+  -> Attachment Security result outbox
+  -> archive delegation-result inbox
                                             -> target-bound Blob custody
                                             -> one-use bounded Blob read
                                             -> ZIP metadata adapter
@@ -91,11 +101,82 @@ integration storage и не получает shared filesystem path. Cross-owner
 bytes передаются только через evidence-bound Blob custody. Kernel выдаёт и
 fence-ит capability, но не читает bytes и не интерпретирует report.
 
+### Event-only custody handoff
+
+Первичный Mail -> Attachment Security proof нельзя переиспользовать для Archive
+Inspection: он подписан для другого exact target. После scan proof также может
+истечь раньше on-demand запроса. Поэтому joined archive request не создаёт
+parser job напрямую. Он атомарно создаёт typed durable command:
+
+```text
+RequestArchiveInspectionCustodyDelegationV1
+  request_id
+  archive_run_id
+  attachment_anchor_id
+  candidate_message_id
+  candidate_envelope_sha256
+  safety_message_id
+  safety_evidence_id
+  logical_owner_id
+```
+
+Payload не содержит Blob reference, proof, bytes, provider/account identity,
+filesystem path или выбираемый target triple. Target
+`owner=attachment_archive_inspection`,
+`module=hermes-attachment-archive-inspection-runtime`,
+`capability=attachment_archive_inspection.blob.v1` является константой
+контракта.
+
+Attachment Security принимает command только через свой exact Event Hub
+subscription, проверяет owner-local completed safe scan, exact candidate
+message/hash, exact safety evidence и сохранённую current custody. Затем он
+вызывает managed control operation ADR-0360 с deterministic delegation ID,
+атомарно сохраняет terminal result и exact outbox bytes:
+
+```text
+ArchiveInspectionCustodyDelegatedV1
+  request_id
+  archive_run_id
+  attachment_anchor_id
+  candidate_message_id
+  safety_message_id
+  source_reference_id
+  declared_size
+  receipt_sha256
+  custody_transfer_source_proof
+  logical_owner_id
+
+ArchiveInspectionCustodyDelegationRejectedV1
+  request_id
+  archive_run_id
+  attachment_anchor_id
+  bounded reject_code
+  logical_owner_id
+```
+
+Archive persistence принимает result только по exact message ID/hash и
+command causation, сверяет run/anchor/candidate/safety/owner и только после
+этого создаёт parser job. Duplicate exact result является replay; collision,
+неполная lineage, rejected delegation или mismatch fail closed. Proof и Blob
+reference остаются только во внутренних event/persistence/runtime surfaces и
+не попадают в client API, SSE, logs, health или telemetry.
+
+Request/result schema принадлежит target owner в отдельном
+`hermes-attachment-archive-inspection-ingress` package. Attachment Security
+может импортировать только эту public contract unit, но не archive API,
+persistence, runtime, parser или assembly. Это тот же target-owned ingress
+pattern, которым integrations публикуют Communications observations; contract
+dependency не превращает source engine в target engine и не создаёт
+engine-to-engine RPC.
+
 ### Единицы сборки
 
 ```text
 hermes-attachment-archive-inspection-api
   typed Start/Get/realtime client contract and bounded report schema
+
+hermes-attachment-archive-inspection-ingress
+  typed durable custody-delegation command/result contracts and envelopes
 
 hermes-attachment-archive-inspection-core
   pure limits, path normalization, entry policy and terminal decisions
@@ -117,7 +198,8 @@ API/core/parser не зависят от Communications implementation, Attachme
 Security implementation, integrations, Kernel, Storage, Blob implementation
 или runtime packages. Persistence является единственным SQL owner surface.
 Runtime не материализует release artifacts. Assembly не запускается Kernel и
-не подписывает manifest.
+не подписывает manifest. Ingress не зависит от client API, core, persistence,
+runtime или assembly и меняется только при изменении durable handoff contract.
 
 ### Bounded ZIP policy
 
@@ -165,13 +247,14 @@ replayable SSE status. `accepted` не означает completion.
 
 Gate открывается атомарно только после:
 
-1. exact six-unit topology и executable dependency policy;
+1. exact seven-unit topology и executable dependency policy;
 2. reviewed exact ZIP dependency profile;
 3. request/status contract без source Blob/private/provider fields;
 4. bounded path/type/encryption/nested/size/count/depth policy tests;
 5. owner-local request + candidate + safety-state join в любом порядке;
 6. exact replay/collision and lease/generation fencing;
-7. target-bound Blob custody and one-use read;
+7. event-only fresh current-custodian delegation, target-bound Blob custody and
+   one-use read;
 8. successful real ZIP metadata inspection without extraction;
 9. traversal, duplicate, encrypted, nested, symlink/special-entry, malformed,
    entry-count/depth/per-entry/total-size negative matrix;
