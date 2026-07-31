@@ -79,6 +79,7 @@ members = [
   "src/communication-recipient-suggestion-core",
   "src/communication-recipient-suggestion-persistence",
   "src/communication-recipient-suggestion-runtime",
+  "src/communication-recipient-suggestion-assembly",
   "src/ai-contracts",
   "src/ai-inference-core",
   "src/ai-inference-persistence",

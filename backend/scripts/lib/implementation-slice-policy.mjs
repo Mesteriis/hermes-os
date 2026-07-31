@@ -976,6 +976,11 @@ const COMMUNICATION_RECIPIENT_SUGGESTION_RUNTIME_PRODUCTION_PACKAGES = [
   { name: 'hermes-communications-recipient-source-api', role: 'domain', owner: 'communications', surface: 'contract' },
 ];
 
+const COMMUNICATION_RECIPIENT_SUGGESTION_ASSEMBLY_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_RECIPIENT_SUGGESTION_RUNTIME_PRODUCTION_PACKAGES,
+  { name: 'hermes-communication-recipient-suggestion-assembly', role: 'workflow', owner: 'communication_recipient_suggestion', surface: 'assembly' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2753,6 +2758,16 @@ const COMMUNICATION_RECIPIENT_SUGGESTION_SOURCE_PRODUCER_WORKSPACE_DEPENDENCY_AL
   ],
 };
 
+const COMMUNICATION_RECIPIENT_SUGGESTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_RECIPIENT_SUGGESTION_SOURCE_PRODUCER_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-recipient-suggestion-assembly': [
+    { name: 'hermes-communication-recipient-suggestion-persistence', kind: 'normal' },
+    { name: 'hermes-communication-recipient-suggestion-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3428,6 +3443,15 @@ const COMMUNICATION_RECIPIENT_SUGGESTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIS
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
+const COMMUNICATION_RECIPIENT_SUGGESTION_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_RECIPIENT_SUGGESTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-recipient-suggestion-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -5103,6 +5127,17 @@ function expectedSlice(currentSlice) {
       packages: COMMUNICATION_RECIPIENT_SUGGESTION_RUNTIME_PRODUCTION_PACKAGES,
       workspaceDependencies: COMMUNICATION_RECIPIENT_SUGGESTION_SOURCE_PRODUCER_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: COMMUNICATION_RECIPIENT_SUGGESTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_recipient_suggestion_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_RECIPIENT_SUGGESTION_SOURCE_PRODUCER_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_RECIPIENT_SUGGESTION_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies: COMMUNICATION_RECIPIENT_SUGGESTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: COMMUNICATION_RECIPIENT_SUGGESTION_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

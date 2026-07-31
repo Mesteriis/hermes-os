@@ -35,6 +35,9 @@ test('recipient suggestion agreement separates source ownership from workflow de
     communicationsEventRuntime,
     communicationsRecipientSource,
     communicationsSourceSnapshot,
+    assemblyManifest,
+    assembly,
+    releaseScript,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -103,6 +106,9 @@ test('recipient suggestion agreement separates source ownership from workflow de
     readFile(new URL('src/communications-runtime/src/event_runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-runtime/src/recipient_source.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-persistence/src/source_snapshot.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-recipient-suggestion-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-recipient-suggestion-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -147,7 +153,7 @@ test('recipient suggestion agreement separates source ownership from workflow de
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_recipient_suggestion_source_producer_v1',
+    'communication_recipient_suggestion_assembly_v1',
   );
   assert.match(workspace, /"src\/communication-recipient-suggestion-api"/);
   assert.match(workspace, /"src\/communication-recipient-suggestion-core"/);
@@ -242,6 +248,18 @@ test('recipient suggestion agreement separates source ownership from workflow de
   );
   assert.match(communicationsSourceSnapshot, /CommunicationsSourceSnapshotV1/);
   assert.doesNotMatch(communicationsSourceSnapshot, /CommunicationsAiSource/);
+  assert.match(workspace, /"src\/communication-recipient-suggestion-assembly"/);
+  assert.match(assemblyManifest, /owner = "communication_recipient_suggestion"/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
+  assert.match(assembly, /communication_recipient_suggestion_module_descriptor_v1/);
+  assert.match(assembly, /communication_recipient_suggestion_storage_bundle_v1/);
+  assert.match(assembly, /communication_recipient_suggestion\.release-artifacts\.json/);
+  assert.doesNotMatch(assembly, /signing_key|private_key|hermes_provider|ollama/i);
+  assert.match(releaseScript, /--package hermes-communication-recipient-suggestion-assembly/);
+  assert.match(
+    releaseScript,
+    /communication_recipient_suggestion\.release-artifacts\.json/,
+  );
   assert.ok(
     policy.implementation.ownerInventory.workflows.includes(
       'communication_recipient_suggestion',
