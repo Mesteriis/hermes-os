@@ -390,6 +390,48 @@ mod tests {
     }
 
     #[test]
+    fn evaluates_accounting_signal_without_fabricating_other_roles() {
+        let candidates =
+            evaluate_communication_recipient_candidates_v1(b"Invoice payment received", DIGEST)
+                .expect("accounting candidate");
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|candidate| candidate.role)
+                .collect::<Vec<_>>(),
+            vec![CommunicationRecipientRoleV1::AccountingOrBookkeeping]
+        );
+    }
+
+    #[test]
+    fn evaluates_legal_signal_without_fabricating_other_roles() {
+        let candidates =
+            evaluate_communication_recipient_candidates_v1(b"NDA legal review", DIGEST)
+                .expect("legal candidate");
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|candidate| candidate.role)
+                .collect::<Vec<_>>(),
+            vec![CommunicationRecipientRoleV1::LegalCounsel]
+        );
+    }
+
+    #[test]
+    fn evaluates_project_signal_without_fabricating_other_roles() {
+        let candidates =
+            evaluate_communication_recipient_candidates_v1(b"Project status update", DIGEST)
+                .expect("project candidate");
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|candidate| candidate.role)
+                .collect::<Vec<_>>(),
+            vec![CommunicationRecipientRoleV1::ProjectStakeholder]
+        );
+    }
+
+    #[test]
     fn allows_empty_candidate_list_without_fabricating_a_recipient() {
         assert_eq!(
             evaluate_communication_recipient_candidates_v1(b"hello", DIGEST),

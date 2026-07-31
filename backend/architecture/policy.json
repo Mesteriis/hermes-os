@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_recipient_suggestion_assembly_v1",
+    "currentSlice": "communication_recipient_suggestion_managed_conformance_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {

@@ -69,6 +69,10 @@ hermes-communication-translation-runtime = { path = "../../../src/communication-
 hermes-communication-explanation-api = { path = "../../../src/communication-explanation-api" }
 hermes-communication-explanation-persistence = { path = "../../../src/communication-explanation-persistence" }
 hermes-communication-explanation-runtime = { path = "../../../src/communication-explanation-runtime" }
+hermes-communication-recipient-suggestion-api = { path = "../../../src/communication-recipient-suggestion-api" }
+hermes-communication-recipient-suggestion-persistence = { path = "../../../src/communication-recipient-suggestion-persistence" }
+hermes-communication-recipient-suggestion-runtime = { path = "../../../src/communication-recipient-suggestion-runtime" }
+hermes-communications-recipient-source-api = { path = "../../../src/communications-recipient-source-api" }
 hermes-ai-contracts = { path = "../../../src/ai-contracts" }
 hermes-ai-inference-persistence = { path = "../../../src/ai-inference-persistence" }
 hermes-ai-inference-runtime = { path = "../../../src/ai-inference-runtime" }

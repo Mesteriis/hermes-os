@@ -71,6 +71,11 @@ use hermes_communications_export_runtime::admission::{
     COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY_ID_V1, communications_export_module_descriptor_v1,
     communications_export_settings_schema_bytes_v1,
 };
+use hermes_communications_recipient_source_api::{
+    communication_recipient_source_prepare_contract_reference_v1,
+    communication_recipient_source_prepared_contract_reference_v1,
+    communication_recipient_source_rejected_contract_reference_v1,
+};
 use hermes_communications_runtime::admission::{
     COMMUNICATIONS_AI_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID,
     COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
@@ -84,7 +89,8 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_EXPLANATION_SOURCE_CAPABILITY_ID,
     COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID,
     COMMUNICATIONS_MODULE_ID, COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
-    COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
+    COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID,
+    COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID, COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
     COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION,
     COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS, COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
     COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID, COMMUNICATIONS_STORAGE_CAPABILITY_ID,
@@ -1014,13 +1020,32 @@ pub(super) fn assert_communications_transferred_body_projection(
     runtime_dir: &Path,
     exercise_recovery_failures: bool,
 ) -> Vec<u8> {
+    assert_communications_transferred_body_projection_with_plaintext(
+        store,
+        supervisor,
+        kernel_data,
+        kernel,
+        runtime_dir,
+        b"fixture source body for custody transfer",
+        exercise_recovery_failures,
+    )
+}
+
+pub(super) fn assert_communications_transferred_body_projection_with_plaintext(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    kernel_data: &Path,
+    kernel: &Path,
+    runtime_dir: &Path,
+    plaintext: &[u8],
+    exercise_recovery_failures: bool,
+) -> Vec<u8> {
     const OPAQUE_BLOB_REFERENCE: &str = "blob://fixture-source/admitted-body-1";
     let body_account_cursor = fixture_account_cursor(
         hermes_communications_ingress::ProviderProvenanceV1::Telegram,
         "integration-private-body-account-1",
     );
     let source_grant_epoch = record_fixture_source_integration(store);
-    let plaintext = b"fixture source body for custody transfer";
     let plaintext_sha256: [u8; 32] = Sha256::digest(plaintext).into();
     let reference_id = [8; 16];
     let channel_binding = vec![6; 32];
@@ -2640,6 +2665,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_OBSERVE_CAPABILITY_ID.to_owned(),
         "communications.query.v1".to_owned(),
+        COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID.to_owned(),
@@ -2719,6 +2746,14 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
         vec![ModuleBlobOperationV1::Write],
     );
+    let recipient_source_blob = ModuleBlobQuotaRequestV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        COMMUNICATIONS_BLOB_QUOTA_BYTES,
+        COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
+        vec![ModuleBlobOperationV1::Write],
+    );
     let vault_purpose = ModuleVaultPurposeRequestV1::new_with_key_schema_revision(
         COMMUNICATIONS_REGISTRATION,
         COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
@@ -2771,6 +2806,9 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         communication_explanation_source_prepared_contract_reference_v1();
     let explanation_source_rejected =
         communication_explanation_source_rejected_contract_reference_v1();
+    let recipient_source_prepare = communication_recipient_source_prepare_contract_reference_v1();
+    let recipient_source_prepared = communication_recipient_source_prepared_contract_reference_v1();
+    let recipient_source_rejected = communication_recipient_source_rejected_contract_reference_v1();
     let routes = [
         communications_event_route(
             COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
@@ -2911,6 +2949,24 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             ModuleEventRouteDirectionV1::Publish,
         ),
         communications_event_route(
+            COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Command,
+            &recipient_source_prepare,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &recipient_source_prepared,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &recipient_source_rejected,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
             COMMUNICATIONS_SUMMARY_SOURCE_CAPABILITY_ID,
             ModuleEventEnvelopeKindV1::Result,
             &summary_source_rejected,
@@ -3045,6 +3101,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
                     summary_source_blob,
                     translation_source_blob,
                     explanation_source_blob,
+                    recipient_source_blob,
                 ],
                 scheduler: &[],
                 vault_purposes: std::slice::from_ref(&vault_purpose),

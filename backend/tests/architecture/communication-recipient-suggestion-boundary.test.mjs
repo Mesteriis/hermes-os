@@ -38,6 +38,9 @@ test('recipient suggestion agreement separates source ownership from workflow de
     assemblyManifest,
     assembly,
     releaseScript,
+    managedSetup,
+    managedFlow,
+    managedScript,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -109,6 +112,21 @@ test('recipient suggestion agreement separates source ownership from workflow de
     readFile(new URL('src/communication-recipient-suggestion-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-recipient-suggestion-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communication_recipient_suggestion_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communication_recipient_suggestion_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -121,14 +139,14 @@ test('recipient suggestion agreement separates source ownership from workflow de
     gate: 'communications_recipient_source_v1',
     role: 'domain',
     owner: 'communications',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['communications_canonical_read_v2', 'blob_v1', 'nats_data_plane_v1'],
   });
   assert.deepEqual(workflow, {
     gate: 'communication_recipient_suggestion_v1',
     role: 'workflow',
     owner: 'communication_recipient_suggestion',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['communications_recipient_source_v1', 'client_gateway_v1', 'blob_v1'],
   });
   for (const unit of [
@@ -148,12 +166,12 @@ test('recipient suggestion agreement separates source ownership from workflow de
   assert.match(adr, /target-bound Blob/);
   assert.match(adr, /общий replayable SSE/);
   assert.match(adr, /Kernel\/Gateway не компилируют/);
-  assert.match(adr, /Состояние реализации: planned/);
+  assert.match(adr, /Состояние реализации: implemented/);
   assert.doesNotMatch(adr, /Communications (?:owns|владеет) recipient decision|generic `execute\(any\)`/i);
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_recipient_suggestion_assembly_v1',
+    'communication_recipient_suggestion_managed_conformance_v1',
   );
   assert.match(workspace, /"src\/communication-recipient-suggestion-api"/);
   assert.match(workspace, /"src\/communication-recipient-suggestion-core"/);
@@ -174,6 +192,9 @@ test('recipient suggestion agreement separates source ownership from workflow de
   );
   assert.match(core, /evaluate_communication_recipient_candidates_v1/);
   assert.match(core, /allows_empty_candidate_list_without_fabricating_a_recipient/);
+  assert.match(core, /evaluates_accounting_signal_without_fabricating_other_roles/);
+  assert.match(core, /evaluates_legal_signal_without_fabricating_other_roles/);
+  assert.match(core, /evaluates_project_signal_without_fabricating_other_roles/);
   assert.match(core, /SourceDigestMismatch/);
   assert.doesNotMatch(
     core,
@@ -259,6 +280,25 @@ test('recipient suggestion agreement separates source ownership from workflow de
   assert.match(
     releaseScript,
     /communication_recipient_suggestion\.release-artifacts\.json/,
+  );
+  assert.match(managedSetup, /COMMUNICATION_RECIPIENT_SUGGESTION_RELEASE_ARTIFACT_ID_V1/);
+  assert.match(managedSetup, /start_reserved_workflow/);
+  assert.match(
+    managedFlow,
+    /managed_recipient_suggestion_reaches_gateway_sse_and_replays_after_restart/,
+  );
+  assert.match(managedFlow, /read_terminal_sse_event/);
+  assert.match(managedFlow, /restart_communication_recipient_suggestion_runtime_v1/);
+  assert.match(managedFlow, /assert_runtime_fences/);
+  assert.match(managedFlow, /wrong_owner/);
+  assert.match(managedFlow, /conflicting/);
+  assert.match(managedFlow, /stale/);
+  assert.match(managedFlow, /revoke_owner/);
+  assert.match(managedFlow, /assert_private_content_absent/);
+  assert.doesNotMatch(`${managedSetup}\n${managedFlow}`, /ollama|hermes_ai|communication_explanation/i);
+  assert.match(
+    managedScript,
+    /managed_recipient_suggestion_reaches_gateway_sse_and_replays_after_restart/,
   );
   assert.ok(
     policy.implementation.ownerInventory.workflows.includes(

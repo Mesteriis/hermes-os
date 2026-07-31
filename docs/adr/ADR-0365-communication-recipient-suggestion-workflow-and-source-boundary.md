@@ -4,10 +4,14 @@
 
 Дата: 2026-07-31
 
-Состояние реализации: planned. Решение фиксирует отдельного workflow owner,
-typed role candidates, event-only Communications source flow и атомарный phase
-gate. Legacy `smart_cc_suggestions`, уже реализованный Explanation и frontend
-presentation не являются доказательством `communication_recipient_suggestion_v1`.
+Состояние реализации: implemented. Отдельные contract/core/persistence/runtime/
+assembly units, Communications-owned source producer, exact signed release
+admission и managed Gateway/SSE conformance реализованы. Live gate проходит
+через Vault, Storage Control, PostgreSQL, Blob, NATS, Communications и workflow;
+он проверяет restart/replay, revoke, stale source, duplicate/conflict,
+generation/grant fences и отсутствие private source bytes в realtime. Legacy
+`smart_cc_suggestions`, Explanation и frontend presentation не используются как
+доказательство `communication_recipient_suggestion_v1`.
 
 Уточняет:
 
