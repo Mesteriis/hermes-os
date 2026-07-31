@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_explanation_persistence_v1",
+    "currentSlice": "communication_explanation_managed_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -936,6 +936,12 @@
         "role": "workflow",
         "owner": "communication_explanation",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-communication-explanation-runtime",
+        "role": "workflow",
+        "owner": "communication_explanation",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2909,6 +2915,19 @@
           "name": "hermes-storage-protocol",
           "kind": "normal"
         }
+      ],
+      "hermes-communication-explanation-runtime": [
+        { "name": "hermes-ai-contracts", "kind": "normal" },
+        { "name": "hermes-blob-client", "kind": "normal" },
+        { "name": "hermes-communication-explanation-api", "kind": "normal" },
+        { "name": "hermes-communication-explanation-core", "kind": "normal" },
+        { "name": "hermes-communication-explanation-persistence", "kind": "normal" },
+        { "name": "hermes-communications-ai-source-api", "kind": "normal" },
+        { "name": "hermes-events-jetstream", "kind": "normal" },
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" },
+        { "name": "hermes-storage-vault", "kind": "normal" }
       ]
     },
     "thirdPartyDependencyAllowlist": {
@@ -2968,6 +2987,13 @@
       "hermes-communication-explanation-persistence": [
         { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
         { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+      ],
+      "hermes-communication-explanation-runtime": [
+        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
+        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
       ],
       "hermes-events-protocol": [
         {
@@ -7584,6 +7610,10 @@
       },
       "hermes-communication-explanation-persistence": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-explanation-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       },
       "hermes-ai-contracts": {

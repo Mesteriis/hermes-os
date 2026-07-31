@@ -942,6 +942,11 @@ const COMMUNICATION_EXPLANATION_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-communication-explanation-persistence', role: 'workflow', owner: 'communication_explanation', surface: 'persistence' },
 ];
 
+const COMMUNICATION_EXPLANATION_RUNTIME_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_EXPLANATION_PERSISTENCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-communication-explanation-runtime', role: 'workflow', owner: 'communication_explanation', surface: 'runtime' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2634,6 +2639,23 @@ const COMMUNICATION_EXPLANATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATION_EXPLANATION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_EXPLANATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-explanation-runtime': [
+    { name: 'hermes-ai-contracts', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communication-explanation-api', kind: 'normal' },
+    { name: 'hermes-communication-explanation-core', kind: 'normal' },
+    { name: 'hermes-communication-explanation-persistence', kind: 'normal' },
+    { name: 'hermes-communications-ai-source-api', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3230,6 +3252,17 @@ const COMMUNICATION_EXPLANATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATION_EXPLANATION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_EXPLANATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-explanation-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -3671,6 +3704,10 @@ const COMMUNICATION_EXPLANATION_PERSISTENCE_INVENTORY = {
     ...COMMUNICATION_EXPLANATION_CROSS_OWNER_CONTRACTS_INVENTORY.businessCapabilities,
     'communication_explanation.storage.v1',
   ].sort(),
+};
+
+const COMMUNICATION_EXPLANATION_RUNTIME_INVENTORY = {
+  ...COMMUNICATION_EXPLANATION_PERSISTENCE_INVENTORY,
 };
 
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
@@ -4746,6 +4783,17 @@ function expectedSlice(currentSlice) {
       packages: COMMUNICATION_EXPLANATION_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: COMMUNICATION_EXPLANATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: COMMUNICATION_EXPLANATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_explanation_managed_runtime_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_EXPLANATION_RUNTIME_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_EXPLANATION_RUNTIME_PRODUCTION_PACKAGES,
+      workspaceDependencies: COMMUNICATION_EXPLANATION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: COMMUNICATION_EXPLANATION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

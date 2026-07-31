@@ -26,6 +26,12 @@ test('communication explanation agreement separates workflow domain engine and p
     persistenceSchema,
     persistenceModel,
     persistenceRepository,
+    runtimeManifest,
+    runtimeAdmission,
+    runtimeClientPort,
+    runtimeInference,
+    runtimeSourceResults,
+    managedRuntime,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -79,6 +85,12 @@ test('communication explanation agreement separates workflow domain engine and p
       new URL('src/communication-explanation-persistence/src/repository.rs', BACKEND_ROOT),
       'utf8',
     ),
+    readFile(new URL('src/communication-explanation-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-explanation-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-explanation-runtime/src/client_port.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-explanation-runtime/src/inference.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-explanation-runtime/src/source_results.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-explanation-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -115,10 +127,11 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.match(adr, /Состояние реализации: planned/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns explanation/i);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_explanation_persistence_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_explanation_managed_runtime_v1');
   assert.match(workspace, /"src\/communication-explanation-api"/);
   assert.match(workspace, /"src\/communication-explanation-core"/);
   assert.match(workspace, /"src\/communication-explanation-persistence"/);
+  assert.match(workspace, /"src\/communication-explanation-runtime"/);
   assert.match(apiManifest, /owner = "communication_explanation"/);
   assert.match(apiManifest, /surface = "contract"/);
   assert.match(coreManifest, /owner = "communication_explanation"/);
@@ -199,5 +212,23 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.doesNotMatch(
     `${persistenceManifest}\n${persistenceModel}\n${persistenceRepository}`,
     /hermes-(?:communications-domain|ai-inference|ollama|mail|telegram|whatsapp|zulip)/,
+  );
+  assert.match(runtimeManifest, /owner = "communication_explanation"/);
+  assert.match(runtimeManifest, /surface = "runtime"/);
+  assert.match(runtimeAdmission, /ModuleKindV1::Workflow/);
+  assert.match(runtimeAdmission, /communication_explanation\.source_prepare\.v1/);
+  assert.match(runtimeAdmission, /communication_explanation\.source_prepared\.v1/);
+  assert.match(runtimeAdmission, /communication_explanation\.source_rejected\.v1/);
+  assert.match(runtimeClientPort, /StartCommunicationExplanationRequestV1/);
+  assert.match(runtimeClientPort, /CommunicationExplanationReasonV1/);
+  assert.match(runtimeInference, /RouteModuleRequest/);
+  assert.match(runtimeInference, /AiExplanationReasonKindV1/);
+  assert.match(runtimeSourceResults, /seal_explanation_inference_request_v1/);
+  assert.match(runtimeSourceResults, /AiUseCaseCommunicationExplanation/);
+  assert.match(managedRuntime, /ManagedStorageRuntimeConfigurationV1/);
+  assert.match(managedRuntime, /publish_pending/);
+  assert.doesNotMatch(
+    `${runtimeAdmission}\n${runtimeClientPort}\n${runtimeInference}\n${runtimeSourceResults}\n${managedRuntime}`,
+    /communication_summary|CommunicationSummary|communication_translation|CommunicationTranslation|mail_|telegram_|whatsapp_|zulip_|provider_id|model_id|prompt|target_language|translated_text/,
   );
 });
