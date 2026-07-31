@@ -639,7 +639,7 @@
       "gate": "attachment_archive_inspection_v1",
       "role": "engine",
       "owner": "attachment_archive_inspection",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["blob_v1", "attachment_security_engine_v1"]
     },
     {

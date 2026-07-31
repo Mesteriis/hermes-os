@@ -422,14 +422,12 @@ async fn verify_delegation_source(
            AND job.attachment_anchor_id = $1
            AND job.candidate_message_id = $2
            AND candidate_inbox.envelope_sha256 = $3
-           AND job.outbox_message_id = $4
            AND job.target_blob_reference_id IS NOT NULL
            AND job.target_blob_receipt_sha256 IS NOT NULL",
     )
     .bind(&request.attachment_anchor_id)
     .bind(&request.candidate_message_id)
     .bind(&request.candidate_envelope_sha256)
-    .bind(&request.safety_message_id)
     .fetch_optional(&mut **transaction)
     .await
     .map_err(|_| AttachmentSecurityPersistenceErrorV1::StorageUnavailable)?;
@@ -592,8 +590,7 @@ fn safe_verdict_matches(
         COMMUNICATION_ATTACHMENT_CONTRACT_MAJOR,
         COMMUNICATION_ATTACHMENT_CONTRACT_REVISION,
         &COMMUNICATION_ATTACHMENT_SAFETY_VERDICT_OBSERVATION_SCHEMA_SHA256,
-    ) && envelope.message_id == request.safety_message_id
-        && envelope.partition_key == request.attachment_anchor_id
+    ) && envelope.partition_key == request.attachment_anchor_id
         && payload.attachment_anchor_id == request.attachment_anchor_id
         && payload.evidence_id == request.safety_evidence_id
         && payload.expected_state == AttachmentSafetyExpectedStateV1::BlobAdmitted as i32
@@ -825,6 +822,11 @@ mod tests {
         ArchiveInspectionCustodyEnvelopeContextV1,
         build_request_archive_inspection_custody_delegation_outbox_record_v1,
     };
+    use hermes_communications_attachment_contract::{
+        AttachmentObservationEnvelopeContextV1, AttachmentSafetyExpectedStateV1,
+        AttachmentSafetyVerdictFactV1, AttachmentSafetyVerdictV1,
+        build_attachment_safety_verdict_outbox_record_v1,
+    };
 
     use super::*;
 
@@ -882,6 +884,37 @@ mod tests {
             predecessor_custody_source_proof.clear();
         }
         assert!(!valid_claim(&invalid));
+    }
+
+    #[test]
+    fn safe_scan_is_bound_by_evidence_not_the_canonical_transition_message_id() {
+        let request = request();
+        let verdict = build_attachment_safety_verdict_outbox_record_v1(
+            &AttachmentSafetyVerdictFactV1 {
+                attachment_anchor_id: [3; 16],
+                evidence_id: [7; 16],
+                causation_message_id: [8; 16],
+                correlation_id: [9; 16],
+                expected_state: AttachmentSafetyExpectedStateV1::BlobAdmitted,
+                verdict: AttachmentSafetyVerdictV1::SafeForDelivery,
+                observed_at_unix_seconds: 1_700_000_000,
+            },
+            &AttachmentObservationEnvelopeContextV1 {
+                runtime_instance_id: "attachment-security-runtime-1".to_owned(),
+                runtime_generation: 1,
+                module_id: "hermes-attachment-security-runtime".to_owned(),
+                recorded_at_unix_seconds: 1_700_000_001,
+                recorded_at_nanos: 0,
+            },
+        )
+        .expect("safe verdict");
+        let envelope =
+            decode_envelope_v1(verdict.record().exact_bytes()).expect("validated verdict");
+        assert_ne!(envelope.message_id, request.safety_message_id);
+        assert_eq!(
+            safe_verdict_matches(&request, verdict.record().exact_bytes()),
+            Ok(true)
+        );
     }
 
     fn request() -> RequestArchiveInspectionCustodyDelegationV1 {

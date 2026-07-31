@@ -270,6 +270,7 @@ fn delivery_intent_command_contract_v1() -> ContractReferenceV1 {
 fn body_read_error(error: BlobClientError) -> BodyReadErrorV1 {
     match error {
         BlobClientError::InvalidSessionRequest
+        | BlobClientError::InvalidCustodyDelegationRequest
         | BlobClientError::InvalidCustodyReleaseRequest
         | BlobClientError::InvalidSocketPath
         | BlobClientError::InvalidTimeout => BodyReadErrorV1::InvalidReceipt,

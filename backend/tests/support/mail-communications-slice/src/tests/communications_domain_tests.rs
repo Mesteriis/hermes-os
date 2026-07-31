@@ -18,6 +18,7 @@ fn command(observed_at_unix_seconds: i64) -> RecordCommunicationEvidenceV1 {
         conversation_cursor: Some(CommunicationSourceCursorV1::new([4; 32])),
         participant_cursor: None,
         participant_display_label: None,
+        message_subject: None,
         media_cursor: None,
         reply_to_source_cursor: None,
         forward_origin_source_cursor: None,

@@ -5,7 +5,9 @@ use std::sync::{
 
 use hermes_communications_runtime::admission::COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID;
 use hermes_runtime_protocol::v1::{
-    BlobDataOperationV1, ManagedRuntimeBlobSessionDeliveryV1, ManagedRuntimeBlobSessionRequestV1,
+    BlobDataOperationV1, ManagedRuntimeBlobCustodyDelegationDeliveryV1,
+    ManagedRuntimeBlobCustodyDelegationRequestV1, ManagedRuntimeBlobSessionDeliveryV1,
+    ManagedRuntimeBlobSessionRequestV1,
 };
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgSslMode};
 use zeroize::Zeroizing;
@@ -95,6 +97,14 @@ impl ManagedRuntimeBlobSessionHandler for CommunicationsExportRaceBlobSessionHan
             self.race.mutate_if_armed()?;
         }
         self.inner.issue_blob_session(expectation, request)
+    }
+
+    fn delegate_blob_custody(
+        &self,
+        expectation: &ManagedRuntimeExpectation,
+        request: ManagedRuntimeBlobCustodyDelegationRequestV1,
+    ) -> Result<ManagedRuntimeBlobCustodyDelegationDeliveryV1, String> {
+        self.inner.delegate_blob_custody(expectation, request)
     }
 }
 

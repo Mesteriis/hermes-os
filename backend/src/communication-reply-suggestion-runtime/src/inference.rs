@@ -97,7 +97,7 @@ fn validate_request_for_run(
     run: &PersistedReplySuggestionRunV1,
     request: &CommunicationReplySuggestionInferenceRequestV1,
 ) -> Result<(), ReplySuggestionInferenceErrorV1> {
-    validate_reply_inference_request_v1(&request)
+    validate_reply_inference_request_v1(request)
         .map_err(|_| ReplySuggestionInferenceErrorV1::InvalidRequest)?;
     let context = request
         .context

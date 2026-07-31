@@ -295,41 +295,6 @@ fn same_semantic_request(
     left == right
 }
 
-#[cfg(test)]
-mod tests {
-    use hermes_ai_contracts::wire::AiPrivateSourceReceiptV1;
-
-    use super::*;
-
-    #[test]
-    fn semantic_replay_allows_only_custody_proof_renewal() {
-        let mut original = CommunicationReplySuggestionInferenceRequestV1 {
-            run_id: vec![1; 16],
-            source: Some(AiPrivateSourceReceiptV1 {
-                reference_id: vec![2; 16],
-                declared_bytes: 32,
-                sha256: vec![3; 32],
-                custody_transfer_source_proof: vec![4; 48],
-            }),
-            logical_owner_id: "owner-1".to_owned(),
-            ..Default::default()
-        };
-        let mut renewed = original.clone();
-        renewed
-            .source
-            .as_mut()
-            .expect("source")
-            .custody_transfer_source_proof = vec![5; 48];
-        assert!(same_semantic_request(&original, &renewed));
-
-        renewed.source.as_mut().expect("source").sha256[0] ^= 1;
-        assert!(!same_semantic_request(&original, &renewed));
-
-        original.source = None;
-        assert!(!same_semantic_request(&original, &renewed));
-    }
-}
-
 const SELECT_RUN: &str = "
  SELECT logical_owner_id, run_id, request_digest, context_id, source_evidence_id,
         source_evidence_revision, contract_major, contract_revision,
@@ -587,4 +552,39 @@ fn report_developer_database_error(stage: &str, error: &sqlx::Error) {
         .and_then(sqlx::error::DatabaseError::code)
         .unwrap_or(std::borrow::Cow::Borrowed("transport"));
     eprintln!("developer_ai_inference_database_error stage={stage} code={code}");
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_ai_contracts::wire::AiPrivateSourceReceiptV1;
+
+    use super::*;
+
+    #[test]
+    fn semantic_replay_allows_only_custody_proof_renewal() {
+        let mut original = CommunicationReplySuggestionInferenceRequestV1 {
+            run_id: vec![1; 16],
+            source: Some(AiPrivateSourceReceiptV1 {
+                reference_id: vec![2; 16],
+                declared_bytes: 32,
+                sha256: vec![3; 32],
+                custody_transfer_source_proof: vec![4; 48],
+            }),
+            logical_owner_id: "owner-1".to_owned(),
+            ..Default::default()
+        };
+        let mut renewed = original.clone();
+        renewed
+            .source
+            .as_mut()
+            .expect("source")
+            .custody_transfer_source_proof = vec![5; 48];
+        assert!(same_semantic_request(&original, &renewed));
+
+        renewed.source.as_mut().expect("source").sha256[0] ^= 1;
+        assert!(!same_semantic_request(&original, &renewed));
+
+        original.source = None;
+        assert!(!same_semantic_request(&original, &renewed));
+    }
 }

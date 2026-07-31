@@ -341,6 +341,13 @@ struct GmailMessageRecordsV1 {
     observed_history_id: Option<String>,
 }
 
+struct InboundBodyObservationSourceV1 {
+    source_id: String,
+    sender: Option<String>,
+    subject: Option<String>,
+    plaintext: Option<Vec<u8>>,
+}
+
 #[derive(Debug)]
 pub enum MailBootstrapError {
     Admission,
@@ -2776,10 +2783,12 @@ impl MailAdmittedRuntime {
                 ),
                 ProviderProvenanceV1::MailImap,
                 connection_id,
-                message_id.clone(),
-                message.sender.clone(),
-                Some(message.subject.clone()),
-                message.plain_text_body.clone(),
+                InboundBodyObservationSourceV1 {
+                    source_id: message_id.clone(),
+                    sender: message.sender.clone(),
+                    subject: Some(message.subject.clone()),
+                    plaintext: message.plain_text_body.clone(),
+                },
             )?;
             let record = build_observation_outbox_record_v1(
                 &observation,
@@ -2952,10 +2961,12 @@ impl MailAdmittedRuntime {
                 ),
                 ProviderProvenanceV1::MailGmail,
                 connection_id,
-                format!("{connection_id}:{provider_record_id}"),
-                preview.as_ref().and_then(|preview| preview.sender.clone()),
-                subject.clone(),
-                direct_plain_text_body(&bytes),
+                InboundBodyObservationSourceV1 {
+                    source_id: format!("{connection_id}:{provider_record_id}"),
+                    sender: preview.as_ref().and_then(|preview| preview.sender.clone()),
+                    subject: subject.clone(),
+                    plaintext: direct_plain_text_body(&bytes),
+                },
             )?;
             let primary_record = build_observation_outbox_record_v1(
                 &observation,
@@ -3096,11 +3107,14 @@ impl MailAdmittedRuntime {
         operation_id: &str,
         provider: ProviderProvenanceV1,
         connection_id: &str,
-        source_id: String,
-        sender: Option<String>,
-        subject: Option<String>,
-        plaintext: Option<Vec<u8>>,
+        source: InboundBodyObservationSourceV1,
     ) -> Result<CommunicationObservationDraft, MailBootstrapError> {
+        let InboundBodyObservationSourceV1 {
+            source_id,
+            sender,
+            subject,
+            plaintext,
+        } = source;
         let Some(plaintext) = plaintext else {
             return unavailable_body_observation(
                 operation_id,

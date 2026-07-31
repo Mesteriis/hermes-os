@@ -104,7 +104,8 @@ fn serve_inherited(paths: InheritedPaths) -> Result<(), String> {
         .clone()
         .ok_or_else(|| "Archive Inspection storage configuration is missing".to_owned())?;
     let admission = ArchiveInspectionRuntimeAdmissionV1 {
-        logical_owner_id: configuration.logical_owner_id,
+        module_owner_id: configuration.logical_owner_id,
+        logical_human_owner_id: configuration.logical_human_owner_id,
         registration_id: configuration.registration_id,
         runtime_instance_id: configuration.runtime_instance_id,
         runtime_generation: configuration.runtime_generation,

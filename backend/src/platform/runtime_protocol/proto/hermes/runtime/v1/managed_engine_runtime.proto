@@ -20,4 +20,7 @@ message ManagedEngineRuntimeConfigurationV1 {
   string event_hub_endpoint = 8;
   uint64 event_credential_revision = 9;
   uint64 settings_revision = 10;
+  // Authenticated human tenancy. This never replaces the Engine build-unit
+  // owner used by registration, grants, Storage and Event Hub authority.
+  string logical_human_owner_id = 11;
 }

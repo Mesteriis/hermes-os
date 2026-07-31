@@ -492,7 +492,10 @@ fn assert_attachment_security_verdict_flow(
             );
             let diagnostics = attachment_security_persistence_diagnostics().await;
             assert_eq!(diagnostics.candidates, before.candidates + 1);
-            assert_eq!(diagnostics.canonical_states, before.canonical_states + 1);
+            assert_eq!(
+                diagnostics.canonical_states, diagnostics.candidates,
+                "each scan candidate must retain one exact canonical attachment state regardless of consumer timing"
+            );
             assert_eq!(diagnostics.jobs, before.jobs + 1);
             assert_eq!(diagnostics.attempts, before.attempts + 1);
             assert_eq!(

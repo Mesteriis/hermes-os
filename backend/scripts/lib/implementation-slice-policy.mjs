@@ -4301,7 +4301,7 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'attachment_archive_inspection_client_gateway_v1') {
+  if (currentSlice === 'attachment_archive_inspection_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: ATTACHMENT_ARCHIVE_INSPECTION_CLIENT_INVENTORY,

@@ -233,6 +233,7 @@ fn blob_failure(error: BlobClientError) -> MaterializationFailureV1 {
         | BlobClientError::InvalidFrame
         | BlobClientError::InvalidResponse
         | BlobClientError::Rejected(_)
+        | BlobClientError::InvalidCustodyDelegationRequest
         | BlobClientError::InvalidCustodyReleaseRequest
         | BlobClientError::InvalidSessionRequest => MaterializationFailureV1::Policy,
     }

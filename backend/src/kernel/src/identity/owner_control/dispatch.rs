@@ -442,7 +442,7 @@ fn start_reserved_engine_runtime(
     request: StartReservedEngineRuntimeRequestV1,
 ) -> Result<OwnerResult, String> {
     (|| {
-        sessions.authorize(store, &request.owner_session_id)?;
+        let logical_human_owner = sessions.authorized_owner(store, &request.owner_session_id)?;
         let reservation =
             macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
         let registration = store
@@ -480,6 +480,7 @@ fn start_reserved_engine_runtime(
             event_hub_endpoint,
             event_credential_revision,
             settings_revision: settings_snapshot.revision,
+            logical_human_owner_id: logical_human_owner.owner_id().to_owned(),
         };
         validate_managed_engine_runtime_configuration(&configuration)
             .map_err(|_| "managed engine runtime configuration is invalid".to_owned())?;

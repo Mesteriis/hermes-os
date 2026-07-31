@@ -66,7 +66,8 @@ const JOB_LEASE_MILLIS: u64 = 180_000;
 const EVENT_POLL_WAIT: Duration = Duration::from_millis(250);
 
 pub struct ArchiveInspectionRuntimeAdmissionV1 {
-    pub logical_owner_id: String,
+    pub module_owner_id: String,
+    pub logical_human_owner_id: String,
     pub registration_id: String,
     pub runtime_instance_id: String,
     pub runtime_generation: u64,
@@ -82,7 +83,7 @@ pub struct AttachmentArchiveInspectionRuntimeV1 {
     persistence: AttachmentArchiveInspectionPersistenceV1,
     client_realtime: ArchiveInspectionClientRealtimePublisherV1,
     limits: ArchiveInspectionLimitsV1,
-    logical_owner_id: String,
+    logical_human_owner_id: String,
     runtime_instance_id: String,
     runtime_generation: u64,
     grant_epoch: u64,
@@ -116,7 +117,7 @@ impl AttachmentArchiveInspectionRuntimeV1 {
         )?;
         let access = request_managed_runtime_event_access_v2(
             &mut control_channel,
-            &admission.logical_owner_id,
+            &admission.module_owner_id,
             &admission.registration_id,
             &admission.runtime_instance_id,
             admission.runtime_generation,
@@ -202,7 +203,7 @@ impl AttachmentArchiveInspectionRuntimeV1 {
             persistence,
             client_realtime: ArchiveInspectionClientRealtimePublisherV1::default(),
             limits,
-            logical_owner_id: admission.logical_owner_id.clone(),
+            logical_human_owner_id: admission.logical_human_owner_id.clone(),
             runtime_instance_id: admission.runtime_instance_id.clone(),
             runtime_generation: admission.runtime_generation,
             grant_epoch: admission.grant_epoch,
@@ -232,7 +233,7 @@ impl AttachmentArchiveInspectionRuntimeV1 {
                     .map_err(|_| ArchiveInspectionRuntimeErrorV1::InvalidDelivery)?;
                 self.persistence
                     .persist_scan_candidate(
-                        &self.logical_owner_id,
+                        &self.logical_human_owner_id,
                         &decoded.fact,
                         decoded.envelope_sha256,
                         consumed_at_unix_millis,
@@ -246,7 +247,7 @@ impl AttachmentArchiveInspectionRuntimeV1 {
                 {
                     self.persistence
                         .persist_canonical_safety_fact(
-                            &self.logical_owner_id,
+                            &self.logical_human_owner_id,
                             &decoded.fact,
                             decoded.envelope_sha256,
                             consumed_at_unix_millis,
@@ -310,7 +311,7 @@ impl AttachmentArchiveInspectionRuntimeV1 {
     ) -> Result<usize, ArchiveInspectionRuntimeErrorV1> {
         let pending = self
             .persistence
-            .pending_custody_delegation_requests(&self.logical_owner_id, 64)
+            .pending_custody_delegation_requests(&self.logical_human_owner_id, 64)
             .await
             .map_err(persistence_error)?;
         for item in &pending {
@@ -330,7 +331,11 @@ impl AttachmentArchiveInspectionRuntimeV1 {
             )
             .map_err(|_| ArchiveInspectionRuntimeErrorV1::InvalidJob)?;
             self.persistence
-                .store_custody_delegation_outbox(&self.logical_owner_id, &record, now_unix_millis)
+                .store_custody_delegation_outbox(
+                    &self.logical_human_owner_id,
+                    &record,
+                    now_unix_millis,
+                )
                 .await
                 .map_err(persistence_error)?;
         }
@@ -343,7 +348,7 @@ impl AttachmentArchiveInspectionRuntimeV1 {
     ) -> Result<usize, ArchiveInspectionRuntimeErrorV1> {
         relay_archive_custody_outbox_once_v1(
             &self.persistence,
-            &self.logical_owner_id,
+            &self.logical_human_owner_id,
             &self.connection,
             &self.publish_permit,
             now_unix_millis,
@@ -357,13 +362,13 @@ impl AttachmentArchiveInspectionRuntimeV1 {
         now_unix_millis: i64,
     ) -> Result<ArchiveInspectionJobTickV1, ArchiveInspectionRuntimeErrorV1> {
         self.persistence
-            .recover_expired_jobs(&self.logical_owner_id, now_unix_millis)
+            .recover_expired_jobs(&self.logical_human_owner_id, now_unix_millis)
             .await
             .map_err(persistence_error)?;
         let Some(claimed) = self
             .persistence
             .claim_next_job(
-                &self.logical_owner_id,
+                &self.logical_human_owner_id,
                 WORKER_ID,
                 self.runtime_generation,
                 self.grant_epoch,
@@ -444,7 +449,7 @@ impl AttachmentArchiveInspectionRuntimeV1 {
         };
         let response = dispatch_archive_inspection_client_request_v1(
             &self.persistence,
-            &self.logical_owner_id,
+            &self.logical_human_owner_id,
             request,
             now_unix_millis,
         )
@@ -482,7 +487,7 @@ impl AttachmentArchiveInspectionRuntimeV1 {
                 &self.persistence,
                 &mut self.control_channel,
                 &mut dispatcher,
-                &self.logical_owner_id,
+                &self.logical_human_owner_id,
             )
             .await
             .map_err(client_realtime_error);
@@ -636,7 +641,8 @@ fn validate_open(
 ) -> Result<(), ArchiveInspectionRuntimeErrorV1> {
     if descriptor.is_empty()
         || settings.is_empty()
-        || admission.logical_owner_id != ATTACHMENT_ARCHIVE_INSPECTION_OWNER_V1
+        || admission.module_owner_id != ATTACHMENT_ARCHIVE_INSPECTION_OWNER_V1
+        || !valid_owner_id(&admission.logical_human_owner_id)
         || admission.registration_id.is_empty()
         || admission.runtime_instance_id.is_empty()
         || admission.runtime_generation == 0
@@ -647,6 +653,14 @@ fn validate_open(
         return Err(ArchiveInspectionRuntimeErrorV1::Admission);
     }
     Ok(())
+}
+
+fn valid_owner_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 fn authenticate(

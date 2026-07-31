@@ -242,6 +242,7 @@ fn start_reserved_ai_inference_runtime_v1(
         event_hub_endpoint: String::new(),
         event_credential_revision: 0,
         settings_revision: 1,
+        logical_human_owner_id: "owner-1".to_owned(),
     };
     managed_launch::start_reserved_engine(
         supervisor,

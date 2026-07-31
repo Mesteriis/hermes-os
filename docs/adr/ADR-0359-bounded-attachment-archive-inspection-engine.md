@@ -4,7 +4,7 @@
 
 Дата: 2026-07-31
 
-Состояние реализации: частично реализовано. Отдельные
+Состояние реализации: реализовано. Отдельные
 `hermes-attachment-archive-inspection-api`,
 `hermes-attachment-archive-inspection-core` и
 `hermes-attachment-archive-inspection-zip` units реализуют provider-neutral
@@ -35,9 +35,10 @@ manifest. Runtime descriptor теперь предоставляет exact owner
 и ClientRealtime surfaces; managed control dispatch валидирует module/owner/
 contract identity, а replay publisher читает только owner-local status
 transitions и отправляет bounded status через общий Kernel realtime protocol.
-Live PostgreSQL/NATS/Blob/Gateway conformance, terminal SSE replay после
-restart и production gate
-`attachment_archive_inspection_v1` остаются открыты.
+Live PostgreSQL/NATS/Blob/Gateway conformance доказывает exact event-only
+custody handoff, NATS outage replay, terminal Gateway/SSE replay после restart
+без второго Blob transfer или parser run и privacy-negative client output.
+Production gate `attachment_archive_inspection_v1` открыт.
 
 Зависит от:
 

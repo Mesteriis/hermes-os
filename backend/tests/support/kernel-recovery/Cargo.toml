@@ -26,6 +26,9 @@ hermes-blob-client = { path = "../../../src/platform/blob/client" }
 hermes-attachment-security-contract = { path = "../../../src/attachment-security-contract" }
 hermes-attachment-security-persistence = { path = "../../../src/attachment-security-persistence" }
 hermes-attachment-security-runtime = { path = "../../../src/attachment-security-runtime" }
+hermes-attachment-archive-inspection-api = { path = "../../../src/attachment-archive-inspection-api" }
+hermes-attachment-archive-inspection-persistence = { path = "../../../src/attachment-archive-inspection-persistence" }
+hermes-attachment-archive-inspection-runtime = { path = "../../../src/attachment-archive-inspection-runtime" }
 hermes-communications-persistence = { path = "../../../src/communications-persistence" }
 hermes-communications-runtime = { path = "../../../src/communications-runtime" }
 hermes-communications-ai-source-api = { path = "../../../src/communications-ai-source-api" }

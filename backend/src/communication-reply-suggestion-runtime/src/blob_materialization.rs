@@ -158,57 +158,47 @@ pub(crate) fn release_reply_source_blobs_v1(
 ) -> Result<(), ReplySuggestionBlobErrorV1> {
     let ai_reference = id16(&ai_source.reference_id)?;
     let ai_sha256 = id32(&ai_source.sha256)?;
+    let reason = if accepted {
+        BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalAcceptedV1
+    } else {
+        BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalRejectedV1
+    };
     release(
         channel,
         dispatcher,
-        release_operation_id(run_id, b"ai"),
-        &ai_reference,
-        ai_source.declared_bytes,
-        &ai_sha256,
-        &ai_source.custody_transfer_source_proof,
-        accepted,
+        ManagedBlobCustodyReleaseRequestV1 {
+            operation_id: &release_operation_id(run_id, b"ai"),
+            capability_id: COMMUNICATION_REPLY_SUGGESTION_BLOB_CAPABILITY_ID_V1,
+            reference_id: &ai_reference,
+            declared_size: ai_source.declared_bytes,
+            receipt_sha256: &ai_sha256,
+            custody_source_proof: &ai_source.custody_transfer_source_proof,
+            reason,
+        },
     )?;
     release(
         channel,
         dispatcher,
-        release_operation_id(run_id, b"source"),
-        &source_cleanup.reference_id,
-        source_cleanup.declared_bytes,
-        &source_cleanup.sha256,
-        &source_cleanup.custody_proof,
-        accepted,
+        ManagedBlobCustodyReleaseRequestV1 {
+            operation_id: &release_operation_id(run_id, b"source"),
+            capability_id: COMMUNICATION_REPLY_SUGGESTION_BLOB_CAPABILITY_ID_V1,
+            reference_id: &source_cleanup.reference_id,
+            declared_size: source_cleanup.declared_bytes,
+            receipt_sha256: &source_cleanup.sha256,
+            custody_source_proof: &source_cleanup.custody_proof,
+            reason,
+        },
     )
 }
 
 fn release(
     channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
-    operation_id: [u8; 16],
-    reference_id: &[u8; 16],
-    declared_bytes: u64,
-    sha256: &[u8; 32],
-    proof: &[u8],
-    accepted: bool,
+    request: ManagedBlobCustodyReleaseRequestV1<'_>,
 ) -> Result<(), ReplySuggestionBlobErrorV1> {
-    request_managed_blob_custody_release_v2(
-        channel,
-        dispatcher,
-        ManagedBlobCustodyReleaseRequestV1 {
-            operation_id: &operation_id,
-            capability_id: COMMUNICATION_REPLY_SUGGESTION_BLOB_CAPABILITY_ID_V1,
-            reference_id,
-            declared_size: declared_bytes,
-            receipt_sha256: sha256,
-            custody_source_proof: proof,
-            reason: if accepted {
-                BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalAcceptedV1
-            } else {
-                BlobCustodyReleaseReasonV1::BlobCustodyReleaseReasonTerminalRejectedV1
-            },
-        },
-    )
-    .map(|_| ())
-    .map_err(|_| ReplySuggestionBlobErrorV1::Unavailable)
+    request_managed_blob_custody_release_v2(channel, dispatcher, request)
+        .map(|_| ())
+        .map_err(|_| ReplySuggestionBlobErrorV1::Unavailable)
 }
 
 fn read_exact(

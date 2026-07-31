@@ -135,7 +135,9 @@ fn storage_error(
 
 fn blob_transfer_failure(error: BlobClientError) -> BlobCustodyTransferFailureV1 {
     match error {
-        BlobClientError::Rejected(_) | BlobClientError::InvalidCustodyReleaseRequest => {
+        BlobClientError::Rejected(_)
+        | BlobClientError::InvalidCustodyDelegationRequest
+        | BlobClientError::InvalidCustodyReleaseRequest => {
             BlobCustodyTransferFailureV1::PolicyRejected
         }
         BlobClientError::InvalidSocketPath

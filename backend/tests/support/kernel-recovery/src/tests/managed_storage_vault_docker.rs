@@ -129,6 +129,8 @@ mod ai_inference_blob_fixture;
 mod ai_inference_managed_flow;
 #[path = "managed_storage_vault_docker/ai_inference_managed_setup.rs"]
 mod ai_inference_managed_setup;
+#[path = "managed_storage_vault_docker/archive_inspection_managed_setup.rs"]
+mod archive_inspection_managed_setup;
 #[path = "managed_storage_vault_docker/attachment_security_blob_fixture.rs"]
 mod attachment_security_blob_fixture;
 #[path = "managed_storage_vault_docker/attachment_security_clamav_fixture.rs"]
@@ -139,6 +141,9 @@ mod attachment_security_event_flow;
 mod attachment_security_managed_flow;
 #[path = "managed_storage_vault_docker/attachment_security_managed_setup.rs"]
 mod attachment_security_managed_setup;
+use archive_inspection_managed_setup::*;
+#[path = "managed_storage_vault_docker/archive_inspection_managed_flow.rs"]
+mod archive_inspection_managed_flow;
 #[path = "managed_storage_vault_docker/attachment_security_persistence_fixture.rs"]
 mod attachment_security_persistence_fixture;
 #[path = "managed_storage_vault_docker/mail_attachment_flow.rs"]

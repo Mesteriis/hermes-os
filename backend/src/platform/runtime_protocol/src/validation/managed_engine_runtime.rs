@@ -17,6 +17,7 @@ pub fn validate_managed_engine_runtime_configuration(
         .ok_or(ManagedEngineRuntimeValidationErrorV1::InvalidConfiguration)?;
     if configuration.major != 1
         || !valid_identifier(&configuration.logical_owner_id)
+        || !valid_identifier(&configuration.logical_human_owner_id)
         || !valid_identifier(&configuration.registration_id)
         || !valid_identifier(&configuration.runtime_instance_id)
         || configuration.runtime_generation == 0
@@ -112,6 +113,7 @@ mod tests {
             event_hub_endpoint: "nats://127.0.0.1:4222".to_owned(),
             event_credential_revision: 13,
             settings_revision: 17,
+            logical_human_owner_id: "owner-1".to_owned(),
         }
     }
 
@@ -155,6 +157,16 @@ mod tests {
     fn rejects_missing_settings_identity() {
         let mut configuration = configuration();
         configuration.settings_revision = 0;
+        assert_eq!(
+            validate_managed_engine_runtime_configuration(&configuration),
+            Err(ManagedEngineRuntimeValidationErrorV1::InvalidConfiguration)
+        );
+    }
+
+    #[test]
+    fn rejects_missing_human_owner_identity() {
+        let mut configuration = configuration();
+        configuration.logical_human_owner_id.clear();
         assert_eq!(
             validate_managed_engine_runtime_configuration(&configuration),
             Err(ManagedEngineRuntimeValidationErrorV1::InvalidConfiguration)

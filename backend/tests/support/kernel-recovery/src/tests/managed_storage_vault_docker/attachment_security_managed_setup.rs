@@ -3,15 +3,11 @@
 use super::*;
 
 use hermes_attachment_security_persistence::{
-    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V2, attachment_security_storage_bundle_v1,
+    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V6, attachment_security_storage_bundle_v1,
 };
 use hermes_attachment_security_runtime::{
     admission::{
-        ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID,
-        ATTACHMENT_SECURITY_CANDIDATE_OBSERVE_CAPABILITY_ID,
-        ATTACHMENT_SECURITY_COMMUNICATIONS_STATE_OBSERVE_CAPABILITY_ID,
         ATTACHMENT_SECURITY_OWNER_ID, ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID,
-        ATTACHMENT_SECURITY_VERDICT_PUBLISH_CAPABILITY_ID,
         attachment_security_module_descriptor_v1,
     },
     settings::attachment_security_settings_schema_bytes_v1,
@@ -52,13 +48,11 @@ pub(super) fn admit_attachment_security_runtime(
     let descriptor_bytes = descriptor.encode_to_vec();
     let registration = crate::modules::registration::registry::register(store, &descriptor_bytes)
         .expect("register exact Attachment Security descriptor");
-    let capability_ids = vec![
-        ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID.to_owned(),
-        ATTACHMENT_SECURITY_CANDIDATE_OBSERVE_CAPABILITY_ID.to_owned(),
-        ATTACHMENT_SECURITY_COMMUNICATIONS_STATE_OBSERVE_CAPABILITY_ID.to_owned(),
-        ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID.to_owned(),
-        ATTACHMENT_SECURITY_VERDICT_PUBLISH_CAPABILITY_ID.to_owned(),
-    ];
+    let capability_ids = descriptor
+        .capabilities
+        .iter()
+        .map(|capability| capability.capability_id.clone())
+        .collect::<Vec<_>>();
     crate::modules::registration::registry::approve_after_owner_authorization(
         store,
         registration.registration_id(),
@@ -86,7 +80,7 @@ pub(super) fn admit_attachment_security_runtime(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 ATTACHMENT_SECURITY_OWNER_ID,
-                u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V2),
+                u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V6),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -110,7 +104,7 @@ pub(super) fn prepare_attachment_security_runtime(
     let bundle = store
         .platform_storage_bundle(
             ATTACHMENT_SECURITY_OWNER_ID,
-            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V2),
+            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V6),
         )
         .expect("read Attachment Security Storage bundle")
         .expect("Attachment Security Storage bundle");
@@ -123,7 +117,7 @@ pub(super) fn prepare_attachment_security_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V2),
+            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V6),
             *bundle.digest(),
         )
         .expect("Attachment Security Storage binding issue"),
@@ -229,6 +223,7 @@ fn start_reserved_attachment_security_runtime(
         event_hub_endpoint: events.nats_endpoint().to_owned(),
         event_credential_revision: events.credential_revision(),
         settings_revision: ATTACHMENT_SECURITY_SETTINGS_REVISION,
+        logical_human_owner_id: "owner-1".to_owned(),
     };
     managed_launch::start_reserved_engine(
         supervisor,
@@ -246,7 +241,7 @@ fn start_reserved_attachment_security_runtime(
     }
 }
 
-fn attachment_security_release_artifact() -> SignedRuntimeArtifact {
+pub(super) fn attachment_security_release_artifact() -> SignedRuntimeArtifact {
     SignedRuntimeArtifact::new(
         ATTACHMENT_SECURITY_RELEASE_ARTIFACT_ID,
         attachment_security_binary(),

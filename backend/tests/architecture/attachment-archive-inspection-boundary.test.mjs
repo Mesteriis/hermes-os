@@ -5,7 +5,7 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../', BACKEND_ROOT);
 
-test('archive inspection client runtime is admitted without opening the planned live gate', async () => {
+test('archive inspection production gate is implemented as an exact engine inventory', async () => {
   const [inventorySource, policySource, adr] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
@@ -30,12 +30,12 @@ test('archive inspection client runtime is admitted without opening the planned 
     gate: 'attachment_archive_inspection_v1',
     role: 'engine',
     owner: 'attachment_archive_inspection',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_archive_inspection_client_gateway_v1',
+    'attachment_archive_inspection_v1',
   );
   assert(policy.implementation.ownerInventory.engines.includes(
     'attachment_archive_inspection',
@@ -50,6 +50,74 @@ test('archive inspection client runtime is admitted without opening the planned 
   assert.match(adr, /До выполнения всех пунктов inventory state остаётся `planned`/);
   assert.match(adr, /не распаковывает entry bytes/);
   assert.match(adr, /не изменяет safety lifecycle/);
+});
+
+test('archive inspection live evidence keeps module authority distinct from human tenancy', async () => {
+  const [protocol, validation, kernelDispatch, runtime, setup, flow, delegation, ownerAdr] =
+    await Promise.all([
+      readFile(
+        new URL(
+          'src/platform/runtime_protocol/proto/hermes/runtime/v1/managed_engine_runtime.proto',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'src/platform/runtime_protocol/src/validation/managed_engine_runtime.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL('src/kernel/src/identity/owner_control/dispatch.rs', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL('src/attachment-archive-inspection-runtime/src/runtime.rs', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/archive_inspection_managed_setup.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/archive_inspection_managed_flow.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL('src/attachment-security-persistence/src/delegation.rs', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'docs/adr/ADR-0361-explicit-human-owner-context-for-managed-engine-runtimes.md',
+          REPOSITORY_ROOT,
+        ),
+        'utf8',
+      ),
+    ]);
+
+  assert.match(protocol, /string logical_human_owner_id = 11/);
+  assert.match(validation, /valid_identifier\(&configuration\.logical_human_owner_id\)/);
+  assert.match(kernelDispatch, /logical_human_owner_id: logical_human_owner\.owner_id\(\)\.to_owned\(\)/);
+  assert.match(runtime, /module_owner_id: String/);
+  assert.match(runtime, /logical_human_owner_id: String/);
+  assert.match(setup, /logical_owner_id: ATTACHMENT_ARCHIVE_INSPECTION_OWNER_V1\.to_owned\(\)/);
+  assert.match(setup, /logical_human_owner_id: ARCHIVE_INSPECTION_LOGICAL_OWNER_ID_V1\.to_owned\(\)/);
+  assert.match(flow, /set_authenticated_nats_container_running\(false\)/);
+  assert.match(flow, /restart_archive_inspection_runtime_v1\(/);
+  assert.match(flow, /restart and replay must not transfer Blob custody or execute the parser twice/);
+  assert.match(flow, /assert_private_archive_data_absent/);
+  assert.match(delegation, /payload\.evidence_id == request\.safety_evidence_id/);
+  assert.doesNotMatch(delegation, /envelope\.message_id == request\.safety_message_id/);
+  assert.match(ownerAdr, /Состояние реализации: реализовано/);
 });
 
 test('archive inspection API is bounded and carries no Blob or provider authority', async () => {
