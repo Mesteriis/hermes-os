@@ -153,8 +153,18 @@ test('summary persistence owns atomic workflow state without foreign storage or 
 });
 
 test('summary runtime and assembly expose only exact event request and release boundaries', async () => {
-  const [policySource, manifest, admission, sourceResults, inference, realtime, managed, assemblyManifest, assembly] =
-    await Promise.all([
+  const [
+    policySource,
+    manifest,
+    admission,
+    sourceResults,
+    inference,
+    realtime,
+    managed,
+    assemblyManifest,
+    assembly,
+    release,
+  ] = await Promise.all([
       backendSource('architecture/policy.json'),
       backendSource('src/communication-summary-runtime/Cargo.toml'),
       backendSource('src/communication-summary-runtime/src/admission.rs'),
@@ -164,6 +174,7 @@ test('summary runtime and assembly expose only exact event request and release b
       backendSource('src/communication-summary-runtime/src/managed_runtime.rs'),
       backendSource('src/communication-summary-assembly/Cargo.toml'),
       backendSource('src/communication-summary-assembly/src/lib.rs'),
+      backendSource('scripts/materialize-dev-release.sh'),
     ]);
   const policy = JSON.parse(policySource);
 
@@ -200,6 +211,9 @@ test('summary runtime and assembly expose only exact event request and release b
   assert.match(assemblyManifest, /surface = "assembly"/);
   assert.match(assembly, /communication_summary\.release-artifacts\.json/);
   assert.match(assembly, /communication_summary_storage_bundle_v1/);
+  assert.match(release, /--package hermes-communication-summary-runtime/);
+  assert.match(release, /--package hermes-communication-summary-assembly/);
+  assert.match(release, /communication_summary\.release-artifacts\.json/);
   assert.doesNotMatch(
     `${manifest}\n${assemblyManifest}`,
     /hermes-communications-runtime|hermes-ai-inference-(core|runtime|persistence)|hermes-ollama/,

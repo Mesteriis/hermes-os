@@ -944,6 +944,88 @@ test('signs the exact Reply Suggestion runtime and Storage entries emitted by it
   }
 });
 
+test('signs the exact Communication Summary runtime and Storage entries emitted by its assembly', async () => {
+  const root = canonicalTemporaryDirectory('hermes-communication-summary-release-fragment-');
+  try {
+    const runtime = join(root, 'hermes-communication-summary-runtime');
+    const assemblyOutput = join(root, 'assembly');
+    const privateKeyPath = join(root, 'release-key.pem');
+    writeFileSync(runtime, 'communication summary runtime bytes', { mode: 0o700 });
+    const keyPair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    writeFileSync(
+      privateKeyPath,
+      keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      { mode: 0o600 },
+    );
+    execFileSync('cargo', [
+      'run',
+      '--quiet',
+      '-p',
+      'hermes-communication-summary-assembly',
+      '--',
+      '--build-id',
+      'build-communication-summary',
+      '--output-dir',
+      assemblyOutput,
+      '--runtime',
+      runtime,
+    ], { cwd: process.cwd(), stdio: 'pipe' });
+    const fragment = JSON.parse(readFileSync(
+      join(assemblyOutput, 'communication_summary.release-artifacts.json'),
+      'utf8',
+    ));
+    assert.deepEqual(
+      fragment.artifacts.map(({ artifact_id, artifact_kind }) => [artifact_id, artifact_kind]),
+      [
+        ['communication_summary.runtime.v1', 'module_runtime'],
+        ['communication_summary.storage.v1', 'storage_bundle'],
+      ],
+    );
+    assert.equal(fragment.owner_id, 'communication_summary');
+    assert.equal(fragment.module_id, 'hermes-communication-summary-runtime');
+
+    const input = composeReleaseCompilerInput({
+      verification_key_id: 'release-2026',
+      trust_root_revision: 1,
+      revision: 1,
+      distribution_id: 'hermes-desktop',
+      release_version: '1.0.0',
+      build_id: 'build-communication-summary',
+      target_triple: 'aarch64-apple-darwin',
+      generation: 1,
+      ...releaseProvenance,
+      additional_verification_keys: [],
+      artifacts: [{
+        artifact_kind: 'browser_bootstrap_bundle',
+        artifact_id: 'browser.bootstrap',
+        relative_path: 'browser/bootstrap.html',
+        source_path: browserBootstrapSource,
+        required: true,
+      }],
+    }, [fragment]);
+    const release = await compileReleaseDistribution(
+      input,
+      loadReleaseSigningKey(privateKeyPath),
+    );
+    const signed = decodeFields(release.signedManifest);
+    const manifest = decodeFields(signed.get(2)[0]);
+    const artifacts = manifest.get(8).map(decodeFields);
+
+    assert.deepEqual(
+      artifacts.map((artifact) => [fieldString(artifact, 2), artifact.get(1)[0]]),
+      [
+        ['browser.bootstrap', 4n],
+        ['communication_summary.runtime.v1', 1n],
+        ['communication_summary.storage.v1', 3n],
+      ],
+    );
+    assert.equal(artifacts[1].get(6)[0].length, 32);
+    assert.equal(artifacts[1].get(7)[0].length, 32);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('signs the exact Ollama AI runtime and Storage entries emitted by its assembly', async () => {
   const root = canonicalTemporaryDirectory('hermes-ollama-ai-release-fragment-');
   try {
