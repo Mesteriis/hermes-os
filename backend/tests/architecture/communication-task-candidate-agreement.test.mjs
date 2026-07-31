@@ -18,6 +18,11 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     core,
     extraction,
     lifecycle,
+    persistenceManifest,
+    persistence,
+    persistenceModel,
+    persistenceSchema,
+    migration,
     sourceManifest,
     sourceApi,
     sourceProtocol,
@@ -46,6 +51,11 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     readFile(new URL('src/communication-task-candidate-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-core/src/extraction.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-core/src/lifecycle.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-persistence/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-persistence/src/model.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-persistence/src/schema.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-persistence/migrations/0001_task_candidate.sql', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-task-source-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-task-source-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(
@@ -73,7 +83,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_contract_core_source_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_persistence_v1');
   assert.match(adr, /Состояние реализации: planned/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);
@@ -95,6 +105,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   for (const unit of [
     'hermes-communication-task-candidate-api',
     'hermes-communication-task-candidate-core',
+    'hermes-communication-task-candidate-persistence',
     'hermes-communications-task-source-api',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
@@ -115,6 +126,16 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(extraction, /duplicate_title_across_subject_and_body_becomes_one_combined_candidate/);
   assert.match(lifecycle, /SourceIdentityMismatch/);
   assert.doesNotMatch(`${core}\n${extraction}\n${lifecycle}`, /hermes_communications|hermes_review|hermes_tasks|ollama|reqwest|sqlx/);
+  assert.match(persistenceManifest, /owner = "communication_task_candidate_extraction"/);
+  assert.match(persistenceManifest, /surface = "persistence"/);
+  assert.match(persistence, /CommunicationTaskCandidatePersistenceV1/);
+  assert.match(persistenceModel, /candidate_codec_preserves_all_typed_fields_and_empty_result/);
+  assert.match(persistenceSchema, /communication_task_candidate_extraction_storage_bundle_v1/);
+  assert.match(migration, /communication_task_candidate_extraction_runs/);
+  assert.match(migration, /communication_task_candidate_extraction_inbox/);
+  assert.match(migration, /communication_task_candidate_extraction_outbox/);
+  assert.match(migration, /communication_task_candidate_extraction_realtime/);
+  assert.doesNotMatch(`${persistence}\n${persistenceModel}\n${migration}`, /communication_recipient_suggestion|hermes_communications|hermes_review|hermes_tasks|ollama|prompt|provider_id/);
   assert.match(sourceManifest, /owner = "communications"/);
   assert.match(sourceManifest, /surface = "contract"/);
   assert.match(sourceApi, /communications\.task-source\.v1/);

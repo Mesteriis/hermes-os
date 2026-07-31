@@ -988,6 +988,11 @@ const COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-communications-task-source-api', role: 'domain', owner: 'communications', surface: 'contract' },
 ];
 
+const COMMUNICATION_TASK_CANDIDATE_PERSISTENCE_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-communication-task-candidate-persistence', role: 'workflow', owner: 'communication_task_candidate_extraction', surface: 'persistence' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2785,6 +2790,14 @@ const COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_WORKSPACE_DEPENDENCY_ALL
   ],
 };
 
+const COMMUNICATION_TASK_CANDIDATE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-task-candidate-persistence': [
+    { name: 'hermes-communication-task-candidate-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3493,6 +3506,14 @@ const COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_THIRD_PARTY_DEPENDENCY_A
   ],
 };
 
+const COMMUNICATION_TASK_CANDIDATE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-task-candidate-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -3994,6 +4015,14 @@ const COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_INVENTORY = {
     'communication_task_candidate_extraction.source_prepared.v1',
     'communication_task_candidate_extraction.source_rejected.v1',
     'communications.task-source.v1',
+  ].sort(),
+};
+
+const COMMUNICATION_TASK_CANDIDATE_PERSISTENCE_INVENTORY = {
+  ...COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_INVENTORY,
+  businessCapabilities: [
+    ...COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_INVENTORY.businessCapabilities,
+    'communication_task_candidate_extraction.storage.v1',
   ].sort(),
 };
 
@@ -5228,6 +5257,17 @@ function expectedSlice(currentSlice) {
       packages: COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_PRODUCTION_PACKAGES,
       workspaceDependencies: COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: COMMUNICATION_TASK_CANDIDATE_CONTRACT_CORE_SOURCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_task_candidate_persistence_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_TASK_CANDIDATE_PERSISTENCE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_TASK_CANDIDATE_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies: COMMUNICATION_TASK_CANDIDATE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: COMMUNICATION_TASK_CANDIDATE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

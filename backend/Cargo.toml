@@ -82,6 +82,7 @@ members = [
   "src/communication-recipient-suggestion-assembly",
   "src/communication-task-candidate-api",
   "src/communication-task-candidate-core",
+  "src/communication-task-candidate-persistence",
   "src/communications-task-source-api",
   "src/ai-contracts",
   "src/ai-inference-core",
