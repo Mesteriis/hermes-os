@@ -152,6 +152,25 @@ pub fn validate_explanation_inference_result_v1(
     Ok(())
 }
 
+pub fn encode_explanation_inference_result_v1(
+    result: &CommunicationExplanationInferenceResultV1,
+) -> Result<Vec<u8>, AiContractValidationErrorV1> {
+    validate_explanation_inference_result_v1(result)?;
+    Ok(result.encode_to_vec())
+}
+
+pub fn decode_explanation_inference_result_v1(
+    bytes: &[u8],
+) -> Result<CommunicationExplanationInferenceResultV1, AiContractValidationErrorV1> {
+    let result = CommunicationExplanationInferenceResultV1::decode(bytes)
+        .map_err(|_| AiContractValidationErrorV1::InvalidResult)?;
+    validate_explanation_inference_result_v1(&result)?;
+    if result.encode_to_vec() != bytes {
+        return Err(AiContractValidationErrorV1::InvalidResult);
+    }
+    Ok(result)
+}
+
 pub fn validate_provider_explanation_request_v1(
     request: &AiProviderExplanationRequestV1,
 ) -> Result<(), AiContractValidationErrorV1> {

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_explanation_managed_runtime_v1",
+    "currentSlice": "communication_explanation_ai_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {

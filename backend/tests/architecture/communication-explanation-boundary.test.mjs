@@ -21,6 +21,13 @@ test('communication explanation agreement separates workflow domain engine and p
     aiProtocol,
     aiContracts,
     aiExplanationValidation,
+    aiExplanationCore,
+    aiExplanationSchema,
+    aiExplanationRepository,
+    aiRuntimeAdmission,
+    aiRuntimePorts,
+    aiExplanationWorker,
+    aiManagedRuntime,
     ollamaApi,
     persistenceManifest,
     persistenceSchema,
@@ -65,6 +72,13 @@ test('communication explanation agreement separates workflow domain engine and p
     readFile(new URL('src/ai-contracts/proto/hermes/ai/contracts/v1/ai.proto', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-contracts/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-contracts/src/explanation.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-core/src/explanation.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-persistence/migrations/0004_ai_explanation_runs.sql', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-persistence/src/explanation_repository.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-runtime/src/managed_ports.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-runtime/src/explanation_worker.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ollama-ai-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL('src/communication-explanation-persistence/Cargo.toml', BACKEND_ROOT),
@@ -127,7 +141,7 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.match(adr, /Состояние реализации: planned/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns explanation/i);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_explanation_managed_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_explanation_ai_runtime_v1');
   assert.match(workspace, /"src\/communication-explanation-api"/);
   assert.match(workspace, /"src\/communication-explanation-core"/);
   assert.match(workspace, /"src\/communication-explanation-persistence"/);
@@ -180,6 +194,24 @@ test('communication explanation agreement separates workflow domain engine and p
     /CommunicationSummary|CommunicationTranslation|\b(?:provider_id|model_id|endpoint|prompt)\b/,
   );
   assert.match(ollamaApi, /OLLAMA_AI_EXPLANATION_CAPABILITY_ID_V1/);
+  assert.match(aiExplanationCore, /build_explanation_provider_input_v1/);
+  assert.match(aiExplanationCore, /fixed-taxonomy/);
+  assert.match(aiExplanationCore, /provider_result\.reasons/);
+  assert.match(aiExplanationSchema, /ai_explanation_runs/);
+  assert.match(aiExplanationSchema, /result_exact_bytes/);
+  assert.doesNotMatch(aiExplanationSchema, /source_body|prompt_text|provider_id|model_id|endpoint/);
+  assert.match(aiExplanationRepository, /accept_explanation_run/);
+  assert.match(aiExplanationRepository, /decode_explanation_inference_result_v1/);
+  assert.match(aiRuntimeAdmission, /AI_EXPLANATION_REQUEST_CAPABILITY_ID_V1/);
+  assert.match(aiRuntimeAdmission, /AI_PROVIDER_EXPLANATION_CAPABILITY_ID_V1/);
+  assert.match(aiRuntimePorts, /ai_provider_explanation_contract_reference_v1/);
+  assert.match(aiExplanationWorker, /execute_explanation_payload_v1/);
+  assert.match(aiExplanationWorker, /ports\.explain/);
+  assert.match(aiManagedRuntime, /communication_explanation_inference_contract_reference_v1/);
+  assert.doesNotMatch(
+    `${aiExplanationCore}\n${aiExplanationRepository}\n${aiExplanationWorker}`,
+    /communication_summary|CommunicationSummary|communication_translation|CommunicationTranslation|ollama|provider_id|model_id|endpoint/,
+  );
   for (const capability of [
     'ai.explanation.request.v1',
     'ai.provider.explain.v1',

@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod explanation_model;
+mod explanation_repository;
 mod model;
 mod repository;
 pub mod schema;
@@ -8,6 +10,9 @@ mod summary_repository;
 mod translation_model;
 mod translation_repository;
 
+pub use explanation_model::{
+    AiExplanationPersistenceOutcomeV1, AiExplanationTransitionV1, PersistedAiExplanationRunV1,
+};
 pub use model::{
     AI_INFERENCE_RECOVERY_LIMIT_V1, AiInferencePersistenceErrorV1, AiInferencePersistenceOutcomeV1,
     AiInferenceTransitionV1, PersistedAiInferenceRunV1,

@@ -6,7 +6,8 @@ mod validation;
 
 pub use explanation::{
     compute_explanation_inference_request_digest_v1,
-    compute_provider_explanation_request_digest_v1, decode_explanation_source_content_v1,
+    compute_provider_explanation_request_digest_v1, decode_explanation_inference_result_v1,
+    decode_explanation_source_content_v1, encode_explanation_inference_result_v1,
     encode_explanation_source_content_v1, seal_explanation_inference_request_v1,
     validate_explanation_inference_request_v1, validate_explanation_inference_result_v1,
     validate_explanation_source_content_v1, validate_provider_explanation_request_v1,

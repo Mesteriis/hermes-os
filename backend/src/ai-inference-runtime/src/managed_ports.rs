@@ -1,20 +1,24 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_ai_contracts::{
-    AI_INFERENCE_BLOB_CAPABILITY_ID_V1, ai_provider_reply_generation_contract_reference_v1,
+    AI_INFERENCE_BLOB_CAPABILITY_ID_V1, ai_provider_explanation_contract_reference_v1,
+    ai_provider_reply_generation_contract_reference_v1,
     ai_provider_summary_generation_contract_reference_v1,
-    ai_provider_translation_contract_reference_v1, validate_provider_reply_generation_request_v1,
+    ai_provider_translation_contract_reference_v1, validate_provider_explanation_request_v1,
+    validate_provider_explanation_result_v1, validate_provider_reply_generation_request_v1,
     validate_provider_reply_generation_result_v1, validate_provider_summary_generation_request_v1,
     validate_provider_summary_generation_result_v1, validate_provider_translation_request_v1,
     validate_provider_translation_result_v1,
     wire::{
+        AiProviderExplanationRequestV1, AiProviderExplanationResultV1,
         AiProviderReplyGenerationRequestV1, AiProviderReplyGenerationResultV1,
         AiProviderSummaryGenerationRequestV1, AiProviderSummaryGenerationResultV1,
         AiProviderTranslationRequestV1, AiProviderTranslationResultV1,
     },
 };
 use hermes_ai_inference_core::{
-    AiInferenceExecutionPlanV1, AiSummaryExecutionPlanV1, AiTranslationExecutionPlanV1,
+    AiExplanationExecutionPlanV1, AiInferenceExecutionPlanV1, AiSummaryExecutionPlanV1,
+    AiTranslationExecutionPlanV1,
 };
 use hermes_blob_client::{
     BlobDataClient, ManagedBlobCustodyTransferRequestV1, ManagedBlobSessionRequestV1,
@@ -78,6 +82,16 @@ pub(crate) trait AiInferenceExecutionPortsV1 {
         &mut self,
         request: AiProviderTranslationRequestV1,
     ) -> Result<AiProviderTranslationResultV1, AiInferenceProviderPortErrorV1>;
+
+    fn materialize_explanation_source(
+        &mut self,
+        plan: &AiExplanationExecutionPlanV1,
+    ) -> Result<Zeroizing<Vec<u8>>, AiInferenceSourcePortErrorV1>;
+
+    fn explain(
+        &mut self,
+        request: AiProviderExplanationRequestV1,
+    ) -> Result<AiProviderExplanationResultV1, AiInferenceProviderPortErrorV1>;
 }
 
 pub(crate) struct ManagedAiInferenceExecutionPortsV1<'a> {
@@ -270,6 +284,67 @@ impl AiInferenceExecutionPortsV1 for ManagedAiInferenceExecutionPortsV1<'_> {
         let result = AiProviderTranslationResultV1::decode(response.response_payload.as_slice())
             .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
         validate_provider_translation_result_v1(&result)
+            .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
+        Ok(result)
+    }
+
+    fn materialize_explanation_source(
+        &mut self,
+        plan: &AiExplanationExecutionPlanV1,
+    ) -> Result<Zeroizing<Vec<u8>>, AiInferenceSourcePortErrorV1> {
+        materialize_source(
+            self.control_channel,
+            self.dispatcher,
+            &plan.source,
+            &plan.run_id,
+            &plan.request_digest,
+        )
+    }
+
+    fn explain(
+        &mut self,
+        mut request: AiProviderExplanationRequestV1,
+    ) -> Result<AiProviderExplanationResultV1, AiInferenceProviderPortErrorV1> {
+        validate_provider_explanation_request_v1(&request)
+            .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
+        let request_id: [u8; 16] = request
+            .request_id
+            .as_slice()
+            .try_into()
+            .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
+        let mut payload = request.encode_to_vec();
+        request.input_utf8.zeroize();
+        let routed = ManagedRuntimeModuleRequestRequestV1 {
+            request_id: request_id.to_vec(),
+            contract: Some(ai_provider_explanation_contract_reference_v1()),
+            request_payload: std::mem::take(&mut payload),
+            deadline_millis: MODULE_REQUEST_MAX_DEADLINE_MILLIS_V1,
+        };
+        validate_module_request_request_v1(&routed)
+            .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
+        let response = self
+            .control_channel
+            .request_next_with_dispatch(
+                ManagedRuntimeControlRequestV1 {
+                    operation: Some(Operation::RouteModuleRequest(routed)),
+                },
+                self.dispatcher,
+            )
+            .map_err(|_| AiInferenceProviderPortErrorV1::Unavailable)?;
+        if !response.error_code.is_empty() {
+            return Err(AiInferenceProviderPortErrorV1::Unavailable);
+        }
+        let Some(ControlResult::ModuleRequestRoute(response)) = response.result else {
+            return Err(AiInferenceProviderPortErrorV1::Unavailable);
+        };
+        validate_module_request_response_v1(&response)
+            .map_err(|_| AiInferenceProviderPortErrorV1::Unavailable)?;
+        if response.request_id != request_id || !response.error_code.is_empty() {
+            return Err(AiInferenceProviderPortErrorV1::Rejected);
+        }
+        let result = AiProviderExplanationResultV1::decode(response.response_payload.as_slice())
+            .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
+        validate_provider_explanation_result_v1(&result)
             .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
         Ok(result)
     }

@@ -1,8 +1,16 @@
 #![forbid(unsafe_code)]
 
+mod explanation;
 mod summary;
 mod translation;
 
+pub use explanation::{
+    AI_EXPLANATION_SOURCE_BODY_EXCERPT_BYTES_V1, AiExplanationExecutionPlanV1, AiExplanationRunV1,
+    accept_explanation_inference_v1, begin_explanation_inference_v1,
+    build_explanation_provider_input_v1, complete_explanation_inference_v1,
+    explanation_inference_execution_plan_v1, explanation_prompt_policy_sha256_v1,
+    reject_explanation_inference_v1,
+};
 pub use summary::{
     AI_SUMMARY_SOURCE_BODY_EXCERPT_BYTES_V1, AiSummaryExecutionPlanV1, AiSummaryRunV1,
     accept_summary_inference_v1, begin_summary_inference_v1, build_summary_provider_input_v1,
