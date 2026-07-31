@@ -609,4 +609,5 @@ reply workflow переносит Communications custody, создаёт отд�
 AI-target-bound Blob, хранит только bounded recovery receipts и Ack-ает source
 event после terminal inference и cleanup обоих Blob. Runtime unit реализована;
 unsigned assembly реализована отдельно; signed live orchestration и
-sender/subject context остаются открыты.
+sender/subject context остаются открыты. Dev release compiler уже включает
+exact runtime и Storage artifacts в подписанный manifest.

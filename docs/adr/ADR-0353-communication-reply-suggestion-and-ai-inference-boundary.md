@@ -63,9 +63,11 @@ admission, event-only source consumption, отдельную target-bound Blob
 materialization для AI, exact inference `request_rpc`, terminal cleanup до Ack
 и client-safe invalidation через общий replayable SSE. Отдельная
 `hermes-communication-reply-suggestion-assembly` materializes только unsigned
-descriptor, settings schema, owner-local Storage bundle и release fragment.
-Persistence не хранит source body, prompt или provider metadata. Signed live
-orchestration evidence ещё отсутствует; Communications source v1 пока
+descriptor, settings schema, owner-local Storage bundle и release fragment;
+dev release compiler включает exact runtime и Storage artifacts в подписанный
+distribution manifest. Persistence не хранит source body, prompt или provider
+metadata. Signed Kernel admission и live orchestration evidence ещё
+отсутствуют; Communications source v1 пока
 передаёт только body, поэтому sender/subject context не фабрикуется и остаётся
 отдельным открытым contract slice. Этот staged slice не открывает workflow
 gate.

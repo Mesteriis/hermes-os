@@ -301,10 +301,11 @@ test('reply suggestion runtime coordinates event source, AI request, Blob custod
 });
 
 test('reply suggestion assembly emits only unsigned workflow runtime and storage inputs', async () => {
-  const [manifest, assembly, cli] = await Promise.all([
+  const [manifest, assembly, cli, release] = await Promise.all([
     backendSource('src/communication-reply-suggestion-assembly/Cargo.toml'),
     backendSource('src/communication-reply-suggestion-assembly/src/lib.rs'),
     backendSource('src/communication-reply-suggestion-assembly/src/main.rs'),
+    backendSource('scripts/materialize-dev-release.sh'),
   ]);
 
   assert.match(manifest, /role = "workflow"/);
@@ -318,6 +319,9 @@ test('reply suggestion assembly emits only unsigned workflow runtime and storage
   assert.match(assembly, /create_new\(true\)/);
   assert.match(assembly, /mode\(0o600\)/);
   assert.match(cli, /--runtime/);
+  assert.match(release, /--package hermes-communication-reply-suggestion-runtime/);
+  assert.match(release, /--package hermes-communication-reply-suggestion-assembly/);
+  assert.match(release, /communication_reply_suggestion\.release-artifacts\.json/);
   assert.doesNotMatch(
     `${manifest}\n${assembly}\n${cli}`,
     /signing|private_key|launch|hermes-communications|hermes-ollama|\bprovider_id\b|\bmodel_id\b|prompt_text/,

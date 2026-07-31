@@ -146,6 +146,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-communication-bulk-action-assembly \
 	--package hermes-communication-cross-channel-forward-runtime \
 	--package hermes-communication-cross-channel-forward-assembly \
+	--package hermes-communication-reply-suggestion-runtime \
+	--package hermes-communication-reply-suggestion-assembly \
 	--package hermes-communication-delayed-delivery-runtime \
 	--package hermes-communication-delayed-delivery-assembly \
 	--package hermes-attachment-security-runtime \
@@ -201,6 +203,7 @@ communications_export_assembly="$assembly_root/communications-export"
 communication_delivery_intent_assembly="$assembly_root/communication-delivery-intent"
 communication_bulk_action_assembly="$assembly_root/communication-bulk-action"
 communication_cross_channel_forward_assembly="$assembly_root/communication-cross-channel-forward"
+communication_reply_suggestion_assembly="$assembly_root/communication-reply-suggestion"
 communication_delayed_delivery_assembly="$assembly_root/communication-delayed-delivery"
 attachment_security_assembly="$assembly_root/attachment-security"
 ollama_ai_assembly="$assembly_root/ollama-ai"
@@ -229,6 +232,10 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$communication_cross_channel_forward_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-communication-cross-channel-forward-runtime"
+"$cargo_target_dir/debug/hermes-communication-reply-suggestion-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$communication_reply_suggestion_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-communication-reply-suggestion-runtime"
 "$cargo_target_dir/debug/hermes-communication-delayed-delivery-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$communication_delayed_delivery_assembly" \
@@ -293,6 +300,7 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$communication_delivery_intent_assembly/communication_delivery_intent.release-artifacts.json" \
 	--artifact-fragment "$communication_bulk_action_assembly/communication_bulk_action.release-artifacts.json" \
 	--artifact-fragment "$communication_cross_channel_forward_assembly/communication_cross_channel_forward.release-artifacts.json" \
+	--artifact-fragment "$communication_reply_suggestion_assembly/communication_reply_suggestion.release-artifacts.json" \
 	--artifact-fragment "$communication_delayed_delivery_assembly/communication_delayed_delivery.release-artifacts.json" \
 	--artifact-fragment "$attachment_security_assembly/attachment-security.release-artifacts.json" \
 	--artifact-fragment "$ollama_ai_assembly/ollama-ai.release-artifacts.json" \

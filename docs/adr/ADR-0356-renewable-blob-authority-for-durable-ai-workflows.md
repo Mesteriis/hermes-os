@@ -12,8 +12,9 @@ bounded UTF-8 body, материализует отдельный AI-target-boun
 bounded request/cleanup receipts и подтверждает source event только после
 terminal inference и освобождения обоих Blob. Semantic request digest не
 включает короткоживущий custody proof; non-terminal exact replay может обновить
-только этот proof. Signed live managed orchestration ещё не реализована,
-поэтому `communication_reply_suggestion_v1` остаётся `planned`.
+только этот proof. Dev release compiler подписывает exact runtime и Storage
+artifacts, но signed Kernel admission и live managed orchestration ещё не
+реализованы, поэтому `communication_reply_suggestion_v1` остаётся `planned`.
 
 Уточняет:
 
