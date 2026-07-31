@@ -4,14 +4,12 @@
 
 Дата: 2026-07-31
 
-Состояние реализации: partial implementation. Реализованы distinct contracts,
-Communications source events, AI Engine и Ollama summary paths, пять отдельных
-workflow units, owner-local persistence/replay, signed release artifacts,
-authenticated Gateway Start/Get, replayable SSE и managed negative/restart/
-revoke contour. Gate `communication_summary_v1` остаётся `planned` до
-положительного live contour через настоящий Ollama process, завершения полного
-набора negative/fencing evidence и full pre-push; существующий Reply Suggestion
-contour не используется как доказательство Summary.
+Состояние реализации: implemented. Gate `communication_summary_v1` закрыт
+атомарно: distinct contracts, Communications source events, AI Engine и Ollama
+summary paths, пять отдельных workflow units, owner-local persistence/replay,
+signed release artifacts, authenticated Gateway Start/Get, replayable SSE,
+managed negative/restart/revoke/fencing contour и положительный live contour
+через настоящий Ollama process доказаны независимо от Reply Suggestion.
 
 Уточняет:
 

@@ -27,7 +27,7 @@ test('communication summary agreement keeps workflow domain engine and integrati
     gate: 'communication_summary_v1',
     role: 'workflow',
     owner: 'communication_summary',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'communications_ai_context_source_v1',
       'ai_inference_v1',
@@ -50,7 +50,7 @@ test('communication summary agreement keeps workflow domain engine and integrati
   assert.match(adr, /existing managed workflow admission/);
   assert.match(adr, /Kernel\/Gateway не компилируют summary schema/);
   assert.match(adr, /Task\/note\/deadline extraction не смешивается/);
-  assert.match(adr, /Gate[\s\S]*`communication_summary_v1`[\s\S]*остаётся `planned`/);
+  assert.match(adr, /Gate[\s\S]*`communication_summary_v1`[\s\S]*закрыт/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns summary/i);
 });
 
@@ -178,7 +178,7 @@ test('summary runtime and assembly expose only exact event request and release b
     ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_summary_build_units_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_summary_v1');
   assert.deepEqual(
     policy.implementation.productionPackages
       .filter(({ owner }) => owner === 'communication_summary')
@@ -242,6 +242,9 @@ test('signed Summary conformance crosses Gateway SSE event and request boundarie
   assert.match(flow, /COMMUNICATION_SUMMARY_QUERY_CONNECT_PATH_V1/);
   assert.match(flow, /read_terminal_summary_sse_event/);
   assert.match(flow, /route_communication_summary_as/);
+  assert.match(flow, /assert_communication_summary_runtime_fences/);
+  assert.match(flow, /stale Communication Summary runtime generation/);
+  assert.match(flow, /stale Communication Summary grant epoch/);
   assert.match(flow, /conflicting_request/);
   assert.match(flow, /CommunicationSummaryErrorCodeInvalidRequest/);
   assert.match(flow, /CommunicationSummaryErrorCodeSourceRejected/);

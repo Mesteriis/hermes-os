@@ -4405,7 +4405,7 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'communication_summary_build_units_v1') {
+  if (currentSlice === 'communication_summary_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: COMMUNICATION_SUMMARY_BUILD_UNITS_INVENTORY,

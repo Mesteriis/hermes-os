@@ -157,6 +157,7 @@ fn managed_communication_summary_reaches_ai_and_replays_through_gateway_sse() {
     let source_message_id: [u8; 16] = source_message_id
         .try_into()
         .expect("canonical source message ID");
+    assert_communication_summary_runtime_fences(&store, &supervisor, &summary, source_message_id);
     let wrong_owner = route_communication_summary_as(
         &store,
         &supervisor,
@@ -670,22 +671,8 @@ fn route_communication_summary_as(
         .effective_managed_launch_record(registration_id)
         .expect("read Communication Summary launch")
         .expect("Communication Summary launch is active");
-    let request = ModuleClientRequestV1 {
-        protocol_major: 1,
-        module_id: COMMUNICATION_SUMMARY_MODULE_ID_V1.to_owned(),
-        owner_id: COMMUNICATION_SUMMARY_OWNER_V1.to_owned(),
-        contract: Some(ContractReferenceV1 {
-            owner: COMMUNICATION_SUMMARY_OWNER_V1.to_owned(),
-            name: COMMUNICATION_SUMMARY_COMMAND_CONTRACT_NAME_V1.to_owned(),
-            major: COMMUNICATION_SUMMARY_CONTRACT_MAJOR_V1,
-            revision: COMMUNICATION_SUMMARY_CONTRACT_REVISION_V1,
-            schema_sha256: COMMUNICATION_SUMMARY_SCHEMA_SHA256.to_vec(),
-        }),
-        request_id,
-        request_payload: request.encode_to_vec(),
-        logical_owner_id: logical_owner_id.to_owned(),
-    }
-    .encode_to_vec();
+    let request =
+        encode_communication_summary_module_request_as(logical_owner_id, request_id, request);
     let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
         registration_id,
         launch.runtime_instance_id(),
@@ -702,6 +689,72 @@ fn route_communication_summary_as(
     .expect("route Communication Summary owner-fence request");
     ModuleClientResponseV1::decode(bytes.as_slice())
         .expect("decode Communication Summary owner-fence response")
+}
+
+fn assert_communication_summary_runtime_fences(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    summary: &StartedCommunicationSummaryRuntimeV1,
+    source_message_id: [u8; 16],
+) {
+    let request = encode_communication_summary_module_request_as(
+        COMMUNICATION_SUMMARY_LOGICAL_OWNER_ID_V1,
+        699,
+        start_request([0x7f; 16], source_message_id, 2),
+    );
+    for (runtime_generation, grant_epoch, label) in [
+        (
+            summary.runtime_generation + 1,
+            summary.grant_epoch,
+            "stale Communication Summary runtime generation",
+        ),
+        (
+            summary.runtime_generation,
+            summary.grant_epoch + 1,
+            "stale Communication Summary grant epoch",
+        ),
+    ] {
+        let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+            &summary.registration_id,
+            &summary.runtime_instance_id,
+            runtime_generation,
+            grant_epoch,
+            COMMUNICATION_SUMMARY_CAPABILITY_ID_V1,
+            &request,
+        );
+        assert_eq!(
+            crate::modules::capability::router::route_managed_client_request(
+                store,
+                &supervisor.relay_port(),
+                &route,
+            )
+            .expect_err(label),
+            "managed runtime fence is stale"
+        );
+    }
+}
+
+fn encode_communication_summary_module_request_as(
+    logical_owner_id: &str,
+    request_id: u64,
+    request: StartCommunicationSummaryRequestV1,
+) -> Vec<u8> {
+    ModuleClientRequestV1 {
+        protocol_major: 1,
+        module_id: COMMUNICATION_SUMMARY_MODULE_ID_V1.to_owned(),
+        owner_id: COMMUNICATION_SUMMARY_OWNER_V1.to_owned(),
+        contract: Some(ContractReferenceV1 {
+            owner: COMMUNICATION_SUMMARY_OWNER_V1.to_owned(),
+            name: COMMUNICATION_SUMMARY_COMMAND_CONTRACT_NAME_V1.to_owned(),
+            major: COMMUNICATION_SUMMARY_CONTRACT_MAJOR_V1,
+            revision: COMMUNICATION_SUMMARY_CONTRACT_REVISION_V1,
+            schema_sha256: COMMUNICATION_SUMMARY_SCHEMA_SHA256.to_vec(),
+        }),
+        request_id,
+        request_payload: request.encode_to_vec(),
+        logical_owner_id: logical_owner_id.to_owned(),
+    }
+    .encode_to_vec()
 }
 
 fn wait_for_terminal_summary(

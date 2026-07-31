@@ -583,7 +583,7 @@
       "gate": "communication_summary_v1",
       "role": "workflow",
       "owner": "communication_summary",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "communications_ai_context_source_v1",
         "ai_inference_v1",
