@@ -636,4 +636,6 @@ redelegation уже принятого Blob. Kernel проверяет predecess
 evidence lineage и current custodian runtime/grant, но не читает bytes или Blob
 metadata; следующий target получает новый proof только через typed durable
 event и выполняет обычный transfer, где Blob runtime остаётся final custody
-authority.
+authority. Runtime protocol, Kernel issuance, typed Blob client и Blob
+data-plane lineage validation реализованы; первый business event flow и live
+conformance остаются в Archive Inspection gate.

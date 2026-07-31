@@ -5,6 +5,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::v1::{
+    ManagedRuntimeBlobCustodyDelegationDeliveryV1, ManagedRuntimeBlobCustodyDelegationRequestV1,
     ManagedRuntimeBlobCustodyReleaseDeliveryV1, ManagedRuntimeBlobCustodyReleaseRequestV1,
     ManagedRuntimeBlobSessionDeliveryV1, ManagedRuntimeBlobSessionRequestV1,
     ManagedRuntimeClientRealtimePublishRequestV1, ManagedRuntimeClientRealtimePublishResponseV1,
@@ -31,6 +32,7 @@ const PROVIDER_CREDENTIAL_FIELD_TAG: u8 = 0x22;
 const BLOB_SESSION_FIELD_TAG: u8 = 0x32;
 const OWNER_DERIVED_KEY_FIELD_TAG: u8 = 0x3a;
 const BLOB_CUSTODY_RELEASE_FIELD_TAG: u8 = 0x72;
+const BLOB_CUSTODY_DELEGATION_FIELD_TAG: u8 = 0x7a;
 
 pub(crate) enum ManagedRuntimeInboundRequestV1 {
     Ready(ManagedRuntimeReadyRequestV1),
@@ -39,6 +41,7 @@ pub(crate) enum ManagedRuntimeInboundRequestV1 {
     ProviderCredential(ManagedRuntimeProviderCredentialRequestV1),
     OwnerDerivedKey(ManagedRuntimeOwnerDerivedKeyRequestV1),
     BlobSession(ManagedRuntimeBlobSessionRequestV1),
+    BlobCustodyDelegation(ManagedRuntimeBlobCustodyDelegationRequestV1),
     BlobCustodyRelease(ManagedRuntimeBlobCustodyReleaseRequestV1),
     ModuleQuery(ManagedRuntimeModuleQueryRequestV1),
     ModuleRequest(ManagedRuntimeModuleRequestRequestV1),
@@ -72,6 +75,11 @@ pub(crate) fn decode_typed_request(
             if crate::platform::blob::session::valid_request(&value) =>
         {
             Ok(ManagedRuntimeInboundRequestV1::BlobSession(value))
+        }
+        Some(Operation::DelegateBlobCustody(value))
+            if crate::platform::blob::session::valid_delegation_request(&value) =>
+        {
+            Ok(ManagedRuntimeInboundRequestV1::BlobCustodyDelegation(value))
         }
         Some(Operation::ReleaseBlobCustody(value))
             if crate::platform::blob::release::valid_request(&value) =>
@@ -535,6 +543,68 @@ fn blob_session_error_code(error: &str) -> &'static str {
     }
 }
 
+pub(crate) fn try_receive_blob_custody_delegation(
+    channel: &mut UnixStream,
+) -> Result<Option<ManagedRuntimeBlobCustodyDelegationRequestV1>, String> {
+    let Some(frame) = peek_complete_frame(channel)? else {
+        return Ok(None);
+    };
+    if frame.first() != Some(&BLOB_CUSTODY_DELEGATION_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = blob_custody_delegation_request(&frame)?
+        .ok_or_else(|| "managed runtime Blob custody delegation request is invalid".to_owned())?;
+    read_frame(channel)?;
+    Ok(Some(request))
+}
+
+pub(crate) fn blob_custody_delegation_request(
+    frame: &[u8],
+) -> Result<Option<ManagedRuntimeBlobCustodyDelegationRequestV1>, String> {
+    if frame.first() != Some(&BLOB_CUSTODY_DELEGATION_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = ManagedRuntimeControlRequestV1::decode(frame)
+        .map_err(|_| "managed runtime Blob custody delegation request is invalid".to_owned())?;
+    let Some(Operation::DelegateBlobCustody(value)) = request.operation else {
+        return Err("managed runtime Blob custody delegation request is invalid".to_owned());
+    };
+    crate::platform::blob::session::valid_delegation_request(&value)
+        .then_some(value)
+        .map(Some)
+        .ok_or_else(|| "managed runtime Blob custody delegation request is invalid".to_owned())
+}
+
+pub(crate) fn respond_blob_custody_delegation(
+    channel: &mut UnixStream,
+    result: Result<ManagedRuntimeBlobCustodyDelegationDeliveryV1, String>,
+) -> Result<(), String> {
+    write_frame(
+        channel,
+        &blob_custody_delegation_response(result).encode_to_vec(),
+    )
+}
+
+pub(crate) fn blob_custody_delegation_response(
+    result: Result<ManagedRuntimeBlobCustodyDelegationDeliveryV1, String>,
+) -> ManagedRuntimeControlResponseV1 {
+    match result {
+        Ok(delivery) => ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::BlobCustodyDelegation(delivery)),
+            error_code: String::new(),
+        },
+        Err(error) => ManagedRuntimeControlResponseV1 {
+            result: None,
+            error_code: if error.contains("unavailable") {
+                "managed_blob_custody_delegation_unavailable"
+            } else {
+                "managed_blob_custody_delegation_denied"
+            }
+            .to_owned(),
+        },
+    }
+}
+
 pub(crate) fn try_receive_blob_custody_release(
     channel: &mut UnixStream,
 ) -> Result<Option<ManagedRuntimeBlobCustodyReleaseRequestV1>, String> {
@@ -704,13 +774,15 @@ fn valid_configuration_instance_id(value: &str) -> bool {
 #[cfg(test)]
 mod blob_session_error_code_tests {
     use super::{
-        BLOB_CUSTODY_RELEASE_FIELD_TAG, ManagedRuntimeInboundRequestV1, VAULT_ROUTE_FIELD_TAG,
+        BLOB_CUSTODY_DELEGATION_FIELD_TAG, BLOB_CUSTODY_RELEASE_FIELD_TAG,
+        ManagedRuntimeInboundRequestV1, VAULT_ROUTE_FIELD_TAG, blob_custody_delegation_request,
         blob_custody_release_request, blob_session_error_code, decode_typed_request,
     };
     use hermes_runtime_protocol::v1::{
-        BlobCustodyReleaseReasonV1, ManagedRuntimeBlobCustodyReleaseRequestV1,
-        ManagedRuntimeControlRequestV1, ManagedRuntimeReadyRequestV1,
-        ManagedRuntimeVaultRouteRequestV1, managed_runtime_control_request_v1::Operation,
+        BlobCustodyReleaseReasonV1, ManagedRuntimeBlobCustodyDelegationRequestV1,
+        ManagedRuntimeBlobCustodyReleaseRequestV1, ManagedRuntimeControlRequestV1,
+        ManagedRuntimeReadyRequestV1, ManagedRuntimeVaultRouteRequestV1,
+        managed_runtime_control_request_v1::Operation,
     };
     use prost::Message;
 
@@ -776,6 +848,33 @@ mod blob_session_error_code_tests {
         assert_eq!(frame.first(), Some(&BLOB_CUSTODY_RELEASE_FIELD_TAG));
         assert!(
             blob_custody_release_request(&frame)
+                .expect("decode")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn custody_delegation_uses_its_exact_typed_oneof_tag() {
+        let frame = ManagedRuntimeControlRequestV1 {
+            operation: Some(Operation::DelegateBlobCustody(
+                ManagedRuntimeBlobCustodyDelegationRequestV1 {
+                    request_id: vec![1; 16],
+                    capability_id: "attachment_security.blob.v1".to_owned(),
+                    current_reference_id: vec![2; 16],
+                    predecessor_custody_source_proof: vec![3; 64],
+                    predecessor_evidence_id: vec![4; 16],
+                    predecessor_evidence_envelope_sha256: vec![5; 32],
+                    target_owner_id: "attachment_archive_inspection".to_owned(),
+                    target_module_id: "hermes-attachment-archive-inspection-runtime".to_owned(),
+                    target_capability_id: "attachment_archive_inspection.blob.v1".to_owned(),
+                },
+            )),
+        }
+        .encode_to_vec();
+
+        assert_eq!(frame.first(), Some(&BLOB_CUSTODY_DELEGATION_FIELD_TAG));
+        assert!(
+            blob_custody_delegation_request(&frame)
                 .expect("decode")
                 .is_some()
         );

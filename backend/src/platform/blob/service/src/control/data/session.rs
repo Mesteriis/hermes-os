@@ -7,7 +7,8 @@ use hermes_blob_protocol::{
 };
 use hermes_runtime_protocol::v1::{
     BlobBackupClassV1 as WireBackupClass, BlobCustodyReleaseGrantV1, BlobCustodyReleaseReasonV1,
-    BlobCustodyTransferGrantV1, BlobDataOperationV1, BlobDataSessionGrantV1,
+    BlobCustodySourceProofKindV1, BlobCustodySourceProofV1, BlobCustodyTransferGrantV1,
+    BlobDataOperationV1, BlobDataSessionGrantV1,
 };
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use prost::Message;
@@ -468,6 +469,9 @@ fn decode_transfer(
     grant: &BlobCustodyTransferGrantV1,
 ) -> Result<VerifiedBlobCustodyTransferV1, ()> {
     let source = grant.source.as_ref().ok_or(())?;
+    if !valid_source_proof_lineage(source) {
+        return Err(());
+    }
     let backup_class = backup_class(source.backup_class)?;
     let source_reference = BlobRefV1::new(
         source.reference_id.as_slice().try_into().map_err(|_| ())?,
@@ -551,6 +555,27 @@ fn decode_transfer(
     })
 }
 
+fn valid_source_proof_lineage(source: &BlobCustodySourceProofV1) -> bool {
+    match BlobCustodySourceProofKindV1::try_from(source.proof_kind).ok() {
+        None => false,
+        Some(
+            BlobCustodySourceProofKindV1::BlobCustodySourceProofKindUnspecifiedV1
+            | BlobCustodySourceProofKindV1::BlobCustodySourceProofKindOriginalWriteV1,
+        ) => source.delegation_id.is_empty() && source.predecessor_proof_sha256.is_empty(),
+        Some(
+            BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1,
+        ) => {
+            source.delegation_id.len() == 16
+                && source.delegation_id.iter().any(|byte| *byte != 0)
+                && source.predecessor_proof_sha256.len() == 32
+                && source
+                    .predecessor_proof_sha256
+                    .iter()
+                    .any(|byte| *byte != 0)
+        }
+    }
+}
+
 fn backup_class(value: i32) -> Result<BlobBackupClassV1, ()> {
     match WireBackupClass::try_from(value).map_err(|_| ())? {
         WireBackupClass::BlobBackupClassRequiredV1 => Ok(BlobBackupClassV1::Required),
@@ -564,7 +589,8 @@ fn backup_class(value: i32) -> Result<BlobBackupClassV1, ()> {
 mod tests {
     use hermes_runtime_protocol::v1::{
         BlobBackupClassV1 as WireBackupClass, BlobCustodyReleaseGrantV1,
-        BlobCustodyReleaseReasonV1, BlobCustodySourceProofV1, BlobCustodyTransferGrantV1,
+        BlobCustodyReleaseReasonV1, BlobCustodySourceProofKindV1, BlobCustodySourceProofV1,
+        BlobCustodyTransferGrantV1,
     };
     use p256::ecdsa::{Signature, SigningKey, signature::Signer};
     use prost::Message;
@@ -623,7 +649,7 @@ mod tests {
 
     #[test]
     fn kernel_signed_transfer_keeps_distinct_cross_owner_fences() {
-        let grant = BlobCustodyTransferGrantV1 {
+        let mut grant = BlobCustodyTransferGrantV1 {
             source: Some(BlobCustodySourceProofV1 {
                 owner_id: "mail".to_owned(),
                 registration_id: "mail-registration".to_owned(),
@@ -660,5 +686,15 @@ mod tests {
         );
         assert_eq!(verified.source_access().owner_id(), "mail");
         assert_eq!(verified.target_access().owner_id(), "attachment_security");
+
+        let source = grant.source.as_mut().expect("source");
+        source.proof_kind =
+            BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1
+                as i32;
+        assert!(decode_transfer(&grant).is_err());
+        let source = grant.source.as_mut().expect("source");
+        source.delegation_id = vec![4; 16];
+        source.predecessor_proof_sha256 = vec![5; 32];
+        assert!(decode_transfer(&grant).is_ok());
     }
 }

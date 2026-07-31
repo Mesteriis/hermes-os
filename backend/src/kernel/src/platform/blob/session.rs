@@ -7,8 +7,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use hermes_kernel_control_store::ModuleBlobOperationV1;
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::{
-    BlobCustodySourceProofV1, BlobCustodyTransferGrantV1, BlobDataOperationV1,
-    BlobDataSessionGrantV1, ManagedRuntimeBlobSessionDeliveryV1,
+    BlobCustodySourceProofKindV1, BlobCustodySourceProofV1, BlobCustodyTransferGrantV1,
+    BlobDataOperationV1, BlobDataSessionGrantV1, ManagedRuntimeBlobCustodyDelegationDeliveryV1,
+    ManagedRuntimeBlobCustodyDelegationRequestV1, ManagedRuntimeBlobSessionDeliveryV1,
     ManagedRuntimeBlobSessionRequestV1,
 };
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
@@ -31,6 +32,28 @@ const BLOB_CONTENT_KEY_SCHEMA_REVISION: u64 = 1;
 pub(super) enum CustodySourceProofUseV1 {
     Transfer,
     Release,
+}
+
+#[derive(Clone, Copy)]
+struct CustodyProofTargetV1<'a> {
+    owner_id: &'a str,
+    module_id: &'a str,
+    capability_id: &'a str,
+}
+
+#[derive(Clone, Copy)]
+struct CustodyProofLineageV1<'a> {
+    kind: BlobCustodySourceProofKindV1,
+    delegation_id: &'a [u8],
+    predecessor_proof_sha256: &'a [u8],
+}
+
+impl CustodyProofLineageV1<'static> {
+    const ORIGINAL_WRITE: Self = Self {
+        kind: BlobCustodySourceProofKindV1::BlobCustodySourceProofKindOriginalWriteV1,
+        delegation_id: &[],
+        predecessor_proof_sha256: &[],
+    };
 }
 
 /// Kernel authority for an exact direct Blob data operation.
@@ -159,10 +182,13 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
                 &signer,
                 &grant,
                 &request.receipt_sha256,
-                &request.custody_target_owner_id,
-                &request.custody_target_module_id,
-                &request.custody_target_capability_id,
+                CustodyProofTargetV1 {
+                    owner_id: &request.custody_target_owner_id,
+                    module_id: &request.custody_target_module_id,
+                    capability_id: &request.custody_target_capability_id,
+                },
                 now,
+                CustodyProofLineageV1::ORIGINAL_WRITE,
             )?
         };
         Ok(ManagedRuntimeBlobSessionDeliveryV1 {
@@ -172,6 +198,107 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
             grant: Some(grant),
             custody_transfer_source_proof,
             custody_transfer_grant: None,
+        })
+    }
+
+    fn delegate_blob_custody(
+        &self,
+        expectation: &ManagedRuntimeExpectation,
+        request: ManagedRuntimeBlobCustodyDelegationRequestV1,
+    ) -> Result<ManagedRuntimeBlobCustodyDelegationDeliveryV1, String> {
+        if !valid_delegation_request(&request)
+            || !current_managed_runtime_matches(
+                &*self.store,
+                expectation.registration_id(),
+                expectation.runtime_instance_id(),
+                expectation.runtime_generation(),
+                expectation.grant_epoch(),
+            )
+            .map_err(|_| custody_delegation_denied())?
+        {
+            return Err(custody_delegation_denied());
+        }
+        let source = catalog::resolve(&*self.store)?
+            .into_iter()
+            .find(|entry| {
+                entry.registration_id() == expectation.registration_id()
+                    && entry.capability_id() == request.capability_id
+                    && entry.grant_epoch() == expectation.grant_epoch()
+                    && entry
+                        .request()
+                        .allows(ModuleBlobOperationV1::CustodyTransfer)
+            })
+            .ok_or_else(custody_delegation_denied)?;
+        let now = now_unix_ms()?;
+        let signer = FileDeviceSigner::open_for_instance(&self.data_dir)?;
+        let predecessor = verify_custody_source_proof(
+            &request.predecessor_custody_source_proof,
+            &signer.public_key_sec1(),
+            self.store.snapshot().instance_id(),
+            now,
+            CustodySourceProofUseV1::Release,
+        )
+        .map_err(|_| custody_delegation_denied())?;
+        let expected_reference = transfer_target_reference(
+            &predecessor,
+            &request.predecessor_custody_source_proof,
+            &request.predecessor_evidence_id,
+            &request.predecessor_evidence_envelope_sha256,
+        );
+        if expected_reference.as_slice() != request.current_reference_id.as_slice()
+            || !proof_authorizes_target(
+                &predecessor,
+                source.request().owner_id(),
+                expectation.module_id(),
+                &request.capability_id,
+            )
+        {
+            return Err(custody_delegation_denied());
+        }
+        let grant = BlobDataSessionGrantV1 {
+            major: 1,
+            kernel_instance_id: self.store.snapshot().instance_id().to_owned(),
+            session_id: Vec::new(),
+            channel_binding_sha256: Vec::new(),
+            owner_id: source.request().owner_id().to_owned(),
+            registration_id: expectation.registration_id().to_owned(),
+            capability_id: request.capability_id,
+            runtime_instance_id: expectation.runtime_instance_id().to_owned(),
+            runtime_generation: expectation.runtime_generation(),
+            grant_epoch: expectation.grant_epoch(),
+            key_revision: BLOB_CONTENT_KEY_SCHEMA_REVISION,
+            quota_max_bytes: source.request().max_bytes(),
+            reference_id: request.current_reference_id,
+            declared_size: predecessor.declared_size,
+            reference_expires_at_unix_ms: predecessor.reference_expires_at_unix_ms,
+            backup_class: predecessor.backup_class,
+            operation: BlobDataOperationV1::BlobDataOperationCustodyTransferV1 as i32,
+            expires_at_unix_ms: 0,
+            kernel_authorization_signature_raw: Vec::new(),
+            blob_runtime_generation: 0,
+            expected_plaintext_sha256: predecessor.receipt_sha256.clone(),
+            custody_scope_id: source.request().custody_scope_id().to_owned(),
+        };
+        let predecessor_proof_sha256 = Sha256::digest(&request.predecessor_custody_source_proof);
+        let proof = issue_custody_source_proof(
+            &signer,
+            &grant,
+            &predecessor.receipt_sha256,
+            CustodyProofTargetV1 {
+                owner_id: &request.target_owner_id,
+                module_id: &request.target_module_id,
+                capability_id: &request.target_capability_id,
+            },
+            now,
+            CustodyProofLineageV1 {
+                kind: BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1,
+                delegation_id: &request.request_id,
+                predecessor_proof_sha256: predecessor_proof_sha256.as_slice(),
+            },
+        )?;
+        Ok(ManagedRuntimeBlobCustodyDelegationDeliveryV1 {
+            request_id: request.request_id,
+            custody_transfer_source_proof: proof,
         })
     }
 }
@@ -218,7 +345,8 @@ impl BlobSessionHandlerV1 {
                     && entry.grant_epoch() == source.grant_epoch
                     && entry.request().owner_id() == source.owner_id.as_str()
                     && entry.request().custody_scope_id() == source.custody_scope_id
-                    && entry.request().allows(ModuleBlobOperationV1::Write)
+                    && required_source_operation(&source)
+                        .is_some_and(|operation| entry.request().allows(operation))
             })
         {
             return Err("managed runtime Blob custody transfer is denied".to_owned());
@@ -228,6 +356,7 @@ impl BlobSessionHandlerV1 {
         getrandom::fill(&mut session_id)
             .map_err(|_| "managed runtime Blob custody transfer is unavailable".to_owned())?;
         let target_reference_id = transfer_target_reference(
+            &source,
             &request.custody_source_proof,
             &request.evidence_id,
             &request.evidence_envelope_sha256,
@@ -288,6 +417,31 @@ pub(crate) fn valid_request(request: &ManagedRuntimeBlobSessionRequestV1) -> boo
         && valid_custody_target_request(request)
 }
 
+pub(crate) fn valid_delegation_request(
+    request: &ManagedRuntimeBlobCustodyDelegationRequestV1,
+) -> bool {
+    request.request_id.len() == 16
+        && request.request_id.iter().any(|byte| *byte != 0)
+        && valid_target_token(&request.capability_id)
+        && request.current_reference_id.len() == 16
+        && request.current_reference_id.iter().any(|byte| *byte != 0)
+        && !request.predecessor_custody_source_proof.is_empty()
+        && request.predecessor_custody_source_proof.len() <= 2_048
+        && request.predecessor_evidence_id.len() == 16
+        && request
+            .predecessor_evidence_id
+            .iter()
+            .any(|byte| *byte != 0)
+        && request.predecessor_evidence_envelope_sha256.len() == 32
+        && request
+            .predecessor_evidence_envelope_sha256
+            .iter()
+            .any(|byte| *byte != 0)
+        && valid_target_token(&request.target_owner_id)
+        && valid_target_token(&request.target_module_id)
+        && valid_target_token(&request.target_capability_id)
+}
+
 pub(super) fn verify_custody_source_proof(
     encoded: &[u8],
     public_key_sec1: &[u8; 65],
@@ -319,6 +473,7 @@ pub(super) fn verify_custody_source_proof(
         || proof.issued_at_unix_ms > now_unix_ms
         || proof.kernel_authorization_signature_raw.len() != 64
         || !valid_proof_target(&proof)
+        || !valid_proof_lineage(&proof)
     {
         return Err("managed runtime Blob custody transfer is denied".to_owned());
     }
@@ -336,13 +491,29 @@ pub(super) fn verify_custody_source_proof(
 }
 
 fn transfer_target_reference(
+    source: &BlobCustodySourceProofV1,
     source_proof: &[u8],
     evidence_id: &[u8],
     envelope_hash: &[u8],
 ) -> [u8; 16] {
     let mut digest = Sha256::new();
-    digest.update(b"hermes.blob-custody-target-reference.v1\0");
-    digest.update(source_proof);
+    if source.proof_kind
+        == BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1
+            as i32
+    {
+        digest.update(b"hermes.blob-custody-target-reference.v2\0");
+        digest.update(&source.delegation_id);
+        digest.update(&source.reference_id);
+        digest.update(source.target_owner_id.as_bytes());
+        digest.update([0]);
+        digest.update(source.target_module_id.as_bytes());
+        digest.update([0]);
+        digest.update(source.target_capability_id.as_bytes());
+        digest.update([0]);
+    } else {
+        digest.update(b"hermes.blob-custody-target-reference.v1\0");
+        digest.update(source_proof);
+    }
     digest.update(evidence_id);
     digest.update(envelope_hash);
     let hash: [u8; 32] = digest.finalize().into();
@@ -358,10 +529,9 @@ fn issue_custody_source_proof(
     signer: &FileDeviceSigner,
     grant: &BlobDataSessionGrantV1,
     receipt_sha256: &[u8],
-    target_owner_id: &str,
-    target_module_id: &str,
-    target_capability_id: &str,
+    target: CustodyProofTargetV1<'_>,
     now_unix_ms: u64,
+    lineage: CustodyProofLineageV1<'_>,
 ) -> Result<Vec<u8>, String> {
     let expires_at_unix_ms = now_unix_ms
         .checked_add(CUSTODY_SOURCE_PROOF_TTL_MS)
@@ -384,15 +554,52 @@ fn issue_custody_source_proof(
         kernel_authorization_signature_raw: Vec::new(),
         backup_class: grant.backup_class,
         reference_expires_at_unix_ms: grant.reference_expires_at_unix_ms,
-        target_owner_id: target_owner_id.to_owned(),
-        target_module_id: target_module_id.to_owned(),
-        target_capability_id: target_capability_id.to_owned(),
+        target_owner_id: target.owner_id.to_owned(),
+        target_module_id: target.module_id.to_owned(),
+        target_capability_id: target.capability_id.to_owned(),
         custody_scope_id: grant.custody_scope_id.clone(),
+        proof_kind: lineage.kind as i32,
+        delegation_id: lineage.delegation_id.to_vec(),
+        predecessor_proof_sha256: lineage.predecessor_proof_sha256.to_vec(),
     };
     let mut message = b"hermes.blob-custody-source-proof.v1\0".to_vec();
     message.extend_from_slice(&proof.encode_to_vec());
     proof.kernel_authorization_signature_raw = signer.sign(&message).to_vec();
     Ok(proof.encode_to_vec())
+}
+
+fn valid_proof_lineage(proof: &BlobCustodySourceProofV1) -> bool {
+    match BlobCustodySourceProofKindV1::try_from(proof.proof_kind).ok() {
+        None => false,
+        Some(
+            BlobCustodySourceProofKindV1::BlobCustodySourceProofKindUnspecifiedV1
+            | BlobCustodySourceProofKindV1::BlobCustodySourceProofKindOriginalWriteV1,
+        ) => proof.delegation_id.is_empty() && proof.predecessor_proof_sha256.is_empty(),
+        Some(
+            BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1,
+        ) => {
+            proof.delegation_id.len() == 16
+                && proof.delegation_id.iter().any(|byte| *byte != 0)
+                && proof.predecessor_proof_sha256.len() == 32
+                && proof.predecessor_proof_sha256.iter().any(|byte| *byte != 0)
+        }
+    }
+}
+
+fn required_source_operation(proof: &BlobCustodySourceProofV1) -> Option<ModuleBlobOperationV1> {
+    match BlobCustodySourceProofKindV1::try_from(proof.proof_kind).ok()? {
+        BlobCustodySourceProofKindV1::BlobCustodySourceProofKindUnspecifiedV1
+        | BlobCustodySourceProofKindV1::BlobCustodySourceProofKindOriginalWriteV1 => {
+            Some(ModuleBlobOperationV1::Write)
+        }
+        BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1 => {
+            Some(ModuleBlobOperationV1::CustodyTransfer)
+        }
+    }
+}
+
+fn custody_delegation_denied() -> String {
+    "managed runtime Blob custody delegation is denied".to_owned()
 }
 
 const fn module_blob_operation(operation: BlobDataOperationV1) -> Option<ModuleBlobOperationV1> {
@@ -476,6 +683,32 @@ fn now_unix_ms() -> Result<u64, String> {
 mod tests {
     use super::*;
 
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let mut nonce = [0_u8; 16];
+            getrandom::fill(&mut nonce).expect("temporary directory nonce");
+            let name = nonce
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            let path = std::env::temp_dir().join(format!("hermes-blob-delegation-{name}"));
+            std::fs::create_dir(&path).expect("temporary data directory");
+            Self(path)
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn unbound_proof_remains_same_owner_only() {
         let proof = BlobCustodySourceProofV1 {
@@ -526,5 +759,219 @@ mod tests {
             ..Default::default()
         };
         assert!(!valid_proof_target(&partial));
+    }
+
+    #[test]
+    fn custody_delegation_request_is_exact_and_bounded() {
+        let mut request = ManagedRuntimeBlobCustodyDelegationRequestV1 {
+            request_id: vec![1; 16],
+            capability_id: "attachment_security.blob.v1".to_owned(),
+            current_reference_id: vec![2; 16],
+            predecessor_custody_source_proof: vec![3; 128],
+            predecessor_evidence_id: vec![4; 16],
+            predecessor_evidence_envelope_sha256: vec![5; 32],
+            target_owner_id: "attachment_archive_inspection".to_owned(),
+            target_module_id: "hermes-attachment-archive-inspection-runtime".to_owned(),
+            target_capability_id: "attachment_archive_inspection.blob.v1".to_owned(),
+        };
+        assert!(valid_delegation_request(&request));
+
+        request.target_module_id.clear();
+        assert!(!valid_delegation_request(&request));
+        request.target_module_id = "hermes-attachment-archive-inspection-runtime".to_owned();
+        request.predecessor_evidence_envelope_sha256 = vec![0; 32];
+        assert!(!valid_delegation_request(&request));
+    }
+
+    #[test]
+    fn proof_kind_selects_the_exact_source_capability_operation() {
+        let original = BlobCustodySourceProofV1 {
+            proof_kind: BlobCustodySourceProofKindV1::BlobCustodySourceProofKindOriginalWriteV1
+                as i32,
+            ..Default::default()
+        };
+        assert_eq!(
+            required_source_operation(&original),
+            Some(ModuleBlobOperationV1::Write)
+        );
+        assert!(valid_proof_lineage(&original));
+
+        let redelegated = BlobCustodySourceProofV1 {
+            proof_kind: BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1 as i32,
+            delegation_id: vec![7; 16],
+            predecessor_proof_sha256: vec![8; 32],
+            ..Default::default()
+        };
+        assert_eq!(
+            required_source_operation(&redelegated),
+            Some(ModuleBlobOperationV1::CustodyTransfer)
+        );
+        assert!(valid_proof_lineage(&redelegated));
+
+        let partial = BlobCustodySourceProofV1 {
+            proof_kind: BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1 as i32,
+            delegation_id: vec![7; 16],
+            ..Default::default()
+        };
+        assert!(!valid_proof_lineage(&partial));
+    }
+
+    #[test]
+    fn redelegation_retry_keeps_one_target_reference() {
+        let mut first = BlobCustodySourceProofV1 {
+            proof_kind: BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1 as i32,
+            delegation_id: vec![9; 16],
+            predecessor_proof_sha256: vec![10; 32],
+            reference_id: vec![11; 16],
+            target_owner_id: "attachment_archive_inspection".to_owned(),
+            target_module_id: "hermes-attachment-archive-inspection-runtime".to_owned(),
+            target_capability_id: "attachment_archive_inspection.blob.v1".to_owned(),
+            issued_at_unix_ms: 100,
+            kernel_authorization_signature_raw: vec![12; 64],
+            ..Default::default()
+        };
+        let first_bytes = first.encode_to_vec();
+        first.issued_at_unix_ms = 200;
+        first.kernel_authorization_signature_raw = vec![13; 64];
+        let second_bytes = first.encode_to_vec();
+        assert_ne!(first_bytes, second_bytes);
+
+        let evidence_id = [14; 16];
+        let envelope_sha256 = [15; 32];
+        assert_eq!(
+            transfer_target_reference(&first, &first_bytes, &evidence_id, &envelope_sha256),
+            transfer_target_reference(&first, &second_bytes, &evidence_id, &envelope_sha256),
+        );
+    }
+
+    #[test]
+    fn original_write_reference_remains_bound_to_exact_proof_bytes() {
+        let source = BlobCustodySourceProofV1 {
+            proof_kind: BlobCustodySourceProofKindV1::BlobCustodySourceProofKindOriginalWriteV1
+                as i32,
+            ..Default::default()
+        };
+        assert_ne!(
+            transfer_target_reference(&source, &[1], &[2; 16], &[3; 32]),
+            transfer_target_reference(&source, &[4], &[2; 16], &[3; 32]),
+        );
+    }
+
+    #[test]
+    fn signed_predecessor_lineage_mints_only_an_exact_redelegation() {
+        let directory = TestDirectory::new();
+        let (signer, _) =
+            FileDeviceSigner::open_or_create_for_instance(directory.path()).expect("signer");
+        let predecessor_grant = BlobDataSessionGrantV1 {
+            major: 1,
+            kernel_instance_id: "kernel-1".to_owned(),
+            owner_id: "mail".to_owned(),
+            registration_id: "mail-registration".to_owned(),
+            capability_id: "mail.blob.v1".to_owned(),
+            runtime_instance_id: "mail-runtime".to_owned(),
+            runtime_generation: 3,
+            grant_epoch: 4,
+            key_revision: 1,
+            reference_id: vec![1; 16],
+            declared_size: 42,
+            backup_class: 1,
+            custody_scope_id: "mail-blob-custody".to_owned(),
+            ..Default::default()
+        };
+        let predecessor_bytes = issue_custody_source_proof(
+            &signer,
+            &predecessor_grant,
+            &[2; 32],
+            CustodyProofTargetV1 {
+                owner_id: "attachment_security",
+                module_id: "hermes-attachment-security-runtime",
+                capability_id: "attachment_security.blob.v1",
+            },
+            100,
+            CustodyProofLineageV1::ORIGINAL_WRITE,
+        )
+        .expect("predecessor proof");
+        let predecessor = verify_custody_source_proof(
+            &predecessor_bytes,
+            &signer.public_key_sec1(),
+            "kernel-1",
+            101,
+            CustodySourceProofUseV1::Release,
+        )
+        .expect("verified predecessor");
+        let evidence_id = [3; 16];
+        let evidence_sha256 = [4; 32];
+        let current_reference = transfer_target_reference(
+            &predecessor,
+            &predecessor_bytes,
+            &evidence_id,
+            &evidence_sha256,
+        );
+        let current_grant = BlobDataSessionGrantV1 {
+            major: 1,
+            kernel_instance_id: "kernel-1".to_owned(),
+            owner_id: "attachment_security".to_owned(),
+            registration_id: "security-registration".to_owned(),
+            capability_id: "attachment_security.blob.v1".to_owned(),
+            runtime_instance_id: "security-runtime".to_owned(),
+            runtime_generation: 5,
+            grant_epoch: 6,
+            key_revision: 1,
+            reference_id: current_reference.to_vec(),
+            declared_size: predecessor.declared_size,
+            backup_class: predecessor.backup_class,
+            custody_scope_id: "attachment-security-custody".to_owned(),
+            ..Default::default()
+        };
+        let predecessor_sha256 = Sha256::digest(&predecessor_bytes);
+        let redelegated_bytes = issue_custody_source_proof(
+            &signer,
+            &current_grant,
+            &predecessor.receipt_sha256,
+            CustodyProofTargetV1 {
+                owner_id: "attachment_archive_inspection",
+                module_id: "hermes-attachment-archive-inspection-runtime",
+                capability_id: "attachment_archive_inspection.blob.v1",
+            },
+            200,
+            CustodyProofLineageV1 {
+                kind: BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1,
+                delegation_id: &[5; 16],
+                predecessor_proof_sha256: predecessor_sha256.as_slice(),
+            },
+        )
+        .expect("redelegated proof");
+        let redelegated = verify_custody_source_proof(
+            &redelegated_bytes,
+            &signer.public_key_sec1(),
+            "kernel-1",
+            201,
+            CustodySourceProofUseV1::Transfer,
+        )
+        .expect("verified redelegation");
+        assert_eq!(redelegated.reference_id, current_reference);
+        assert_eq!(
+            required_source_operation(&redelegated),
+            Some(ModuleBlobOperationV1::CustodyTransfer)
+        );
+        assert!(proof_authorizes_target(
+            &redelegated,
+            "attachment_archive_inspection",
+            "hermes-attachment-archive-inspection-runtime",
+            "attachment_archive_inspection.blob.v1",
+        ));
+
+        let mut altered = redelegated;
+        altered.target_owner_id = "communications".to_owned();
+        assert!(
+            verify_custody_source_proof(
+                &altered.encode_to_vec(),
+                &signer.public_key_sec1(),
+                "kernel-1",
+                201,
+                CustodySourceProofUseV1::Transfer,
+            )
+            .is_err()
+        );
     }
 }

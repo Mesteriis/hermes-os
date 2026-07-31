@@ -4,9 +4,13 @@
 
 Дата: 2026-07-31
 
-Состояние реализации: решение принято, runtime protocol, Kernel control plane,
-Blob client и conformance ещё не реализованы. До их реализации существующий
-target-bound proof нельзя переиспользовать для второго cross-owner handoff.
+Состояние реализации: runtime protocol, Kernel control plane, Blob client и
+Blob data-plane structural validation реализованы. Unit evidence доказывает
+exact wire operation, signed predecessor lineage, target binding, distinction
+между source `Write` и `CustodyTransfer`, deterministic reference при retry и
+fail-closed partial lineage. Business request/result events и managed live
+conformance первого consumer остаются частью открытого Archive Inspection
+gate; существующий proof всё ещё нельзя переиспользовать напрямую.
 
 Зависит от:
 

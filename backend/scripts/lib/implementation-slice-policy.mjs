@@ -4134,7 +4134,10 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'attachment_archive_inspection_persistence_join_v1') {
+  if (
+    currentSlice === 'attachment_archive_inspection_persistence_join_v1'
+    || currentSlice === 'blob_current_custodian_redelegation_v1'
+  ) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_INVENTORY,

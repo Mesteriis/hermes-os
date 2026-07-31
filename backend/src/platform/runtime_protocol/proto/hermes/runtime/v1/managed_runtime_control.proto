@@ -133,6 +133,24 @@ message ManagedRuntimeBlobCustodyReleaseDeliveryV1 {
   BlobCustodyReleaseOutcomeV1 outcome = 2;
   uint64 delete_not_before_unix_ms = 3;
 }
+// Current custodian asks Kernel to mint one exact target-bound proof from
+// already accepted custody lineage. Runtime/grant coordinates come only from
+// the authenticated managed channel.
+message ManagedRuntimeBlobCustodyDelegationRequestV1 {
+  bytes request_id = 1;
+  string capability_id = 2;
+  bytes current_reference_id = 3;
+  bytes predecessor_custody_source_proof = 4;
+  bytes predecessor_evidence_id = 5;
+  bytes predecessor_evidence_envelope_sha256 = 6;
+  string target_owner_id = 7;
+  string target_module_id = 8;
+  string target_capability_id = 9;
+}
+message ManagedRuntimeBlobCustodyDelegationDeliveryV1 {
+  bytes request_id = 1;
+  bytes custody_transfer_source_proof = 2;
+}
 // Caller-to-Kernel request for one descriptor-declared query dependency.
 // Target process identity and capability are deliberately absent: Kernel
 // resolves the single current approved provider of the exact contract.
@@ -210,6 +228,7 @@ message ManagedRuntimeControlRequestV1 {
     ManagedRuntimeModuleRequestRequestV1 route_module_request = 12;
     ManagedRuntimeModuleRequestDeliveryV1 deliver_module_request = 13;
     ManagedRuntimeBlobCustodyReleaseRequestV1 release_blob_custody = 14;
+    ManagedRuntimeBlobCustodyDelegationRequestV1 delegate_blob_custody = 15;
   }
 }
 message ManagedRuntimeControlAckV1 {}
@@ -229,6 +248,7 @@ message ManagedRuntimeControlResponseV1 {
     ManagedRuntimeModuleRequestResponseV1 module_request_route = 12;
     ManagedRuntimeModuleRequestResponseV1 module_request_delivery = 13;
     ManagedRuntimeBlobCustodyReleaseDeliveryV1 blob_custody_release = 14;
+    ManagedRuntimeBlobCustodyDelegationDeliveryV1 blob_custody_delegation = 16;
   }
   string error_code = 15;
 }

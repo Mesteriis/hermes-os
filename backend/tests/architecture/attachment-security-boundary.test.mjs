@@ -395,8 +395,13 @@ test('Cross-owner Blob custody binds a public module audience and current runtim
   ]);
 
   assert.match(controlProtocol, /string custody_target_module_id = 14;/);
+  assert.match(controlProtocol, /ManagedRuntimeBlobCustodyDelegationRequestV1/);
+  assert.match(controlProtocol, /ManagedRuntimeBlobCustodyDelegationDeliveryV1/);
   assert.doesNotMatch(controlProtocol, /custody_target_registration_id/);
   assert.match(blobProtocol, /string target_module_id = 19;/);
+  assert.match(blobProtocol, /BlobCustodySourceProofKindV1 proof_kind = 22;/);
+  assert.match(blobProtocol, /bytes delegation_id = 23;/);
+  assert.match(blobProtocol, /bytes predecessor_proof_sha256 = 24;/);
   assert.doesNotMatch(blobProtocol, /string target_registration_id = 19;/);
   assert.match(
     attachmentContract,
@@ -424,9 +429,18 @@ test('Cross-owner Blob custody binds a public module audience and current runtim
   const transfer = kernelSession.slice(transferStart, transferEnd);
   assert.match(transfer, /catalog::resolve\(&\*self\.store\)/);
   assert.match(transfer, /entry\.grant_epoch\(\) == source\.grant_epoch/);
-  assert.match(transfer, /entry\.request\(\)\.allows\(ModuleBlobOperationV1::Write\)/);
+  assert.match(transfer, /required_source_operation\(&source\)/);
+  assert.match(
+    kernelSession,
+    /BlobCustodySourceProofKindOriginalWriteV1[\s\S]*Some\(ModuleBlobOperationV1::Write\)/,
+  );
+  assert.match(
+    kernelSession,
+    /BlobCustodySourceProofKindCurrentCustodianRedelegationV1[\s\S]*Some\(ModuleBlobOperationV1::CustodyTransfer\)/,
+  );
   assert.doesNotMatch(transfer, /current_managed_runtime_matches/);
   assert.doesNotMatch(blobSession, /source\.owner_id != target_reference\.owner_id\(\)/);
+  assert.match(blobSession, /valid_source_proof_lineage\(source\)/);
   assert.match(blobSession, /kernel_signed_transfer_keeps_distinct_cross_owner_fences/);
 });
 
@@ -621,7 +635,7 @@ test('Attachment Security remains one exact engine after Mail integration admiss
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_archive_inspection_persistence_join_v1',
+    'blob_current_custodian_redelegation_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.engines, [
     'ai',

@@ -53,6 +53,12 @@ message BlobDataSessionGrantV1 {
 // Durable, non-readable proof that an exact producer-owned Blob reference was
 // admitted for a typed evidence receipt. It is not a Blob data grant: only the
 // custody-transfer platform operation may consume it.
+enum BlobCustodySourceProofKindV1 {
+  BLOB_CUSTODY_SOURCE_PROOF_KIND_UNSPECIFIED_V1 = 0;
+  BLOB_CUSTODY_SOURCE_PROOF_KIND_ORIGINAL_WRITE_V1 = 1;
+  BLOB_CUSTODY_SOURCE_PROOF_KIND_CURRENT_CUSTODIAN_REDELEGATION_V1 = 2;
+}
+
 message BlobCustodySourceProofV1 {
   uint32 major = 1;
   string kernel_instance_id = 2;
@@ -79,6 +85,13 @@ message BlobCustodySourceProofV1 {
   // Stable source at-rest custody. The target scope is resolved from the
   // current target descriptor rather than accepted from this source proof.
   string custody_scope_id = 21;
+  // Missing on pre-ADR-0360 proofs and interpreted only as ORIGINAL_WRITE.
+  BlobCustodySourceProofKindV1 proof_kind = 22;
+  // Present only for CURRENT_CUSTODIAN_REDELEGATION. It keeps the next target
+  // reference deterministic across safe issuance retries.
+  bytes delegation_id = 23;
+  // SHA-256 of the exact predecessor proof used to establish custody lineage.
+  bytes predecessor_proof_sha256 = 24;
 }
 
 // One-use Kernel authorization for an internal Blob rewrap from the source

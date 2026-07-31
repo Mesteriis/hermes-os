@@ -35,7 +35,7 @@ test('archive inspection persistence is admitted without opening the planned gat
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_archive_inspection_persistence_join_v1',
+    'blob_current_custodian_redelegation_v1',
   );
   assert(policy.implementation.ownerInventory.engines.includes(
     'attachment_archive_inspection',

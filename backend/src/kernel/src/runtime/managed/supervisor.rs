@@ -387,6 +387,12 @@ fn process_typed_requests(
         return Ok(true);
     }
     if let Some(request) =
+        managed_runtime_control::inbound::try_receive_blob_custody_delegation(channel)?
+    {
+        dispatch_blob_custody_delegation(channel, expectation, handlers.blob_session, request)?;
+        return Ok(true);
+    }
+    if let Some(request) =
         managed_runtime_control::inbound::try_receive_blob_custody_release(channel)?
     {
         dispatch_blob_custody_release(
@@ -398,6 +404,18 @@ fn process_typed_requests(
         return Ok(true);
     }
     Ok(false)
+}
+
+fn dispatch_blob_custody_delegation(
+    channel: &mut std::os::unix::net::UnixStream,
+    expectation: &ManagedRuntimeExpectation,
+    handler: Option<&dyn ManagedRuntimeBlobSessionHandler>,
+    request: hermes_runtime_protocol::v1::ManagedRuntimeBlobCustodyDelegationRequestV1,
+) -> Result<(), String> {
+    let result = handler
+        .ok_or_else(|| "managed runtime Blob custody delegation route is not available".to_owned())?
+        .delegate_blob_custody(expectation, request);
+    managed_runtime_control::inbound::respond_blob_custody_delegation(channel, result)
 }
 
 fn dispatch_blob_custody_release(

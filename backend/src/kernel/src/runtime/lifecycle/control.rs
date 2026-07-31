@@ -13,7 +13,8 @@ use hermes_kernel_control_store::{
 };
 use hermes_runtime_protocol::managed_control::ManagedControlChannelV2;
 use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeResponseV1, ManagedRuntimeBlobCustodyReleaseDeliveryV1,
+    DescribeManagedRuntimeResponseV1, ManagedRuntimeBlobCustodyDelegationDeliveryV1,
+    ManagedRuntimeBlobCustodyDelegationRequestV1, ManagedRuntimeBlobCustodyReleaseDeliveryV1,
     ManagedRuntimeBlobCustodyReleaseRequestV1, ManagedRuntimeBlobSessionDeliveryV1,
     ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeClientRealtimePublishRequestV1,
     ManagedRuntimeClientRealtimePublishResponseV1, ManagedRuntimeControlRequestV1,
@@ -75,6 +76,12 @@ pub trait ManagedRuntimeBlobSessionHandler: Send + Sync {
         expectation: &ManagedRuntimeExpectation,
         request: ManagedRuntimeBlobSessionRequestV1,
     ) -> Result<ManagedRuntimeBlobSessionDeliveryV1, String>;
+
+    fn delegate_blob_custody(
+        &self,
+        expectation: &ManagedRuntimeExpectation,
+        request: ManagedRuntimeBlobCustodyDelegationRequestV1,
+    ) -> Result<ManagedRuntimeBlobCustodyDelegationDeliveryV1, String>;
 }
 
 pub trait ManagedRuntimeBlobCustodyReleaseHandler: Send + Sync {
@@ -177,6 +184,17 @@ pub(crate) fn dispatch_typed_request(
                         "managed runtime Blob session handler is not available".to_owned()
                     })
                     .and_then(|handler| handler.issue_blob_session(expectation, request)),
+            ))
+        }
+        inbound::ManagedRuntimeInboundRequestV1::BlobCustodyDelegation(request) => {
+            Ok(inbound::blob_custody_delegation_response(
+                handlers
+                    .blob_session
+                    .ok_or_else(|| {
+                        "managed runtime Blob custody delegation handler is not available"
+                            .to_owned()
+                    })
+                    .and_then(|handler| handler.delegate_blob_custody(expectation, request)),
             ))
         }
         inbound::ManagedRuntimeInboundRequestV1::BlobCustodyRelease(request) => {
@@ -540,6 +558,16 @@ pub(crate) fn relay_with_control_routes(
                 .ok_or_else(|| "managed runtime Blob session handler is not available".to_owned())?
                 .issue_blob_session(expectation, request);
             inbound::respond_blob_session(channel, result)?;
+            continue;
+        }
+        if let Ok(Some(request)) = inbound::blob_custody_delegation_request(&frame) {
+            let result = handlers
+                .blob_session
+                .ok_or_else(|| {
+                    "managed runtime Blob custody delegation handler is not available".to_owned()
+                })?
+                .delegate_blob_custody(expectation, request);
+            inbound::respond_blob_custody_delegation(channel, result)?;
             continue;
         }
         if let Ok(Some(request)) = inbound::blob_custody_release_request(&frame) {
