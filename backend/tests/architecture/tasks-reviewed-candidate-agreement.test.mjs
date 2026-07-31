@@ -30,6 +30,9 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
     blob,
     eventOutbox,
     runtimeMain,
+    assemblyManifest,
+    assembly,
+    assemblyMain,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -63,15 +66,19 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
     readFile(new URL('src/tasks-runtime/src/blob.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/tasks-runtime/src/event_outbox.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/tasks-runtime/src/main.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-assembly/src/main.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'tasks_reviewed_candidate_managed_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'tasks_reviewed_candidate_assembly_v1');
   for (const unit of [
     'hermes-tasks-command-api',
     'hermes-tasks-core',
     'hermes-tasks-persistence',
     'hermes-tasks-runtime',
+    'hermes-tasks-assembly',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
     assert.match(adr, new RegExp(`\\b${unit}\\b`));
@@ -143,5 +150,17 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
   assert.doesNotMatch(
     `${runtimeManifest}\n${runtime}\n${admission}\n${command}\n${blob}\n${eventOutbox}\n${runtimeMain}`,
     /hermes-review|hermes-communications|hermes-calendar|hermes-contacts|hermes-projects|hermes-ollama|reqwest/,
+  );
+  assert.match(assemblyManifest, /role = "domain"/);
+  assert.match(assemblyManifest, /owner = "tasks"/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
+  assert.match(assembly, /materialize_tasks_release_assembly_v1/);
+  assert.match(assembly, /tasks_module_descriptor_v1/);
+  assert.match(assembly, /tasks_storage_bundle_v1/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.match(assemblyMain, /--runtime/);
+  assert.doesNotMatch(
+    `${assemblyManifest}\n${assembly}\n${assemblyMain}`,
+    /hermes-review|hermes-communications|hermes-calendar|hermes-ollama|sign_distribution|SigningKey|launch_runtime/,
   );
 });

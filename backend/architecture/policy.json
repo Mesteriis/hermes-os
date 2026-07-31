@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "tasks_reviewed_candidate_managed_runtime_v1",
+    "currentSlice": "tasks_reviewed_candidate_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1074,6 +1074,12 @@
         "role": "domain",
         "owner": "tasks",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-tasks-assembly",
+        "role": "domain",
+        "owner": "tasks",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1758,6 +1764,24 @@
         },
         {
           "name": "hermes-tasks-persistence",
+          "kind": "normal"
+        }
+      ],
+      "hermes-tasks-assembly": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-tasks-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-tasks-runtime",
           "kind": "normal"
         }
       ],
@@ -5280,6 +5304,35 @@
           "features": []
         }
       ],
+      "hermes-tasks-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-review-attention-persistence": [
         {
           "name": "sha2",
@@ -8603,6 +8656,10 @@
         "customBuildAllowed": false
       },
       "hermes-tasks-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-tasks-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       }

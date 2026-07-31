@@ -3817,6 +3817,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-tasks-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-tasks-persistence",
+ "hermes-tasks-runtime",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-tasks-command-api"
 version = "0.1.0"
 dependencies = [

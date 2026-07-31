@@ -42,8 +42,10 @@ Tasks-owned durable command, читает уже Tasks-bound Blob, примен�
 owner/generation fences, восстанавливает inbox до новых delivery, сохраняет
 terminal result перед Ack, освобождает Blob custody и relay-ит exact outbox
 bytes. Он не импортирует Review, Communications или provider packages.
-Aggregate gate остаётся закрыт до Tasks assembly, signed admission и managed
-E2E.
+Tasks assembly отдельно материализует canonical descriptor, пустую Settings
+schema, owner-local Storage bundle и unsigned release fragment без runtime
+launch или signing authority. Aggregate gate остаётся закрыт до signed
+admission, Gateway/SSE composition и managed E2E.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 
