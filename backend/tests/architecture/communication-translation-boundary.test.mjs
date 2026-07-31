@@ -18,6 +18,11 @@ test('communication translation agreement isolates workflow domain engine and pr
     persistenceManifest,
     persistenceSchema,
     persistenceRepository,
+    runtimeManifest,
+    runtimeAdmission,
+    runtimeInference,
+    runtimeSourceResults,
+    managedRuntime,
     communicationsSourceProtocol,
     aiProtocol,
     aiContracts,
@@ -57,6 +62,23 @@ test('communication translation agreement isolates workflow domain engine and pr
     ),
     readFile(
       new URL('src/communication-translation-persistence/src/repository.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(new URL('src/communication-translation-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL('src/communication-translation-runtime/src/admission.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-translation-runtime/src/inference.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-translation-runtime/src/source_results.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-translation-runtime/src/managed_runtime.rs', BACKEND_ROOT),
       'utf8',
     ),
     readFile(
@@ -108,10 +130,11 @@ test('communication translation agreement isolates workflow domain engine and pr
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_translation_persistence_v1',
+    'communication_translation_managed_runtime_v1',
   );
   assert.match(workspace, /"src\/communication-translation-api"/);
   assert.match(workspace, /"src\/communication-translation-core"/);
+  assert.match(workspace, /"src\/communication-translation-runtime"/);
   assert.match(apiManifest, /owner = "communication_translation"/);
   assert.match(apiManifest, /surface = "contract"/);
   assert.match(api, /COMMUNICATION_TRANSLATION_CAPABILITY_ID_V1/);
@@ -155,5 +178,21 @@ test('communication translation agreement isolates workflow domain engine and pr
   assert.doesNotMatch(
     `${persistenceSchema}\n${persistenceRepository}`,
     /communication_summary|communications_|mail_|telegram_|whatsapp_|zulip_|source_body|provider_id|model_id|endpoint/,
+  );
+  assert.match(runtimeManifest, /owner = "communication_translation"/);
+  assert.match(runtimeManifest, /surface = "runtime"/);
+  assert.match(runtimeAdmission, /ModuleKindV1::Workflow/);
+  assert.match(runtimeAdmission, /communication_translation\.source_prepare\.v1/);
+  assert.match(runtimeAdmission, /communication_translation\.source_prepared\.v1/);
+  assert.match(runtimeAdmission, /communication_translation\.source_rejected\.v1/);
+  assert.match(runtimeInference, /RouteModuleRequest/);
+  assert.match(runtimeInference, /translated_text_utf8/);
+  assert.match(runtimeInference, /detected_source_language/);
+  assert.match(runtimeSourceResults, /seal_translation_inference_request_v1/);
+  assert.match(runtimeSourceResults, /AiUseCaseCommunicationTranslation/);
+  assert.match(managedRuntime, /ManagedStorageRuntimeConfigurationV1/);
+  assert.doesNotMatch(
+    `${runtimeAdmission}\n${runtimeInference}\n${runtimeSourceResults}\n${managedRuntime}`,
+    /communication_summary|CommunicationSummary|mail_|telegram_|whatsapp_|zulip_|provider_id|model_id|prompt/,
   );
 });

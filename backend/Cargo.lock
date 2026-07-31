@@ -2384,6 +2384,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-translation-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-ai-contracts",
+ "hermes-blob-client",
+ "hermes-communication-translation-api",
+ "hermes-communication-translation-core",
+ "hermes-communication-translation-persistence",
+ "hermes-communications-ai-source-api",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-communications-ai-source-api"
 version = "0.1.0"
 dependencies = [

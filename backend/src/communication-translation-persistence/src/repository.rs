@@ -585,7 +585,7 @@ async fn persist_status(
     .bind(materialization.map(|(_, cleanup)| cleanup.sha256.to_vec()))
     .bind(materialization.map(|(_, cleanup)| cleanup.custody_proof.as_slice()))
     .bind(candidate.map(|value| value.translated_text_utf8.clone()))
-    .bind(candidate.map(|value| i16::from(detected_language_code(value.detected_source_language))))
+    .bind(candidate.map(|value| detected_language_code(value.detected_source_language)))
     .bind(candidate.map(|value| i16::from(target_language_code(value.target_language))))
     .bind(candidate.map(|value| completeness_code(value.completeness)))
     .bind(

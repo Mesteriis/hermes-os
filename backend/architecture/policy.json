@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_translation_persistence_v1",
+    "currentSlice": "communication_translation_managed_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -906,6 +906,12 @@
         "role": "workflow",
         "owner": "communication_translation",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-communication-translation-runtime",
+        "role": "workflow",
+        "owner": "communication_translation",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2161,6 +2167,52 @@
           "kind": "normal"
         }
       ],
+      "hermes-communication-translation-runtime": [
+        {
+          "name": "hermes-ai-contracts",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-translation-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-translation-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-translation-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-ai-source-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
       "hermes-ai-contracts": [
         {
           "name": "hermes-runtime-protocol",
@@ -2839,6 +2891,13 @@
       "hermes-communication-translation-persistence": [
         { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
         { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+      ],
+      "hermes-communication-translation-runtime": [
+        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
+        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
       ],
       "hermes-events-protocol": [
         {
@@ -7435,6 +7494,10 @@
       },
       "hermes-communication-translation-persistence": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-translation-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       },
       "hermes-ai-contracts": {

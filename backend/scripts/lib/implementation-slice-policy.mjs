@@ -921,6 +921,11 @@ const COMMUNICATION_TRANSLATION_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-communication-translation-persistence', role: 'workflow', owner: 'communication_translation', surface: 'persistence' },
 ];
 
+const COMMUNICATION_TRANSLATION_RUNTIME_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_TRANSLATION_PERSISTENCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-communication-translation-runtime', role: 'workflow', owner: 'communication_translation', surface: 'runtime' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2572,6 +2577,23 @@ const COMMUNICATION_TRANSLATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATION_TRANSLATION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_TRANSLATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-translation-runtime': [
+    { name: 'hermes-ai-contracts', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communication-translation-api', kind: 'normal' },
+    { name: 'hermes-communication-translation-core', kind: 'normal' },
+    { name: 'hermes-communication-translation-persistence', kind: 'normal' },
+    { name: 'hermes-communications-ai-source-api', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3129,6 +3151,17 @@ const COMMUNICATION_TRANSLATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const COMMUNICATION_TRANSLATION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_TRANSLATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-communication-translation-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -3530,6 +3563,10 @@ const COMMUNICATION_TRANSLATION_PERSISTENCE_INVENTORY = {
     ...COMMUNICATION_TRANSLATION_CROSS_OWNER_CONTRACTS_INVENTORY.businessCapabilities,
     'communication_translation.storage.v1',
   ].sort(),
+};
+
+const COMMUNICATION_TRANSLATION_RUNTIME_INVENTORY = {
+  ...COMMUNICATION_TRANSLATION_PERSISTENCE_INVENTORY,
 };
 
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
@@ -4527,6 +4564,17 @@ function expectedSlice(currentSlice) {
       packages: COMMUNICATION_TRANSLATION_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: COMMUNICATION_TRANSLATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: COMMUNICATION_TRANSLATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_translation_managed_runtime_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_TRANSLATION_RUNTIME_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_TRANSLATION_RUNTIME_PRODUCTION_PACKAGES,
+      workspaceDependencies: COMMUNICATION_TRANSLATION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: COMMUNICATION_TRANSLATION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
