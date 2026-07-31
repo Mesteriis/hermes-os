@@ -141,6 +141,7 @@ policy через ссылки из новых документов.
 - [ADR-0365: Communication recipient suggestion workflow and source boundary](ADR-0365-communication-recipient-suggestion-workflow-and-source-boundary.md)
 - [ADR-0366: Communication task candidate extraction and reviewed Task promotion](ADR-0366-communication-task-candidate-extraction-and-reviewed-task-promotion.md)
 - [ADR-0367: Authenticated client device context for owner runtimes](ADR-0367-authenticated-client-device-context-for-owner-runtimes.md)
+- [ADR-0368: Reviewed task candidate promotion workflow](ADR-0368-reviewed-task-candidate-promotion-workflow.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -669,3 +670,9 @@ ADR-0367 проводит уже аутентифицированный browser 
 owner-neutral Gateway client envelope до exact managed runtime. Actor не берётся
 из business payload, Kernel не интерпретирует owner semantics, а Review может
 сохранять отзываемое human decision evidence без Gateway facade.
+ADR-0368 закрывает отсутствующий cross-owner переход между Review approval и
+Tasks command отдельным `reviewed_task_candidate_promotion` workflow. Workflow
+владеет только durable correlation/inbox/outbox, не читает Blob и не импортирует
+domain implementations; terminal Tasks result возвращается в Review через
+отдельный Review-owned typed contract и только затем меняет promotion
+projection/SSE.

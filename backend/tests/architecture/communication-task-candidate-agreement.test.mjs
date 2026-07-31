@@ -8,6 +8,7 @@ const REPOSITORY_ROOT = new URL('../../../', import.meta.url);
 test('task candidate agreement keeps extraction review and Tasks in separate owner units', async () => {
   const [
     adr,
+    promotionAdr,
     inventorySource,
     policySource,
     workspace,
@@ -48,6 +49,13 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     readFile(
       new URL(
         'docs/adr/ADR-0366-communication-task-candidate-extraction-and-reviewed-task-promotion.md',
+        REPOSITORY_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'docs/adr/ADR-0368-reviewed-task-candidate-promotion-workflow.md',
         REPOSITORY_ROOT,
       ),
       'utf8',
@@ -145,6 +153,13 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(adr, /не создаёт Task до approve/);
   assert.match(adr, /reject[\s\S]*никогда не создаёт Task/);
   assert.match(adr, /approve[\s\S]*ровно один source-backed Task/);
+  assert.match(adr, /reviewed_task_candidate_promotion workflow/);
+  assert.match(promotionAdr, /owner `reviewed_task_candidate_promotion`/);
+  assert.match(promotionAdr, /Workflow не читает candidate Blob/);
+  assert.match(promotionAdr, /Review напрямую публикует Tasks command/);
+  assert.match(promotionAdr, /Kernel или Gateway преобразует payload/);
+  assert.match(promotionAdr, /accepted command/i);
+  assert.doesNotMatch(promotionAdr, /generic business facade разрешён/);
   assert.doesNotMatch(adr, /generic `create\(entity_kind, payload\)` разрешён/);
   assert.doesNotMatch(adr, /Communications владеет Task|Tasks читает Communications storage/);
 

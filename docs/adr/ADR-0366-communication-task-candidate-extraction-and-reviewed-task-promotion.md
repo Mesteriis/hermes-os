@@ -198,8 +198,11 @@ Authenticated client Start
   -> Review task-candidate owner
   -> explicit owner approve/reject command through Gateway
   -> durable TaskCandidateApprovedForPromotion event
+  -> reviewed_task_candidate_promotion workflow
   -> Tasks CreateTaskFromReviewedCandidate command consumer
   -> Tasks owner-local Task + durable terminal result
+  -> reviewed_task_candidate_promotion workflow
+  -> Review-owned promotion result
   -> Review promotion projection
 ```
 
@@ -213,8 +216,10 @@ runtime/grant coordinates до mutation.
 Reject не вызывает Tasks. Approve не означает, что Task создан: terminal Tasks
 result приходит отдельным durable event. Review хранит decision и promotion
 status; Tasks хранит только durable Task и command receipt; extraction workflow
-хранит только run/candidate result. Клиент композирует эти public projections,
-а Gateway не становится task-candidate facade.
+хранит только run/candidate result. Преобразование Review event в Tasks command
+и terminal Tasks result в Review-owned promotion result выполняет отдельный
+workflow по ADR-0368. Клиент композирует эти public projections, а Gateway не
+становится task-candidate facade.
 
 ### Review semantics
 
