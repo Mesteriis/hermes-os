@@ -28,12 +28,12 @@ provider-neutral outbound route и restart recovery; отдельный
 `hermes-ai-inference-assembly` материализует только unsigned descriptor,
 settings schema и Storage bundle inputs. Все пять AI engine build units
 реализованы. Signed managed conformance запускает eventless AI Engine с
-настоящими Vault/Storage/Blob, маршрутизирует typed provider request в
-отдельную Ollama integration, сохраняет terminal `ProviderUnavailable`, после
-engine restart возвращает exact persisted response без повторного provider
-request и отклоняет request-ID conflict. Это доказывает admission, Blob
-custody, storage binding и отрицательный replay contour, но не successful
-inference. Workflow ещё не завершён. Для Ollama реализованы все шесть
+настоящими Vault/Storage/Blob, через Kernel module-request router маршрутизирует
+typed provider request в отдельную Ollama integration, сохраняет terminal
+`ProviderUnavailable`, после engine restart возвращает exact persisted
+response без повторного provider request и отклоняет request-ID conflict. Это
+доказывает admission, Blob custody, storage binding и отрицательный replay
+contour, но не successful inference. Для Ollama реализованы все шесть
 отдельных staged units —
 `hermes-ollama-ai-api`,
 `hermes-ollama-ai-core`, `hermes-ollama-ai-http`,
@@ -75,9 +75,22 @@ descriptor, settings schema, owner-local Storage bundle и release fragment;
 dev release compiler включает exact runtime и Storage artifacts в подписанный
 distribution manifest. Persistence не хранит source body, prompt или provider
 metadata. ADR-0357 реализовал Communications source revision 2 с bounded typed
-sender/subject/body content без provider facade. Signed Kernel admission, live
-orchestration evidence и успешный Ollama inference ещё отсутствуют, поэтому
-workflow gate остаётся закрытым.
+sender/subject/body content без provider facade. Signed Kernel admission и
+live negative orchestration теперь реализованы отдельным full-ensemble
+conformance: реальные Vault/Storage/Blob/NATS, Communications domain, Reply
+Suggestion workflow, AI engine и Ollama integration запускаются как отдельные
+signed managed процессы; Start/Get проходят через Gateway, source передаётся
+только durable events и target-bound Blob, а inference проходит через два
+последовательных Kernel `request_rpc`. Observable loopback listener доказывает
+реальную Ollama HTTP-попытку. Terminal `InferenceRejected` приходит через
+replayable SSE без sender/subject/body или source identity; exact operation
+replay после workflow restart не повторяет HTTP, conflicting operation
+отклоняется, а stale source завершается `SourceRejected` до provider boundary.
+Заодно Storage authority workflow исправлена: human logical owner больше не
+подменяет owner namespace отдельной Storage unit, а временный
+`RUNTIME_UNAVAILABLE` Gateway отображает как 503, не как internal 500.
+Успешный Ollama inference, revoke/wrong-owner matrix и typed successful
+candidate всё ещё отсутствуют, поэтому workflow gate остаётся закрытым.
 
 Уточняет:
 

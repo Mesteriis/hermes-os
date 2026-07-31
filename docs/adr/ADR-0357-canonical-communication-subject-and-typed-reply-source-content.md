@@ -8,8 +8,9 @@
 evidence major 1 переведены на revision 2, Mail передаёт sender/subject,
 canonical persistence хранит bounded subject, а Communications AI source
 revision 2 передаёт один typed sender/subject/body Blob в Reply Suggestion
-workflow. Live managed admission и успешный Ollama inference остаются
-отдельными gates ADR-0353.
+workflow. Live negative managed admission/orchestration реализованы
+full-ensemble conformance ADR-0353; успешный Ollama inference остаётся
+отдельным закрытым gate.
 
 Уточняет:
 
@@ -113,8 +114,9 @@ Slice считается реализованным только после:
 5. workflow propagation без raw private-content persistence;
 6. architecture, Cargo и frontend fast gates.
 
-Live managed Reply Suggestion admission и успешный Ollama inference остаются
-отдельными gates ADR-0353 и не открываются этим решением.
+Live negative managed Reply Suggestion admission/orchestration теперь доказаны
+ADR-0353, но успешный Ollama inference остаётся отдельным gate и не открывается
+этим решением.
 
 ## Отклонённые варианты
 

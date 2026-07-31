@@ -415,6 +415,7 @@ pub(crate) fn gateway_service(
                 if request_id == 0 {
                     return Err(ClientRpcRouteErrorV1::Unavailable);
                 }
+                let route_registration_id = route.registration_id().to_owned();
                 let request = encode_owner_client_rpc_module_request(
                     snapshot.registration().module_id(),
                     route,
@@ -436,7 +437,13 @@ pub(crate) fn gateway_service(
                 let response = ModuleClientResponseV1::decode(response_bytes.as_slice())
                     .map_err(|_| ClientRpcRouteErrorV1::Internal)?;
                 if !response.error_code.is_empty() {
-                    return Err(ClientRpcRouteErrorV1::Internal);
+                    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                        eprintln!(
+                            "developer_gateway_client_rpc_module_error registration={} code={}",
+                            route_registration_id, response.error_code,
+                        );
+                    }
+                    return Err(map_module_client_rpc_error(&response.error_code));
                 }
                 Ok(response.response_payload)
             },
@@ -701,6 +708,15 @@ fn map_managed_client_rpc_route_error(error: String) -> ClientRpcRouteErrorV1 {
     }
 }
 
+fn map_module_client_rpc_error(error: &str) -> ClientRpcRouteErrorV1 {
+    match error {
+        "RUNTIME_UNAVAILABLE" => ClientRpcRouteErrorV1::Unavailable,
+        "INVALID_ARGUMENT" => ClientRpcRouteErrorV1::InvalidArgument,
+        "NOT_FOUND" => ClientRpcRouteErrorV1::NotFound,
+        _ => ClientRpcRouteErrorV1::Internal,
+    }
+}
+
 #[cfg(test)]
 mod client_rpc_request_tests {
     use super::*;
@@ -727,5 +743,21 @@ mod client_rpc_request_tests {
             ModuleClientRequestV1::decode(bytes.as_slice()).expect("module client request");
 
         assert!(request.request_payload.is_empty());
+    }
+
+    #[test]
+    fn transient_module_unavailability_is_not_an_internal_gateway_failure() {
+        assert_eq!(
+            map_module_client_rpc_error("RUNTIME_UNAVAILABLE"),
+            ClientRpcRouteErrorV1::Unavailable,
+        );
+        assert_eq!(
+            map_module_client_rpc_error("INVALID_ARGUMENT"),
+            ClientRpcRouteErrorV1::InvalidArgument,
+        );
+        assert_eq!(
+            map_module_client_rpc_error("unexpected"),
+            ClientRpcRouteErrorV1::Internal,
+        );
     }
 }

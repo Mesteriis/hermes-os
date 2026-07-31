@@ -540,8 +540,7 @@ fn storage_binding(
     admission: &ReplySuggestionRuntimeAdmissionV1,
 ) -> Result<StorageBindingV1, ReplySuggestionManagedRuntimeErrorV1> {
     if configuration.runtime_instance_id != admission.runtime_instance_id
-        || configuration.logical_owner_id != admission.logical_owner_id
-        || configuration.owner != COMMUNICATION_REPLY_SUGGESTION_OWNER_V1
+        || !storage_owner_is_exact(&configuration.logical_owner_id, &configuration.owner)
         || configuration.storage_bundle_digest.len() != 32
         || configuration.storage_generation == 0
         || configuration.credential_revision == 0
@@ -586,6 +585,10 @@ fn storage_binding(
     .map_err(|_| ReplySuggestionManagedRuntimeErrorV1::Admission)?;
     StorageBindingV1::new(identity, fences, access)
         .map_err(|_| ReplySuggestionManagedRuntimeErrorV1::Admission)
+}
+
+fn storage_owner_is_exact(logical_owner_id: &str, owner: &str) -> bool {
+    logical_owner_id == owner && owner == COMMUNICATION_REPLY_SUGGESTION_OWNER_V1
 }
 
 fn event_relay_error(
@@ -683,5 +686,17 @@ mod tests {
             COMMUNICATION_REPLY_SUGGESTION_MODULE_ID_V1,
             "hermes-communication-reply-suggestion-runtime"
         );
+    }
+
+    #[test]
+    fn storage_authority_stays_with_workflow_unit_not_human_owner() {
+        assert!(storage_owner_is_exact(
+            COMMUNICATION_REPLY_SUGGESTION_OWNER_V1,
+            COMMUNICATION_REPLY_SUGGESTION_OWNER_V1,
+        ));
+        assert!(!storage_owner_is_exact(
+            "owner-1",
+            COMMUNICATION_REPLY_SUGGESTION_OWNER_V1,
+        ));
     }
 }

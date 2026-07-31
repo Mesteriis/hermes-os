@@ -2,6 +2,7 @@
 
 use super::*;
 
+use crate::modules::capability::module_request::ModuleRequestRouteHandlerV1;
 use hermes_ai_contracts::{AI_INFERENCE_MODULE_ID_V1, AI_OWNER_V1};
 use hermes_ai_inference_persistence::schema::{
     AI_INFERENCE_STORAGE_BUNDLE_REVISION_V1, ai_inference_storage_bundle_v1,
@@ -44,15 +45,31 @@ pub(super) fn installed_ai_inference_release_v1(root: &Path) -> InstalledSignedB
             ),
             blob_release_artifact(),
             ollama_ai_release_artifact_v1(),
-            SignedRuntimeArtifact::new(
-                AI_INFERENCE_RELEASE_ARTIFACT_ID_V1,
-                ai_inference_binary(),
-                ai_inference_module_descriptor_v1(AI_INFERENCE_BUILD_ID_V1).encode_to_vec(),
-            )
-            .with_settings_schema(ai_inference_settings_schema_bytes_v1()),
+            ai_inference_release_artifact_v1(),
         ],
     )
     .expect("install signed AI inference release")
+}
+
+pub(super) fn ai_inference_release_artifact_v1() -> SignedRuntimeArtifact {
+    SignedRuntimeArtifact::new(
+        AI_INFERENCE_RELEASE_ARTIFACT_ID_V1,
+        ai_inference_binary(),
+        ai_inference_module_descriptor_v1(AI_INFERENCE_BUILD_ID_V1).encode_to_vec(),
+    )
+    .with_settings_schema(ai_inference_settings_schema_bytes_v1())
+}
+
+pub(super) fn configure_ai_module_request_router_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &Arc<SqliteControlStore>,
+) {
+    supervisor
+        .configure_module_request_handler(Arc::new(ModuleRequestRouteHandlerV1::new(
+            Arc::clone(store),
+            supervisor.relay_port(),
+        )))
+        .expect("configure AI module request router");
 }
 
 pub(super) fn admit_ai_inference_runtime_v1(

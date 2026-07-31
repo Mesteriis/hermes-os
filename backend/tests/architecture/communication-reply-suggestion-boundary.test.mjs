@@ -369,6 +369,47 @@ test('reply suggestion runtime coordinates event source, AI request, Blob custod
   );
 });
 
+test('signed Reply Suggestion conformance crosses only event and request RPC boundaries', async () => {
+  const [setup, flow, managedScript, gateway] = await Promise.all([
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/reply_suggestion_managed_setup.rs',
+    ),
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/reply_suggestion_managed_flow.rs',
+    ),
+    backendSource('scripts/test-authenticated-storage.mjs'),
+    backendSource('src/kernel/src/platform/gateway.rs'),
+  ]);
+
+  assert.match(setup, /communications_release_artifacts/);
+  assert.match(setup, /ollama_ai_release_artifact_v1/);
+  assert.match(setup, /ai_inference_release_artifact_v1/);
+  assert.match(setup, /reply_suggestion_release_artifact_v1/);
+  assert.match(setup, /ManagedWorkflowRuntimeConfigurationV1/);
+  assert.match(flow, /managed_reply_suggestion_reaches_ai_and_replays_through_gateway_sse/);
+  assert.match(flow, /start_communications_domain/);
+  assert.match(flow, /start_reply_suggestion_runtime_v1/);
+  assert.match(flow, /start_ai_inference_runtime_v1/);
+  assert.match(flow, /start_ollama_ai_runtime_v1/);
+  assert.match(flow, /COMMUNICATION_REPLY_SUGGESTION_COMMAND_CONNECT_PATH_V1/);
+  assert.match(flow, /\/api\/realtime\/v1\/events/);
+  assert.match(flow, /restart_reply_suggestion_runtime_v1/);
+  assert.match(flow, /drain_ollama_connections/);
+  assert.match(flow, /assert_no_ollama_connection/);
+  assert.match(flow, /ReplySuggestionErrorCodeSourceRejected/);
+  assert.match(flow, /assert_private_content_absent/);
+  assert.match(managedScript, /hermes-communication-reply-suggestion-runtime/);
+  assert.match(
+    managedScript,
+    /managed_reply_suggestion_reaches_ai_and_replays_through_gateway_sse/,
+  );
+  assert.match(gateway, /"RUNTIME_UNAVAILABLE" => ClientRpcRouteErrorV1::Unavailable/);
+  assert.doesNotMatch(
+    `${setup}\n${flow}`,
+    /hermes_mail_runtime|hermes_telegram_runtime|hermes_whatsapp_runtime|hermes_zulip_runtime/,
+  );
+});
+
 test('reply suggestion assembly emits only unsigned workflow runtime and storage inputs', async () => {
   const [manifest, assembly, cli, release] = await Promise.all([
     backendSource('src/communication-reply-suggestion-assembly/Cargo.toml'),

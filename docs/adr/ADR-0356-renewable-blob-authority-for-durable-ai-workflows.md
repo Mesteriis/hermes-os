@@ -13,8 +13,14 @@ bounded request/cleanup receipts и подтверждает source event тол
 terminal inference и освобождения обоих Blob. Semantic request digest не
 включает короткоживущий custody proof; non-terminal exact replay может обновить
 только этот proof. Dev release compiler подписывает exact runtime и Storage
-artifacts, но signed Kernel admission и live managed orchestration ещё не
-реализованы, поэтому `communication_reply_suggestion_v1` остаётся `planned`.
+artifacts. Signed Kernel admission и live negative managed orchestration
+реализованы full-ensemble conformance: Communications event проходит в
+workflow, custody переносится к AI, request маршрутизируется через отдельные AI
+engine и Ollama integration, terminal cleanup завершается до replayable
+Gateway/SSE result, а workflow restart возвращает exact terminal state без
+повторного Ollama HTTP. Stale source отклоняется до provider boundary.
+Успешный local provider inference и оставшаяся revoke/wrong-owner матрица ещё
+не доказаны, поэтому `communication_reply_suggestion_v1` остаётся `planned`.
 
 Уточняет:
 

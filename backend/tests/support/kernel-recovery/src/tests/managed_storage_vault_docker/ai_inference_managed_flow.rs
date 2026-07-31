@@ -65,6 +65,7 @@ fn managed_ai_inference_routes_to_ollama_and_replays_after_restart() {
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
     configure_route_handler(&supervisor, &store, &data);
+    configure_ai_module_request_router_v1(&supervisor, &store);
     start_vault(&supervisor, &store, &data, release.kernel());
     assert_eq!(
         blob_launch::start_from_kernel(
