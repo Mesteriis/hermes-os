@@ -550,7 +550,7 @@
       "gate": "ai_inference_v1",
       "role": "engine",
       "owner": "ai",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "capability_routed_module_request_rpc_v1",
         "blob_v1",

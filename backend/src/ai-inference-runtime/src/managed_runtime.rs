@@ -29,7 +29,8 @@ use crate::{
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AiInferenceRuntimeAdmissionV1 {
-    pub logical_owner_id: String,
+    pub module_owner_id: String,
+    pub logical_human_owner_id: String,
     pub registration_id: String,
     pub runtime_instance_id: String,
     pub runtime_generation: u64,
@@ -46,6 +47,7 @@ pub enum AiInferenceManagedRuntimeErrorV1 {
 pub struct AiInferenceManagedRuntimeV1 {
     control_channel: ManagedControlChannelV2<UnixStream>,
     persistence: AiInferencePersistenceV1,
+    logical_human_owner_id: String,
 }
 
 impl AiInferenceManagedRuntimeV1 {
@@ -105,6 +107,7 @@ impl AiInferenceManagedRuntimeV1 {
         Ok(Self {
             control_channel,
             persistence,
+            logical_human_owner_id: admission.logical_human_owner_id.clone(),
         })
     }
 
@@ -118,9 +121,10 @@ impl AiInferenceManagedRuntimeV1 {
             control_channel: &mut self.control_channel,
             dispatcher: &mut dispatcher,
         };
-        let result = recover_pending_v1(&self.persistence, &mut ports)
-            .await
-            .map_err(runtime_error);
+        let result =
+            recover_pending_v1(&self.persistence, &mut ports, &self.logical_human_owner_id)
+                .await
+                .map_err(runtime_error);
         self.control_channel
             .inner_mut()
             .set_nonblocking(true)
@@ -142,7 +146,7 @@ impl AiInferenceManagedRuntimeV1 {
                 let response = if validate_module_request_delivery_v1(&delivery).is_err()
                     || delivery.contract.as_ref()
                         != Some(&communication_reply_inference_contract_reference_v1())
-                    || delivery.logical_owner_id.is_empty()
+                    || delivery.logical_owner_id != self.logical_human_owner_id
                 {
                     rejected(request_id)
                 } else {
@@ -158,7 +162,7 @@ impl AiInferenceManagedRuntimeV1 {
                     let response = match execute_payload_v1(
                         &self.persistence,
                         &mut ports,
-                        &delivery.logical_owner_id,
+                        &self.logical_human_owner_id,
                         &delivery.request_payload,
                     )
                     .await
@@ -219,7 +223,8 @@ fn unavailable(request_id: Vec<u8>) -> ManagedRuntimeModuleRequestResponseV1 {
 fn validate_admission(
     admission: &AiInferenceRuntimeAdmissionV1,
 ) -> Result<(), AiInferenceManagedRuntimeErrorV1> {
-    if admission.logical_owner_id != AI_OWNER_V1
+    if admission.module_owner_id != AI_OWNER_V1
+        || !valid_owner_id_v1(&admission.logical_human_owner_id)
         || admission.registration_id.is_empty()
         || admission.runtime_instance_id.is_empty()
         || admission.runtime_generation == 0
@@ -228,6 +233,14 @@ fn validate_admission(
         return Err(AiInferenceManagedRuntimeErrorV1::Admission);
     }
     Ok(())
+}
+
+fn valid_owner_id_v1(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 fn authenticate(
@@ -295,7 +308,7 @@ fn storage_binding(
     admission: &AiInferenceRuntimeAdmissionV1,
 ) -> Result<StorageBindingV1, AiInferenceManagedRuntimeErrorV1> {
     if configuration.runtime_instance_id != admission.runtime_instance_id
-        || configuration.logical_owner_id != admission.logical_owner_id
+        || configuration.logical_owner_id != admission.module_owner_id
         || configuration.owner != AI_OWNER_V1
         || configuration.storage_bundle_digest.len() != 32
         || configuration.storage_generation == 0
@@ -361,7 +374,8 @@ mod tests {
     #[test]
     fn admission_is_exactly_ai_owned_and_generation_fenced() {
         let valid = AiInferenceRuntimeAdmissionV1 {
-            logical_owner_id: AI_OWNER_V1.to_owned(),
+            module_owner_id: AI_OWNER_V1.to_owned(),
+            logical_human_owner_id: "owner-1".to_owned(),
             registration_id: AI_INFERENCE_MODULE_ID_V1.to_owned(),
             runtime_instance_id: "runtime-1".to_owned(),
             runtime_generation: 1,
@@ -369,7 +383,13 @@ mod tests {
         };
         assert_eq!(validate_admission(&valid), Ok(()));
         let mut invalid = valid;
-        invalid.logical_owner_id = "communications".to_owned();
+        invalid.module_owner_id = "communications".to_owned();
+        assert_eq!(
+            validate_admission(&invalid),
+            Err(AiInferenceManagedRuntimeErrorV1::Admission)
+        );
+        invalid.module_owner_id = AI_OWNER_V1.to_owned();
+        invalid.logical_human_owner_id.clear();
         assert_eq!(
             validate_admission(&invalid),
             Err(AiInferenceManagedRuntimeErrorV1::Admission)

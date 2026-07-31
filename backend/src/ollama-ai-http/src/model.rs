@@ -38,8 +38,39 @@ struct ChatRequestV1<'a> {
     messages: [ChatMessageV1<'a>; 1],
     stream: bool,
     think: bool,
-    format: &'static str,
+    format: ReplyJsonSchemaV1,
     options: ChatOptionsV1,
+}
+
+#[derive(Serialize)]
+struct ReplyJsonSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    properties: ReplyJsonPropertiesV1,
+    required: [&'static str; 3],
+    #[serde(rename = "additionalProperties")]
+    additional_properties: bool,
+}
+
+#[derive(Serialize)]
+struct ReplyJsonPropertiesV1 {
+    subject: JsonStringSchemaV1,
+    body: JsonStringSchemaV1,
+    language: JsonLanguageSchemaV1,
+}
+
+#[derive(Serialize)]
+struct JsonStringSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+}
+
+#[derive(Serialize)]
+struct JsonLanguageSchemaV1 {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    #[serde(rename = "enum")]
+    allowed: [&'static str; 3],
 }
 
 #[derive(Serialize)]
@@ -106,7 +137,7 @@ pub(crate) fn encode_chat_request_v1(
         }],
         stream: false,
         think: false,
-        format: "json",
+        format: reply_json_schema_v1(),
         options: ChatOptionsV1 {
             temperature: 0,
             num_predict: plan.maximum_output_tokens,
@@ -114,6 +145,22 @@ pub(crate) fn encode_chat_request_v1(
     })
     .map(Zeroizing::new)
     .map_err(|_| OllamaAiHttpErrorV1::InvalidRequest)
+}
+
+fn reply_json_schema_v1() -> ReplyJsonSchemaV1 {
+    ReplyJsonSchemaV1 {
+        kind: "object",
+        properties: ReplyJsonPropertiesV1 {
+            subject: JsonStringSchemaV1 { kind: "string" },
+            body: JsonStringSchemaV1 { kind: "string" },
+            language: JsonLanguageSchemaV1 {
+                kind: "string",
+                allowed: ["english", "spanish", "russian"],
+            },
+        },
+        required: ["subject", "body", "language"],
+        additional_properties: false,
+    }
 }
 
 pub(crate) fn decode_chat_response_v1(
@@ -175,6 +222,14 @@ mod tests {
                 model: "gemma3:latest".to_owned(),
                 digest: [9; 32],
             })
+        );
+    }
+
+    #[test]
+    fn reply_schema_is_closed_and_language_bounded() {
+        assert_eq!(
+            serde_json::to_string(&reply_json_schema_v1()).expect("reply JSON schema"),
+            r#"{"type":"object","properties":{"subject":{"type":"string"},"body":{"type":"string"},"language":{"type":"string","enum":["english","spanish","russian"]}},"required":["subject","body","language"],"additionalProperties":false}"#
         );
     }
 }

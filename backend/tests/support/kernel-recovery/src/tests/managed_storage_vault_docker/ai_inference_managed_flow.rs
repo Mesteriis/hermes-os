@@ -1,4 +1,4 @@
-//! Live managed AI engine routing, terminal replay and request-conflict conformance.
+//! Live managed AI engine routing, owner fencing, terminal replay and request-conflict conformance.
 
 use std::net::TcpListener;
 
@@ -9,9 +9,9 @@ use hermes_ai_contracts::{
     AI_LOCAL_EGRESS_POLICY_REVISION_V1, communication_reply_inference_contract_reference_v1,
     encode_reply_source_content_v1, seal_reply_inference_request_v1,
     wire::{
-        AiContextReceiptV1, AiEgressPolicyV1, AiInferenceTerminalStatusV1,
-        AiPrivateSourceReceiptV1, AiReplyLanguageV1, AiReplySourceContentV1,
-        AiReplySubjectPolicyV1, AiReplyToneV1, AiUseCaseV1,
+        AiContextReceiptV1, AiEgressPolicyV1, AiInferenceCompletenessV1,
+        AiInferenceTerminalStatusV1, AiPrivateSourceReceiptV1, AiReplyLanguageV1,
+        AiReplySourceContentV1, AiReplySubjectPolicyV1, AiReplyToneV1, AiUseCaseV1,
         CommunicationReplySuggestionInferenceRequestV1,
         CommunicationReplySuggestionInferenceResultV1,
     },
@@ -53,7 +53,7 @@ fn managed_ai_inference_routes_to_ollama_and_replays_after_restart() {
         .expect("bind signed Blob release");
     store
         .claim_initial_owner(&hermes_kernel_control_store::InitialOwnerIdentity::new(
-            OLLAMA_AI_LOGICAL_OWNER_ID_V1,
+            AI_INFERENCE_LOGICAL_OWNER_ID_V1,
             "desktop-1",
             [4; 65],
         ))
@@ -150,6 +150,137 @@ fn managed_ai_inference_routes_to_ollama_and_replays_after_restart() {
     std::fs::remove_dir_all(data).expect("remove short AI inference kernel data fixture");
 }
 
+#[test]
+#[ignore = "requires disposable Docker plus a real loopback Ollama service with hermes-conformance:latest"]
+fn managed_ai_inference_completes_real_provider_generation() {
+    assert_eq!(
+        std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
+        Ok("1")
+    );
+    let ollama_port = required("HERMES_OLLAMA_LIVE_PORT")
+        .parse::<u16>()
+        .expect("valid live Ollama port");
+    let root = unique_target_root("hermes-managed-ai-inference-live");
+    let data = private_directory(short_communications_kernel_data_directory());
+    initialize_vault(
+        &private_directory(data.join("vault")),
+        &credential_directory(),
+    );
+    let release = installed_ai_inference_release_v1(&root);
+    unsafe {
+        std::env::set_var("HERMES_TEST_KERNEL_EXECUTABLE", release.kernel());
+    }
+    let store = Arc::new(configured_store(&root, release.kernel()));
+    crate::platform::blob::binding::bind_installed_release(&store, release.kernel())
+        .expect("bind signed Blob release");
+    store
+        .claim_initial_owner(&hermes_kernel_control_store::InitialOwnerIdentity::new(
+            AI_INFERENCE_LOGICAL_OWNER_ID_V1,
+            "desktop-1",
+            [4; 65],
+        ))
+        .expect("claim live AI inference logical owner");
+    let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
+    let admitted_ollama = admit_ollama_ai_runtime_v1(&store);
+    let admitted_ai = admit_ai_inference_runtime_v1(&store);
+    let source = AiInferenceBlobSourceFixtureV1::admit(&store);
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
+    configure_route_handler(&supervisor, &store, &data);
+    configure_ai_module_request_router_v1(&supervisor, &store);
+    start_vault(&supervisor, &store, &data, release.kernel());
+    assert_eq!(
+        blob_launch::start_from_kernel(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &data,
+            &root.join("runtime"),
+        )
+        .expect("start signed Blob runtime"),
+        1
+    );
+    start_storage(
+        &supervisor,
+        &store,
+        release.kernel(),
+        &storage_runtime_directory(),
+    );
+    let admitted_ollama = prepare_ollama_ai_runtime_v1(&supervisor, &store, admitted_ollama);
+    let admitted_ai = prepare_ai_inference_runtime_v1(&supervisor, &store, admitted_ai);
+    let ollama = start_ollama_ai_runtime_v1(
+        &supervisor,
+        &store,
+        &data,
+        &root.join("runtime"),
+        admitted_ollama,
+        ollama_port,
+    );
+    let ai = start_ai_inference_runtime_v1(&supervisor, &store, &root.join("runtime"), admitted_ai);
+
+    let source_content = encode_reply_source_content_v1(&AiReplySourceContentV1 {
+        sender_utf8: b"Alice Example <alice@example.test>".to_vec(),
+        subject_utf8: b"Quarterly update".to_vec(),
+        body_utf8: b"Private source body for a bounded local reply".to_vec(),
+    })
+    .expect("typed live AI source content");
+    let blob = source.write(&store, &supervisor, &data, [0x71; 16], &source_content);
+    let request = inference_request_v1(&blob);
+
+    let wrong_owner = deliver_inference_request_for_owner_v1(
+        &supervisor,
+        &ai.registration_id,
+        "owner-2",
+        &request,
+    );
+    assert_eq!(wrong_owner.request_id, request.run_id);
+    assert_eq!(wrong_owner.error_code, "REJECTED");
+    assert!(wrong_owner.response_payload.is_empty());
+
+    let first = deliver_inference_request_v1(&supervisor, &ai.registration_id, &request);
+    assert!(first.error_code.is_empty());
+    let result =
+        CommunicationReplySuggestionInferenceResultV1::decode(first.response_payload.as_slice())
+            .expect("typed successful AI inference result");
+    assert_eq!(result.run_id, request.run_id);
+    assert_eq!(
+        result.terminal_status,
+        AiInferenceTerminalStatusV1::AiInferenceTerminalStatusReady as i32
+    );
+    assert_eq!(
+        result.completeness,
+        AiInferenceCompletenessV1::AiInferenceCompletenessComplete as i32
+    );
+    assert_eq!(
+        result.resolved_language,
+        AiReplyLanguageV1::AiReplyLanguageEnglish as i32
+    );
+    assert!(!result.body_utf8.is_empty());
+    let receipt = result
+        .inference_receipt
+        .as_ref()
+        .expect("successful AI inference receipt");
+    assert_eq!(receipt.model_revision_sha256.len(), 32);
+    assert_eq!(receipt.prompt_policy_sha256.len(), 32);
+    assert_eq!(receipt.provider_settings_revision, 1);
+
+    supervisor
+        .stop(&ollama.registration_id)
+        .expect("stop Ollama dependency before successful replay");
+    let previous_generation = ai.runtime_generation;
+    let ai = restart_ai_inference_runtime_v1(&supervisor, &store, &root.join("runtime"), ai);
+    assert_eq!(ai.runtime_generation, previous_generation + 1);
+    let replayed = deliver_inference_request_v1(&supervisor, &ai.registration_id, &request);
+    assert_eq!(replayed, first);
+
+    supervisor.shutdown().expect("stop managed processes");
+    unsafe {
+        std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
+    }
+    std::fs::remove_dir_all(root).expect("remove live AI inference fixture");
+    std::fs::remove_dir_all(data).expect("remove short live AI inference kernel data fixture");
+}
+
 fn inference_request_v1(
     blob: &AiInferenceFixtureBlobV1,
 ) -> CommunicationReplySuggestionInferenceRequestV1 {
@@ -178,7 +309,7 @@ fn inference_request_v1(
         maximum_output_tokens: 512,
         egress_policy: AiEgressPolicyV1::AiEgressPolicyLocalOnly as i32,
         egress_policy_revision: AI_LOCAL_EGRESS_POLICY_REVISION_V1,
-        logical_owner_id: OLLAMA_AI_LOGICAL_OWNER_ID_V1.to_owned(),
+        logical_owner_id: AI_INFERENCE_LOGICAL_OWNER_ID_V1.to_owned(),
     })
     .expect("seal AI inference request")
 }
@@ -188,9 +319,23 @@ fn deliver_inference_request_v1(
     registration_id: &str,
     request: &CommunicationReplySuggestionInferenceRequestV1,
 ) -> ManagedRuntimeModuleRequestResponseV1 {
+    deliver_inference_request_for_owner_v1(
+        supervisor,
+        registration_id,
+        AI_INFERENCE_LOGICAL_OWNER_ID_V1,
+        request,
+    )
+}
+
+fn deliver_inference_request_for_owner_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    registration_id: &str,
+    logical_owner_id: &str,
+    request: &CommunicationReplySuggestionInferenceRequestV1,
+) -> ManagedRuntimeModuleRequestResponseV1 {
     let delivery = ManagedRuntimeModuleRequestDeliveryV1 {
         request_id: request.run_id.clone(),
-        logical_owner_id: OLLAMA_AI_LOGICAL_OWNER_ID_V1.to_owned(),
+        logical_owner_id: logical_owner_id.to_owned(),
         contract: Some(communication_reply_inference_contract_reference_v1()),
         request_payload: request.encode_to_vec(),
     };

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "ollama_ai_provider_v1",
+    "currentSlice": "ai_inference_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {

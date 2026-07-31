@@ -33,8 +33,16 @@ typed provider request в отдельную Ollama integration, сохраня�
 `ProviderUnavailable`, после engine restart возвращает exact persisted
 response без повторного provider request и отклоняет request-ID conflict. Это
 доказывает admission, Blob custody, storage binding и отрицательный replay
-contour, но не successful inference. Для Ollama реализованы все шесть
-отдельных staged units —
+contour. Дополнительный live managed conformance запускает тот же signed AI
+Engine с настоящими Vault/Storage/Blob и отдельной Ollama integration против
+реального provider process: target-bound source materialization, два
+последовательных `request_rpc`, typed `Ready` result и exact positive replay
+после остановки provider и restart engine подтверждены. Engine связывает
+request и recovery с authenticated human owner; wrong-owner delivery
+отклоняется до persistence, а recovery SQL выбирает только runs этого owner.
+Gate `ai_inference_v1` реализован независимо от Communications, reply workflow
+и Ollama implementation. Для Ollama реализованы все шесть отдельных staged
+units —
 `hermes-ollama-ai-api`,
 `hermes-ollama-ai-core`, `hermes-ollama-ai-http`,
 `hermes-ollama-ai-persistence`, `hermes-ollama-ai-runtime` и
@@ -44,6 +52,7 @@ revision-fenced PostgreSQL lifecycle и terminal `uncertain` transition без
 automatic retry. Persistence не хранит source content, prompt или HTTP request
 body. HTTP unit реализует bounded `/api/tags` discovery и `/api/chat` dialect,
 exact model binding, fixed JSON/non-streaming/non-thinking request и
+закрытая typed JSON Schema для обязательных `subject/body/language`, а также
 fail-closed response framing без redirects. Managed integration runtime
 реализует exact provider request RPC, commit-before-HTTP lifecycle, model
 digest confirmation после generation и crash recovery только в `uncertain`,
@@ -62,8 +71,8 @@ ASCII-регистр трёх закрытых language tokens; whitespace, alia
 значения отклоняются. Runtime связывает request tenancy с authenticated human
 owner из managed launch и отклоняет wrong-owner delivery до persistence или
 provider HTTP. Gate `ollama_ai_provider_v1` реализован независимо от
-Communications, AI Engine и reply workflow. Gates `ai_inference_v1` и
-`communication_reply_suggestion_v1` остаются `planned`. Для reply
+Communications, AI Engine и reply workflow. Gate
+`communication_reply_suggestion_v1` остаётся `planned`. Для reply
 workflow реализованы все пять отдельных units:
 `hermes-communication-reply-suggestion-api` с concrete generated
 Start/Get/realtime contract и
@@ -94,8 +103,9 @@ replay после workflow restart не повторяет HTTP, conflicting ope
 Заодно Storage authority workflow исправлена: human logical owner больше не
 подменяет owner namespace отдельной Storage unit, а временный
 `RUNTIME_UNAVAILABLE` Gateway отображает как 503, не как internal 500.
-Успешный Ollama inference, revoke/wrong-owner matrix и typed successful
-candidate всё ещё отсутствуют, поэтому workflow gate остаётся закрытым.
+Успешный inference на уровне отдельного AI Engine уже доказан, но успешный
+full-ensemble workflow contour, его revoke/wrong-owner matrix и typed candidate
+через Gateway/SSE всё ещё отсутствуют, поэтому workflow gate остаётся закрытым.
 
 Уточняет:
 
@@ -390,10 +400,11 @@ event-only preparation evidence проверяются managed conformance.
 
 ### `ai_inference_v1`
 
-Открывается только вместе с five AI engine units, common receipt and exact
-reply request/result, owner-local run state, settings/fencing, Blob materialize,
-provider `request_rpc`, restart/idempotency/privacy negatives and live managed
-inference evidence.
+Реализован: five AI engine units, common receipt and exact reply request/result,
+owner-local run state, settings/fencing, target-bound Blob materialization,
+provider-neutral `request_rpc`, restart/idempotency/privacy negatives,
+authenticated human-owner fence, owner-scoped recovery и live managed
+successful inference evidence проверяются conformance.
 
 ### `ollama_ai_provider_v1`
 

@@ -57,7 +57,7 @@ test('reply suggestion agreement keeps domain workflow engine and integration se
     gate: 'ai_inference_v1',
     role: 'engine',
     owner: 'ai',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'capability_routed_module_request_rpc_v1',
       'blob_v1',
@@ -535,13 +535,17 @@ test('AI inference persistence is typed owner-local and stores no private source
 });
 
 test('AI inference runtime owns exact managed execution without provider implementation', async () => {
-  const [manifest, admission, ports, worker, runtime, processRoot] = await Promise.all([
+  const [manifest, admission, ports, worker, runtime, processRoot, persistence, managedFlow] = await Promise.all([
     backendSource('src/ai-inference-runtime/Cargo.toml'),
     backendSource('src/ai-inference-runtime/src/admission.rs'),
     backendSource('src/ai-inference-runtime/src/managed_ports.rs'),
     backendSource('src/ai-inference-runtime/src/worker.rs'),
     backendSource('src/ai-inference-runtime/src/managed_runtime.rs'),
     backendSource('src/ai-inference-runtime/src/main.rs'),
+    backendSource('src/ai-inference-persistence/src/repository.rs'),
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/ai_inference_managed_flow.rs',
+    ),
   ]);
 
   assert.match(manifest, /role = "engine"/);
@@ -562,8 +566,23 @@ test('AI inference runtime owns exact managed execution without provider impleme
   assert.match(worker, /load_recoverable_runs/);
   assert.match(runtime, /Operation::DeliverModuleRequest/);
   assert.match(runtime, /recover_pending_v1/);
+  assert.match(runtime, /delivery\.logical_owner_id != self\.logical_human_owner_id/);
+  assert.match(runtime, /&self\.logical_human_owner_id/);
   assert.match(processRoot, /ManagedEngineRuntimeConfigurationV1/);
+  assert.match(processRoot, /logical_human_owner_id: configuration\.logical_human_owner_id/);
   assert.match(processRoot, /validate_settings_snapshot_against_schema_v1/);
+  assert.match(persistence, /WHERE logical_owner_id = \$1 AND run_state IN \(1, 2\)/);
+  assert.match(
+    managedFlow,
+    /fn managed_ai_inference_completes_real_provider_generation\(\)/,
+  );
+  assert.match(managedFlow, /required\("HERMES_OLLAMA_LIVE_PORT"\)/);
+  assert.match(managedFlow, /AiInferenceTerminalStatusReady/);
+  assert.match(managedFlow, /AiInferenceCompletenessComplete/);
+  assert.match(managedFlow, /"owner-2"/);
+  assert.match(managedFlow, /stop\(&ollama\.registration_id\)/);
+  assert.match(managedFlow, /assert_eq!\(replayed, first\)/);
+  assert.doesNotMatch(managedFlow, /canned|OllamaAiHttpFixture/i);
   assert.doesNotMatch(
     `${manifest}\n${admission}\n${ports}\n${worker}\n${runtime}`,
     /hermes-communications|communication-reply-suggestion|hermes-ollama|reqwest|hyper|nats|\bprovider_id\b|\bmodel_id\b|endpoint|prompt_text/,
@@ -634,7 +653,10 @@ test('Ollama HTTP owns one bounded loopback dialect without redirects or model s
   assert.match(client, /"POST",\s*"\/api\/chat"/);
   assert.match(model, /stream: false/);
   assert.match(model, /think: false/);
-  assert.match(model, /format: "json"/);
+  assert.match(model, /format: reply_json_schema_v1\(\)/);
+  assert.match(model, /required: \["subject", "body", "language"\]/);
+  assert.match(model, /additional_properties: false/);
+  assert.match(model, /allowed: \["english", "spanish", "russian"\]/);
   assert.match(model, /response\.model != plan\.model/);
   assert.match(wire, /const LOOPBACK_HOST: &str = "127\.0\.0\.1"/);
   assert.match(wire, /Accept-Encoding: identity/);

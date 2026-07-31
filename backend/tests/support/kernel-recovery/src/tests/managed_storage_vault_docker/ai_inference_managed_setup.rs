@@ -16,6 +16,7 @@ use hermes_runtime_protocol::v1::{ManagedEngineRuntimeConfigurationV1, SettingsS
 
 const AI_INFERENCE_RELEASE_ARTIFACT_ID_V1: &str = "ai_inference.runtime.v1";
 const AI_INFERENCE_BUILD_ID_V1: &str = "managed-ai-inference-negative";
+pub(super) const AI_INFERENCE_LOGICAL_OWNER_ID_V1: &str = "owner-1";
 
 pub(super) struct AdmittedAiInferenceRuntimeV1 {
     registration_id: String,
@@ -242,7 +243,7 @@ fn start_reserved_ai_inference_runtime_v1(
         event_hub_endpoint: String::new(),
         event_credential_revision: 0,
         settings_revision: 1,
-        logical_human_owner_id: "owner-1".to_owned(),
+        logical_human_owner_id: AI_INFERENCE_LOGICAL_OWNER_ID_V1.to_owned(),
     };
     managed_launch::start_reserved_engine(
         supervisor,

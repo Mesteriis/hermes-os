@@ -61,6 +61,8 @@ test('signed managed AI conformance uses the exact eventless pair and no event a
   assert.match(setup, /event_credential_revision: 0/);
   assert.doesNotMatch(setup, /EventHub|Nats|event_adapter|fake_event/i);
   assert.match(flow, /managed_ai_inference_routes_to_ollama_and_replays_after_restart/);
+  assert.match(flow, /managed_ai_inference_completes_real_provider_generation/);
+  assert.match(flow, /"owner-2"/);
   assert.match(flow, /stop\(&ollama\.registration_id\)/);
   assert.match(flow, /restart_ai_inference_runtime_v1/);
   assert.match(flow, /assert_eq!\(replayed, first\)/);

@@ -57,9 +57,10 @@ pub(crate) async fn execute_payload_v1(
 pub(crate) async fn recover_pending_v1(
     persistence: &AiInferencePersistenceV1,
     ports: &mut dyn AiInferenceExecutionPortsV1,
+    logical_owner_id: &str,
 ) -> Result<u32, AiInferenceWorkerErrorV1> {
     let pending = persistence
-        .load_recoverable_runs(1)
+        .load_recoverable_runs(logical_owner_id, 1)
         .await
         .map_err(persistence_error)?;
     let mut recovered = 0_u32;
