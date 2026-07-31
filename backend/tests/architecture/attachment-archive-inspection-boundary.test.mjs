@@ -35,7 +35,7 @@ test('archive inspection persistence is admitted without opening the planned gat
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'blob_current_custodian_redelegation_v1',
+    'attachment_archive_inspection_ingress_contract_v1',
   );
   assert(policy.implementation.ownerInventory.engines.includes(
     'attachment_archive_inspection',
@@ -84,6 +84,52 @@ test('archive inspection API is bounded and carries no Blob or provider authorit
   );
   assert.match(source, /MAX_REPORT_ENTRIES_V1: usize = 1_000/);
   assert.match(source, /MAX_PATH_BYTES_V1: usize = 1_024/);
+});
+
+test('archive ingress is a target-owned event contract without engine implementation coupling', async () => {
+  const [manifest, proto, source] = await Promise.all([
+    readFile(
+      new URL('src/attachment-archive-inspection-ingress/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/attachment-archive-inspection-ingress/proto/hermes/attachment_archive_inspection/ingress/v1/custody_delegation.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-ingress/src/lib.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(manifest, /role = "engine"/);
+  assert.match(manifest, /owner = "attachment_archive_inspection"/);
+  assert.match(manifest, /surface = "contract"/);
+  assert.match(manifest, /hermes-events-protocol/);
+  assert.match(manifest, /hermes-runtime-protocol/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:attachment-security|attachment-archive-inspection-(?:api|core|persistence|runtime|assembly)|communications|blob|kernel)/,
+  );
+  assert.match(proto, /message RequestArchiveInspectionCustodyDelegationV1/);
+  assert.match(proto, /bytes candidate_envelope_sha256 = 5/);
+  assert.match(proto, /message ArchiveInspectionCustodyDelegatedV1/);
+  assert.match(proto, /bytes custody_transfer_source_proof = 9/);
+  const request = proto.slice(
+    proto.indexOf('message RequestArchiveInspectionCustodyDelegationV1'),
+    proto.indexOf('message ArchiveInspectionCustodyDelegatedV1'),
+  );
+  assert.doesNotMatch(
+    request,
+    /\b(?:blob_reference|custody_transfer_source_proof|provider_id|account_id|filesystem_path|target_owner_id|target_module_id|target_capability_id)\b/,
+  );
+  assert.match(source, /ATTACHMENT_SECURITY_ARCHIVE_DELEGATION_CAPABILITY_ID_V1/);
+  assert.match(source, /ATTACHMENT_ARCHIVE_INSPECTION_BLOB_TARGET_OWNER_ID_V1/);
+  assert.match(source, /DurableEnvelopeKindV1::Command/);
+  assert.match(source, /DurableEnvelopeKindV1::Result/);
 });
 
 test('pure archive core owns policy without transport, storage or parser dependency', async () => {

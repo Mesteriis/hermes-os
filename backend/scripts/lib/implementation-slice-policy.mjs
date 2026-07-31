@@ -852,6 +852,12 @@ const ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_PRODUCTION_PACKAGES = [
     surface: 'contract',
   },
   {
+    name: 'hermes-attachment-archive-inspection-ingress',
+    role: 'engine',
+    owner: 'attachment_archive_inspection',
+    surface: 'contract',
+  },
+  {
     name: 'hermes-attachment-archive-inspection-core',
     role: 'engine',
     owner: 'attachment_archive_inspection',
@@ -2428,6 +2434,10 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
 const ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-attachment-archive-inspection-api': [],
+  'hermes-attachment-archive-inspection-ingress': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
   'hermes-attachment-archive-inspection-core': [
     { name: 'hermes-attachment-archive-inspection-api', kind: 'normal' },
   ],
@@ -2905,6 +2915,14 @@ const ATTACHMENT_ARCHIVE_INSPECTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLI
   ...COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-attachment-archive-inspection-api': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-archive-inspection-ingress': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
@@ -3450,6 +3468,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communication-reply-suggestion-api',
       'hermes-ai-contracts',
       'hermes-attachment-archive-inspection-api',
+      'hermes-attachment-archive-inspection-ingress',
       'hermes-communications-export-api',
       'hermes-communication-delivery-intent-api',
       'hermes-communication-delivery-intent-ingress-api',
@@ -4137,6 +4156,7 @@ function expectedSlice(currentSlice) {
   if (
     currentSlice === 'attachment_archive_inspection_persistence_join_v1'
     || currentSlice === 'blob_current_custodian_redelegation_v1'
+    || currentSlice === 'attachment_archive_inspection_ingress_contract_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,

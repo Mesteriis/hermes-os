@@ -12,11 +12,13 @@ client contract, pure bounded policy и ZIP metadata adapter без extraction.
 `hermes-attachment-archive-inspection-persistence` реализует owner-local
 request idempotency, exact message/hash inbox, порядок-независимый join,
 bounded report/realtime storage и job lease fencing по worker, runtime
-generation, grant epoch и monotonic fence. Согласован отдельный target-owned
-`hermes-attachment-archive-inspection-ingress` contract для event-only
-custody delegation request/result; его код, managed runtime, release assembly,
-event decoding, Blob custody/read, live PostgreSQL/NATS/Gateway conformance и
-production gate `attachment_archive_inspection_v1` остаются открыты.
+generation, grant epoch и monotonic fence. Отдельный target-owned
+`hermes-attachment-archive-inspection-ingress` реализует typed event routes,
+deterministic request/result envelopes, exact target constants и bounded
+private proof validation для event-only custody delegation. Owner-local
+request/result persistence, managed runtime, release assembly, event decoding,
+Blob custody/read, live PostgreSQL/NATS/Gateway conformance и production gate
+`attachment_archive_inspection_v1` остаются открыты.
 
 Зависит от:
 
