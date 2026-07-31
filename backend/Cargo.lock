@@ -2325,6 +2325,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-recipient-suggestion-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-blob-client",
+ "hermes-communication-recipient-suggestion-api",
+ "hermes-communication-recipient-suggestion-core",
+ "hermes-communication-recipient-suggestion-persistence",
+ "hermes-communications-recipient-source-api",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-communication-reply-suggestion-api"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,34 @@
+[package]
+name = "hermes-communication-recipient-suggestion-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-communication-recipient-suggestion-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "communication_recipient_suggestion"
+surface = "runtime"
+
+[dependencies]
+hermes-blob-client = { path = "../platform/blob/client" }
+hermes-communication-recipient-suggestion-api = { path = "../communication-recipient-suggestion-api" }
+hermes-communication-recipient-suggestion-core = { path = "../communication-recipient-suggestion-core" }
+hermes-communication-recipient-suggestion-persistence = { path = "../communication-recipient-suggestion-persistence" }
+hermes-communications-recipient-source-api = { path = "../communications-recipient-source-api" }
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-events-protocol = { path = "../platform/events" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-storage-vault = { path = "../platform/storage/vault" }
+libc = "=0.2.186"
+prost = "=0.14.4"
+sha2 = { version = "=0.11.0", default-features = false }
+tokio = { version = "=1.52.4", default-features = false, features = ["rt-multi-thread", "time"] }
+zeroize = "=1.9.0"
