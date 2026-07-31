@@ -1,8 +1,17 @@
 #![forbid(unsafe_code)]
 
+mod explanation;
 mod translation;
 mod validation;
 
+pub use explanation::{
+    compute_explanation_inference_request_digest_v1,
+    compute_provider_explanation_request_digest_v1, decode_explanation_source_content_v1,
+    encode_explanation_source_content_v1, seal_explanation_inference_request_v1,
+    validate_explanation_inference_request_v1, validate_explanation_inference_result_v1,
+    validate_explanation_source_content_v1, validate_provider_explanation_request_v1,
+    validate_provider_explanation_result_v1,
+};
 use hermes_runtime_protocol::v1::ContractReferenceV1;
 pub use translation::{
     compute_provider_translation_request_digest_v1,
@@ -30,7 +39,7 @@ pub use validation::{
 pub const PACKAGE: &str = "hermes-ai-contracts";
 pub const AI_OWNER_V1: &str = "ai";
 pub const AI_CONTRACT_MAJOR_V1: u32 = 1;
-pub const AI_CONTRACT_REVISION_V1: u32 = 2;
+pub const AI_CONTRACT_REVISION_V1: u32 = 3;
 pub const COMMUNICATION_REPLY_INFERENCE_CONTRACT_NAME_V1: &str =
     "communication_reply_suggestion_inference";
 pub const AI_PROVIDER_REPLY_GENERATION_CONTRACT_NAME_V1: &str = "ai_provider_reply_generation";
@@ -40,12 +49,17 @@ pub const AI_PROVIDER_SUMMARY_GENERATION_CONTRACT_NAME_V1: &str = "ai_provider_s
 pub const COMMUNICATION_TRANSLATION_INFERENCE_CONTRACT_NAME_V1: &str =
     "communication_translation_inference";
 pub const AI_PROVIDER_TRANSLATION_CONTRACT_NAME_V1: &str = "ai_provider_translation";
+pub const COMMUNICATION_EXPLANATION_INFERENCE_CONTRACT_NAME_V1: &str =
+    "communication_explanation_inference";
+pub const AI_PROVIDER_EXPLANATION_CONTRACT_NAME_V1: &str = "ai_provider_explanation";
 pub const AI_INFERENCE_REQUEST_CAPABILITY_ID_V1: &str = "ai.inference.request.v1";
 pub const AI_PROVIDER_GENERATION_CAPABILITY_ID_V1: &str = "ai.provider.generate.v1";
 pub const AI_SUMMARY_REQUEST_CAPABILITY_ID_V1: &str = "ai.summary.request.v1";
 pub const AI_PROVIDER_SUMMARY_CAPABILITY_ID_V1: &str = "ai.provider.summarize.v1";
 pub const AI_TRANSLATION_REQUEST_CAPABILITY_ID_V1: &str = "ai.translation.request.v1";
 pub const AI_PROVIDER_TRANSLATION_CAPABILITY_ID_V1: &str = "ai.provider.translate.v1";
+pub const AI_EXPLANATION_REQUEST_CAPABILITY_ID_V1: &str = "ai.explanation.request.v1";
+pub const AI_PROVIDER_EXPLANATION_CAPABILITY_ID_V1: &str = "ai.provider.explain.v1";
 pub const AI_INFERENCE_BLOB_CAPABILITY_ID_V1: &str = "ai.inference.blob.v1";
 pub const AI_INFERENCE_MODULE_ID_V1: &str = "hermes-ai-inference-runtime";
 pub const AI_MAX_PRIVATE_SOURCE_BYTES_V1: u64 = 256 * 1024;
@@ -55,6 +69,8 @@ pub const AI_MAX_SENDER_BYTES_V1: usize = 512;
 pub const AI_MAX_SUBJECT_BYTES_V1: usize = 998;
 pub const AI_MAX_CUSTODY_PROOF_BYTES_V1: usize = 2_048;
 pub const AI_LOCAL_EGRESS_POLICY_REVISION_V1: u32 = 1;
+pub const AI_MAX_EXPLANATION_REASONS_V1: u32 = 8;
+pub const AI_MAX_EXPLANATION_REASON_TEXT_BYTES_V1: u32 = 512;
 
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/hermes.ai.contracts.v1.rs"));
@@ -95,6 +111,16 @@ pub fn ai_provider_translation_contract_reference_v1() -> ContractReferenceV1 {
     contract_reference(AI_PROVIDER_TRANSLATION_CONTRACT_NAME_V1)
 }
 
+#[must_use]
+pub fn communication_explanation_inference_contract_reference_v1() -> ContractReferenceV1 {
+    contract_reference(COMMUNICATION_EXPLANATION_INFERENCE_CONTRACT_NAME_V1)
+}
+
+#[must_use]
+pub fn ai_provider_explanation_contract_reference_v1() -> ContractReferenceV1 {
+    contract_reference(AI_PROVIDER_EXPLANATION_CONTRACT_NAME_V1)
+}
+
 fn contract_reference(name: &str) -> ContractReferenceV1 {
     ContractReferenceV1 {
         owner: AI_OWNER_V1.to_owned(),
@@ -119,7 +145,7 @@ mod tests {
                 owner: "ai".to_owned(),
                 name: "communication_reply_suggestion_inference".to_owned(),
                 major: 1,
-                revision: 2,
+                revision: 3,
                 schema_sha256: AI_CONTRACTS_SCHEMA_SHA256.to_vec(),
             }
         );
@@ -142,6 +168,14 @@ mod tests {
         assert_eq!(
             ai_provider_translation_contract_reference_v1().name,
             "ai_provider_translation"
+        );
+        assert_eq!(
+            communication_explanation_inference_contract_reference_v1().name,
+            "communication_explanation_inference"
+        );
+        assert_eq!(
+            ai_provider_explanation_contract_reference_v1().name,
+            "ai_provider_explanation"
         );
     }
 }

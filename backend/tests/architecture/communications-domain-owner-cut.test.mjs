@@ -58,7 +58,7 @@ test('Communications remains isolated after Review owner admission', async () =>
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_explanation_contract_core_v1',
+    'communication_explanation_cross_owner_contracts_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'review'],
@@ -74,6 +74,8 @@ test('Communications remains isolated after Review owner admission', async () =>
     ],
     engines: ['ai', 'attachment_archive_inspection', 'attachment_security'],
     businessCapabilities: [
+      'ai.explanation.request.v1',
+      'ai.provider.explain.v1',
       'ai.provider.translate.v1',
       'ai.translation.request.v1',
       'attachment.archive_inspection.v1',
@@ -111,6 +113,11 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication_delivery_intent.telegram.events.v1',
       'communication_delivery_intent.whatsapp.events.v1',
       'communication_delivery_intent.zulip.events.v1',
+      'communication_explanation.inference.v1',
+      'communication_explanation.source.blob.v1',
+      'communication_explanation.source_prepare.v1',
+      'communication_explanation.source_prepared.v1',
+      'communication_explanation.source_rejected.v1',
       'communication_summary.inference.v1',
       'communication_summary.source.blob.v1',
       'communication_summary.source_prepare.v1',
@@ -123,6 +130,8 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication_translation.source_prepared.v1',
       'communication_translation.source_rejected.v1',
       'communication_translation.storage.v1',
+      'communications.ai-explanation-source.blob.v1',
+      'communications.ai-explanation-source.v1',
       'communications.ai-reply-source.blob.v1',
       'communications.ai-reply-source.v1',
       'communications.ai-summary-source.blob.v1',

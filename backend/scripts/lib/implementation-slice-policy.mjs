@@ -3628,6 +3628,22 @@ const COMMUNICATION_EXPLANATION_CONTRACT_CORE_INVENTORY = {
   ].sort(),
 };
 
+const COMMUNICATION_EXPLANATION_CROSS_OWNER_CONTRACTS_INVENTORY = {
+  ...COMMUNICATION_EXPLANATION_CONTRACT_CORE_INVENTORY,
+  businessCapabilities: [
+    ...COMMUNICATION_EXPLANATION_CONTRACT_CORE_INVENTORY.businessCapabilities,
+    'ai.explanation.request.v1',
+    'ai.provider.explain.v1',
+    'communication_explanation.inference.v1',
+    'communication_explanation.source.blob.v1',
+    'communication_explanation.source_prepare.v1',
+    'communication_explanation.source_prepared.v1',
+    'communication_explanation.source_rejected.v1',
+    'communications.ai-explanation-source.blob.v1',
+    'communications.ai-explanation-source.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -4675,6 +4691,17 @@ function expectedSlice(currentSlice) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: COMMUNICATION_EXPLANATION_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: COMMUNICATION_EXPLANATION_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies: COMMUNICATION_EXPLANATION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: COMMUNICATION_EXPLANATION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'communication_explanation_cross_owner_contracts_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: COMMUNICATION_EXPLANATION_CROSS_OWNER_CONTRACTS_INVENTORY,
       cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
       packages: COMMUNICATION_EXPLANATION_CONTRACT_CORE_PRODUCTION_PACKAGES,
       workspaceDependencies: COMMUNICATION_EXPLANATION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,

@@ -143,3 +143,49 @@ enum CommunicationTranslationSourceRejectCodeV1 {
   COMMUNICATION_TRANSLATION_SOURCE_REJECT_CODE_CONTENT_LIMIT = 6;
   COMMUNICATION_TRANSLATION_SOURCE_REJECT_CODE_POLICY = 7;
 }
+
+message PrepareCommunicationExplanationSourceCommandV1 {
+  bytes run_id = 1;
+  bytes source_message_id = 2;
+  uint64 expected_source_revision = 3;
+  string logical_owner_id = 4;
+}
+
+message CommunicationExplanationSourcePreparedV1 {
+  bytes run_id = 1;
+  bytes source_message_id = 2;
+  bytes source_evidence_id = 3;
+  uint64 source_evidence_revision = 4;
+  CommunicationExplanationSourceContentReceiptV1 source_content = 5;
+  string logical_owner_id = 6;
+}
+
+message CommunicationExplanationSourceRejectedV1 {
+  bytes run_id = 1;
+  CommunicationExplanationSourceRejectCodeV1 code = 2;
+  string logical_owner_id = 3;
+}
+
+message CommunicationExplanationSourceContentReceiptV1 {
+  bytes reference_id = 1;
+  uint64 declared_bytes = 2;
+  bytes sha256 = 3;
+  bytes custody_transfer_source_proof = 4;
+}
+
+message CommunicationExplanationSourceContentV1 {
+  bytes sender_utf8 = 1;
+  bytes subject_utf8 = 2;
+  bytes body_utf8 = 3;
+}
+
+enum CommunicationExplanationSourceRejectCodeV1 {
+  COMMUNICATION_EXPLANATION_SOURCE_REJECT_CODE_UNSPECIFIED = 0;
+  COMMUNICATION_EXPLANATION_SOURCE_REJECT_CODE_INVALID_REQUEST = 1;
+  COMMUNICATION_EXPLANATION_SOURCE_REJECT_CODE_SOURCE_MISSING_OR_INACTIVE = 2;
+  COMMUNICATION_EXPLANATION_SOURCE_REJECT_CODE_STALE_REVISION = 3;
+  COMMUNICATION_EXPLANATION_SOURCE_REJECT_CODE_CONTENT_UNAVAILABLE = 4;
+  COMMUNICATION_EXPLANATION_SOURCE_REJECT_CODE_INVALID_UTF8 = 5;
+  COMMUNICATION_EXPLANATION_SOURCE_REJECT_CODE_CONTENT_LIMIT = 6;
+  COMMUNICATION_EXPLANATION_SOURCE_REJECT_CODE_POLICY = 7;
+}
