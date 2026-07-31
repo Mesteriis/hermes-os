@@ -1051,6 +1051,11 @@ const REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_PRODUCTION_PACKAGES = [
   { name: 'hermes-reviewed-task-candidate-promotion-core', role: 'workflow', owner: 'reviewed_task_candidate_promotion', surface: 'implementation' },
 ];
 
+const REVIEWED_TASK_CANDIDATE_PROMOTION_PERSISTENCE_PRODUCTION_PACKAGES = [
+  ...REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_PRODUCTION_PACKAGES,
+  { name: 'hermes-reviewed-task-candidate-promotion-persistence', role: 'workflow', owner: 'reviewed_task_candidate_promotion', surface: 'persistence' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2984,6 +2989,15 @@ const REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOW
   'hermes-reviewed-task-candidate-promotion-core': [],
 };
 
+const REVIEWED_TASK_CANDIDATE_PROMOTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-reviewed-task-candidate-promotion-persistence': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-reviewed-task-candidate-promotion-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3821,6 +3835,14 @@ const REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALL
   ],
 };
 
+const REVIEWED_TASK_CANDIDATE_PROMOTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-reviewed-task-candidate-promotion-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -4387,6 +4409,14 @@ const REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_INVENTORY = {
   businessCapabilities: [
     ...TASKS_REVIEWED_CANDIDATE_PERSISTENCE_INVENTORY.businessCapabilities,
     'review.task-candidate.promotion-result.v1',
+  ].sort(),
+};
+
+const REVIEWED_TASK_CANDIDATE_PROMOTION_PERSISTENCE_INVENTORY = {
+  ...REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_INVENTORY,
+  businessCapabilities: [
+    ...REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_INVENTORY.businessCapabilities,
+    'reviewed_task_candidate_promotion.storage.v1',
   ].sort(),
 };
 
@@ -5800,6 +5830,17 @@ function expectedSlice(currentSlice) {
       packages: REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_PRODUCTION_PACKAGES,
       workspaceDependencies: REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'reviewed_task_candidate_promotion_persistence_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: REVIEWED_TASK_CANDIDATE_PROMOTION_PERSISTENCE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: REVIEWED_TASK_CANDIDATE_PROMOTION_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies: REVIEWED_TASK_CANDIDATE_PROMOTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: REVIEWED_TASK_CANDIDATE_PROMOTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

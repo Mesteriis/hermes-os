@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "reviewed_task_candidate_promotion_contract_core_v1",
+    "currentSlice": "reviewed_task_candidate_promotion_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1092,6 +1092,12 @@
         "role": "workflow",
         "owner": "reviewed_task_candidate_promotion",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-reviewed-task-candidate-promotion-persistence",
+        "role": "workflow",
+        "owner": "reviewed_task_candidate_promotion",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1808,6 +1814,20 @@
         }
       ],
       "hermes-reviewed-task-candidate-promotion-core": [],
+      "hermes-reviewed-task-candidate-promotion-persistence": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-reviewed-task-candidate-promotion-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-communications-attachment-contract": [
         {
           "name": "hermes-events-protocol",
@@ -5417,6 +5437,28 @@
           "features": []
         }
       ],
+      "hermes-reviewed-task-candidate-promotion-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-review-attention-persistence": [
         {
           "name": "sha2",
@@ -8754,6 +8796,10 @@
       "hermes-reviewed-task-candidate-promotion-core": {
         "primaryKind": "lib",
         "customBuildAllowed": false
+      },
+      "hermes-reviewed-task-candidate-promotion-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -8944,6 +8990,7 @@
         "review.task-candidate.promotion.v1",
         "review.task-candidate.storage.v1",
         "review.task-candidate.submission.v1",
+        "reviewed_task_candidate_promotion.storage.v1",
         "tasks.reviewed-candidate.blob.v1",
         "tasks.reviewed-candidate.command.v1",
         "tasks.storage.v1"

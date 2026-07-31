@@ -180,7 +180,7 @@ test('summary runtime and assembly expose only exact event request and release b
 
   assert.equal(
     policy.implementation.currentSlice,
-    'reviewed_task_candidate_promotion_contract_core_v1',
+    'reviewed_task_candidate_promotion_persistence_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages
