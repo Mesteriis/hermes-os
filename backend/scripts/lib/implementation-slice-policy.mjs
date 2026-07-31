@@ -770,6 +770,12 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_PRODUCTION_PACKAGES = [
     surface: 'implementation',
   },
   {
+    name: 'hermes-communication-reply-suggestion-persistence',
+    role: 'workflow',
+    owner: 'communication_reply_suggestion',
+    surface: 'persistence',
+  },
+  {
     name: 'hermes-ai-contracts',
     role: 'engine',
     owner: 'ai',
@@ -2306,6 +2312,10 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-communication-reply-suggestion-api': [],
   'hermes-communication-reply-suggestion-core': [],
+  'hermes-communication-reply-suggestion-persistence': [
+    { name: 'hermes-communication-reply-suggestion-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
   'hermes-ai-contracts': [
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
@@ -2747,6 +2757,10 @@ const COMMUNICATIONS_AI_SOURCE_CONTRACT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
   'hermes-communication-reply-suggestion-core': [],
+  'hermes-communication-reply-suggestion-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
   'hermes-ai-contracts': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },

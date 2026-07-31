@@ -746,6 +746,12 @@
         "surface": "implementation"
       },
       {
+        "name": "hermes-communication-reply-suggestion-persistence",
+        "role": "workflow",
+        "owner": "communication_reply_suggestion",
+        "surface": "persistence"
+      },
+      {
         "name": "hermes-ai-contracts",
         "role": "engine",
         "owner": "ai",
@@ -1766,6 +1772,16 @@
       ],
       "hermes-communication-reply-suggestion-api": [],
       "hermes-communication-reply-suggestion-core": [],
+      "hermes-communication-reply-suggestion-persistence": [
+        {
+          "name": "hermes-communication-reply-suggestion-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-ai-contracts": [
         {
           "name": "hermes-runtime-protocol",
@@ -5088,6 +5104,28 @@
         }
       ],
       "hermes-communication-reply-suggestion-core": [],
+      "hermes-communication-reply-suggestion-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-ai-inference-core": [
         {
           "name": "sha2",
@@ -6611,6 +6649,10 @@
         "customBuildAllowed": true
       },
       "hermes-communication-reply-suggestion-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-communication-reply-suggestion-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },

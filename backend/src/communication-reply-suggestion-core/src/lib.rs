@@ -104,6 +104,7 @@ pub enum ReplySuggestionTransitionErrorV1 {
     InvalidTransition,
     InvalidSourceReceipt,
     InvalidCandidate,
+    InvalidStatus,
     DigestMismatch,
     RevisionExhausted,
 }
@@ -215,6 +216,59 @@ pub fn transition_reply_suggestion_v1(
         }),
         _ => Err(ReplySuggestionTransitionErrorV1::InvalidTransition),
     }
+}
+
+pub fn validate_reply_suggestion_status_v1(
+    status: &ReplySuggestionStatusV1,
+) -> Result<(), ReplySuggestionTransitionErrorV1> {
+    if status.state_revision == 0 {
+        return Err(ReplySuggestionTransitionErrorV1::InvalidStatus);
+    }
+    let has_source = status.source_evidence_id.is_some()
+        && status
+            .source_evidence_revision
+            .is_some_and(|value| value > 0)
+        && status.source_sha256.is_some()
+        && status.inference_request_digest.is_some();
+    let has_partial_source = status.source_evidence_id.is_some()
+        || status.source_evidence_revision.is_some()
+        || status.source_sha256.is_some()
+        || status.inference_request_digest.is_some();
+    match status.state {
+        ReplySuggestionStateV1::Accepted | ReplySuggestionStateV1::PreparingSource => {
+            if has_partial_source || status.candidate.is_some() || status.rejection.is_some() {
+                return Err(ReplySuggestionTransitionErrorV1::InvalidStatus);
+            }
+        }
+        ReplySuggestionStateV1::AwaitingInference => {
+            if !has_source || status.candidate.is_some() || status.rejection.is_some() {
+                return Err(ReplySuggestionTransitionErrorV1::InvalidStatus);
+            }
+        }
+        ReplySuggestionStateV1::Ready => {
+            let candidate = status
+                .candidate
+                .as_ref()
+                .ok_or(ReplySuggestionTransitionErrorV1::InvalidStatus)?;
+            validate_candidate(candidate)?;
+            if !has_source
+                || status.rejection.is_some()
+                || status.inference_request_digest != Some(candidate.request_digest)
+                || status.source_sha256 != Some(candidate.source_sha256)
+            {
+                return Err(ReplySuggestionTransitionErrorV1::InvalidStatus);
+            }
+        }
+        ReplySuggestionStateV1::Rejected => {
+            if status.candidate.is_some() || status.rejection.is_none() {
+                return Err(ReplySuggestionTransitionErrorV1::InvalidStatus);
+            }
+            if has_partial_source && !has_source {
+                return Err(ReplySuggestionTransitionErrorV1::InvalidStatus);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_candidate(
@@ -354,6 +408,14 @@ mod tests {
                 },
             ),
             Err(ReplySuggestionTransitionErrorV1::InvalidSourceReceipt)
+        );
+
+        assert_eq!(validate_reply_suggestion_status_v1(&rejected), Ok(()));
+        let mut invalid = accepted_reply_suggestion_status_v1();
+        invalid.source_sha256 = Some([8; 32]);
+        assert_eq!(
+            validate_reply_suggestion_status_v1(&invalid),
+            Err(ReplySuggestionTransitionErrorV1::InvalidStatus)
         );
     }
 }

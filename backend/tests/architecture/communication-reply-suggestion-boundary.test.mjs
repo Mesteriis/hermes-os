@@ -211,6 +211,47 @@ test('reply suggestion core owns only the bounded workflow state machine', async
   );
 });
 
+test('reply suggestion persistence is owner-local atomic replay state without private source', async () => {
+  const [manifest, api, model, repository, outbox, realtime, schema, migration] =
+    await Promise.all([
+      backendSource('src/communication-reply-suggestion-persistence/Cargo.toml'),
+      backendSource('src/communication-reply-suggestion-persistence/src/lib.rs'),
+      backendSource('src/communication-reply-suggestion-persistence/src/model.rs'),
+      backendSource('src/communication-reply-suggestion-persistence/src/repository.rs'),
+      backendSource('src/communication-reply-suggestion-persistence/src/outbox.rs'),
+      backendSource('src/communication-reply-suggestion-persistence/src/realtime.rs'),
+      backendSource('src/communication-reply-suggestion-persistence/src/schema.rs'),
+      backendSource(
+        'src/communication-reply-suggestion-persistence/migrations/0001_reply_suggestion.sql',
+      ),
+    ]);
+
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "communication_reply_suggestion"/);
+  assert.match(manifest, /surface = "persistence"/);
+  assert.match(api, /CommunicationReplySuggestionPersistenceV1/);
+  assert.match(model, /request_fingerprint/);
+  assert.match(repository, /create_run/);
+  assert.match(repository, /persist_source_result/);
+  assert.match(repository, /persist_inference_transition/);
+  assert.match(repository, /load_recoverable_runs/);
+  assert.match(repository, /transition_reply_suggestion_v1/);
+  assert.match(repository, /transaction\.commit\(\)/);
+  assert.match(outbox, /unpublished_source_prepare_events/);
+  assert.match(outbox, /mark_source_prepare_published/);
+  assert.match(realtime, /client_realtime_window/);
+  assert.match(schema, /owner_id: "communication_reply_suggestion"/);
+  assert.match(migration, /CREATE TABLE hermes_data\.communication_reply_suggestion_runs/);
+  assert.match(migration, /UNIQUE \(logical_owner_id, operation_id\)/);
+  assert.match(migration, /CREATE TABLE hermes_data\.communication_reply_suggestion_inbox/);
+  assert.match(migration, /CREATE TABLE hermes_data\.communication_reply_suggestion_outbox/);
+  assert.match(migration, /CREATE TABLE hermes_data\.communication_reply_suggestion_realtime/);
+  assert.doesNotMatch(
+    `${manifest}\n${model}\n${repository}\n${outbox}\n${realtime}\n${migration}`,
+    /communications_|mail_|telegram_|whatsapp_|zulip_|source_body|prompt|provider_id|model_id|endpoint|serde_json|google\.protobuf\.Any|map</,
+  );
+});
+
 test('AI public contracts are one concrete provider-neutral engine unit', async () => {
   const [manifest, api, validation, proto] = await Promise.all([
     backendSource('src/ai-contracts/Cargo.toml'),

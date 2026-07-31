@@ -2141,6 +2141,16 @@ name = "hermes-communication-reply-suggestion-core"
 version = "0.1.0"
 
 [[package]]
+name = "hermes-communication-reply-suggestion-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-reply-suggestion-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-communications-ai-source-api"
 version = "0.1.0"
 dependencies = [

@@ -56,6 +56,7 @@ members = [
   "src/communications-ai-source-api",
   "src/communication-reply-suggestion-api",
   "src/communication-reply-suggestion-core",
+  "src/communication-reply-suggestion-persistence",
   "src/ai-contracts",
   "src/ai-inference-core",
   "src/ai-inference-persistence",
