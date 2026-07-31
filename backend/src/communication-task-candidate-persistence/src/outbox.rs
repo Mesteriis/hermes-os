@@ -10,7 +10,7 @@ use crate::{
 };
 
 impl CommunicationTaskCandidatePersistenceV1 {
-    pub async fn unpublished_source_prepare_events(
+    pub async fn unpublished_events(
         &self,
         logical_owner_id: &str,
         limit: u16,
@@ -67,7 +67,7 @@ impl CommunicationTaskCandidatePersistenceV1 {
         .collect()
     }
 
-    pub async fn mark_source_prepare_published(
+    pub async fn mark_event_published(
         &self,
         logical_owner_id: &str,
         message_id: &[u8; 16],

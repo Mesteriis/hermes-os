@@ -2860,6 +2860,7 @@ const COMMUNICATION_TASK_CANDIDATE_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-communications-task-source-api', kind: 'normal' },
     { name: 'hermes-events-jetstream', kind: 'normal' },
     { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-review-task-candidate-api', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
     { name: 'hermes-storage-vault', kind: 'normal' },

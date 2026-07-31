@@ -51,7 +51,14 @@ authority. Live managed contour теперь устанавливает одну
 Review domain и Tasks domain, выдаёт каждому отдельный owner-local Storage
 binding и поднимает их через реальные Vault, Blob, PostgreSQL/PgBouncer и NATS
 границы. Kernel admission использует exact descriptor requests, а conformance
-фиксирует distinct module/owner identities и runtime generations. Aggregate
+фиксирует distinct module/owner identities и runtime generations. Extraction
+workflow теперь после детерминированного результата записывает каждый typed
+candidate в Review-target-bound Blob, строит exact durable
+`SubmitTaskCandidateForReviewCommandV1` только через Review public contract и
+атомарно сохраняет terminal extraction state, replayable realtime и все Review
+submission envelopes в собственном outbox. Runtime не импортирует Review core,
+persistence или runtime implementation; общий outbox relay публикует exact
+source и Review envelopes без re-encode. Aggregate
 gate остаётся закрыт до Gateway/SSE business-flow composition, полного managed
 approve/reject E2E и обязательных negative/restart/revoke/privacy доказательств.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction

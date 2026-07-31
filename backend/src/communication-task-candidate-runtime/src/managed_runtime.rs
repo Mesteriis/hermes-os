@@ -44,15 +44,20 @@ use crate::{
         CommunicationTaskCandidateClientRealtimeErrorV1,
         CommunicationTaskCandidateClientRealtimePublisherV1,
     },
-    consume_task_source_prepared_once_v1, consume_task_source_rejected_once_v1,
     contracts::{
         communication_task_candidate_command_contract_v1,
         communication_task_candidate_query_contract_v1,
     },
-    event_outbox::CommunicationTaskCandidateEventRelayErrorV1,
-    extraction::CommunicationTaskCandidateExtractionErrorV1,
-    recover_accepted_communication_task_candidate_once_v1, relay_source_prepare_outbox_once_v1,
-    source_results::CommunicationTaskCandidateSourceResultErrorV1,
+    event_outbox::{CommunicationTaskCandidateEventRelayErrorV1, relay_outbox_once_v1},
+    extraction::{
+        CommunicationTaskCandidateExtractionErrorV1,
+        recover_accepted_communication_task_candidate_once_v1,
+    },
+    review_submission::CommunicationTaskCandidateReviewSubmissionContextV1,
+    source_results::{
+        CommunicationTaskCandidateSourceResultErrorV1, consume_task_source_prepared_once_v1,
+        consume_task_source_rejected_once_v1,
+    },
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -210,11 +215,11 @@ impl CommunicationTaskCandidateManagedRuntimeV1 {
         })
     }
 
-    pub async fn relay_source_prepare_outbox_once(
+    pub async fn relay_outbox_once(
         &self,
         now_unix_millis: i64,
     ) -> Result<bool, CommunicationTaskCandidateManagedRuntimeErrorV1> {
-        relay_source_prepare_outbox_once_v1(
+        relay_outbox_once_v1(
             &self.persistence,
             &self.admission.logical_owner_id,
             &self.event_connection,
@@ -233,6 +238,13 @@ impl CommunicationTaskCandidateManagedRuntimeV1 {
             .inner_mut()
             .set_nonblocking(false)
             .map_err(|_| CommunicationTaskCandidateManagedRuntimeErrorV1::Unavailable)?;
+        let runtime_instance_id = self.admission.runtime_instance_id.clone();
+        let submission_context = CommunicationTaskCandidateReviewSubmissionContextV1 {
+            module_id: COMMUNICATION_TASK_CANDIDATE_MODULE_ID_V1,
+            runtime_instance_id: &runtime_instance_id,
+            runtime_generation: self.admission.runtime_generation,
+            now_unix_millis,
+        };
         let mut dispatcher = RejectManagedControlRequestsV2;
         let result = consume_task_source_prepared_once_v1(
             &self.persistence,
@@ -241,6 +253,7 @@ impl CommunicationTaskCandidateManagedRuntimeV1 {
             &mut self.control_channel,
             &mut dispatcher,
             &self.admission.logical_owner_id,
+            &submission_context,
             now_unix_millis,
         )
         .await
@@ -275,12 +288,20 @@ impl CommunicationTaskCandidateManagedRuntimeV1 {
             .inner_mut()
             .set_nonblocking(false)
             .map_err(|_| CommunicationTaskCandidateManagedRuntimeErrorV1::Unavailable)?;
+        let runtime_instance_id = self.admission.runtime_instance_id.clone();
+        let submission_context = CommunicationTaskCandidateReviewSubmissionContextV1 {
+            module_id: COMMUNICATION_TASK_CANDIDATE_MODULE_ID_V1,
+            runtime_instance_id: &runtime_instance_id,
+            runtime_generation: self.admission.runtime_generation,
+            now_unix_millis,
+        };
         let mut dispatcher = RejectManagedControlRequestsV2;
         let result = recover_accepted_communication_task_candidate_once_v1(
             &self.persistence,
             &mut self.control_channel,
             &mut dispatcher,
             &self.admission.logical_owner_id,
+            &submission_context,
             now_unix_millis,
         )
         .await
@@ -659,6 +680,9 @@ fn extraction_error(
         }
         CommunicationTaskCandidateExtractionErrorV1::Persistence(error) => {
             CommunicationTaskCandidateManagedRuntimeErrorV1::Persistence(error)
+        }
+        CommunicationTaskCandidateExtractionErrorV1::ReviewSubmission => {
+            CommunicationTaskCandidateManagedRuntimeErrorV1::Unavailable
         }
         CommunicationTaskCandidateExtractionErrorV1::Blob(
             crate::CommunicationTaskCandidateBlobErrorV1::InvalidReceipt,

@@ -12,6 +12,10 @@ use hermes_communications_task_source_api::{
     communication_task_source_rejected_consume_request_v1,
     communication_task_source_rejected_contract_reference_v1,
 };
+use hermes_review_task_candidate_api::{
+    review_task_candidate_submit_contract_reference_v1,
+    review_task_candidate_submit_publish_request_v1,
+};
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
     CapabilityRequestV1, ClientRpcRouteV1, ContractReferenceV1, ModuleDescriptorV1, ModuleKindV1,
@@ -32,6 +36,8 @@ pub const COMMUNICATION_TASK_CANDIDATE_STORAGE_CAPABILITY_ID_V1: &str =
     "communication_task_candidate_extraction.storage.v1";
 pub const COMMUNICATION_TASK_CANDIDATE_BLOB_CAPABILITY_ID_V1: &str =
     "communication_task_candidate_extraction.source.blob.v1";
+pub const COMMUNICATION_TASK_CANDIDATE_REVIEW_SUBMISSION_CAPABILITY_ID_V1: &str =
+    "communication_task_candidate_extraction.review_submission.v1";
 const STORAGE_CONNECTION_BUDGET_V1: u32 = 4;
 
 #[must_use]
@@ -66,6 +72,7 @@ pub fn communication_task_candidate_module_descriptor_v1(build_id: &str) -> Modu
         }),
         capabilities: vec![
             client_capability(),
+            review_submission_capability(),
             blob_capability(),
             source_prepare_capability(),
             source_prepared_capability(),
@@ -99,6 +106,7 @@ fn blob_capability() -> CapabilityDescriptorV1 {
                 custody_scope_id: COMMUNICATION_TASK_CANDIDATE_OWNER_V1.to_owned(),
                 allowed_operations: vec![
                     BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::Write as i32,
                     BlobQuotaOperationV1::CustodyTransfer as i32,
                     BlobQuotaOperationV1::ReleaseCustody as i32,
                 ],
@@ -106,6 +114,15 @@ fn blob_capability() -> CapabilityDescriptorV1 {
         }],
         ..Default::default()
     }
+}
+
+fn review_submission_capability() -> CapabilityDescriptorV1 {
+    event_capability(
+        COMMUNICATION_TASK_CANDIDATE_REVIEW_SUBMISSION_CAPABILITY_ID_V1,
+        ProvidedSurfaceKindV1::DurablePublisher,
+        review_task_candidate_submit_contract_reference_v1(),
+        review_task_candidate_submit_publish_request_v1(),
+    )
 }
 
 fn client_capability() -> CapabilityDescriptorV1 {
@@ -232,6 +249,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 COMMUNICATION_TASK_CANDIDATE_CAPABILITY_ID_V1,
+                COMMUNICATION_TASK_CANDIDATE_REVIEW_SUBMISSION_CAPABILITY_ID_V1,
                 COMMUNICATION_TASK_CANDIDATE_BLOB_CAPABILITY_ID_V1,
                 "communication_task_candidate_extraction.source_prepare.v1",
                 "communication_task_candidate_extraction.source_prepared.v1",

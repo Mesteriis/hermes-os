@@ -1,16 +1,25 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobCustodyReleaseRequestV1, ManagedBlobCustodyTransferRequestV1,
-    ManagedBlobSessionRequestV1, request_managed_blob_custody_release_v2,
-    request_managed_blob_custody_transfer_v2, request_managed_blob_session_v2,
+    BlobDataClient, ManagedBlobCustodyReleaseRequestV1, ManagedBlobCustodyTargetV1,
+    ManagedBlobCustodyTransferRequestV1, ManagedBlobSessionRequestV1,
+    request_managed_blob_custody_release_v2, request_managed_blob_custody_transfer_v2,
+    request_managed_blob_session_v2,
 };
+use hermes_communication_task_candidate_core::CommunicationTaskCandidateV1;
 use hermes_communication_task_candidate_persistence::CommunicationTaskCandidateBlobCleanupV1;
 use hermes_communications_task_source_api::COMMUNICATION_TASK_SOURCE_MAX_BYTES_V1;
+use hermes_review_task_candidate_api::{
+    REVIEW_TASK_CANDIDATE_BLOB_TARGET_CAPABILITY_ID_V1,
+    REVIEW_TASK_CANDIDATE_BLOB_TARGET_MODULE_ID_V1, REVIEW_TASK_CANDIDATE_BLOB_TARGET_OWNER_ID_V1,
+    REVIEW_TASK_CANDIDATE_MAX_BLOB_BYTES_V1, REVIEW_TASK_CANDIDATE_MAX_PROOF_BYTES_V1,
+    wire::{ReviewTargetBoundCandidateReceiptV1, ReviewTaskCandidateContentV1},
+};
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, ManagedControlRequestDispatcherV2},
     v1::{BlobCustodyReleaseReasonV1, BlobDataOperationV1},
 };
+use prost::Message;
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -123,6 +132,65 @@ pub(crate) fn read_task_source_v1(
     )
 }
 
+pub(crate) fn write_review_candidate_v1(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+    candidate: &CommunicationTaskCandidateV1,
+) -> Result<ReviewTargetBoundCandidateReceiptV1, CommunicationTaskCandidateBlobErrorV1> {
+    let bytes = Zeroizing::new(
+        ReviewTaskCandidateContentV1 {
+            title: candidate.title.clone(),
+            due_text_hint: candidate.due_text_hint.clone(),
+            assignee_label_hint: candidate.assignee_label_hint.clone(),
+        }
+        .encode_to_vec(),
+    );
+    let declared_bytes = u64::try_from(bytes.len())
+        .map_err(|_| CommunicationTaskCandidateBlobErrorV1::InvalidReceipt)?;
+    if !(1..=REVIEW_TASK_CANDIDATE_MAX_BLOB_BYTES_V1).contains(&declared_bytes) {
+        return Err(CommunicationTaskCandidateBlobErrorV1::InvalidReceipt);
+    }
+    let sha256: [u8; 32] = Sha256::digest(bytes.as_slice()).into();
+    let reference_id = review_reference_id(candidate, sha256);
+    let session = request_managed_blob_session_v2(
+        channel,
+        dispatcher,
+        ManagedBlobSessionRequestV1 {
+            capability_id: COMMUNICATION_TASK_CANDIDATE_BLOB_CAPABILITY_ID_V1,
+            operation: BlobDataOperationV1::BlobDataOperationWriteV1,
+            reference_id: &reference_id,
+            declared_size: declared_bytes,
+            backup_class: 1,
+            receipt_sha256: Some(&sha256),
+            custody_target: Some(ManagedBlobCustodyTargetV1 {
+                owner_id: REVIEW_TASK_CANDIDATE_BLOB_TARGET_OWNER_ID_V1,
+                module_id: REVIEW_TASK_CANDIDATE_BLOB_TARGET_MODULE_ID_V1,
+                capability_id: REVIEW_TASK_CANDIDATE_BLOB_TARGET_CAPABILITY_ID_V1,
+            }),
+        },
+    )
+    .map_err(|_| CommunicationTaskCandidateBlobErrorV1::Unavailable)?;
+    let proof = session.custody_transfer_source_proof;
+    if proof.is_empty() || proof.len() > REVIEW_TASK_CANDIDATE_MAX_PROOF_BYTES_V1 {
+        return Err(CommunicationTaskCandidateBlobErrorV1::InvalidReceipt);
+    }
+    if BlobDataClient::new(session.data_socket_path)
+        .and_then(|client| client.write(session.grant, session.channel_binding, bytes.to_vec()))
+        .is_err()
+    {
+        let existing = read_exact(channel, dispatcher, &reference_id, declared_bytes, &sha256)?;
+        if existing.as_slice() != bytes.as_slice() {
+            return Err(CommunicationTaskCandidateBlobErrorV1::InvalidReceipt);
+        }
+    }
+    Ok(ReviewTargetBoundCandidateReceiptV1 {
+        reference_id: reference_id.to_vec(),
+        declared_bytes,
+        sha256: sha256.to_vec(),
+        custody_transfer_source_proof: proof,
+    })
+}
+
 fn read_exact(
     channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
@@ -190,6 +258,17 @@ fn release_operation_id(run_id: [u8; 16]) -> [u8; 16] {
     let mut digest = Sha256::new();
     digest.update(b"hermes.communication_task_candidate.release_source.v1\0");
     digest.update(run_id);
+    digest.finalize()[..16]
+        .try_into()
+        .expect("SHA-256 prefix has exact length")
+}
+
+fn review_reference_id(candidate: &CommunicationTaskCandidateV1, sha256: [u8; 32]) -> [u8; 16] {
+    let mut digest = Sha256::new();
+    digest.update(b"hermes.communication_task_candidate.review-copy.v1\0");
+    digest.update(candidate.candidate_id);
+    digest.update(candidate.candidate_digest);
+    digest.update(sha256);
     digest.finalize()[..16]
         .try_into()
         .expect("SHA-256 prefix has exact length")

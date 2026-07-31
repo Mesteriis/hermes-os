@@ -124,7 +124,7 @@ where
             .map_err(|_| "Communication Task Candidate clock is invalid".to_owned())?;
         retry_runtime(executor.block_on(runtime.pump_control_once(now)))?;
         retry_runtime(executor.block_on(runtime.process_extraction_once(now)))?;
-        retry_runtime(executor.block_on(runtime.relay_source_prepare_outbox_once(now)))?;
+        retry_runtime(executor.block_on(runtime.relay_outbox_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_source_prepared_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_source_rejected_once(now)))?;
         retry_runtime(executor.block_on(runtime.process_extraction_once(now)))?;

@@ -33,12 +33,16 @@ use hermes_runtime_protocol::{
 use prost::Message;
 
 use crate::{
-    CommunicationTaskCandidateBlobErrorV1, CommunicationTaskCandidateExtractionErrorV1,
+    CommunicationTaskCandidateBlobErrorV1,
     blob_materialization::{
         CommunicationTaskCandidateSourceBlobReceiptV1, materialize_task_source_v1,
         read_task_source_v1, release_task_source_v1,
     },
-    complete_communication_task_candidate_extraction_v1,
+    extraction::{
+        CommunicationTaskCandidateExtractionErrorV1,
+        complete_communication_task_candidate_extraction_v1,
+    },
+    review_submission::CommunicationTaskCandidateReviewSubmissionContextV1,
 };
 
 const COMMUNICATIONS_RUNTIME_MODULE_ID_V1: &str = "hermes-communications-runtime";
@@ -53,13 +57,14 @@ pub enum CommunicationTaskCandidateSourceResultErrorV1 {
     EventUnavailable,
 }
 
-pub async fn consume_task_source_prepared_once_v1(
+pub(crate) async fn consume_task_source_prepared_once_v1(
     persistence: &CommunicationTaskCandidatePersistenceV1,
     connection: &RuntimeJetStreamConnection,
     permit: &RuntimeSubscribePermitV1,
     channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     expected_logical_owner_id: &str,
+    submission_context: &CommunicationTaskCandidateReviewSubmissionContextV1<'_>,
     consumed_at_unix_millis: i64,
 ) -> Result<bool, CommunicationTaskCandidateSourceResultErrorV1> {
     let delivery = receive_runtime_pull_delivery(connection, permit)
@@ -144,6 +149,7 @@ pub async fn consume_task_source_prepared_once_v1(
             dispatcher,
             &persisted,
             materialized.body_utf8.as_slice(),
+            submission_context,
             consumed_at_unix_millis,
         )
         .await?
@@ -160,6 +166,7 @@ pub async fn consume_task_source_prepared_once_v1(
             dispatcher,
             &run,
             body.as_slice(),
+            submission_context,
             consumed_at_unix_millis,
         )
         .await?
@@ -182,6 +189,7 @@ async fn finish_extraction(
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     run: &PersistedCommunicationTaskCandidateRunV1,
     body_utf8: &[u8],
+    submission_context: &CommunicationTaskCandidateReviewSubmissionContextV1<'_>,
     occurred_at_unix_millis: i64,
 ) -> Result<PersistedCommunicationTaskCandidateRunV1, CommunicationTaskCandidateSourceResultErrorV1>
 {
@@ -191,8 +199,11 @@ async fn finish_extraction(
         .ok_or(CommunicationTaskCandidateSourceResultErrorV1::InvalidPayload)?;
     let terminal = complete_communication_task_candidate_extraction_v1(
         persistence,
+        channel,
+        dispatcher,
         run,
         body_utf8,
+        submission_context,
         occurred_at_unix_millis,
     )
     .await

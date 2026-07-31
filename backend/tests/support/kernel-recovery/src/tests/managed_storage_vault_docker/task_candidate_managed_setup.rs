@@ -293,7 +293,7 @@ fn start_task_candidate_unit_v1(
             reservation,
             ManagedWorkflowRuntimeConfigurationV1 {
                 major: 1,
-                logical_owner_id: admitted.unit.descriptor.owner_id.clone(),
+                logical_owner_id: TASK_CANDIDATE_LOGICAL_HUMAN_OWNER_ID_V1.to_owned(),
                 registration_id: admitted.registration_id.clone(),
                 runtime_instance_id: runtime_instance_id.clone(),
                 runtime_generation,

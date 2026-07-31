@@ -21,8 +21,8 @@ use crate::{
         CommunicationTaskCandidateInboxResultV1, CommunicationTaskCandidatePersistenceErrorV1,
         CommunicationTaskCandidateSourceResultV1, CreateCommunicationTaskCandidateOutcomeV1,
         CreateCommunicationTaskCandidateRunV1, PersistedCommunicationTaskCandidateRunV1,
-        decode_candidates, encode_candidates, nonzero, rejection_code, request_fingerprint,
-        valid_identity, valid_timestamp,
+        UnpublishedCommunicationTaskCandidateEventV1, decode_candidates, encode_candidates,
+        nonzero, rejection_code, request_fingerprint, valid_identity, valid_timestamp,
     },
     realtime::insert_realtime_transition,
 };
@@ -271,6 +271,7 @@ impl CommunicationTaskCandidatePersistenceV1 {
         logical_owner_id: &str,
         run_id: &[u8; 16],
         transition: CommunicationTaskCandidateTransitionV1,
+        review_submissions: &[UnpublishedCommunicationTaskCandidateEventV1],
         occurred_at_unix_millis: i64,
     ) -> Result<
         PersistedCommunicationTaskCandidateRunV1,
@@ -279,6 +280,7 @@ impl CommunicationTaskCandidatePersistenceV1 {
         if !valid_identity(logical_owner_id)
             || !nonzero(run_id)
             || !valid_timestamp(occurred_at_unix_millis)
+            || !valid_review_submissions(review_submissions)
             || !matches!(
                 transition,
                 CommunicationTaskCandidateTransitionV1::Complete { .. }
@@ -301,6 +303,22 @@ impl CommunicationTaskCandidatePersistenceV1 {
             None,
         )
         .await?;
+        for event in review_submissions {
+            sqlx::query(
+                "INSERT INTO hermes_data.communication_task_candidate_extraction_outbox (
+                   logical_owner_id, message_id, envelope_sha256, envelope_bytes,
+                   created_at_unix_millis
+                 ) VALUES ($1, $2, $3, $4, $5)",
+            )
+            .bind(logical_owner_id)
+            .bind(event.message_id.as_slice())
+            .bind(event.envelope_sha256.as_slice())
+            .bind(&event.envelope_bytes)
+            .bind(occurred_at_unix_millis)
+            .execute(&mut *transaction)
+            .await
+            .map_err(storage_error)?;
+        }
         insert_realtime_transition(
             &mut transaction,
             logical_owner_id,
@@ -477,6 +495,21 @@ impl CommunicationTaskCandidatePersistenceV1 {
             .ok_or(CommunicationTaskCandidatePersistenceErrorV1::NotFound)?;
         persisted_from_row(row)
     }
+}
+
+fn valid_review_submissions(events: &[UnpublishedCommunicationTaskCandidateEventV1]) -> bool {
+    if events.len() > hermes_communication_task_candidate_core::COMMUNICATION_TASK_MAX_CANDIDATES_V1
+    {
+        return false;
+    }
+    let mut message_ids = std::collections::BTreeSet::new();
+    events.iter().all(|event| {
+        nonzero(&event.message_id)
+            && nonzero(&event.envelope_sha256)
+            && !event.envelope_bytes.is_empty()
+            && event.envelope_bytes.len() <= COMMUNICATION_TASK_CANDIDATE_MAX_EVENT_BYTES_V1
+            && message_ids.insert(event.message_id)
+    })
 }
 
 const SELECT_RUN: &str = "

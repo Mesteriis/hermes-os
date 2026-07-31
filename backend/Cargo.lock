@@ -2527,6 +2527,7 @@ dependencies = [
  "hermes-communications-task-source-api",
  "hermes-events-jetstream",
  "hermes-events-protocol",
+ "hermes-review-task-candidate-api",
  "hermes-runtime-protocol",
  "hermes-storage-protocol",
  "hermes-storage-vault",

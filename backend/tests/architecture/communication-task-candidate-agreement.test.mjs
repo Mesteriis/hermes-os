@@ -21,12 +21,15 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     persistenceManifest,
     persistence,
     persistenceModel,
+    persistenceRepository,
+    persistenceOutbox,
     persistenceSchema,
     migration,
     runtimeManifest,
     runtime,
     runtimeAdmission,
     runtimeExtraction,
+    runtimeReviewSubmission,
     runtimeSourceResults,
     assemblyManifest,
     assembly,
@@ -68,12 +71,15 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     readFile(new URL('src/communication-task-candidate-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-persistence/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-persistence/src/model.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-persistence/src/repository.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-persistence/src/outbox.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-persistence/src/schema.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-persistence/migrations/0001_task_candidate.sql', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-runtime/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-runtime/src/extraction.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-task-candidate-runtime/src/review_submission.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-runtime/src/source_results.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-task-candidate-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
@@ -177,17 +183,39 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(migration, /communication_task_candidate_extraction_inbox/);
   assert.match(migration, /communication_task_candidate_extraction_outbox/);
   assert.match(migration, /communication_task_candidate_extraction_realtime/);
-  assert.doesNotMatch(`${persistence}\n${persistenceModel}\n${migration}`, /communication_recipient_suggestion|hermes_communications|hermes_review|hermes_tasks|ollama|prompt|provider_id/);
+  assert.match(persistenceRepository, /persist_extraction_transition/);
+  assert.match(persistenceRepository, /review_submissions/);
+  assert.match(
+    persistenceRepository,
+    /communication_task_candidate_extraction_outbox[\s\S]*insert_realtime_transition[\s\S]*transaction\.commit/,
+  );
+  assert.match(persistenceOutbox, /unpublished_events/);
+  assert.match(persistenceOutbox, /mark_event_published/);
+  assert.doesNotMatch(`${persistence}\n${persistenceModel}\n${persistenceRepository}\n${migration}`, /communication_recipient_suggestion|hermes_communications|hermes_review|hermes_tasks|ollama|prompt|provider_id/);
   assert.match(runtimeManifest, /owner = "communication_task_candidate_extraction"/);
   assert.match(runtimeManifest, /surface = "runtime"/);
   assert.match(runtime, /CommunicationTaskCandidateManagedRuntimeV1/);
   assert.match(runtimeAdmission, /communication_task_candidate_extraction\.source\.blob\.v1/);
+  assert.match(runtimeAdmission, /communication_task_candidate_extraction\.review_submission\.v1/);
+  assert.match(runtimeAdmission, /review_task_candidate_submit_contract_reference_v1/);
+  assert.match(runtimeAdmission, /review_task_candidate_submit_publish_request_v1/);
+  assert.match(runtimeAdmission, /BlobQuotaOperationV1::Write/);
   assert.match(runtimeAdmission, /ProvidedSurfaceKindV1::ClientRealtime/);
   assert.match(runtimeExtraction, /extract_communication_task_candidates_v1/);
   assert.match(runtimeExtraction, /CommunicationTaskSourceContentV1/);
+  assert.match(runtimeExtraction, /prepare_review_submissions_v1/);
+  assert.match(runtimeReviewSubmission, /build_submit_review_task_candidate_outbox_record_v1/);
+  assert.match(runtimeReviewSubmission, /write_review_candidate_v1/);
+  assert.match(runtimeReviewSubmission, /ReviewTaskCandidateEnvelopeContextV1/);
+  assert.match(runtimeReviewSubmission, /SubmitTaskCandidateForReviewCommandV1/);
   assert.match(runtimeSourceResults, /source_read_receipt_bytes/);
   assert.match(runtimeSourceResults, /materialize_task_source_v1/);
-  assert.doesNotMatch(`${runtime}\n${runtimeAdmission}\n${runtimeExtraction}\n${runtimeSourceResults}`, /recipient_suggestion|hermes_review|hermes_tasks|ollama|reqwest|prompt|provider_id/);
+  assert.match(runtimeManifest, /hermes-review-task-candidate-api/);
+  assert.doesNotMatch(runtimeManifest, /hermes-review-task-candidate-(core|persistence|runtime|assembly)/);
+  assert.doesNotMatch(
+    `${runtime}\n${runtimeAdmission}\n${runtimeExtraction}\n${runtimeReviewSubmission}\n${runtimeSourceResults}`,
+    /recipient_suggestion|hermes_review_task_candidate_(core|persistence|runtime|assembly)|hermes_tasks|ollama|reqwest|prompt|provider_id/,
+  );
   assert.match(assemblyManifest, /owner = "communication_task_candidate_extraction"/);
   assert.match(assemblyManifest, /surface = "assembly"/);
   assert.match(assembly, /communication_task_candidate_extraction_storage_bundle_v1/);

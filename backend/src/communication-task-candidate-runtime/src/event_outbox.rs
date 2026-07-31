@@ -10,7 +10,7 @@ pub enum CommunicationTaskCandidateEventRelayErrorV1 {
     EventUnavailable,
 }
 
-pub async fn relay_source_prepare_outbox_once_v1(
+pub async fn relay_outbox_once_v1(
     persistence: &CommunicationTaskCandidatePersistenceV1,
     logical_owner_id: &str,
     connection: &RuntimeJetStreamConnection,
@@ -21,7 +21,7 @@ pub async fn relay_source_prepare_outbox_once_v1(
         return Err(CommunicationTaskCandidateEventRelayErrorV1::InvalidTimestamp);
     }
     let Some(record) = persistence
-        .unpublished_source_prepare_events(logical_owner_id, 1)
+        .unpublished_events(logical_owner_id, 1)
         .await
         .map_err(CommunicationTaskCandidateEventRelayErrorV1::Persistence)?
         .into_iter()
@@ -34,7 +34,7 @@ pub async fn relay_source_prepare_outbox_once_v1(
         .await
         .map_err(|_| CommunicationTaskCandidateEventRelayErrorV1::EventUnavailable)?;
     persistence
-        .mark_source_prepare_published(
+        .mark_event_published(
             logical_owner_id,
             &record.message_id,
             &record.envelope_sha256,

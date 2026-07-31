@@ -18,18 +18,26 @@ use prost::Message;
 use crate::blob_materialization::{
     CommunicationTaskCandidateBlobErrorV1, read_task_source_v1, release_task_source_v1,
 };
+use crate::review_submission::{
+    CommunicationTaskCandidateReviewSubmissionContextV1,
+    CommunicationTaskCandidateReviewSubmissionErrorV1, prepare_review_submissions_v1,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationTaskCandidateExtractionErrorV1 {
     Blob(CommunicationTaskCandidateBlobErrorV1),
     InvalidState,
     Persistence(CommunicationTaskCandidatePersistenceErrorV1),
+    ReviewSubmission,
 }
 
-pub async fn complete_communication_task_candidate_extraction_v1(
+pub(crate) async fn complete_communication_task_candidate_extraction_v1(
     persistence: &CommunicationTaskCandidatePersistenceV1,
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     run: &PersistedCommunicationTaskCandidateRunV1,
     source_bytes: &[u8],
+    submission_context: &CommunicationTaskCandidateReviewSubmissionContextV1<'_>,
     occurred_at_unix_millis: i64,
 ) -> Result<PersistedCommunicationTaskCandidateRunV1, CommunicationTaskCandidateExtractionErrorV1> {
     if run.status.state != CommunicationTaskCandidateStateV1::Extracting {
@@ -60,13 +68,33 @@ pub async fn complete_communication_task_candidate_extraction_v1(
             )
             .ok()
         });
-    let transition = match extracted {
-        Some(candidates) => CommunicationTaskCandidateTransitionV1::Complete {
-            source_sha256,
-            candidates,
-        },
-        None => CommunicationTaskCandidateTransitionV1::Reject(
-            CommunicationTaskCandidateRejectionCodeV1::ExtractionRejected,
+    let (transition, review_submissions) = match extracted {
+        Some(candidates) => {
+            let review_submissions = prepare_review_submissions_v1(
+                channel,
+                dispatcher,
+                &run.logical_owner_id,
+                &candidates,
+                submission_context,
+            )
+            .map_err(
+                |_error: CommunicationTaskCandidateReviewSubmissionErrorV1| {
+                    CommunicationTaskCandidateExtractionErrorV1::ReviewSubmission
+                },
+            )?;
+            (
+                CommunicationTaskCandidateTransitionV1::Complete {
+                    source_sha256,
+                    candidates,
+                },
+                review_submissions,
+            )
+        }
+        None => (
+            CommunicationTaskCandidateTransitionV1::Reject(
+                CommunicationTaskCandidateRejectionCodeV1::ExtractionRejected,
+            ),
+            Vec::new(),
         ),
     };
     persistence
@@ -74,17 +102,19 @@ pub async fn complete_communication_task_candidate_extraction_v1(
             &run.logical_owner_id,
             &run.draft.run_id,
             transition,
+            &review_submissions,
             occurred_at_unix_millis,
         )
         .await
         .map_err(CommunicationTaskCandidateExtractionErrorV1::Persistence)
 }
 
-pub async fn recover_accepted_communication_task_candidate_once_v1(
+pub(crate) async fn recover_accepted_communication_task_candidate_once_v1(
     persistence: &CommunicationTaskCandidatePersistenceV1,
     channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     logical_owner_id: &str,
+    submission_context: &CommunicationTaskCandidateReviewSubmissionContextV1<'_>,
     occurred_at_unix_millis: i64,
 ) -> Result<bool, CommunicationTaskCandidateExtractionErrorV1> {
     let Some(run) = persistence
@@ -117,8 +147,11 @@ pub async fn recover_accepted_communication_task_candidate_once_v1(
                 .map_err(CommunicationTaskCandidateExtractionErrorV1::Blob)?;
             let terminal = complete_communication_task_candidate_extraction_v1(
                 persistence,
+                channel,
+                dispatcher,
                 &run,
                 body.as_slice(),
+                submission_context,
                 occurred_at_unix_millis,
             )
             .await?;
