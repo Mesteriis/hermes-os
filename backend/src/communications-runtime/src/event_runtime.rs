@@ -7,6 +7,7 @@ use std::{
 };
 
 use hermes_communications_ai_source_api::{
+    communication_explanation_source_prepare_contract_reference_v1,
     communication_reply_source_prepare_contract_reference_v1,
     communication_summary_source_prepare_contract_reference_v1,
     communication_translation_source_prepare_contract_reference_v1,
@@ -81,6 +82,9 @@ use crate::{
     evidence_export_source::{
         CommunicationsEvidenceExportDeliveryErrorV1, consume_next_evidence_export_prepare_v1,
     },
+    explanation_source::{
+        CommunicationsExplanationSourceDeliveryErrorV1, consume_next_explanation_source_prepare_v1,
+    },
     query_module_port::handle_module_query_delivery_v1,
     search_access::CommunicationsSearchAccessV1,
     search_worker::process_next_derived_index_job_v1,
@@ -135,6 +139,7 @@ struct CommunicationsSubscribePermitsV1 {
     ai_source_prepare: RuntimeSubscribePermitV1,
     summary_source_prepare: RuntimeSubscribePermitV1,
     translation_source_prepare: RuntimeSubscribePermitV1,
+    explanation_source_prepare: RuntimeSubscribePermitV1,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -148,6 +153,7 @@ enum CommunicationsConsumerV1 {
     AiSourcePrepare,
     SummarySourcePrepare,
     TranslationSourcePrepare,
+    ExplanationSourcePrepare,
 }
 
 impl CommunicationsConsumerV1 {
@@ -161,7 +167,8 @@ impl CommunicationsConsumerV1 {
             Self::CrossChannelForwardSourcePrepare => Self::AiSourcePrepare,
             Self::AiSourcePrepare => Self::SummarySourcePrepare,
             Self::SummarySourcePrepare => Self::TranslationSourcePrepare,
-            Self::TranslationSourcePrepare => Self::Observation,
+            Self::TranslationSourcePrepare => Self::ExplanationSourcePrepare,
+            Self::ExplanationSourcePrepare => Self::Observation,
         }
     }
 }
@@ -183,6 +190,8 @@ impl CommunicationsSubscribePermitsV1 {
         let summary_source_prepare = communication_summary_source_prepare_contract_reference_v1();
         let translation_source_prepare =
             communication_translation_source_prepare_contract_reference_v1();
+        let explanation_source_prepare =
+            communication_explanation_source_prepare_contract_reference_v1();
         let mut observation_permit = None;
         let mut call_evidence_permit = None;
         let mut attachment_blob_admission_permit = None;
@@ -192,6 +201,7 @@ impl CommunicationsSubscribePermitsV1 {
         let mut ai_source_prepare_permit = None;
         let mut summary_source_prepare_permit = None;
         let mut translation_source_prepare_permit = None;
+        let mut explanation_source_prepare_permit = None;
         for permit in permits {
             let Some(contract) = permit.contract() else {
                 return Err(CommunicationsEventRuntimeErrorV1::Admission);
@@ -214,6 +224,8 @@ impl CommunicationsSubscribePermitsV1 {
                 replace_once(&mut summary_source_prepare_permit, permit)?;
             } else if exact_contract(contract, &translation_source_prepare) {
                 replace_once(&mut translation_source_prepare_permit, permit)?;
+            } else if exact_contract(contract, &explanation_source_prepare) {
+                replace_once(&mut explanation_source_prepare_permit, permit)?;
             } else {
                 return Err(CommunicationsEventRuntimeErrorV1::Admission);
             }
@@ -235,6 +247,8 @@ impl CommunicationsSubscribePermitsV1 {
             summary_source_prepare: summary_source_prepare_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
             translation_source_prepare: translation_source_prepare_permit
+                .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
+            explanation_source_prepare: explanation_source_prepare_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
         })
     }
@@ -882,6 +896,37 @@ impl CommunicationsEventRuntimeV1 {
                     .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
                 result
             }
+            CommunicationsConsumerV1::ExplanationSourcePrepare => {
+                let mut nested_search_access = self.search_access.clone();
+                let mut dispatcher = CommunicationsNestedRequestDispatcher {
+                    persistence: &self.persistence,
+                    call_evidence_persistence: &self.call_evidence_persistence,
+                    logical_owner_id: &self.logical_owner_id,
+                    search_access: &mut nested_search_access,
+                    content_tickets: &self.content_tickets,
+                };
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(false)
+                    .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
+                let result = consume_next_explanation_source_prepare_v1(
+                    &self.persistence,
+                    &self.connection,
+                    &self.permits.explanation_source_prepare,
+                    &mut self.control_channel,
+                    &mut dispatcher,
+                    &self.logical_human_owner_id,
+                    &canonical_event_context,
+                )
+                .await
+                .map(|_| ())
+                .map_err(explanation_source_delivery_error);
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(true)
+                    .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
+                result
+            }
         }
     }
 
@@ -1158,6 +1203,29 @@ fn translation_source_delivery_error(
     }
 }
 
+fn explanation_source_delivery_error(
+    error: CommunicationsExplanationSourceDeliveryErrorV1,
+) -> CommunicationsDeliveryErrorV1 {
+    match error {
+        CommunicationsExplanationSourceDeliveryErrorV1::Unavailable => {
+            CommunicationsDeliveryErrorV1::Unavailable
+        }
+        CommunicationsExplanationSourceDeliveryErrorV1::InvalidEnvelope => {
+            CommunicationsDeliveryErrorV1::InvalidEnvelope
+        }
+        CommunicationsExplanationSourceDeliveryErrorV1::InvalidPayload => {
+            CommunicationsDeliveryErrorV1::Consume(
+                CommunicationsEventConsumeErrorV1::InvalidPayload,
+            )
+        }
+        CommunicationsExplanationSourceDeliveryErrorV1::Persistence => {
+            CommunicationsDeliveryErrorV1::Consume(
+                CommunicationsEventConsumeErrorV1::PersistenceRejected,
+            )
+        }
+    }
+}
+
 const fn call_evidence_realtime_error(
     error: CallEvidenceClientRealtimeErrorV1,
 ) -> CommunicationsEventRuntimeErrorV1 {
@@ -1340,6 +1408,7 @@ mod tests {
         let seventh = sixth.successor();
         let eighth = seventh.successor();
         let ninth = eighth.successor();
+        let tenth = ninth.successor();
 
         assert_eq!(
             [
@@ -1352,7 +1421,8 @@ mod tests {
                 seventh,
                 eighth,
                 ninth,
-                ninth.successor()
+                tenth,
+                tenth.successor()
             ],
             [
                 CommunicationsConsumerV1::Observation,
@@ -1364,6 +1434,7 @@ mod tests {
                 CommunicationsConsumerV1::AiSourcePrepare,
                 CommunicationsConsumerV1::SummarySourcePrepare,
                 CommunicationsConsumerV1::TranslationSourcePrepare,
+                CommunicationsConsumerV1::ExplanationSourcePrepare,
                 CommunicationsConsumerV1::Observation,
             ]
         );

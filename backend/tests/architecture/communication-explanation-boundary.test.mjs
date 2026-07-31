@@ -49,6 +49,12 @@ test('communication explanation agreement separates workflow domain engine and p
     assemblyManifest,
     assembly,
     release,
+    communicationsExplanationSource,
+    communicationsAdmission,
+    communicationsEventRuntime,
+    managedSetup,
+    managedFlow,
+    managedScript,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -134,6 +140,24 @@ test('communication explanation agreement separates workflow domain engine and p
     readFile(new URL('src/communication-explanation-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-explanation-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/explanation_source.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/event_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communication_explanation_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communication_explanation_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -170,7 +194,7 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.match(adr, /Состояние реализации: planned/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns explanation/i);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_explanation_assembly_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_explanation_managed_conformance_v1');
   assert.match(workspace, /"src\/communication-explanation-api"/);
   assert.match(workspace, /"src\/communication-explanation-core"/);
   assert.match(workspace, /"src\/communication-explanation-persistence"/);
@@ -324,5 +348,44 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.doesNotMatch(
     assembly,
     /communication_summary|communication_translation|ollama|ai_inference|communications_domain/,
+  );
+  assert.match(communicationsExplanationSource, /consume_next_explanation_source_prepare_v1/);
+  assert.match(communicationsExplanationSource, /ManagedBlobCustodyTargetV1/);
+  assert.match(communicationsExplanationSource, /communication_explanation_source_prepared/);
+  assert.doesNotMatch(
+    communicationsExplanationSource,
+    /hermes_communication_explanation_runtime|hermes_ai_inference|hermes_ollama|provider_id|model_id|prompt/,
+  );
+  assert.match(communicationsAdmission, /communications_explanation_source_capability_v1/);
+  assert.match(
+    communicationsAdmission,
+    /communication_explanation_source_prepare_consume_request_v1/,
+  );
+  assert.match(communicationsEventRuntime, /explanation_source_prepare: RuntimeSubscribePermitV1/);
+  assert.match(
+    communicationsEventRuntime,
+    /consume_next_explanation_source_prepare_v1/,
+  );
+  assert.match(managedSetup, /COMMUNICATION_EXPLANATION_RELEASE_ARTIFACT_ID_V1/);
+  assert.match(managedSetup, /start_reserved_workflow/);
+  assert.match(
+    managedFlow,
+    /managed_communication_explanation_reaches_ai_and_replays_through_gateway_sse/,
+  );
+  assert.match(
+    managedFlow,
+    /managed_communication_explanation_completes_real_provider_through_gateway_sse/,
+  );
+  assert.match(managedFlow, /required\("HERMES_OLLAMA_LIVE_PORT"\)/);
+  assert.match(managedFlow, /read_terminal_explanation_sse_event/);
+  assert.match(managedFlow, /restart_communication_explanation_runtime_v1/);
+  assert.match(managedFlow, /assert_communication_explanation_runtime_fences/);
+  assert.match(managedFlow, /wrong_owner/);
+  assert.match(managedFlow, /stale_request/);
+  assert.match(managedFlow, /revoke_owner/);
+  assert.match(managedFlow, /assert_private_content_absent/);
+  assert.match(
+    managedScript,
+    /managed_communication_explanation_reaches_ai_and_replays_through_gateway_sse/,
   );
 });

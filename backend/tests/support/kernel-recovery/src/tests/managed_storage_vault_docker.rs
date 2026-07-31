@@ -95,8 +95,13 @@ mod communication_summary_managed_flow;
 #[path = "managed_storage_vault_docker/communication_translation_managed_setup.rs"]
 mod communication_translation_managed_setup;
 use communication_translation_managed_setup::*;
+#[path = "managed_storage_vault_docker/communication_explanation_managed_setup.rs"]
+mod communication_explanation_managed_setup;
 #[path = "managed_storage_vault_docker/communication_translation_managed_flow.rs"]
 mod communication_translation_managed_flow;
+use communication_explanation_managed_setup::*;
+#[path = "managed_storage_vault_docker/communication_explanation_managed_flow.rs"]
+mod communication_explanation_managed_flow;
 #[path = "managed_storage_vault_docker/communications_export_race.rs"]
 mod communications_export_race;
 #[path = "managed_storage_vault_docker/reply_suggestion_managed_flow.rs"]
