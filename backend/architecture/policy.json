@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_task_candidate_managed_admission_v1",
+    "currentSlice": "reviewed_task_candidate_promotion_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1080,6 +1080,18 @@
         "role": "domain",
         "owner": "tasks",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-review-task-candidate-promotion-api",
+        "role": "domain",
+        "owner": "review",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-reviewed-task-candidate-promotion-core",
+        "role": "workflow",
+        "owner": "reviewed_task_candidate_promotion",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1785,6 +1797,17 @@
           "kind": "normal"
         }
       ],
+      "hermes-review-task-candidate-promotion-api": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-reviewed-task-candidate-promotion-core": [],
       "hermes-communications-attachment-contract": [
         {
           "name": "hermes-events-protocol",
@@ -5334,6 +5357,66 @@
           "features": []
         }
       ],
+      "hermes-review-task-candidate-promotion-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-reviewed-task-candidate-promotion-core": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-review-attention-persistence": [
         {
           "name": "sha2",
@@ -8663,6 +8746,14 @@
       "hermes-tasks-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
+      },
+      "hermes-review-task-candidate-promotion-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-reviewed-task-candidate-promotion-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -8713,9 +8804,10 @@
       "communication_recipient_suggestion",
       "communication_reply_suggestion",
       "communication_summary",
-      "communication_task_candidate_extraction",
-      "communication_translation",
-      "communications_export"
+        "communication_task_candidate_extraction",
+        "communication_translation",
+        "communications_export",
+        "reviewed_task_candidate_promotion"
     ],
     "engines": [
       "ai",
@@ -8848,6 +8940,7 @@
         "review.communication-attention.storage.v1",
         "review.task-candidate.blob.v1",
         "review.task-candidate.client.v1",
+        "review.task-candidate.promotion-result.v1",
         "review.task-candidate.promotion.v1",
         "review.task-candidate.storage.v1",
         "review.task-candidate.submission.v1",

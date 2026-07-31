@@ -1045,6 +1045,12 @@ const TASKS_REVIEWED_CANDIDATE_ASSEMBLY_PRODUCTION_PACKAGES = [
   { name: 'hermes-tasks-assembly', role: 'domain', owner: 'tasks', surface: 'assembly' },
 ];
 
+const REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_PRODUCTION_PACKAGES = [
+  ...TASKS_REVIEWED_CANDIDATE_ASSEMBLY_PRODUCTION_PACKAGES,
+  { name: 'hermes-review-task-candidate-promotion-api', role: 'domain', owner: 'review', surface: 'contract' },
+  { name: 'hermes-reviewed-task-candidate-promotion-core', role: 'workflow', owner: 'reviewed_task_candidate_promotion', surface: 'implementation' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -2969,6 +2975,15 @@ const TASKS_REVIEWED_CANDIDATE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...TASKS_REVIEWED_CANDIDATE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-review-task-candidate-promotion-api': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-reviewed-task-candidate-promotion-core': [],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -3791,6 +3806,21 @@ const TASKS_REVIEWED_CANDIDATE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...TASKS_REVIEWED_CANDIDATE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-review-task-candidate-promotion-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-reviewed-task-candidate-promotion-core': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -4348,6 +4378,18 @@ const TASKS_REVIEWED_CANDIDATE_PERSISTENCE_INVENTORY = {
   ].sort(),
 };
 
+const REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_INVENTORY = {
+  ...TASKS_REVIEWED_CANDIDATE_PERSISTENCE_INVENTORY,
+  workflows: [
+    ...TASKS_REVIEWED_CANDIDATE_PERSISTENCE_INVENTORY.workflows,
+    'reviewed_task_candidate_promotion',
+  ].sort(),
+  businessCapabilities: [
+    ...TASKS_REVIEWED_CANDIDATE_PERSISTENCE_INVENTORY.businessCapabilities,
+    'review.task-candidate.promotion-result.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -4568,6 +4610,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communication-cross-channel-forward-api',
       'hermes-review-attention-api',
       'hermes-review-task-candidate-api',
+      'hermes-review-task-candidate-promotion-api',
       'hermes-tasks-command-api',
       'hermes-mail-delivery-intent-contract',
       'hermes-telegram-delivery-intent-contract',
@@ -5746,6 +5789,17 @@ function expectedSlice(currentSlice) {
       packages: TASKS_REVIEWED_CANDIDATE_ASSEMBLY_PRODUCTION_PACKAGES,
       workspaceDependencies: TASKS_REVIEWED_CANDIDATE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: TASKS_REVIEWED_CANDIDATE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'reviewed_task_candidate_promotion_contract_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies: REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: REVIEWED_TASK_CANDIDATE_PROMOTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

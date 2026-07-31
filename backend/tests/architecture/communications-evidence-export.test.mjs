@@ -110,7 +110,7 @@ test('Communications export is one exact workflow family with a public domain so
   const sourceSchema = sourceContract.replaceAll(/\/\/.*$/gm, '');
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_task_candidate_managed_admission_v1',
+    'reviewed_task_candidate_promotion_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, [
     'communication_cross_channel_forward',
@@ -122,6 +122,7 @@ test('Communications export is one exact workflow family with a public domain so
     'communication_task_candidate_extraction',
     'communication_translation',
     'communications_export',
+    'reviewed_task_candidate_promotion',
   ]);
   assert.deepEqual(
     policy.implementation.productionPackages

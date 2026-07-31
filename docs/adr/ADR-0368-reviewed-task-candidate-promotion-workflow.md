@@ -4,10 +4,12 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: planned. Review approval event, Tasks command/result и
-Review promotion persistence уже существуют раздельно, но durable adapter и
-terminal result route между ними ещё не реализованы. Наличие этих отдельных
-контрактов или managed launch не открывает promotion gate.
+Состояние реализации: staged. Review-owned terminal promotion-result API и
+pure workflow correlation core реализованы как отдельные compile-isolated
+units. Review approval event, Tasks command/result и Review promotion
+persistence уже существуют раздельно, но workflow persistence/runtime,
+assembly, Review result consumer и managed E2E ещё не реализованы. Наличие этих
+отдельных контрактов или managed launch не открывает promotion gate.
 
 Уточняет:
 

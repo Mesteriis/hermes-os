@@ -45,6 +45,12 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     managedSetup,
     managedFlow,
     authenticatedStorage,
+    promotionApiManifest,
+    promotionApi,
+    promotionProtocol,
+    promotionEnvelope,
+    promotionCoreManifest,
+    promotionCore,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -120,6 +126,18 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
       'utf8',
     ),
     readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-task-candidate-promotion-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-task-candidate-promotion-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/review-task-candidate-promotion-api/proto/hermes/review/task_candidate/promotion/v1/promotion.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('src/review-task-candidate-promotion-api/src/envelope.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-core/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -137,7 +155,13 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'communication_task_candidate_managed_admission_v1');
+  assert.equal(policy.implementation.currentSlice, 'reviewed_task_candidate_promotion_contract_core_v1');
+  assert.equal(
+    policy.implementation.ownerInventory.businessCapabilities.includes(
+      'review.task-candidate.promotion-result.v1',
+    ),
+    true,
+  );
   assert.match(adr, /Состояние реализации: planned/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);
@@ -269,5 +293,26 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(
     authenticatedStorage,
     /HERMES_STORAGE_MANAGED_TEST_FILTER[\s\S]*managed_task_candidate_chain_starts_from_one_signed_release/,
+  );
+  assert.match(promotionApiManifest, /role = "domain"/);
+  assert.match(promotionApiManifest, /owner = "review"/);
+  assert.match(promotionApiManifest, /surface = "contract"/);
+  assert.match(promotionApi, /review\.task-candidate\.promotion-result\.v1/);
+  assert.match(promotionApi, /DurableEnvelopeKindV1::Event/);
+  assert.match(promotionProtocol, /ReviewTaskCandidatePromotionResultV1/);
+  assert.match(promotionProtocol, /expected_review_revision/);
+  assert.doesNotMatch(
+    promotionProtocol,
+    /title|due_text|assignee_label|source_body|provider_id|account_id|map</,
+  );
+  assert.match(promotionEnvelope, /causation_message_id/);
+  assert.match(promotionEnvelope, /ActorKindV1::Module/);
+  assert.match(promotionCoreManifest, /role = "workflow"/);
+  assert.match(promotionCoreManifest, /owner = "reviewed_task_candidate_promotion"/);
+  assert.match(promotionCore, /derive_reviewed_task_candidate_command_id_v1/);
+  assert.match(promotionCore, /derive_reviewed_task_candidate_result_id_v1/);
+  assert.doesNotMatch(
+    `${promotionCoreManifest}\n${promotionCore}`,
+    /hermes-review-task-candidate-(core|persistence|runtime)|hermes-tasks-(core|persistence|runtime)|sqlx|async-nats|reqwest|ollama/,
   );
 });
