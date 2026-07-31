@@ -2256,6 +2256,16 @@ name = "hermes-communication-explanation-core"
 version = "0.1.0"
 
 [[package]]
+name = "hermes-communication-explanation-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-explanation-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-communication-reply-suggestion-api"
 version = "0.1.0"
 dependencies = [

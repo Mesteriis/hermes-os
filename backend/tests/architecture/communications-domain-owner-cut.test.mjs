@@ -58,7 +58,7 @@ test('Communications remains isolated after Review owner admission', async () =>
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_explanation_cross_owner_contracts_v1',
+    'communication_explanation_persistence_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'review'],
@@ -118,6 +118,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication_explanation.source_prepare.v1',
       'communication_explanation.source_prepared.v1',
       'communication_explanation.source_rejected.v1',
+      'communication_explanation.storage.v1',
       'communication_summary.inference.v1',
       'communication_summary.source.blob.v1',
       'communication_summary.source_prepare.v1',

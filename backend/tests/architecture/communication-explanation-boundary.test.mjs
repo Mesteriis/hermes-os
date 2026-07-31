@@ -22,6 +22,10 @@ test('communication explanation agreement separates workflow domain engine and p
     aiContracts,
     aiExplanationValidation,
     ollamaApi,
+    persistenceManifest,
+    persistenceSchema,
+    persistenceModel,
+    persistenceRepository,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -56,6 +60,25 @@ test('communication explanation agreement separates workflow domain engine and p
     readFile(new URL('src/ai-contracts/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-contracts/src/explanation.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ollama-ai-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL('src/communication-explanation-persistence/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/communication-explanation-persistence/migrations/0001_explanation.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-explanation-persistence/src/model.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/communication-explanation-persistence/src/repository.rs', BACKEND_ROOT),
+      'utf8',
+    ),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -92,13 +115,16 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.match(adr, /Состояние реализации: planned/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns explanation/i);
 
-  assert.equal(policy.implementation.currentSlice, 'communication_explanation_cross_owner_contracts_v1');
+  assert.equal(policy.implementation.currentSlice, 'communication_explanation_persistence_v1');
   assert.match(workspace, /"src\/communication-explanation-api"/);
   assert.match(workspace, /"src\/communication-explanation-core"/);
+  assert.match(workspace, /"src\/communication-explanation-persistence"/);
   assert.match(apiManifest, /owner = "communication_explanation"/);
   assert.match(apiManifest, /surface = "contract"/);
   assert.match(coreManifest, /owner = "communication_explanation"/);
   assert.match(coreManifest, /surface = "implementation"/);
+  assert.match(persistenceManifest, /owner = "communication_explanation"/);
+  assert.match(persistenceManifest, /surface = "persistence"/);
   assert.match(api, /COMMUNICATION_EXPLANATION_CAPABILITY_ID_V1/);
   assert.match(protocol, /CommunicationExplanationCandidateV1/);
   assert.match(protocol, /COMMUNICATION_EXPLANATION_REASON_KIND_DEADLINE/);
@@ -149,9 +175,29 @@ test('communication explanation agreement separates workflow domain engine and p
     'communication_explanation.source_prepare.v1',
     'communication_explanation.source_prepared.v1',
     'communication_explanation.source_rejected.v1',
+    'communication_explanation.storage.v1',
     'communications.ai-explanation-source.blob.v1',
     'communications.ai-explanation-source.v1',
   ]) {
     assert.ok(policy.implementation.ownerInventory.businessCapabilities.includes(capability));
   }
+  assert.match(persistenceSchema, /communication_explanation_runs/);
+  assert.match(persistenceSchema, /UNIQUE \(logical_owner_id, operation_id\)/);
+  assert.match(persistenceSchema, /candidate_reasons_bytes/);
+  assert.match(persistenceSchema, /communication_explanation_inbox/);
+  assert.match(persistenceSchema, /communication_explanation_outbox/);
+  assert.match(persistenceSchema, /communication_explanation_realtime/);
+  assert.doesNotMatch(
+    persistenceSchema,
+    /communications_|mail_|telegram_|whatsapp_|zulip_|source_body|prompt|provider_id|model_id|endpoint/,
+  );
+  assert.match(persistenceModel, /encode_reasons/);
+  assert.match(persistenceModel, /decode_reasons/);
+  assert.match(persistenceRepository, /load_recoverable_runs/);
+  assert.match(persistenceRepository, /InboxConflict/);
+  assert.match(persistenceRepository, /request_fingerprint/);
+  assert.doesNotMatch(
+    `${persistenceManifest}\n${persistenceModel}\n${persistenceRepository}`,
+    /hermes-(?:communications-domain|ai-inference|ollama|mail|telegram|whatsapp|zulip)/,
+  );
 });

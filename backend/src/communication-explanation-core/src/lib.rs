@@ -229,6 +229,78 @@ pub fn transition_communication_explanation_v1(
     }
 }
 
+pub fn validate_communication_explanation_status_v1(
+    status: &CommunicationExplanationStatusV1,
+) -> Result<(), CommunicationExplanationTransitionErrorV1> {
+    if status.state_revision == 0 {
+        return Err(CommunicationExplanationTransitionErrorV1::InvalidStatus);
+    }
+    match status.state {
+        CommunicationExplanationStateV1::Accepted
+        | CommunicationExplanationStateV1::PreparingSource => {
+            if status.source_evidence_id.is_some()
+                || status.source_evidence_revision.is_some()
+                || status.source_sha256.is_some()
+                || status.inference_request_digest.is_some()
+                || status.candidate.is_some()
+                || status.rejection.is_some()
+            {
+                return Err(CommunicationExplanationTransitionErrorV1::InvalidStatus);
+            }
+        }
+        CommunicationExplanationStateV1::AwaitingInference => {
+            validate_source_state(status)?;
+            if status.candidate.is_some() || status.rejection.is_some() {
+                return Err(CommunicationExplanationTransitionErrorV1::InvalidStatus);
+            }
+        }
+        CommunicationExplanationStateV1::Ready => {
+            validate_source_state(status)?;
+            let candidate = status
+                .candidate
+                .as_ref()
+                .ok_or(CommunicationExplanationTransitionErrorV1::InvalidStatus)?;
+            validate_candidate(candidate)?;
+            if status.rejection.is_some()
+                || status.inference_request_digest != Some(candidate.request_digest)
+                || status.source_sha256 != Some(candidate.source_sha256)
+            {
+                return Err(CommunicationExplanationTransitionErrorV1::InvalidStatus);
+            }
+        }
+        CommunicationExplanationStateV1::Rejected => {
+            if status.candidate.is_some() || status.rejection.is_none() {
+                return Err(CommunicationExplanationTransitionErrorV1::InvalidStatus);
+            }
+            let has_source = status.source_evidence_id.is_some()
+                || status.source_evidence_revision.is_some()
+                || status.source_sha256.is_some()
+                || status.inference_request_digest.is_some();
+            if has_source {
+                validate_source_state(status)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_source_state(
+    status: &CommunicationExplanationStatusV1,
+) -> Result<(), CommunicationExplanationTransitionErrorV1> {
+    if status.source_evidence_id.is_none_or(|value| zero(&value))
+        || status
+            .source_evidence_revision
+            .is_none_or(|value| value == 0)
+        || status.source_sha256.is_none_or(|value| zero(&value))
+        || status
+            .inference_request_digest
+            .is_none_or(|value| zero(&value))
+    {
+        return Err(CommunicationExplanationTransitionErrorV1::InvalidStatus);
+    }
+    Ok(())
+}
+
 fn validate_candidate(
     candidate: &CommunicationExplanationCandidateV1,
 ) -> Result<(), CommunicationExplanationTransitionErrorV1> {
@@ -361,6 +433,17 @@ mod tests {
         assert_eq!(
             validate_candidate(&overconfident),
             Err(CommunicationExplanationTransitionErrorV1::InvalidCandidate)
+        );
+    }
+
+    #[test]
+    fn status_validation_rejects_partial_source_coordinates() {
+        let mut invalid = accepted_communication_explanation_status_v1();
+        invalid.state = CommunicationExplanationStateV1::AwaitingInference;
+        invalid.source_evidence_id = Some([1; 16]);
+        assert_eq!(
+            validate_communication_explanation_status_v1(&invalid),
+            Err(CommunicationExplanationTransitionErrorV1::InvalidStatus)
         );
     }
 }
