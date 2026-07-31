@@ -1,0 +1,13 @@
+[package]
+name = "hermes-communication-recipient-suggestion-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "communication_recipient_suggestion"
+surface = "implementation"

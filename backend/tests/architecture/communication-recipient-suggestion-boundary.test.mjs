@@ -6,7 +6,7 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../../../', import.meta.url);
 
 test('recipient suggestion agreement separates source ownership from workflow decisions', async () => {
-  const [adr, inventorySource] = await Promise.all([
+  const [adr, inventorySource, policySource, workspace, apiManifest, api, protocol, coreManifest, core] = await Promise.all([
     readFile(
       new URL(
         'docs/adr/ADR-0365-communication-recipient-suggestion-workflow-and-source-boundary.md',
@@ -18,8 +18,22 @@ test('recipient suggestion agreement separates source ownership from workflow de
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
       'utf8',
     ),
+    readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-recipient-suggestion-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-recipient-suggestion-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/communication-recipient-suggestion-api/proto/hermes/communication_recipient_suggestion/v1/recipient_suggestion.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('src/communication-recipient-suggestion-core/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-recipient-suggestion-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
+  const policy = JSON.parse(policySource);
   const source = inventory.slices.find(({ gate }) => gate === 'communications_recipient_source_v1');
   const workflow = inventory.slices.find(
     ({ gate }) => gate === 'communication_recipient_suggestion_v1',
@@ -58,4 +72,40 @@ test('recipient suggestion agreement separates source ownership from workflow de
   assert.match(adr, /Kernel\/Gateway не компилируют/);
   assert.match(adr, /Состояние реализации: planned/);
   assert.doesNotMatch(adr, /Communications (?:owns|владеет) recipient decision|generic `execute\(any\)`/i);
+
+  assert.equal(
+    policy.implementation.currentSlice,
+    'communication_recipient_suggestion_contract_core_v1',
+  );
+  assert.match(workspace, /"src\/communication-recipient-suggestion-api"/);
+  assert.match(workspace, /"src\/communication-recipient-suggestion-core"/);
+  assert.match(apiManifest, /owner = "communication_recipient_suggestion"/);
+  assert.match(apiManifest, /surface = "contract"/);
+  assert.match(coreManifest, /owner = "communication_recipient_suggestion"/);
+  assert.match(coreManifest, /surface = "implementation"/);
+  assert.match(api, /COMMUNICATION_RECIPIENT_SUGGESTION_CAPABILITY_ID_V1/);
+  assert.match(protocol, /COMMUNICATION_RECIPIENT_ROLE_ACCOUNTING_OR_BOOKKEEPING/);
+  assert.match(protocol, /COMMUNICATION_RECIPIENT_ROLE_LEGAL_COUNSEL/);
+  assert.match(protocol, /COMMUNICATION_RECIPIENT_ROLE_PROJECT_STAKEHOLDER/);
+  assert.doesNotMatch(
+    protocol,
+    /email_address|contact_id|person_id|organization_id|provider_id|account_id|model_id|prompt|source_body|map</,
+  );
+  assert.match(core, /evaluate_communication_recipient_candidates_v1/);
+  assert.match(core, /allows_empty_candidate_list_without_fabricating_a_recipient/);
+  assert.match(core, /SourceDigestMismatch/);
+  assert.doesNotMatch(
+    core,
+    /hermes_ai|ollama|communications_domain|communication_explanation|communication_reply_suggestion/,
+  );
+  assert.ok(
+    policy.implementation.ownerInventory.workflows.includes(
+      'communication_recipient_suggestion',
+    ),
+  );
+  assert.ok(
+    policy.implementation.ownerInventory.businessCapabilities.includes(
+      'communication.recipient-suggestion.v1',
+    ),
+  );
 });
