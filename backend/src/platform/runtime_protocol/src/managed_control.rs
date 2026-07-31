@@ -192,11 +192,19 @@ impl<S: Read + Write> ManagedControlChannelV2<S> {
         ready: ManagedRuntimeReadyRequestV1,
     ) -> Result<(), ManagedControlTransportErrorV2> {
         let mut bootstrap_dispatcher = RejectManagedControlRequestsV2;
+        self.signal_ready_with_dispatch(ready, &mut bootstrap_dispatcher)
+    }
+
+    pub fn signal_ready_with_dispatch(
+        &mut self,
+        ready: ManagedRuntimeReadyRequestV1,
+        dispatcher: &mut dyn ManagedControlRequestDispatcherV2<S>,
+    ) -> Result<(), ManagedControlTransportErrorV2> {
         let response = self.request_next_with_dispatch(
             ManagedRuntimeControlRequestV1 {
                 operation: Some(Operation::Ready(ready)),
             },
-            &mut bootstrap_dispatcher,
+            dispatcher,
         )?;
         match response.result {
             Some(ControlResult::Ack(ManagedRuntimeControlAckV1 {}))

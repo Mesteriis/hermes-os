@@ -101,7 +101,7 @@ test('Communications canonical read v2 owns keyset persistence and scoped opaque
   assert.match(persistence, /canonical_message/);
   assert.match(persistence, /canonical_message_evidence_page/);
   assert.equal((migration.match(/CREATE INDEX/g) ?? []).length, 8);
-  assert.match(storageBundle, /COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 14/);
+  assert.match(storageBundle, /COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 15/);
   assert.match(storageBundle, /communications_canonical_read_v2_indexes/);
   assert.match(managed, /assert_communications_canonical_read_v2_pagination/);
   assert.match(managed, /Operation::GetMessage/);

@@ -539,7 +539,7 @@
       "gate": "communications_ai_context_source_v1",
       "role": "domain",
       "owner": "communications",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "communications_content_read_v1",
         "nats_data_plane_v1",

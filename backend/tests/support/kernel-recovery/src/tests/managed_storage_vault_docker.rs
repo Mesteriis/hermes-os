@@ -82,6 +82,8 @@ use scheduler_events::*;
 #[path = "managed_storage_vault_docker/communications_setup.rs"]
 mod communications_setup;
 use communications_setup::*;
+#[path = "managed_storage_vault_docker/communications_ai_source_managed_flow.rs"]
+mod communications_ai_source_managed_flow;
 #[path = "managed_storage_vault_docker/communications_export_race.rs"]
 mod communications_export_race;
 use communications_export_race::*;

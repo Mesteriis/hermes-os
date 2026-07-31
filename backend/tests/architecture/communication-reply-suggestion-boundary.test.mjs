@@ -50,7 +50,7 @@ test('reply suggestion agreement keeps domain workflow engine and integration se
     gate: 'communications_ai_context_source_v1',
     role: 'domain',
     owner: 'communications',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['communications_content_read_v1', 'nats_data_plane_v1', 'blob_v1'],
   });
   assert.deepEqual(slices.get('ai_inference_v1'), {
@@ -184,12 +184,17 @@ test('canonical Mail subject and sender reach reply source content without a pro
 });
 
 test('Communications AI source runtime commits an owner-bound event handoff before ack', async () => {
-  const [manifest, persistence, runtime, admission, eventRuntime] = await Promise.all([
+  const [manifest, persistence, runtime, admission, eventRuntime, managedFlow, managedScript] =
+    await Promise.all([
     backendSource('src/communications-runtime/Cargo.toml'),
     backendSource('src/communications-persistence/src/ai_source.rs'),
     backendSource('src/communications-runtime/src/ai_source.rs'),
     backendSource('src/communications-runtime/src/admission.rs'),
     backendSource('src/communications-runtime/src/event_runtime.rs'),
+    backendSource(
+      'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communications_ai_source_managed_flow.rs',
+    ),
+    backendSource('scripts/test-authenticated-storage.mjs'),
   ]);
 
   assert.match(manifest, /hermes-communications-ai-source-api/);
@@ -210,6 +215,14 @@ test('Communications AI source runtime commits an owner-bound event handoff befo
   assert.match(admission, /communications_ai_source_capability_v1/);
   assert.match(eventRuntime, /communication_reply_source_prepare_contract_reference_v1/);
   assert.match(eventRuntime, /CommunicationsConsumerV1::AiSourcePrepare/);
+  assert.match(
+    managedFlow,
+    /managed_communications_ai_source_is_event_only_and_revision_fenced/,
+  );
+  assert.match(managedFlow, /CommunicationReplySourceRejectCodeStaleRevision/);
+  assert.match(managedFlow, /CommunicationReplySourceRejectCodeSourceMissingOrInactive/);
+  assert.match(managedFlow, /assert_private_content_absent/);
+  assert.match(managedScript, /managed_communications_ai_source_is_event_only_and_revision_fenced/);
 
   const persisted = runtime.indexOf('.persist_ai_source_result(');
   const acknowledged = runtime.indexOf('delivery.acknowledge()', persisted);

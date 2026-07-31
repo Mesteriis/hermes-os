@@ -2711,6 +2711,7 @@ dependencies = [
  "hermes-communication-delivery-intent-api",
  "hermes-communication-delivery-intent-persistence",
  "hermes-communication-delivery-intent-runtime",
+ "hermes-communications-ai-source-api",
  "hermes-communications-api",
  "hermes-communications-attachment-contract",
  "hermes-communications-call-evidence-api",

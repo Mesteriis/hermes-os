@@ -4,6 +4,11 @@ use crate::runtime::lifecycle::control::{
     ManagedRuntimeBlobSessionHandler, ManagedRuntimeExpectation,
 };
 use hermes_blob_client::BlobDataClient;
+use hermes_communications_ai_source_api::{
+    communication_reply_source_prepare_contract_reference_v1,
+    communication_reply_source_prepared_contract_reference_v1,
+    communication_reply_source_rejected_contract_reference_v1,
+};
 use hermes_communications_api::query_wire::{
     CommunicationsQueryRequestV1, CommunicationsQueryResponseV1, GetEvidenceRequestV1,
     GetMessageRequestV1, ListAccountsRequestV1, ListMessageEvidenceRequestV1,
@@ -58,6 +63,7 @@ use hermes_communications_export_runtime::admission::{
     communications_export_settings_schema_bytes_v1,
 };
 use hermes_communications_runtime::admission::{
+    COMMUNICATIONS_AI_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID,
     COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_BLOB_CAPABILITY_ID, COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
@@ -1057,7 +1063,7 @@ pub(super) fn assert_communications_transferred_body_projection(
                 external_conversation_id: Some(
                     "integration-private-body-conversation-1".to_owned(),
                 ),
-                external_participant_id: None,
+                external_participant_id: Some("integration-private-body-participant-1".to_owned()),
                 external_media_id: None,
                 external_reply_to_record_id: None,
                 external_forward_origin_record_id: None,
@@ -1101,7 +1107,7 @@ pub(super) fn assert_communications_transferred_body_projection(
                 external_conversation_id: Some(
                     "integration-private-body-conversation-1".to_owned(),
                 ),
-                external_participant_id: None,
+                external_participant_id: Some("integration-private-body-participant-1".to_owned()),
                 external_media_id: None,
                 external_reply_to_record_id: None,
                 external_forward_origin_record_id: None,
@@ -1113,6 +1119,16 @@ pub(super) fn assert_communications_transferred_body_projection(
         Some(1_783_024_001),
     )
     .expect("build admitted-body ingress draft");
+    let draft = hermes_communications_ingress::with_participant_display_label(
+        draft,
+        Some("Alice Example <alice@example.test>".to_owned()),
+    )
+    .expect("attach admitted-body sender label");
+    let draft = hermes_communications_ingress::with_message_subject(
+        draft,
+        Some("Quarterly update".to_owned()),
+    )
+    .expect("attach admitted-body subject");
     let draft = hermes_communications_ingress::with_admitted_body_blob(
         draft,
         hermes_communications_ingress::BodyBlobReceiptV1 {
@@ -1854,7 +1870,9 @@ fn wait_for_transferred_body_message(
         else {
             assert!(
                 std::time::Instant::now() < deadline,
-                "exportable admitted-body account was not projected"
+                "exportable admitted-body account was not projected; active={:?}; last_failure={:?}",
+                supervisor.is_active(COMMUNICATIONS_REGISTRATION),
+                supervisor.last_failure(COMMUNICATIONS_REGISTRATION),
             );
             std::thread::sleep(std::time::Duration::from_millis(25));
             continue;
@@ -2542,22 +2560,39 @@ pub(super) fn route_communications_query(
         COMMUNICATIONS_QUERY_CAPABILITY_ID,
         &request,
     );
-    let bytes = crate::modules::capability::router::route_managed_client_request(
-        store,
-        &supervisor.relay_port(),
-        &route,
-    )
-    .expect("route exact Communications owner query");
-    let response = ModuleClientResponseV1::decode(bytes.as_slice())
-        .expect("decode Communications module response");
-    assert_eq!(response.request_id, request_id);
-    assert!(
-        response.error_code.is_empty(),
-        "Communications query {request_id} failed: {}",
-        response.error_code,
-    );
-    CommunicationsQueryResponseV1::decode(response.response_payload.as_slice())
-        .expect("decode Communications query response")
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let bytes = match crate::modules::capability::router::route_managed_client_request(
+            store,
+            &supervisor.relay_port(),
+            &route,
+        ) {
+            Ok(bytes) => bytes,
+            Err(error)
+                if error == "managed runtime V2 relay response is invalid"
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(25));
+                continue;
+            }
+            Err(error) => panic!("route exact Communications owner query: {error}"),
+        };
+        let response = ModuleClientResponseV1::decode(bytes.as_slice())
+            .expect("decode Communications module response");
+        assert_eq!(response.request_id, request_id);
+        if response.error_code == "RUNTIME_UNAVAILABLE" && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            continue;
+        }
+        assert!(
+            response.error_code.is_empty(),
+            "Communications query {request_id} failed: {}; last_failure={:?}",
+            response.error_code,
+            supervisor.last_failure(COMMUNICATIONS_REGISTRATION),
+        );
+        return CommunicationsQueryResponseV1::decode(response.response_payload.as_slice())
+            .expect("decode Communications query response");
+    }
 }
 
 fn record_communications_registration(store: &SqliteControlStore, descriptor: &[u8]) -> u64 {
@@ -2570,6 +2605,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         1,
     );
     let capabilities = [
+        COMMUNICATIONS_AI_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_ATTACHMENT_SAFETY_VERDICT_OBSERVE_CAPABILITY_ID.to_owned(),
         "communications.blob.v1".to_owned(),
@@ -2630,6 +2667,14 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
         vec![ModuleBlobOperationV1::Write],
     );
+    let ai_source_blob = ModuleBlobQuotaRequestV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_AI_SOURCE_BLOB_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        COMMUNICATIONS_BLOB_QUOTA_BYTES,
+        COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
+        vec![ModuleBlobOperationV1::Write],
+    );
     let vault_purpose = ModuleVaultPurposeRequestV1::new_with_key_schema_revision(
         COMMUNICATIONS_REGISTRATION,
         COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
@@ -2664,6 +2709,9 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         cross_channel_forward_source_prepared_contract_reference_v1();
     let cross_channel_forward_source_rejected =
         cross_channel_forward_source_rejected_contract_reference_v1();
+    let ai_source_prepare = communication_reply_source_prepare_contract_reference_v1();
+    let ai_source_prepared = communication_reply_source_prepared_contract_reference_v1();
+    let ai_source_rejected = communication_reply_source_rejected_contract_reference_v1();
     let routes = [
         communications_event_route(
             COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
@@ -2741,6 +2789,24 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             COMMUNICATIONS_CROSS_CHANNEL_FORWARD_SOURCE_CAPABILITY_ID,
             ModuleEventEnvelopeKindV1::Result,
             &cross_channel_forward_source_rejected,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Command,
+            &ai_source_prepare,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &ai_source_prepared,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &ai_source_rejected,
             ModuleEventRouteDirectionV1::Publish,
         ),
     ];
@@ -2862,6 +2928,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
                     content_blob,
                     export_source_blob,
                     cross_channel_forward_source_blob,
+                    ai_source_blob,
                 ],
                 scheduler: &[],
                 vault_purposes: std::slice::from_ref(&vault_purpose),

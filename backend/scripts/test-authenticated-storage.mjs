@@ -474,6 +474,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_bulk_action_reaches_gateway_sse_and_replays_after_restart',
     'managed_attachment_security_engine_starts_with_exact_signed_contracts',
     'managed_review_attention_reaches_gateway_sse_and_replays_after_restart',
+    'managed_communications_ai_source_is_event_only_and_revision_fenced',
     'managed_ai_inference_routes_to_ollama_and_replays_after_restart',
     'managed_ollama_ai_runtime_replays_provider_unavailable_without_second_http_attempt',
     'managed_mail_runtime_uses_kernel_leases_and_route_specific_admission',

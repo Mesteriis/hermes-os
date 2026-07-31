@@ -317,7 +317,7 @@ fn dispatch_v2_typed_request(
     input: &ManagedChildRunInput<'_>,
 ) -> Result<(), String> {
     let request = managed_runtime_control::inbound::decode_typed_request(request)?;
-    let response = match request {
+    match request {
         managed_runtime_control::inbound::ManagedRuntimeInboundRequestV1::Ready(ready) => {
             if !input.expectation.matches_ready(&ready) {
                 let _ = input
@@ -325,24 +325,32 @@ fn dispatch_v2_typed_request(
                     .try_send(Err("managed runtime ready signal is stale".to_owned()));
                 return Err("managed runtime ready signal is stale".to_owned());
             }
+            channel
+                .write_response(
+                    correlation_id,
+                    ManagedRuntimeControlResponseV1 {
+                        result: Some(ControlResult::Ack(ManagedRuntimeControlAckV1 {})),
+                        error_code: String::new(),
+                    },
+                )
+                .map_err(|_| "managed runtime correlated control response is invalid".to_owned())?;
             input
                 .ready_state
                 .store(true, std::sync::atomic::Ordering::Release);
             let _ = input.ready_sender.try_send(Ok(()));
-            ManagedRuntimeControlResponseV1 {
-                result: Some(ControlResult::Ack(ManagedRuntimeControlAckV1 {})),
-                error_code: String::new(),
-            }
+            Ok(())
         }
-        request => managed_runtime_control::dispatch_typed_request(
-            request,
-            input.expectation,
-            input.control_handlers,
-        )?,
-    };
-    channel
-        .write_response(correlation_id, response)
-        .map_err(|_| "managed runtime correlated control response is invalid".to_owned())
+        request => {
+            let response = managed_runtime_control::dispatch_typed_request(
+                request,
+                input.expectation,
+                input.control_handlers,
+            )?;
+            channel
+                .write_response(correlation_id, response)
+                .map_err(|_| "managed runtime correlated control response is invalid".to_owned())
+        }
+    }
 }
 
 fn process_typed_requests(

@@ -4,7 +4,7 @@ use hermes_storage_protocol::{
 };
 use sha2::{Digest, Sha256};
 
-pub const COMMUNICATIONS_CALL_EVIDENCE_STORAGE_BUNDLE_REVISION_V1: u32 = 15;
+pub const COMMUNICATIONS_CALL_EVIDENCE_STORAGE_BUNDLE_REVISION_V1: u32 = 16;
 pub const COMMUNICATIONS_CALL_EVIDENCE_SCHEMA_V1: &[u8] =
     include_bytes!("../migrations/0001_call_evidence.sql");
 
@@ -48,10 +48,10 @@ mod tests {
     fn bundle_is_additive_owner_local_and_private_content_negative() {
         let predecessor = StorageBundleV1 {
             major: 1,
-            revision: 14,
+            revision: 15,
             bundle_id: "communications_state".to_owned(),
             owner_id: "communications".to_owned(),
-            steps: (1..=14)
+            steps: (1..=15)
                 .map(|revision| {
                     let sql = format!(
                         "CREATE TABLE hermes_data.communications_test_{revision} (id BIGINT);"
@@ -69,9 +69,9 @@ mod tests {
         let bundle =
             append_communications_call_evidence_storage_v1(predecessor).expect("successor");
         assert_eq!(bundle.owner_id, "communications");
-        assert_eq!(bundle.revision, 15);
-        assert_eq!(bundle.steps.len(), 15);
-        let sql = String::from_utf8(bundle.steps[14].forward_sql_utf8.clone()).expect("utf8");
+        assert_eq!(bundle.revision, 16);
+        assert_eq!(bundle.steps.len(), 16);
+        let sql = String::from_utf8(bundle.steps[15].forward_sql_utf8.clone()).expect("utf8");
         for table in [
             "communications_call_evidence_inbox",
             "communications_call_evidence_projection",

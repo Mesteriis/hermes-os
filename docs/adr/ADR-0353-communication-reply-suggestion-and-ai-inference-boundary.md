@@ -12,9 +12,11 @@ AI contract unit имеет concrete reply request/result, common context receip
 deterministic request digest и provider-neutral bounded local-only generation
 port. Provider result обязан вернуть typed completeness и bounded confidence;
 engine не фабрикует эти значения. Всё перечисленное имеет Cargo/architecture
-evidence. Live event-only
-source preparation ещё не доказано, поэтому gate
-`communications_ai_context_source_v1` остаётся `planned`.
+evidence. Live managed conformance запускает Communications с настоящими
+Vault/Storage/Blob/NATS, передаёт bounded sender/subject/body только через
+target-bound Blob receipt, не публикует private content в envelope, подавляет
+duplicate result и fail-closed отклоняет stale и inactive source revision.
+Gate `communications_ai_context_source_v1` реализован.
 `hermes-ai-inference-core` также реализован как отдельная engine unit с
 revision-fenced lifecycle, fixed prompt/policy receipt и sanitized terminal
 results. `hermes-ai-inference-persistence` реализован отдельной owner-local
@@ -363,9 +365,9 @@ Frontend review использует только generated workflow client. App
 
 ### `communications_ai_context_source_v1`
 
-Открывается только при наличии public source contract, Communications-owned
-inbox/outbox implementation, target-bound Blob custody, stale/edit/delete
-negative matrix and live event-only preparation evidence.
+Реализован: public source contract, Communications-owned inbox/outbox,
+target-bound Blob custody, stale/edit/inactive negative matrix and live
+event-only preparation evidence проверяются managed conformance.
 
 ### `ai_inference_v1`
 

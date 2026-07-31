@@ -33,7 +33,7 @@ const EVIDENCE_EXPORT_SOURCE_SCHEMA: &[u8] =
 const MESSAGE_SUBJECT_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0015_communications_message_subject.sql");
 
-pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 14;
+pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 15;
 
 /// Immutable Communications schema admitted and applied only by Storage Control.
 #[must_use]
