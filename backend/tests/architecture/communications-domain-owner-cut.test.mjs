@@ -58,10 +58,10 @@ test('Communications remains isolated after Review owner admission', async () =>
 
   assert.equal(
     policy.implementation.currentSlice,
-    'review_task_candidate_assembly_v1',
+    'tasks_reviewed_candidate_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
-    domains: ['communications', 'review'],
+    domains: ['communications', 'review', 'tasks'],
     integrations: ['mail'],
     workflows: [
       'communication_cross_channel_forward',
@@ -204,6 +204,8 @@ test('Communications remains isolated after Review owner admission', async () =>
       'review.task-candidate.promotion.v1',
       'review.task-candidate.storage.v1',
       'review.task-candidate.submission.v1',
+      'tasks.reviewed-candidate.blob.v1',
+      'tasks.reviewed-candidate.command.v1',
     ],
   });
   assert.deepEqual(

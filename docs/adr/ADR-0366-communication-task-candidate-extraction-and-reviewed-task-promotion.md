@@ -31,7 +31,11 @@ realtime. Domain-separated 16-byte actor evidence строится только 
 `authenticated_device_id`, переданного Gateway вне client payload. Runtime
 package сохраняет exact Domain descriptor, семь отдельных
 client/Blob/event/storage capabilities и пустую typed Settings schema, но
-aggregate gate остаётся закрыт до signed admission, Tasks и managed E2E.
+Tasks staged slice теперь реализует отдельные `hermes-tasks-command-api` и
+`hermes-tasks-core`: exact target-owned durable command/results, deterministic
+Task identity, source/review provenance и hints без создания Calendar, Contact,
+Project или Obligation truth. Aggregate gate остаётся закрыт до Tasks
+persistence/runtime/assembly, signed admission и managed E2E.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 

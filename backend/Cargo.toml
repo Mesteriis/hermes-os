@@ -53,6 +53,8 @@ members = [
   "src/review-task-candidate-persistence",
   "src/review-task-candidate-runtime",
   "src/review-task-candidate-assembly",
+  "src/tasks-command-api",
+  "src/tasks-core",
   "src/communications-content-api",
   "src/communications-saved-query-api",
   "src/communications-sender-insights-api",

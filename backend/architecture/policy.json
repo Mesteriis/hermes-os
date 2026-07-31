@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_task_candidate_assembly_v1",
+    "currentSlice": "tasks_reviewed_candidate_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1050,6 +1050,18 @@
         "role": "domain",
         "owner": "review",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-tasks-command-api",
+        "role": "domain",
+        "owner": "tasks",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-tasks-core",
+        "role": "domain",
+        "owner": "tasks",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1678,6 +1690,17 @@
           "kind": "normal"
         }
       ],
+      "hermes-tasks-command-api": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-tasks-core": [],
       "hermes-communications-attachment-contract": [
         {
           "name": "hermes-events-protocol",
@@ -5070,6 +5093,66 @@
           "features": []
         }
       ],
+      "hermes-tasks-command-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-tasks-core": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-review-attention-persistence": [
         {
           "name": "sha2",
@@ -8379,6 +8462,14 @@
       "hermes-review-task-candidate-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
+      },
+      "hermes-tasks-command-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-tasks-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -8416,7 +8507,8 @@
     "ownerInventory": {
       "domains": [
         "communications",
-        "review"
+        "review",
+        "tasks"
       ],
       "integrations": [
         "mail"
@@ -8565,7 +8657,9 @@
         "review.task-candidate.client.v1",
         "review.task-candidate.promotion.v1",
         "review.task-candidate.storage.v1",
-        "review.task-candidate.submission.v1"
+        "review.task-candidate.submission.v1",
+        "tasks.reviewed-candidate.blob.v1",
+        "tasks.reviewed-candidate.command.v1"
       ]
     },
     "kernelProfile": {
