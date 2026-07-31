@@ -133,6 +133,9 @@ fn serve_inherited(paths: InheritedPaths) -> Result<(), String> {
         executor.block_on(interval.tick());
         let (now_millis, nanos) = current_runtime_time_v1()
             .map_err(|_| "Archive Inspection clock is unavailable".to_owned())?;
+        if let Err(error) = executor.block_on(runtime.pump_control_once(now_millis)) {
+            diagnostic("client-delivery", error);
+        }
         if let Err(error) = executor.block_on(runtime.consume_next(now_millis)) {
             diagnostic("consume", error);
         }
@@ -146,6 +149,9 @@ fn serve_inherited(paths: InheritedPaths) -> Result<(), String> {
         }
         if let Err(error) = executor.block_on(runtime.process_next_job(now_millis)) {
             diagnostic("inspect", error);
+        }
+        if let Err(error) = executor.block_on(runtime.pump_client_realtime_once()) {
+            diagnostic("client-realtime", error);
         }
     }
 }

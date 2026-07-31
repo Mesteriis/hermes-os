@@ -2,6 +2,9 @@
 
 pub mod admission;
 mod blob;
+mod client_port;
+mod client_realtime;
+mod contracts;
 mod event_decode;
 mod outbox;
 pub mod runtime;

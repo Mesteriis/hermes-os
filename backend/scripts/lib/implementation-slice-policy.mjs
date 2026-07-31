@@ -3359,6 +3359,14 @@ const ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_INVENTORY = {
   ].sort(),
 };
 
+const ATTACHMENT_ARCHIVE_INSPECTION_CLIENT_INVENTORY = {
+  ...ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_INVENTORY,
+  businessCapabilities: [
+    ...ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_INVENTORY.businessCapabilities,
+    'attachment.archive_inspection.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -4284,6 +4292,19 @@ function expectedSlice(currentSlice) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies:
+        ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies:
+        ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_archive_inspection_client_gateway_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_ARCHIVE_INSPECTION_CLIENT_INVENTORY,
       cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
       packages: ATTACHMENT_ARCHIVE_INSPECTION_ASSEMBLY_PRODUCTION_PACKAGES,
       workspaceDependencies:

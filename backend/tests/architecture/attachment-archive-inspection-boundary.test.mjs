@@ -5,7 +5,7 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../', BACKEND_ROOT);
 
-test('archive inspection persistence is admitted without opening the planned gate', async () => {
+test('archive inspection client runtime is admitted without opening the planned live gate', async () => {
   const [inventorySource, policySource, adr] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
@@ -35,7 +35,7 @@ test('archive inspection persistence is admitted without opening the planned gat
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_archive_inspection_release_assembly_v1',
+    'attachment_archive_inspection_client_gateway_v1',
   );
   assert(policy.implementation.ownerInventory.engines.includes(
     'attachment_archive_inspection',
@@ -325,6 +325,54 @@ test('archive runtime is a separate managed engine with event-only custody and r
     `${admission}\n${runtime}\n${blob}\n${eventDecode}\n${outbox}\n${settings}`,
     /hermes_(?:attachment_security_(?:core|persistence|runtime)|communications_(?:core|persistence|runtime)|mail|telegram|whatsapp|zulip)/,
   );
+});
+
+test('archive runtime exposes exact owner-local Start Get and shared realtime surfaces', async () => {
+  const [admission, contracts, clientPort, realtime, runtime, main] = await Promise.all([
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/admission.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/contracts.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/client_port.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/client_realtime.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/runtime.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-archive-inspection-runtime/src/main.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(admission, /ATTACHMENT_ARCHIVE_INSPECTION_COMMAND_CONNECT_PATH_V1/);
+  assert.match(admission, /ATTACHMENT_ARCHIVE_INSPECTION_QUERY_CONNECT_PATH_V1/);
+  assert.match(admission, /ProvidedSurfaceKindV1::ClientRealtime/);
+  assert.match(contracts, /ATTACHMENT_ARCHIVE_INSPECTION_SCHEMA_SHA256/);
+  assert.match(clientPort, /dispatch_archive_inspection_client_request_v1/);
+  assert.match(clientPort, /create_run/);
+  assert.match(clientPort, /load_run/);
+  assert.doesNotMatch(
+    clientPort,
+    /\b(?:blob_reference|custody_transfer_source_proof|provider_id|account_id|filesystem_path)\b/,
+  );
+  assert.match(realtime, /client_realtime_window/);
+  assert.match(realtime, /ManagedRuntimeClientRealtimePublishRequestV1/);
+  assert.match(realtime, /attachment-archive-inspection\/\{\}/);
+  assert.match(runtime, /Operation::ClientDelivery/);
+  assert.match(runtime, /RejectManagedControlRequestsV2/);
+  assert.match(main, /pump_control_once/);
+  assert.match(main, /pump_client_realtime_once/);
 });
 
 test('archive release assembly is a separate unsigned engine unit', async () => {

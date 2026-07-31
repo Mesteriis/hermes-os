@@ -29,8 +29,16 @@ use hermes_events_jetstream::{
     request_managed_runtime_event_access_v2,
 };
 use hermes_runtime_protocol::{
-    managed_control::ManagedControlChannelV2,
-    v1::{ContractReferenceV1, ManagedRuntimeReadyRequestV1, ManagedStorageRuntimeConfigurationV1},
+    managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
+    v1::{
+        ContractReferenceV1, ManagedRuntimeClientDeliveryResponseV1,
+        ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
+        ManagedStorageRuntimeConfigurationV1, managed_runtime_control_request_v1::Operation,
+        managed_runtime_control_response_v1::Result as ControlResult,
+    },
+    validation::module_client::{
+        validate_module_client_request_v1, validate_module_client_response_v1,
+    },
 };
 use hermes_storage_protocol::{
     StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1, StorageBindingV1,
@@ -42,6 +50,10 @@ use hermes_storage_vault::{
 
 use crate::{
     blob::{read_archive_blob_v1, transfer_archive_blob_v1},
+    client_port::dispatch_archive_inspection_client_request_v1,
+    client_realtime::{
+        ArchiveInspectionClientRealtimeErrorV1, ArchiveInspectionClientRealtimePublisherV1,
+    },
     event_decode::{
         DecodedArchiveCustodyResultV1, decode_archive_candidate_v1,
         decode_archive_custody_result_v1, decode_archive_safety_v1,
@@ -68,6 +80,7 @@ pub struct AttachmentArchiveInspectionRuntimeV1 {
     next_consumer: ArchiveInspectionConsumerV1,
     publish_permit: RuntimePublishPermitV1,
     persistence: AttachmentArchiveInspectionPersistenceV1,
+    client_realtime: ArchiveInspectionClientRealtimePublisherV1,
     limits: ArchiveInspectionLimitsV1,
     logical_owner_id: String,
     runtime_instance_id: String,
@@ -187,6 +200,7 @@ impl AttachmentArchiveInspectionRuntimeV1 {
             next_consumer: ArchiveInspectionConsumerV1::Candidate,
             publish_permit,
             persistence,
+            client_realtime: ArchiveInspectionClientRealtimePublisherV1::default(),
             limits,
             logical_owner_id: admission.logical_owner_id.clone(),
             runtime_instance_id: admission.runtime_instance_id.clone(),
@@ -402,6 +416,98 @@ impl AttachmentArchiveInspectionRuntimeV1 {
             }
         }
     }
+
+    pub async fn pump_control_once(
+        &mut self,
+        now_unix_millis: i64,
+    ) -> Result<bool, ArchiveInspectionRuntimeErrorV1> {
+        let Some((correlation_id, request)) = self
+            .control_channel
+            .try_receive_request()
+            .map_err(|_| ArchiveInspectionRuntimeErrorV1::Unavailable)?
+        else {
+            return Ok(false);
+        };
+        let Some(Operation::ClientDelivery(delivery)) = request.operation else {
+            self.write_client_error(correlation_id, "managed_runtime_control_unexpected_request")?;
+            return Ok(true);
+        };
+        let Some(request) = delivery
+            .request
+            .filter(|request| validate_module_client_request_v1(request).is_ok())
+        else {
+            self.write_client_error(
+                correlation_id,
+                "managed_runtime_control_invalid_client_delivery",
+            )?;
+            return Ok(true);
+        };
+        let response = dispatch_archive_inspection_client_request_v1(
+            &self.persistence,
+            &self.logical_owner_id,
+            request,
+            now_unix_millis,
+        )
+        .await;
+        if validate_module_client_response_v1(&response).is_err() {
+            return Err(ArchiveInspectionRuntimeErrorV1::Unavailable);
+        }
+        self.control_channel
+            .write_response(
+                correlation_id,
+                ManagedRuntimeControlResponseV1 {
+                    result: Some(ControlResult::ClientDelivery(
+                        ManagedRuntimeClientDeliveryResponseV1 {
+                            response: Some(response),
+                        },
+                    )),
+                    error_code: String::new(),
+                },
+            )
+            .map_err(|_| ArchiveInspectionRuntimeErrorV1::Unavailable)?;
+        Ok(true)
+    }
+
+    pub async fn pump_client_realtime_once(
+        &mut self,
+    ) -> Result<bool, ArchiveInspectionRuntimeErrorV1> {
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| ArchiveInspectionRuntimeErrorV1::Unavailable)?;
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let result = self
+            .client_realtime
+            .publish_pending(
+                &self.persistence,
+                &mut self.control_channel,
+                &mut dispatcher,
+                &self.logical_owner_id,
+            )
+            .await
+            .map_err(client_realtime_error);
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| ArchiveInspectionRuntimeErrorV1::Unavailable)?;
+        result
+    }
+
+    fn write_client_error(
+        &mut self,
+        correlation_id: [u8; 16],
+        error_code: &str,
+    ) -> Result<(), ArchiveInspectionRuntimeErrorV1> {
+        self.control_channel
+            .write_response(
+                correlation_id,
+                ManagedRuntimeControlResponseV1 {
+                    result: None,
+                    error_code: error_code.to_owned(),
+                },
+            )
+            .map_err(|_| ArchiveInspectionRuntimeErrorV1::Unavailable)
+    }
 }
 
 struct ArchiveInspectionSubscribePermitsV1 {
@@ -502,6 +608,20 @@ fn persistence_error(
         }
         ArchiveInspectionPersistenceErrorV1::StorageUnavailable
         | ArchiveInspectionPersistenceErrorV1::ClaimLost => {
+            ArchiveInspectionRuntimeErrorV1::Unavailable
+        }
+    }
+}
+
+fn client_realtime_error(
+    error: ArchiveInspectionClientRealtimeErrorV1,
+) -> ArchiveInspectionRuntimeErrorV1 {
+    match error {
+        ArchiveInspectionClientRealtimeErrorV1::InvalidTransition => {
+            ArchiveInspectionRuntimeErrorV1::InvalidJob
+        }
+        ArchiveInspectionClientRealtimeErrorV1::Persistence(error) => persistence_error(error),
+        ArchiveInspectionClientRealtimeErrorV1::Unavailable => {
             ArchiveInspectionRuntimeErrorV1::Unavailable
         }
     }

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_archive_inspection_release_assembly_v1",
+    "currentSlice": "attachment_archive_inspection_client_gateway_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -7500,6 +7500,7 @@
       "attachment_security"
     ],
       "businessCapabilities": [
+        "attachment.archive_inspection.v1",
         "attachment_archive_inspection.blob.v1",
         "attachment_archive_inspection.candidate.observe.v1",
         "attachment_archive_inspection.custody-request.publish.v1",

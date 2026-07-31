@@ -31,8 +31,12 @@ capabilities, принимает exact candidate/safety/delegation events, пу�
 metadata adapter. Отдельная assembly unit детерминированно материализует
 descriptor, restart-applied settings schema, owner-local Storage bundle и
 unsigned sorted release fragment; она не запускает runtime и не подписывает
-manifest. Gateway Start/Get/shared SSE, live PostgreSQL/NATS/Blob/Gateway
-conformance и production gate
+manifest. Runtime descriptor теперь предоставляет exact owner-local Start/Get
+и ClientRealtime surfaces; managed control dispatch валидирует module/owner/
+contract identity, а replay publisher читает только owner-local status
+transitions и отправляет bounded status через общий Kernel realtime protocol.
+Live PostgreSQL/NATS/Blob/Gateway conformance, terminal SSE replay после
+restart и production gate
 `attachment_archive_inspection_v1` остаются открыты.
 
 Зависит от:

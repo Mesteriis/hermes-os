@@ -1,7 +1,10 @@
 //! Exact managed Engine descriptor for the event-only archive worker slice.
 
 use hermes_attachment_archive_inspection_api::{
+    ATTACHMENT_ARCHIVE_INSPECTION_CAPABILITY_ID_V1,
+    ATTACHMENT_ARCHIVE_INSPECTION_COMMAND_CONNECT_PATH_V1,
     ATTACHMENT_ARCHIVE_INSPECTION_MODULE_ID_V1, ATTACHMENT_ARCHIVE_INSPECTION_OWNER_V1,
+    ATTACHMENT_ARCHIVE_INSPECTION_QUERY_CONNECT_PATH_V1,
 };
 use hermes_attachment_archive_inspection_ingress::{
     ATTACHMENT_ARCHIVE_INSPECTION_BLOB_TARGET_CAPABILITY_ID_V1,
@@ -21,13 +24,18 @@ use hermes_communications_attachment_contract::admission::{
 };
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
-    CapabilityRequestV1, ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
-    EventRouteRequestV1, EventSubscriptionRequirementV1, ModuleDescriptorV1, ModuleKindV1,
-    ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1,
-    SettingsSchemaRefV1, StorageNamespaceRequestV1, capability_request_v1::Request,
+    CapabilityRequestV1, ClientRpcRouteV1, ContractReferenceV1, DurableEnvelopeKindV1,
+    EventRouteDirectionV1, EventRouteRequestV1, EventSubscriptionRequirementV1, ModuleDescriptorV1,
+    ModuleKindV1, ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
+    RuntimeBudgetRequestV1, SettingsSchemaRefV1, StorageNamespaceRequestV1,
+    capability_request_v1::Request,
 };
 use sha2::{Digest, Sha256};
 
+use crate::contracts::{
+    archive_inspection_command_contract_v1, archive_inspection_query_contract_v1,
+    archive_inspection_realtime_contract_v1,
+};
 use crate::settings::{
     ATTACHMENT_ARCHIVE_INSPECTION_SETTINGS_SCHEMA_MAJOR_V1,
     ATTACHMENT_ARCHIVE_INSPECTION_SETTINGS_SCHEMA_REVISION_V1,
@@ -87,6 +95,7 @@ pub fn attachment_archive_inspection_module_descriptor_v1(build_id: &str) -> Mod
 
 fn capabilities() -> Vec<CapabilityDescriptorV1> {
     vec![
+        client(),
         blob(),
         consumer(
             ATTACHMENT_ARCHIVE_INSPECTION_CANDIDATE_CAPABILITY_ID,
@@ -104,6 +113,42 @@ fn capabilities() -> Vec<CapabilityDescriptorV1> {
         ),
         storage(),
     ]
+}
+
+fn client() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: ATTACHMENT_ARCHIVE_INSPECTION_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            client_rpc(
+                archive_inspection_command_contract_v1(),
+                ATTACHMENT_ARCHIVE_INSPECTION_COMMAND_CONNECT_PATH_V1,
+            ),
+            client_rpc(
+                archive_inspection_query_contract_v1(),
+                ATTACHMENT_ARCHIVE_INSPECTION_QUERY_CONNECT_PATH_V1,
+            ),
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::ClientRealtime as i32,
+                contract: Some(archive_inspection_realtime_contract_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+        ],
+        ..Default::default()
+    }
+}
+
+fn client_rpc(contract: ContractReferenceV1, path: &str) -> ProvidedSurfaceV1 {
+    ProvidedSurfaceV1 {
+        kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+        contract: Some(contract),
+        client_rpc_route: Some(ClientRpcRouteV1 {
+            path: path.to_owned(),
+        }),
+        client_blob_route: None,
+    }
 }
 
 fn consumer(
@@ -244,7 +289,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn descriptor_is_exact_six_capability_engine() {
+    fn descriptor_is_exact_seven_capability_engine() {
         let descriptor = attachment_archive_inspection_module_descriptor_v1("build-1");
         assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
         assert_eq!(
@@ -254,6 +299,7 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                ATTACHMENT_ARCHIVE_INSPECTION_CAPABILITY_ID_V1,
                 ATTACHMENT_ARCHIVE_INSPECTION_BLOB_CAPABILITY_ID,
                 ATTACHMENT_ARCHIVE_INSPECTION_CANDIDATE_CAPABILITY_ID,
                 ATTACHMENT_ARCHIVE_INSPECTION_CUSTODY_REQUEST_CAPABILITY_ID,
