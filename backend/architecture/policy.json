@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_recipient_suggestion_managed_runtime_v1",
+    "currentSlice": "communication_recipient_suggestion_source_producer_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1647,6 +1647,10 @@
         },
         {
           "name": "hermes-storage-vault",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-recipient-source-api",
           "kind": "normal"
         }
       ],
@@ -8087,6 +8091,7 @@
         "communications.export.v1",
         "communications.observe.v1",
         "communications.query.v1",
+        "communications.recipient-source.blob.v1",
         "communications.recipient-source.v1",
         "communications.saved-search.v1",
         "communications.search.index.v1",

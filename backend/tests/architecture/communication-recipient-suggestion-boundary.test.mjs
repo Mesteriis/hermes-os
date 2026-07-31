@@ -30,6 +30,11 @@ test('recipient suggestion agreement separates source ownership from workflow de
     runtimeEvaluation,
     runtimeSourceResults,
     runtimeManaged,
+    communicationsRuntimeManifest,
+    communicationsAdmission,
+    communicationsEventRuntime,
+    communicationsRecipientSource,
+    communicationsSourceSnapshot,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -93,6 +98,11 @@ test('recipient suggestion agreement separates source ownership from workflow de
     readFile(new URL('src/communication-recipient-suggestion-runtime/src/evaluation.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-recipient-suggestion-runtime/src/source_results.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-recipient-suggestion-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/event_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/recipient_source.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-persistence/src/source_snapshot.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -137,7 +147,7 @@ test('recipient suggestion agreement separates source ownership from workflow de
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_recipient_suggestion_managed_runtime_v1',
+    'communication_recipient_suggestion_source_producer_v1',
   );
   assert.match(workspace, /"src\/communication-recipient-suggestion-api"/);
   assert.match(workspace, /"src\/communication-recipient-suggestion-core"/);
@@ -210,6 +220,28 @@ test('recipient suggestion agreement separates source ownership from workflow de
     [runtimeAdmission, runtimeEvaluation, runtimeSourceResults, runtimeManaged].join('\n'),
     /communications-domain|hermes-communications-(?:core|persistence)|hermes_ai|ollama/i,
   );
+  assert.match(communicationsRuntimeManifest, /hermes-communications-recipient-source-api/);
+  assert.match(
+    communicationsAdmission,
+    /COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID/,
+  );
+  assert.match(
+    communicationsAdmission,
+    /communication_recipient_source_prepare_consume_request_v1/,
+  );
+  assert.match(
+    communicationsEventRuntime,
+    /consume_next_recipient_source_prepare_v1/,
+  );
+  assert.match(communicationsRecipientSource, /write_target_bound_source/);
+  assert.match(communicationsRecipientSource, /CommunicationRecipientBodySourceReceiptV1/);
+  assert.match(communicationsRecipientSource, /persist_source_result/);
+  assert.doesNotMatch(
+    communicationsRecipientSource,
+    /sender_utf8|subject_utf8|provider_id|account_id|email_address|hermes_ai|ollama/,
+  );
+  assert.match(communicationsSourceSnapshot, /CommunicationsSourceSnapshotV1/);
+  assert.doesNotMatch(communicationsSourceSnapshot, /CommunicationsAiSource/);
   assert.ok(
     policy.implementation.ownerInventory.workflows.includes(
       'communication_recipient_suggestion',
@@ -222,6 +254,7 @@ test('recipient suggestion agreement separates source ownership from workflow de
   );
   for (const capability of [
     'communications.recipient-source.v1',
+    'communications.recipient-source.blob.v1',
     'communication_recipient_suggestion.source.blob.v1',
     'communication_recipient_suggestion.source_prepare.v1',
     'communication_recipient_suggestion.source_prepared.v1',

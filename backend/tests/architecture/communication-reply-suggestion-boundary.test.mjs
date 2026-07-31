@@ -161,7 +161,7 @@ test('canonical Mail subject and sender reach reply source content without a pro
     backendSource(
       'src/communications-persistence/migrations/0015_communications_message_subject.sql',
     ),
-    backendSource('src/communications-persistence/src/ai_source.rs'),
+    backendSource('src/communications-persistence/src/source_snapshot.rs'),
     backendSource('src/communications-runtime/src/ai_source.rs'),
     backendSource('src/communication-reply-suggestion-runtime/src/blob_materialization.rs'),
   ]);
@@ -193,7 +193,7 @@ test('Communications AI source runtime commits an owner-bound event handoff befo
   const [manifest, persistence, runtime, admission, eventRuntime, managedFlow, managedScript] =
     await Promise.all([
     backendSource('src/communications-runtime/Cargo.toml'),
-    backendSource('src/communications-persistence/src/ai_source.rs'),
+    backendSource('src/communications-persistence/src/source_snapshot.rs'),
     backendSource('src/communications-runtime/src/ai_source.rs'),
     backendSource('src/communications-runtime/src/admission.rs'),
     backendSource('src/communications-runtime/src/event_runtime.rs'),
@@ -230,7 +230,7 @@ test('Communications AI source runtime commits an owner-bound event handoff befo
   assert.match(managedFlow, /assert_private_content_absent/);
   assert.match(managedScript, /managed_communications_ai_source_is_event_only_and_revision_fenced/);
 
-  const persisted = runtime.indexOf('.persist_ai_source_result(');
+  const persisted = runtime.indexOf('.persist_source_result(');
   const acknowledged = runtime.indexOf('delivery.acknowledge()', persisted);
   assert.ok(persisted >= 0);
   assert.ok(acknowledged > persisted);

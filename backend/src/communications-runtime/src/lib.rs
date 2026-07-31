@@ -25,6 +25,7 @@ pub mod query;
 pub mod query_client_port;
 pub mod query_module_port;
 pub mod query_port;
+mod recipient_source;
 pub mod saved_search_port;
 pub mod search_access;
 pub mod search_digest;

@@ -26,8 +26,8 @@ use hermes_communications_ai_source_api::{
     },
 };
 use hermes_communications_persistence::{
-    CommunicationsAiBodyReceiptV1, CommunicationsAiSourceErrorV1, CommunicationsAiSourceSnapshotV1,
-    CommunicationsConsumeOutcomeV1, CommunicationsDurablePersistence,
+    CommunicationsBodyReceiptV1, CommunicationsConsumeOutcomeV1, CommunicationsDurablePersistence,
+    CommunicationsSourceErrorV1, CommunicationsSourceSnapshotV1,
 };
 use hermes_events_jetstream::{
     RuntimeJetStreamConnection, RuntimePullDeliveryErrorV1, RuntimeSubscribePermitV1,
@@ -77,7 +77,7 @@ pub async fn consume_next_summary_source_prepare_v1(
         .map_err(|_| CommunicationsSummarySourceDeliveryErrorV1::InvalidEnvelope)?;
     let decoded = decode_prepare_command(&record, logical_human_owner_id)?;
     let snapshot = match persistence
-        .ai_source_snapshot(decoded.source_message_id, decoded.expected_source_revision)
+        .source_snapshot(decoded.source_message_id, decoded.expected_source_revision)
         .await
     {
         Ok(snapshot) => snapshot,
@@ -130,7 +130,7 @@ pub async fn consume_next_summary_source_prepare_v1(
     )
     .map_err(|_| CommunicationsSummarySourceDeliveryErrorV1::InvalidPayload)?;
     let outcome = match persistence
-        .persist_ai_source_result(
+        .persist_source_result(
             *record.message_id(),
             *record.envelope_sha256(),
             Some(&snapshot),
@@ -140,7 +140,7 @@ pub async fn consume_next_summary_source_prepare_v1(
         .await
     {
         Ok(outcome) => outcome,
-        Err(CommunicationsAiSourceErrorV1::StaleRevision) => persist_rejection(
+        Err(CommunicationsSourceErrorV1::StaleRevision) => persist_rejection(
             persistence,
             &record,
             &decoded,
@@ -205,7 +205,7 @@ fn decode_prepare_command(
 fn read_and_validate_body(
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
-    receipt: &CommunicationsAiBodyReceiptV1,
+    receipt: &CommunicationsBodyReceiptV1,
 ) -> Result<Vec<u8>, BodyMaterializationErrorV1> {
     let session = request_managed_blob_session_v2(
         control_channel,
@@ -248,7 +248,7 @@ fn write_target_bound_source(
     control_channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     run_id: [u8; 16],
-    snapshot: &CommunicationsAiSourceSnapshotV1,
+    snapshot: &CommunicationsSourceSnapshotV1,
     bytes: Vec<u8>,
 ) -> Result<CommunicationSummarySourceContentReceiptV1, BodyMaterializationErrorV1> {
     let bytes =
@@ -304,7 +304,7 @@ fn write_target_bound_source(
 
 fn source_reference_id(
     run_id: [u8; 16],
-    snapshot: &CommunicationsAiSourceSnapshotV1,
+    snapshot: &CommunicationsSourceSnapshotV1,
     sha256: [u8; 32],
 ) -> [u8; 16] {
     let mut hasher = Sha256::new();
@@ -335,7 +335,7 @@ async fn persist_rejection(
     )
     .map_err(|_| CommunicationsSummarySourceDeliveryErrorV1::InvalidPayload)?;
     persistence
-        .persist_ai_source_result(
+        .persist_source_result(
             *record.message_id(),
             *record.envelope_sha256(),
             None,
@@ -359,28 +359,28 @@ fn summary_source_envelope_context(
 }
 
 fn snapshot_rejection_code(
-    error: CommunicationsAiSourceErrorV1,
+    error: CommunicationsSourceErrorV1,
 ) -> Result<CommunicationSummarySourceRejectCodeV1, CommunicationsSummarySourceDeliveryErrorV1> {
     match error {
-        CommunicationsAiSourceErrorV1::InvalidRequest => Ok(
+        CommunicationsSourceErrorV1::InvalidRequest => Ok(
             CommunicationSummarySourceRejectCodeV1::CommunicationSummarySourceRejectCodeInvalidRequest,
         ),
-        CommunicationsAiSourceErrorV1::SourceMissingOrInactive => Ok(
+        CommunicationsSourceErrorV1::SourceMissingOrInactive => Ok(
             CommunicationSummarySourceRejectCodeV1::CommunicationSummarySourceRejectCodeSourceMissingOrInactive,
         ),
-        CommunicationsAiSourceErrorV1::ContentUnavailable => Ok(
+        CommunicationsSourceErrorV1::ContentUnavailable => Ok(
             CommunicationSummarySourceRejectCodeV1::CommunicationSummarySourceRejectCodeContentUnavailable,
         ),
-        CommunicationsAiSourceErrorV1::ContentLimit => Ok(
+        CommunicationsSourceErrorV1::ContentLimit => Ok(
             CommunicationSummarySourceRejectCodeV1::CommunicationSummarySourceRejectCodeContentLimit,
         ),
-        CommunicationsAiSourceErrorV1::StaleRevision => Ok(
+        CommunicationsSourceErrorV1::StaleRevision => Ok(
             CommunicationSummarySourceRejectCodeV1::CommunicationSummarySourceRejectCodeStaleRevision,
         ),
-        CommunicationsAiSourceErrorV1::InvalidRow
-        | CommunicationsAiSourceErrorV1::StorageUnavailable
-        | CommunicationsAiSourceErrorV1::InboxHashConflict
-        | CommunicationsAiSourceErrorV1::OutboxConflict => {
+        CommunicationsSourceErrorV1::InvalidRow
+        | CommunicationsSourceErrorV1::StorageUnavailable
+        | CommunicationsSourceErrorV1::InboxHashConflict
+        | CommunicationsSourceErrorV1::OutboxConflict => {
             Err(CommunicationsSummarySourceDeliveryErrorV1::Persistence)
         }
     }
@@ -398,9 +398,7 @@ fn content_limit_error() -> BodyMaterializationErrorV1 {
     )
 }
 
-fn persistence_error(
-    _: CommunicationsAiSourceErrorV1,
-) -> CommunicationsSummarySourceDeliveryErrorV1 {
+fn persistence_error(_: CommunicationsSourceErrorV1) -> CommunicationsSummarySourceDeliveryErrorV1 {
     CommunicationsSummarySourceDeliveryErrorV1::Persistence
 }
 
@@ -443,14 +441,14 @@ enum BodyMaterializationErrorV1 {
 mod tests {
     use super::*;
 
-    fn snapshot() -> CommunicationsAiSourceSnapshotV1 {
-        CommunicationsAiSourceSnapshotV1 {
+    fn snapshot() -> CommunicationsSourceSnapshotV1 {
+        CommunicationsSourceSnapshotV1 {
             source_message_id: [1; 16],
             evidence_id: [2; 16],
             evidence_revision: 3,
             sender_utf8: b"Ada <ada@example.test>".to_vec(),
             subject_utf8: b"Quarterly update".to_vec(),
-            body: CommunicationsAiBodyReceiptV1 {
+            body: CommunicationsBodyReceiptV1 {
                 reference_id: [4; 16],
                 declared_bytes: 5,
                 sha256: [6; 32],
