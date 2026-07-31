@@ -3,6 +3,7 @@
 pub mod admission;
 mod managed_ports;
 mod managed_runtime;
+mod summary_worker;
 mod worker;
 
 pub use admission::{

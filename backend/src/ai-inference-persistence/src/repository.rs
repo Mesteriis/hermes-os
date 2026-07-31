@@ -17,7 +17,7 @@ use crate::model::{
 
 #[derive(Clone)]
 pub struct AiInferencePersistenceV1 {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 impl AiInferencePersistenceV1 {

@@ -1,6 +1,9 @@
 use std::os::unix::net::UnixStream;
 
-use hermes_ai_contracts::{AI_OWNER_V1, communication_reply_inference_contract_reference_v1};
+use hermes_ai_contracts::{
+    AI_OWNER_V1, communication_reply_inference_contract_reference_v1,
+    communication_summary_inference_contract_reference_v1,
+};
 use hermes_ai_inference_persistence::{AiInferencePersistenceErrorV1, AiInferencePersistenceV1};
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
@@ -24,6 +27,7 @@ use hermes_storage_vault::{
 
 use crate::{
     managed_ports::ManagedAiInferenceExecutionPortsV1,
+    summary_worker::{execute_summary_payload_v1, recover_pending_summaries_v1},
     worker::{AiInferenceWorkerErrorV1, execute_payload_v1, recover_pending_v1},
 };
 
@@ -121,15 +125,26 @@ impl AiInferenceManagedRuntimeV1 {
             control_channel: &mut self.control_channel,
             dispatcher: &mut dispatcher,
         };
-        let result =
+        let replies =
             recover_pending_v1(&self.persistence, &mut ports, &self.logical_human_owner_id)
                 .await
-                .map_err(runtime_error);
+                .map_err(runtime_error)?;
+        let summaries = recover_pending_summaries_v1(
+            &self.persistence,
+            &mut ports,
+            &self.logical_human_owner_id,
+        )
+        .await
+        .map_err(runtime_error);
         self.control_channel
             .inner_mut()
             .set_nonblocking(true)
             .map_err(|_| AiInferenceManagedRuntimeErrorV1::Unavailable)?;
-        result
+        summaries.and_then(|summaries| {
+            replies
+                .checked_add(summaries)
+                .ok_or(AiInferenceManagedRuntimeErrorV1::Unavailable)
+        })
     }
 
     pub async fn pump_control_once(&mut self) -> Result<bool, AiInferenceManagedRuntimeErrorV1> {
@@ -143,9 +158,13 @@ impl AiInferenceManagedRuntimeV1 {
         let response = match request.operation {
             Some(Operation::DeliverModuleRequest(delivery)) => {
                 let request_id = delivery.request_id.clone();
+                let contract = delivery.contract.as_ref();
+                let is_reply =
+                    contract == Some(&communication_reply_inference_contract_reference_v1());
+                let is_summary =
+                    contract == Some(&communication_summary_inference_contract_reference_v1());
                 let response = if validate_module_request_delivery_v1(&delivery).is_err()
-                    || delivery.contract.as_ref()
-                        != Some(&communication_reply_inference_contract_reference_v1())
+                    || (!is_reply && !is_summary)
                     || delivery.logical_owner_id != self.logical_human_owner_id
                 {
                     rejected(request_id)
@@ -159,14 +178,24 @@ impl AiInferenceManagedRuntimeV1 {
                         control_channel: &mut self.control_channel,
                         dispatcher: &mut dispatcher,
                     };
-                    let response = match execute_payload_v1(
-                        &self.persistence,
-                        &mut ports,
-                        &self.logical_human_owner_id,
-                        &delivery.request_payload,
-                    )
-                    .await
-                    {
+                    let executed = if is_summary {
+                        execute_summary_payload_v1(
+                            &self.persistence,
+                            &mut ports,
+                            &self.logical_human_owner_id,
+                            &delivery.request_payload,
+                        )
+                        .await
+                    } else {
+                        execute_payload_v1(
+                            &self.persistence,
+                            &mut ports,
+                            &self.logical_human_owner_id,
+                            &delivery.request_payload,
+                        )
+                        .await
+                    };
+                    let response = match executed {
                         Ok(payload) => ManagedRuntimeModuleRequestResponseV1 {
                             request_id,
                             response_payload: payload,
