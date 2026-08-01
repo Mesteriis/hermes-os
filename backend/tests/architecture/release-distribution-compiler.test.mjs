@@ -332,8 +332,56 @@ test('binds a native runtime dependency to one exact managed module', async () =
     };
     await assert.rejects(
       compileUnsignedReleaseContent(invalid),
-      /native dependency binding is invalid/,
+      /runtime artifact binding is invalid/,
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('binds native executables and read-only data to one exact managed module', async () => {
+  const root = canonicalTemporaryDirectory('hermes-runtime-resources-release-');
+  try {
+    const runner = join(root, 'tesseract-runner');
+    const model = join(root, 'eng.traineddata');
+    writeFileSync(runner, 'runner bytes', { mode: 0o500 });
+    writeFileSync(model, 'model bytes', { mode: 0o400 });
+    const release = await compileUnsignedReleaseContent({
+      verification_key_id: 'release-2026',
+      trust_root_revision: 1,
+      revision: 1,
+      distribution_id: 'hermes-desktop',
+      release_version: '1.0.0',
+      build_id: 'build-runtime-resources',
+      target_triple: 'aarch64-apple-darwin',
+      generation: 1,
+      ...releaseProvenance,
+      additional_verification_keys: [],
+      artifacts: [
+        {
+          artifact_kind: 'module_runtime_read_only_data',
+          artifact_id: 'attachment_text_extraction.ocr.eng.v1',
+          relative_path: 'runtime-resources/eng.traineddata',
+          source_path: model,
+          required: true,
+          bound_module_id: 'hermes-attachment-text-extraction-runtime',
+        },
+        {
+          artifact_kind: 'module_runtime_native_executable',
+          artifact_id: 'attachment_text_extraction.ocr.runner.v1',
+          relative_path: 'runtime-resources/tesseract-runner',
+          source_path: runner,
+          required: true,
+          bound_module_id: 'hermes-attachment-text-extraction-runtime',
+        },
+      ],
+    });
+    const manifest = decodeFields(release.rawManifest);
+    const artifacts = manifest.get(8).map(decodeFields);
+    assert.deepEqual(artifacts.map((artifact) => artifact.get(1)[0]), [8n, 7n]);
+    assert.ok(artifacts.every(
+      (artifact) => fieldString(artifact, 13) === 'hermes-attachment-text-extraction-runtime',
+    ));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -775,6 +823,106 @@ test('signs the exact Attachment Security runtime and Storage entries emitted by
     );
     assert.equal(artifacts[0].get(6)[0].length, 32);
     assert.equal(artifacts[0].get(7)[0].length, 32);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('signs the exact text extraction runtime Storage and OCR entries emitted by its assembly', async () => {
+  const root = canonicalTemporaryDirectory('hermes-text-extraction-release-fragment-');
+  try {
+    const runtime = join(root, 'hermes-attachment-text-extraction-runtime');
+    const runner = join(root, 'tesseract-runner');
+    const english = join(root, 'eng.traineddata');
+    const russian = join(root, 'rus.traineddata');
+    const assemblyOutput = join(root, 'assembly');
+    const privateKeyPath = join(root, 'release-key.pem');
+    writeFileSync(runtime, 'text extraction runtime bytes', { mode: 0o700 });
+    writeFileSync(runner, 'tesseract runner bytes', { mode: 0o500 });
+    writeFileSync(english, 'english model bytes', { mode: 0o400 });
+    writeFileSync(russian, 'russian model bytes', { mode: 0o400 });
+    const keyPair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    writeFileSync(
+      privateKeyPath,
+      keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      { mode: 0o600 },
+    );
+    execFileSync('cargo', [
+      'run',
+      '--quiet',
+      '-p',
+      'hermes-attachment-text-extraction-assembly',
+      '--',
+      '--build-id',
+      'build-text-extraction',
+      '--output-dir',
+      assemblyOutput,
+      '--runtime',
+      runtime,
+      '--ocr-runner',
+      runner,
+      '--ocr-eng',
+      english,
+      '--ocr-rus',
+      russian,
+    ], { cwd: process.cwd(), stdio: 'pipe' });
+    const fragment = JSON.parse(readFileSync(
+      join(assemblyOutput, 'attachment_text_extraction.release-artifacts.json'),
+      'utf8',
+    ));
+    assert.deepEqual(
+      fragment.artifacts.map(({ artifact_id, artifact_kind }) => [artifact_id, artifact_kind]),
+      [
+        ['attachment_text_extraction.ocr.eng.v1', 'module_runtime_read_only_data'],
+        ['attachment_text_extraction.ocr.runner.v1', 'module_runtime_native_executable'],
+        ['attachment_text_extraction.ocr.rus.v1', 'module_runtime_read_only_data'],
+        ['attachment_text_extraction.runtime.v1', 'module_runtime'],
+        ['attachment_text_extraction.storage.v1', 'storage_bundle'],
+      ],
+    );
+    assert.equal(fragment.owner_id, 'attachment_text_extraction');
+    assert.equal(fragment.module_id, 'hermes-attachment-text-extraction-runtime');
+
+    const input = composeReleaseCompilerInput({
+      verification_key_id: 'release-2026',
+      trust_root_revision: 1,
+      revision: 1,
+      distribution_id: 'hermes-desktop',
+      release_version: '1.0.0',
+      build_id: 'build-text-extraction',
+      target_triple: 'aarch64-apple-darwin',
+      generation: 1,
+      ...releaseProvenance,
+      additional_verification_keys: [],
+      artifacts: [{
+        artifact_kind: 'browser_bootstrap_bundle',
+        artifact_id: 'browser.bootstrap',
+        relative_path: 'browser/bootstrap.html',
+        source_path: browserBootstrapSource,
+        required: true,
+      }],
+    }, [fragment]);
+    const release = await compileReleaseDistribution(
+      input,
+      loadReleaseSigningKey(privateKeyPath),
+    );
+    const signed = decodeFields(release.signedManifest);
+    const manifest = decodeFields(signed.get(2)[0]);
+    const artifacts = manifest.get(8).map(decodeFields);
+    assert.deepEqual(
+      artifacts.map((artifact) => [fieldString(artifact, 2), artifact.get(1)[0]]),
+      [
+        ['attachment_text_extraction.ocr.eng.v1', 8n],
+        ['attachment_text_extraction.ocr.runner.v1', 7n],
+        ['attachment_text_extraction.ocr.rus.v1', 8n],
+        ['attachment_text_extraction.runtime.v1', 1n],
+        ['attachment_text_extraction.storage.v1', 3n],
+        ['browser.bootstrap', 4n],
+      ],
+    );
+    assert.ok(artifacts.slice(0, 3).every(
+      (artifact) => fieldString(artifact, 13) === 'hermes-attachment-text-extraction-runtime',
+    ));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

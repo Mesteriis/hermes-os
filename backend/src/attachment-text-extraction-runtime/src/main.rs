@@ -10,6 +10,7 @@ use hermes_attachment_text_extraction_persistence::attachment_text_extraction_st
 use hermes_attachment_text_extraction_runtime::{
     AttachmentTextExtractionParserRuntimeV1, attachment_text_extraction_module_descriptor_v1,
     attachment_text_extraction_settings_schema_bytes_v1,
+    prepare_attachment_text_extraction_ocr_resources_v1,
     runtime::{
         AttachmentTextExtractionManagedRuntimeV1, AttachmentTextExtractionRuntimeAdmissionV1,
         current_runtime_time_v1,
@@ -107,9 +108,13 @@ fn serve_inherited(paths: InheritedPaths) -> Result<(), String> {
     };
     let executor = tokio::runtime::Runtime::new()
         .map_err(|_| "Attachment Text Extraction executor is unavailable".to_owned())?;
-    // OCR stays fail-closed until its verified executable/model binding is
-    // admitted. The other exact adapters remain fully operational.
-    let parser = AttachmentTextExtractionParserRuntimeV1::new(None);
+    let ocr_resources =
+        prepare_attachment_text_extraction_ocr_resources_v1(&configuration.runtime_artifacts)
+            .map_err(|_| {
+                "Attachment Text Extraction OCR runtime resources are unavailable".to_owned()
+            })?;
+    let parser =
+        AttachmentTextExtractionParserRuntimeV1::new(Some(ocr_resources.configuration().clone()));
     let mut runtime = executor
         .block_on(AttachmentTextExtractionManagedRuntimeV1::open(
             inherited_control_channel()?,

@@ -320,8 +320,8 @@ test('text extraction persistence owns exact joins and fenced jobs without trans
   );
 });
 
-test('managed runtime composes exact Event Blob parser client and SSE ports without domain implementations', async () => {
-  const [manifest, admission, runtime, eventDecode, blob, clientPort, realtime, parser, main] =
+test('managed runtime composes exact Event Blob parser client SSE and OCR resource ports without domain implementations', async () => {
+  const [manifest, admission, runtime, eventDecode, blob, clientPort, realtime, parser, ocrResources, main] =
     await Promise.all([
       readFile(new URL('src/attachment-text-extraction-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/attachment-text-extraction-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
@@ -331,8 +331,10 @@ test('managed runtime composes exact Event Blob parser client and SSE ports with
       readFile(new URL('src/attachment-text-extraction-runtime/src/client_port.rs', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/attachment-text-extraction-runtime/src/client_realtime.rs', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/attachment-text-extraction-runtime/src/parser.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/attachment-text-extraction-runtime/src/ocr_resources.rs', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/attachment-text-extraction-runtime/src/main.rs', BACKEND_ROOT), 'utf8'),
     ]);
+  const ocrProduction = ocrResources.split('#[cfg(test)]')[0];
 
   assert.match(manifest, /role = "workflow"/);
   assert.match(manifest, /surface = "runtime"/);
@@ -346,6 +348,10 @@ test('managed runtime composes exact Event Blob parser client and SSE ports with
   assert.match(admission, /ModuleKindV1::Workflow/);
   assert.match(admission, /ATTACHMENT_TEXT_EXTRACTION_CONTENT_CONNECT_PATH_V1/);
   assert.match(admission, /BlobQuotaOperationV1::Write/);
+  assert.match(admission, /ATTACHMENT_TEXT_EXTRACTION_OCR_CAPABILITY_ID_V1/);
+  assert.match(ocrResources, /attachment_text_extraction\.ocr_runtime\.v1/);
+  assert.match(admission, /RuntimeArtifactUseV1::NativeExecutable/);
+  assert.match(admission, /RuntimeArtifactUseV1::ReadOnlyData/);
   assert.match(runtime, /receive_runtime_pull_delivery/);
   assert.match(runtime, /materialize_pending_custody_requests/);
   assert.match(runtime, /process_next_job/);
@@ -357,9 +363,20 @@ test('managed runtime composes exact Event Blob parser client and SSE ports with
   assert.match(clientPort, /ReadText/);
   assert.match(realtime, /PublishClientRealtime/);
   assert.match(parser, /detect_attachment_text_parser_v1/);
+  assert.match(ocrResources, /attachment_text_extraction\.ocr\.eng\.v1/);
+  assert.match(ocrResources, /attachment_text_extraction\.ocr\.runner\.v1/);
+  assert.match(ocrResources, /attachment_text_extraction\.ocr\.rus\.v1/);
+  assert.match(ocrResources, /eng\.traineddata/);
+  assert.match(ocrResources, /rus\.traineddata/);
+  assert.match(ocrResources, /create_new\(true\)/);
+  assert.match(ocrResources, /from_mode\(0o400\)/);
+  assert.doesNotMatch(ocrProduction, /std::env|Command::new|tesseract"|settings|provider/);
   assert.match(main, /serve-inherited/);
+  assert.match(main, /configuration\.runtime_artifacts/);
+  assert.match(main, /ocr_resources\.configuration\(\)\.clone\(\)/);
+  assert.doesNotMatch(main, /AttachmentTextExtractionParserRuntimeV1::new\(None\)/);
   assert.doesNotMatch(
-    [runtime, eventDecode, blob, clientPort, realtime, parser, main].join('\n'),
+    [runtime, eventDecode, blob, clientPort, realtime, parser, ocrResources, main].join('\n'),
     /provider_id|account_id|filename|mime_type|source_path/,
   );
   assert.doesNotMatch(`${eventDecode}\n${realtime}`, /text_utf8/);
@@ -378,6 +395,12 @@ test('release assembly is a separate unsigned build unit and never launches runt
   assert.match(source, /attachment_text_extraction_module_descriptor_v1/);
   assert.match(source, /attachment_text_extraction_storage_bundle_v1/);
   assert.match(source, /artifact_kind: "module_runtime"/);
+  assert.match(source, /artifact_kind: "module_runtime_native_executable"/);
+  assert.match(source, /artifact_kind: "module_runtime_read_only_data"/);
+  assert.match(source, /bound_module_id: ATTACHMENT_TEXT_EXTRACTION_MODULE_ID_V1/);
+  assert.match(source, /ATTACHMENT_TEXT_EXTRACTION_OCR_ENGLISH_ARTIFACT_ID_V1/);
+  assert.match(source, /ATTACHMENT_TEXT_EXTRACTION_OCR_RUNNER_ARTIFACT_ID_V1/);
+  assert.match(source, /ATTACHMENT_TEXT_EXTRACTION_OCR_RUSSIAN_ARTIFACT_ID_V1/);
   assert.match(source, /artifact_kind: "storage_bundle"/);
   assert.match(source, /create_new\(true\)/);
   assert.doesNotMatch(source, /Command::new|signing|private_key/);

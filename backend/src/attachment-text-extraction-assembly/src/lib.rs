@@ -13,6 +13,9 @@ use hermes_attachment_text_extraction_api::{
 };
 use hermes_attachment_text_extraction_persistence::attachment_text_extraction_storage_bundle_v1;
 use hermes_attachment_text_extraction_runtime::{
+    ATTACHMENT_TEXT_EXTRACTION_OCR_ENGLISH_ARTIFACT_ID_V1,
+    ATTACHMENT_TEXT_EXTRACTION_OCR_RUNNER_ARTIFACT_ID_V1,
+    ATTACHMENT_TEXT_EXTRACTION_OCR_RUSSIAN_ARTIFACT_ID_V1,
     attachment_text_extraction_module_descriptor_v1, attachment_text_extraction_settings_schema_v1,
 };
 use hermes_runtime_protocol::validation::descriptor::{
@@ -66,8 +69,20 @@ pub struct StorageBundleArtifactInputV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BoundRuntimeArtifactInputV1 {
+    pub artifact_kind: String,
+    pub artifact_id: String,
+    pub relative_path: String,
+    pub source_path: String,
+    pub required: bool,
+    pub bound_module_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum AttachmentTextExtractionReleaseArtifactInputV1 {
+    BoundRuntimeArtifact(BoundRuntimeArtifactInputV1),
     ModuleRuntime(ModuleRuntimeArtifactInputV1),
     StorageBundle(StorageBundleArtifactInputV1),
 }
@@ -75,6 +90,7 @@ pub enum AttachmentTextExtractionReleaseArtifactInputV1 {
 impl AttachmentTextExtractionReleaseArtifactInputV1 {
     fn artifact_id(&self) -> &str {
         match self {
+            Self::BoundRuntimeArtifact(value) => &value.artifact_id,
             Self::ModuleRuntime(value) => &value.artifact_id,
             Self::StorageBundle(value) => &value.artifact_id,
         }
@@ -111,11 +127,21 @@ pub fn materialize_attachment_text_extraction_release_assembly_v1(
     output_directory: &Path,
     build_id: &str,
     runtime_source: &Path,
+    ocr_runner_source: &Path,
+    ocr_english_model_source: &Path,
+    ocr_russian_model_source: &Path,
 ) -> Result<
     AttachmentTextExtractionReleaseAssemblyPathsV1,
     AttachmentTextExtractionReleaseAssemblyErrorV1,
 > {
-    validate_inputs(output_directory, build_id, runtime_source)?;
+    validate_inputs(
+        output_directory,
+        build_id,
+        runtime_source,
+        ocr_runner_source,
+        ocr_english_model_source,
+        ocr_russian_model_source,
+    )?;
     let descriptor = attachment_text_extraction_module_descriptor_v1(build_id);
     let settings = attachment_text_extraction_settings_schema_v1();
     let storage = attachment_text_extraction_storage_bundle_v1();
@@ -131,7 +157,13 @@ pub fn materialize_attachment_text_extraction_release_assembly_v1(
         storage_bundle: output_directory.join(ATTACHMENT_TEXT_EXTRACTION_STORAGE_FILE_V1),
         artifact_fragment: output_directory.join(ATTACHMENT_TEXT_EXTRACTION_FRAGMENT_FILE_V1),
     };
-    let fragment = artifact_fragment(runtime_source, &paths)?;
+    let fragment = artifact_fragment(
+        runtime_source,
+        ocr_runner_source,
+        ocr_english_model_source,
+        ocr_russian_model_source,
+        &paths,
+    )?;
     let writes = [
         (paths.descriptor.as_path(), descriptor.encode_to_vec()),
         (paths.settings_schema.as_path(), settings.encode_to_vec()),
@@ -161,6 +193,9 @@ fn validate_inputs(
     output_directory: &Path,
     build_id: &str,
     runtime_source: &Path,
+    ocr_runner_source: &Path,
+    ocr_english_model_source: &Path,
+    ocr_russian_model_source: &Path,
 ) -> Result<(), AttachmentTextExtractionReleaseAssemblyErrorV1> {
     if !output_directory.is_absolute()
         || output_directory.parent().is_none()
@@ -170,6 +205,12 @@ fn validate_inputs(
         || !build_id.is_ascii()
         || !runtime_source.is_absolute()
         || !regular_non_symlink_file(runtime_source)
+        || !ocr_runner_source.is_absolute()
+        || !regular_non_symlink_file(ocr_runner_source)
+        || !ocr_english_model_source.is_absolute()
+        || !regular_non_symlink_file(ocr_english_model_source)
+        || !ocr_russian_model_source.is_absolute()
+        || !regular_non_symlink_file(ocr_russian_model_source)
     {
         return Err(AttachmentTextExtractionReleaseAssemblyErrorV1::InvalidInput);
     }
@@ -184,12 +225,48 @@ fn regular_non_symlink_file(path: &Path) -> bool {
 
 fn artifact_fragment(
     runtime_source: &Path,
+    ocr_runner_source: &Path,
+    ocr_english_model_source: &Path,
+    ocr_russian_model_source: &Path,
     paths: &AttachmentTextExtractionReleaseAssemblyPathsV1,
 ) -> Result<
     AttachmentTextExtractionReleaseArtifactFragmentV1,
     AttachmentTextExtractionReleaseAssemblyErrorV1,
 > {
     let artifacts = vec![
+        AttachmentTextExtractionReleaseArtifactInputV1::BoundRuntimeArtifact(
+            BoundRuntimeArtifactInputV1 {
+                artifact_kind: "module_runtime_read_only_data".to_owned(),
+                artifact_id: ATTACHMENT_TEXT_EXTRACTION_OCR_ENGLISH_ARTIFACT_ID_V1.to_owned(),
+                relative_path: "runtime-resources/attachment-text-extraction/eng.traineddata"
+                    .to_owned(),
+                source_path: utf8_path(ocr_english_model_source)?,
+                required: true,
+                bound_module_id: ATTACHMENT_TEXT_EXTRACTION_MODULE_ID_V1.to_owned(),
+            },
+        ),
+        AttachmentTextExtractionReleaseArtifactInputV1::BoundRuntimeArtifact(
+            BoundRuntimeArtifactInputV1 {
+                artifact_kind: "module_runtime_native_executable".to_owned(),
+                artifact_id: ATTACHMENT_TEXT_EXTRACTION_OCR_RUNNER_ARTIFACT_ID_V1.to_owned(),
+                relative_path: "runtime-resources/attachment-text-extraction/tesseract-runner"
+                    .to_owned(),
+                source_path: utf8_path(ocr_runner_source)?,
+                required: true,
+                bound_module_id: ATTACHMENT_TEXT_EXTRACTION_MODULE_ID_V1.to_owned(),
+            },
+        ),
+        AttachmentTextExtractionReleaseArtifactInputV1::BoundRuntimeArtifact(
+            BoundRuntimeArtifactInputV1 {
+                artifact_kind: "module_runtime_read_only_data".to_owned(),
+                artifact_id: ATTACHMENT_TEXT_EXTRACTION_OCR_RUSSIAN_ARTIFACT_ID_V1.to_owned(),
+                relative_path: "runtime-resources/attachment-text-extraction/rus.traineddata"
+                    .to_owned(),
+                source_path: utf8_path(ocr_russian_model_source)?,
+                required: true,
+                bound_module_id: ATTACHMENT_TEXT_EXTRACTION_MODULE_ID_V1.to_owned(),
+            },
+        ),
         AttachmentTextExtractionReleaseArtifactInputV1::ModuleRuntime(
             ModuleRuntimeArtifactInputV1 {
                 artifact_kind: "module_runtime".to_owned(),
@@ -265,10 +342,21 @@ mod tests {
         ));
         fs::create_dir(&root).expect("test root");
         let runtime = root.join("runtime");
+        let ocr_runner = root.join("tesseract-runner");
+        let ocr_english = root.join("eng.traineddata");
+        let ocr_russian = root.join("rus.traineddata");
         fs::write(&runtime, b"runtime").expect("runtime fixture");
+        fs::write(&ocr_runner, b"runner").expect("runner fixture");
+        fs::write(&ocr_english, b"english").expect("english fixture");
+        fs::write(&ocr_russian, b"russian").expect("russian fixture");
         let output = root.join("assembly");
         let paths = materialize_attachment_text_extraction_release_assembly_v1(
-            &output, "build-1", &runtime,
+            &output,
+            "build-1",
+            &runtime,
+            &ocr_runner,
+            &ocr_english,
+            &ocr_russian,
         )
         .expect("materialize");
         let fragment: AttachmentTextExtractionReleaseArtifactFragmentV1 =
@@ -276,10 +364,22 @@ mod tests {
                 .expect("typed fragment");
         assert_eq!(fragment.owner_id, ATTACHMENT_TEXT_EXTRACTION_OWNER_V1);
         assert_eq!(fragment.module_id, ATTACHMENT_TEXT_EXTRACTION_MODULE_ID_V1);
-        assert_eq!(fragment.artifacts.len(), 2);
+        assert_eq!(fragment.artifacts.len(), 5);
+        assert!(matches!(
+            &fragment.artifacts[0],
+            AttachmentTextExtractionReleaseArtifactInputV1::BoundRuntimeArtifact(value)
+                if value.artifact_id == ATTACHMENT_TEXT_EXTRACTION_OCR_ENGLISH_ARTIFACT_ID_V1
+                    && value.artifact_kind == "module_runtime_read_only_data"
+                    && value.bound_module_id == ATTACHMENT_TEXT_EXTRACTION_MODULE_ID_V1
+        ));
         assert_eq!(
             materialize_attachment_text_extraction_release_assembly_v1(
-                &output, "build-1", &runtime,
+                &output,
+                "build-1",
+                &runtime,
+                &ocr_runner,
+                &ocr_english,
+                &ocr_russian,
             ),
             Err(AttachmentTextExtractionReleaseAssemblyErrorV1::InvalidInput)
         );

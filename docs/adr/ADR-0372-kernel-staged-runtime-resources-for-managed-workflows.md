@@ -4,9 +4,11 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: planned. Контракт и Kernel boundary приняты; protocol,
-release assembly, Kernel staging, OCR runtime binding и managed conformance ещё
-не реализованы. `attachment_text_extraction_v1` остаётся `planned`.
+Состояние реализации: partially implemented. Owner-neutral protocol, exact
+use/kind validation, Kernel selector/staging, OCR runtime binding и unsigned
+release fragment реализованы. Pinned reproducible runner build, signed release,
+managed `eng+rus` conformance и полный negative/live gate ещё не доказаны.
+`attachment_text_extraction_v1` остаётся `planned`.
 
 Зависит от:
 

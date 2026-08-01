@@ -659,9 +659,7 @@ fn staged_runtime_artifact_cleanup(
         return None;
     }
     Some(Box::new(move || {
-        for artifact in artifacts {
-            let _ = artifact.remove();
-        }
+        native_launch::cleanup_staged_runtime_artifacts(artifacts);
     }))
 }
 

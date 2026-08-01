@@ -34,7 +34,10 @@ const artifactKinds = new Map([
   ['browser_bootstrap_bundle', 4],
   ['browser_client_asset', 5],
   ['module_runtime_native_dependency', 6],
+  ['module_runtime_native_executable', 7],
+  ['module_runtime_read_only_data', 8],
 ]);
+const boundRuntimeArtifactKinds = new Set([6, 7, 8]);
 
 function exactKeys(value, keys) {
   return value !== null
@@ -297,7 +300,9 @@ function validateArtifactInput(artifact, previousArtifactId) {
   const moduleKeys = [...commonKeys, 'descriptor', 'settings_schema'];
   const nativeDependencyKeys = [...commonKeys, 'bound_module_id'];
   const kind = artifactKinds.get(artifact?.artifact_kind);
-  const keys = kind === 1 ? moduleKeys : kind === 6 ? nativeDependencyKeys : commonKeys;
+  const keys = kind === 1
+    ? moduleKeys
+    : boundRuntimeArtifactKinds.has(kind) ? nativeDependencyKeys : commonKeys;
   if (!kind || !exactKeys(artifact, keys)
     || !validIdentifier(artifact.artifact_id)
     || artifact.artifact_id <= previousArtifactId
@@ -313,8 +318,8 @@ function validateArtifactInput(artifact, previousArtifactId) {
     validateContractInput(artifact.descriptor, 'descriptor');
     if (artifact.settings_schema !== null) validateContractInput(artifact.settings_schema, 'settings schema');
   }
-  if (kind === 6 && !validModuleIdentifier(artifact.bound_module_id)) {
-    throw new Error('release compiler native dependency binding is invalid');
+  if (boundRuntimeArtifactKinds.has(kind) && !validModuleIdentifier(artifact.bound_module_id)) {
+    throw new Error('release compiler runtime artifact binding is invalid');
   }
   return kind;
 }
@@ -448,7 +453,7 @@ export async function compileUnsignedReleaseContent(input) {
         relativePath: artifact.settings_schema.relative_path,
         sourcePath: artifact.settings_schema.source_path,
       },
-      boundModuleId: kind === 6 ? artifact.bound_module_id : null,
+      boundModuleId: boundRuntimeArtifactKinds.has(kind) ? artifact.bound_module_id : null,
     });
     previousArtifactId = artifact.artifact_id;
   }
@@ -481,7 +486,11 @@ export function composeReleaseCompilerInput(input, fragments) {
     ).length;
     if (moduleRuntimeCount !== 1
       || fragment.artifacts.some((artifact) => (
-        artifact.artifact_kind === 'module_runtime_native_dependency'
+        [
+          'module_runtime_native_dependency',
+          'module_runtime_native_executable',
+          'module_runtime_read_only_data',
+        ].includes(artifact.artifact_kind)
         && artifact.bound_module_id !== fragment.module_id
       ))) {
       throw new Error('release compiler artifact fragment binding is invalid');

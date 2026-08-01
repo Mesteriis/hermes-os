@@ -27,14 +27,20 @@ use hermes_runtime_protocol::v1::{
     CapabilityRequestV1, ClientRpcRouteV1, ContractReferenceV1, DurableEnvelopeKindV1,
     EventRouteDirectionV1, EventRouteRequestV1, EventSubscriptionRequirementV1, ModuleDescriptorV1,
     ModuleKindV1, ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
-    RuntimeBudgetRequestV1, SettingsSchemaRefV1, SettingsSchemaV1, StorageNamespaceRequestV1,
-    capability_request_v1::Request,
+    RuntimeArtifactRequestV1, RuntimeArtifactUseV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1,
+    SettingsSchemaV1, StorageNamespaceRequestV1, capability_request_v1::Request,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
 
 use crate::contracts::{
     command_contract_v1, content_contract_v1, query_contract_v1, realtime_contract_v1,
+};
+use crate::ocr_resources::{
+    ATTACHMENT_TEXT_EXTRACTION_OCR_CAPABILITY_ID_V1,
+    ATTACHMENT_TEXT_EXTRACTION_OCR_ENGLISH_ARTIFACT_ID_V1,
+    ATTACHMENT_TEXT_EXTRACTION_OCR_RUNNER_ARTIFACT_ID_V1,
+    ATTACHMENT_TEXT_EXTRACTION_OCR_RUSSIAN_ARTIFACT_ID_V1,
 };
 
 pub const ATTACHMENT_TEXT_EXTRACTION_BLOB_CAPABILITY_ID_V1: &str =
@@ -92,6 +98,7 @@ pub fn attachment_text_extraction_module_descriptor_v1(build_id: &str) -> Module
             ),
             custody_request_capability(),
             custody_result_capability(),
+            ocr_runtime_capability(),
             consumer_capability(
                 ATTACHMENT_TEXT_EXTRACTION_SAFETY_CAPABILITY_ID_V1,
                 communication_attachment_safety_state_changed_contract_reference_v1(),
@@ -113,6 +120,41 @@ pub fn attachment_text_extraction_module_descriptor_v1(build_id: &str) -> Module
             max_cpu_millis: 2_000,
         }),
         display_name: "Attachment Text Extraction".to_owned(),
+    }
+}
+
+fn ocr_runtime_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: ATTACHMENT_TEXT_EXTRACTION_OCR_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![
+            runtime_artifact_request(
+                ATTACHMENT_TEXT_EXTRACTION_OCR_ENGLISH_ARTIFACT_ID_V1,
+                RuntimeArtifactUseV1::ReadOnlyData,
+            ),
+            runtime_artifact_request(
+                ATTACHMENT_TEXT_EXTRACTION_OCR_RUNNER_ARTIFACT_ID_V1,
+                RuntimeArtifactUseV1::NativeExecutable,
+            ),
+            runtime_artifact_request(
+                ATTACHMENT_TEXT_EXTRACTION_OCR_RUSSIAN_ARTIFACT_ID_V1,
+                RuntimeArtifactUseV1::ReadOnlyData,
+            ),
+        ],
+        ..Default::default()
+    }
+}
+
+fn runtime_artifact_request(
+    artifact_id: &str,
+    use_kind: RuntimeArtifactUseV1,
+) -> CapabilityRequestV1 {
+    CapabilityRequestV1 {
+        request: Some(Request::RuntimeArtifact(RuntimeArtifactRequestV1 {
+            artifact_id: artifact_id.to_owned(),
+            r#use: use_kind as i32,
+        })),
     }
 }
 
@@ -288,11 +330,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn descriptor_is_exact_seven_capability_workflow() {
+    fn descriptor_is_exact_eight_capability_workflow() {
         let descriptor = attachment_text_extraction_module_descriptor_v1("build-1");
         assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
         assert_eq!(descriptor.module_kind, ModuleKindV1::Workflow as i32);
-        assert_eq!(descriptor.capabilities.len(), 7);
+        assert_eq!(descriptor.capabilities.len(), 8);
         assert_eq!(
             validate_settings_schema_v1(&attachment_text_extraction_settings_schema_v1()),
             Ok(())

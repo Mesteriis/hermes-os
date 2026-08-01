@@ -82,6 +82,8 @@ test('Kernel stages granted workflow and engine resources without owner semantic
   assert.match(selector, /managed runtime artifact use is ambiguous/);
   assert.match(nativeLaunch, /prepare_bound_managed_runtime_with_artifacts/);
   assert.match(nativeLaunch, /r#use: request\.use_kind\(\) as i32/);
+  assert.match(nativeLaunch, /cleanup_staged_runtime_artifacts/);
+  assert.match(nativeLaunch, /remove_dir_all\(artifact_directory\)/);
   assert.match(managedLaunch, /fn prepare_runtime_with_artifacts/);
   assert.match(managedLaunch, /configuration\.runtime_artifacts = prepared\.runtime_artifact_bindings/);
   assert.match(ownerControl, /effective_granted_capability_ids/);

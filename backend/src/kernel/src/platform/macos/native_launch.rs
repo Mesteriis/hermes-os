@@ -54,9 +54,7 @@ impl PreparedBundledManagedRuntimeWithArtifacts {
     pub fn remove(self) {
         let (runtime, artifacts) = self.into_launch_parts();
         let _ = runtime.remove();
-        for artifact in artifacts {
-            let _ = artifact.remove();
-        }
+        cleanup_staged_runtime_artifacts(artifacts);
     }
 }
 
@@ -338,20 +336,20 @@ fn stage_runtime_dependencies(
         {
             Some(artifact) => artifact,
             None => {
-                cleanup_staged_artifacts(staged_artifacts);
+                cleanup_staged_runtime_artifacts(staged_artifacts);
                 return Err("verified managed runtime artifact is unavailable".to_owned());
             }
         };
         if artifact.size_bytes() != requested_artifact.size_bytes
             || artifact.expected_sha256().as_slice() != requested_artifact.sha256.as_slice()
         {
-            cleanup_staged_artifacts(staged_artifacts);
+            cleanup_staged_runtime_artifacts(staged_artifacts);
             return Err("verified managed runtime artifact does not match manifest".to_owned());
         }
         let staged = match stage_runtime_artifact(artifact, launch_directory, request.use_kind()) {
             Ok(staged) => staged,
             Err(error) => {
-                cleanup_staged_artifacts(staged_artifacts);
+                cleanup_staged_runtime_artifacts(staged_artifacts);
                 return Err(error);
             }
         };
@@ -361,7 +359,7 @@ fn stage_runtime_dependencies(
             .filter(|value| !value.contains(['\0', '\n', '\r']))
             .map(ToOwned::to_owned)
         else {
-            cleanup_staged_artifacts(staged_artifacts);
+            cleanup_staged_runtime_artifacts(staged_artifacts);
             let _ = staged.remove();
             return Err("managed runtime staged artifact path is invalid".to_owned());
         };
@@ -400,9 +398,16 @@ fn stage_runtime_artifact(
     )
 }
 
-fn cleanup_staged_artifacts(artifacts: Vec<StagedNativeArtifact>) {
+pub(crate) fn cleanup_staged_runtime_artifacts(artifacts: Vec<StagedNativeArtifact>) {
+    let artifact_directory = artifacts
+        .first()
+        .and_then(|artifact| artifact.path().parent())
+        .map(Path::to_owned);
     for artifact in artifacts {
         let _ = artifact.remove();
+    }
+    if let Some(artifact_directory) = artifact_directory {
+        let _ = std::fs::remove_dir_all(artifact_directory);
     }
 }
 
@@ -514,4 +519,45 @@ fn same_file(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
         && left.mtime_nsec() == right.mtime_nsec()
         && left.ctime() == right.ctime()
         && left.ctime_nsec() == right.ctime_nsec()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use sha2::{Digest, Sha256};
+
+    use super::*;
+
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+    #[test]
+    fn runtime_artifact_cleanup_removes_runtime_created_work_tree() {
+        let root = std::env::temp_dir().join(format!(
+            "hermes-native-runtime-cleanup-{}-{}",
+            std::process::id(),
+            NEXT_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        let source = root.join("source");
+        let artifacts = root.join("launch/runtime-artifacts");
+        std::fs::create_dir(&root).expect("test root");
+        std::fs::write(&source, b"runtime resource").expect("source");
+        let digest: [u8; 32] = Sha256::digest(b"runtime resource").into();
+        let staged = staged_artifact::stage_with_access(
+            &source,
+            &artifacts,
+            "resource",
+            &digest,
+            staged_artifact::StagedArtifactAccessV1::ReadOnly,
+        )
+        .expect("stage resource");
+        let runtime_work = artifacts.join("ocr-work-v1/tessdata");
+        std::fs::create_dir_all(&runtime_work).expect("runtime work");
+        std::fs::write(runtime_work.join("eng.traineddata"), b"model").expect("runtime model");
+
+        cleanup_staged_runtime_artifacts(vec![staged]);
+
+        assert!(!artifacts.exists());
+        std::fs::remove_dir_all(root).expect("cleanup root");
+    }
 }
