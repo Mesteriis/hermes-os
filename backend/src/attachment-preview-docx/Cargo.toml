@@ -1,0 +1,21 @@
+[package]
+name = "hermes-attachment-preview-docx"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "attachment_preview"
+surface = "implementation"
+
+[dependencies]
+hermes-attachment-preview-api = { path = "../attachment-preview-api" }
+hermes-attachment-preview-renderer-contract = { path = "../attachment-preview-renderer-contract" }
+image = { version = "=0.25.9", default-features = false, features = ["png"] }
+quick-xml = { version = "=0.41.0", default-features = false }
+swash = { version = "=0.2.10", default-features = false, features = ["std", "render"] }
+zip = { version = "=6.0.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }

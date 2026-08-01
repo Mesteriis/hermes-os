@@ -4,7 +4,7 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: staged PDF-adapter slice. Clean-room owner boundary,
+Состояние реализации: staged document-adapter slice. Clean-room owner boundary,
 client/private-content boundary, event-only custody, renderer topology и phase
 gate определены. Отдельные `hermes-attachment-preview-api`, `-ingress`, `-core`
 и `-renderer-contract` admitted и реализуют versioned Start/Get/IssueRead/
@@ -14,8 +14,12 @@ evidence join/lifecycle/output policy и byte-only magic detection. Незави
 normalization, decode-and-fresh-PNG image rendering и fail-closed MP3/MP4
 container validation. Отдельный `hermes-attachment-preview-pdf` реализует
 pure-Rust first-page rasterization с bounded viewport, fresh PNG output и
-fail-closed active-content policy без native library или shell. DOCX adapter,
-persistence, managed runtime, assembly и live evidence ещё не реализованы. Inventory gate
+fail-closed active-content policy без native library или shell. Отдельный
+`hermes-attachment-preview-docx` проверяет bounded OPC/ZIP structure, запрещает
+external relationships, macros, ActiveX/OLE и source-provided fonts, извлекает
+только bounded `word/document.xml` и строит fresh first-card PNG bundled
+DejaVu Sans с pinned digest и включённой лицензией. Persistence, managed runtime,
+assembly и live evidence ещё не реализованы. Inventory gate
 `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:

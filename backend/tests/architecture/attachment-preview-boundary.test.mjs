@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
@@ -28,13 +29,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_pdf_adapter_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_docx_adapter_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
-  assert.match(adr, /Состояние реализации: staged PDF-adapter slice/);
-  assert.match(adr, /DOCX adapter,[\s\S]*persistence, managed runtime/);
+  assert.match(adr, /Состояние реализации: staged document-adapter slice/);
+  assert.match(adr, /Persistence, managed runtime/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);
@@ -232,6 +233,52 @@ test('PDF adapter rasterizes one bounded page without native or owner authority'
   assert.match(source, /FORBIDDEN_ACTIVE_MARKERS_V1/);
   assert.match(source, /catch_unwind/);
   assert.match(source, /AttachmentPreviewKindV1::Document/);
+  assert.doesNotMatch(
+    source,
+    /Command::|TcpStream|File::|filesystem|source_path|provider|account_id|filename|content_type_hint|data_url|url/,
+  );
+});
+
+test('DOCX adapter rebuilds a bounded fixed-font card without external resources', async () => {
+  const [manifest, entrypoint, container, documentText, card, fontLicense, fontBytes] = await Promise.all([
+    readFile(new URL('src/attachment-preview-docx/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-docx/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-docx/src/container.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-docx/src/document_text.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-docx/src/card.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-docx/assets/DejaVu-LICENSE.txt', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-docx/assets/DejaVuSans.ttf', BACKEND_ROOT)),
+  ]);
+  const source = `${entrypoint}\n${container}\n${documentText}\n${card}`;
+  assert.match(manifest, /swash = \{ version = "=0\.2\.10", default-features = false, features = \["std", "render"\] \}/);
+  assert.match(manifest, /quick-xml = \{ version = "=0\.41\.0", default-features = false \}/);
+  assert.match(manifest, /zip = \{ version = "=6\.0\.0", default-features = false, features = \["deflate-flate2-zlib-rs"\] \}/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:communications|attachment-security|blob|events|runtime|storage|kernel|attachment-text-extraction)|\b(?:sqlx|tokio|reqwest)\s*=/,
+  );
+  assert.match(source, /include_bytes!\("\.\.\/assets\/DejaVuSans\.ttf"\)/);
+  assert.match(source, /FIXED_FONT_SHA256_V1/);
+  assert.equal(
+    createHash('sha256').update(fontBytes).digest('hex'),
+    '7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954',
+  );
+  assert.match(source, /MAX_ZIP_ENTRIES_V1/);
+  assert.match(source, /MAX_ZIP_UNCOMPRESSED_BYTES_V1/);
+  assert.match(source, /MAX_DOCUMENT_XML_BYTES_V1/);
+  assert.match(source, /validate_relationships_v1/);
+  assert.match(source, /target_mode[\s\S]*external/);
+  assert.match(source, /FORBIDDEN_ENTRY_MARKERS_V1/);
+  assert.match(source, /FORBIDDEN_XML_MARKERS_V1/);
+  assert.match(source, /catch_unwind/);
+  assert.match(source, /AttachmentPreviewKindV1::Document/);
+  assert.match(entrypoint, /mod card;/);
+  assert.match(entrypoint, /mod container;/);
+  assert.match(entrypoint, /mod document_text;/);
+  assert.doesNotMatch(container, /\b(?:image|swash)::|render_docx_card_v1/);
+  assert.doesNotMatch(card, /\b(?:ZipArchive|quick_xml)|read_bounded_docx_v1/);
+  assert.doesNotMatch(documentText, /\b(?:image|swash)::|ZipArchive|render_docx_card_v1/);
+  assert.match(fontLicense, /Bitstream Vera Fonts Copyright/);
   assert.doesNotMatch(
     source,
     /Command::|TcpStream|File::|filesystem|source_path|provider|account_id|filename|content_type_hint|data_url|url/,

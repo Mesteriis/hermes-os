@@ -1182,6 +1182,11 @@ const ATTACHMENT_PREVIEW_PDF_ADAPTER_PRODUCTION_PACKAGES = [
   { name: 'hermes-attachment-preview-pdf', role: 'workflow', owner: 'attachment_preview', surface: 'implementation' },
 ];
 
+const ATTACHMENT_PREVIEW_DOCX_ADAPTER_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_PREVIEW_PDF_ADAPTER_PRODUCTION_PACKAGES,
+  { name: 'hermes-attachment-preview-docx', role: 'workflow', owner: 'attachment_preview', surface: 'implementation' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3438,6 +3443,14 @@ const ATTACHMENT_PREVIEW_PDF_ADAPTER_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_PREVIEW_DOCX_ADAPTER_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_PREVIEW_PDF_ADAPTER_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-preview-docx': [
+    { name: 'hermes-attachment-preview-api', kind: 'normal' },
+    { name: 'hermes-attachment-preview-renderer-contract', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4560,6 +4573,16 @@ const ATTACHMENT_PREVIEW_PDF_ADAPTER_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-attachment-preview-pdf': [
     { name: 'image', kind: 'normal', source: 'crates_io', version: '=0.25.9', defaultFeatures: false, features: ['png'] },
     { name: 'hayro', kind: 'normal', source: 'crates_io', version: '=0.7.1', defaultFeatures: true, features: [] },
+  ],
+};
+
+const ATTACHMENT_PREVIEW_DOCX_ADAPTER_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_PREVIEW_PDF_ADAPTER_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-preview-docx': [
+    { name: 'image', kind: 'normal', source: 'crates_io', version: '=0.25.9', defaultFeatures: false, features: ['png'] },
+    { name: 'quick-xml', kind: 'normal', source: 'crates_io', version: '=0.41.0', defaultFeatures: false, features: [] },
+    { name: 'swash', kind: 'normal', source: 'crates_io', version: '=0.2.10', defaultFeatures: false, features: ['render', 'std'] },
+    { name: 'zip', kind: 'normal', source: 'crates_io', version: '=6.0.0', defaultFeatures: false, features: ['deflate-flate2-zlib-rs'] },
   ],
 };
 
@@ -6969,6 +6992,17 @@ function expectedSlice(currentSlice) {
       packages: ATTACHMENT_PREVIEW_PDF_ADAPTER_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_PREVIEW_PDF_ADAPTER_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: ATTACHMENT_PREVIEW_PDF_ADAPTER_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_preview_docx_adapter_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_PREVIEW_FOUNDATION_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_PREVIEW_DOCX_ADAPTER_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_PREVIEW_DOCX_ADAPTER_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_PREVIEW_DOCX_ADAPTER_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
