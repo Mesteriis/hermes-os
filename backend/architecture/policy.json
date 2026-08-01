@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_task_candidate_promotion_result_consumer_v1",
+    "currentSlice": "reviewed_task_candidate_promotion_managed_admission_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1104,6 +1104,12 @@
         "role": "workflow",
         "owner": "reviewed_task_candidate_promotion",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-reviewed-task-candidate-promotion-assembly",
+        "role": "workflow",
+        "owner": "reviewed_task_candidate_promotion",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1877,6 +1883,24 @@
         },
         {
           "name": "hermes-tasks-command-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-reviewed-task-candidate-promotion-assembly": [
+        {
+          "name": "hermes-reviewed-task-candidate-promotion-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-reviewed-task-candidate-promotion-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -5556,6 +5580,35 @@
           "features": []
         }
       ],
+      "hermes-reviewed-task-candidate-promotion-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-review-attention-persistence": [
         {
           "name": "sha2",
@@ -8899,6 +8952,10 @@
         "customBuildAllowed": false
       },
       "hermes-reviewed-task-candidate-promotion-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-reviewed-task-candidate-promotion-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       }

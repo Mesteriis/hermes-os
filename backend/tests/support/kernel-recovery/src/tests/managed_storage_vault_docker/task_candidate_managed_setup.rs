@@ -26,6 +26,18 @@ use hermes_review_task_candidate_runtime::{
     REVIEW_TASK_CANDIDATE_STORAGE_CAPABILITY_ID_V1, review_task_candidate_module_descriptor_v1,
     review_task_candidate_settings_schema_bytes_v1,
 };
+use hermes_reviewed_task_candidate_promotion_core::{
+    REVIEWED_TASK_CANDIDATE_PROMOTION_MODULE_ID_V1, REVIEWED_TASK_CANDIDATE_PROMOTION_OWNER_V1,
+};
+use hermes_reviewed_task_candidate_promotion_persistence::schema::{
+    REVIEWED_TASK_CANDIDATE_PROMOTION_STORAGE_BUNDLE_REVISION_V1,
+    reviewed_task_candidate_promotion_storage_bundle_v1,
+};
+use hermes_reviewed_task_candidate_promotion_runtime::{
+    REVIEWED_TASK_CANDIDATE_PROMOTION_STORAGE_CAPABILITY_ID_V1,
+    reviewed_task_candidate_promotion_module_descriptor_v1,
+    reviewed_task_candidate_promotion_settings_schema_bytes_v1,
+};
 use hermes_runtime_protocol::v1::{
     ManagedWorkflowRuntimeConfigurationV1, ModuleDescriptorV1, ModuleKindV1,
 };
@@ -129,7 +141,7 @@ pub(super) fn start_task_candidate_ensemble_v1(
         .collect()
 }
 
-fn task_candidate_units_v1() -> [TaskCandidateManagedUnitV1; 3] {
+fn task_candidate_units_v1() -> [TaskCandidateManagedUnitV1; 4] {
     [
         TaskCandidateManagedUnitV1 {
             label: "Communication Task Candidate",
@@ -152,6 +164,18 @@ fn task_candidate_units_v1() -> [TaskCandidateManagedUnitV1; 3] {
             descriptor: review_task_candidate_module_descriptor_v1(TASK_CANDIDATE_BUILD_ID_V1),
             settings: review_task_candidate_settings_schema_bytes_v1(),
             storage_bundle: review_task_candidate_storage_bundle_v1(),
+        },
+        TaskCandidateManagedUnitV1 {
+            label: "Reviewed Task Candidate Promotion",
+            artifact_id: "reviewed_task_candidate_promotion.runtime.v1",
+            binary_environment: "HERMES_REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_BIN",
+            storage_capability_id: REVIEWED_TASK_CANDIDATE_PROMOTION_STORAGE_CAPABILITY_ID_V1,
+            storage_revision: REVIEWED_TASK_CANDIDATE_PROMOTION_STORAGE_BUNDLE_REVISION_V1,
+            descriptor: reviewed_task_candidate_promotion_module_descriptor_v1(
+                TASK_CANDIDATE_BUILD_ID_V1,
+            ),
+            settings: reviewed_task_candidate_promotion_settings_schema_bytes_v1(),
+            storage_bundle: reviewed_task_candidate_promotion_storage_bundle_v1(),
         },
         TaskCandidateManagedUnitV1 {
             label: "Tasks",
@@ -370,6 +394,13 @@ fn assert_exact_unit_boundary(unit: &TaskCandidateManagedUnitV1) {
         REVIEW_TASK_CANDIDATE_MODULE_ID_V1 => {
             assert_eq!(unit.descriptor.owner_id, REVIEW_TASK_CANDIDATE_OWNER_V1);
             assert_eq!(unit.descriptor.module_kind, ModuleKindV1::Domain as i32);
+        }
+        REVIEWED_TASK_CANDIDATE_PROMOTION_MODULE_ID_V1 => {
+            assert_eq!(
+                unit.descriptor.owner_id,
+                REVIEWED_TASK_CANDIDATE_PROMOTION_OWNER_V1
+            );
+            assert_eq!(unit.descriptor.module_kind, ModuleKindV1::Workflow as i32);
         }
         TASKS_MODULE_ID_V1 => {
             assert_eq!(unit.descriptor.owner_id, TASKS_OWNER_ID_V1);

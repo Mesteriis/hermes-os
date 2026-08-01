@@ -66,6 +66,9 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     promotionRuntimeOutbox,
     promotionManagedRuntime,
     promotionRuntimeMain,
+    promotionAssemblyManifest,
+    promotionAssembly,
+    promotionAssemblyMain,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -174,6 +177,9 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     readFile(new URL('src/reviewed-task-candidate-promotion-runtime/src/event_outbox.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/reviewed-task-candidate-promotion-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/reviewed-task-candidate-promotion-runtime/src/main.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-assembly/src/main.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -191,7 +197,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_promotion_result_consumer_v1');
+  assert.equal(policy.implementation.currentSlice, 'reviewed_task_candidate_promotion_managed_admission_v1');
   assert.equal(
     policy.implementation.ownerInventory.businessCapabilities.includes(
       'review.task-candidate.promotion-result.v1',
@@ -331,16 +337,22 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(managedSetup, /installed_task_candidate_ensemble_release_v1/);
   assert.match(managedSetup, /communication_task_candidate_extraction\.runtime\.v1/);
   assert.match(managedSetup, /review\.task-candidate\.runtime\.v1/);
+  assert.match(managedSetup, /reviewed_task_candidate_promotion\.runtime\.v1/);
   assert.match(managedSetup, /tasks\.runtime\.v1/);
   assert.match(managedSetup, /ManagedWorkflowRuntimeConfigurationV1/);
   assert.match(managedSetup, /ManagedDomainRuntimeConfigurationV1/);
   assert.match(managedFlow, /managed_task_candidate_chain_starts_from_one_signed_release/);
   assert.match(managedFlow, /configure_communications_jetstream/);
   assert.match(managedFlow, /start_communications_domain/);
+  assert.match(managedFlow, /started\.len\(\), 4/);
   assert.match(managedFlow, /start_task_candidate_ensemble_v1/);
   assert.match(
     authenticatedStorage,
     /HERMES_STORAGE_MANAGED_TEST_FILTER[\s\S]*managed_task_candidate_chain_starts_from_one_signed_release/,
+  );
+  assert.match(
+    authenticatedStorage,
+    /HERMES_REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_BIN/,
   );
   assert.match(promotionApiManifest, /role = "domain"/);
   assert.match(promotionApiManifest, /owner = "review"/);
@@ -407,4 +419,16 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     `${promotionRuntimeManifest}\n${promotionRuntime}\n${promotionRuntimeAdmission}\n${promotionRuntimeApproval}\n${promotionRuntimeResults}\n${promotionRuntimeOutbox}\n${promotionManagedRuntime}`,
     /hermes-review-task-candidate-(core|persistence|runtime|assembly)|hermes-tasks-(core|persistence|runtime|assembly)|hermes-blob|ClientRpc|ClientRealtime|provider_id|account_id|ollama|reqwest/,
   );
+  assert.match(workspace, /"src\/reviewed-task-candidate-promotion-assembly"/);
+  assert.match(promotionAssemblyManifest, /role = "workflow"/);
+  assert.match(promotionAssemblyManifest, /owner = "reviewed_task_candidate_promotion"/);
+  assert.match(promotionAssemblyManifest, /surface = "assembly"/);
+  assert.match(
+    promotionAssembly,
+    /materialize_reviewed_task_candidate_promotion_release_assembly_v1/,
+  );
+  assert.match(promotionAssembly, /reviewed_task_candidate_promotion\.runtime\.v1/);
+  assert.match(promotionAssembly, /reviewed_task_candidate_promotion\.storage\.v1/);
+  assert.match(promotionAssemblyMain, /--runtime/);
+  assert.doesNotMatch(promotionAssembly, /private_key|launch_managed|serve-inherited/);
 });

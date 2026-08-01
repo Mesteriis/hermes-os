@@ -62,6 +62,7 @@ members = [
   "src/reviewed-task-candidate-promotion-core",
   "src/reviewed-task-candidate-promotion-persistence",
   "src/reviewed-task-candidate-promotion-runtime",
+  "src/reviewed-task-candidate-promotion-assembly",
   "src/communications-content-api",
   "src/communications-saved-query-api",
   "src/communications-sender-insights-api",

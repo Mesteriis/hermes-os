@@ -74,7 +74,7 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_promotion_result_consumer_v1');
+  assert.equal(policy.implementation.currentSlice, 'reviewed_task_candidate_promotion_managed_admission_v1');
   for (const unit of [
     'hermes-tasks-command-api',
     'hermes-tasks-core',
@@ -170,6 +170,8 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
     'hermes-communication-task-candidate-assembly',
     'hermes-review-task-candidate-runtime',
     'hermes-review-task-candidate-assembly',
+    'hermes-reviewed-task-candidate-promotion-runtime',
+    'hermes-reviewed-task-candidate-promotion-assembly',
     'hermes-tasks-runtime',
     'hermes-tasks-assembly',
   ]) {
@@ -178,6 +180,7 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
   for (const fragment of [
     'communication_task_candidate.release-artifacts.json',
     'review-task-candidate.release-artifacts.json',
+    'reviewed_task_candidate_promotion.release-artifacts.json',
     'tasks.release-artifacts.json',
   ]) {
     assert.match(release, new RegExp(`--artifact-fragment .*${fragment.replaceAll('.', '\\.')}`));

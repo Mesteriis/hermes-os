@@ -862,7 +862,7 @@ test('signs the exact Review attention runtime and Storage entries emitted by it
   }
 });
 
-test('signs distinct extraction Review and Tasks runtime and Storage entries', async () => {
+test('signs distinct extraction Review promotion workflow and Tasks runtime and Storage entries', async () => {
   const root = canonicalTemporaryDirectory('hermes-task-candidate-release-fragments-');
   try {
     const privateKeyPath = join(root, 'release-key.pem');
@@ -889,6 +889,16 @@ test('signs distinct extraction Review and Tasks runtime and Storage entries', a
         fragmentName: 'review-task-candidate.release-artifacts.json',
         owner: 'review',
         ids: ['review.task-candidate.runtime.v1', 'review.task-candidate.storage.v1'],
+      },
+      {
+        package: 'hermes-reviewed-task-candidate-promotion-assembly',
+        runtimeName: 'hermes-reviewed-task-candidate-promotion-runtime',
+        fragmentName: 'reviewed_task_candidate_promotion.release-artifacts.json',
+        owner: 'reviewed_task_candidate_promotion',
+        ids: [
+          'reviewed_task_candidate_promotion.runtime.v1',
+          'reviewed_task_candidate_promotion.storage.v1',
+        ],
       },
       {
         package: 'hermes-tasks-assembly',
@@ -954,6 +964,8 @@ test('signs distinct extraction Review and Tasks runtime and Storage entries', a
         ['communication_task_candidate_extraction.storage.v1', 3n],
         ['review.task-candidate.runtime.v1', 1n],
         ['review.task-candidate.storage.v1', 3n],
+        ['reviewed_task_candidate_promotion.runtime.v1', 1n],
+        ['reviewed_task_candidate_promotion.storage.v1', 3n],
         ['tasks.runtime.v1', 1n],
         ['tasks.storage.v1', 3n],
       ],

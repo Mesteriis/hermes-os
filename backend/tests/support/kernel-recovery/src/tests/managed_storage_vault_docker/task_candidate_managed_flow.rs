@@ -9,6 +9,9 @@ use hermes_communication_task_candidate_api::{
 use hermes_review_task_candidate_api::{
     REVIEW_TASK_CANDIDATE_MODULE_ID_V1, REVIEW_TASK_CANDIDATE_OWNER_V1,
 };
+use hermes_reviewed_task_candidate_promotion_core::{
+    REVIEWED_TASK_CANDIDATE_PROMOTION_MODULE_ID_V1, REVIEWED_TASK_CANDIDATE_PROMOTION_OWNER_V1,
+};
 use hermes_tasks_command_api::{TASKS_MODULE_ID_V1, TASKS_OWNER_ID_V1};
 
 #[test]
@@ -87,7 +90,7 @@ fn managed_task_candidate_chain_starts_from_one_signed_release() {
     );
     let started =
         start_task_candidate_ensemble_v1(&supervisor, &store, &root.join("runtime"), admitted);
-    assert_eq!(started.len(), 3);
+    assert_eq!(started.len(), 4);
     assert_eq!(
         started
             .iter()
@@ -101,6 +104,10 @@ fn managed_task_candidate_chain_starts_from_one_signed_release() {
             (
                 REVIEW_TASK_CANDIDATE_MODULE_ID_V1,
                 REVIEW_TASK_CANDIDATE_OWNER_V1,
+            ),
+            (
+                REVIEWED_TASK_CANDIDATE_PROMOTION_MODULE_ID_V1,
+                REVIEWED_TASK_CANDIDATE_PROMOTION_OWNER_V1,
             ),
             (TASKS_MODULE_ID_V1, TASKS_OWNER_ID_V1),
         ]
