@@ -287,6 +287,49 @@ mod tests {
         );
     }
 
+    #[test]
+    fn candidate_bounds_fail_closed_before_custody_delegation() {
+        for invalid in [
+            AttachmentTextScanCandidateV1 {
+                declared_size: 0,
+                ..candidate()
+            },
+            AttachmentTextScanCandidateV1 {
+                declared_size: ATTACHMENT_TEXT_EXTRACTION_MAX_SOURCE_BYTES_V1 + 1,
+                ..candidate()
+            },
+            AttachmentTextScanCandidateV1 {
+                blob_receipt_sha256: [0; 32],
+                ..candidate()
+            },
+            AttachmentTextScanCandidateV1 {
+                custody_transfer_source_proof: Vec::new(),
+                ..candidate()
+            },
+            AttachmentTextScanCandidateV1 {
+                custody_transfer_source_proof: vec![7; MAX_CUSTODY_SOURCE_PROOF_BYTES_V1 + 1],
+                ..candidate()
+            },
+        ] {
+            assert_eq!(
+                decide_attachment_text_scan_candidate_record_v1(None, &invalid),
+                AttachmentTextExtractionRecordDecisionV1::Reject(
+                    AttachmentTextExtractionRejectionV1::InvalidCandidate
+                )
+            );
+            assert_eq!(
+                decide_attachment_text_join_v1(
+                    &request(),
+                    Some(&invalid),
+                    Some(&safety(AttachmentTextSafetyStateV1::SafeForDelivery)),
+                ),
+                AttachmentTextExtractionJoinDecisionV1::Reject(
+                    AttachmentTextExtractionRejectionV1::InvalidCandidate
+                )
+            );
+        }
+    }
+
     fn request() -> AttachmentTextExtractionRequestV1 {
         AttachmentTextExtractionRequestV1 {
             run_id: [1; 16],

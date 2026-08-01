@@ -2,6 +2,8 @@
 
 use super::*;
 
+use std::os::unix::fs::PermissionsExt;
+
 use crate::platform::client_realtime::ClientRealtimePublishHandlerV1;
 use crate::platform::managed::signed_bundle::SignedRuntimeResource;
 
@@ -176,6 +178,33 @@ pub(super) fn start_attachment_text_extraction_runtime_v1(
         reservation,
         admitted.capability_ids,
     )
+}
+
+pub(super) fn remove_staged_attachment_text_extraction_ocr_runner_v1(
+    runtime_dir: &Path,
+    runtime_generation: u64,
+) {
+    let artifacts = runtime_dir
+        .join("managed")
+        .join(format!("launch-{runtime_generation}"))
+        .join("runtime-artifacts");
+    let executable = std::fs::read_dir(&artifacts)
+        .expect("read staged Attachment Text Extraction runtime artifacts")
+        .map(|entry| entry.expect("staged Attachment Text Extraction runtime artifact"))
+        .filter(|entry| {
+            entry
+                .metadata()
+                .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        executable.len(),
+        1,
+        "Attachment Text Extraction must stage exactly one OCR executable"
+    );
+    std::fs::remove_file(executable[0].path())
+        .expect("remove staged OCR runner for parser-unavailable conformance");
 }
 
 pub(super) fn restart_attachment_text_extraction_runtime_v1(

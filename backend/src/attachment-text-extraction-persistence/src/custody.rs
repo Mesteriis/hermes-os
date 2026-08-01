@@ -329,6 +329,8 @@ struct LockedDelegationRequestV1 {
     attachment_anchor_id: [u8; 16],
     candidate_message_id: [u8; 16],
     safety_message_id: [u8; 16],
+    candidate_declared_size: u64,
+    candidate_receipt_sha256: [u8; 32],
 }
 
 enum ResultInboxInsertV1 {
@@ -354,7 +356,7 @@ async fn lock_request(
     request_id: [u8; 16],
 ) -> Result<LockedDelegationRequestV1, AttachmentTextExtractionPersistenceErrorV1> {
     let row = sqlx::query(
-        "SELECT o.run_id,o.candidate_message_id,o.safety_message_id,r.operation_id,r.attachment_anchor_id FROM hermes_data.attachment_text_extraction_custody_outbox o JOIN hermes_data.attachment_text_extraction_runs r ON r.logical_owner_id=o.logical_owner_id AND r.run_id=o.run_id WHERE o.logical_owner_id=$1 AND o.request_id=$2 FOR UPDATE OF o,r",
+        "SELECT o.run_id,o.candidate_message_id,o.safety_message_id,r.operation_id,r.attachment_anchor_id,c.declared_size AS candidate_declared_size,c.blob_receipt_sha256 AS candidate_receipt_sha256 FROM hermes_data.attachment_text_extraction_custody_outbox o JOIN hermes_data.attachment_text_extraction_runs r ON r.logical_owner_id=o.logical_owner_id AND r.run_id=o.run_id JOIN hermes_data.attachment_text_extraction_scan_candidates c ON c.logical_owner_id=o.logical_owner_id AND c.message_id=o.candidate_message_id AND c.attachment_anchor_id=r.attachment_anchor_id WHERE o.logical_owner_id=$1 AND o.request_id=$2 FOR UPDATE OF o,r,c",
     )
     .bind(logical_owner_id)
     .bind(request_id.as_slice())
@@ -368,6 +370,15 @@ async fn lock_request(
         attachment_anchor_id: id16_row(row.try_get("attachment_anchor_id").map_err(invalid_row)?)?,
         candidate_message_id: id16_row(row.try_get("candidate_message_id").map_err(invalid_row)?)?,
         safety_message_id: id16_row(row.try_get("safety_message_id").map_err(invalid_row)?)?,
+        candidate_declared_size: u64::try_from(
+            row.try_get::<i64, _>("candidate_declared_size")
+                .map_err(invalid_row)?,
+        )
+        .map_err(invalid_row)?,
+        candidate_receipt_sha256: id32_row(
+            row.try_get("candidate_receipt_sha256")
+                .map_err(invalid_row)?,
+        )?,
     };
     if request_id
         != attachment_text_custody_delegation_request_id_v1(
@@ -548,6 +559,8 @@ fn validate_delegated_against_request(
         || request.attachment_anchor_id != id16(&payload.attachment_anchor_id)?
         || request.candidate_message_id != id16(&payload.candidate_message_id)?
         || request.safety_message_id != id16(&payload.safety_message_id)?
+        || request.candidate_declared_size != payload.declared_size
+        || request.candidate_receipt_sha256 != id32_input(&payload.receipt_sha256)?
     {
         return Err(AttachmentTextExtractionPersistenceErrorV1::EvidenceConflict);
     }
@@ -587,5 +600,56 @@ mod tests {
     fn outbox_bounds_are_explicit() {
         assert_eq!(MAX_OUTBOX_ITEMS_V1, 64);
         assert_eq!(MAX_ENVELOPE_BYTES_V1, 8_192);
+    }
+
+    #[test]
+    fn delegated_result_must_preserve_candidate_size_and_receipt() {
+        let request = locked_request();
+        let payload = delegated_payload();
+        assert_eq!(
+            validate_delegated_against_request(&payload, &request),
+            Ok(())
+        );
+
+        let mut mismatched_size = payload.clone();
+        mismatched_size.declared_size += 1;
+        assert_eq!(
+            validate_delegated_against_request(&mismatched_size, &request),
+            Err(AttachmentTextExtractionPersistenceErrorV1::EvidenceConflict)
+        );
+
+        let mut mismatched_receipt = payload;
+        mismatched_receipt.receipt_sha256 = vec![10; 32];
+        assert_eq!(
+            validate_delegated_against_request(&mismatched_receipt, &request),
+            Err(AttachmentTextExtractionPersistenceErrorV1::EvidenceConflict)
+        );
+    }
+
+    fn locked_request() -> LockedDelegationRequestV1 {
+        LockedDelegationRequestV1 {
+            run_id: [1; 16],
+            operation_id: [2; 16],
+            attachment_anchor_id: [3; 16],
+            candidate_message_id: [4; 16],
+            safety_message_id: [5; 16],
+            candidate_declared_size: 42,
+            candidate_receipt_sha256: [9; 32],
+        }
+    }
+
+    fn delegated_payload() -> AttachmentTextCustodyDelegatedV1 {
+        AttachmentTextCustodyDelegatedV1 {
+            request_id: vec![6; 16],
+            extraction_run_id: vec![1; 16],
+            attachment_anchor_id: vec![3; 16],
+            candidate_message_id: vec![4; 16],
+            safety_message_id: vec![5; 16],
+            source_reference_id: vec![7; 16],
+            declared_size: 42,
+            receipt_sha256: vec![9; 32],
+            custody_transfer_source_proof: vec![8; 64],
+            logical_owner_id: "owner-1".to_owned(),
+        }
     }
 }

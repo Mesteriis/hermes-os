@@ -307,6 +307,9 @@ test('text extraction persistence owns exact joins and fenced jobs without trans
   assert.match(observations, /reject_anchor_runs/);
   assert.match(custody, /exact_envelope_bytes/);
   assert.match(custody, /insert_result_inbox/);
+  assert.match(custody, /candidate_declared_size != payload\.declared_size/);
+  assert.match(custody, /candidate_receipt_sha256 != id32_input\(&payload\.receipt_sha256\)/);
+  assert.match(custody, /attachment_text_extraction_scan_candidates c/);
   assert.doesNotMatch(custody, /DurableEnvelopeV1|hermes_events_protocol|prost::Message/);
   assert.match(jobs, /FOR UPDATE SKIP LOCKED/);
   assert.match(jobs, /runtime_generation/);
@@ -483,6 +486,12 @@ test('managed conformance stages exact OCR resources through the workflow releas
   assert.match(flow, /restart_attachment_text_extraction_runtime_v1/);
   assert.match(flow, /text\.runtime_generation, previous_generation \+ 1/);
   assert.match(flow, /attachment_text_extraction\.ocr_runtime\.v1/);
+  assert.match(flow, /text-extraction-malformed-pdf/);
+  assert.match(flow, /text-extraction-unsupported/);
+  assert.match(flow, /text-extraction-parser-unavailable/);
+  assert.match(flow, /stop\(blob_binding::BLOB_PROCESS_ID\)/);
+  assert.match(flow, /AttachmentTextExtractionErrorCodeV1::Unavailable/);
+  assert.match(flow, /remove_staged_attachment_text_extraction_ocr_runner_v1/);
   assert.match(
     signedBundle,
     /ModuleRuntimeNativeExecutable[\s\S]*ModuleRuntimeReadOnlyData/,

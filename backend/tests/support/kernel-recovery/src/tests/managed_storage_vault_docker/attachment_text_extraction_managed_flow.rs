@@ -15,6 +15,7 @@ use super::{
         attachment_text_extraction_gateway_v1, get_attachment_text_extraction_v1,
         post_attachment_text_proto_status_v1, post_attachment_text_proto_v1,
         read_terminal_attachment_text_sse_event_v1, wait_for_ready_attachment_text_v1,
+        wait_for_terminal_attachment_text_v1,
     },
     attachment_text_extraction_persistence_fixture::{
         AttachmentTextExtractionDiagnosticsV1, attachment_text_extraction_diagnostics_v1,
@@ -503,20 +504,104 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
             &scenario_blob,
         );
     }
+
+    supervisor
+        .stop(blob_binding::BLOB_PROCESS_ID)
+        .expect("stop Blob for Text Extraction private-content outage");
+    let unavailable_read = post_attachment_text_proto_v1::<_, ReadAttachmentTextResponseV1>(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        ATTACHMENT_TEXT_EXTRACTION_CONTENT_CONNECT_PATH_V1,
+        ReadAttachmentTextRequestV1 {
+            protocol_major: 1,
+            run_id: accepted.run_id.clone(),
+        },
+    );
+    assert_eq!(
+        text_error_v1(unavailable_read.error),
+        AttachmentTextExtractionErrorCodeV1::Unavailable
+    );
+    assert!(unavailable_read.text_utf8.is_empty());
+    assert_eq!(attachment_text_extraction_diagnostics_v1().artifacts, 4);
+    assert_eq!(
+        blob_launch::start_from_kernel(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &data,
+            &root.join("runtime"),
+        )
+        .expect("restart signed Blob runtime after Text Extraction outage"),
+        2
+    );
+    let recovered_read = post_attachment_text_proto_v1::<_, ReadAttachmentTextResponseV1>(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        ATTACHMENT_TEXT_EXTRACTION_CONTENT_CONNECT_PATH_V1,
+        ReadAttachmentTextRequestV1 {
+            protocol_major: 1,
+            run_id: accepted.run_id.clone(),
+        },
+    );
+    assert_eq!(recovered_read, read);
+
+    let negative = ManagedAttachmentTextNegativeContourV1 {
+        store: &store,
+        supervisor: &supervisor,
+        data: &data,
+        clamav: &clamav,
+        blob_source: &blob_source,
+        router: &restarted_router,
+        gateway_runtime: &gateway_runtime,
+        cookie: &restarted_cookie,
+    };
+    negative.assert_terminal_failure_v1(
+        5,
+        "text-extraction-malformed-pdf",
+        [0xe1; 16],
+        [0xe2; 16],
+        b"%PDF-1.7\ninvalid".to_vec(),
+        AttachmentTextExtractionStateV1::Rejected,
+        AttachmentTextExtractionErrorCodeV1::ParserFailed,
+    );
+    negative.assert_terminal_failure_v1(
+        6,
+        "text-extraction-unsupported",
+        [0xe3; 16],
+        [0xe4; 16],
+        vec![0xff, 0xfe, 0xfd],
+        AttachmentTextExtractionStateV1::Unsupported,
+        AttachmentTextExtractionErrorCodeV1::Unsupported,
+    );
+    remove_staged_attachment_text_extraction_ocr_runner_v1(
+        &root.join("runtime"),
+        text.runtime_generation,
+    );
+    negative.assert_terminal_failure_v1(
+        7,
+        "text-extraction-parser-unavailable",
+        [0xe5; 16],
+        [0xe6; 16],
+        attachment_text_ocr_png_source_v1(),
+        AttachmentTextExtractionStateV1::Rejected,
+        AttachmentTextExtractionErrorCodeV1::ParserUnavailable,
+    );
     assert_eq!(
         attachment_text_extraction_diagnostics_v1(),
         AttachmentTextExtractionDiagnosticsV1 {
-            candidates: 4,
-            safety_facts: 4,
-            custody_requests: 4,
+            candidates: 7,
+            safety_facts: 7,
+            custody_requests: 7,
             pending_custody_outbox: 0,
-            custody_results: 4,
-            jobs: 4,
-            attempts: 4,
+            custody_results: 7,
+            jobs: 7,
+            attempts: 7,
             artifacts: 4,
-            security_delegation_commands: 4,
-            security_delegation_attempts: 4,
-            security_delegation_results: 4,
+            security_delegation_commands: 7,
+            security_delegation_attempts: 7,
+            security_delegation_results: 7,
         },
         "each supported parser must execute once through the same event-only custody path"
     );
@@ -543,6 +628,113 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
     }
     std::fs::remove_dir_all(root).expect("remove Attachment Text Extraction fixture");
     std::fs::remove_dir_all(data).expect("remove short Attachment Text Extraction Kernel fixture");
+}
+
+struct ManagedAttachmentTextNegativeContourV1<'a> {
+    store: &'a Arc<SqliteControlStore>,
+    supervisor: &'a ManagedRuntimeSupervisor,
+    data: &'a Path,
+    clamav: &'a AttachmentSecurityClamAvFixture,
+    blob_source: &'a AttachmentSecurityBlobSourceFixture,
+    router: &'a attachment_text_extraction_gateway_fixture::AttachmentTextExtractionGateway,
+    gateway_runtime: &'a tokio::runtime::Runtime,
+    cookie: &'a str,
+}
+
+impl ManagedAttachmentTextNegativeContourV1<'_> {
+    fn assert_terminal_failure_v1(
+        &self,
+        expected_count: i64,
+        scenario_id: &str,
+        blob_id: [u8; 16],
+        operation_id: [u8; 16],
+        source: Vec<u8>,
+        expected_state: AttachmentTextExtractionStateV1,
+        expected_error: AttachmentTextExtractionErrorCodeV1,
+    ) {
+        let blob = self.blob_source.write(
+            self.store,
+            self.supervisor,
+            self.data,
+            blob_id,
+            source.as_slice(),
+        );
+        let attachment = prepare_communications_attachment_for_scan(
+            self.store,
+            scenario_id,
+            blob.declared_size,
+            blob.receipt_sha256,
+        );
+        assert_clean_attachment_security_verdict_flow(
+            self.store,
+            &attachment,
+            &blob,
+            self.clamav,
+            source.as_slice(),
+        );
+        assert_eq!(
+            wait_for_attachment_state(
+                self.store,
+                self.supervisor,
+                attachment.attachment_anchor_id,
+            ),
+            hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
+                as u32
+        );
+        wait_for_attachment_text_evidence_v1(expected_count);
+        let accepted = post_attachment_text_proto_v1::<_, StartAttachmentTextExtractionResponseV1>(
+            self.router,
+            self.gateway_runtime,
+            self.cookie,
+            ATTACHMENT_TEXT_EXTRACTION_COMMAND_CONNECT_PATH_V1,
+            StartAttachmentTextExtractionRequestV1 {
+                protocol_major: 1,
+                operation_id: operation_id.to_vec(),
+                attachment_anchor_id: attachment.attachment_anchor_id.to_vec(),
+            },
+        );
+        assert_eq!(accepted.error, unspecified_error_v1());
+        let terminal = wait_for_terminal_attachment_text_v1(
+            self.router,
+            self.gateway_runtime,
+            self.cookie,
+            &accepted.run_id,
+        );
+        assert_eq!(text_state_v1(terminal.state), expected_state);
+        assert_eq!(text_error_v1(terminal.error), expected_error);
+        assert_eq!(terminal.format, AttachmentTextFormatV1::Unspecified as i32);
+        assert_eq!(terminal.extracted_size_bytes, 0);
+        assert!(!terminal.extraction_truncated);
+        assert_private_attachment_text_absent_v1(&terminal.encode_to_vec(), &source, &blob);
+
+        let read = post_attachment_text_proto_v1::<_, ReadAttachmentTextResponseV1>(
+            self.router,
+            self.gateway_runtime,
+            self.cookie,
+            ATTACHMENT_TEXT_EXTRACTION_CONTENT_CONNECT_PATH_V1,
+            ReadAttachmentTextRequestV1 {
+                protocol_major: 1,
+                run_id: accepted.run_id.clone(),
+            },
+        );
+        assert_eq!(
+            text_error_v1(read.error),
+            AttachmentTextExtractionErrorCodeV1::NotFound
+        );
+        assert!(read.text_utf8.is_empty());
+        let event = read_terminal_attachment_text_sse_event_v1(
+            self.router,
+            self.gateway_runtime,
+            self.cookie,
+            &accepted.run_id,
+        );
+        assert_private_attachment_text_absent_v1(&event.encode_to_vec(), &source, &blob);
+        assert_eq!(
+            attachment_text_extraction_diagnostics_v1().artifacts,
+            4,
+            "{scenario_id} must not commit a derived artifact"
+        );
+    }
 }
 
 fn wait_for_attachment_text_evidence_v1(expected: i64) {

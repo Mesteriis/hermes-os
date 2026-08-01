@@ -150,6 +150,23 @@ pub(super) fn wait_for_ready_attachment_text_v1(
     cookie: &str,
     run_id: &[u8],
 ) -> GetAttachmentTextExtractionResponseV1 {
+    let response = wait_for_terminal_attachment_text_v1(router, runtime, cookie, run_id);
+    let state = AttachmentTextExtractionStateV1::try_from(response.state)
+        .expect("known Attachment Text Extraction state");
+    assert_eq!(
+        state,
+        AttachmentTextExtractionStateV1::Ready,
+        "Attachment Text Extraction rejected a safe supported source: {response:?}"
+    );
+    response
+}
+
+pub(super) fn wait_for_terminal_attachment_text_v1(
+    router: &AttachmentTextExtractionGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    run_id: &[u8],
+) -> GetAttachmentTextExtractionResponseV1 {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let response = get_attachment_text_extraction_v1(router, runtime, cookie, run_id);
@@ -161,16 +178,11 @@ pub(super) fn wait_for_ready_attachment_text_v1(
                 | AttachmentTextExtractionStateV1::Rejected
                 | AttachmentTextExtractionStateV1::Unsupported
         ) {
-            assert_eq!(
-                state,
-                AttachmentTextExtractionStateV1::Ready,
-                "Attachment Text Extraction rejected a safe supported source: {response:?}"
-            );
             return response;
         }
         assert!(
             Instant::now() < deadline,
-            "Attachment Text Extraction did not reach Ready: {response:?}"
+            "Attachment Text Extraction did not reach a terminal state: {response:?}"
         );
         std::thread::sleep(Duration::from_millis(25));
     }
