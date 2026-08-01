@@ -135,7 +135,7 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_text_extraction_parser_adapters_v1',
+    'attachment_text_extraction_persistence_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, [
     'attachment_text_extraction',

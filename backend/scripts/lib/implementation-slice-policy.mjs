@@ -1151,6 +1151,11 @@ const ATTACHMENT_TEXT_EXTRACTION_PARSER_ADAPTERS_PRODUCTION_PACKAGES = [
   { name: 'hermes-attachment-text-extraction-ocr', role: 'workflow', owner: 'attachment_text_extraction', surface: 'implementation' },
 ];
 
+const ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_TEXT_EXTRACTION_PARSER_ADAPTERS_PRODUCTION_PACKAGES,
+  { name: 'hermes-attachment-text-extraction-persistence', role: 'workflow', owner: 'attachment_text_extraction', surface: 'persistence' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3327,6 +3332,14 @@ const ATTACHMENT_TEXT_EXTRACTION_PARSER_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST 
   ],
 };
 
+const ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TEXT_EXTRACTION_PARSER_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-text-extraction-persistence': [
+    { name: 'hermes-attachment-text-extraction-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4388,6 +4401,14 @@ const ATTACHMENT_TEXT_EXTRACTION_PARSER_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIS
   ],
   'hermes-attachment-text-extraction-ocr': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
+const ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TEXT_EXTRACTION_PARSER_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-text-extraction-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
   ],
 };
 
@@ -6727,6 +6748,17 @@ function expectedSlice(currentSlice) {
       packages: ATTACHMENT_TEXT_EXTRACTION_PARSER_ADAPTERS_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_TEXT_EXTRACTION_PARSER_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: ATTACHMENT_TEXT_EXTRACTION_PARSER_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_text_extraction_persistence_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

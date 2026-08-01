@@ -35,7 +35,7 @@ test('text extraction is a staged workflow and not a Communications facade', asy
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_text_extraction_parser_adapters_v1',
+    'attachment_text_extraction_persistence_v1',
   );
   assert(policy.implementation.ownerInventory.workflows.includes(
     'attachment_text_extraction',
@@ -238,4 +238,52 @@ test('parser contract and adapters are five isolated byte-only units', async () 
   assert.match(ocr, /russian_model_sha256/);
   assert.match(ocr, /\.env_clear\(\)/);
   assert.doesNotMatch(ocr, /\b(?:sh|bash|zsh)\b|Command::new\("tesseract"\)/);
+});
+
+test('text extraction persistence is owner-local metadata without derived plaintext', async () => {
+  const [manifest, schema, repository] = await Promise.all([
+    readFile(
+      new URL('src/attachment-text-extraction-persistence/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/attachment-text-extraction-persistence/migrations/0001_text_extraction.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-text-extraction-persistence/src/repository.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "attachment_text_extraction"/);
+  assert.match(manifest, /surface = "persistence"/);
+  assert.match(manifest, /hermes-attachment-text-extraction-core/);
+  assert.match(manifest, /hermes-storage-protocol/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:communications|attachment-security|blob|events|runtime|kernel)|attachment-text-extraction-(?:plain|pdf|docx|ocr|runtime|assembly)/,
+  );
+  for (const table of [
+    'attachment_text_extraction_runs',
+    'attachment_text_extraction_event_inbox',
+    'attachment_text_extraction_custody_outbox',
+    'attachment_text_extraction_jobs',
+    'attachment_text_extraction_artifacts',
+    'attachment_text_extraction_realtime',
+  ]) {
+    assert.match(schema, new RegExp(`hermes_data\\.${table}`));
+  }
+  assert.doesNotMatch(
+    schema,
+    /text_utf8|extracted_content|source_bytes|provider_id|filename|mime_type/,
+  );
+  assert.match(repository, /ON CONFLICT \(logical_owner_id, operation_id\) DO NOTHING/);
+  assert.match(repository, /state_revision = \$10/);
+  assert.match(repository, /commit_ready_artifact/);
+  assert.match(repository, /append_realtime/);
 });

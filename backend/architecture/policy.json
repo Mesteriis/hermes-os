@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_text_extraction_parser_adapters_v1",
+    "currentSlice": "attachment_text_extraction_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1284,6 +1284,12 @@
         "role": "workflow",
         "owner": "attachment_text_extraction",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-text-extraction-persistence",
+        "role": "workflow",
+        "owner": "attachment_text_extraction",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2397,6 +2403,16 @@
       "hermes-attachment-text-extraction-ocr": [
         {
           "name": "hermes-attachment-text-extraction-parser-contract",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-text-extraction-persistence": [
+        {
+          "name": "hermes-attachment-text-extraction-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -6757,6 +6773,28 @@
           "features": []
         }
       ],
+      "hermes-attachment-text-extraction-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-attachment-archive-inspection-zip": [
         {
           "name": "zip",
@@ -9105,6 +9143,10 @@
         "customBuildAllowed": false
       },
       "hermes-attachment-text-extraction-ocr": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-text-extraction-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
