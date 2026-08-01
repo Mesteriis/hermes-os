@@ -5,10 +5,11 @@
 Дата: 2026-08-01
 
 Состояние реализации: staged. Приняты exact source, extraction и candidate
-contracts, pure deterministic extraction core/lifecycle и отдельный owner-local
+contracts, pure deterministic extraction core/lifecycle, отдельный owner-local
 PostgreSQL persistence unit с run state, request replay, inbox, outbox и
-replayable realtime. Managed runtimes, Review-owned decision, promotion
-workflow, Knowledge command consumer и aggregate managed conformance ещё не реализованы; поэтому
+replayable realtime, а также exact Review note-candidate API/core с immutable
+human decision и отдельным promotion lifecycle. Managed runtimes, Review
+persistence/assembly, promotion workflow, Knowledge command consumer и aggregate managed conformance ещё не реализованы; поэтому
 `communication_note_candidate_extraction_v1` остаётся `planned`.
 
 Уточняет:
@@ -54,9 +55,17 @@ Extraction принадлежит workflow owner
 - `hermes-communication-note-candidate-persistence`;
 - будущие отдельные runtime и assembly units.
 
-Review получает отдельный note-candidate contract/core/persistence/runtime/
-assembly slice. Он не расширяет task-candidate payload generic union и не
-хранит Knowledge truth.
+Review получает отдельный note-candidate slice:
+
+- `hermes-review-note-candidate-api`;
+- `hermes-review-note-candidate-core`;
+- будущие persistence/runtime/assembly units.
+
+Он не расширяет task-candidate payload generic union и не хранит Knowledge
+truth. После approve Review переносит presentation bytes в Blob, bound к
+`reviewed_note_candidate_promotion`; promotion workflow после собственного
+admission создаёт отдельную Knowledge-bound custody. Поэтому Review contract не
+выдаёт права заблокированному Knowledge owner и не предвосхищает его command.
 
 Knowledge получает собственные command API, core, persistence, runtime и
 assembly units. Только Knowledge создаёт durable verified note. Promotion
@@ -119,8 +128,10 @@ Authenticated client Start
   -> durable SubmitNoteCandidateForReview command + Review-bound Blob
   -> Review note-candidate owner
   -> authenticated owner-device approve/reject
+  -> promotion-workflow-bound Blob
   -> durable NoteCandidateApprovedForPromotion event
   -> reviewed_note_candidate_promotion workflow
+  -> Knowledge-bound Blob
   -> Knowledge CreateNoteFromReviewedCandidate command
   -> Knowledge owner-local note + terminal durable result
   -> Review-owned promotion result
