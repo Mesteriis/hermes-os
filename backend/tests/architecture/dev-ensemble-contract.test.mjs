@@ -124,6 +124,12 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
 
   assert.match(release, /hermes-communications-assembly/);
   assert.match(release, /hermes-attachment-security-assembly/);
+  assert.match(release, /build-attachment-text-extraction-ocr-macos\.sh/);
+  assert.match(release, /hermes-attachment-text-extraction-assembly/);
+  assert.match(
+    release,
+    /attachment_text_extraction\.release-artifacts\.json/,
+  );
   assert.match(release, /hermes-mail-assembly/);
   assert.match(release, /hermes-telegram-assembly/);
   assert.match(release, /hermes-whatsapp-assembly/);
@@ -143,6 +149,14 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
     /ReservationReleaseV1::Predecessor[\s\S]*write_state\(state_path, &state\)[\s\S]*remove_reservation\(reservation_path\)[\s\S]*refresh_plan/,
   );
   assert.match(developmentAssembly, /version=3/);
+  assert.match(
+    developmentAssembly,
+    /ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ARTIFACT:[\s\S]*attachment_text_extraction\.runtime\.v1/,
+  );
+  assert.match(
+    developmentAssembly,
+    /runtime_artifact_id: ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ARTIFACT,[\s\S]*runtime_kind: ModuleRuntimeKindV1::Workflow/,
+  );
 
   assert.match(probe, /host: '127\.0\.0\.1'/);
   assert.match(probe, /origin: 'http:\/\/127\.0\.0\.1:5173'/);

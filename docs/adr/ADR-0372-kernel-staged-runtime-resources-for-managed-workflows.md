@@ -8,8 +8,11 @@
 use/kind validation, Kernel selector/staging, OCR runtime binding и unsigned
 release fragment реализованы. Pinned macOS arm64 runner build, license/model
 hash audit, system-fallback negative и изолированная двойная reproducibility
-проверка реализованы в отдельной native build unit. Signed release, managed
-`eng+rus` conformance и полный negative/live gate ещё не доказаны.
+проверка реализованы в отдельной native build unit. Development signed release
+компилирует exact runtime/model artifacts, а clean-room development assembly
+admit-ит и запускает Attachment Text Extraction как отдельный managed workflow.
+Реальный `eng+rus` conformance через workflow и полный negative/live gate ещё
+не доказаны.
 `attachment_text_extraction_v1` остаётся `planned`.
 
 Зависит от:
@@ -189,6 +192,8 @@ release build unit и не становится domain, integration или runti
 `--verify-reproducibility`. Build unit pin-ит exact commits Tesseract,
 Leptonica, zlib, libpng и tessdata, exact model/license bytes, CMake archive и
 Apple toolchain bytes. Developer `PATH` отсекается до system directories.
+Кроме shell `PATH`, CMake system-environment lookup отключён, а package-manager
+prefixes `/opt/homebrew` и `/usr/local` явно исключены из поиска.
 Runner собирается со static non-system libraries, а release отвергается при
 non-system Mach-O load command, `LC_RPATH` или побайтовом различии двух
 изолированных builds. Только двойная проверка выставляет

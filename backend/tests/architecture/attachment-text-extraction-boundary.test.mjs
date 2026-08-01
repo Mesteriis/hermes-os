@@ -372,9 +372,12 @@ test('managed runtime composes exact Event Blob parser client SSE and OCR resour
   assert.match(ocrResources, /from_mode\(0o400\)/);
   assert.doesNotMatch(ocrProduction, /std::env|Command::new|tesseract"|settings|provider/);
   assert.match(main, /serve-inherited/);
+  assert.match(main, /ManagedWorkflowRuntimeConfigurationV1/);
+  assert.match(main, /validate_managed_workflow_runtime_configuration/);
   assert.match(main, /configuration\.runtime_artifacts/);
   assert.match(main, /ocr_resources\.configuration\(\)\.clone\(\)/);
   assert.doesNotMatch(main, /AttachmentTextExtractionParserRuntimeV1::new\(None\)/);
+  assert.doesNotMatch(main, /ManagedEngineRuntimeConfigurationV1|settings-snapshot-path/);
   assert.doesNotMatch(
     [runtime, eventDecode, blob, clientPort, realtime, parser, ocrResources, main].join('\n'),
     /provider_id|account_id|filename|mime_type|source_path/,
@@ -423,6 +426,8 @@ test('OCR native release build is pinned static reproducible and system-fallback
   assert.match(build, /e16e5e036cce1d9ec2b00063cf8b54472625b9e14d893a169e2b0dedeb4df225/);
   assert.match(build, /readonly XCODE_VERSION="26\.6"/);
   assert.match(build, /export PATH="\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"/);
+  assert.match(build, /-DCMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH=OFF/);
+  assert.match(build, /-DCMAKE_IGNORE_PREFIX_PATH="\/opt\/homebrew;\/usr\/local"/);
   assert.match(build, /-DBUILD_SHARED_LIBS=OFF/);
   assert.match(build, /-DDISABLE_ARCHIVE=ON/);
   assert.match(build, /-DDISABLE_CURL=ON/);
@@ -433,5 +438,8 @@ test('OCR native release build is pinned static reproducible and system-fallback
   assert.match(build, /--verify-reproducibility/);
   assert.match(build, /cmp -s/);
   assert.match(build, /"release_eligible": \$\{reproducibility_verified\}/);
-  assert.doesNotMatch(build, /brew|Command::new|submodule update --remote|--branch\s/);
+  assert.doesNotMatch(
+    build,
+    /(?:^|\s)brew(?:\s|$)|Command::new|submodule update --remote|--branch\s/m,
+  );
 });

@@ -11,6 +11,7 @@ cargo_target_dir="${HERMES_DEV_CARGO_TARGET_DIR:-$backend_root/target}"
 release_root="${HERMES_DEV_RELEASE_ROOT:-$local_root/dev-release}"
 signing_key="${HERMES_DEV_RELEASE_SIGNING_KEY:-$local_root/dev-release-signing-key.pem}"
 tgcalls_root="${HERMES_DEV_TGCALLS_ROOT:-$local_root/dev-native/tgcalls}"
+attachment_text_extraction_ocr_root="${HERMES_DEV_ATTACHMENT_TEXT_EXTRACTION_OCR_ROOT:-$local_root/dev-native/attachment-text-extraction-ocr}"
 distribution_id="hermes-local-development"
 distribution_generation=""
 generation_metadata_name="development-distribution-generation"
@@ -103,6 +104,9 @@ require_absolute_path "HERMES_DEV_CARGO_TARGET_DIR" "$cargo_target_dir"
 require_absolute_path "HERMES_DEV_RELEASE_ROOT" "$release_root"
 require_absolute_path "HERMES_DEV_RELEASE_SIGNING_KEY" "$signing_key"
 require_absolute_path "HERMES_DEV_TGCALLS_ROOT" "$tgcalls_root"
+require_absolute_path \
+	"HERMES_DEV_ATTACHMENT_TEXT_EXTRACTION_OCR_ROOT" \
+	"$attachment_text_extraction_ocr_root"
 test "$(uname -m)" = "arm64" || fail "the current development release supports macOS arm64 only"
 
 mkdir -p "$local_root"
@@ -126,6 +130,27 @@ if ! test -f "$tgcalls_path"; then
 		--development-audio-conformance
 fi
 require_regular_file "$tgcalls_path" "Telegram call bridge"
+
+attachment_text_extraction_ocr_runner="$attachment_text_extraction_ocr_root/tesseract-runner"
+attachment_text_extraction_ocr_english="$attachment_text_extraction_ocr_root/eng.traineddata"
+attachment_text_extraction_ocr_russian="$attachment_text_extraction_ocr_root/rus.traineddata"
+if ! test -e "$attachment_text_extraction_ocr_root"; then
+	printf '%s\n' 'Building the pinned Attachment Text Extraction OCR runtime for local development...' >&2
+	"$backend_root/scripts/build-attachment-text-extraction-ocr-macos.sh" \
+		--output-dir "$attachment_text_extraction_ocr_root"
+fi
+test -d "$attachment_text_extraction_ocr_root" \
+	&& test ! -L "$attachment_text_extraction_ocr_root" \
+	|| fail "Attachment Text Extraction OCR runtime root is invalid"
+require_regular_file \
+	"$attachment_text_extraction_ocr_runner" \
+	"Attachment Text Extraction OCR runner"
+require_regular_file \
+	"$attachment_text_extraction_ocr_english" \
+	"Attachment Text Extraction English OCR model"
+require_regular_file \
+	"$attachment_text_extraction_ocr_russian" \
+	"Attachment Text Extraction Russian OCR model"
 
 printf '%s\n' 'Building signed-development runtime and assembly units...' >&2
 CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
@@ -176,6 +201,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-communication-delayed-delivery-assembly \
 	--package hermes-attachment-security-runtime \
 	--package hermes-attachment-security-assembly \
+	--package hermes-attachment-text-extraction-runtime \
+	--package hermes-attachment-text-extraction-assembly \
 	--package hermes-ollama-ai-runtime \
 	--package hermes-ollama-ai-assembly \
 	--package hermes-mail-runtime \
@@ -242,6 +269,7 @@ reviewed_note_candidate_promotion_assembly="$assembly_root/reviewed-note-candida
 reviewed_task_candidate_promotion_assembly="$assembly_root/reviewed-task-candidate-promotion"
 communication_delayed_delivery_assembly="$assembly_root/communication-delayed-delivery"
 attachment_security_assembly="$assembly_root/attachment-security"
+attachment_text_extraction_assembly="$assembly_root/attachment-text-extraction"
 ollama_ai_assembly="$assembly_root/ollama-ai"
 mail_assembly="$assembly_root/mail"
 telegram_assembly="$assembly_root/telegram"
@@ -328,6 +356,13 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$attachment_security_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-attachment-security-runtime"
+"$cargo_target_dir/debug/hermes-attachment-text-extraction-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$attachment_text_extraction_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-attachment-text-extraction-runtime" \
+	--ocr-runner "$attachment_text_extraction_ocr_runner" \
+	--ocr-eng "$attachment_text_extraction_ocr_english" \
+	--ocr-rus "$attachment_text_extraction_ocr_russian"
 "$cargo_target_dir/debug/hermes-ollama-ai-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$ollama_ai_assembly" \
@@ -399,6 +434,7 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$reviewed_task_candidate_promotion_assembly/reviewed_task_candidate_promotion.release-artifacts.json" \
 	--artifact-fragment "$communication_delayed_delivery_assembly/communication_delayed_delivery.release-artifacts.json" \
 	--artifact-fragment "$attachment_security_assembly/attachment-security.release-artifacts.json" \
+	--artifact-fragment "$attachment_text_extraction_assembly/attachment_text_extraction.release-artifacts.json" \
 	--artifact-fragment "$ollama_ai_assembly/ollama-ai.release-artifacts.json" \
 	--artifact-fragment "$mail_assembly/mail.release-artifacts.json" \
 	--artifact-fragment "$telegram_assembly/telegram.release-artifacts.json" \

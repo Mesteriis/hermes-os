@@ -162,6 +162,7 @@ configure() {
   mapped_c_flags="${common_c_flags} -ffile-prefix-map=${source_directory}=/usr/src/hermes-ocr/sources -fdebug-prefix-map=${source_directory}=/usr/src/hermes-ocr/sources -ffile-prefix-map=${isolated_build_root}=/usr/src/hermes-ocr/build -fdebug-prefix-map=${isolated_build_root}=/usr/src/hermes-ocr/build"
   "$cmake_path" -S "$source" -B "$build" \
     -G "Unix Makefiles" \
+    -DCMAKE_MAKE_PROGRAM=/usr/bin/make \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_ARCHITECTURES=arm64 \
     -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
@@ -174,6 +175,9 @@ configure() {
     -DCMAKE_SHARED_LINKER_FLAGS="$common_linker_flags" \
     -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
     -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF \
+    -DCMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH=OFF \
+    -DCMAKE_IGNORE_PATH="/opt/homebrew/bin;/opt/homebrew/sbin;/usr/local/bin;/usr/local/sbin" \
+    -DCMAKE_IGNORE_PREFIX_PATH="/opt/homebrew;/usr/local" \
     "$@"
 }
 

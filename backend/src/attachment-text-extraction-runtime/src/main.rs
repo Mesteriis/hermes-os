@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use hermes_attachment_text_extraction_api::ATTACHMENT_TEXT_EXTRACTION_OWNER_V1;
 use hermes_attachment_text_extraction_persistence::attachment_text_extraction_storage_bundle_v1;
 use hermes_attachment_text_extraction_runtime::{
     AttachmentTextExtractionParserRuntimeV1, attachment_text_extraction_module_descriptor_v1,
@@ -17,13 +18,10 @@ use hermes_attachment_text_extraction_runtime::{
     },
 };
 use hermes_runtime_protocol::{
-    v1::ManagedEngineRuntimeConfigurationV1,
+    v1::ManagedWorkflowRuntimeConfigurationV1,
     validation::{
-        descriptor::{
-            decode_settings_schema_v1, decode_settings_snapshot_v1,
-            validate_settings_snapshot_against_schema_v1,
-        },
-        managed_engine_runtime::validate_managed_engine_runtime_configuration,
+        descriptor::decode_settings_schema_v1,
+        managed_workflow_runtime::validate_managed_workflow_runtime_configuration,
     },
 };
 use prost::Message;
@@ -31,7 +29,6 @@ use prost::Message;
 struct InheritedPaths {
     descriptor: PathBuf,
     settings_schema: PathBuf,
-    settings_snapshot: PathBuf,
     runtime_configuration: PathBuf,
     runtime_instance_id: String,
 }
@@ -76,22 +73,15 @@ fn main() -> Result<(), String> {
 fn serve_inherited(paths: InheritedPaths) -> Result<(), String> {
     let descriptor = read_contract(&paths.descriptor)?;
     let schema_bytes = read_contract(&paths.settings_schema)?;
-    let schema = decode_settings_schema_v1(&schema_bytes)
+    decode_settings_schema_v1(&schema_bytes)
         .map_err(|_| "Attachment Text Extraction settings schema is invalid".to_owned())?;
-    let snapshot = decode_settings_snapshot_v1(&read_contract(&paths.settings_snapshot)?)
-        .map_err(|_| "Attachment Text Extraction settings snapshot is invalid".to_owned())?;
-    validate_settings_snapshot_against_schema_v1(&schema, &snapshot)
-        .map_err(|_| "Attachment Text Extraction settings snapshot is invalid".to_owned())?;
-    let configuration = ManagedEngineRuntimeConfigurationV1::decode(
+    let configuration = ManagedWorkflowRuntimeConfigurationV1::decode(
         read_contract(&paths.runtime_configuration)?.as_slice(),
     )
     .map_err(|_| "Attachment Text Extraction runtime configuration is invalid".to_owned())?;
-    validate_managed_engine_runtime_configuration(&configuration)
+    validate_managed_workflow_runtime_configuration(&configuration)
         .map_err(|_| "Attachment Text Extraction runtime configuration is invalid".to_owned())?;
-    if configuration.runtime_instance_id != paths.runtime_instance_id
-        || snapshot.target_id != configuration.registration_id
-        || snapshot.revision != configuration.settings_revision
-    {
+    if configuration.runtime_instance_id != paths.runtime_instance_id {
         return Err("Attachment Text Extraction runtime configuration is stale".to_owned());
     }
     let storage = configuration
@@ -99,8 +89,8 @@ fn serve_inherited(paths: InheritedPaths) -> Result<(), String> {
         .clone()
         .ok_or_else(|| "Attachment Text Extraction storage configuration is missing".to_owned())?;
     let admission = AttachmentTextExtractionRuntimeAdmissionV1 {
-        module_owner_id: configuration.logical_owner_id,
-        logical_human_owner_id: configuration.logical_human_owner_id,
+        module_owner_id: ATTACHMENT_TEXT_EXTRACTION_OWNER_V1.to_owned(),
+        logical_human_owner_id: configuration.logical_owner_id,
         registration_id: configuration.registration_id,
         runtime_instance_id: configuration.runtime_instance_id,
         runtime_generation: configuration.runtime_generation,
@@ -173,7 +163,6 @@ where
 {
     let descriptor = required_path(arguments, "--descriptor-path")?;
     let settings_schema = required_path(arguments, "--settings-schema-path")?;
-    let settings_snapshot = required_path(arguments, "--settings-snapshot-path")?;
     let runtime_configuration = required_path(arguments, "--runtime-configuration-path")?;
     let runtime_instance_id = required_string(arguments, "--runtime-instance-id")?;
     if arguments.next().is_some() {
@@ -182,7 +171,6 @@ where
     Ok(InheritedPaths {
         descriptor,
         settings_schema,
-        settings_snapshot,
         runtime_configuration,
         runtime_instance_id,
     })
