@@ -4,14 +4,17 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: staged foundation. Clean-room owner boundary,
+Состояние реализации: staged safe-adapter slice. Clean-room owner boundary,
 client/private-content boundary, event-only custody, renderer topology и phase
 gate определены. Отдельные `hermes-attachment-preview-api`, `-ingress`, `-core`
 и `-renderer-contract` admitted и реализуют versioned Start/Get/IssueRead/
 client_blob contracts, target-owned custody envelopes, pure order-independent
-evidence join/lifecycle/output policy и byte-only magic detection. Renderer
-adapters, persistence, managed runtime, assembly и live evidence ещё не
-реализованы. Inventory gate `attachment_preview_v1` остаётся `planned`.
+evidence join/lifecycle/output policy и byte-only magic detection. Независимые
+`hermes-attachment-preview-text`, `-image` и `-media` реализуют bounded UTF-8
+normalization, decode-and-fresh-PNG image rendering и fail-closed MP3/MP4
+container validation. PDF/DOCX adapters, persistence, managed runtime,
+assembly и live evidence ещё не реализованы. Inventory gate
+`attachment_preview_v1` остаётся `planned`.
 
 Зависит от:
 

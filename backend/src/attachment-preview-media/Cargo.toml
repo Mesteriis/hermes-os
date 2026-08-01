@@ -1,0 +1,17 @@
+[package]
+name = "hermes-attachment-preview-media"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "attachment_preview"
+surface = "implementation"
+
+[dependencies]
+hermes-attachment-preview-api = { path = "../attachment-preview-api" }
+hermes-attachment-preview-renderer-contract = { path = "../attachment-preview-renderer-contract" }

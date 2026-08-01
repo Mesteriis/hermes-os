@@ -1170,6 +1170,13 @@ const ATTACHMENT_PREVIEW_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-attachment-preview-renderer-contract', role: 'workflow', owner: 'attachment_preview', surface: 'contract' },
 ];
 
+const ATTACHMENT_PREVIEW_SAFE_ADAPTERS_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_PREVIEW_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-attachment-preview-text', role: 'workflow', owner: 'attachment_preview', surface: 'implementation' },
+  { name: 'hermes-attachment-preview-image', role: 'workflow', owner: 'attachment_preview', surface: 'implementation' },
+  { name: 'hermes-attachment-preview-media', role: 'workflow', owner: 'attachment_preview', surface: 'implementation' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3402,6 +3409,22 @@ const ATTACHMENT_PREVIEW_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_PREVIEW_SAFE_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_PREVIEW_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-preview-text': [
+    { name: 'hermes-attachment-preview-api', kind: 'normal' },
+    { name: 'hermes-attachment-preview-renderer-contract', kind: 'normal' },
+  ],
+  'hermes-attachment-preview-image': [
+    { name: 'hermes-attachment-preview-api', kind: 'normal' },
+    { name: 'hermes-attachment-preview-renderer-contract', kind: 'normal' },
+  ],
+  'hermes-attachment-preview-media': [
+    { name: 'hermes-attachment-preview-api', kind: 'normal' },
+    { name: 'hermes-attachment-preview-renderer-contract', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4508,6 +4531,15 @@ const ATTACHMENT_PREVIEW_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-attachment-preview-core': [],
   'hermes-attachment-preview-renderer-contract': [],
+};
+
+const ATTACHMENT_PREVIEW_SAFE_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_PREVIEW_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-preview-text': [],
+  'hermes-attachment-preview-image': [
+    { name: 'image', kind: 'normal', source: 'crates_io', version: '=0.25.9', defaultFeatures: false, features: ['gif', 'jpeg', 'png', 'webp'] },
+  ],
+  'hermes-attachment-preview-media': [],
 };
 
 const FORBIDDEN_DEPENDENCIES = [
@@ -6894,6 +6926,17 @@ function expectedSlice(currentSlice) {
       packages: ATTACHMENT_PREVIEW_FOUNDATION_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_PREVIEW_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: ATTACHMENT_PREVIEW_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_preview_safe_adapters_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_PREVIEW_FOUNDATION_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_PREVIEW_SAFE_ADAPTERS_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_PREVIEW_SAFE_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_PREVIEW_SAFE_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_preview_foundation_v1",
+    "currentSlice": "attachment_preview_safe_adapters_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1326,6 +1326,24 @@
         "role": "workflow",
         "owner": "attachment_preview",
         "surface": "contract"
+      },
+      {
+        "name": "hermes-attachment-preview-text",
+        "role": "workflow",
+        "owner": "attachment_preview",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-preview-image",
+        "role": "workflow",
+        "owner": "attachment_preview",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-preview-media",
+        "role": "workflow",
+        "owner": "attachment_preview",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2446,6 +2464,36 @@
       "hermes-attachment-preview-renderer-contract": [
         {
           "name": "hermes-attachment-preview-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-preview-text": [
+        {
+          "name": "hermes-attachment-preview-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-renderer-contract",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-preview-image": [
+        {
+          "name": "hermes-attachment-preview-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-renderer-contract",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-preview-media": [
+        {
+          "name": "hermes-attachment-preview-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-renderer-contract",
           "kind": "normal"
         }
       ],
@@ -7055,6 +7103,23 @@
       ],
       "hermes-attachment-preview-core": [],
       "hermes-attachment-preview-renderer-contract": [],
+      "hermes-attachment-preview-text": [],
+      "hermes-attachment-preview-image": [
+        {
+          "name": "image",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.25.9",
+          "defaultFeatures": false,
+          "features": [
+            "gif",
+            "jpeg",
+            "png",
+            "webp"
+          ]
+        }
+      ],
+      "hermes-attachment-preview-media": [],
       "hermes-attachment-text-extraction-plain": [],
       "hermes-attachment-text-extraction-pdf": [
         {
@@ -9466,6 +9531,18 @@
         "customBuildAllowed": false
       },
       "hermes-attachment-preview-renderer-contract": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-preview-text": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-preview-image": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-preview-media": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },

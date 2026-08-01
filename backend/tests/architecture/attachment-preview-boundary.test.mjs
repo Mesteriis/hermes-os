@@ -28,12 +28,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_foundation_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_safe_adapters_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
-  assert.match(adr, /Состояние реализации: staged foundation/);
+  assert.match(adr, /Состояние реализации: staged safe-adapter slice/);
+  assert.match(adr, /PDF\/DOCX adapters, persistence, managed runtime/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);
@@ -179,5 +180,37 @@ test('renderer contract is byte-only and metadata cannot select behavior', async
   assert.doesNotMatch(
     source,
     /\b(?:filename|content_type_hint|provider|account_id|filesystem|source_path|url)\b/,
+  );
+});
+
+test('safe text image and media adapters are three isolated byte-only units', async () => {
+  const [textManifest, text, imageManifest, image, mediaManifest, media] = await Promise.all([
+    readFile(new URL('src/attachment-preview-text/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-text/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-image/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-image/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-media/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-media/src/lib.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+  for (const manifest of [textManifest, imageManifest, mediaManifest]) {
+    assert.match(manifest, /hermes-attachment-preview-renderer-contract/);
+    assert.doesNotMatch(
+      manifest,
+      /hermes-(?:communications|attachment-security|blob|events|runtime|storage|kernel)|\b(?:sqlx|tokio)\s*=/,
+    );
+  }
+  assert.doesNotMatch(textManifest, /\bimage\s*=/);
+  assert.doesNotMatch(mediaManifest, /\bimage\s*=/);
+  assert.match(imageManifest, /image = \{ version = "=0\.25\.9", default-features = false/);
+  assert.match(text, /normalized_visible_utf8_v1/);
+  assert.match(text, /ATTACHMENT_PREVIEW_MAX_TEXT_BYTES_V1/);
+  assert.match(image, /write_to\(&mut output, ImageFormat::Png\)/);
+  assert.match(image, /ATTACHMENT_PREVIEW_MAX_IMAGE_PIXELS_V1/);
+  assert.match(media, /validate_mp3_v1/);
+  assert.match(media, /validate_mp4_v1/);
+  assert.match(media, /allowed_mp4_brand/);
+  assert.doesNotMatch(
+    `${text}\n${image}\n${media}`,
+    /\b(?:filename|provider|account_id|filesystem|source_path|data_url|url)\b/,
   );
 });
