@@ -35,7 +35,7 @@ test('text extraction is a staged workflow and not a Communications facade', asy
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_text_extraction_persistence_v1',
+    'attachment_text_extraction_runtime_assembly_v1',
   );
   assert(policy.implementation.ownerInventory.workflows.includes(
     'attachment_text_extraction',
@@ -318,4 +318,68 @@ test('text extraction persistence owns exact joins and fenced jobs without trans
     [repository, observations, custody, jobs].join('\n'),
     /text_utf8|extracted_content|source_bytes|provider_id|filename|mime_type/,
   );
+});
+
+test('managed runtime composes exact Event Blob parser client and SSE ports without domain implementations', async () => {
+  const [manifest, admission, runtime, eventDecode, blob, clientPort, realtime, parser, main] =
+    await Promise.all([
+      readFile(new URL('src/attachment-text-extraction-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/attachment-text-extraction-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/attachment-text-extraction-runtime/src/runtime.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/attachment-text-extraction-runtime/src/event_decode.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/attachment-text-extraction-runtime/src/blob.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/attachment-text-extraction-runtime/src/client_port.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/attachment-text-extraction-runtime/src/client_realtime.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/attachment-text-extraction-runtime/src/parser.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/attachment-text-extraction-runtime/src/main.rs', BACKEND_ROOT), 'utf8'),
+    ]);
+
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /surface = "runtime"/);
+  assert.match(manifest, /hermes-events-jetstream/);
+  assert.match(manifest, /hermes-blob-client/);
+  assert.match(manifest, /hermes-attachment-text-extraction-persistence/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:communications-runtime|attachment-security-engine|kernel)/,
+  );
+  assert.match(admission, /ModuleKindV1::Workflow/);
+  assert.match(admission, /ATTACHMENT_TEXT_EXTRACTION_CONTENT_CONNECT_PATH_V1/);
+  assert.match(admission, /BlobQuotaOperationV1::Write/);
+  assert.match(runtime, /receive_runtime_pull_delivery/);
+  assert.match(runtime, /materialize_pending_custody_requests/);
+  assert.match(runtime, /process_next_job/);
+  assert.match(runtime, /pump_client_realtime_once/);
+  assert.match(eventDecode, /OutboxRecordV1::accept/);
+  assert.match(eventDecode, /payload_sha256/);
+  assert.match(blob, /request_managed_blob_custody_transfer_v2/);
+  assert.match(blob, /BlobDataOperationWriteV1/);
+  assert.match(clientPort, /ReadText/);
+  assert.match(realtime, /PublishClientRealtime/);
+  assert.match(parser, /detect_attachment_text_parser_v1/);
+  assert.match(main, /serve-inherited/);
+  assert.doesNotMatch(
+    [runtime, eventDecode, blob, clientPort, realtime, parser, main].join('\n'),
+    /provider_id|account_id|filename|mime_type|source_path/,
+  );
+  assert.doesNotMatch(`${eventDecode}\n${realtime}`, /text_utf8/);
+});
+
+test('release assembly is a separate unsigned build unit and never launches runtime', async () => {
+  const [manifest, source, main] = await Promise.all([
+    readFile(new URL('src/attachment-text-extraction-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-text-extraction-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-text-extraction-assembly/src/main.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /surface = "assembly"/);
+  assert.match(manifest, /hermes-attachment-text-extraction-runtime/);
+  assert.match(source, /attachment_text_extraction_module_descriptor_v1/);
+  assert.match(source, /attachment_text_extraction_storage_bundle_v1/);
+  assert.match(source, /artifact_kind: "module_runtime"/);
+  assert.match(source, /artifact_kind: "storage_bundle"/);
+  assert.match(source, /create_new\(true\)/);
+  assert.doesNotMatch(source, /Command::new|signing|private_key/);
+  assert.match(main, /materialize_attachment_text_extraction_release_assembly_v1/);
 });

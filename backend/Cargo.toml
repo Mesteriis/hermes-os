@@ -196,6 +196,8 @@ members = [
   "src/attachment-text-extraction-docx",
   "src/attachment-text-extraction-ocr",
   "src/attachment-text-extraction-persistence",
+  "src/attachment-text-extraction-runtime",
+  "src/attachment-text-extraction-assembly",
   "src/kernel/control_store/contract",
   "src/kernel/control_store/sqlite",
   "src/kernel",

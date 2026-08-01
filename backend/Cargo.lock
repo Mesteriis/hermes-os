@@ -1821,6 +1821,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-attachment-text-extraction-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-text-extraction-api",
+ "hermes-attachment-text-extraction-persistence",
+ "hermes-attachment-text-extraction-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-attachment-text-extraction-core"
 version = "0.1.0"
 dependencies = [
@@ -1886,6 +1900,34 @@ name = "hermes-attachment-text-extraction-plain"
 version = "0.1.0"
 dependencies = [
  "hermes-attachment-text-extraction-parser-contract",
+]
+
+[[package]]
+name = "hermes-attachment-text-extraction-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-security-contract",
+ "hermes-attachment-text-extraction-api",
+ "hermes-attachment-text-extraction-core",
+ "hermes-attachment-text-extraction-docx",
+ "hermes-attachment-text-extraction-ingress",
+ "hermes-attachment-text-extraction-ocr",
+ "hermes-attachment-text-extraction-parser-contract",
+ "hermes-attachment-text-extraction-pdf",
+ "hermes-attachment-text-extraction-persistence",
+ "hermes-attachment-text-extraction-plain",
+ "hermes-blob-client",
+ "hermes-communications-attachment-contract",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]

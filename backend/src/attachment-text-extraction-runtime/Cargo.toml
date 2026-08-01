@@ -1,0 +1,41 @@
+[package]
+name = "hermes-attachment-text-extraction-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-attachment-text-extraction-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "attachment_text_extraction"
+surface = "runtime"
+
+[dependencies]
+hermes-attachment-security-contract = { path = "../attachment-security-contract" }
+hermes-attachment-text-extraction-api = { path = "../attachment-text-extraction-api" }
+hermes-attachment-text-extraction-core = { path = "../attachment-text-extraction-core" }
+hermes-attachment-text-extraction-docx = { path = "../attachment-text-extraction-docx" }
+hermes-attachment-text-extraction-ingress = { path = "../attachment-text-extraction-ingress" }
+hermes-attachment-text-extraction-ocr = { path = "../attachment-text-extraction-ocr" }
+hermes-attachment-text-extraction-parser-contract = { path = "../attachment-text-extraction-parser-contract" }
+hermes-attachment-text-extraction-pdf = { path = "../attachment-text-extraction-pdf" }
+hermes-attachment-text-extraction-persistence = { path = "../attachment-text-extraction-persistence" }
+hermes-attachment-text-extraction-plain = { path = "../attachment-text-extraction-plain" }
+hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }
+hermes-blob-client = { path = "../platform/blob/client" }
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-events-protocol = { path = "../platform/events" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-storage-vault = { path = "../platform/storage/vault" }
+libc = "=0.2.186"
+prost = "=0.14.4"
+sha2 = { version = "=0.11.0", default-features = false }
+tokio = { version = "=1.52.4", default-features = false, features = ["rt-multi-thread", "time"] }
+zeroize = "=1.9.0"

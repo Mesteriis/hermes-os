@@ -1156,6 +1156,12 @@ const ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-attachment-text-extraction-persistence', role: 'workflow', owner: 'attachment_text_extraction', surface: 'persistence' },
 ];
 
+const ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-attachment-text-extraction-runtime', role: 'workflow', owner: 'attachment_text_extraction', surface: 'runtime' },
+  { name: 'hermes-attachment-text-extraction-assembly', role: 'workflow', owner: 'attachment_text_extraction', surface: 'assembly' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3341,6 +3347,36 @@ const ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-text-extraction-runtime': [
+    { name: 'hermes-attachment-security-contract', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-api', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-core', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-docx', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-ingress', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-ocr', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-parser-contract', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-pdf', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-persistence', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-plain', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-communications-attachment-contract', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+  'hermes-attachment-text-extraction-assembly': [
+    { name: 'hermes-attachment-text-extraction-api', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-persistence', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4410,6 +4446,22 @@ const ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = 
   'hermes-attachment-text-extraction-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
+const ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-text-extraction-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-attachment-text-extraction-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -6760,6 +6812,17 @@ function expectedSlice(currentSlice) {
       packages: ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_text_extraction_runtime_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

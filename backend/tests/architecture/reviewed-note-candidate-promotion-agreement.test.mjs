@@ -105,7 +105,7 @@ test('reviewed note promotion is an event-only workflow with a fresh Knowledge c
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_text_extraction_persistence_v1',
+    'attachment_text_extraction_runtime_assembly_v1',
   );
   assert.equal(
     policy.implementation.ownerInventory.workflows.includes(
