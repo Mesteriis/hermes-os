@@ -29,14 +29,14 @@ pub struct PreparedBundledManagedRuntime {
     settings_schema_bytes: Option<Vec<u8>>,
 }
 
-pub struct PreparedBundledManagedIntegrationRuntime {
+pub struct PreparedBundledManagedRuntimeWithArtifacts {
     runtime: PreparedBundledManagedRuntime,
     runtime_artifact_bindings: Vec<ManagedRuntimeArtifactBindingV1>,
     staged_runtime_artifacts: Vec<StagedNativeArtifact>,
     state_layout_revision: Option<u32>,
 }
 
-impl PreparedBundledManagedIntegrationRuntime {
+impl PreparedBundledManagedRuntimeWithArtifacts {
     #[must_use]
     pub fn runtime_artifact_bindings(&self) -> &[ManagedRuntimeArtifactBindingV1] {
         &self.runtime_artifact_bindings
@@ -150,12 +150,12 @@ pub fn prepare_bound_managed_runtime(
     })
 }
 
-pub fn prepare_bound_managed_integration_runtime(
+pub fn prepare_bound_managed_runtime_with_artifacts(
     kernel_executable: &Path,
     binding: &BundledManagedLaunchBinding,
     launch_directory: &Path,
     granted_capability_ids: &[String],
-) -> Result<PreparedBundledManagedIntegrationRuntime, String> {
+) -> Result<PreparedBundledManagedRuntimeWithArtifacts, String> {
     let runtime_bundle = verify_selected_installed_bundle_artifact_ids(
         kernel_executable,
         "aarch64-apple-darwin",
@@ -174,7 +174,7 @@ pub fn prepare_bound_managed_integration_runtime(
             requirements
                 .runtime_artifacts()
                 .iter()
-                .map(|artifact| artifact.artifact_id.as_str()),
+                .map(|requirement| requirement.artifact().artifact_id.as_str()),
         )
         .collect::<Vec<_>>();
     let bundle = verify_selected_installed_bundle_artifact_ids(
@@ -203,7 +203,7 @@ pub fn prepare_bound_managed_integration_runtime(
             return Err(error);
         }
     };
-    Ok(PreparedBundledManagedIntegrationRuntime {
+    Ok(PreparedBundledManagedRuntimeWithArtifacts {
         runtime,
         runtime_artifact_bindings,
         staged_runtime_artifacts,
@@ -315,7 +315,7 @@ fn stage_verified_artifact(
 
 fn stage_runtime_dependencies(
     bundle: &VerifiedDistributionBundle,
-    requested: &[hermes_runtime_protocol::v1::DistributionManifestArtifactV1],
+    requested: &[crate::distribution::runtime_dependencies::RuntimeArtifactRequirementV1],
     launch_directory: &Path,
 ) -> Result<
     (
@@ -327,29 +327,28 @@ fn stage_runtime_dependencies(
     let mut bindings = Vec::with_capacity(requested.len());
     let mut staged_artifacts = Vec::with_capacity(requested.len());
     for request in requested {
+        let requested_artifact = request.artifact();
         let artifact = match bundle
             .artifacts()
-            .binary_search_by(|candidate| candidate.artifact_id().cmp(&request.artifact_id))
+            .binary_search_by(|candidate| {
+                candidate.artifact_id().cmp(&requested_artifact.artifact_id)
+            })
             .ok()
             .map(|index| &bundle.artifacts()[index])
         {
             Some(artifact) => artifact,
             None => {
                 cleanup_staged_artifacts(staged_artifacts);
-                return Err(
-                    "verified managed integration runtime artifact is unavailable".to_owned(),
-                );
+                return Err("verified managed runtime artifact is unavailable".to_owned());
             }
         };
-        if artifact.size_bytes() != request.size_bytes
-            || artifact.expected_sha256().as_slice() != request.sha256.as_slice()
+        if artifact.size_bytes() != requested_artifact.size_bytes
+            || artifact.expected_sha256().as_slice() != requested_artifact.sha256.as_slice()
         {
             cleanup_staged_artifacts(staged_artifacts);
-            return Err(
-                "verified managed integration runtime artifact does not match manifest".to_owned(),
-            );
+            return Err("verified managed runtime artifact does not match manifest".to_owned());
         }
-        let staged = match stage_artifact(artifact, launch_directory) {
+        let staged = match stage_runtime_artifact(artifact, launch_directory, request.use_kind()) {
             Ok(staged) => staged,
             Err(error) => {
                 cleanup_staged_artifacts(staged_artifacts);
@@ -364,18 +363,41 @@ fn stage_runtime_dependencies(
         else {
             cleanup_staged_artifacts(staged_artifacts);
             let _ = staged.remove();
-            return Err("managed integration staged artifact path is invalid".to_owned());
+            return Err("managed runtime staged artifact path is invalid".to_owned());
         };
         bindings.push(ManagedRuntimeArtifactBindingV1 {
-            artifact_id: request.artifact_id.clone(),
-            r#use: RuntimeArtifactUseV1::NativeDynamicLibrary as i32,
+            artifact_id: requested_artifact.artifact_id.clone(),
+            r#use: request.use_kind() as i32,
             staged_path,
-            size_bytes: request.size_bytes,
-            sha256: request.sha256.clone(),
+            size_bytes: requested_artifact.size_bytes,
+            sha256: requested_artifact.sha256.clone(),
         });
         staged_artifacts.push(staged);
     }
     Ok((bindings, staged_artifacts))
+}
+
+fn stage_runtime_artifact(
+    artifact: &crate::distribution::bundle_verifier::VerifiedDistributionArtifact,
+    launch_directory: &Path,
+    use_kind: RuntimeArtifactUseV1,
+) -> Result<StagedNativeArtifact, String> {
+    let access = match use_kind {
+        RuntimeArtifactUseV1::ReadOnlyData => staged_artifact::StagedArtifactAccessV1::ReadOnly,
+        RuntimeArtifactUseV1::NativeDynamicLibrary | RuntimeArtifactUseV1::NativeExecutable => {
+            staged_artifact::StagedArtifactAccessV1::ReadExecute
+        }
+        RuntimeArtifactUseV1::Unspecified => {
+            return Err("managed runtime artifact use is invalid".to_owned());
+        }
+    };
+    staged_artifact::stage_with_access(
+        artifact.canonical_path(),
+        launch_directory,
+        &staged_artifact_name(artifact.expected_sha256()),
+        artifact.expected_sha256(),
+        access,
+    )
 }
 
 fn cleanup_staged_artifacts(artifacts: Vec<StagedNativeArtifact>) {

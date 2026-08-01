@@ -65,3 +65,31 @@ test('runtime resource types are exact and domains cannot request them', async (
   assert.match(validator, /paths\.insert\(artifact\.staged_path\.as_str\(\)\)/);
   assert.match(validator, /artifact\.sha256\.iter\(\)\.any/);
 });
+
+test('Kernel stages granted workflow and engine resources without owner semantics', async () => {
+  const [selector, nativeLaunch, managedLaunch, ownerControl, stagedArtifact] =
+    await Promise.all([
+      backendSource('src/kernel/src/distribution/runtime_dependencies.rs'),
+      backendSource('src/kernel/src/platform/macos/native_launch.rs'),
+      backendSource('src/kernel/src/platform/macos/managed_launch.rs'),
+      backendSource('src/kernel/src/identity/owner_control/dispatch.rs'),
+      backendSource('src/kernel/src/distribution/staged_artifact.rs'),
+    ]);
+
+  assert.match(selector, /ModuleKindV1::Integration \| ModuleKindV1::Workflow \| ModuleKindV1::Engine/);
+  assert.match(selector, /artifact\.artifact_kind != distribution_kind\(use_kind\) as i32/);
+  assert.match(selector, /artifact\.bound_module_id != descriptor\.module_id/);
+  assert.match(selector, /managed runtime artifact use is ambiguous/);
+  assert.match(nativeLaunch, /prepare_bound_managed_runtime_with_artifacts/);
+  assert.match(nativeLaunch, /r#use: request\.use_kind\(\) as i32/);
+  assert.match(managedLaunch, /fn prepare_runtime_with_artifacts/);
+  assert.match(managedLaunch, /configuration\.runtime_artifacts = prepared\.runtime_artifact_bindings/);
+  assert.match(ownerControl, /effective_granted_capability_ids/);
+  assert.match(stagedArtifact, /StagedArtifactAccessV1::ReadOnly => 0o400/);
+  assert.match(stagedArtifact, /StagedArtifactAccessV1::ReadExecute => 0o500/);
+  const selectorProduction = selector.slice(0, selector.indexOf('#[cfg(test)]'));
+  assert.doesNotMatch(
+    `${selectorProduction}\n${nativeLaunch}\n${managedLaunch}`,
+    /tesseract|ocr\.eng|ocr\.rus/i,
+  );
+});

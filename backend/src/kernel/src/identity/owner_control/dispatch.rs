@@ -469,6 +469,8 @@ fn start_reserved_engine_runtime(
             store,
             &request.registration_id,
         )?;
+        let granted_capability_ids =
+            effective_granted_capability_ids(store, &request.registration_id, "managed engine")?;
         let configuration = ManagedEngineRuntimeConfigurationV1 {
             major: 1,
             logical_owner_id: registration.owner_id().to_owned(),
@@ -491,6 +493,7 @@ fn start_reserved_engine_runtime(
             reservation,
             configuration,
             settings_snapshot.bytes,
+            &granted_capability_ids,
         )
     })()
     .map(|runtime_generation| {
@@ -535,6 +538,8 @@ fn start_reserved_workflow_runtime(
             .platform_event_hub_topology()
             .map_err(|_| "Event Hub topology is unavailable".to_owned())?
             .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
+        let granted_capability_ids =
+            effective_granted_capability_ids(store, &request.registration_id, "managed workflow")?;
         let configuration = ManagedWorkflowRuntimeConfigurationV1 {
             major: 1,
             logical_owner_id: logical_owner.owner_id().to_owned(),
@@ -554,6 +559,7 @@ fn start_reserved_workflow_runtime(
             runtime_dir,
             reservation,
             configuration,
+            &granted_capability_ids,
         )
     })()
     .map(|runtime_generation| {
@@ -563,6 +569,22 @@ fn start_reserved_workflow_runtime(
             launch_state: "accepted".to_owned(),
         })
     })
+}
+
+fn effective_granted_capability_ids(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    runtime_kind: &str,
+) -> Result<Vec<String>, String> {
+    store
+        .module_grant_snapshot(registration_id)
+        .map_err(|_| format!("{runtime_kind} grants are unavailable"))?
+        .and_then(|snapshot| {
+            snapshot
+                .effective_grants()
+                .map(|grants| grants.capability_ids().to_vec())
+        })
+        .ok_or_else(|| format!("{runtime_kind} grants are unavailable"))
 }
 
 fn status(

@@ -263,11 +263,10 @@ pub(crate) fn start_reserved_engine(
     supervisor: &ManagedRuntimeSupervisor,
     runtime_dir: &Path,
     reservation: ManagedLaunchReservation,
-    configuration: ManagedEngineRuntimeConfigurationV1,
+    mut configuration: ManagedEngineRuntimeConfigurationV1,
     settings_snapshot_bytes: Vec<u8>,
+    granted_capability_ids: &[String],
 ) -> Result<u64, String> {
-    validate_managed_engine_runtime_configuration(&configuration)
-        .map_err(|_| "managed engine runtime configuration is invalid".to_owned())?;
     if configuration.registration_id != reservation.registration_id()
         || configuration.runtime_instance_id != reservation.runtime_instance_id()
         || configuration.runtime_generation != reservation.runtime_generation()
@@ -275,15 +274,28 @@ pub(crate) fn start_reserved_engine(
     {
         return Err("managed engine runtime configuration is stale".to_owned());
     }
-    start_staged_with_configuration_bytes(
+    let prepared = prepare_runtime_with_artifacts(
+        runtime_dir,
+        &reservation,
+        granted_capability_ids,
+        "managed engine",
+    )?;
+    configuration.runtime_artifacts = prepared.runtime_artifact_bindings().to_vec();
+    if validate_managed_engine_runtime_configuration(&configuration).is_err() {
+        prepared.remove();
+        return Err("managed engine runtime configuration is invalid".to_owned());
+    }
+    let (prepared_runtime, staged_runtime_artifacts) = prepared.into_launch_parts();
+    start_prepared_with_configuration_bytes(
         supervisor,
         runtime_dir,
         reservation,
+        prepared_runtime,
         PreparedRuntimeContractInput {
             runtime_configuration_bytes: configuration.encode_to_vec(),
             settings_snapshot_bytes: Some(settings_snapshot_bytes),
             host_bridge_configuration: None,
-            cleanup: None,
+            cleanup: staged_runtime_artifact_cleanup(staged_runtime_artifacts),
             expected_module_kind: ModuleKindV1::Engine,
         },
     )
@@ -296,10 +308,9 @@ pub(crate) fn start_reserved_workflow(
     supervisor: &ManagedRuntimeSupervisor,
     runtime_dir: &Path,
     reservation: ManagedLaunchReservation,
-    configuration: ManagedWorkflowRuntimeConfigurationV1,
+    mut configuration: ManagedWorkflowRuntimeConfigurationV1,
+    granted_capability_ids: &[String],
 ) -> Result<u64, String> {
-    validate_managed_workflow_runtime_configuration(&configuration)
-        .map_err(|_| "managed workflow runtime configuration is invalid".to_owned())?;
     if configuration.registration_id != reservation.registration_id()
         || configuration.runtime_instance_id != reservation.runtime_instance_id()
         || configuration.runtime_generation != reservation.runtime_generation()
@@ -307,15 +318,28 @@ pub(crate) fn start_reserved_workflow(
     {
         return Err("managed workflow runtime configuration is stale".to_owned());
     }
-    start_staged_with_configuration_bytes(
+    let prepared = prepare_runtime_with_artifacts(
+        runtime_dir,
+        &reservation,
+        granted_capability_ids,
+        "managed workflow",
+    )?;
+    configuration.runtime_artifacts = prepared.runtime_artifact_bindings().to_vec();
+    if validate_managed_workflow_runtime_configuration(&configuration).is_err() {
+        prepared.remove();
+        return Err("managed workflow runtime configuration is invalid".to_owned());
+    }
+    let (prepared_runtime, staged_runtime_artifacts) = prepared.into_launch_parts();
+    start_prepared_with_configuration_bytes(
         supervisor,
         runtime_dir,
         reservation,
+        prepared_runtime,
         PreparedRuntimeContractInput {
             runtime_configuration_bytes: configuration.encode_to_vec(),
             settings_snapshot_bytes: None,
             host_bridge_configuration: None,
-            cleanup: None,
+            cleanup: staged_runtime_artifact_cleanup(staged_runtime_artifacts),
             expected_module_kind: ModuleKindV1::Workflow,
         },
     )
@@ -566,15 +590,39 @@ fn start_prepared_with_configuration_bytes(
     Ok(runtime_generation)
 }
 
+fn prepare_runtime_with_artifacts(
+    runtime_dir: &Path,
+    reservation: &ManagedLaunchReservation,
+    granted_capability_ids: &[String],
+    runtime_kind: &str,
+) -> Result<native_launch::PreparedBundledManagedRuntimeWithArtifacts, String> {
+    let kernel_executable = selected_kernel_executable()?;
+    let prepared = native_launch::prepare_bound_managed_runtime_with_artifacts(
+        &kernel_executable,
+        reservation.binding(),
+        &runtime_dir
+            .join("managed")
+            .join(format!("launch-{}", reservation.runtime_generation())),
+        granted_capability_ids,
+    )?;
+    if prepared.state_layout_revision().is_some() {
+        prepared.remove();
+        return Err(format!(
+            "{runtime_kind} cannot receive integration state resources"
+        ));
+    }
+    Ok(prepared)
+}
+
 fn prepare_integration_runtime(
     data_dir: &Path,
     runtime_dir: &Path,
     reservation: &ManagedLaunchReservation,
     configuration: &mut ManagedIntegrationRuntimeConfigurationV1,
     granted_capability_ids: &[String],
-) -> Result<native_launch::PreparedBundledManagedIntegrationRuntime, String> {
+) -> Result<native_launch::PreparedBundledManagedRuntimeWithArtifacts, String> {
     let kernel_executable = selected_kernel_executable()?;
-    let prepared = native_launch::prepare_bound_managed_integration_runtime(
+    let prepared = native_launch::prepare_bound_managed_runtime_with_artifacts(
         &kernel_executable,
         reservation.binding(),
         &runtime_dir

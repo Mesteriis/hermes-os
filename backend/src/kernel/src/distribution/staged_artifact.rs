@@ -12,6 +12,12 @@ pub struct StagedNativeArtifact {
     path: PathBuf,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StagedArtifactAccessV1 {
+    ReadExecute,
+    ReadOnly,
+}
+
 impl StagedNativeArtifact {
     #[must_use]
     pub fn path(&self) -> &Path {
@@ -33,9 +39,31 @@ pub fn stage(
     artifact_name: &str,
     expected_sha256: &[u8; 32],
 ) -> Result<StagedNativeArtifact, String> {
+    stage_with_access(
+        source,
+        launch_directory,
+        artifact_name,
+        expected_sha256,
+        StagedArtifactAccessV1::ReadExecute,
+    )
+}
+
+pub fn stage_with_access(
+    source: &Path,
+    launch_directory: &Path,
+    artifact_name: &str,
+    expected_sha256: &[u8; 32],
+    access: StagedArtifactAccessV1,
+) -> Result<StagedNativeArtifact, String> {
     let source_metadata = validate_stage_paths(source, launch_directory, artifact_name)?;
     let destination = launch_directory.join(artifact_name);
-    let result = copy_verified(source, &source_metadata, &destination, expected_sha256);
+    let result = copy_verified(
+        source,
+        &source_metadata,
+        &destination,
+        expected_sha256,
+        access,
+    );
     if result.is_err() {
         let _ = std::fs::remove_file(&destination);
     }
@@ -76,6 +104,7 @@ fn copy_verified(
     source_metadata: &std::fs::Metadata,
     destination: &Path,
     expected_sha256: &[u8; 32],
+    access: StagedArtifactAccessV1,
 ) -> Result<StagedNativeArtifact, String> {
     let mut input = File::open(source).map_err(|error| error.to_string())?;
     let opened_metadata = input.metadata().map_err(|error| error.to_string())?;
@@ -110,7 +139,11 @@ fn copy_verified(
         return Err("staged artifact digest does not match manifest".to_owned());
     }
     drop(output);
-    std::fs::set_permissions(destination, std::fs::Permissions::from_mode(0o500))
+    let mode = match access {
+        StagedArtifactAccessV1::ReadExecute => 0o500,
+        StagedArtifactAccessV1::ReadOnly => 0o400,
+    };
+    std::fs::set_permissions(destination, std::fs::Permissions::from_mode(mode))
         .map_err(|error| error.to_string())?;
     Ok(StagedNativeArtifact {
         path: destination.to_owned(),
@@ -125,4 +158,69 @@ fn same_file(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
         && left.mtime_nsec() == right.mtime_nsec()
         && left.ctime() == right.ctime()
         && left.ctime_nsec() == right.ctime_nsec()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        os::unix::fs::PermissionsExt,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    use super::*;
+
+    static TEST_ID: AtomicU64 = AtomicU64::new(1);
+
+    #[test]
+    fn stages_executable_and_data_with_distinct_exact_permissions() {
+        let root = std::env::temp_dir().join(format!(
+            "hermes-staged-artifact-{}-{}",
+            std::process::id(),
+            TEST_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        let source = root.join("source");
+        let launch = root.join("launch");
+        std::fs::create_dir(&root).expect("test root");
+        std::fs::write(&source, b"exact-runtime-artifact").expect("test source");
+        let digest: [u8; 32] = Sha256::digest(b"exact-runtime-artifact").into();
+
+        let executable = stage_with_access(
+            &source,
+            &launch,
+            "executable",
+            &digest,
+            StagedArtifactAccessV1::ReadExecute,
+        )
+        .expect("executable staging");
+        assert_eq!(
+            std::fs::metadata(executable.path())
+                .expect("executable metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o500
+        );
+        executable.remove().expect("remove executable");
+
+        let data = stage_with_access(
+            &source,
+            &launch,
+            "data",
+            &digest,
+            StagedArtifactAccessV1::ReadOnly,
+        )
+        .expect("data staging");
+        assert_eq!(
+            std::fs::metadata(data.path())
+                .expect("data metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o400
+        );
+        data.remove().expect("remove data");
+        std::fs::remove_file(source).expect("remove source");
+        std::fs::remove_dir(launch).expect("remove launch");
+        std::fs::remove_dir(root).expect("remove root");
+    }
 }
