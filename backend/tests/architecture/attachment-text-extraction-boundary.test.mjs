@@ -406,3 +406,32 @@ test('release assembly is a separate unsigned build unit and never launches runt
   assert.doesNotMatch(source, /Command::new|signing|private_key/);
   assert.match(main, /materialize_attachment_text_extraction_release_assembly_v1/);
 });
+
+test('OCR native release build is pinned static reproducible and system-fallback negative', async () => {
+  const build = await readFile(
+    new URL('scripts/build-attachment-text-extraction-ocr-macos.sh', BACKEND_ROOT),
+    'utf8',
+  );
+
+  assert.match(build, /6e1d56a847e697de07b38619356550e5cf4e8633/);
+  assert.match(build, /63aef18d98432b8582a1565e241f7bd2ee9cc8d9/);
+  assert.match(build, /51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf/);
+  assert.match(build, /2b978915d82377df13fcbb1fb56660195ded868a/);
+  assert.match(build, /87416418657359cb625c412a48b6e1d6d41c29bd/);
+  assert.match(build, /800fc86838e913fff969b499886c80baeb4ccfd00f0e39906b34aa334f39ab6c/);
+  assert.match(build, /7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2/);
+  assert.match(build, /e16e5e036cce1d9ec2b00063cf8b54472625b9e14d893a169e2b0dedeb4df225/);
+  assert.match(build, /readonly XCODE_VERSION="26\.6"/);
+  assert.match(build, /export PATH="\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"/);
+  assert.match(build, /-DBUILD_SHARED_LIBS=OFF/);
+  assert.match(build, /-DDISABLE_ARCHIVE=ON/);
+  assert.match(build, /-DDISABLE_CURL=ON/);
+  assert.match(build, /otool -L/);
+  assert.match(build, /echo "\$\{RUNNER_NAME\}:"/);
+  assert.match(build, /-ffile-prefix-map=\$\{isolated_build_root\}=\/usr\/src\/hermes-ocr\/build/);
+  assert.match(build, /grep -Ev '\^\(\/usr\/lib\/\|\/System\/Library\/\)'/);
+  assert.match(build, /--verify-reproducibility/);
+  assert.match(build, /cmp -s/);
+  assert.match(build, /"release_eligible": \$\{reproducibility_verified\}/);
+  assert.doesNotMatch(build, /brew|Command::new|submodule update --remote|--branch\s/);
+});

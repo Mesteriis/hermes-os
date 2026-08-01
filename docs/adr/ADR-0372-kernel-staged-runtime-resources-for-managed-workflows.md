@@ -6,8 +6,10 @@
 
 Состояние реализации: partially implemented. Owner-neutral protocol, exact
 use/kind validation, Kernel selector/staging, OCR runtime binding и unsigned
-release fragment реализованы. Pinned reproducible runner build, signed release,
-managed `eng+rus` conformance и полный negative/live gate ещё не доказаны.
+release fragment реализованы. Pinned macOS arm64 runner build, license/model
+hash audit, system-fallback negative и изолированная двойная reproducibility
+проверка реализованы в отдельной native build unit. Signed release, managed
+`eng+rus` conformance и полный negative/live gate ещё не доказаны.
 `attachment_text_extraction_v1` остаётся `planned`.
 
 Зависит от:
@@ -181,6 +183,17 @@ download, auto-update и model fallback в V1 запрещены.
 его production Cargo package inventory. Existing eleven production packages из
 ADR-0371 сохраняются. Native runner build/verification является отдельной
 release build unit и не становится domain, integration или runtime package.
+
+`backend/scripts/build-attachment-text-extraction-ocr-macos.sh` принимает
+только новый absolute output directory и optional
+`--verify-reproducibility`. Build unit pin-ит exact commits Tesseract,
+Leptonica, zlib, libpng и tessdata, exact model/license bytes, CMake archive и
+Apple toolchain bytes. Developer `PATH` отсекается до system directories.
+Runner собирается со static non-system libraries, а release отвергается при
+non-system Mach-O load command, `LC_RPATH` или побайтовом различии двух
+изолированных builds. Только двойная проверка выставляет
+`release_eligible=true` в provenance; single development build не является
+release evidence.
 
 ## Failure semantics
 
