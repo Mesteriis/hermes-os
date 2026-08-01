@@ -142,6 +142,10 @@ policy через ссылки из новых документов.
 - [ADR-0366: Communication task candidate extraction and reviewed Task promotion](ADR-0366-communication-task-candidate-extraction-and-reviewed-task-promotion.md)
 - [ADR-0367: Authenticated client device context for owner runtimes](ADR-0367-authenticated-client-device-context-for-owner-runtimes.md)
 - [ADR-0368: Reviewed task candidate promotion workflow](ADR-0368-reviewed-task-candidate-promotion-workflow.md)
+- [ADR-0369: Communication note candidate extraction and reviewed Knowledge promotion](ADR-0369-communication-note-candidate-extraction-and-reviewed-knowledge-promotion.md)
+- [ADR-0370: Verified Knowledge note owner admission](ADR-0370-verified-knowledge-note-owner-admission.md)
+- [ADR-0371: Bounded attachment text extraction workflow](ADR-0371-bounded-attachment-text-extraction-workflow.md)
+- [ADR-0372: Kernel-staged runtime resources for managed workflows](ADR-0372-kernel-staged-runtime-resources-for-managed-workflows.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -685,3 +689,13 @@ command/core units принимают только reviewed candidate с provena
 Knowledge-bound Blob. Generic Notes, Graph/Search/Context/Memory projections и
 direct domain calls остаются запрещены; managed owner gate ещё требует
 persistence/runtime/assembly и live evidence.
+ADR-0371 выделяет text extraction из Communications в отдельный bounded
+workflow: source authority приходит только через Communications и Attachment
+Security events, bytes переходят через target-bound Blob, parser adapters и
+derived text остаются отдельными build units. Production gate остаётся planned
+до полного managed OCR/live evidence.
+ADR-0372 обобщает Kernel-staged runtime artifacts на integration, workflow и
+engine без допуска domain: exact native executable и read-only model data
+приходят только из signed distribution через descriptor/grant intersection.
+Первый consumer — `eng+rus` OCR workflow; Settings, system Tesseract и
+machine-local path fallback запрещены.
