@@ -24,6 +24,13 @@ test('Knowledge admission is exact verified-note ownership with atomic owner-loc
     persistenceRepository,
     persistenceSchema,
     migration,
+    runtimeManifest,
+    runtime,
+    admission,
+    blob,
+    command,
+    managedRuntime,
+    eventOutbox,
   ] = await Promise.all([
     readFile(
       new URL('docs/adr/ADR-0370-verified-knowledge-note-owner-admission.md', REPOSITORY_ROOT),
@@ -54,10 +61,17 @@ test('Knowledge admission is exact verified-note ownership with atomic owner-loc
       new URL('src/knowledge-persistence/migrations/0001_knowledge.sql', BACKEND_ROOT),
       'utf8',
     ),
+    readFile(new URL('src/knowledge-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/knowledge-runtime/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/knowledge-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/knowledge-runtime/src/blob.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/knowledge-runtime/src/command.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/knowledge-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/knowledge-runtime/src/event_outbox.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'knowledge_verified_note_persistence_v1');
+  assert.equal(policy.implementation.currentSlice, 'knowledge_verified_note_managed_runtime_v1');
   assert.equal(policy.domains.developmentAllowlist.includes('knowledge'), true);
   assert.equal(policy.domains.blocked.includes('knowledge'), false);
   assert.match(adr, /Состояние реализации: staged/);
@@ -69,6 +83,7 @@ test('Knowledge admission is exact verified-note ownership with atomic owner-loc
     'hermes-knowledge-command-api',
     'hermes-knowledge-core',
     'hermes-knowledge-persistence',
+    'hermes-knowledge-runtime',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
     assert.match(adr, new RegExp(`\\b${unit}\\b`));
@@ -152,5 +167,42 @@ test('Knowledge admission is exact verified-note ownership with atomic owner-loc
   assert.doesNotMatch(
     `${persistence}\n${persistenceModel.split('#[cfg(test)]')[0]}\n${persistenceRepository}\n${persistenceSchema.split('#[cfg(test)]')[0]}\n${migration}`,
     /tasks_|review_note_candidate_|communications_|provider_id|account_id|ollama/,
+  );
+
+  assert.match(runtimeManifest, /role = "domain"/);
+  assert.match(runtimeManifest, /owner = "knowledge"/);
+  assert.match(runtimeManifest, /surface = "runtime"/);
+  for (const dependency of [
+    'hermes-knowledge-command-api',
+    'hermes-knowledge-core',
+    'hermes-knowledge-persistence',
+    'hermes-events-jetstream',
+    'hermes-blob-client',
+  ]) {
+    assert.match(runtimeManifest, new RegExp(dependency));
+  }
+  assert.doesNotMatch(
+    runtimeManifest,
+    /hermes-(communications|review|tasks|documents|mail|telegram|whatsapp|zulip)/,
+  );
+  assert.match(runtime, /KnowledgeManagedRuntimeV1/);
+  assert.match(admission, /ModuleKindV1::Domain/);
+  assert.match(admission, /knowledge\.reviewed-candidate\.created\.publisher\.v1/);
+  assert.match(admission, /knowledge\.reviewed-candidate\.rejected\.publisher\.v1/);
+  assert.match(admission, /knowledge\.storage\.v1/);
+  assert.match(blob, /request_managed_blob_custody_transfer_v2/);
+  assert.match(blob, /request_managed_blob_session_v2/);
+  assert.match(blob, /request_managed_blob_custody_release_v2/);
+  assert.match(blob, /ReviewedKnowledgeNoteContentV1/);
+  assert.match(command, /consume_knowledge_note_command_once_v1/);
+  assert.match(command, /create_verified_knowledge_note_from_reviewed_candidate_v1/);
+  assert.match(command, /complete_note/);
+  assert.match(command, /reject_note/);
+  assert.match(managedRuntime, /request_managed_runtime_event_access_v2/);
+  assert.match(managedRuntime, /StorageVaultLeaseAdapterV1/);
+  assert.match(eventOutbox, /publish_exact/);
+  assert.doesNotMatch(
+    `${runtime}\n${admission}\n${blob.split('#[cfg(test)]')[0]}\n${command.split('#[cfg(test)]')[0]}\n${managedRuntime}\n${eventOutbox}`,
+    /hermes_(communications|review|tasks|documents)|provider_id|account_id|ollama|reqwest|client_polling/,
   );
 });

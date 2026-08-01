@@ -1095,6 +1095,11 @@ const KNOWLEDGE_VERIFIED_NOTE_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-knowledge-persistence', role: 'domain', owner: 'knowledge', surface: 'persistence' },
 ];
 
+const KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_PRODUCTION_PACKAGES = [
+  ...KNOWLEDGE_VERIFIED_NOTE_PERSISTENCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-knowledge-runtime', role: 'domain', owner: 'knowledge', surface: 'runtime' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3123,6 +3128,21 @@ const KNOWLEDGE_VERIFIED_NOTE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...KNOWLEDGE_VERIFIED_NOTE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-knowledge-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-knowledge-command-api', kind: 'normal' },
+    { name: 'hermes-knowledge-core', kind: 'normal' },
+    { name: 'hermes-knowledge-persistence', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4055,6 +4075,17 @@ const KNOWLEDGE_VERIFIED_NOTE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...KNOWLEDGE_VERIFIED_NOTE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-knowledge-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -4692,6 +4723,16 @@ const KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_INVENTORY = {
     ...REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_INVENTORY.businessCapabilities,
     'knowledge.reviewed-candidate.blob.v1',
     'knowledge.reviewed-candidate.command.v1',
+  ].sort(),
+};
+
+const KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_INVENTORY = {
+  ...KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_INVENTORY,
+  businessCapabilities: [
+    ...KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_INVENTORY.businessCapabilities,
+    'knowledge.reviewed-candidate.created.publisher.v1',
+    'knowledge.reviewed-candidate.rejected.publisher.v1',
+    'knowledge.storage.v1',
   ].sort(),
 };
 
@@ -6223,6 +6264,17 @@ function expectedSlice(currentSlice) {
       packages: KNOWLEDGE_VERIFIED_NOTE_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: KNOWLEDGE_VERIFIED_NOTE_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: KNOWLEDGE_VERIFIED_NOTE_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'knowledge_verified_note_managed_runtime_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_PRODUCTION_PACKAGES,
+      workspaceDependencies: KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

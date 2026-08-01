@@ -103,7 +103,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'knowledge_verified_note_persistence_v1',
+    'knowledge_verified_note_managed_runtime_v1',
   );
   assert.deepEqual(inventory.domains, ['communications', 'knowledge', 'review', 'tasks']);
   assert.deepEqual(inventory.integrations, ['mail']);

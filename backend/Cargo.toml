@@ -56,6 +56,7 @@ members = [
   "src/knowledge-command-api",
   "src/knowledge-core",
   "src/knowledge-persistence",
+  "src/knowledge-runtime",
   "src/review-task-candidate-persistence",
   "src/review-task-candidate-runtime",
   "src/review-task-candidate-assembly",
