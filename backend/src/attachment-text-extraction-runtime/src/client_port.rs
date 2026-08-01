@@ -38,6 +38,7 @@ pub(crate) async fn dispatch_client_request_v1(
     if request.protocol_major != 1
         || request.module_id != ATTACHMENT_TEXT_EXTRACTION_MODULE_ID_V1
         || request.owner_id != ATTACHMENT_TEXT_EXTRACTION_OWNER_V1
+        || request.logical_owner_id != logical_owner_id
     {
         return ClientDispatchV1::Response(rejected(response_request_id));
     }

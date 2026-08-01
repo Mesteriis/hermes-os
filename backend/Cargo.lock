@@ -3483,6 +3483,7 @@ dependencies = [
  "tokio-rustls",
  "webauthn-rs-core",
  "zeroize",
+ "zip",
 ]
 
 [[package]]

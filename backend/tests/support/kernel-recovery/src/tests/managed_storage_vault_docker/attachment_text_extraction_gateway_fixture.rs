@@ -1,0 +1,257 @@
+//! Authenticated Gateway and replayable SSE fixture for Text Extraction.
+
+use std::time::{Duration, Instant};
+
+use super::*;
+
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use hermes_attachment_text_extraction_api::{
+    ATTACHMENT_TEXT_EXTRACTION_QUERY_CONNECT_PATH_V1,
+    ATTACHMENT_TEXT_EXTRACTION_REALTIME_CONTRACT_NAME_V1,
+    ATTACHMENT_TEXT_EXTRACTION_REALTIME_EVENT_KIND_V1,
+    wire::{
+        AttachmentTextExtractionStateV1, AttachmentTextExtractionStatusChangedV1,
+        GetAttachmentTextExtractionRequestV1, GetAttachmentTextExtractionResponseV1,
+    },
+};
+use hermes_gateway_protocol::v1::{
+    ClientRealtimeEventV1, ClientRealtimeFrameV1, client_realtime_frame_v1::Frame as RealtimeFrame,
+};
+use http_body_util::BodyExt as _;
+use hyper::{Request, StatusCode, body::Bytes};
+
+pub(super) type AttachmentTextExtractionGateway = hermes_gateway_runtime::GatewayApplicationRouter<
+    crate::identity::browser_gateway::ControlStoreBrowserAuthority,
+    hermes_gateway_runtime::InMemoryBrowserRealtimeSource,
+>;
+
+pub(super) fn attachment_text_extraction_gateway_v1(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    root: &Path,
+    data: &Path,
+    realtime: hermes_gateway_runtime::InMemoryBrowserRealtimeSource,
+) -> AttachmentTextExtractionGateway {
+    let configuration = crate::platform::gateway::BrowserGatewayConfigurationV1::new(
+        "127.0.0.1:9443".parse().expect("loopback Gateway address"),
+        "https://hub.local".to_owned(),
+        "hub.local".to_owned(),
+        root.join("attachment-text-extraction-gateway-cert.der"),
+        root.join("attachment-text-extraction-gateway-key.der"),
+    )
+    .expect("Gateway configuration");
+    crate::platform::gateway::gateway_service(
+        Arc::clone(store),
+        data,
+        supervisor.clone(),
+        realtime,
+        &configuration,
+        None,
+    )
+    .expect("compose Attachment Text Extraction Gateway routes")
+}
+
+pub(super) fn post_attachment_text_proto_v1<M, R>(
+    router: &AttachmentTextExtractionGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    path: &str,
+    message: M,
+) -> R
+where
+    M: Message,
+    R: Message + Default,
+{
+    let payload = message.encode_to_vec();
+    let deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        let response = runtime.block_on(
+            router.route(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .header("content-type", "application/connect+proto")
+                    .header("cookie", cookie)
+                    .body(http_body_util::Full::new(Bytes::from(payload.clone())))
+                    .expect("Attachment Text Extraction Gateway request"),
+            ),
+        );
+        let status = response.status();
+        let bytes = runtime
+            .block_on(response.into_body().collect())
+            .expect("Attachment Text Extraction Gateway response")
+            .to_bytes();
+        if status == StatusCode::SERVICE_UNAVAILABLE && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(25));
+            continue;
+        }
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "Attachment Text Extraction Gateway response body: {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        return R::decode(bytes.as_ref())
+            .expect("decode Attachment Text Extraction Gateway response");
+    }
+}
+
+pub(super) fn post_attachment_text_proto_status_v1<M>(
+    router: &AttachmentTextExtractionGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: Option<&str>,
+    path: &str,
+    message: M,
+) -> StatusCode
+where
+    M: Message,
+{
+    let mut request = Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("content-type", "application/connect+proto");
+    if let Some(cookie) = cookie {
+        request = request.header("cookie", cookie);
+    }
+    runtime
+        .block_on(
+            router.route(
+                request
+                    .body(http_body_util::Full::new(Bytes::from(
+                        message.encode_to_vec(),
+                    )))
+                    .expect("Attachment Text Extraction Gateway status request"),
+            ),
+        )
+        .status()
+}
+
+pub(super) fn get_attachment_text_extraction_v1(
+    router: &AttachmentTextExtractionGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    run_id: &[u8],
+) -> GetAttachmentTextExtractionResponseV1 {
+    post_attachment_text_proto_v1(
+        router,
+        runtime,
+        cookie,
+        ATTACHMENT_TEXT_EXTRACTION_QUERY_CONNECT_PATH_V1,
+        GetAttachmentTextExtractionRequestV1 {
+            protocol_major: 1,
+            run_id: run_id.to_vec(),
+        },
+    )
+}
+
+pub(super) fn wait_for_ready_attachment_text_v1(
+    router: &AttachmentTextExtractionGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    run_id: &[u8],
+) -> GetAttachmentTextExtractionResponseV1 {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let response = get_attachment_text_extraction_v1(router, runtime, cookie, run_id);
+        let state = AttachmentTextExtractionStateV1::try_from(response.state)
+            .expect("known Attachment Text Extraction state");
+        if matches!(
+            state,
+            AttachmentTextExtractionStateV1::Ready
+                | AttachmentTextExtractionStateV1::Rejected
+                | AttachmentTextExtractionStateV1::Unsupported
+        ) {
+            assert_eq!(
+                state,
+                AttachmentTextExtractionStateV1::Ready,
+                "Attachment Text Extraction rejected a safe supported source: {response:?}"
+            );
+            return response;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Attachment Text Extraction did not reach Ready: {response:?}"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+pub(super) fn read_terminal_attachment_text_sse_event_v1(
+    router: &AttachmentTextExtractionGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    run_id: &[u8],
+) -> ClientRealtimeEventV1 {
+    let response = runtime.block_on(
+        router.route(
+            Request::builder()
+                .method("GET")
+                .uri("/api/realtime/v1/events")
+                .header("cookie", cookie)
+                .body(http_body_util::Full::new(Bytes::new()))
+                .expect("Attachment Text Extraction Gateway SSE request"),
+        ),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    runtime.block_on(async {
+        tokio::time::timeout(
+            Duration::from_secs(8),
+            find_terminal_attachment_text_event_v1(response.into_body(), run_id),
+        )
+        .await
+        .expect("Attachment Text Extraction SSE timeout")
+    })
+}
+
+async fn find_terminal_attachment_text_event_v1<B>(
+    mut body: B,
+    run_id: &[u8],
+) -> ClientRealtimeEventV1
+where
+    B: hyper::body::Body<Data = Bytes> + Unpin,
+    B::Error: std::fmt::Debug,
+{
+    let mut pending = Vec::new();
+    while let Some(frame) = body.frame().await {
+        let frame = frame.expect("Attachment Text Extraction SSE frame");
+        let Ok(data) = frame.into_data() else {
+            continue;
+        };
+        pending.extend_from_slice(&data);
+        while let Some(boundary) = pending.windows(2).position(|window| window == b"\n\n") {
+            let block = pending.drain(..boundary + 2).collect::<Vec<_>>();
+            let text = std::str::from_utf8(&block).expect("Attachment Text Extraction SSE UTF-8");
+            let Some(encoded) = text.lines().find_map(|line| line.strip_prefix("data: ")) else {
+                continue;
+            };
+            let bytes = URL_SAFE_NO_PAD
+                .decode(encoded)
+                .expect("decode Attachment Text Extraction frame");
+            let frame = ClientRealtimeFrameV1::decode(bytes.as_slice())
+                .expect("Attachment Text Extraction realtime frame");
+            let Some(RealtimeFrame::Event(event)) = frame.frame else {
+                continue;
+            };
+            if event.contract_name != ATTACHMENT_TEXT_EXTRACTION_REALTIME_CONTRACT_NAME_V1
+                || event.event_kind != ATTACHMENT_TEXT_EXTRACTION_REALTIME_EVENT_KIND_V1
+            {
+                continue;
+            }
+            let payload = AttachmentTextExtractionStatusChangedV1::decode(event.payload.as_slice())
+                .expect("Attachment Text Extraction realtime payload");
+            let state = AttachmentTextExtractionStateV1::try_from(payload.state)
+                .expect("known Attachment Text Extraction realtime state");
+            if payload.run_id == run_id
+                && matches!(
+                    state,
+                    AttachmentTextExtractionStateV1::Ready
+                        | AttachmentTextExtractionStateV1::Rejected
+                        | AttachmentTextExtractionStateV1::Unsupported
+                )
+            {
+                return event;
+            }
+        }
+    }
+    panic!("Gateway SSE closed before terminal Attachment Text Extraction event");
+}

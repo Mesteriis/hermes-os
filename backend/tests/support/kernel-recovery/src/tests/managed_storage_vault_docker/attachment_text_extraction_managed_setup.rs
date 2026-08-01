@@ -2,6 +2,7 @@
 
 use super::*;
 
+use crate::platform::client_realtime::ClientRealtimePublishHandlerV1;
 use crate::platform::managed::signed_bundle::SignedRuntimeResource;
 
 use hermes_attachment_text_extraction_api::{
@@ -19,6 +20,7 @@ use hermes_attachment_text_extraction_runtime::{
     attachment_text_extraction_module_descriptor_v1,
     attachment_text_extraction_settings_schema_bytes_v1,
 };
+use hermes_gateway_runtime::InMemoryBrowserRealtimeSource;
 use hermes_runtime_protocol::v1::ManagedWorkflowRuntimeConfigurationV1;
 
 const ATTACHMENT_TEXT_EXTRACTION_RELEASE_ARTIFACT_ID_V1: &str =
@@ -146,6 +148,19 @@ pub(super) fn prepare_attachment_text_extraction_runtime_v1(
     admitted
 }
 
+pub(super) fn configure_attachment_text_extraction_realtime_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &Arc<SqliteControlStore>,
+    realtime: InMemoryBrowserRealtimeSource,
+) {
+    supervisor
+        .configure_client_realtime_handler(Arc::new(ClientRealtimePublishHandlerV1::new(
+            Arc::clone(store),
+            realtime,
+        )))
+        .expect("configure Attachment Text Extraction client realtime");
+}
+
 pub(super) fn start_attachment_text_extraction_runtime_v1(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,
@@ -154,12 +169,63 @@ pub(super) fn start_attachment_text_extraction_runtime_v1(
 ) -> StartedAttachmentTextExtractionRuntimeV1 {
     let reservation = managed_launch::load(supervisor, store, &admitted.registration_id)
         .expect("load Attachment Text Extraction launch reservation");
+    start_reserved_attachment_text_extraction_runtime_v1(
+        supervisor,
+        store,
+        runtime_dir,
+        reservation,
+        admitted.capability_ids,
+    )
+}
+
+pub(super) fn restart_attachment_text_extraction_runtime_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    predecessor: StartedAttachmentTextExtractionRuntimeV1,
+) -> StartedAttachmentTextExtractionRuntimeV1 {
+    let binding = store
+        .platform_storage_binding(
+            &predecessor.registration_id,
+            ATTACHMENT_TEXT_EXTRACTION_STORAGE_CAPABILITY_ID_V1,
+        )
+        .expect("read predecessor Attachment Text Extraction Storage binding")
+        .expect("predecessor Attachment Text Extraction Storage binding");
+    let issue = storage_successor::issue_after(&binding)
+        .expect("derive Attachment Text Extraction Storage successor");
+    let (reservation, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        &predecessor.registration_id,
+        ATTACHMENT_TEXT_EXTRACTION_STORAGE_CAPABILITY_ID_V1,
+        issue,
+    )
+    .expect("reserve Attachment Text Extraction successor");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision Attachment Text Extraction successor Storage binding");
+    start_reserved_attachment_text_extraction_runtime_v1(
+        supervisor,
+        store,
+        runtime_dir,
+        reservation,
+        predecessor.capability_ids,
+    )
+}
+
+fn start_reserved_attachment_text_extraction_runtime_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    reservation: managed_launch::ManagedLaunchReservation,
+    capability_ids: Vec<String>,
+) -> StartedAttachmentTextExtractionRuntimeV1 {
+    let registration_id = reservation.registration_id().to_owned();
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
     let grant_epoch = reservation.grant_epoch();
     let binding = store
         .platform_storage_binding(
-            &admitted.registration_id,
+            &registration_id,
             ATTACHMENT_TEXT_EXTRACTION_STORAGE_CAPABILITY_ID_V1,
         )
         .expect("read Attachment Text Extraction Storage binding")
@@ -187,7 +253,7 @@ pub(super) fn start_attachment_text_extraction_runtime_v1(
         ManagedWorkflowRuntimeConfigurationV1 {
             major: 1,
             logical_owner_id: ATTACHMENT_TEXT_EXTRACTION_LOGICAL_OWNER_ID_V1.to_owned(),
-            registration_id: admitted.registration_id.clone(),
+            registration_id: registration_id.clone(),
             runtime_instance_id: runtime_instance_id.clone(),
             runtime_generation,
             grant_epoch,
@@ -196,23 +262,23 @@ pub(super) fn start_attachment_text_extraction_runtime_v1(
             event_credential_revision: events.credential_revision(),
             runtime_artifacts: Vec::new(),
         },
-        &admitted.capability_ids,
+        &capability_ids,
     )
     .expect("start managed Attachment Text Extraction workflow");
     supervisor
-        .wait_until_ready(&admitted.registration_id)
+        .wait_until_ready(&registration_id)
         .unwrap_or_else(|error| {
             panic!(
                 "Attachment Text Extraction readiness: {error}; last_failure={:?}",
-                supervisor.last_failure(&admitted.registration_id)
+                supervisor.last_failure(&registration_id)
             )
         });
     StartedAttachmentTextExtractionRuntimeV1 {
-        registration_id: admitted.registration_id,
+        registration_id,
         runtime_instance_id,
         runtime_generation,
         grant_epoch,
-        capability_ids: admitted.capability_ids,
+        capability_ids,
     }
 }
 

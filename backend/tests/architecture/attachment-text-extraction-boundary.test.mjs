@@ -361,6 +361,7 @@ test('managed runtime composes exact Event Blob parser client SSE and OCR resour
   assert.match(blob, /request_managed_blob_custody_transfer_v2/);
   assert.match(blob, /BlobDataOperationWriteV1/);
   assert.match(clientPort, /ReadText/);
+  assert.match(clientPort, /request\.logical_owner_id != logical_owner_id/);
   assert.match(realtime, /PublishClientRealtime/);
   assert.match(parser, /detect_attachment_text_parser_v1/);
   assert.match(ocrResources, /attachment_text_extraction\.ocr\.eng\.v1/);
@@ -477,9 +478,10 @@ test('managed conformance stages exact OCR resources through the workflow releas
   assert.match(setup, /SignedRuntimeResource::native_executable/);
   assert.match(setup, /SignedRuntimeResource::read_only_data/);
   assert.match(setup, /start_reserved_workflow/);
-  assert.match(setup, /&admitted\.capability_ids/);
+  assert.match(setup, /start_reserved_workflow[\s\S]*&capability_ids/);
   assert.doesNotMatch(setup, /start_reserved_(?:engine|integration|domain)/);
-  assert.match(flow, /supervisor[\s\S]*\.is_active\(&started\.registration_id\)/);
+  assert.match(flow, /restart_attachment_text_extraction_runtime_v1/);
+  assert.match(flow, /text\.runtime_generation, previous_generation \+ 1/);
   assert.match(flow, /attachment_text_extraction\.ocr_runtime\.v1/);
   assert.match(
     signedBundle,
@@ -487,7 +489,7 @@ test('managed conformance stages exact OCR resources through the workflow releas
   );
   assert.match(
     harness,
-    /managed_attachment_text_extraction_starts_with_exact_staged_ocr_resources/,
+    /managed_attachment_text_extraction_completes_through_gateway_and_replays_after_restart/,
   );
   assert.match(harness, /HERMES_ATTACHMENT_TEXT_EXTRACTION_OCR_RUNNER/);
 });

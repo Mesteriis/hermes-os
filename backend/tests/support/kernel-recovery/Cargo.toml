@@ -172,3 +172,4 @@ tokio = { version = "=1.52.4", default-features = false, features = ["io-util", 
 tokio-rustls = "=0.26.4"
 webauthn-rs-core = "=0.5.5"
 zeroize = "=1.9.0"
+zip = { version = "=6.0.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
