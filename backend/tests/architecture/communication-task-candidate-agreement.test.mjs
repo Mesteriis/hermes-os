@@ -44,7 +44,10 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     communicationsTaskSource,
     managedSetup,
     managedFlow,
+    managedBlobNegative,
     managedPersistenceFlow,
+    tasksRuntimeBlob,
+    tasksRuntimeCommand,
     authenticatedStorage,
     promotionApiManifest,
     promotionApi,
@@ -146,11 +149,20 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     ),
     readFile(
       new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/task_candidate_blob_negative.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
         'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/task_candidate_persistence_flow.rs',
         BACKEND_ROOT,
       ),
       'utf8',
     ),
+    readFile(new URL('src/tasks-runtime/src/blob.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/tasks-runtime/src/command.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/review-task-candidate-promotion-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/review-task-candidate-promotion-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
@@ -380,6 +392,15 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(managedFlow, /replayed\.approved\.cursor, approved_cursor/);
   assert.match(managedFlow, /replayed\.rejected\.cursor, rejected_cursor/);
   assert.match(managedFlow, /assert_reviewed_task_candidate_persistence_negatives_v1/);
+  assert.match(managedFlow, /assert_tasks_reject_stale_blob_receipt_v1/);
+  assert.match(managedBlobNegative, /TaskCreationRejectCodeBlobMismatch/);
+  assert.match(managedBlobNegative, /stale Blob receipt must not create Task/);
+  assert.match(tasksRuntimeBlob, /BlobClientError::Rejected\(_\)[\s\S]*TasksBlobErrorV1::InvalidReceipt/);
+  assert.match(tasksRuntimeBlob, /BlobClientError::Unavailable[\s\S]*TasksBlobErrorV1::Unavailable/);
+  assert.match(
+    tasksRuntimeCommand,
+    /TasksBlobErrorV1::InvalidReceipt[\s\S]*TaskCreationRejectCodeV1::TaskCreationRejectCodeBlobMismatch/,
+  );
   assert.match(managedPersistenceFlow, /PersistPromotionApprovalOutcomeV1::Duplicate/);
   assert.match(managedPersistenceFlow, /ApprovalConflict/);
   assert.match(managedPersistenceFlow, /PersistPromotionResultOutcomeV1::Duplicate/);

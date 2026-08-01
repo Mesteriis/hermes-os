@@ -453,6 +453,7 @@ fn managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_r
     assert_eq!(replayed_extraction.cursor, extraction_cursor);
     assert_eq!(replayed.approved.cursor, approved_cursor);
     assert_eq!(replayed.rejected.cursor, rejected_cursor);
+    assert_tasks_reject_stale_blob_receipt_v1(&gateway_runtime, &store);
 
     supervisor.shutdown().expect("stop managed processes");
     assert_reviewed_task_candidate_persistence_negatives_v1(&gateway_runtime);

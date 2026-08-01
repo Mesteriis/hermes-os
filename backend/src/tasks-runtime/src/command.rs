@@ -79,7 +79,12 @@ pub(crate) async fn consume_task_command_once_v1(
         | ReserveReviewedCandidateCommandOutcomeV1::Existing(value) => value,
     };
     if decoded.expired && !persisted.completed {
-        let cleanup = materialize_candidate(persistence, channel, dispatcher, &persisted).await?;
+        let cleanup =
+            match materialize_candidate(persistence, channel, dispatcher, &persisted).await {
+                Ok(cleanup) => Some(cleanup),
+                Err(TasksCommandErrorV1::Blob(TasksBlobErrorV1::InvalidReceipt)) => None,
+                Err(error) => return Err(error),
+            };
         reject_command(
             persistence,
             &persisted,
@@ -87,16 +92,18 @@ pub(crate) async fn consume_task_command_once_v1(
             TaskCreationRejectCodeV1::TaskCreationRejectCodeInvalidRequest,
         )
         .await?;
-        cleanup_command_with_outcome(
-            persistence,
-            channel,
-            dispatcher,
-            &persisted,
-            &cleanup,
-            false,
-            runtime.now_unix_millis,
-        )
-        .await?;
+        if let Some(cleanup) = cleanup {
+            cleanup_command_with_outcome(
+                persistence,
+                channel,
+                dispatcher,
+                &persisted,
+                &cleanup,
+                false,
+                runtime.now_unix_millis,
+            )
+            .await?;
+        }
     } else {
         process_persisted_command(persistence, channel, dispatcher, &persisted, runtime).await?;
     }
@@ -130,7 +137,20 @@ async fn process_persisted_command(
     command: &PersistedReviewedCandidateCommandV1,
     runtime: &TasksCommandRuntimeContextV1<'_>,
 ) -> Result<(), TasksCommandErrorV1> {
-    let cleanup = materialize_candidate(persistence, channel, dispatcher, command).await?;
+    let cleanup = match materialize_candidate(persistence, channel, dispatcher, command).await {
+        Ok(cleanup) => cleanup,
+        Err(TasksCommandErrorV1::Blob(TasksBlobErrorV1::InvalidReceipt)) => {
+            reject_command(
+                persistence,
+                command,
+                runtime,
+                TaskCreationRejectCodeV1::TaskCreationRejectCodeBlobMismatch,
+            )
+            .await?;
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
     if command.completed {
         cleanup_command(persistence, channel, dispatcher, command, &cleanup, runtime).await?;
         return Ok(());

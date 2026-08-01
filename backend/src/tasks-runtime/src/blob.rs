@@ -1,9 +1,10 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobCustodyReleaseRequestV1, ManagedBlobCustodyTransferRequestV1,
-    ManagedBlobSessionRequestV1, request_managed_blob_custody_release_v2,
-    request_managed_blob_custody_transfer_v2, request_managed_blob_session_v2,
+    BlobClientError, BlobDataClient, ManagedBlobCustodyReleaseRequestV1,
+    ManagedBlobCustodyTransferRequestV1, ManagedBlobSessionRequestV1,
+    request_managed_blob_custody_release_v2, request_managed_blob_custody_transfer_v2,
+    request_managed_blob_session_v2,
 };
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, ManagedControlRequestDispatcherV2},
@@ -45,7 +46,7 @@ pub(crate) fn transfer_candidate_v1(
             evidence_envelope_sha256: &command_envelope_sha256,
         },
     )
-    .map_err(|_| TasksBlobErrorV1::Unavailable)?;
+    .map_err(classify_blob_client_error_v1)?;
     let reference_id = id16(&transfer.grant.target_reference_id)?;
     BlobDataClient::new(&transfer.data_socket_path)
         .and_then(|client| client.custody_transfer(transfer.grant, transfer.channel_binding))
@@ -77,7 +78,7 @@ pub(crate) fn read_candidate_v1(
             custody_target: None,
         },
     )
-    .map_err(|_| TasksBlobErrorV1::Unavailable)?;
+    .map_err(classify_blob_client_error_v1)?;
     let bytes = Zeroizing::new(
         BlobDataClient::new(session.data_socket_path)
             .and_then(|client| {
@@ -186,6 +187,15 @@ fn id16(value: &[u8]) -> Result<[u8; 16], TasksBlobErrorV1> {
         .ok_or(TasksBlobErrorV1::InvalidReceipt)
 }
 
+fn classify_blob_client_error_v1(error: BlobClientError) -> TasksBlobErrorV1 {
+    match error {
+        BlobClientError::Rejected(_) | BlobClientError::InvalidSessionRequest => {
+            TasksBlobErrorV1::InvalidReceipt
+        }
+        _ => TasksBlobErrorV1::Unavailable,
+    }
+}
+
 fn release_operation_id(command_id: [u8; 16]) -> [u8; 16] {
     let mut digest = Sha256::new();
     digest.update(b"hermes.tasks.reviewed-candidate.release.v1\0");
@@ -201,5 +211,17 @@ mod tests {
     fn release_identity_is_command_stable() {
         assert_eq!(release_operation_id([1; 16]), release_operation_id([1; 16]));
         assert_ne!(release_operation_id([1; 16]), release_operation_id([2; 16]));
+    }
+
+    #[test]
+    fn denied_custody_is_terminal_while_transport_outage_is_retryable() {
+        assert_eq!(
+            classify_blob_client_error_v1(BlobClientError::Rejected("expired".to_owned())),
+            TasksBlobErrorV1::InvalidReceipt
+        );
+        assert_eq!(
+            classify_blob_client_error_v1(BlobClientError::Unavailable),
+            TasksBlobErrorV1::Unavailable
+        );
     }
 }

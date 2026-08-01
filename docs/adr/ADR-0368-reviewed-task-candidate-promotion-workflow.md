@@ -37,7 +37,9 @@ PostgreSQL дополнительно доказывает exact approval/result
 conflicting envelope/outbox, unknown Tasks command и stale candidate
 correlation; duplicate terminal result теперь сверяет и inbox, и сохранённый
 Review-result outbox до replay. Promotion gate остаётся staged только до
-итогового clean-room аудита Blob expiry negative и повторного full pre-push.
+итогового clean-room аудита и повторного full pre-push. Отдельный live Tasks
+negative уже подтверждает terminal `BlobMismatch` для stale/expired custody
+receipt без Task materialization; transport `Unavailable` остаётся retryable.
 
 Уточняет:
 

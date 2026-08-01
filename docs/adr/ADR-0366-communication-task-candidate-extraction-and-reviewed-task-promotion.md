@@ -66,8 +66,11 @@ fences, отсутствие Task до approve, ровно один Task пос�
 Task после reject. Extraction и Review публикуют отдельные terminal frames в
 общий replayable SSE; после owner cache revoke и независимого restart обоих
 runtimes восстанавливаются те же cursors без source body или candidate
-presentation bytes. Aggregate gate остаётся закрыт до оставшихся обязательных
-Blob expiry negatives, итогового clean-room аудита и повторного full pre-push.
+presentation bytes. Live Tasks negative дополнительно доказывает, что
+просроченный или недействительный custody receipt классифицируется как terminal
+`BlobMismatch`, не превращается в retryable outage и не создаёт Task.
+Aggregate gate остаётся закрыт только до итогового clean-room аудита и
+повторного full pre-push.
 Отдельный live PostgreSQL conformance после остановки managed runtimes
 доказывает exact approval/result duplicate replay, conflicting envelope/outbox,
 unknown Tasks command и stale candidate correlation без публикации тестовых
