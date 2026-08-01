@@ -3,6 +3,7 @@ syntax = "proto3";
 package hermes.runtime.v1;
 
 import "hermes/runtime/v1/managed_storage_runtime.proto";
+import "hermes/runtime/v1/managed_runtime_artifact.proto";
 
 // Provider-neutral workflow runtime bootstrap. It intentionally has no
 // integration configuration, host bridge, provider state or domain identity.
@@ -19,4 +20,5 @@ message ManagedWorkflowRuntimeConfigurationV1 {
   ManagedStorageRuntimeConfigurationV1 storage = 7;
   string event_hub_endpoint = 8;
   uint64 event_credential_revision = 9;
+  repeated ManagedRuntimeArtifactBindingV1 runtime_artifacts = 10;
 }

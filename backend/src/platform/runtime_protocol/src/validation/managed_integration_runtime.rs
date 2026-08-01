@@ -4,11 +4,11 @@ use std::path::{Component, Path};
 
 use crate::v1::ManagedIntegrationRuntimeConfigurationV1;
 
+use super::managed_runtime_artifact::valid_runtime_artifacts;
+
 const MAX_IDENTIFIER_BYTES: usize = 128;
 const MAX_ENDPOINT_BYTES: usize = 1_024;
 const MAX_PRIVATE_PATH_BYTES: usize = 4_096;
-const MAX_RUNTIME_ARTIFACTS: usize = 16;
-const MAX_RUNTIME_ARTIFACT_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_CONFIGURATION_INSTANCES: usize = 32;
 const MAX_SETTINGS_SNAPSHOT_BYTES: usize = 256 * 1024;
 
@@ -97,28 +97,6 @@ fn valid_configuration_instances(configuration: &ManagedIntegrationRuntimeConfig
     selected.is_some_and(|instance| {
         instance.integration_state_root == configuration.integration_state_root
     })
-}
-
-fn valid_runtime_artifacts(artifacts: &[crate::v1::ManagedRuntimeArtifactBindingV1]) -> bool {
-    if artifacts.len() > MAX_RUNTIME_ARTIFACTS {
-        return false;
-    }
-    let mut previous = "";
-    for artifact in artifacts {
-        if !valid_identifier(&artifact.artifact_id)
-            || artifact.artifact_id.as_str() <= previous
-            || crate::v1::RuntimeArtifactUseV1::try_from(artifact.r#use)
-                .ok()
-                .is_none_or(|value| value != crate::v1::RuntimeArtifactUseV1::NativeDynamicLibrary)
-            || !valid_private_path(&artifact.staged_path)
-            || !(1..=MAX_RUNTIME_ARTIFACT_BYTES).contains(&artifact.size_bytes)
-            || artifact.sha256.len() != 32
-        {
-            return false;
-        }
-        previous = &artifact.artifact_id;
-    }
-    true
 }
 
 fn valid_private_path(value: &str) -> bool {

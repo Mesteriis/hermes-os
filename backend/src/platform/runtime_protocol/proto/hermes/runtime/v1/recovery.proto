@@ -68,7 +68,12 @@ message ClockTimerRequestV1 { bool requires_wall_clock = 1; }
 message SchedulerJobRequestV1 { ContractReferenceV1 job_kind = 1; }
 message TelemetrySignalRequestV1 { string signal_class = 1; uint32 quota_per_minute = 2; }
 message HostCapabilityRequestV1 { string capability_id = 1; }
-enum RuntimeArtifactUseV1 { RUNTIME_ARTIFACT_USE_V1_UNSPECIFIED = 0; RUNTIME_ARTIFACT_USE_V1_NATIVE_DYNAMIC_LIBRARY = 1; }
+enum RuntimeArtifactUseV1 {
+  RUNTIME_ARTIFACT_USE_V1_UNSPECIFIED = 0;
+  RUNTIME_ARTIFACT_USE_V1_NATIVE_DYNAMIC_LIBRARY = 1;
+  RUNTIME_ARTIFACT_USE_V1_NATIVE_EXECUTABLE = 2;
+  RUNTIME_ARTIFACT_USE_V1_READ_ONLY_DATA = 3;
+}
 message RuntimeArtifactRequestV1 { string artifact_id = 1; RuntimeArtifactUseV1 use = 2; }
 message IntegrationStateRequestV1 { uint32 state_layout_revision = 1; }
 message CapabilityRequestV1 { oneof request { StorageNamespaceRequestV1 storage_namespace = 1; VaultPurposeRequestV1 vault_purpose = 2; BlobQuotaRequestV1 blob_quota = 3; ClockTimerRequestV1 clock_timer = 4; SchedulerJobRequestV1 scheduler_job = 5; TelemetrySignalRequestV1 telemetry_signal = 6; HostCapabilityRequestV1 host_capability = 7; EventRouteRequestV1 event_route = 8; RuntimeArtifactRequestV1 runtime_artifact = 9; IntegrationStateRequestV1 integration_state = 10; } }

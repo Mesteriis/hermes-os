@@ -3,20 +3,12 @@ syntax = "proto3";
 package hermes.runtime.v1;
 
 import "hermes/runtime/v1/managed_storage_runtime.proto";
-import "hermes/runtime/v1/recovery.proto";
+import "hermes/runtime/v1/managed_runtime_artifact.proto";
 
 // Short-lived private configuration staged by Kernel for an admitted provider
 // integration. It carries only bounded runtime identity, event topology and
 // owner-local storage fences. Provider credentials are issued and resolved on
 // the inherited Vault route and are not representable in this message.
-message ManagedRuntimeArtifactBindingV1 {
-  string artifact_id = 1;
-  RuntimeArtifactUseV1 use = 2;
-  string staged_path = 3;
-  uint64 size_bytes = 4;
-  bytes sha256 = 5;
-}
-
 message IntegrationStateRootV1 {
   string root_path = 1;
   uint64 state_generation = 2;

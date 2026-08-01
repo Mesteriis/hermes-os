@@ -17,6 +17,12 @@ enum DistributionArtifactKindV1 {
   // A native library required by one exact managed module. It is a separate
   // assembly artifact and never carries a descriptor or settings schema.
   DISTRIBUTION_ARTIFACT_KIND_V1_MODULE_RUNTIME_NATIVE_DEPENDENCY = 6;
+  // A native executable required by one exact managed integration, workflow
+  // or engine. It is staged privately and cannot be requested by a domain.
+  DISTRIBUTION_ARTIFACT_KIND_V1_MODULE_RUNTIME_NATIVE_EXECUTABLE = 7;
+  // Immutable non-code runtime data required by one exact managed integration,
+  // workflow or engine, for example a pinned local parser model.
+  DISTRIBUTION_ARTIFACT_KIND_V1_MODULE_RUNTIME_READ_ONLY_DATA = 8;
 }
 message DistributionManifestArtifactV1 {
   DistributionArtifactKindV1 artifact_kind = 1;

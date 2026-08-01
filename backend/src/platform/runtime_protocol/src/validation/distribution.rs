@@ -95,9 +95,15 @@ pub fn validate_distribution_manifest_v1(
             return Err(DistributionManifestValidationError::InvalidArtifact);
         }
         let module = artifact.artifact_kind == DistributionArtifactKindV1::ModuleRuntime as i32;
-        let native_dependency = artifact.artifact_kind
-            == DistributionArtifactKindV1::ModuleRuntimeNativeDependency as i32;
-        if native_dependency {
+        let bound_runtime_dependency = matches!(
+            DistributionArtifactKindV1::try_from(artifact.artifact_kind).ok(),
+            Some(
+                DistributionArtifactKindV1::ModuleRuntimeNativeDependency
+                    | DistributionArtifactKindV1::ModuleRuntimeNativeExecutable
+                    | DistributionArtifactKindV1::ModuleRuntimeReadOnlyData
+            )
+        );
+        if bound_runtime_dependency {
             if !valid_module_id(&artifact.bound_module_id) {
                 return Err(DistributionManifestValidationError::InvalidArtifact);
             }
@@ -252,7 +258,7 @@ mod tests {
     };
 
     #[test]
-    fn native_dependency_requires_one_exact_bound_module() {
+    fn runtime_dependencies_require_one_exact_bound_module() {
         let mut manifest = DistributionManifestV1 {
             major: 1,
             revision: 1,
@@ -273,6 +279,17 @@ mod tests {
             }],
         };
         assert_eq!(validate_distribution_manifest_v1(&manifest), Ok(()));
+
+        for kind in [
+            DistributionArtifactKindV1::ModuleRuntimeNativeExecutable,
+            DistributionArtifactKindV1::ModuleRuntimeReadOnlyData,
+        ] {
+            manifest.artifacts[0].artifact_kind = kind as i32;
+            assert_eq!(validate_distribution_manifest_v1(&manifest), Ok(()));
+        }
+
+        manifest.artifacts[0].artifact_kind =
+            DistributionArtifactKindV1::ModuleRuntimeNativeDependency as i32;
 
         manifest.artifacts[0].bound_module_id.clear();
         assert!(validate_distribution_manifest_v1(&manifest).is_err());

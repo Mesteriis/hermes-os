@@ -1,5 +1,7 @@
 use crate::v1::ManagedWorkflowRuntimeConfigurationV1;
 
+use super::managed_runtime_artifact::valid_runtime_artifacts;
+
 const MAX_IDENTIFIER_BYTES: usize = 256;
 const MAX_ENDPOINT_BYTES: usize = 512;
 
@@ -25,6 +27,7 @@ pub fn validate_managed_workflow_runtime_configuration(
         || configuration.event_credential_revision == 0
         || storage.runtime_instance_id != configuration.runtime_instance_id
         || !valid_storage_configuration(storage)
+        || !valid_runtime_artifacts(&configuration.runtime_artifacts)
     {
         return Err(ManagedWorkflowRuntimeValidationErrorV1::InvalidConfiguration);
     }
@@ -106,6 +109,7 @@ mod tests {
             }),
             event_hub_endpoint: "nats://localhost:4222".to_owned(),
             event_credential_revision: 1,
+            runtime_artifacts: Vec::new(),
         }
     }
 

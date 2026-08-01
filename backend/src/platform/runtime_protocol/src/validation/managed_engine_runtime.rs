@@ -1,5 +1,7 @@
 use crate::v1::ManagedEngineRuntimeConfigurationV1;
 
+use super::managed_runtime_artifact::valid_runtime_artifacts;
+
 const MAX_IDENTIFIER_BYTES: usize = 128;
 const MAX_ENDPOINT_BYTES: usize = 1_024;
 
@@ -30,6 +32,7 @@ pub fn validate_managed_engine_runtime_configuration(
         || storage.logical_owner_id != configuration.logical_owner_id
         || storage.runtime_instance_id != configuration.runtime_instance_id
         || !valid_storage_configuration(storage)
+        || !valid_runtime_artifacts(&configuration.runtime_artifacts)
     {
         return Err(ManagedEngineRuntimeValidationErrorV1::InvalidConfiguration);
     }
@@ -114,6 +117,7 @@ mod tests {
             event_credential_revision: 13,
             settings_revision: 17,
             logical_human_owner_id: "owner-1".to_owned(),
+            runtime_artifacts: Vec::new(),
         }
     }
 

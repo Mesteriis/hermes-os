@@ -99,13 +99,10 @@ pub fn validate_descriptor_v1(
     if descriptor.descriptor_major != 1 {
         return Err(DescriptorValidationError::InvalidMajor);
     }
-    if ModuleKindV1::try_from(descriptor.module_kind)
+    let module_kind = ModuleKindV1::try_from(descriptor.module_kind)
         .ok()
         .filter(|kind| *kind != ModuleKindV1::Unspecified)
-        .is_none()
-    {
-        return Err(DescriptorValidationError::InvalidKind);
-    }
+        .ok_or(DescriptorValidationError::InvalidKind)?;
     for identifier in [
         &descriptor.module_id,
         &descriptor.owner_id,
@@ -150,7 +147,7 @@ pub fn validate_descriptor_v1(
             || capability
                 .requests
                 .iter()
-                .any(|request| !valid_capability_request(request))
+                .any(|request| !valid_capability_request(request, module_kind))
         {
             return Err(DescriptorValidationError::InvalidCapability);
         }
@@ -229,7 +226,10 @@ fn valid_settings_schema_reference(descriptor: &ModuleDescriptorV1) -> bool {
         })
 }
 
-fn valid_capability_request(request: &crate::v1::CapabilityRequestV1) -> bool {
+fn valid_capability_request(
+    request: &crate::v1::CapabilityRequestV1,
+    module_kind: ModuleKindV1,
+) -> bool {
     match request.request.as_ref() {
         Some(capability_request_v1::Request::StorageNamespace(storage)) => {
             validate_identifier(&storage.owner_id).is_ok()
@@ -258,10 +258,13 @@ fn valid_capability_request(request: &crate::v1::CapabilityRequestV1) -> bool {
         }
         Some(capability_request_v1::Request::EventRoute(route)) => valid_event_route_request(route),
         Some(capability_request_v1::Request::RuntimeArtifact(artifact)) => {
-            validate_identifier(&artifact.artifact_id).is_ok()
+            matches!(
+                module_kind,
+                ModuleKindV1::Integration | ModuleKindV1::Workflow | ModuleKindV1::Engine
+            ) && validate_identifier(&artifact.artifact_id).is_ok()
                 && RuntimeArtifactUseV1::try_from(artifact.r#use)
                     .ok()
-                    .is_some_and(|value| value == RuntimeArtifactUseV1::NativeDynamicLibrary)
+                    .is_some_and(|value| value != RuntimeArtifactUseV1::Unspecified)
         }
         Some(capability_request_v1::Request::IntegrationState(state)) => {
             state.state_layout_revision != 0
@@ -704,6 +707,7 @@ mod tests {
     #[test]
     fn runtime_artifact_and_integration_state_requests_are_typed() {
         let mut descriptor = client_rpc_descriptor();
+        descriptor.module_kind = ModuleKindV1::Integration as i32;
         descriptor.capabilities[0].requests = vec![
             CapabilityRequestV1 {
                 request: Some(capability_request_v1::Request::RuntimeArtifact(
@@ -731,7 +735,23 @@ mod tests {
         artifact.r#use = RuntimeArtifactUseV1::Unspecified as i32;
         assert!(validate_descriptor_v1(&descriptor).is_err());
 
+        let mut workflow = client_rpc_descriptor();
+        workflow.module_kind = ModuleKindV1::Workflow as i32;
+        workflow.capabilities[0].requests = vec![CapabilityRequestV1 {
+            request: Some(capability_request_v1::Request::RuntimeArtifact(
+                RuntimeArtifactRequestV1 {
+                    artifact_id: "attachment_text_extraction.ocr.runner.v1".to_owned(),
+                    r#use: RuntimeArtifactUseV1::NativeExecutable as i32,
+                },
+            )),
+        }];
+        assert_eq!(validate_descriptor_v1(&workflow), Ok(()));
+
+        workflow.module_kind = ModuleKindV1::Domain as i32;
+        assert!(validate_descriptor_v1(&workflow).is_err());
+
         let mut descriptor = client_rpc_descriptor();
+        descriptor.module_kind = ModuleKindV1::Integration as i32;
         descriptor.capabilities[0].requests = vec![CapabilityRequestV1 {
             request: Some(capability_request_v1::Request::IntegrationState(
                 IntegrationStateRequestV1 {

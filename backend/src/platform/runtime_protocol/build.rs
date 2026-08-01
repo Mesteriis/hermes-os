@@ -26,6 +26,7 @@ fn main() {
                 "proto/hermes/runtime/v1/events_authority_runtime.proto",
                 "proto/hermes/runtime/v1/scheduler_runtime.proto",
                 "proto/hermes/runtime/v1/managed_storage_runtime.proto",
+                "proto/hermes/runtime/v1/managed_runtime_artifact.proto",
                 "proto/hermes/runtime/v1/managed_domain_runtime.proto",
                 "proto/hermes/runtime/v1/managed_engine_runtime.proto",
                 "proto/hermes/runtime/v1/managed_workflow_runtime.proto",

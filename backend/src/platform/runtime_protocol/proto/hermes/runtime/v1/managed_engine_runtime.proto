@@ -3,6 +3,7 @@ syntax = "proto3";
 package hermes.runtime.v1;
 
 import "hermes/runtime/v1/managed_storage_runtime.proto";
+import "hermes/runtime/v1/managed_runtime_artifact.proto";
 
 // Short-lived private configuration staged by Kernel for an admitted engine.
 // It carries only runtime identity, Event Hub topology, owner-local Storage
@@ -23,4 +24,5 @@ message ManagedEngineRuntimeConfigurationV1 {
   // Authenticated human tenancy. This never replaces the Engine build-unit
   // owner used by registration, grants, Storage and Event Hub authority.
   string logical_human_owner_id = 11;
+  repeated ManagedRuntimeArtifactBindingV1 runtime_artifacts = 12;
 }

@@ -481,6 +481,7 @@ fn start_reserved_engine_runtime(
             event_credential_revision,
             settings_revision: settings_snapshot.revision,
             logical_human_owner_id: logical_human_owner.owner_id().to_owned(),
+            runtime_artifacts: Vec::new(),
         };
         validate_managed_engine_runtime_configuration(&configuration)
             .map_err(|_| "managed engine runtime configuration is invalid".to_owned())?;
@@ -544,6 +545,7 @@ fn start_reserved_workflow_runtime(
             storage: Some(storage),
             event_hub_endpoint: event_topology.nats_endpoint().to_owned(),
             event_credential_revision: event_topology.credential_revision(),
+            runtime_artifacts: Vec::new(),
         };
         validate_managed_workflow_runtime_configuration(&configuration)
             .map_err(|_| "managed workflow runtime configuration is invalid".to_owned())?;
