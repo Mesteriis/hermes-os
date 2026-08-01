@@ -1,0 +1,135 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+const BACKEND_ROOT = new URL('../..', import.meta.url);
+const REPOSITORY_ROOT = new URL('../../../', import.meta.url);
+
+test('note candidate agreement separates Communications workflow Review and Knowledge owners', async () => {
+  const [
+    adr,
+    inventorySource,
+    workspace,
+    apiManifest,
+    api,
+    protocol,
+    coreManifest,
+    core,
+    extraction,
+    lifecycle,
+    sourceManifest,
+    sourceApi,
+    sourceProtocol,
+    sourceEnvelope,
+  ] = await Promise.all([
+    readFile(
+      new URL(
+        'docs/adr/ADR-0369-communication-note-candidate-extraction-and-reviewed-knowledge-promotion.md',
+        REPOSITORY_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT)),
+    readFile(new URL('Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/communication-note-candidate-api/proto/hermes/communication_note_candidate/v1/note_candidate.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('src/communication-note-candidate-core/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-core/src/extraction.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-core/src/lifecycle.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-note-source-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-note-source-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/communications-note-source-api/proto/hermes/communications/note_source/v1/note_source.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('src/communications-note-source-api/src/envelope.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+  const inventory = JSON.parse(inventorySource);
+  const slice = inventory.slices.find(
+    ({ gate }) => gate === 'communication_note_candidate_extraction_v1',
+  );
+
+  assert.deepEqual(slice, {
+    gate: 'communication_note_candidate_extraction_v1',
+    role: 'workflow',
+    owner: 'communication_note_candidate_extraction',
+    state: 'planned',
+    dependsOn: ['communications_content_read_v1'],
+  });
+  assert.match(adr, /Состояние реализации: staged/);
+  assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
+  assert.match(adr, /Extraction остаётся workflow/);
+  assert.match(adr, /Review владеет human decision/);
+  assert.match(adr, /Knowledge —[\s\S]*durable verified note truth/);
+  assert.match(adr, /typed command\/event/);
+  assert.match(adr, /target-bound Blob custody/);
+  assert.match(adr, /общий replayable SSE/);
+  assert.match(adr, /Periodic polling/);
+  assert.match(adr, /не использует AI Engine/);
+  assert.match(adr, /Ollama остаётся concrete integration/);
+  assert.match(adr, /reject никогда не создаёт Knowledge note/i);
+  assert.match(adr, /approve —[\s\S]*ровно одну note/i);
+  assert.doesNotMatch(adr, /Communications владеет Knowledge|Knowledge читает Communications storage/);
+
+  for (const unit of [
+    'hermes-communication-note-candidate-api',
+    'hermes-communication-note-candidate-core',
+    'hermes-communications-note-source-api',
+  ]) {
+    assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
+    assert.match(adr, new RegExp(`\\b${unit}\\b`));
+  }
+
+  assert.match(apiManifest, /role = "workflow"/);
+  assert.match(apiManifest, /owner = "communication_note_candidate_extraction"/);
+  assert.match(apiManifest, /surface = "contract"/);
+  assert.match(api, /communication\.note-candidate-extraction\.v1/);
+  assert.match(protocol, /candidate_digest/);
+  assert.match(protocol, /string excerpt/);
+  assert.match(protocol, /COMMUNICATION_NOTE_TOPIC_HINT_FINANCIAL/);
+  assert.match(protocol, /COMMUNICATION_NOTE_TOPIC_HINT_LEGAL/);
+  assert.match(protocol, /COMMUNICATION_NOTE_TOPIC_HINT_DECISION_STATEMENT/);
+  assert.match(protocol, /COMMUNICATION_NOTE_TOPIC_HINT_DEADLINE_STATEMENT/);
+  assert.doesNotMatch(
+    protocol,
+    /knowledge_note_id|decision_id|document_id|provider_id|account_id|model_id|prompt|map</,
+  );
+
+  assert.match(coreManifest, /role = "workflow"/);
+  assert.match(coreManifest, /owner = "communication_note_candidate_extraction"/);
+  assert.match(core, /extract_communication_note_candidates_v1/);
+  assert.match(extraction, /empty_source_does_not_fabricate_a_note_candidate/);
+  assert.match(extraction, /legacy_markers_produce_one_bounded_review_candidate/);
+  assert.match(extraction, /take\(5\)/);
+  assert.match(lifecycle, /SourceIdentityMismatch/);
+  assert.doesNotMatch(
+    `${core}\n${extraction}\n${lifecycle}`,
+    /hermes_communications|hermes_review|hermes_knowledge|ollama|reqwest|sqlx|prompt/,
+  );
+
+  assert.match(sourceManifest, /role = "domain"/);
+  assert.match(sourceManifest, /owner = "communications"/);
+  assert.match(sourceManifest, /surface = "contract"/);
+  assert.match(sourceApi, /communications\.note-source\.v1/);
+  assert.match(sourceApi, /communication_note_candidate_extraction\.source\.blob\.v1/);
+  assert.match(sourceProtocol, /PrepareCommunicationNoteSourceCommandV1/);
+  assert.match(sourceProtocol, /CommunicationNoteSourceContentReceiptV1/);
+  assert.match(sourceProtocol, /subject_utf8/);
+  assert.match(sourceProtocol, /body_utf8/);
+  assert.doesNotMatch(sourceProtocol, /provider_id|account_id|model_id|prompt|map</);
+  assert.match(sourceEnvelope, /build_communication_note_source_prepare_outbox_record_v1/);
+  assert.match(sourceEnvelope, /build_communication_note_source_prepared_outbox_record_v1/);
+  assert.match(sourceEnvelope, /build_communication_note_source_rejected_outbox_record_v1/);
+  assert.doesNotMatch(sourceEnvelope, /source_content\.subject_utf8|source_content\.body_utf8/);
+});

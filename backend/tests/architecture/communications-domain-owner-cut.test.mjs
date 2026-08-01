@@ -58,7 +58,7 @@ test('Communications remains isolated after Review owner admission', async () =>
 
   assert.equal(
     policy.implementation.currentSlice,
-    'reviewed_task_candidate_promotion_gateway_sse_v1',
+    'communication_note_candidate_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'review', 'tasks'],
@@ -67,6 +67,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication_cross_channel_forward',
       'communication_delivery_intent',
       'communication_explanation',
+      'communication_note_candidate_extraction',
       'communication_recipient_suggestion',
       'communication_reply_suggestion',
       'communication_summary',
@@ -97,6 +98,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'attachment_security.verdict.publish.v1',
       'communication.cross_channel_forward.v1',
       'communication.explanation.v1',
+      'communication.note-candidate-extraction.v1',
       'communication.recipient-suggestion.v1',
       'communication.summary.v1',
       'communication.task-candidate-extraction.v1',
@@ -124,6 +126,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communication_explanation.source_prepared.v1',
       'communication_explanation.source_rejected.v1',
       'communication_explanation.storage.v1',
+      'communication_note_candidate_extraction.source.blob.v1',
       'communication_recipient_suggestion.source.blob.v1',
       'communication_recipient_suggestion.source_prepare.v1',
       'communication_recipient_suggestion.source_prepared.v1',
@@ -164,6 +167,7 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communications.export-source.blob.v1',
       'communications.export-source.v1',
       'communications.export.v1',
+      'communications.note-source.v1',
       'communications.observe.v1',
       'communications.query.v1',
       'communications.recipient-source.blob.v1',

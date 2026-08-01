@@ -135,12 +135,13 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
 
   assert.equal(
     policy.implementation.currentSlice,
-    'reviewed_task_candidate_promotion_gateway_sse_v1',
+    'communication_note_candidate_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, [
     'communication_cross_channel_forward',
     'communication_delivery_intent',
     'communication_explanation',
+    'communication_note_candidate_extraction',
     'communication_recipient_suggestion',
     'communication_reply_suggestion',
     'communication_summary',
