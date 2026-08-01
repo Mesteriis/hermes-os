@@ -40,6 +40,12 @@ test('note candidate agreement separates Communications workflow Review and Know
     communicationsAdmission,
     communicationsEventRuntime,
     communicationsNoteSource,
+    managedSetup,
+    managedFlow,
+    managedGatewayFlow,
+    managedBlobNegative,
+    managedPersistenceFlow,
+    authenticatedStorageRunner,
     policySource,
   ] = await Promise.all([
     readFile(
@@ -99,6 +105,42 @@ test('note candidate agreement separates Communications workflow Review and Know
     readFile(new URL('src/communications-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-runtime/src/event_runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-runtime/src/note_source.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/note_candidate_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/note_candidate_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/note_candidate_gateway_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/note_candidate_blob_negative.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/note_candidate_persistence_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
@@ -111,11 +153,11 @@ test('note candidate agreement separates Communications workflow Review and Know
     gate: 'communication_note_candidate_extraction_v1',
     role: 'workflow',
     owner: 'communication_note_candidate_extraction',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['communications_content_read_v1'],
   });
   assert.equal(policy.implementation.currentSlice, 'communication_note_candidate_assembly_v1');
-  assert.match(adr, /Состояние реализации: staged/);
+  assert.match(adr, /Состояние реализации: implemented/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);
   assert.match(adr, /Review владеет human decision/);
@@ -129,6 +171,24 @@ test('note candidate agreement separates Communications workflow Review and Know
   assert.match(adr, /reject никогда не создаёт Knowledge note/i);
   assert.match(adr, /approve —[\s\S]*ровно одну note/i);
   assert.doesNotMatch(adr, /Communications владеет Knowledge|Knowledge читает Communications storage/);
+  assert.match(managedFlow, /managed_note_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart/);
+  assert.match(managedFlow, /assert_ne!\(approved_source_message_id, rejected_source_message_id\)/);
+  assert.match(managedFlow, /assert_no_note_materialization_v1/);
+  assert.match(managedFlow, /assert_exact_note_materialization_v1/);
+  assert.match(managedFlow, /restart_note_candidate_runtime_v1/);
+  assert.match(managedFlow, /replayed_approved_extraction\.cursor/);
+  assert.match(managedFlow, /replayed_rejected_extraction\.cursor/);
+  assert.match(managedFlow, /assert_knowledge_reject_stale_blob_receipt_v1/);
+  assert.match(managedSetup, /\[NoteCandidateManagedUnitV1; 4\]/);
+  assert.match(managedSetup, /COMMUNICATION_NOTE_CANDIDATE_MODULE_ID_V1/);
+  assert.match(managedSetup, /REVIEW_NOTE_CANDIDATE_MODULE_ID_V1/);
+  assert.match(managedSetup, /REVIEWED_NOTE_CANDIDATE_PROMOTION_MODULE_ID_V1/);
+  assert.match(managedSetup, /KNOWLEDGE_MODULE_ID_V1/);
+  assert.match(managedGatewayFlow, /knowledge_state/);
+  assert.match(managedBlobNegative, /KnowledgeNoteCreationRejectCodeBlobMismatch/);
+  assert.match(managedPersistenceFlow, /reserve_approval/);
+  assert.match(managedPersistenceFlow, /persist_materialization/);
+  assert.match(authenticatedStorageRunner, /managed_note_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart/);
 
   for (const unit of [
     'hermes-communication-note-candidate-api',

@@ -4,7 +4,8 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: staged. Приняты exact source, extraction и candidate
+Состояние реализации: implemented после final full pre-push и clean-room audit.
+Приняты exact source, extraction и candidate
 contracts, pure deterministic extraction core/lifecycle, отдельный owner-local
 PostgreSQL persistence unit с run state, request replay, inbox, outbox и
 replayable realtime, exact Review note-candidate API/core с immutable human
@@ -21,8 +22,14 @@ runtime/assembly реализованы отдельными workflow units; Com
 а extraction runtime выполняет durable lifecycle, Review submission, owner-local
 recovery и replayable realtime. Assembly материализует только unsigned runtime,
 descriptor, settings schema и storage bundle. Aggregate managed conformance
-всего multi-owner flow ещё не реализован; поэтому
-`communication_note_candidate_extraction_v1` остаётся `planned`.
+запускает Communications, extraction, Review, promotion и Knowledge как
+отдельные signed managed runtimes с distinct module/owner/runtime identities и
+owner-local Storage bindings. Два реальных canonical Communications source
+проходят approve/reject flow без seeded rows; approve создаёт ровно одну
+Knowledge note, reject — ноль. Gate также доказывает wrong-owner, revision,
+runtime generation/grant и stale Blob custody fences, restart recovery,
+exact SSE cursor replay и отсутствие source/candidate plaintext в realtime.
+`communication_note_candidate_extraction_v1` имеет состояние `implemented`.
 
 Уточняет:
 
@@ -179,8 +186,8 @@ handwritten business REST не вводятся.
 
 ## Phase gate
 
-`communication_note_candidate_extraction_v1` может стать `implemented` только
-после одновременного evidence:
+`communication_note_candidate_extraction_v1` имеет состояние `implemented`,
+поскольку одновременно присутствует следующее evidence:
 
 1. source, extraction, Review, promotion и Knowledge units существуют отдельно;
 2. owner-local PostgreSQL inbox/outbox/state/realtime и exact replay доказаны;
@@ -192,7 +199,9 @@ handwritten business REST не вводятся.
 7. restart восстанавливает state и SSE cursors без plaintext в event/log/error;
 8. architecture, Cargo, managed-runtime и full pre-push gates зелёные.
 
-Наличие ADR, client skeleton или pure core само по себе gate не закрывает.
+Наличие ADR, client skeleton или pure core само по себе gate не закрывает;
+authority даёт только совместное static, managed-runtime и full pre-push
+evidence выше.
 
 ## Последствия
 
@@ -202,4 +211,5 @@ handwritten business REST не вводятся.
   durable verified note truth.
 - Legacy observable heuristic можно восстановить без cross-domain storage и
   без generic facade.
-- Полный slice требует новых production units и отдельного admission phase gate.
+- Полный note-candidate slice закрыт отдельным admission phase gate без
+  расширения Communications или Knowledge чужим поведением.

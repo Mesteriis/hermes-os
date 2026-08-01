@@ -651,7 +651,7 @@
       "gate": "communication_note_candidate_extraction_v1",
       "role": "workflow",
       "owner": "communication_note_candidate_extraction",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["communications_content_read_v1"]
     },
     {

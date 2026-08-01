@@ -188,6 +188,16 @@ mod mail_operational_flow;
 mod mail_smtp_fixture;
 #[path = "managed_storage_vault_docker/mail_sync_health_flow.rs"]
 mod mail_sync_health_flow;
+#[path = "managed_storage_vault_docker/note_candidate_blob_negative.rs"]
+mod note_candidate_blob_negative;
+#[path = "managed_storage_vault_docker/note_candidate_gateway_flow.rs"]
+mod note_candidate_gateway_flow;
+#[path = "managed_storage_vault_docker/note_candidate_managed_flow.rs"]
+mod note_candidate_managed_flow;
+#[path = "managed_storage_vault_docker/note_candidate_managed_setup.rs"]
+mod note_candidate_managed_setup;
+#[path = "managed_storage_vault_docker/note_candidate_persistence_flow.rs"]
+mod note_candidate_persistence_flow;
 #[path = "managed_storage_vault_docker/ollama_ai_managed_flow.rs"]
 mod ollama_ai_managed_flow;
 #[path = "managed_storage_vault_docker/ollama_ai_managed_setup.rs"]
@@ -215,6 +225,10 @@ use mail_gmail_fixture::*;
 use mail_gmail_oauth_fixture::*;
 use mail_imap_fixture::*;
 use mail_smtp_fixture::*;
+use note_candidate_blob_negative::*;
+use note_candidate_gateway_flow::*;
+use note_candidate_managed_setup::*;
+use note_candidate_persistence_flow::*;
 use ollama_ai_managed_setup::*;
 use review_attention_managed_setup::*;
 use task_candidate_blob_negative::*;

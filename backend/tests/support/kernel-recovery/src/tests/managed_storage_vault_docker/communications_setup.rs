@@ -71,6 +71,11 @@ use hermes_communications_export_runtime::admission::{
     COMMUNICATIONS_EXPORT_STORAGE_CAPABILITY_ID_V1, communications_export_module_descriptor_v1,
     communications_export_settings_schema_bytes_v1,
 };
+use hermes_communications_note_source_api::{
+    communication_note_source_prepare_contract_reference_v1,
+    communication_note_source_prepared_contract_reference_v1,
+    communication_note_source_rejected_contract_reference_v1,
+};
 use hermes_communications_recipient_source_api::{
     communication_recipient_source_prepare_contract_reference_v1,
     communication_recipient_source_prepared_contract_reference_v1,
@@ -88,8 +93,10 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_EXPLANATION_SOURCE_BLOB_CAPABILITY_ID,
     COMMUNICATIONS_EXPLANATION_SOURCE_CAPABILITY_ID,
     COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID,
-    COMMUNICATIONS_MODULE_ID, COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
-    COMMUNICATIONS_QUERY_CAPABILITY_ID, COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID,
+    COMMUNICATIONS_MODULE_ID, COMMUNICATIONS_NOTE_SOURCE_BLOB_CAPABILITY_ID,
+    COMMUNICATIONS_NOTE_SOURCE_CAPABILITY_ID, COMMUNICATIONS_OBSERVE_CAPABILITY_ID,
+    COMMUNICATIONS_OWNER_ID, COMMUNICATIONS_QUERY_CAPABILITY_ID,
+    COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID,
     COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID, COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
     COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION,
     COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS, COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
@@ -1046,15 +1053,42 @@ pub(super) fn assert_communications_transferred_body_projection_with_plaintext(
     plaintext: &[u8],
     exercise_recovery_failures: bool,
 ) -> Vec<u8> {
-    const OPAQUE_BLOB_REFERENCE: &str = "blob://fixture-source/admitted-body-1";
+    assert_communications_transferred_body_projection_with_plaintext_and_fixture_id(
+        store,
+        supervisor,
+        kernel_data,
+        kernel,
+        runtime_dir,
+        plaintext,
+        exercise_recovery_failures,
+        1,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn assert_communications_transferred_body_projection_with_plaintext_and_fixture_id(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    kernel_data: &Path,
+    kernel: &Path,
+    runtime_dir: &Path,
+    plaintext: &[u8],
+    exercise_recovery_failures: bool,
+    fixture_id: u8,
+) -> Vec<u8> {
+    assert!(fixture_id > 0, "fixture id must be non-zero");
+    let opaque_blob_reference = format!("blob://fixture-source/admitted-body-{fixture_id}");
+    let external_account_id = format!("integration-private-body-account-{fixture_id}");
+    let external_conversation_id = format!("integration-private-body-conversation-{fixture_id}");
+    let external_participant_id = format!("integration-private-body-participant-{fixture_id}");
     let body_account_cursor = fixture_account_cursor(
         hermes_communications_ingress::ProviderProvenanceV1::Telegram,
-        "integration-private-body-account-1",
+        &external_account_id,
     );
     let source_grant_epoch = record_fixture_source_integration(store);
     let plaintext_sha256: [u8; 32] = Sha256::digest(plaintext).into();
-    let reference_id = [8; 16];
-    let channel_binding = vec![6; 32];
+    let reference_id = [fixture_id; 16];
+    let channel_binding = vec![fixture_id.saturating_add(5); 32];
     let delivery = BlobSessionHandlerV1::new(
         Arc::clone(store),
         supervisor.relay_port(),
@@ -1071,7 +1105,7 @@ pub(super) fn assert_communications_transferred_body_projection_with_plaintext(
             None,
         ),
         ManagedRuntimeBlobSessionRequestV1 {
-            request_id: vec![4; 16],
+            request_id: vec![fixture_id.saturating_add(3); 16],
             capability_id: FIXTURE_SOURCE_CAPABILITY_ID.to_owned(),
             operation: BlobDataOperationV1::BlobDataOperationWriteV1 as u32,
             channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
@@ -1099,16 +1133,14 @@ pub(super) fn assert_communications_transferred_body_projection_with_plaintext(
         )
         .expect("write source integration Blob content");
     let rejected_draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
-        "managed-rejected-body-observation-1",
+        format!("managed-rejected-body-observation-{fixture_id}"),
         hermes_communications_ingress::SourceEnvelope {
             provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
-            external_record_id: "integration-private-body-record-rejected-1".to_owned(),
+            external_record_id: format!("integration-private-body-record-rejected-{fixture_id}"),
             scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
-                external_account_id: "integration-private-body-account-1".to_owned(),
-                external_conversation_id: Some(
-                    "integration-private-body-conversation-1".to_owned(),
-                ),
-                external_participant_id: Some("integration-private-body-participant-1".to_owned()),
+                external_account_id: external_account_id.clone(),
+                external_conversation_id: Some(external_conversation_id.clone()),
+                external_participant_id: Some(external_participant_id.clone()),
                 external_media_id: None,
                 external_reply_to_record_id: None,
                 external_forward_origin_record_id: None,
@@ -1123,7 +1155,7 @@ pub(super) fn assert_communications_transferred_body_projection_with_plaintext(
     let rejected_draft = hermes_communications_ingress::with_admitted_body_blob(
         rejected_draft,
         hermes_communications_ingress::BodyBlobReceiptV1 {
-            blob_ref: OPAQUE_BLOB_REFERENCE.to_owned(),
+            blob_ref: opaque_blob_reference.clone(),
             reference_id,
             declared_bytes: u64::try_from(plaintext.len()).expect("fixture body size"),
             sha256: [9; 32],
@@ -1143,16 +1175,14 @@ pub(super) fn assert_communications_transferred_body_projection_with_plaintext(
     )
     .expect("build altered admitted-body typed ingress envelope");
     let draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
-        "managed-admitted-body-observation-1",
+        format!("managed-admitted-body-observation-{fixture_id}"),
         hermes_communications_ingress::SourceEnvelope {
             provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
-            external_record_id: "integration-private-body-record-1".to_owned(),
+            external_record_id: format!("integration-private-body-record-{fixture_id}"),
             scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
-                external_account_id: "integration-private-body-account-1".to_owned(),
-                external_conversation_id: Some(
-                    "integration-private-body-conversation-1".to_owned(),
-                ),
-                external_participant_id: Some("integration-private-body-participant-1".to_owned()),
+                external_account_id,
+                external_conversation_id: Some(external_conversation_id),
+                external_participant_id: Some(external_participant_id),
                 external_media_id: None,
                 external_reply_to_record_id: None,
                 external_forward_origin_record_id: None,
@@ -1177,7 +1207,7 @@ pub(super) fn assert_communications_transferred_body_projection_with_plaintext(
     let draft = hermes_communications_ingress::with_admitted_body_blob(
         draft,
         hermes_communications_ingress::BodyBlobReceiptV1 {
-            blob_ref: OPAQUE_BLOB_REFERENCE.to_owned(),
+            blob_ref: opaque_blob_reference.clone(),
             reference_id,
             declared_bytes: u64::try_from(plaintext.len()).expect("fixture body size"),
             sha256: plaintext_sha256,
@@ -1431,7 +1461,7 @@ pub(super) fn assert_communications_transferred_body_projection_with_plaintext(
             let stale_draft = hermes_communications_ingress::with_admitted_body_blob(
                 stale_draft,
                 hermes_communications_ingress::BodyBlobReceiptV1 {
-                    blob_ref: OPAQUE_BLOB_REFERENCE.to_owned(),
+                    blob_ref: opaque_blob_reference.clone(),
                     reference_id,
                     declared_bytes: u64::try_from(plaintext.len()).expect("fixture body size"),
                     sha256: plaintext_sha256,
@@ -1556,7 +1586,7 @@ pub(super) fn assert_communications_transferred_body_projection_with_plaintext(
             let revoked_draft = hermes_communications_ingress::with_admitted_body_blob(
                 revoked_draft,
                 hermes_communications_ingress::BodyBlobReceiptV1 {
-                    blob_ref: OPAQUE_BLOB_REFERENCE.to_owned(),
+                    blob_ref: opaque_blob_reference.clone(),
                     reference_id: current_reference_id,
                     declared_bytes: u64::try_from(plaintext.len()).expect("fixture body size"),
                     sha256: plaintext_sha256,
@@ -1616,8 +1646,8 @@ pub(super) fn assert_communications_transferred_body_projection_with_plaintext(
             .encode_to_vec();
             assert!(
                 !public_payload
-                    .windows(OPAQUE_BLOB_REFERENCE.len())
-                    .any(|window| window == OPAQUE_BLOB_REFERENCE.as_bytes()),
+                    .windows(opaque_blob_reference.len())
+                    .any(|window| window == opaque_blob_reference.as_bytes()),
                 "public Communications query must not reveal an owner-private Blob reference",
             );
             return transferred_message_id;
@@ -2669,6 +2699,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_EVENTS_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_EXPORT_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_EXPORT_SOURCE_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_NOTE_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_NOTE_SOURCE_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_OBSERVE_CAPABILITY_ID.to_owned(),
         "communications.query.v1".to_owned(),
         COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
@@ -2746,6 +2778,14 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
         vec![ModuleBlobOperationV1::Write],
     );
+    let note_source_blob = ModuleBlobQuotaRequestV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_NOTE_SOURCE_BLOB_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        COMMUNICATIONS_BLOB_QUOTA_BYTES,
+        COMMUNICATIONS_BLOB_CUSTODY_SCOPE_ID,
+        vec![ModuleBlobOperationV1::Write],
+    );
     let translation_source_blob = ModuleBlobQuotaRequestV1::new(
         COMMUNICATIONS_REGISTRATION,
         COMMUNICATIONS_TRANSLATION_SOURCE_BLOB_CAPABILITY_ID,
@@ -2813,6 +2853,9 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
     let task_source_prepare = communication_task_source_prepare_contract_reference_v1();
     let task_source_prepared = communication_task_source_prepared_contract_reference_v1();
     let task_source_rejected = communication_task_source_rejected_contract_reference_v1();
+    let note_source_prepare = communication_note_source_prepare_contract_reference_v1();
+    let note_source_prepared = communication_note_source_prepared_contract_reference_v1();
+    let note_source_rejected = communication_note_source_rejected_contract_reference_v1();
     let translation_source_prepare =
         communication_translation_source_prepare_contract_reference_v1();
     let translation_source_prepared =
@@ -2875,6 +2918,24 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             COMMUNICATIONS_EVENTS_CAPABILITY_ID,
             ModuleEventEnvelopeKindV1::Event,
             &attachment_safety_state_changed,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_NOTE_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Command,
+            &note_source_prepare,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_NOTE_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &note_source_prepared,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_NOTE_SOURCE_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &note_source_rejected,
             ModuleEventRouteDirectionV1::Publish,
         ),
         communications_event_route(
@@ -3133,6 +3194,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
                     blob,
                     content_blob,
                     export_source_blob,
+                    note_source_blob,
                     cross_channel_forward_source_blob,
                     ai_source_blob,
                     summary_source_blob,
@@ -3159,6 +3221,13 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
 }
 
 fn record_fixture_source_integration(store: &SqliteControlStore) -> u64 {
+    if let Some(registration) = store
+        .module_registration(FIXTURE_SOURCE_REGISTRATION)
+        .expect("read fixture source integration registration")
+    {
+        assert_eq!(registration.state(), ModuleRegistrationState::Approved);
+        return registration.grant_epoch();
+    }
     let registration = ModuleRegistration::new(
         FIXTURE_SOURCE_REGISTRATION,
         "integration.fixture-source",
