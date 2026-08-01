@@ -55,6 +55,7 @@ use crate::{
     },
     review_submission::CommunicationTaskCandidateReviewSubmissionContextV1,
     source_results::{
+        CommunicationTaskCandidateSourcePreparedContextV1,
         CommunicationTaskCandidateSourceResultErrorV1, consume_task_source_prepared_once_v1,
         consume_task_source_rejected_once_v1,
     },
@@ -239,11 +240,12 @@ impl CommunicationTaskCandidateManagedRuntimeV1 {
             .set_nonblocking(false)
             .map_err(|_| CommunicationTaskCandidateManagedRuntimeErrorV1::Unavailable)?;
         let runtime_instance_id = self.admission.runtime_instance_id.clone();
-        let submission_context = CommunicationTaskCandidateReviewSubmissionContextV1 {
+        let source_context = CommunicationTaskCandidateSourcePreparedContextV1 {
+            logical_owner_id: &self.admission.logical_owner_id,
             module_id: COMMUNICATION_TASK_CANDIDATE_MODULE_ID_V1,
             runtime_instance_id: &runtime_instance_id,
             runtime_generation: self.admission.runtime_generation,
-            now_unix_millis,
+            consumed_at_unix_millis: now_unix_millis,
         };
         let mut dispatcher = RejectManagedControlRequestsV2;
         let result = consume_task_source_prepared_once_v1(
@@ -252,9 +254,7 @@ impl CommunicationTaskCandidateManagedRuntimeV1 {
             &self.source_prepared_subscription,
             &mut self.control_channel,
             &mut dispatcher,
-            &self.admission.logical_owner_id,
-            &submission_context,
-            now_unix_millis,
+            &source_context,
         )
         .await
         .map_err(source_result_error);

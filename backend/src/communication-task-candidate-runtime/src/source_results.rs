@@ -57,24 +57,43 @@ pub enum CommunicationTaskCandidateSourceResultErrorV1 {
     EventUnavailable,
 }
 
+pub(crate) struct CommunicationTaskCandidateSourcePreparedContextV1<'a> {
+    pub logical_owner_id: &'a str,
+    pub module_id: &'a str,
+    pub runtime_instance_id: &'a str,
+    pub runtime_generation: u64,
+    pub consumed_at_unix_millis: i64,
+}
+
+impl<'a> CommunicationTaskCandidateSourcePreparedContextV1<'a> {
+    fn review_submission_context(
+        &'a self,
+    ) -> CommunicationTaskCandidateReviewSubmissionContextV1<'a> {
+        CommunicationTaskCandidateReviewSubmissionContextV1 {
+            module_id: self.module_id,
+            runtime_instance_id: self.runtime_instance_id,
+            runtime_generation: self.runtime_generation,
+            now_unix_millis: self.consumed_at_unix_millis,
+        }
+    }
+}
+
 pub(crate) async fn consume_task_source_prepared_once_v1(
     persistence: &CommunicationTaskCandidatePersistenceV1,
     connection: &RuntimeJetStreamConnection,
     permit: &RuntimeSubscribePermitV1,
     channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
-    expected_logical_owner_id: &str,
-    submission_context: &CommunicationTaskCandidateReviewSubmissionContextV1<'_>,
-    consumed_at_unix_millis: i64,
+    context: &CommunicationTaskCandidateSourcePreparedContextV1<'_>,
 ) -> Result<bool, CommunicationTaskCandidateSourceResultErrorV1> {
     let delivery = receive_runtime_pull_delivery(connection, permit)
         .await
         .map_err(event_error)?;
     let record = OutboxRecordV1::accept(delivery.exact_bytes().to_vec())
         .map_err(|_| CommunicationTaskCandidateSourceResultErrorV1::InvalidEnvelope)?;
-    let prepared = decode_prepared(&record, expected_logical_owner_id)?;
+    let prepared = decode_prepared(&record, context.logical_owner_id)?;
     let run = persistence
-        .load_run(expected_logical_owner_id, &prepared.run_id)
+        .load_run(context.logical_owner_id, &prepared.run_id)
         .await
         .map_err(CommunicationTaskCandidateSourceResultErrorV1::Persistence)?;
     if run.draft.source_message_id != prepared.source_message_id
@@ -102,10 +121,10 @@ pub(crate) async fn consume_task_source_prepared_once_v1(
             .map_err(CommunicationTaskCandidateSourceResultErrorV1::Blob)?;
             persistence
                 .complete_blob_cleanup(
-                    expected_logical_owner_id,
+                    context.logical_owner_id,
                     &run.draft.run_id,
                     cleanup,
-                    consumed_at_unix_millis,
+                    context.consumed_at_unix_millis,
                 )
                 .await
                 .map_err(CommunicationTaskCandidateSourceResultErrorV1::Persistence)?;
@@ -126,7 +145,7 @@ pub(crate) async fn consume_task_source_prepared_once_v1(
             .persist_source_result(CommunicationTaskCandidateSourceResultV1 {
                 result_message_id: *record.message_id(),
                 envelope_sha256: *record.envelope_sha256(),
-                logical_owner_id: expected_logical_owner_id.to_owned(),
+                logical_owner_id: context.logical_owner_id.to_owned(),
                 run_id: prepared.run_id,
                 transition: CommunicationTaskCandidateTransitionV1::SourcePrepared {
                     source_evidence_id: prepared.source_evidence_id,
@@ -135,7 +154,7 @@ pub(crate) async fn consume_task_source_prepared_once_v1(
                 },
                 source_read_receipt_bytes: Some(source.encode_to_vec()),
                 source_cleanup: Some(materialized.source_cleanup.clone()),
-                occurred_at_unix_millis: consumed_at_unix_millis,
+                occurred_at_unix_millis: context.consumed_at_unix_millis,
             })
             .await
             .map_err(CommunicationTaskCandidateSourceResultErrorV1::Persistence)?;
@@ -149,8 +168,8 @@ pub(crate) async fn consume_task_source_prepared_once_v1(
             dispatcher,
             &persisted,
             materialized.body_utf8.as_slice(),
-            submission_context,
-            consumed_at_unix_millis,
+            &context.review_submission_context(),
+            context.consumed_at_unix_millis,
         )
         .await?
     } else if run.status.state == CommunicationTaskCandidateStateV1::Extracting {
@@ -166,8 +185,8 @@ pub(crate) async fn consume_task_source_prepared_once_v1(
             dispatcher,
             &run,
             body.as_slice(),
-            submission_context,
-            consumed_at_unix_millis,
+            &context.review_submission_context(),
+            context.consumed_at_unix_millis,
         )
         .await?
     } else {
