@@ -38,6 +38,7 @@ runtime, assembly и live evidence ещё не реализованы. Inventory
 - [ADR-0273](ADR-0273-attachment-security-engine-and-event-only-verdict-authority.md);
 - [ADR-0282](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
 - [ADR-0360](ADR-0360-current-custodian-target-bound-blob-redelegation.md).
+- [ADR-0374](ADR-0374-authenticated-client-blob-response-ceiling.md).
 
 ## Контекст
 

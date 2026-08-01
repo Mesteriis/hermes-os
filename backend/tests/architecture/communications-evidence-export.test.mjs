@@ -43,7 +43,7 @@ const paths = {
     BACKEND_ROOT,
   ),
   controlStoreClientBlobSchema: new URL(
-    'src/kernel/control_store/sqlite/src/schema/v42_to_v43.rs',
+    'src/kernel/control_store/sqlite/src/schema/v48_to_v49.rs',
     BACKEND_ROOT,
   ),
   gatewayClientBlob: new URL(
@@ -198,12 +198,12 @@ test('export artifact stays within one exact platform client Blob ceiling', asyn
       readFile(paths.gatewayClientBlob, 'utf8'),
       readFile(paths.workflowAdmission, 'utf8'),
     ]);
-  const exactCeiling = /const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 24 \* 1024 \* 1024;/;
+  const exactCeiling = /const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 32 \* 1024 \* 1024;/;
   assert.match(runtimeDescriptorValidation, exactCeiling);
   assert.match(controlStoreClientBlob, exactCeiling);
   assert.match(
     controlStoreClientBlobSchema,
-    /max_response_bytes BETWEEN 1 AND 25165824/,
+    /max_response_bytes BETWEEN 1 AND 33554432/,
   );
   assert.match(gatewayClientBlob, exactCeiling);
   assert.match(

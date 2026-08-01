@@ -16,7 +16,7 @@ use crate::{GatewayHttpResponse, SharedBrowserGatewaySessionService, full_gatewa
 
 const MAX_REQUEST_BYTES: usize = 4_096;
 const MAX_REQUEST_DEADLINE: Duration = Duration::from_secs(10);
-const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 24 * 1024 * 1024;
+const MAX_CLIENT_BLOB_RESPONSE_BYTES: u64 = 32 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClientBlobRouteV1 {

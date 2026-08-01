@@ -49,8 +49,9 @@ mod v44_to_v45;
 mod v45_to_v46;
 mod v46_to_v47;
 mod v47_to_v48;
+mod v48_to_v49;
 
-pub const SCHEMA_VERSION: i64 = 48;
+pub const SCHEMA_VERSION: i64 = 49;
 
 pub fn migrate_schema(connection: &Connection) -> Result<(), StoreError> {
     loop {
@@ -155,11 +156,15 @@ fn version_feature_exists(connection: &Connection, version: i64) -> Result<bool,
         )?),
         41 => table_exists(connection, "hermes_kernel_bundled_artifact_proposal"),
         42 => table_exists(connection, "hermes_kernel_module_client_blob_route_request"),
-        43 => table_definition_contains(
+        43 => Ok(table_definition_contains(
             connection,
             "hermes_kernel_module_client_blob_route_request",
             "max_response_bytes BETWEEN 1 AND 25165824",
-        ),
+        )? || table_definition_contains(
+            connection,
+            "hermes_kernel_module_client_blob_route_request",
+            "max_response_bytes BETWEEN 1 AND 33554432",
+        )?),
         44 => Ok(
             table_exists(connection, "hermes_kernel_settings_configuration_target")?
                 && columns_exist(
@@ -181,6 +186,11 @@ fn version_feature_exists(connection: &Connection, version: i64) -> Result<bool,
             connection,
             "hermes_kernel_module_blob_quota_request",
             "allowed_operations BETWEEN 0 AND 15",
+        ),
+        49 => table_definition_contains(
+            connection,
+            "hermes_kernel_module_client_blob_route_request",
+            "max_response_bytes BETWEEN 1 AND 33554432",
         ),
         _ => Ok(false),
     }
@@ -372,6 +382,7 @@ fn apply_step(version: i64, transaction: &Transaction<'_>) -> Result<(), StoreEr
         45 => v45_to_v46::apply(transaction),
         46 => v46_to_v47::apply(transaction),
         47 => v47_to_v48::apply(transaction),
+        48 => v48_to_v49::apply(transaction),
         unsupported => Err(StoreError::UnsupportedSchema(unsupported)),
     }
 }
