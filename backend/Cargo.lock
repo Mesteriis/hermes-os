@@ -1875,6 +1875,7 @@ name = "hermes-attachment-text-extraction-persistence"
 version = "0.1.0"
 dependencies = [
  "hermes-attachment-text-extraction-core",
+ "hermes-attachment-text-extraction-ingress",
  "hermes-storage-protocol",
  "sha2 0.11.0",
  "sqlx",

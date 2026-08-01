@@ -1,7 +1,10 @@
 #![forbid(unsafe_code)]
 //! Owner-local PostgreSQL persistence for attachment text extraction.
 
+mod custody;
+mod jobs;
 mod model;
+mod observations;
 mod repository;
 mod schema;
 
@@ -12,9 +15,13 @@ use sqlx::{
 };
 
 pub use model::{
-    ATTACHMENT_TEXT_EXTRACTION_REALTIME_LIMIT_V1, CreateAttachmentTextExtractionRunOutcomeV1,
-    CreateAttachmentTextExtractionRunV1, PersistedAttachmentTextArtifactV1,
-    PersistedAttachmentTextExtractionRunV1, TextExtractionRealtimeTransitionV1,
+    ATTACHMENT_TEXT_EXTRACTION_REALTIME_LIMIT_V1, ClaimedAttachmentTextExtractionJobV1,
+    CreateAttachmentTextExtractionRunOutcomeV1, CreateAttachmentTextExtractionRunV1,
+    PendingAttachmentTextCustodyDelegationV1, PersistAttachmentTextCustodyDelegationV1,
+    PersistAttachmentTextCustodyResultOutcomeV1, PersistAttachmentTextFactOutcomeV1,
+    PersistedAttachmentTextArtifactV1, PersistedAttachmentTextExtractionRunV1,
+    TextExtractionLeaseV1, TextExtractionRealtimeTransitionV1, TextExtractionTargetBlobReceiptV1,
+    UnpublishedAttachmentTextCustodyDelegationV1, attachment_text_extraction_job_id_v1,
     attachment_text_extraction_request_fingerprint_v1, attachment_text_extraction_run_id_v1,
 };
 pub use schema::{
@@ -74,7 +81,7 @@ impl AttachmentTextExtractionPersistenceV1 {
         &self,
     ) -> Result<(), AttachmentTextExtractionPersistenceErrorV1> {
         sqlx::query(
-            "SELECT 1 FROM hermes_data.attachment_text_extraction_runs, hermes_data.attachment_text_extraction_event_inbox, hermes_data.attachment_text_extraction_custody_outbox, hermes_data.attachment_text_extraction_jobs, hermes_data.attachment_text_extraction_artifacts, hermes_data.attachment_text_extraction_realtime LIMIT 0",
+            "SELECT 1 FROM hermes_data.attachment_text_extraction_runs, hermes_data.attachment_text_extraction_event_inbox, hermes_data.attachment_text_extraction_scan_candidates, hermes_data.attachment_text_extraction_safety_facts, hermes_data.attachment_text_extraction_custody_outbox, hermes_data.attachment_text_extraction_custody_result_inbox, hermes_data.attachment_text_extraction_jobs, hermes_data.attachment_text_extraction_artifacts, hermes_data.attachment_text_extraction_realtime LIMIT 0",
         )
         .execute(&self.pool)
         .await

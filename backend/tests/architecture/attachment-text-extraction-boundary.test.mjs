@@ -240,8 +240,8 @@ test('parser contract and adapters are five isolated byte-only units', async () 
   assert.doesNotMatch(ocr, /\b(?:sh|bash|zsh)\b|Command::new\("tesseract"\)/);
 });
 
-test('text extraction persistence is owner-local metadata without derived plaintext', async () => {
-  const [manifest, schema, repository] = await Promise.all([
+test('text extraction persistence owns exact joins and fenced jobs without transport ownership or plaintext', async () => {
+  const [manifest, schema, repository, observations, custody, jobs] = await Promise.all([
     readFile(
       new URL('src/attachment-text-extraction-persistence/Cargo.toml', BACKEND_ROOT),
       'utf8',
@@ -255,6 +255,18 @@ test('text extraction persistence is owner-local metadata without derived plaint
     ),
     readFile(
       new URL('src/attachment-text-extraction-persistence/src/repository.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-text-extraction-persistence/src/observations.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-text-extraction-persistence/src/custody.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-text-extraction-persistence/src/jobs.rs', BACKEND_ROOT),
       'utf8',
     ),
   ]);
@@ -271,7 +283,10 @@ test('text extraction persistence is owner-local metadata without derived plaint
   for (const table of [
     'attachment_text_extraction_runs',
     'attachment_text_extraction_event_inbox',
+    'attachment_text_extraction_scan_candidates',
+    'attachment_text_extraction_safety_facts',
     'attachment_text_extraction_custody_outbox',
+    'attachment_text_extraction_custody_result_inbox',
     'attachment_text_extraction_jobs',
     'attachment_text_extraction_artifacts',
     'attachment_text_extraction_realtime',
@@ -284,6 +299,23 @@ test('text extraction persistence is owner-local metadata without derived plaint
   );
   assert.match(repository, /ON CONFLICT \(logical_owner_id, operation_id\) DO NOTHING/);
   assert.match(repository, /state_revision = \$10/);
-  assert.match(repository, /commit_ready_artifact/);
+  assert.match(repository, /find_artifact/);
+  assert.match(repository, /realtime_after/);
   assert.match(repository, /append_realtime/);
+  assert.match(observations, /pg_advisory_xact_lock/);
+  assert.match(observations, /decide_attachment_text_join_v1/);
+  assert.match(observations, /reject_anchor_runs/);
+  assert.match(custody, /exact_envelope_bytes/);
+  assert.match(custody, /insert_result_inbox/);
+  assert.doesNotMatch(custody, /DurableEnvelopeV1|hermes_events_protocol|prost::Message/);
+  assert.match(jobs, /FOR UPDATE SKIP LOCKED/);
+  assert.match(jobs, /runtime_generation/);
+  assert.match(jobs, /grant_epoch/);
+  assert.match(jobs, /lease_fence/);
+  assert.match(jobs, /recover_expired_jobs/);
+  assert.match(jobs, /complete_job/);
+  assert.doesNotMatch(
+    [repository, observations, custody, jobs].join('\n'),
+    /text_utf8|extracted_content|source_bytes|provider_id|filename|mime_type/,
+  );
 });

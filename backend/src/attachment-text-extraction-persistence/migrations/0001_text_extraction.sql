@@ -84,6 +84,53 @@ CREATE TABLE hermes_data.attachment_text_extraction_event_inbox (
     CHECK (processed_at_unix_millis > 0)
 );
 
+CREATE TABLE hermes_data.attachment_text_extraction_scan_candidates (
+    logical_owner_id TEXT NOT NULL,
+    attachment_anchor_id BYTEA NOT NULL,
+    message_id BYTEA NOT NULL,
+    envelope_sha256 BYTEA NOT NULL,
+    exact_payload_sha256 BYTEA NOT NULL,
+    blob_reference_id BYTEA NOT NULL,
+    declared_size BIGINT NOT NULL,
+    blob_receipt_sha256 BYTEA NOT NULL,
+    custody_transfer_source_proof BYTEA NOT NULL,
+    observed_at_unix_seconds BIGINT NOT NULL,
+    PRIMARY KEY (logical_owner_id, attachment_anchor_id),
+    CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
+    CHECK (length(attachment_anchor_id) = 16),
+    CHECK (length(message_id) = 16),
+    CHECK (length(envelope_sha256) = 32),
+    CHECK (length(exact_payload_sha256) = 32),
+    CHECK (length(blob_reference_id) = 16),
+    CHECK (declared_size BETWEEN 1 AND 104857600),
+    CHECK (length(blob_receipt_sha256) = 32),
+    CHECK (length(custody_transfer_source_proof) BETWEEN 1 AND 2048),
+    CHECK (observed_at_unix_seconds > 0)
+);
+
+CREATE TABLE hermes_data.attachment_text_extraction_safety_facts (
+    logical_owner_id TEXT NOT NULL,
+    attachment_anchor_id BYTEA NOT NULL,
+    message_id BYTEA NOT NULL,
+    envelope_sha256 BYTEA NOT NULL,
+    exact_payload_sha256 BYTEA NOT NULL,
+    expected_state SMALLINT NOT NULL,
+    next_state SMALLINT NOT NULL,
+    evidence_id BYTEA NOT NULL,
+    observed_at_unix_seconds BIGINT NOT NULL,
+    PRIMARY KEY (logical_owner_id, attachment_anchor_id),
+    CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
+    CHECK (length(attachment_anchor_id) = 16),
+    CHECK (length(message_id) = 16),
+    CHECK (length(envelope_sha256) = 32),
+    CHECK (length(exact_payload_sha256) = 32),
+    CHECK (expected_state BETWEEN 1 AND 6),
+    CHECK (next_state IN (4, 5, 6)),
+    CHECK (expected_state != next_state),
+    CHECK (length(evidence_id) = 16),
+    CHECK (observed_at_unix_seconds > 0)
+);
+
 CREATE TABLE hermes_data.attachment_text_extraction_custody_outbox (
     logical_owner_id TEXT NOT NULL,
     request_id BYTEA NOT NULL,
@@ -118,13 +165,42 @@ ON hermes_data.attachment_text_extraction_custody_outbox (
     request_id
 );
 
+CREATE TABLE hermes_data.attachment_text_extraction_custody_result_inbox (
+    logical_owner_id TEXT NOT NULL,
+    message_id BYTEA NOT NULL,
+    envelope_sha256 BYTEA NOT NULL,
+    request_id BYTEA NOT NULL,
+    run_id BYTEA NOT NULL,
+    attachment_anchor_id BYTEA NOT NULL,
+    result_kind SMALLINT NOT NULL,
+    processed_at_unix_millis BIGINT NOT NULL,
+    PRIMARY KEY (logical_owner_id, message_id),
+    UNIQUE (logical_owner_id, request_id),
+    CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
+    CHECK (length(message_id) = 16),
+    CHECK (length(envelope_sha256) = 32),
+    CHECK (length(request_id) = 16),
+    CHECK (length(run_id) = 16),
+    CHECK (length(attachment_anchor_id) = 16),
+    CHECK (result_kind IN (1, 2)),
+    CHECK (processed_at_unix_millis > 0)
+);
+
 CREATE TABLE hermes_data.attachment_text_extraction_jobs (
     logical_owner_id TEXT NOT NULL,
     job_id BYTEA NOT NULL,
     run_id BYTEA NOT NULL,
+    request_id BYTEA NOT NULL,
+    result_message_id BYTEA NOT NULL,
+    attachment_anchor_id BYTEA NOT NULL,
+    candidate_message_id BYTEA NOT NULL,
+    safety_message_id BYTEA NOT NULL,
     source_reference_id BYTEA NOT NULL,
+    target_reference_id BYTEA,
+    target_receipt_sha256 BYTEA,
     source_receipt_sha256 BYTEA NOT NULL,
     source_declared_size BIGINT NOT NULL,
+    custody_transfer_source_proof BYTEA NOT NULL,
     custody_proof_sha256 BYTEA NOT NULL,
     state SMALLINT NOT NULL,
     attempt_count INTEGER NOT NULL,
@@ -141,9 +217,19 @@ CREATE TABLE hermes_data.attachment_text_extraction_jobs (
     CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
     CHECK (length(job_id) = 16),
     CHECK (length(run_id) = 16),
+    CHECK (length(request_id) = 16),
+    CHECK (length(result_message_id) = 16),
+    CHECK (length(attachment_anchor_id) = 16),
+    CHECK (length(candidate_message_id) = 16),
+    CHECK (length(safety_message_id) = 16),
     CHECK (length(source_reference_id) = 16),
+    CHECK (
+        (target_reference_id IS NULL AND target_receipt_sha256 IS NULL)
+        OR (length(target_reference_id) = 16 AND length(target_receipt_sha256) = 32)
+    ),
     CHECK (length(source_receipt_sha256) = 32),
     CHECK (source_declared_size BETWEEN 1 AND 104857600),
+    CHECK (length(custody_transfer_source_proof) BETWEEN 1 AND 2048),
     CHECK (length(custody_proof_sha256) = 32),
     CHECK (state BETWEEN 1 AND 4),
     CHECK (attempt_count BETWEEN 0 AND max_attempts),

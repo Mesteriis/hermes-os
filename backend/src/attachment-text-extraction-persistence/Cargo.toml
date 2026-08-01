@@ -14,6 +14,7 @@ surface = "persistence"
 
 [dependencies]
 hermes-attachment-text-extraction-core = { path = "../attachment-text-extraction-core" }
+hermes-attachment-text-extraction-ingress = { path = "../attachment-text-extraction-ingress" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 sha2 = { version = "=0.11.0", default-features = false }
 sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }

@@ -1,12 +1,14 @@
 use hermes_attachment_text_extraction_core::{
-    AttachmentTextExtractionErrorV1, AttachmentTextExtractionRequestV1,
-    AttachmentTextExtractionStateV1, AttachmentTextExtractionStatusV1, AttachmentTextFormatV1,
+    AttachmentTextCustodyDelegationIntentV1, AttachmentTextExtractionErrorV1,
+    AttachmentTextExtractionRequestV1, AttachmentTextExtractionStateV1,
+    AttachmentTextExtractionStatusV1, AttachmentTextFormatV1,
 };
 use sha2::{Digest, Sha256};
 
 use crate::AttachmentTextExtractionPersistenceErrorV1;
 
 pub const ATTACHMENT_TEXT_EXTRACTION_REALTIME_LIMIT_V1: u32 = 512;
+pub const ATTACHMENT_TEXT_EXTRACTION_MAX_ATTEMPTS_V1: u32 = 8;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CreateAttachmentTextExtractionRunV1 {
@@ -31,6 +33,79 @@ pub enum CreateAttachmentTextExtractionRunOutcomeV1 {
     Created(PersistedAttachmentTextExtractionRunV1),
     Replayed(PersistedAttachmentTextExtractionRunV1),
     OperationCollision,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PersistAttachmentTextFactOutcomeV1 {
+    Recorded { transitioned_runs: u32 },
+    Replayed,
+    Conflict { rejected_runs: u32 },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingAttachmentTextCustodyDelegationV1 {
+    pub intent: AttachmentTextCustodyDelegationIntentV1,
+    pub candidate_envelope_sha256: [u8; 32],
+    pub created_at_unix_millis: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnpublishedAttachmentTextCustodyDelegationV1 {
+    pub message_id: [u8; 16],
+    pub envelope_sha256: [u8; 32],
+    pub exact_envelope_bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PersistAttachmentTextCustodyDelegationV1 {
+    pub request_id: [u8; 16],
+    pub run_id: [u8; 16],
+    pub candidate_message_id: [u8; 16],
+    pub safety_message_id: [u8; 16],
+    pub envelope_sha256: [u8; 32],
+    pub exact_envelope_bytes: Vec<u8>,
+    pub created_at_unix_millis: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PersistAttachmentTextCustodyResultOutcomeV1 {
+    Recorded,
+    Replayed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TextExtractionLeaseV1 {
+    pub worker_id: String,
+    pub runtime_generation: u64,
+    pub grant_epoch: u64,
+    pub lease_fence: u64,
+    pub lease_expires_at_unix_millis: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TextExtractionTargetBlobReceiptV1 {
+    pub reference_id: [u8; 16],
+    pub receipt_sha256: [u8; 32],
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimedAttachmentTextExtractionJobV1 {
+    pub logical_owner_id: String,
+    pub job_id: [u8; 16],
+    pub request: AttachmentTextExtractionRequestV1,
+    pub delegation_request_id: [u8; 16],
+    pub delegation_result_message_id: [u8; 16],
+    pub delegation_result_envelope_sha256: [u8; 32],
+    pub candidate_message_id: [u8; 16],
+    pub safety_message_id: [u8; 16],
+    pub source_reference_id: [u8; 16],
+    pub target_blob_receipt: Option<TextExtractionTargetBlobReceiptV1>,
+    pub source_receipt_sha256: [u8; 32],
+    pub source_declared_size: u64,
+    pub custody_transfer_source_proof: Vec<u8>,
+    pub attempt_count: u32,
+    pub max_attempts: u32,
+    pub lease: TextExtractionLeaseV1,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -78,6 +153,22 @@ pub fn attachment_text_extraction_request_fingerprint_v1(
     hasher.update(b"hermes.attachment-text-extraction.request.v1\0");
     hasher.update(attachment_anchor_id);
     hasher.finalize().into()
+}
+
+#[must_use]
+pub fn attachment_text_extraction_job_id_v1(
+    request: &AttachmentTextExtractionRequestV1,
+    delegation_request_id: [u8; 16],
+    delegation_result_message_id: [u8; 16],
+) -> [u8; 16] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"hermes.attachment-text-extraction.job.v1\0");
+    hasher.update(request.run_id);
+    hasher.update(request.operation_id);
+    hasher.update(request.attachment_anchor_id);
+    hasher.update(delegation_request_id);
+    hasher.update(delegation_result_message_id);
+    hasher.finalize()[..16].try_into().expect("digest prefix")
 }
 
 pub(crate) fn validate_create(
@@ -172,12 +263,52 @@ pub(crate) fn valid_owner(value: &str) -> bool {
     !value.is_empty() && value.len() <= 128
 }
 
+pub(crate) fn valid_worker(value: &str) -> bool {
+    valid_owner(value)
+}
+
+pub(crate) const fn valid_timestamp_millis(value: i64) -> bool {
+    value > 0
+}
+
 pub(crate) fn valid_id16(value: &[u8; 16]) -> bool {
     value.iter().any(|byte| *byte != 0)
 }
 
 pub(crate) fn valid_sha256(value: &[u8; 32]) -> bool {
     value.iter().any(|byte| *byte != 0)
+}
+
+pub(crate) const fn safety_state_code(
+    value: hermes_attachment_text_extraction_core::AttachmentTextSafetyStateV1,
+) -> i16 {
+    use hermes_attachment_text_extraction_core::AttachmentTextSafetyStateV1;
+    match value {
+        AttachmentTextSafetyStateV1::DescriptorOnly => 1,
+        AttachmentTextSafetyStateV1::BlobPending => 2,
+        AttachmentTextSafetyStateV1::BlobAdmitted => 3,
+        AttachmentTextSafetyStateV1::Quarantined => 4,
+        AttachmentTextSafetyStateV1::SafeForDelivery => 5,
+        AttachmentTextSafetyStateV1::Rejected => 6,
+    }
+}
+
+pub(crate) fn safety_state_from_code(
+    value: i16,
+) -> Result<
+    hermes_attachment_text_extraction_core::AttachmentTextSafetyStateV1,
+    AttachmentTextExtractionPersistenceErrorV1,
+> {
+    use hermes_attachment_text_extraction_core::AttachmentTextSafetyStateV1;
+    match value {
+        1 => Ok(AttachmentTextSafetyStateV1::DescriptorOnly),
+        2 => Ok(AttachmentTextSafetyStateV1::BlobPending),
+        3 => Ok(AttachmentTextSafetyStateV1::BlobAdmitted),
+        4 => Ok(AttachmentTextSafetyStateV1::Quarantined),
+        5 => Ok(AttachmentTextSafetyStateV1::SafeForDelivery),
+        6 => Ok(AttachmentTextSafetyStateV1::Rejected),
+        _ => Err(AttachmentTextExtractionPersistenceErrorV1::InvalidRow),
+    }
 }
 
 #[cfg(test)]
@@ -194,6 +325,24 @@ mod tests {
         assert_ne!(
             attachment_text_extraction_request_fingerprint_v1([1; 16]),
             attachment_text_extraction_request_fingerprint_v1([2; 16])
+        );
+    }
+
+    #[test]
+    fn job_identity_binds_request_and_custody_result() {
+        let request = AttachmentTextExtractionRequestV1 {
+            run_id: [1; 16],
+            operation_id: [2; 16],
+            attachment_anchor_id: [3; 16],
+        };
+        let first = attachment_text_extraction_job_id_v1(&request, [4; 16], [5; 16]);
+        assert_eq!(
+            first,
+            attachment_text_extraction_job_id_v1(&request, [4; 16], [5; 16])
+        );
+        assert_ne!(
+            first,
+            attachment_text_extraction_job_id_v1(&request, [4; 16], [6; 16])
         );
     }
 }

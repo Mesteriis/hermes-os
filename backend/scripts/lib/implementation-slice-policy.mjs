@@ -3336,6 +3336,7 @@ const ATTACHMENT_TEXT_EXTRACTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...ATTACHMENT_TEXT_EXTRACTION_PARSER_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-attachment-text-extraction-persistence': [
     { name: 'hermes-attachment-text-extraction-core', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-ingress', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
 };

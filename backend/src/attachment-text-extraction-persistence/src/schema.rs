@@ -35,7 +35,10 @@ mod tests {
         for required in [
             "attachment_text_extraction_runs",
             "attachment_text_extraction_event_inbox",
+            "attachment_text_extraction_scan_candidates",
+            "attachment_text_extraction_safety_facts",
             "attachment_text_extraction_custody_outbox",
+            "attachment_text_extraction_custody_result_inbox",
             "attachment_text_extraction_jobs",
             "attachment_text_extraction_artifacts",
             "attachment_text_extraction_realtime",

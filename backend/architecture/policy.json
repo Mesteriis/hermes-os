@@ -2412,6 +2412,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-attachment-text-extraction-ingress",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-storage-protocol",
           "kind": "normal"
         }
