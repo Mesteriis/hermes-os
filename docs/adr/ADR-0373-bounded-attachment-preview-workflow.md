@@ -4,7 +4,7 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: staged release assembly slice. Clean-room owner boundary,
+Состояние реализации: signed managed admission slice. Clean-room owner boundary,
 client/private-content boundary, event-only custody, renderer topology и phase
 gate определены. Отдельные `hermes-attachment-preview-api`, `-ingress`, `-core`
 и `-renderer-contract` admitted и реализуют versioned Start/Get/IssueRead/
@@ -34,8 +34,12 @@ Communications или Attachment Security implementation, не содержит 
 `hermes-attachment-preview-assembly` fail-closed материализует canonical
 descriptor, empty typed settings schema, owner-local Storage bundle и sorted
 unsigned runtime/storage release fragment; он не запускает runtime, renderer и
-не получает signing authority. Managed/live/browser evidence ещё не
-реализованы. Inventory gate
+не получает signing authority. Development release теперь собирает этот fragment
+отдельно и передаёт его release compiler для подписи. Authenticated managed
+conformance поднимает exact signed Preview binary как отдельный OS-процесс,
+применяет owner-local Storage bundle, выдаёт Vault credential lease и NATS grants
+и подтверждает readiness. Полный custody/render/restart, Gateway и browser
+evidence ещё не реализован. Inventory gate
 `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:

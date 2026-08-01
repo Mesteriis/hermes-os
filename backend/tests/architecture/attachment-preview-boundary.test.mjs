@@ -29,13 +29,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_assembly_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_managed_admission_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
-  assert.match(adr, /Состояние реализации: staged release assembly slice/);
-  assert.match(adr, /Managed\/live\/browser evidence ещё не/);
+  assert.match(adr, /Состояние реализации: signed managed admission slice/);
+  assert.match(adr, /Полный custody\/render\/restart, Gateway и browser[\s\S]*ещё не реализован/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);
@@ -403,4 +403,58 @@ test('Preview release assembly is a separate unsigned workflow build unit', asyn
   assert.match(source, /create_new\(true\)/);
   assert.match(main, /materialize_attachment_preview_release_assembly_v1/);
   assert.doesNotMatch(source, /Command::new|private_key|renderer\.render|serve-inherited/);
+});
+
+test('development release builds and signs the exact Preview assembly fragment', async () => {
+  const release = await readFile(
+    new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT),
+    'utf8',
+  );
+
+  assert.match(release, /--package hermes-attachment-preview-runtime/);
+  assert.match(release, /--package hermes-attachment-preview-assembly/);
+  assert.match(
+    release,
+    /hermes-attachment-preview-assembly"[\s\S]*--runtime "\$cargo_target_dir\/debug\/hermes-attachment-preview-runtime"/,
+  );
+  assert.match(
+    release,
+    /--artifact-fragment "\$attachment_preview_assembly\/attachment-preview\.release-artifacts\.json"/,
+  );
+  assert.doesNotMatch(
+    release,
+    /attachment_preview_assembly=.*(?:communications|attachment-security)/,
+  );
+});
+
+test('Preview has an authenticated exact signed managed admission gate', async () => {
+  const [setup, flow, harness] = await Promise.all([
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
+  ]);
+
+  assert.match(setup, /SignedRuntimeArtifact::new/);
+  assert.match(setup, /attachment_preview_storage_bundle_v1/);
+  assert.match(setup, /issue_managed/);
+  assert.match(setup, /to_managed_runtime_configuration/);
+  assert.match(setup, /start_reserved_workflow/);
+  assert.match(flow, /managed_attachment_preview_starts_from_exact_signed_release/);
+  assert.match(flow, /wait_until_ready|is_active/);
+  assert.match(harness, /-p'[\s\S]*hermes-attachment-preview-runtime/);
+  assert.match(harness, /HERMES_ATTACHMENT_PREVIEW_RUNTIME_BIN/);
+  assert.match(harness, /managed_attachment_preview_starts_from_exact_signed_release/);
+  assert.doesNotMatch(`${setup}\n${flow}`, /hermes_communications_(?:domain|persistence)|hermes_attachment_security_(?:core|persistence|runtime)/);
 });

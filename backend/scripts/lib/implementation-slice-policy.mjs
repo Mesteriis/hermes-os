@@ -7117,7 +7117,10 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'attachment_preview_assembly_v1') {
+  if (
+    currentSlice === 'attachment_preview_assembly_v1'
+    || currentSlice === 'attachment_preview_managed_admission_v1'
+  ) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: ATTACHMENT_PREVIEW_FOUNDATION_INVENTORY,

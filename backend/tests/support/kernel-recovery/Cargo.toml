@@ -32,6 +32,9 @@ hermes-attachment-archive-inspection-runtime = { path = "../../../src/attachment
 hermes-attachment-text-extraction-api = { path = "../../../src/attachment-text-extraction-api" }
 hermes-attachment-text-extraction-persistence = { path = "../../../src/attachment-text-extraction-persistence" }
 hermes-attachment-text-extraction-runtime = { path = "../../../src/attachment-text-extraction-runtime" }
+hermes-attachment-preview-api = { path = "../../../src/attachment-preview-api" }
+hermes-attachment-preview-persistence = { path = "../../../src/attachment-preview-persistence" }
+hermes-attachment-preview-runtime = { path = "../../../src/attachment-preview-runtime" }
 hermes-communications-persistence = { path = "../../../src/communications-persistence" }
 hermes-communications-runtime = { path = "../../../src/communications-runtime" }
 hermes-communications-ai-source-api = { path = "../../../src/communications-ai-source-api" }
