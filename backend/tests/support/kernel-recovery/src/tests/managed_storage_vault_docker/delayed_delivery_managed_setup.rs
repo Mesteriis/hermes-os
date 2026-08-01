@@ -185,7 +185,9 @@ pub(super) fn start_delayed_delivery_runtime(
             storage: Some(storage),
             event_hub_endpoint: events.nats_endpoint().to_owned(),
             event_credential_revision: events.credential_revision(),
+            runtime_artifacts: Vec::new(),
         },
+        &[],
     )
     .expect("start managed delayed-delivery workflow");
     supervisor

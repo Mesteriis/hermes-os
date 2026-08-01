@@ -267,7 +267,9 @@ fn start_reserved_communication_recipient_suggestion_runtime_v1(
             storage: Some(storage),
             event_hub_endpoint: events.nats_endpoint().to_owned(),
             event_credential_revision: events.credential_revision(),
+            runtime_artifacts: Vec::new(),
         },
+        &[],
     )
     .expect("start managed Communication Recipient Suggestion workflow");
     supervisor

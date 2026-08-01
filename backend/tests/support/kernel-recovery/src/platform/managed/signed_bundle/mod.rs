@@ -1,3 +1,5 @@
 mod manifest;
 
-pub(crate) use manifest::{InstalledSignedBundle, SignedNativeDependency, SignedRuntimeArtifact};
+pub(crate) use manifest::{
+    InstalledSignedBundle, SignedNativeDependency, SignedRuntimeArtifact, SignedRuntimeResource,
+};

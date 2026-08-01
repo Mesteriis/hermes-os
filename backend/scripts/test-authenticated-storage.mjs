@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -418,6 +418,7 @@ async function postgres_test_database_url(secrets) {
 async function run_managed_process_conformance(secrets) {
   const tdjsonFixture = await compile_tdjson_fixture(secrets);
   const tgcallsFixture = await compile_tgcalls_fixture(secrets);
+  const textExtractionOcr = await prepare_attachment_text_extraction_ocr();
   await run('cargo', [
     `+${toolchain}`,
     '--config',
@@ -461,6 +462,8 @@ async function run_managed_process_conformance(secrets) {
     '-p',
     'hermes-attachment-archive-inspection-runtime',
     '-p',
+    'hermes-attachment-text-extraction-runtime',
+    '-p',
     'hermes-review-attention-runtime',
     '-p',
     'hermes-review-task-candidate-runtime',
@@ -502,6 +505,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_bulk_action_reaches_gateway_sse_and_replays_after_restart',
     'managed_attachment_security_engine_starts_with_exact_signed_contracts',
     'managed_archive_inspection_reaches_gateway_sse_and_replays_after_restart',
+    'managed_attachment_text_extraction_starts_with_exact_staged_ocr_resources',
     'managed_review_attention_reaches_gateway_sse_and_replays_after_restart',
     'managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart',
     'managed_note_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart',
@@ -563,6 +567,10 @@ async function run_managed_process_conformance(secrets) {
       HERMES_COMMUNICATION_NOTE_CANDIDATE_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-communication-note-candidate-runtime`,
       HERMES_ATTACHMENT_SECURITY_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-attachment-security-runtime`,
       HERMES_ATTACHMENT_ARCHIVE_INSPECTION_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-attachment-archive-inspection-runtime`,
+      HERMES_ATTACHMENT_TEXT_EXTRACTION_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-attachment-text-extraction-runtime`,
+      HERMES_ATTACHMENT_TEXT_EXTRACTION_OCR_RUNNER: textExtractionOcr.runner,
+      HERMES_ATTACHMENT_TEXT_EXTRACTION_OCR_ENG: textExtractionOcr.english,
+      HERMES_ATTACHMENT_TEXT_EXTRACTION_OCR_RUS: textExtractionOcr.russian,
       HERMES_REVIEW_ATTENTION_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-review-attention-runtime`,
       HERMES_REVIEW_TASK_CANDIDATE_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-review-task-candidate-runtime`,
       HERMES_REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-reviewed-task-candidate-promotion-runtime`,
@@ -586,6 +594,26 @@ async function run_managed_process_conformance(secrets) {
       await stop_contour(secrets);
     }
   }
+}
+
+async function prepare_attachment_text_extraction_ocr() {
+  const root = process.env.HERMES_TEST_ATTACHMENT_TEXT_EXTRACTION_OCR_ROOT
+    || join(process.cwd(), '..', '.local', 'dev-native', 'attachment-text-extraction-ocr');
+  const resources = {
+    runner: join(root, 'tesseract-runner'),
+    english: join(root, 'eng.traineddata'),
+    russian: join(root, 'rus.traineddata'),
+  };
+  try {
+    await Promise.all(Object.values(resources).map((path) => access(path)));
+  } catch {
+    await run('./scripts/build-attachment-text-extraction-ocr-macos.sh', [
+      '--output-dir',
+      root,
+    ]);
+  }
+  await Promise.all(Object.values(resources).map((path) => access(path)));
+  return resources;
 }
 
 async function compile_tdjson_fixture(secrets) {

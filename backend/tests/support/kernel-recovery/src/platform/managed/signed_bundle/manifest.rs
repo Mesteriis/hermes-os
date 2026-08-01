@@ -28,6 +28,13 @@ pub(crate) struct SignedNativeDependency {
     bound_module_id: &'static str,
 }
 
+pub(crate) struct SignedRuntimeResource {
+    artifact_id: &'static str,
+    source: PathBuf,
+    bound_module_id: &'static str,
+    artifact_kind: DistributionArtifactKindV1,
+}
+
 impl SignedRuntimeArtifact {
     pub(crate) fn new(artifact_id: &'static str, binary: PathBuf, descriptor: Vec<u8>) -> Self {
         Self {
@@ -58,6 +65,34 @@ impl SignedNativeDependency {
     }
 }
 
+impl SignedRuntimeResource {
+    pub(crate) fn native_executable(
+        artifact_id: &'static str,
+        source: PathBuf,
+        bound_module_id: &'static str,
+    ) -> Self {
+        Self {
+            artifact_id,
+            source,
+            bound_module_id,
+            artifact_kind: DistributionArtifactKindV1::ModuleRuntimeNativeExecutable,
+        }
+    }
+
+    pub(crate) fn read_only_data(
+        artifact_id: &'static str,
+        source: PathBuf,
+        bound_module_id: &'static str,
+    ) -> Self {
+        Self {
+            artifact_id,
+            source,
+            bound_module_id,
+            artifact_kind: DistributionArtifactKindV1::ModuleRuntimeReadOnlyData,
+        }
+    }
+}
+
 pub(crate) struct InstalledSignedBundle {
     kernel: PathBuf,
 }
@@ -75,6 +110,15 @@ impl InstalledSignedBundle {
         artifacts: &[SignedRuntimeArtifact],
         native_dependencies: &[SignedNativeDependency],
     ) -> Result<Self, String> {
+        Self::install_with_runtime_resources(root, artifacts, native_dependencies, &[])
+    }
+
+    pub(crate) fn install_with_runtime_resources(
+        root: &Path,
+        artifacts: &[SignedRuntimeArtifact],
+        native_dependencies: &[SignedNativeDependency],
+        runtime_resources: &[SignedRuntimeResource],
+    ) -> Result<Self, String> {
         if artifacts.is_empty() {
             return Err("signed release must contain managed artifacts".to_owned());
         }
@@ -89,7 +133,12 @@ impl InstalledSignedBundle {
         .map_err(|error| error.to_string())?;
         std::fs::create_dir_all(&distribution).map_err(|error| error.to_string())?;
         std::fs::write(&kernel, b"test-kernel").map_err(|error| error.to_string())?;
-        let manifest = install_artifacts(&distribution, artifacts, native_dependencies)?;
+        let manifest = install_artifacts(
+            &distribution,
+            artifacts,
+            native_dependencies,
+            runtime_resources,
+        )?;
         write_release_signature(&resources, &manifest)?;
         Ok(Self { kernel })
     }
@@ -104,6 +153,7 @@ fn install_artifacts(
     distribution: &Path,
     artifacts: &[SignedRuntimeArtifact],
     native_dependencies: &[SignedNativeDependency],
+    runtime_resources: &[SignedRuntimeResource],
 ) -> Result<DistributionManifestV1, String> {
     let mut manifest_artifacts = artifacts
         .iter()
@@ -113,6 +163,12 @@ fn install_artifacts(
         native_dependencies
             .iter()
             .map(|dependency| install_native_dependency(distribution, dependency))
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    manifest_artifacts.extend(
+        runtime_resources
+            .iter()
+            .map(|resource| install_runtime_resource(distribution, resource))
             .collect::<Result<Vec<_>, _>>()?,
     );
     manifest_artifacts.sort_by(|left, right| left.artifact_id.cmp(&right.artifact_id));
@@ -125,6 +181,48 @@ fn install_artifacts(
         target_triple: TARGET_TRIPLE.to_owned(),
         generation: 1,
         artifacts: manifest_artifacts,
+    })
+}
+
+fn install_runtime_resource(
+    distribution: &Path,
+    resource: &SignedRuntimeResource,
+) -> Result<DistributionManifestArtifactV1, String> {
+    let directory = match resource.artifact_kind {
+        DistributionArtifactKindV1::ModuleRuntimeNativeExecutable => "native-bin",
+        DistributionArtifactKindV1::ModuleRuntimeReadOnlyData => "data",
+        _ => return Err("signed runtime resource kind is invalid".to_owned()),
+    };
+    let relative_path = format!("{directory}/{}", resource.artifact_id);
+    let path = distribution.join(&relative_path);
+    std::fs::create_dir_all(
+        path.parent()
+            .ok_or_else(|| "signed runtime resource path is invalid".to_owned())?,
+    )
+    .map_err(|error| error.to_string())?;
+    std::fs::copy(&resource.source, &path).map_err(|error| error.to_string())?;
+    let mode = match resource.artifact_kind {
+        DistributionArtifactKindV1::ModuleRuntimeNativeExecutable => 0o700,
+        DistributionArtifactKindV1::ModuleRuntimeReadOnlyData => 0o600,
+        _ => unreachable!("validated runtime resource kind"),
+    };
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode))
+        .map_err(|error| error.to_string())?;
+    let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
+    Ok(DistributionManifestArtifactV1 {
+        artifact_kind: resource.artifact_kind as i32,
+        artifact_id: resource.artifact_id.to_owned(),
+        relative_path,
+        size_bytes: bytes.len() as u64,
+        sha256: Sha256::digest(&bytes).to_vec(),
+        descriptor_sha256: Vec::new(),
+        settings_schema_sha256: Vec::new(),
+        required: true,
+        descriptor_relative_path: String::new(),
+        descriptor_size_bytes: 0,
+        settings_schema_relative_path: String::new(),
+        settings_schema_size_bytes: 0,
+        bound_module_id: resource.bound_module_id.to_owned(),
     })
 }
 
@@ -335,6 +433,90 @@ mod tests {
         assert_eq!(native.relative_path, "lib/telegram-tdjson-v1");
         assert!(native.descriptor_relative_path.is_empty());
         assert!(native.settings_schema_relative_path.is_empty());
+
+        std::fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
+    fn signs_executable_and_read_only_runtime_resources_as_distinct_kinds() {
+        let root = std::env::temp_dir().join(format!(
+            "hermes-signed-runtime-resources-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock after epoch")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).expect("test root");
+        let runtime = root.join("runtime");
+        let runner = root.join("runner");
+        let model = root.join("model");
+        std::fs::write(&runtime, b"runtime").expect("runtime fixture");
+        std::fs::write(&runner, b"runner").expect("runner fixture");
+        std::fs::write(&model, b"model").expect("model fixture");
+        let descriptor = ModuleDescriptorV1 {
+            descriptor_major: 1,
+            descriptor_revision: 1,
+            module_id: "hermes-attachment-text-extraction-runtime".to_owned(),
+            owner_id: "attachment_text_extraction".to_owned(),
+            ..Default::default()
+        }
+        .encode_to_vec();
+
+        InstalledSignedBundle::install_with_runtime_resources(
+            &root,
+            &[SignedRuntimeArtifact::new(
+                "attachment_text_extraction.runtime.v1",
+                runtime,
+                descriptor,
+            )],
+            &[],
+            &[
+                SignedRuntimeResource::native_executable(
+                    "attachment_text_extraction.ocr.runner.v1",
+                    runner,
+                    "hermes-attachment-text-extraction-runtime",
+                ),
+                SignedRuntimeResource::read_only_data(
+                    "attachment_text_extraction.ocr.eng.v1",
+                    model,
+                    "hermes-attachment-text-extraction-runtime",
+                ),
+            ],
+        )
+        .expect("signed bundle");
+
+        let signed = SignedDistributionManifestV1::decode(
+            std::fs::read(
+                root.join(
+                    "Hermes.app/Contents/Resources/hermes-kernel-release/hermes-signed-distribution-manifest.pb",
+                ),
+            )
+            .expect("signed manifest")
+            .as_slice(),
+        )
+        .expect("signed manifest encoding");
+        let manifest =
+            decode_distribution_manifest_v1(&signed.raw_manifest_bytes).expect("valid manifest");
+        let runner = manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.artifact_id.ends_with("runner.v1"))
+            .expect("runner resource");
+        let model = manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.artifact_id.ends_with("eng.v1"))
+            .expect("model resource");
+        assert_eq!(
+            runner.artifact_kind,
+            DistributionArtifactKindV1::ModuleRuntimeNativeExecutable as i32
+        );
+        assert_eq!(
+            model.artifact_kind,
+            DistributionArtifactKindV1::ModuleRuntimeReadOnlyData as i32
+        );
+        assert_eq!(runner.bound_module_id, model.bound_module_id);
 
         std::fs::remove_dir_all(root).expect("remove test root");
     }

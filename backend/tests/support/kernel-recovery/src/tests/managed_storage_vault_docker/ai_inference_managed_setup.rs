@@ -244,6 +244,7 @@ fn start_reserved_ai_inference_runtime_v1(
         event_credential_revision: 0,
         settings_revision: 1,
         logical_human_owner_id: AI_INFERENCE_LOGICAL_OWNER_ID_V1.to_owned(),
+        runtime_artifacts: Vec::new(),
     };
     managed_launch::start_reserved_engine(
         supervisor,
@@ -256,6 +257,7 @@ fn start_reserved_ai_inference_runtime_v1(
             values: Vec::new(),
         }
         .encode_to_vec(),
+        &[],
     )
     .expect("start managed AI inference engine");
     supervisor

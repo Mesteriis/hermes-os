@@ -11,8 +11,10 @@ hash audit, system-fallback negative и изолированная двойна�
 проверка реализованы в отдельной native build unit. Development signed release
 компилирует exact runtime/model artifacts, а clean-room development assembly
 admit-ит и запускает Attachment Text Extraction как отдельный managed workflow.
-Реальный `eng+rus` conformance через workflow и полный negative/live gate ещё
-не доказаны.
+Отдельный Docker/live conformance запускает signed workflow через Kernel с
+private staging exact runner/`eng`/`rus` resources и проверяет readiness.
+Реальный `eng+rus` job через Event/Blob flow и полный negative/live gate ещё не
+доказаны.
 `attachment_text_extraction_v1` остаётся `planned`.
 
 Зависит от:

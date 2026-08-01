@@ -443,3 +443,51 @@ test('OCR native release build is pinned static reproducible and system-fallback
     /(?:^|\s)brew(?:\s|$)|Command::new|submodule update --remote|--branch\s/m,
   );
 });
+
+test('managed conformance stages exact OCR resources through the workflow release boundary', async () => {
+  const [setup, flow, signedBundle, harness] = await Promise.all([
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_text_extraction_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_text_extraction_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/platform/managed/signed_bundle/manifest.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT),
+      'utf8',
+    ),
+  ]);
+
+  assert.match(setup, /install_with_runtime_resources/);
+  assert.match(setup, /SignedRuntimeResource::native_executable/);
+  assert.match(setup, /SignedRuntimeResource::read_only_data/);
+  assert.match(setup, /start_reserved_workflow/);
+  assert.match(setup, /&admitted\.capability_ids/);
+  assert.doesNotMatch(setup, /start_reserved_(?:engine|integration|domain)/);
+  assert.match(flow, /supervisor[\s\S]*\.is_active\(&started\.registration_id\)/);
+  assert.match(flow, /attachment_text_extraction\.ocr_runtime\.v1/);
+  assert.match(
+    signedBundle,
+    /ModuleRuntimeNativeExecutable[\s\S]*ModuleRuntimeReadOnlyData/,
+  );
+  assert.match(
+    harness,
+    /managed_attachment_text_extraction_starts_with_exact_staged_ocr_resources/,
+  );
+  assert.match(harness, /HERMES_ATTACHMENT_TEXT_EXTRACTION_OCR_RUNNER/);
+});

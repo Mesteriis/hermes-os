@@ -161,7 +161,12 @@ mod attachment_security_event_flow;
 mod attachment_security_managed_flow;
 #[path = "managed_storage_vault_docker/attachment_security_managed_setup.rs"]
 mod attachment_security_managed_setup;
+#[path = "managed_storage_vault_docker/attachment_text_extraction_managed_flow.rs"]
+mod attachment_text_extraction_managed_flow;
+#[path = "managed_storage_vault_docker/attachment_text_extraction_managed_setup.rs"]
+mod attachment_text_extraction_managed_setup;
 use archive_inspection_managed_setup::*;
+use attachment_text_extraction_managed_setup::*;
 #[path = "managed_storage_vault_docker/archive_inspection_managed_flow.rs"]
 mod archive_inspection_managed_flow;
 #[path = "managed_storage_vault_docker/attachment_security_persistence_fixture.rs"]

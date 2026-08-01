@@ -29,6 +29,9 @@ hermes-attachment-security-runtime = { path = "../../../src/attachment-security-
 hermes-attachment-archive-inspection-api = { path = "../../../src/attachment-archive-inspection-api" }
 hermes-attachment-archive-inspection-persistence = { path = "../../../src/attachment-archive-inspection-persistence" }
 hermes-attachment-archive-inspection-runtime = { path = "../../../src/attachment-archive-inspection-runtime" }
+hermes-attachment-text-extraction-api = { path = "../../../src/attachment-text-extraction-api" }
+hermes-attachment-text-extraction-persistence = { path = "../../../src/attachment-text-extraction-persistence" }
+hermes-attachment-text-extraction-runtime = { path = "../../../src/attachment-text-extraction-runtime" }
 hermes-communications-persistence = { path = "../../../src/communications-persistence" }
 hermes-communications-runtime = { path = "../../../src/communications-runtime" }
 hermes-communications-ai-source-api = { path = "../../../src/communications-ai-source-api" }

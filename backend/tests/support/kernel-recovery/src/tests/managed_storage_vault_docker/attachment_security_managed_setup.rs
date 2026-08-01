@@ -224,6 +224,7 @@ fn start_reserved_attachment_security_runtime(
         event_credential_revision: events.credential_revision(),
         settings_revision: ATTACHMENT_SECURITY_SETTINGS_REVISION,
         logical_human_owner_id: "owner-1".to_owned(),
+        runtime_artifacts: Vec::new(),
     };
     managed_launch::start_reserved_engine(
         supervisor,
@@ -231,6 +232,7 @@ fn start_reserved_attachment_security_runtime(
         reservation,
         configuration,
         attachment_security_settings_snapshot(&registration_id, clamav_port).encode_to_vec(),
+        &[],
     )
     .expect("start managed Attachment Security engine");
     StartedAttachmentSecurityRuntime {

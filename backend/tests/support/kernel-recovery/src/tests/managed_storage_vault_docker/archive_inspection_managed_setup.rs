@@ -247,6 +247,7 @@ fn start_reserved_archive_inspection_runtime_v1(
         event_credential_revision: events.credential_revision(),
         settings_revision: ARCHIVE_INSPECTION_SETTINGS_REVISION_V1,
         logical_human_owner_id: ARCHIVE_INSPECTION_LOGICAL_OWNER_ID_V1.to_owned(),
+        runtime_artifacts: Vec::new(),
     };
     managed_launch::start_reserved_engine(
         supervisor,
@@ -254,6 +255,7 @@ fn start_reserved_archive_inspection_runtime_v1(
         reservation,
         configuration,
         archive_inspection_settings_snapshot(&registration_id).encode_to_vec(),
+        &[],
     )
     .expect("start managed Archive Inspection engine");
     StartedArchiveInspectionRuntimeV1 {
