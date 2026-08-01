@@ -28,13 +28,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_safe_adapters_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_pdf_adapter_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
-  assert.match(adr, /Состояние реализации: staged safe-adapter slice/);
-  assert.match(adr, /PDF\/DOCX adapters, persistence, managed runtime/);
+  assert.match(adr, /Состояние реализации: staged PDF-adapter slice/);
+  assert.match(adr, /DOCX adapter,[\s\S]*persistence, managed runtime/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);
@@ -212,5 +212,28 @@ test('safe text image and media adapters are three isolated byte-only units', as
   assert.doesNotMatch(
     `${text}\n${image}\n${media}`,
     /\b(?:filename|provider|account_id|filesystem|source_path|data_url|url)\b/,
+  );
+});
+
+test('PDF adapter rasterizes one bounded page without native or owner authority', async () => {
+  const [manifest, source] = await Promise.all([
+    readFile(new URL('src/attachment-preview-pdf/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-pdf/src/lib.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+  assert.match(manifest, /hayro = \{ version = "=0\.7\.1", default-features = true \}/);
+  assert.match(manifest, /image = \{ version = "=0\.25\.9", default-features = false, features = \["png"\] \}/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:communications|attachment-security|blob|events|runtime|storage|kernel)|\b(?:sqlx|tokio)\s*=/,
+  );
+  assert.match(source, /render_first_page_v1/);
+  assert.match(source, /MAX_RENDER_DIMENSION_V1/);
+  assert.match(source, /ATTACHMENT_PREVIEW_MAX_IMAGE_PIXELS_V1/);
+  assert.match(source, /FORBIDDEN_ACTIVE_MARKERS_V1/);
+  assert.match(source, /catch_unwind/);
+  assert.match(source, /AttachmentPreviewKindV1::Document/);
+  assert.doesNotMatch(
+    source,
+    /Command::|TcpStream|File::|filesystem|source_path|provider|account_id|filename|content_type_hint|data_url|url/,
   );
 });

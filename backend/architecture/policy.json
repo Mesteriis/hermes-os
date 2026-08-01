@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_preview_safe_adapters_v1",
+    "currentSlice": "attachment_preview_pdf_adapter_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1344,6 +1344,12 @@
         "role": "workflow",
         "owner": "attachment_preview",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-preview-pdf",
+        "role": "workflow",
+        "owner": "attachment_preview",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2488,6 +2494,16 @@
         }
       ],
       "hermes-attachment-preview-media": [
+        {
+          "name": "hermes-attachment-preview-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-renderer-contract",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-preview-pdf": [
         {
           "name": "hermes-attachment-preview-api",
           "kind": "normal"
@@ -7120,6 +7136,26 @@
         }
       ],
       "hermes-attachment-preview-media": [],
+      "hermes-attachment-preview-pdf": [
+        {
+          "name": "image",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.25.9",
+          "defaultFeatures": false,
+          "features": [
+            "png"
+          ]
+        },
+        {
+          "name": "hayro",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.7.1",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-attachment-text-extraction-plain": [],
       "hermes-attachment-text-extraction-pdf": [
         {
@@ -9543,6 +9579,10 @@
         "customBuildAllowed": false
       },
       "hermes-attachment-preview-media": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-preview-pdf": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },

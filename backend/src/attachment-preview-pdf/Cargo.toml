@@ -1,0 +1,19 @@
+[package]
+name = "hermes-attachment-preview-pdf"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "attachment_preview"
+surface = "implementation"
+
+[dependencies]
+hermes-attachment-preview-api = { path = "../attachment-preview-api" }
+hermes-attachment-preview-renderer-contract = { path = "../attachment-preview-renderer-contract" }
+image = { version = "=0.25.9", default-features = false, features = ["png"] }
+hayro = { version = "=0.7.1", default-features = true }

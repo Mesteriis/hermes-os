@@ -156,7 +156,7 @@ test('note candidate agreement separates Communications workflow Review and Know
     state: 'implemented',
     dependsOn: ['communications_content_read_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_safe_adapters_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_pdf_adapter_v1');
   assert.match(adr, /Состояние реализации: implemented/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);

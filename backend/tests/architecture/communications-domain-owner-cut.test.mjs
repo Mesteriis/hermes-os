@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_preview_safe_adapters_v1',
+    'attachment_preview_pdf_adapter_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'knowledge', 'review', 'tasks'],
