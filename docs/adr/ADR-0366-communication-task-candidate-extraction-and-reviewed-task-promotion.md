@@ -59,8 +59,16 @@ candidate в Review-target-bound Blob, строит exact durable
 submission envelopes в собственном outbox. Runtime не импортирует Review core,
 persistence или runtime implementation; общий outbox relay публикует exact
 source и Review envelopes без re-encode. Aggregate
-gate остаётся закрыт до Gateway/SSE business-flow composition, полного managed
-approve/reject E2E и обязательных negative/restart/revoke/privacy доказательств.
+managed E2E теперь начинает extraction через generated Gateway Start/Get из
+реального Communications source, а не из seeded Review rows; доказывает exact
+request replay/conflict, wrong-owner, stale source, runtime generation/grant
+fences, отсутствие Task до approve, ровно один Task после approve и отсутствие
+Task после reject. Extraction и Review публикуют отдельные terminal frames в
+общий replayable SSE; после owner cache revoke и независимого restart обоих
+runtimes восстанавливаются те же cursors без source body или candidate
+presentation bytes. Aggregate gate остаётся закрыт до оставшихся обязательных
+duplicate-event, Blob expiry и workflow unknown-command/correlation negatives,
+итогового clean-room аудита и повторного full pre-push.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 

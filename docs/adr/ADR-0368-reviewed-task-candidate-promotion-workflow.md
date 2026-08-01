@@ -18,9 +18,14 @@ inbox и Review realtime transition и делает ack после commit. Workf
 и Storage bundle включены в signed distribution отдельными artifacts; Kernel
 managed admission доказан вместе с extraction, Review и Tasks через real
 Vault/Storage/NATS readiness. Live managed E2E доказывает approve/reject через
-typed Gateway routes, exact event-only workflow, ровно один Task для approve,
-отсутствие Task для reject, Review `succeeded`, shared SSE terminal frames и
-replay тех же cursors после рестарта Review runtime. Tasks принимает
+typed Gateway routes, начиная с реального Communications source и generated
+extraction Start/Get без прямого seed Review, exact event-only workflow, ровно
+один Task для approve, отсутствие Task до approve и для reject, Review
+`succeeded`, extraction/Review frames в shared SSE и replay тех же cursors
+после owner cache revoke и независимого рестарта extraction и Review runtimes.
+Тот же contour доказывает wrong-owner, stale source/review,
+request duplicate/conflict, runtime generation/grant fences и отсутствие
+private source/candidate presentation bytes в SSE. Tasks принимает
 target-bound candidate Blob только после собственного custody transfer по
 exact command evidence; прямое чтение Review reference запрещено. Promotion
 client boundary теперь проверяет persisted operation до current Review
@@ -28,7 +33,8 @@ revision/state: exact retry после terminal promotion replay-ит сохра
 операцию, а reuse operation ID с другим request hash/fingerprint fail closed
 как `operation_conflict` без повторного решения или Task. Live managed gate
 доказывает оба случая. Promotion gate остаётся staged только до итогового
-clean-room аудита оставшихся negative requirements.
+clean-room аудита оставшихся duplicate-event, Blob expiry и workflow
+unknown-command/correlation negative requirements и повторного full pre-push.
 
 Уточняет:
 

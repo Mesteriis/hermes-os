@@ -5,6 +5,18 @@ use super::*;
 use std::time::Instant;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use hermes_communication_task_candidate_api::{
+    COMMUNICATION_TASK_CANDIDATE_COMMAND_CONNECT_PATH_V1,
+    COMMUNICATION_TASK_CANDIDATE_QUERY_CONNECT_PATH_V1,
+    COMMUNICATION_TASK_CANDIDATE_REALTIME_CONTRACT_NAME_V1,
+    COMMUNICATION_TASK_CANDIDATE_REALTIME_EVENT_KIND_V1,
+    wire::{
+        CommunicationTaskCandidateStateV1, CommunicationTaskCandidateStatusChangedV1,
+        CommunicationTaskCandidateV1, GetCommunicationTaskCandidateRequestV1,
+        GetCommunicationTaskCandidateResponseV1, StartCommunicationTaskCandidateRequestV1,
+        StartCommunicationTaskCandidateResponseV1,
+    },
+};
 use hermes_gateway_protocol::v1::{
     ClientRealtimeEventV1, ClientRealtimeFrameV1, client_realtime_frame_v1::Frame as RealtimeFrame,
 };
@@ -30,7 +42,7 @@ pub(super) type TaskCandidateGateway = hermes_gateway_runtime::GatewayApplicatio
     hermes_gateway_runtime::InMemoryBrowserRealtimeSource,
 >;
 
-pub(super) struct SeededTaskCandidateReviewsV1 {
+pub(super) struct TaskCandidateReviewsV1 {
     pub approved_review_id: Vec<u8>,
     pub approved_candidate_id: Vec<u8>,
     pub rejected_review_id: Vec<u8>,
@@ -42,7 +54,7 @@ pub(super) struct TaskCandidateTerminalEventsV1 {
     pub rejected: ClientRealtimeEventV1,
 }
 
-type ObservedTaskCandidateFramesV1 = Arc<std::sync::Mutex<Vec<(Vec<u8>, i32, i32, u64)>>>;
+type ObservedTaskCandidateFramesV1 = Arc<std::sync::Mutex<Vec<(String, Vec<u8>, i32, i32, u64)>>>;
 
 pub(super) fn task_candidate_gateway_v1(
     store: &Arc<SqliteControlStore>,
@@ -70,78 +82,158 @@ pub(super) fn task_candidate_gateway_v1(
     .expect("compose Task candidate Gateway routes")
 }
 
-pub(super) fn seed_pending_task_candidate_reviews_v1(
+pub(super) fn start_task_candidate_extraction_v1(
+    router: &TaskCandidateGateway,
     runtime: &tokio::runtime::Runtime,
-) -> SeededTaskCandidateReviewsV1 {
-    runtime.block_on(async {
-        let pool = task_candidate_admin_pool_v1().await;
-        let updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("wall clock")
-            .as_secs()
-            .saturating_sub(60) as i64;
-        let approved_candidate_id = [0x31; 16];
-        let approved_digest = [0x32; 32];
-        let approved_source_id = [0x33_u8; 16];
-        let rejected_candidate_id = [0x41; 16];
-        let rejected_digest = [0x42; 32];
-        let rejected_source_id = [0x43_u8; 16];
-        let approved_review_id = derive_review_task_candidate_id_v1(
-            TASK_CANDIDATE_LOGICAL_HUMAN_OWNER_ID_V1,
-            &approved_candidate_id,
-            &approved_digest,
-        )
-        .expect("approved review id");
-        let rejected_review_id = derive_review_task_candidate_id_v1(
-            TASK_CANDIDATE_LOGICAL_HUMAN_OWNER_ID_V1,
-            &rejected_candidate_id,
-            &rejected_digest,
-        )
-        .expect("rejected review id");
-        for (review_id, candidate_id, digest, source_id, title) in [
-            (
-                approved_review_id,
-                approved_candidate_id,
-                approved_digest,
-                approved_source_id,
-                "Approved candidate title",
-            ),
-            (
-                rejected_review_id,
-                rejected_candidate_id,
-                rejected_digest,
-                rejected_source_id,
-                "Rejected candidate title",
-            ),
-        ] {
-            sqlx::query(
-                "INSERT INTO hermes_data.review_task_candidate_state (
-                   logical_owner_id, review_id, candidate_id, candidate_digest,
-                   source_evidence_id, source_evidence_revision, title, due_text_hint,
-                   assignee_label_hint, state, promotion_status, review_revision,
-                   decided_by_owner_device_id, decided_at_unix_seconds, decided_at_nanos,
-                   promoted_task_id, updated_at_unix_seconds, updated_at_nanos
-                 ) VALUES ($1,$2,$3,$4,$5,1,$6,NULL,NULL,1,1,1,NULL,NULL,NULL,NULL,$7,0)",
+    cookie: &str,
+    operation_id: u8,
+    source_message_id: &[u8],
+    expected_source_revision: u64,
+) -> StartCommunicationTaskCandidateResponseV1 {
+    post_proto(
+        router,
+        runtime,
+        cookie,
+        COMMUNICATION_TASK_CANDIDATE_COMMAND_CONNECT_PATH_V1,
+        StartCommunicationTaskCandidateRequestV1 {
+            protocol_major: 1,
+            operation_id: vec![operation_id; 16],
+            source_message_id: source_message_id.to_vec(),
+            expected_source_revision,
+        },
+    )
+}
+
+pub(super) fn wait_for_ready_task_candidate_extraction_v1(
+    router: &TaskCandidateGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    run_id: &[u8],
+) -> GetCommunicationTaskCandidateResponseV1 {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let response: GetCommunicationTaskCandidateResponseV1 = post_proto(
+            router,
+            runtime,
+            cookie,
+            COMMUNICATION_TASK_CANDIDATE_QUERY_CONNECT_PATH_V1,
+            GetCommunicationTaskCandidateRequestV1 {
+                protocol_major: 1,
+                run_id: run_id.to_vec(),
+            },
+        );
+        if response.state
+            == CommunicationTaskCandidateStateV1::CommunicationTaskCandidateStateReady as i32
+        {
+            return response;
+        }
+        assert!(
+            response.state
+                != CommunicationTaskCandidateStateV1::CommunicationTaskCandidateStateRejected
+                    as i32,
+            "Task candidate extraction rejected: {response:?}"
+        );
+        assert!(
+            Instant::now() < deadline,
+            "Task candidate extraction timeout: {response:?}; storage={}",
+            task_candidate_storage_diagnostics_v1(runtime)
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+pub(super) fn wait_for_rejected_task_candidate_extraction_v1(
+    router: &TaskCandidateGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    run_id: &[u8],
+) -> GetCommunicationTaskCandidateResponseV1 {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let response: GetCommunicationTaskCandidateResponseV1 = post_proto(
+            router,
+            runtime,
+            cookie,
+            COMMUNICATION_TASK_CANDIDATE_QUERY_CONNECT_PATH_V1,
+            GetCommunicationTaskCandidateRequestV1 {
+                protocol_major: 1,
+                run_id: run_id.to_vec(),
+            },
+        );
+        if response.state
+            == CommunicationTaskCandidateStateV1::CommunicationTaskCandidateStateRejected as i32
+        {
+            return response;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Task candidate rejection timeout: {response:?}; storage={}",
+            task_candidate_storage_diagnostics_v1(runtime)
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+pub(super) fn wait_for_extracted_task_candidate_reviews_v1(
+    router: &TaskCandidateGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    candidates: &[CommunicationTaskCandidateV1],
+) -> TaskCandidateReviewsV1 {
+    assert!(candidates.len() >= 2, "two extracted candidates required");
+    let ids = candidates[..2]
+        .iter()
+        .map(|candidate| {
+            let candidate_id: [u8; 16] = candidate
+                .candidate_id
+                .as_slice()
+                .try_into()
+                .expect("candidate id");
+            let digest: [u8; 32] = candidate
+                .candidate_digest
+                .as_slice()
+                .try_into()
+                .expect("candidate digest");
+            let review_id = derive_review_task_candidate_id_v1(
+                TASK_CANDIDATE_LOGICAL_HUMAN_OWNER_ID_V1,
+                &candidate_id,
+                &digest,
             )
-            .bind(TASK_CANDIDATE_LOGICAL_HUMAN_OWNER_ID_V1)
-            .bind(review_id.as_slice())
-            .bind(candidate_id.as_slice())
-            .bind(digest.as_slice())
-            .bind(source_id.as_slice())
-            .bind(title)
-            .bind(updated_at)
-            .execute(&pool)
-            .await
-            .expect("seed pending Review candidate");
+            .expect("derived Review id");
+            (review_id.to_vec(), candidate_id.to_vec())
+        })
+        .collect::<Vec<_>>();
+    let reviews = TaskCandidateReviewsV1 {
+        approved_review_id: ids[0].0.clone(),
+        approved_candidate_id: ids[0].1.clone(),
+        rejected_review_id: ids[1].0.clone(),
+        rejected_candidate_id: ids[1].1.clone(),
+    };
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let approved =
+            query_task_candidate_v1(router, runtime, cookie, &reviews.approved_review_id);
+        let rejected =
+            query_task_candidate_v1(router, runtime, cookie, &reviews.rejected_review_id);
+        if [approved.review.as_ref(), rejected.review.as_ref()]
+            .into_iter()
+            .all(|review| {
+                review.is_some_and(|review| {
+                    review.state
+                        == ReviewTaskCandidateStateV1::ReviewTaskCandidateStatePending as i32
+                        && review.review_revision == 1
+                })
+            })
+        {
+            return reviews;
         }
-        pool.close().await;
-        SeededTaskCandidateReviewsV1 {
-            approved_review_id: approved_review_id.to_vec(),
-            approved_candidate_id: approved_candidate_id.to_vec(),
-            rejected_review_id: rejected_review_id.to_vec(),
-            rejected_candidate_id: rejected_candidate_id.to_vec(),
-        }
-    })
+        assert!(
+            Instant::now() < deadline,
+            "Review submission timeout: approved={approved:?}; rejected={rejected:?}; storage={}",
+            task_candidate_storage_diagnostics_v1(runtime)
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
 }
 
 pub(super) fn decide_task_candidate_v1(
@@ -190,7 +282,7 @@ pub(super) fn wait_for_task_candidate_terminal_states_v1(
     router: &TaskCandidateGateway,
     runtime: &tokio::runtime::Runtime,
     cookie: &str,
-    reviews: &SeededTaskCandidateReviewsV1,
+    reviews: &TaskCandidateReviewsV1,
 ) -> (
     GetReviewTaskCandidateResponseV1,
     GetReviewTaskCandidateResponseV1,
@@ -268,7 +360,7 @@ pub(super) fn read_task_candidate_terminal_events_v1(
     router: &TaskCandidateGateway,
     runtime: &tokio::runtime::Runtime,
     cookie: &str,
-    reviews: &SeededTaskCandidateReviewsV1,
+    reviews: &TaskCandidateReviewsV1,
 ) -> TaskCandidateTerminalEventsV1 {
     let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
     let response = runtime.block_on(
@@ -292,15 +384,42 @@ pub(super) fn read_task_candidate_terminal_events_v1(
             Ok(events) => events,
             Err(_) => panic!(
                 "Task candidate SSE timeout; observed={:?}",
-                observed.lock().expect("observed Task candidate frames")
+                observed.lock().expect("observed Task candidate frames"),
             ),
         }
     })
 }
 
+pub(super) fn read_task_candidate_extraction_terminal_event_v1(
+    router: &TaskCandidateGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    run_id: &[u8],
+) -> ClientRealtimeEventV1 {
+    let response = runtime.block_on(
+        router.route(
+            Request::builder()
+                .method("GET")
+                .uri("/api/realtime/v1/events")
+                .header("cookie", cookie)
+                .body(http_body_util::Full::new(Bytes::new()))
+                .expect("Task candidate extraction Gateway SSE request"),
+        ),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    runtime.block_on(async {
+        tokio::time::timeout(
+            Duration::from_secs(15),
+            find_extraction_terminal_event(response.into_body(), run_id),
+        )
+        .await
+        .unwrap_or_else(|_| panic!("Task candidate extraction SSE timeout for {run_id:?}"))
+    })
+}
+
 pub(super) fn assert_exact_task_materialization_v1(
     runtime: &tokio::runtime::Runtime,
-    reviews: &SeededTaskCandidateReviewsV1,
+    reviews: &TaskCandidateReviewsV1,
 ) {
     runtime.block_on(async {
         let pool = task_candidate_admin_pool_v1().await;
@@ -324,6 +443,31 @@ pub(super) fn assert_exact_task_materialization_v1(
         .expect("count rejected candidate Tasks");
         assert_eq!(approved, 1, "approve must materialize exactly one Task");
         assert_eq!(rejected, 0, "reject must never materialize a Task");
+        pool.close().await;
+    });
+}
+
+pub(super) fn assert_no_task_materialization_v1(
+    runtime: &tokio::runtime::Runtime,
+    reviews: &TaskCandidateReviewsV1,
+) {
+    runtime.block_on(async {
+        let pool = task_candidate_admin_pool_v1().await;
+        for candidate_id in [
+            &reviews.approved_candidate_id,
+            &reviews.rejected_candidate_id,
+        ] {
+            let count: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM hermes_data.tasks_state
+                 WHERE logical_owner_id=$1 AND approved_candidate_id=$2",
+            )
+            .bind(TASK_CANDIDATE_LOGICAL_HUMAN_OWNER_ID_V1)
+            .bind(candidate_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count pre-decision Tasks");
+            assert_eq!(count, 0, "extraction must not create Task before approve");
+        }
         pool.close().await;
     });
 }
@@ -374,7 +518,7 @@ where
 
 async fn find_terminal_events<B>(
     mut body: B,
-    reviews: &SeededTaskCandidateReviewsV1,
+    reviews: &TaskCandidateReviewsV1,
     observed: ObservedTaskCandidateFramesV1,
 ) -> TaskCandidateTerminalEventsV1
 where
@@ -382,8 +526,8 @@ where
     B::Error: std::fmt::Debug,
 {
     let mut pending = Vec::new();
-    let mut approved = None;
-    let mut rejected = None;
+    let mut approved: Option<ClientRealtimeEventV1> = None;
+    let mut rejected: Option<ClientRealtimeEventV1> = None;
     while let Some(frame) = body.frame().await {
         let frame = frame.expect("Task candidate SSE frame");
         let Ok(data) = frame.into_data() else {
@@ -404,6 +548,13 @@ where
             let Some(RealtimeFrame::Event(event)) = frame.frame else {
                 continue;
             };
+            observed.lock().expect("record realtime contract").push((
+                event.contract_name.clone(),
+                Vec::new(),
+                0,
+                0,
+                0,
+            ));
             if event.contract_name != REVIEW_TASK_CANDIDATE_REALTIME_CONTRACT_NAME_V1
                 || event.event_kind != REVIEW_TASK_CANDIDATE_REALTIME_EVENT_KIND_V1
             {
@@ -412,6 +563,7 @@ where
             let payload = ReviewTaskCandidateStatusChangedV1::decode(event.payload.as_slice())
                 .expect("Task candidate status payload");
             observed.lock().expect("record Task candidate frame").push((
+                event.contract_name.clone(),
                 payload.review_id.clone(),
                 payload.state,
                 payload.promotion_status,
@@ -441,6 +593,52 @@ where
         }
     }
     panic!("Gateway SSE closed before both Task candidate terminal events");
+}
+
+async fn find_extraction_terminal_event<B>(mut body: B, run_id: &[u8]) -> ClientRealtimeEventV1
+where
+    B: hyper::body::Body<Data = Bytes> + Unpin,
+    B::Error: std::fmt::Debug,
+{
+    let mut pending = Vec::new();
+    while let Some(frame) = body.frame().await {
+        let frame = frame.expect("Task candidate extraction SSE frame");
+        let Ok(data) = frame.into_data() else {
+            continue;
+        };
+        pending.extend_from_slice(&data);
+        while let Some(boundary) = pending.windows(2).position(|window| window == b"\n\n") {
+            let block = pending.drain(..boundary + 2).collect::<Vec<_>>();
+            let text = std::str::from_utf8(&block).expect("Task candidate extraction SSE UTF-8");
+            let Some(encoded) = text.lines().find_map(|line| line.strip_prefix("data: ")) else {
+                continue;
+            };
+            let bytes = URL_SAFE_NO_PAD
+                .decode(encoded)
+                .expect("decode Task candidate extraction frame");
+            let frame = ClientRealtimeFrameV1::decode(bytes.as_slice())
+                .expect("Task candidate extraction realtime frame");
+            let Some(RealtimeFrame::Event(event)) = frame.frame else {
+                continue;
+            };
+            if event.contract_name != COMMUNICATION_TASK_CANDIDATE_REALTIME_CONTRACT_NAME_V1
+                || event.event_kind != COMMUNICATION_TASK_CANDIDATE_REALTIME_EVENT_KIND_V1
+            {
+                continue;
+            }
+            let payload =
+                CommunicationTaskCandidateStatusChangedV1::decode(event.payload.as_slice())
+                    .expect("Task candidate extraction status payload");
+            if payload.run_id == run_id
+                && payload.state
+                    == CommunicationTaskCandidateStateV1::CommunicationTaskCandidateStateReady
+                        as i32
+            {
+                return event;
+            }
+        }
+    }
+    panic!("Gateway SSE closed before Task candidate extraction terminal event");
 }
 
 async fn task_candidate_admin_pool_v1() -> sqlx::PgPool {

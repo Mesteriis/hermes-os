@@ -347,12 +347,30 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   );
   assert.match(managedFlow, /configure_communications_jetstream/);
   assert.match(managedFlow, /start_communications_domain/);
+  assert.match(
+    managedFlow,
+    /assert_communications_transferred_body_projection_with_plaintext/,
+  );
   assert.match(managedFlow, /started\.len\(\), 4/);
   assert.match(managedFlow, /start_task_candidate_ensemble_v1/);
+  assert.match(managedFlow, /start_task_candidate_extraction_v1/);
+  assert.match(managedFlow, /wait_for_ready_task_candidate_extraction_v1/);
+  assert.match(managedFlow, /wait_for_rejected_task_candidate_extraction_v1/);
+  assert.match(managedFlow, /wait_for_extracted_task_candidate_reviews_v1/);
+  assert.match(managedFlow, /assert_no_task_materialization_v1/);
   assert.match(managedFlow, /decide_task_candidate_v1/);
+  assert.match(managedFlow, /ReviewTaskCandidateErrorCodeOperationConflict/);
+  assert.match(managedFlow, /ReviewTaskCandidateErrorCodeRevisionConflict/);
   assert.match(managedFlow, /assert_exact_task_materialization_v1/);
+  assert.match(managedFlow, /read_task_candidate_extraction_terminal_event_v1/);
+  assert.match(managedFlow, /read_task_candidate_terminal_events_v1/);
+  assert.match(managedFlow, /assert_task_candidate_runtime_fences_v1/);
+  assert.match(managedFlow, /route_task_candidate_start_as_v1/);
   assert.match(managedFlow, /revoke_owner/);
   assert.match(managedFlow, /restart_task_candidate_runtime_v1/);
+  assert.match(managedFlow, /replayed_extraction\.cursor, extraction_cursor/);
+  assert.match(managedFlow, /replayed\.approved\.cursor, approved_cursor/);
+  assert.match(managedFlow, /replayed\.rejected\.cursor, rejected_cursor/);
   assert.match(
     authenticatedStorage,
     /HERMES_STORAGE_MANAGED_TEST_FILTER[\s\S]*managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart/,

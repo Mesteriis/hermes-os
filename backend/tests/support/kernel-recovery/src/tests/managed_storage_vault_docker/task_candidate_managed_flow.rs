@@ -4,7 +4,15 @@ use super::*;
 
 use crate::identity::device::signer::DeviceSigner;
 use hermes_communication_task_candidate_api::{
-    COMMUNICATION_TASK_CANDIDATE_MODULE_ID_V1, COMMUNICATION_TASK_CANDIDATE_OWNER_V1,
+    COMMUNICATION_TASK_CANDIDATE_CAPABILITY_ID_V1,
+    COMMUNICATION_TASK_CANDIDATE_COMMAND_CONTRACT_NAME_V1,
+    COMMUNICATION_TASK_CANDIDATE_CONTRACT_MAJOR_V1,
+    COMMUNICATION_TASK_CANDIDATE_CONTRACT_REVISION_V1, COMMUNICATION_TASK_CANDIDATE_MODULE_ID_V1,
+    COMMUNICATION_TASK_CANDIDATE_OWNER_V1, COMMUNICATION_TASK_CANDIDATE_SCHEMA_SHA256,
+    wire::{
+        CommunicationTaskCandidateErrorCodeV1, CommunicationTaskCandidateStateV1,
+        StartCommunicationTaskCandidateRequestV1,
+    },
 };
 use hermes_review_task_candidate_api::{
     REVIEW_TASK_CANDIDATE_MODULE_ID_V1, REVIEW_TASK_CANDIDATE_OWNER_V1,
@@ -16,7 +24,13 @@ use hermes_review_task_candidate_api::{
 use hermes_reviewed_task_candidate_promotion_core::{
     REVIEWED_TASK_CANDIDATE_PROMOTION_MODULE_ID_V1, REVIEWED_TASK_CANDIDATE_PROMOTION_OWNER_V1,
 };
+use hermes_runtime_protocol::v1::{
+    ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
+};
 use hermes_tasks_command_api::{TASKS_MODULE_ID_V1, TASKS_OWNER_ID_V1};
+
+const TASK_CANDIDATE_SOURCE_BODY_V1: &[u8] =
+    b"Action: prepare the release brief by Friday\nCould you check the backup before Monday?";
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault, Storage, Blob, NATS, Communications, extraction, Review and Tasks binaries"]
@@ -122,6 +136,36 @@ fn managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_r
             && !runtime.registration_id.is_empty()
             && !runtime.runtime_instance_id.is_empty()
     }));
+    let source_message_id = assert_communications_transferred_body_projection_with_plaintext(
+        &store,
+        &supervisor,
+        &data,
+        release.kernel(),
+        &root.join("runtime"),
+        TASK_CANDIDATE_SOURCE_BODY_V1,
+        false,
+    );
+    let source_message_id_exact: [u8; 16] = source_message_id
+        .as_slice()
+        .try_into()
+        .expect("canonical source message id");
+    assert_task_candidate_runtime_fences_v1(
+        &store,
+        &supervisor,
+        &started[0],
+        source_message_id_exact,
+    );
+    let wrong_owner = route_task_candidate_start_as_v1(
+        &store,
+        &supervisor,
+        &started[0],
+        "owner-2",
+        700,
+        task_candidate_start_request_v1([0x20; 16], source_message_id_exact, 2),
+    );
+    assert_eq!(wrong_owner.request_id, 700);
+    assert_eq!(wrong_owner.error_code, "REJECTED");
+    assert!(wrong_owner.response_payload.is_empty());
 
     let gateway_runtime = tokio::runtime::Runtime::new().expect("Task candidate Gateway runtime");
     let router = task_candidate_gateway_v1(&store, &supervisor, &root, &data, realtime.clone());
@@ -129,7 +173,120 @@ fn managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_r
         &router,
         &gateway_runtime,
     );
-    let reviews = seed_pending_task_candidate_reviews_v1(&gateway_runtime);
+    let start = start_task_candidate_extraction_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        0x21,
+        &source_message_id,
+        2,
+    );
+    assert_eq!(
+        start.error,
+        CommunicationTaskCandidateErrorCodeV1::CommunicationTaskCandidateErrorCodeUnspecified
+            as i32
+    );
+    assert_eq!(
+        start.state,
+        CommunicationTaskCandidateStateV1::CommunicationTaskCandidateStatePreparingSource as i32
+    );
+    let ready = wait_for_ready_task_candidate_extraction_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        &start.run_id,
+    );
+    assert_eq!(ready.source_message_id, source_message_id);
+    assert_eq!(ready.expected_source_revision, 2);
+    assert!(ready.candidates.len() >= 2);
+    let candidate_titles = ready
+        .candidates
+        .iter()
+        .map(|candidate| candidate.title.as_bytes().to_vec())
+        .collect::<Vec<_>>();
+    let extraction_event = read_task_candidate_extraction_terminal_event_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        &start.run_id,
+    );
+    for title in &candidate_titles {
+        assert!(
+            !extraction_event
+                .encode_to_vec()
+                .windows(title.len())
+                .any(|window| window == title),
+            "client realtime must not expose candidate presentation bytes"
+        );
+    }
+    assert!(
+        !extraction_event
+            .encode_to_vec()
+            .windows(TASK_CANDIDATE_SOURCE_BODY_V1.len())
+            .any(|window| window == TASK_CANDIDATE_SOURCE_BODY_V1),
+        "client realtime must not expose communication source content"
+    );
+    let extraction_cursor = extraction_event.cursor.clone();
+
+    let duplicate = start_task_candidate_extraction_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        0x21,
+        &source_message_id,
+        2,
+    );
+    assert_eq!(duplicate.run_id, start.run_id);
+    assert_eq!(
+        duplicate.state,
+        CommunicationTaskCandidateStateV1::CommunicationTaskCandidateStateReady as i32
+    );
+    let conflict = start_task_candidate_extraction_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        0x21,
+        &source_message_id,
+        3,
+    );
+    assert_eq!(
+        conflict.error,
+        CommunicationTaskCandidateErrorCodeV1::CommunicationTaskCandidateErrorCodeInvalidRequest
+            as i32
+    );
+    let stale = start_task_candidate_extraction_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        0x22,
+        &source_message_id,
+        1,
+    );
+    assert_eq!(
+        stale.error,
+        CommunicationTaskCandidateErrorCodeV1::CommunicationTaskCandidateErrorCodeUnspecified
+            as i32
+    );
+    let stale = wait_for_rejected_task_candidate_extraction_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        &stale.run_id,
+    );
+    assert_eq!(
+        stale.error,
+        CommunicationTaskCandidateErrorCodeV1::CommunicationTaskCandidateErrorCodeSourceRejected
+            as i32
+    );
+    assert!(stale.candidates.is_empty());
+
+    let reviews = wait_for_extracted_task_candidate_reviews_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        &ready.candidates,
+    );
+    assert_no_task_materialization_v1(&gateway_runtime, &reviews);
 
     let approved = decide_task_candidate_v1(
         &router,
@@ -238,10 +395,7 @@ fn managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_r
     let terminal =
         read_task_candidate_terminal_events_v1(&router, &gateway_runtime, &cookie, &reviews);
     assert_exact_task_materialization_v1(&gateway_runtime, &reviews);
-    for title in [
-        b"Approved candidate title".as_slice(),
-        b"Rejected candidate title",
-    ] {
+    for title in &candidate_titles {
         for event in [&terminal.approved, &terminal.rejected] {
             assert!(
                 !event
@@ -260,6 +414,14 @@ fn managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_r
             .revoke_owner(TASK_CANDIDATE_LOGICAL_HUMAN_OWNER_ID_V1)
             .expect("clear Task candidate Gateway replay cache")
     );
+    let extraction_position = started
+        .iter()
+        .position(|runtime| runtime.module_id == COMMUNICATION_TASK_CANDIDATE_MODULE_ID_V1)
+        .expect("started Task candidate extraction runtime");
+    let extraction = started.remove(extraction_position);
+    let extraction =
+        restart_task_candidate_runtime_v1(&supervisor, &store, &root.join("runtime"), extraction);
+    started.insert(extraction_position, extraction);
     let review_position = started
         .iter()
         .position(|runtime| runtime.module_id == REVIEW_TASK_CANDIDATE_MODULE_ID_V1)
@@ -276,12 +438,19 @@ fn managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_r
             &gateway_runtime,
             2,
         );
+    let replayed_extraction = read_task_candidate_extraction_terminal_event_v1(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        &start.run_id,
+    );
     let replayed = read_task_candidate_terminal_events_v1(
         &restarted_router,
         &gateway_runtime,
         &restarted_cookie,
         &reviews,
     );
+    assert_eq!(replayed_extraction.cursor, extraction_cursor);
     assert_eq!(replayed.approved.cursor, approved_cursor);
     assert_eq!(replayed.rejected.cursor, rejected_cursor);
 
@@ -290,4 +459,102 @@ fn managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_r
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
     }
     std::fs::remove_dir_all(root).expect("remove reviewed Task candidate fixture");
+}
+
+fn task_candidate_start_request_v1(
+    operation_id: [u8; 16],
+    source_message_id: [u8; 16],
+    expected_source_revision: u64,
+) -> StartCommunicationTaskCandidateRequestV1 {
+    StartCommunicationTaskCandidateRequestV1 {
+        protocol_major: 1,
+        operation_id: operation_id.to_vec(),
+        source_message_id: source_message_id.to_vec(),
+        expected_source_revision,
+    }
+}
+
+fn route_task_candidate_start_as_v1(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    workflow: &StartedTaskCandidateRuntimeV1,
+    logical_owner_id: &str,
+    request_id: u64,
+    request: StartCommunicationTaskCandidateRequestV1,
+) -> ModuleClientResponseV1 {
+    let request = encode_task_candidate_module_request_v1(logical_owner_id, request_id, request);
+    let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+        &workflow.registration_id,
+        &workflow.runtime_instance_id,
+        workflow.runtime_generation,
+        workflow.grant_epoch,
+        COMMUNICATION_TASK_CANDIDATE_CAPABILITY_ID_V1,
+        &request,
+    );
+    let bytes = crate::modules::capability::router::route_managed_client_request(
+        store,
+        &supervisor.relay_port(),
+        &route,
+    )
+    .expect("route Task candidate owner-fence request");
+    ModuleClientResponseV1::decode(bytes.as_slice()).expect("decode Task candidate response")
+}
+
+fn assert_task_candidate_runtime_fences_v1(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    workflow: &StartedTaskCandidateRuntimeV1,
+    source_message_id: [u8; 16],
+) {
+    let request = encode_task_candidate_module_request_v1(
+        TASK_CANDIDATE_LOGICAL_HUMAN_OWNER_ID_V1,
+        699,
+        task_candidate_start_request_v1([0x1f; 16], source_message_id, 2),
+    );
+    for (runtime_generation, grant_epoch) in [
+        (workflow.runtime_generation + 1, workflow.grant_epoch),
+        (workflow.runtime_generation, workflow.grant_epoch + 1),
+    ] {
+        let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+            &workflow.registration_id,
+            &workflow.runtime_instance_id,
+            runtime_generation,
+            grant_epoch,
+            COMMUNICATION_TASK_CANDIDATE_CAPABILITY_ID_V1,
+            &request,
+        );
+        assert_eq!(
+            crate::modules::capability::router::route_managed_client_request(
+                store,
+                &supervisor.relay_port(),
+                &route,
+            )
+            .expect_err("stale Task candidate runtime fence"),
+            "managed runtime fence is stale"
+        );
+    }
+}
+
+fn encode_task_candidate_module_request_v1(
+    logical_owner_id: &str,
+    request_id: u64,
+    request: StartCommunicationTaskCandidateRequestV1,
+) -> Vec<u8> {
+    ModuleClientRequestV1 {
+        protocol_major: 1,
+        module_id: COMMUNICATION_TASK_CANDIDATE_MODULE_ID_V1.to_owned(),
+        owner_id: COMMUNICATION_TASK_CANDIDATE_OWNER_V1.to_owned(),
+        contract: Some(ContractReferenceV1 {
+            owner: COMMUNICATION_TASK_CANDIDATE_OWNER_V1.to_owned(),
+            name: COMMUNICATION_TASK_CANDIDATE_COMMAND_CONTRACT_NAME_V1.to_owned(),
+            major: COMMUNICATION_TASK_CANDIDATE_CONTRACT_MAJOR_V1,
+            revision: COMMUNICATION_TASK_CANDIDATE_CONTRACT_REVISION_V1,
+            schema_sha256: COMMUNICATION_TASK_CANDIDATE_SCHEMA_SHA256.to_vec(),
+        }),
+        request_id,
+        request_payload: request.encode_to_vec(),
+        logical_owner_id: logical_owner_id.to_owned(),
+        authenticated_device_id: "desktop-1".to_owned(),
+    }
+    .encode_to_vec()
 }
