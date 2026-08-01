@@ -17,9 +17,10 @@ use hermes_review_task_candidate_core::{
     ReviewTaskCandidateStateV1, ReviewTaskCandidateTimestampV1, ReviewTaskCandidateV1,
 };
 use hermes_review_task_candidate_persistence::{
-    DecideReviewTaskCandidateOperationV1, ReviewTaskCandidateDecisionOutcomeV1,
-    ReviewTaskCandidateOutboxRecordV1, ReviewTaskCandidatePersistenceErrorV1,
-    ReviewTaskCandidatePersistenceV1, ReviewTaskCandidateRealtimeTransitionV1,
+    CheckReviewTaskCandidateDecisionReplayV1, DecideReviewTaskCandidateOperationV1,
+    ReviewTaskCandidateDecisionOutcomeV1, ReviewTaskCandidateOutboxRecordV1,
+    ReviewTaskCandidatePersistenceErrorV1, ReviewTaskCandidatePersistenceV1,
+    ReviewTaskCandidateRealtimeTransitionV1,
 };
 use hermes_runtime_protocol::managed_control::{
     ManagedControlChannelV2, ManagedControlRequestDispatcherV2,
@@ -66,6 +67,24 @@ pub(crate) async fn decide_payload_v1(
     {
         return decide_error(WireError::ReviewTaskCandidateErrorCodeInvalidRequest);
     }
+    let owner_device_id = owner_device_actor_id(runtime.authenticated_device_id);
+    let request_sha256: [u8; 32] = Sha256::digest(payload).into();
+    let replay = persistence
+        .load_decision_replay(&CheckReviewTaskCandidateDecisionReplayV1 {
+            logical_owner_id: runtime.logical_owner_id.to_owned(),
+            operation_id,
+            request_sha256,
+            review_id,
+            expected_review_revision: request.expected_review_revision,
+            decision,
+            owner_device_id,
+        })
+        .await;
+    match replay {
+        Ok(Some(review)) => return decide_response(review, true),
+        Ok(None) => {}
+        Err(error) => return decide_error(persistence_error(error)),
+    }
     let current = match persistence
         .load_review(runtime.logical_owner_id, &review_id)
         .await
@@ -79,7 +98,6 @@ pub(crate) async fn decide_payload_v1(
     if current.state != ReviewTaskCandidateStateV1::Pending {
         return decide_error(WireError::ReviewTaskCandidateErrorCodeTerminalDecision);
     }
-    let owner_device_id = owner_device_actor_id(runtime.authenticated_device_id);
     let decided_at = timestamp(runtime.now_unix_millis);
     let approved_event = if decision == ReviewTaskCandidateDecisionV1::Approve {
         match approved_event(channel, dispatcher, owner_device_id, runtime, &current) {
@@ -98,7 +116,7 @@ pub(crate) async fn decide_payload_v1(
         .decide(DecideReviewTaskCandidateOperationV1 {
             logical_owner_id: runtime.logical_owner_id.to_owned(),
             operation_id,
-            request_sha256: Sha256::digest(payload).into(),
+            request_sha256,
             review_id,
             expected_review_revision: request.expected_review_revision,
             decision,

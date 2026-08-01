@@ -112,6 +112,17 @@ pub struct DecideReviewTaskCandidateOperationV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CheckReviewTaskCandidateDecisionReplayV1 {
+    pub logical_owner_id: String,
+    pub operation_id: [u8; 16],
+    pub request_sha256: [u8; 32],
+    pub review_id: [u8; 16],
+    pub expected_review_revision: u64,
+    pub decision: ReviewTaskCandidateDecisionV1,
+    pub owner_device_id: [u8; 16],
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReviewTaskCandidateDecisionOutcomeV1 {
     Applied(ReviewTaskCandidateV1),
     Replayed(ReviewTaskCandidateV1),
@@ -160,15 +171,40 @@ pub enum ReviewTaskCandidatePersistenceErrorV1 {
 }
 
 pub(crate) fn decision_fingerprint(input: &DecideReviewTaskCandidateOperationV1) -> [u8; 32] {
+    decision_fingerprint_fields(
+        input.review_id,
+        input.expected_review_revision,
+        input.decision,
+        input.owner_device_id,
+    )
+}
+
+pub(crate) fn decision_replay_fingerprint(
+    input: &CheckReviewTaskCandidateDecisionReplayV1,
+) -> [u8; 32] {
+    decision_fingerprint_fields(
+        input.review_id,
+        input.expected_review_revision,
+        input.decision,
+        input.owner_device_id,
+    )
+}
+
+fn decision_fingerprint_fields(
+    review_id: [u8; 16],
+    expected_review_revision: u64,
+    decision: ReviewTaskCandidateDecisionV1,
+    owner_device_id: [u8; 16],
+) -> [u8; 32] {
     let mut hash = Sha256::new();
     hash.update(b"hermes.review.task-candidate.decision.v1\0");
-    hash.update(input.review_id);
-    hash.update(input.expected_review_revision.to_be_bytes());
-    hash.update([match input.decision {
+    hash.update(review_id);
+    hash.update(expected_review_revision.to_be_bytes());
+    hash.update([match decision {
         ReviewTaskCandidateDecisionV1::Approve => 1,
         ReviewTaskCandidateDecisionV1::Reject => 2,
     }]);
-    hash.update(input.owner_device_id);
+    hash.update(owner_device_id);
     hash.finalize().into()
 }
 

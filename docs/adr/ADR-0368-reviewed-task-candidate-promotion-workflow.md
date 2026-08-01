@@ -23,7 +23,12 @@ typed Gateway routes, exact event-only workflow, ровно один Task для
 replay тех же cursors после рестарта Review runtime. Tasks принимает
 target-bound candidate Blob только после собственного custody transfer по
 exact command evidence; прямое чтение Review reference запрещено. Promotion
-gate остаётся staged только до полного pre-push и итогового clean-room аудита.
+client boundary теперь проверяет persisted operation до current Review
+revision/state: exact retry после terminal promotion replay-ит сохранённую
+операцию, а reuse operation ID с другим request hash/fingerprint fail closed
+как `operation_conflict` без повторного решения или Task. Live managed gate
+доказывает оба случая. Promotion gate остаётся staged только до итогового
+clean-room аудита оставшихся negative requirements.
 
 Уточняет:
 

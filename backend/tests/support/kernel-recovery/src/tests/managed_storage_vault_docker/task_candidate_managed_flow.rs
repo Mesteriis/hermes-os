@@ -199,6 +199,42 @@ fn managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_r
     let (approved_final, rejected_final) =
         wait_for_task_candidate_terminal_states_v1(&router, &gateway_runtime, &cookie, &reviews);
     assert_task_candidate_response_states_v1(&approved_final, &rejected_final);
+    let approved_replay = decide_task_candidate_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        0x51,
+        &reviews.approved_review_id,
+        1,
+        ReviewTaskCandidateDecisionV1::ReviewTaskCandidateDecisionApprove,
+    );
+    assert_eq!(
+        approved_replay.error,
+        ReviewTaskCandidateErrorCodeV1::ReviewTaskCandidateErrorCodeUnspecified as i32
+    );
+    assert!(approved_replay.replayed);
+    let approved_replay_state = approved_replay.review.expect("replayed Review response");
+    assert_eq!(
+        approved_replay_state.promotion_status,
+        ReviewTaskCandidatePromotionStatusV1::ReviewTaskCandidatePromotionStatusSucceeded as i32
+    );
+    assert_eq!(approved_replay_state.review_revision, 3);
+
+    let operation_conflict = decide_task_candidate_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        0x51,
+        &reviews.approved_review_id,
+        1,
+        ReviewTaskCandidateDecisionV1::ReviewTaskCandidateDecisionReject,
+    );
+    assert_eq!(
+        operation_conflict.error,
+        ReviewTaskCandidateErrorCodeV1::ReviewTaskCandidateErrorCodeOperationConflict as i32
+    );
+    assert!(operation_conflict.review.is_none());
+
     let terminal =
         read_task_candidate_terminal_events_v1(&router, &gateway_runtime, &cookie, &reviews);
     assert_exact_task_materialization_v1(&gateway_runtime, &reviews);

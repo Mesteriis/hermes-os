@@ -10,17 +10,17 @@ use sqlx::{
 };
 
 use crate::{
-    CompleteReviewTaskCandidateSubmissionV1, DecideReviewTaskCandidateOperationV1,
-    PersistReviewTaskCandidateMaterializationV1, PersistReviewTaskCandidatePromotionResultV1,
-    PersistedReviewTaskCandidateSubmissionV1, RejectReviewTaskCandidateSubmissionV1,
-    ReserveReviewTaskCandidateSubmissionOutcomeV1, ReserveReviewTaskCandidateSubmissionV1,
-    ReviewTaskCandidateDecisionOutcomeV1, ReviewTaskCandidateInboxOutcomeV1,
-    ReviewTaskCandidateOutboxRecordV1, ReviewTaskCandidatePersistenceErrorV1,
-    ReviewTaskCandidateRealtimeTransitionV1,
+    CheckReviewTaskCandidateDecisionReplayV1, CompleteReviewTaskCandidateSubmissionV1,
+    DecideReviewTaskCandidateOperationV1, PersistReviewTaskCandidateMaterializationV1,
+    PersistReviewTaskCandidatePromotionResultV1, PersistedReviewTaskCandidateSubmissionV1,
+    RejectReviewTaskCandidateSubmissionV1, ReserveReviewTaskCandidateSubmissionOutcomeV1,
+    ReserveReviewTaskCandidateSubmissionV1, ReviewTaskCandidateDecisionOutcomeV1,
+    ReviewTaskCandidateInboxOutcomeV1, ReviewTaskCandidateOutboxRecordV1,
+    ReviewTaskCandidatePersistenceErrorV1, ReviewTaskCandidateRealtimeTransitionV1,
     model::{
         REVIEW_TASK_CANDIDATE_OUTBOX_LIMIT_V1, REVIEW_TASK_CANDIDATE_REALTIME_LIMIT_V1,
-        REVIEW_TASK_CANDIDATE_RECOVERY_LIMIT_V1, decision_fingerprint, nonzero, valid_blob,
-        valid_cleanup, valid_identity, valid_outbox,
+        REVIEW_TASK_CANDIDATE_RECOVERY_LIMIT_V1, decision_fingerprint, decision_replay_fingerprint,
+        nonzero, valid_blob, valid_cleanup, valid_identity, valid_outbox,
     },
     row_codec::{
         SELECT_PENDING_PROMOTIONS, SELECT_RECOVERABLE_SUBMISSIONS, SELECT_REVIEW_BY_ID,
@@ -452,6 +452,40 @@ impl ReviewTaskCandidatePersistenceV1 {
         Ok(ReviewTaskCandidateDecisionOutcomeV1::Applied(next))
     }
 
+    pub async fn load_decision_replay(
+        &self,
+        input: &CheckReviewTaskCandidateDecisionReplayV1,
+    ) -> Result<Option<ReviewTaskCandidateV1>, ReviewTaskCandidatePersistenceErrorV1> {
+        validate_decision_replay(input)?;
+        let fingerprint = decision_replay_fingerprint(input);
+        let Some(row) = sqlx::query(
+            "SELECT request_sha256, decision_fingerprint, review_id
+             FROM hermes_data.review_task_candidate_operations
+             WHERE logical_owner_id=$1 AND operation_id=$2",
+        )
+        .bind(&input.logical_owner_id)
+        .bind(input.operation_id.as_slice())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage_error)?
+        else {
+            return Ok(None);
+        };
+        let request_hash: Vec<u8> = row.try_get("request_sha256").map_err(invalid_row)?;
+        let stored_fingerprint: Vec<u8> =
+            row.try_get("decision_fingerprint").map_err(invalid_row)?;
+        let review_id: Vec<u8> = row.try_get("review_id").map_err(invalid_row)?;
+        if request_hash.as_slice() != input.request_sha256
+            || stored_fingerprint.as_slice() != fingerprint
+            || review_id.as_slice() != input.review_id
+        {
+            return Err(ReviewTaskCandidatePersistenceErrorV1::OperationConflict);
+        }
+        self.load_review(&input.logical_owner_id, &input.review_id)
+            .await
+            .map(Some)
+    }
+
     pub async fn persist_promotion_result(
         &self,
         input: PersistReviewTaskCandidatePromotionResultV1,
@@ -758,6 +792,21 @@ fn validate_decision(
         || !nonzero(&input.owner_device_id)
         || timestamp_millis(input.decided_at).is_err()
         || !event_valid
+    {
+        return Err(ReviewTaskCandidatePersistenceErrorV1::InvalidInput);
+    }
+    Ok(())
+}
+
+fn validate_decision_replay(
+    input: &CheckReviewTaskCandidateDecisionReplayV1,
+) -> Result<(), ReviewTaskCandidatePersistenceErrorV1> {
+    if !valid_identity(&input.logical_owner_id)
+        || !nonzero(&input.operation_id)
+        || !nonzero(&input.request_sha256)
+        || !nonzero(&input.review_id)
+        || input.expected_review_revision == 0
+        || !nonzero(&input.owner_device_id)
     {
         return Err(ReviewTaskCandidatePersistenceErrorV1::InvalidInput);
     }
