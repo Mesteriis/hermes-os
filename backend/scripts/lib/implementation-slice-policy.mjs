@@ -7123,6 +7123,7 @@ function expectedSlice(currentSlice) {
     currentSlice === 'attachment_preview_assembly_v1'
     || currentSlice === 'attachment_preview_managed_admission_v1'
     || currentSlice === 'attachment_preview_managed_formats_v1'
+    || currentSlice === 'attachment_preview_failure_boundaries_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,

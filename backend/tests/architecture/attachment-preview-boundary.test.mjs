@@ -29,13 +29,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_managed_formats_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_failure_boundaries_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
   assert.match(adr, /Состояние реализации: managed multi-format Gateway\/client Blob\/SSE slice/);
-  assert.match(adr, /Browser evidence и полная negative\/privacy\/outage[\s\S]*ещё не реализованы/);
+  assert.match(adr, /Browser evidence,[\s\S]*privacy-negative матрица ещё не реализованы/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);
@@ -428,7 +428,7 @@ test('development release builds and signs the exact Preview assembly fragment',
 });
 
 test('Preview has an authenticated exact signed managed admission gate', async () => {
-  const [setup, flow, harness] = await Promise.all([
+  const [setup, flow, formats, persistence, harness] = await Promise.all([
     readFile(
       new URL(
         'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_managed_setup.rs',
@@ -443,6 +443,20 @@ test('Preview has an authenticated exact signed managed admission gate', async (
       ),
       'utf8',
     ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_managed_formats.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_persistence_fixture.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
     readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
   ]);
 
@@ -453,8 +467,19 @@ test('Preview has an authenticated exact signed managed admission gate', async (
   assert.match(setup, /start_reserved_workflow/);
   assert.match(flow, /managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart/);
   assert.match(flow, /wait_for_ready_attachment_preview_v1/);
+  assert.match(flow, /set_authenticated_nats_container_running\(false\)/);
+  assert.match(flow, /set_authenticated_nats_container_running\(true\)/);
+  assert.match(flow, /authenticate_secondary_gateway_router/);
+  assert.match(flow, /StatusCode::NOT_FOUND/);
+  assert.match(formats, /preview-bad-pdf/);
+  assert.match(formats, /preview-active-pdf/);
+  assert.match(formats, /preview-bad-png/);
+  assert.match(formats, /preview-unsupported/);
+  assert.match(formats, /assert_private_source_absent_v1/);
+  assert.match(persistence, /attachment_preview_custody_outbox/);
+  assert.match(persistence, /attachment_preview_artifacts/);
   assert.match(harness, /-p'[\s\S]*hermes-attachment-preview-runtime/);
   assert.match(harness, /HERMES_ATTACHMENT_PREVIEW_RUNTIME_BIN/);
   assert.match(harness, /managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart/);
-  assert.doesNotMatch(`${setup}\n${flow}`, /hermes_communications_(?:domain|persistence)|hermes_attachment_security_(?:core|persistence|runtime)/);
+  assert.doesNotMatch(`${setup}\n${flow}\n${formats}\n${persistence}`, /hermes_communications_(?:domain|persistence)|hermes_attachment_security_(?:core|persistence|runtime)/);
 });

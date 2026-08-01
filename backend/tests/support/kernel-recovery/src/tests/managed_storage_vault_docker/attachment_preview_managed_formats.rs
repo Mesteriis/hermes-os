@@ -21,7 +21,7 @@ use super::{
     attachment_preview_gateway_fixture::{
         AttachmentPreviewGateway, post_attachment_preview_proto_v1,
         read_attachment_preview_blob_v1, read_terminal_attachment_preview_sse_event_v1,
-        wait_for_ready_attachment_preview_v1,
+        wait_for_ready_attachment_preview_v1, wait_for_terminal_attachment_preview_v1,
     },
     attachment_security_blob_fixture::AttachmentSecurityBlobSourceFixture,
     attachment_security_clamav_fixture::AttachmentSecurityClamAvFixture,
@@ -58,6 +58,11 @@ pub(super) fn assert_managed_attachment_preview_formats_v1(
     cookie: &str,
 ) {
     let filter = std::env::var("HERMES_ATTACHMENT_PREVIEW_MANAGED_FORMAT_FILTER").ok();
+    let failure_filter = std::env::var("HERMES_ATTACHMENT_PREVIEW_MANAGED_FAILURE_FILTER").ok();
+    assert!(
+        filter.is_none() || failure_filter.is_none(),
+        "managed Preview format and failure filters are mutually exclusive"
+    );
     let formats = managed_preview_formats_v1();
     if let Some(filter) = filter.as_deref() {
         assert!(
@@ -67,6 +72,7 @@ pub(super) fn assert_managed_attachment_preview_formats_v1(
     }
     for (index, format) in formats
         .into_iter()
+        .filter(|_| failure_filter.is_none())
         .filter(|format| {
             filter
                 .as_deref()
@@ -185,6 +191,139 @@ pub(super) fn assert_managed_attachment_preview_formats_v1(
             "{} read ticket must be one-use",
             format.label
         );
+    }
+    if filter.is_none() {
+        assert_managed_attachment_preview_failures_v1(
+            store,
+            supervisor,
+            data,
+            blob_source,
+            clamav,
+            router,
+            gateway_runtime,
+            cookie,
+            failure_filter.as_deref(),
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn assert_managed_attachment_preview_failures_v1(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    data: &Path,
+    blob_source: &AttachmentSecurityBlobSourceFixture,
+    clamav: &AttachmentSecurityClamAvFixture,
+    router: &AttachmentPreviewGateway,
+    gateway_runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    filter: Option<&str>,
+) {
+    let failures = [
+        (
+            "preview-bad-pdf",
+            b"%PDF-1.7\ninvalid".to_vec(),
+            AttachmentPreviewStateV1::Rejected,
+            AttachmentPreviewErrorCodeV1::InvalidContent,
+        ),
+        (
+            "preview-active-pdf",
+            b"%PDF-1.7\n/JavaScript".to_vec(),
+            AttachmentPreviewStateV1::Unsupported,
+            AttachmentPreviewErrorCodeV1::Unsupported,
+        ),
+        (
+            "preview-bad-png",
+            b"\x89PNG\r\n\x1a\ninvalid".to_vec(),
+            AttachmentPreviewStateV1::Rejected,
+            AttachmentPreviewErrorCodeV1::InvalidContent,
+        ),
+        (
+            "preview-unsupported",
+            vec![0xff, 0xfe, 0xfd],
+            AttachmentPreviewStateV1::Unsupported,
+            AttachmentPreviewErrorCodeV1::Unsupported,
+        ),
+    ];
+    if let Some(filter) = filter {
+        assert!(
+            failures.iter().any(|(label, ..)| *label == filter),
+            "unknown managed Preview failure filter"
+        );
+    }
+    for (index, (label, source, expected_state, expected_error)) in failures
+        .into_iter()
+        .filter(|(label, ..)| filter.is_none_or(|filter| *label == filter))
+        .enumerate()
+    {
+        let discriminator = u8::try_from(index).expect("bounded Preview failure index");
+        let blob = blob_source.write(
+            store,
+            supervisor,
+            data,
+            [0xd0_u8
+                .checked_add(discriminator)
+                .expect("Preview failure Blob id"); 16],
+            &source,
+        );
+        let attachment = prepare_communications_attachment_for_scan(
+            store,
+            label,
+            blob.declared_size,
+            blob.receipt_sha256,
+        );
+        assert_clean_attachment_security_verdict_flow(store, &attachment, &blob, clamav, &source);
+        assert_eq!(
+            wait_for_attachment_state(store, supervisor, attachment.attachment_anchor_id),
+            hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
+                as u32
+        );
+        let accepted = post_attachment_preview_proto_v1::<_, StartAttachmentPreviewResponseV1>(
+            router,
+            gateway_runtime,
+            cookie,
+            ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1,
+            StartAttachmentPreviewRequestV1 {
+                protocol_major: 1,
+                operation_id: vec![
+                    0xe0_u8
+                        .checked_add(discriminator)
+                        .expect("Preview failure operation id");
+                    16
+                ],
+                attachment_anchor_id: attachment.attachment_anchor_id.to_vec(),
+            },
+        );
+        assert_eq!(
+            accepted.error,
+            AttachmentPreviewErrorCodeV1::Unspecified as i32
+        );
+        let terminal = wait_for_terminal_attachment_preview_v1(
+            router,
+            gateway_runtime,
+            cookie,
+            &accepted.run_id,
+            label,
+        );
+        assert_eq!(terminal.state, expected_state as i32, "{label}");
+        assert_eq!(terminal.error, expected_error as i32, "{label}");
+        assert_eq!(
+            terminal.preview_kind,
+            AttachmentPreviewKindV1::Unspecified as i32
+        );
+        assert_eq!(
+            terminal.content_type,
+            AttachmentPreviewContentTypeV1::Unspecified as i32
+        );
+        assert_eq!(terminal.preview_size_bytes, 0);
+        assert_private_source_absent_v1(&terminal.encode_to_vec(), &source);
+        let event = read_terminal_attachment_preview_sse_event_v1(
+            router,
+            gateway_runtime,
+            cookie,
+            &accepted.run_id,
+        );
+        assert_private_source_absent_v1(&event.encode_to_vec(), &source);
     }
 }
 

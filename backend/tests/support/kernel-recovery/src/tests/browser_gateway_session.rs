@@ -164,15 +164,32 @@ fn authentication_http_fixture() -> AuthenticationHttpFixture {
 }
 
 pub(super) fn admit_browser_test_device(store: &Arc<SqliteControlStore>, logical_owner_id: &str) {
+    admit_browser_test_device_with_identity(store, logical_owner_id, "browser-1", 1, 7);
+}
+
+pub(super) fn admit_secondary_browser_test_device(
+    store: &Arc<SqliteControlStore>,
+    logical_owner_id: &str,
+) {
+    admit_browser_test_device_with_identity(store, logical_owner_id, "browser-2", 2, 8);
+}
+
+fn admit_browser_test_device_with_identity(
+    store: &Arc<SqliteControlStore>,
+    logical_owner_id: &str,
+    device_id: &str,
+    credential_id: u8,
+    signing_key_byte: u8,
+) {
     store
         .admit_browser_device(
             &BrowserDeviceEnrollmentV1::new(
                 hermes_kernel_control_store::BrowserDeviceEnrollmentInputV1 {
                     owner_id: logical_owner_id.to_owned(),
-                    device_id: "browser-1".to_owned(),
-                    credential_id: vec![1],
-                    cose_public_key: valid_browser_cose_key(),
-                    browser_key_public_key: valid_browser_local_key(),
+                    device_id: device_id.to_owned(),
+                    credential_id: vec![credential_id],
+                    cose_public_key: browser_cose_key(signing_key_byte),
+                    browser_key_public_key: browser_local_key(signing_key_byte),
                     rp_id: "hub.local".to_owned(),
                     sign_count: 0,
                     backup_eligible: false,
@@ -197,7 +214,27 @@ pub(super) fn authenticate_gateway_router_with_sign_count(
     runtime: &tokio::runtime::Runtime,
     sign_count: u32,
 ) -> String {
-    let begin = runtime.block_on(router.route(begin_authentication_request("https://hub.local")));
+    authenticate_gateway_router_for_device(router, runtime, 1, 7, sign_count)
+}
+
+pub(super) fn authenticate_secondary_gateway_router(
+    router: &GatewayApplicationRouter<ControlStoreBrowserAuthority, InMemoryBrowserRealtimeSource>,
+    runtime: &tokio::runtime::Runtime,
+) -> String {
+    authenticate_gateway_router_for_device(router, runtime, 2, 8, 1)
+}
+
+fn authenticate_gateway_router_for_device(
+    router: &GatewayApplicationRouter<ControlStoreBrowserAuthority, InMemoryBrowserRealtimeSource>,
+    runtime: &tokio::runtime::Runtime,
+    credential_id: u8,
+    signing_key_byte: u8,
+    sign_count: u32,
+) -> String {
+    let begin = runtime.block_on(router.route(begin_authentication_request_for_credential(
+        "https://hub.local",
+        credential_id,
+    )));
     assert_eq!(begin.status(), StatusCode::OK);
     let begin_body = runtime
         .block_on(begin.into_body().collect())
@@ -213,11 +250,18 @@ pub(super) fn authenticate_gateway_router_with_sign_count(
     let browser_key_challenge = ceremony["browser_key_challenge"]
         .as_str()
         .expect("browser key challenge");
-    let response = runtime.block_on(router.route(finish_authentication_request(
-        authentication_id,
-        &signed_browser_assertion(challenge, sign_count),
-        browser_key_challenge,
-    )));
+    let response = runtime.block_on(router.route(
+        finish_authentication_request_with_browser_key_signature(
+            authentication_id,
+            &signed_browser_assertion_for_key(
+                challenge,
+                sign_count,
+                credential_id,
+                signing_key_byte,
+            ),
+            &signed_browser_key_proof_for_key(browser_key_challenge, signing_key_byte),
+        ),
+    ));
     assert_eq!(response.status(), StatusCode::OK);
     response
         .headers()
@@ -392,12 +436,22 @@ mod realtime_contract;
 mod connect_status;
 
 fn begin_authentication_request(origin: &str) -> Request<Full<Bytes>> {
+    begin_authentication_request_for_credential(origin, 1)
+}
+
+fn begin_authentication_request_for_credential(
+    origin: &str,
+    credential_id: u8,
+) -> Request<Full<Bytes>> {
     Request::builder()
         .method("POST")
         .uri("/browser/v1/authentication/begin")
         .header("origin", origin)
         .header("content-type", "application/json")
-        .body(Full::new(Bytes::from_static(b"{\"credential_id\":\"AQ\"}")))
+        .body(Full::new(Bytes::from(format!(
+            r#"{{"credential_id":"{}"}}"#,
+            base64_url_encode(&[credential_id]),
+        ))))
         .expect("browser authentication request")
 }
 
@@ -433,6 +487,15 @@ fn finish_authentication_request_with_browser_key_signature(
 }
 
 fn signed_browser_assertion(challenge: &str, sign_count: u32) -> String {
+    signed_browser_assertion_for_key(challenge, sign_count, 1, 7)
+}
+
+fn signed_browser_assertion_for_key(
+    challenge: &str,
+    sign_count: u32,
+    credential_id: u8,
+    signing_key_byte: u8,
+) -> String {
     let client_data = format!(
         r#"{{"type":"webauthn.get","challenge":"{challenge}","origin":"https://hub.local","crossOrigin":false}}"#
     );
@@ -442,9 +505,10 @@ fn signed_browser_assertion(challenge: &str, sign_count: u32) -> String {
     authenticator_data.extend_from_slice(&sign_count.to_be_bytes());
     let mut signed_data = authenticator_data.clone();
     signed_data.extend_from_slice(&client_data_hash);
-    let signature: Signature = browser_signing_key().sign(&signed_data);
+    let signature: Signature = browser_signing_key_for_byte(signing_key_byte).sign(&signed_data);
+    let credential_id = base64_url_encode(&[credential_id]);
     format!(
-        r#"{{"id":"AQ","rawId":"AQ","type":"public-key","response":{{"authenticatorData":"{}","clientDataJSON":"{}","signature":"{}","userHandle":null}},"clientExtensionResults":{{}}}}"#,
+        r#"{{"id":"{credential_id}","rawId":"{credential_id}","type":"public-key","response":{{"authenticatorData":"{}","clientDataJSON":"{}","signature":"{}","userHandle":null}},"clientExtensionResults":{{}}}}"#,
         base64_url_encode(&authenticator_data),
         base64_url_encode(client_data.as_bytes()),
         base64_url_encode(signature.to_der().as_bytes()),
@@ -476,11 +540,19 @@ fn base64_url_encode(value: &[u8]) -> String {
 }
 
 pub(super) fn browser_signing_key() -> SigningKey {
-    SigningKey::from_bytes((&[7_u8; 32]).into()).expect("test signing key")
+    browser_signing_key_for_byte(7)
+}
+
+fn browser_signing_key_for_byte(value: u8) -> SigningKey {
+    SigningKey::from_bytes((&[value; 32]).into()).expect("test signing key")
 }
 
 fn valid_browser_local_key() -> Vec<u8> {
-    browser_signing_key()
+    browser_local_key(7)
+}
+
+fn browser_local_key(signing_key_byte: u8) -> Vec<u8> {
+    browser_signing_key_for_byte(signing_key_byte)
         .verifying_key()
         .to_sec1_point(false)
         .as_bytes()
@@ -488,8 +560,12 @@ fn valid_browser_local_key() -> Vec<u8> {
 }
 
 fn signed_browser_key_proof(challenge: &str) -> String {
+    signed_browser_key_proof_for_key(challenge, 7)
+}
+
+fn signed_browser_key_proof_for_key(challenge: &str, signing_key_byte: u8) -> String {
     let raw = decode_base64_url(challenge);
-    let signature: Signature = browser_signing_key().sign(&raw);
+    let signature: Signature = browser_signing_key_for_byte(signing_key_byte).sign(&raw);
     base64_url_encode(&signature.to_bytes())
 }
 
@@ -514,7 +590,11 @@ fn decode_base64_url(value: &str) -> Vec<u8> {
 }
 
 fn valid_browser_cose_key() -> Vec<u8> {
-    let signing_key = browser_signing_key();
+    browser_cose_key(7)
+}
+
+fn browser_cose_key(signing_key_byte: u8) -> Vec<u8> {
+    let signing_key = browser_signing_key_for_byte(signing_key_byte);
     let point = signing_key.verifying_key().to_sec1_point(false);
     let key = COSEKey {
         type_: COSEAlgorithm::ES256,

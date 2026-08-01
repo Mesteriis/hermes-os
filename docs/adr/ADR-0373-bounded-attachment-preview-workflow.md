@@ -48,8 +48,13 @@ Start/Get/IssueRead, target-bound Blob redelegation, fresh derived Blob для
 Blob data listener явно переводит принятый Unix stream в blocking mode, поэтому
 partial large frame не превращается в `Broken pipe`; fenced Preview jobs
 восстанавливаются после истечения lease и fail closed как `Unavailable` после
-исчерпания bounded attempts. Browser evidence и полная negative/privacy/outage
-матрица ещё не реализованы. Inventory gate
+исчерпания bounded attempts. Managed failure-boundary conformance дополнительно
+доказывает NATS outage/replay без duplicate custody/render/artifact, exact
+request replay и operation-id conflict, actor-fenced one-use Blob tickets,
+malformed PDF/PNG, active PDF и unsupported binary fail-closed outcomes, а
+также отсутствие source bytes в status/SSE carriers. Browser evidence,
+stale-fence/polyglot/oversized matrix, Blob/Vault/renderer outages и полная
+log/error/health/telemetry privacy-negative матрица ещё не реализованы. Inventory gate
 `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:

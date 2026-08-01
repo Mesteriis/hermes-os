@@ -66,6 +66,10 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
         &store,
         ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
     );
+    super::super::browser_gateway_session::admit_secondary_browser_test_device(
+        &store,
+        ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
+    );
 
     let admitted_preview = admit_attachment_preview_runtime_v1(&store);
     let admitted_security = admit_attachment_security_runtime(&store);
@@ -147,6 +151,7 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
         hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
             as u32
     );
+    wait_for_attachment_preview_evidence_v1();
 
     let gateway_runtime = tokio::runtime::Runtime::new().expect("Gateway runtime");
     let router = attachment_preview_gateway_v1(&store, &supervisor, &root, &data, realtime.clone());
@@ -154,22 +159,26 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
         &router,
         &gateway_runtime,
     );
+    let request = StartAttachmentPreviewRequestV1 {
+        protocol_major: 1,
+        operation_id: vec![0xA2; 16],
+        attachment_anchor_id: attachment.attachment_anchor_id.to_vec(),
+    };
+    set_authenticated_nats_container_running(false);
     let accepted = post_attachment_preview_proto_v1::<_, StartAttachmentPreviewResponseV1>(
         &router,
         &gateway_runtime,
         &cookie,
         ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1,
-        StartAttachmentPreviewRequestV1 {
-            protocol_major: 1,
-            operation_id: vec![0xA2; 16],
-            attachment_anchor_id: attachment.attachment_anchor_id.to_vec(),
-        },
+        request.clone(),
     );
     assert_eq!(
         accepted.error,
         AttachmentPreviewErrorCodeV1::Unspecified as i32
     );
     assert_eq!(accepted.run_id.len(), 16);
+    wait_for_pending_attachment_preview_custody_outbox_v1();
+    set_authenticated_nats_container_running(true);
 
     let ready = wait_for_ready_attachment_preview_v1(
         &router,
@@ -210,6 +219,48 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
             .any(|window| window == PRIVATE_SOURCE)
     );
     let first_cursor = first_event.cursor.clone();
+    let completed = attachment_preview_diagnostics_v1();
+    assert_eq!(
+        completed,
+        AttachmentPreviewDiagnosticsV1 {
+            candidates: 1,
+            safety_facts: 1,
+            custody_requests: 1,
+            pending_custody_outbox: 0,
+            custody_results: 1,
+            jobs: 1,
+            attempts: 1,
+            artifacts: 1,
+            security_delegation_commands: 1,
+            security_delegation_attempts: 1,
+            security_delegation_results: 1,
+        }
+    );
+    let duplicate = post_attachment_preview_proto_v1::<_, StartAttachmentPreviewResponseV1>(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1,
+        request.clone(),
+    );
+    assert_eq!(duplicate.run_id, accepted.run_id);
+    assert_eq!(duplicate.state, AttachmentPreviewStateV1::Ready as i32);
+    assert_eq!(attachment_preview_diagnostics_v1(), completed);
+    let conflicting = post_attachment_preview_proto_v1::<_, StartAttachmentPreviewResponseV1>(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1,
+        StartAttachmentPreviewRequestV1 {
+            attachment_anchor_id: vec![0xA3; 16],
+            ..request
+        },
+    );
+    assert_eq!(
+        conflicting.error,
+        AttachmentPreviewErrorCodeV1::InvalidRequest as i32
+    );
+    assert_eq!(attachment_preview_diagnostics_v1(), completed);
 
     let ticket = post_attachment_preview_proto_v1::<_, IssueAttachmentPreviewReadResponseV1>(
         &router,
@@ -226,6 +277,19 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
         AttachmentPreviewErrorCodeV1::Unspecified as i32
     );
     assert_eq!(ticket.opaque_read_ticket.len(), 32);
+    let secondary_cookie =
+        super::super::browser_gateway_session::authenticate_secondary_gateway_router(
+            &router,
+            &gateway_runtime,
+        );
+    let (wrong_actor_status, wrong_actor_body) = read_attachment_preview_blob_v1(
+        &router,
+        &gateway_runtime,
+        Some(&secondary_cookie),
+        ticket.opaque_read_ticket.clone(),
+    );
+    assert_eq!(wrong_actor_status, StatusCode::NOT_FOUND);
+    assert!(wrong_actor_body.is_empty());
     let (status, body) = read_attachment_preview_blob_v1(
         &router,
         &gateway_runtime,
@@ -306,4 +370,34 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
     }
     std::fs::remove_dir_all(root).expect("remove fixture");
     std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
+}
+
+fn wait_for_attachment_preview_evidence_v1() {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let diagnostics = attachment_preview_diagnostics_v1();
+        if diagnostics.candidates == 1 && diagnostics.safety_facts == 1 {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Attachment Preview did not consume source evidence: {diagnostics:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
+fn wait_for_pending_attachment_preview_custody_outbox_v1() {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let diagnostics = attachment_preview_diagnostics_v1();
+        if diagnostics.custody_requests == 1 && diagnostics.pending_custody_outbox == 1 {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Attachment Preview did not retain its custody command during NATS outage: {diagnostics:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
 }

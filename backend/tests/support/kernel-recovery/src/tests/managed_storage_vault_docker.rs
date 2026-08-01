@@ -157,6 +157,9 @@ mod attachment_preview_gateway_fixture;
 mod attachment_preview_managed_flow;
 #[path = "managed_storage_vault_docker/attachment_preview_managed_formats.rs"]
 mod attachment_preview_managed_formats;
+#[path = "managed_storage_vault_docker/attachment_preview_persistence_fixture.rs"]
+mod attachment_preview_persistence_fixture;
+use attachment_preview_persistence_fixture::*;
 #[path = "managed_storage_vault_docker/attachment_preview_managed_setup.rs"]
 mod attachment_preview_managed_setup;
 #[path = "managed_storage_vault_docker/attachment_security_blob_fixture.rs"]
