@@ -29,13 +29,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_gateway_blob_sse_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_managed_formats_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
-  assert.match(adr, /Состояние реализации: managed Gateway\/client Blob\/SSE slice/);
-  assert.match(adr, /Browser evidence, managed[\s\S]*ещё не[\s\S]*реализованы/);
+  assert.match(adr, /Состояние реализации: managed multi-format Gateway\/client Blob\/SSE slice/);
+  assert.match(adr, /Browser evidence и полная negative\/privacy\/outage[\s\S]*ещё не реализованы/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);

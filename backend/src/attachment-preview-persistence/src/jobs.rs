@@ -143,6 +143,86 @@ pub(crate) async fn enqueue_preview_work(
 }
 
 impl AttachmentPreviewPersistenceV1 {
+    pub async fn recover_expired_jobs(
+        &self,
+        logical_owner_id: &str,
+        now_unix_millis: i64,
+    ) -> Result<u32, AttachmentPreviewPersistenceErrorV1> {
+        if !valid_owner(logical_owner_id) || !valid_timestamp_millis(now_unix_millis) {
+            return Err(AttachmentPreviewPersistenceErrorV1::InvalidInput);
+        }
+        let mut transaction = self.pool.begin().await.map_err(storage_unavailable)?;
+        let retry_count = sqlx::query(
+            "UPDATE hermes_data.attachment_preview_jobs SET state=1,worker_id=NULL,runtime_generation=NULL,grant_epoch=NULL,lease_expires_at_unix_millis=NULL,updated_at_unix_millis=$2 WHERE logical_owner_id=$1 AND state=2 AND lease_expires_at_unix_millis<=$2 AND attempt_count<max_attempts",
+        )
+        .bind(logical_owner_id)
+        .bind(now_unix_millis)
+        .execute(&mut *transaction)
+        .await
+        .map_err(storage_unavailable)?
+        .rows_affected();
+        let exhausted = sqlx::query(
+            "SELECT job_id,run_id FROM hermes_data.attachment_preview_jobs WHERE logical_owner_id=$1 AND state=2 AND lease_expires_at_unix_millis<=$2 AND attempt_count>=max_attempts ORDER BY job_id FOR UPDATE",
+        )
+        .bind(logical_owner_id)
+        .bind(now_unix_millis)
+        .fetch_all(&mut *transaction)
+        .await
+        .map_err(storage_unavailable)?;
+        for row in &exhausted {
+            let job_id = id16(row.try_get("job_id").map_err(invalid_row)?)?;
+            let run_id = id16(row.try_get("run_id").map_err(invalid_row)?)?;
+            let current = load_run_for_update(&mut transaction, logical_owner_id, run_id)
+                .await?
+                .ok_or(AttachmentPreviewPersistenceErrorV1::InvalidRow)?;
+            if current.status.state != AttachmentPreviewStateV1::Rendering {
+                return Err(AttachmentPreviewPersistenceErrorV1::EvidenceConflict);
+            }
+            let next = transition_attachment_preview_status_v1(
+                &current.status,
+                AttachmentPreviewTransitionV1::Reject(AttachmentPreviewErrorCodeV1::Unavailable),
+            )
+            .map_err(|_| AttachmentPreviewPersistenceErrorV1::EvidenceConflict)?;
+            let changed = sqlx::query(
+                "UPDATE hermes_data.attachment_preview_jobs SET state=4,worker_id=NULL,runtime_generation=NULL,grant_epoch=NULL,lease_expires_at_unix_millis=NULL,updated_at_unix_millis=$3 WHERE logical_owner_id=$1 AND job_id=$2 AND state=2",
+            )
+            .bind(logical_owner_id)
+            .bind(job_id.as_slice())
+            .bind(now_unix_millis)
+            .execute(&mut *transaction)
+            .await
+            .map_err(storage_unavailable)?
+            .rows_affected();
+            if changed != 1
+                || !update_run_status(
+                    &mut transaction,
+                    logical_owner_id,
+                    run_id,
+                    current.status.state_revision,
+                    &next,
+                    now_unix_millis,
+                )
+                .await?
+            {
+                return Err(AttachmentPreviewPersistenceErrorV1::EvidenceConflict);
+            }
+            append_realtime(
+                &mut transaction,
+                logical_owner_id,
+                run_id,
+                &next,
+                now_unix_millis,
+            )
+            .await?;
+        }
+        let total = retry_count
+            .checked_add(u64::try_from(exhausted.len()).map_err(invalid_row)?)
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or(AttachmentPreviewPersistenceErrorV1::InvalidRow)?;
+        transaction.commit().await.map_err(storage_unavailable)?;
+        Ok(total)
+    }
+
     pub async fn claim_next_job(
         &self,
         logical_owner_id: &str,

@@ -4,7 +4,7 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: managed Gateway/client Blob/SSE slice. Clean-room owner boundary,
+Состояние реализации: managed multi-format Gateway/client Blob/SSE slice. Clean-room owner boundary,
 client/private-content boundary, event-only custody, renderer topology и phase
 gate определены. Отдельные `hermes-attachment-preview-api`, `-ingress`, `-core`
 и `-renderer-contract` admitted и реализуют versioned Start/Get/IssueRead/
@@ -41,11 +41,15 @@ conformance поднимает exact signed Preview binary как отдельн
 Attachment Security теперь отдельно потребляет target-owned Preview custody
 command, проверяет собственное safe/current-custody evidence и публикует exact
 delegated/rejected result без RPC между owners. Authenticated managed gate
-доказывает полный UTF-8 flow через Start/Get/IssueRead, target-bound Blob
-redelegation, fresh derived Blob, one-use actor-bound `client_blob`, metadata-only
-SSE и exact restart replay без повторного render. Browser evidence, managed
-multi-format evidence и полная negative/privacy/outage матрица ещё не
-реализованы. Inventory gate
+доказывает полный UTF-8, PNG, PDF, DOCX, MP3 и MP4 flow через
+Start/Get/IssueRead, target-bound Blob redelegation, fresh derived Blob для
+изображений и документов, exact bounded media copy, one-use actor-bound
+`client_blob`, metadata-only SSE и exact restart replay без повторного render.
+Blob data listener явно переводит принятый Unix stream в blocking mode, поэтому
+partial large frame не превращается в `Broken pipe`; fenced Preview jobs
+восстанавливаются после истечения lease и fail closed как `Unavailable` после
+исчерпания bounded attempts. Browser evidence и полная negative/privacy/outage
+матрица ещё не реализованы. Inventory gate
 `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:

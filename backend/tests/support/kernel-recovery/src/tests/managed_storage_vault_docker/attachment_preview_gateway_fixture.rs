@@ -183,14 +183,16 @@ pub(super) fn wait_for_ready_attachment_preview_v1(
     runtime: &tokio::runtime::Runtime,
     cookie: &str,
     run_id: &[u8],
+    scenario: &str,
 ) -> GetAttachmentPreviewResponseV1 {
-    let response = wait_for_terminal_attachment_preview_v1(router, runtime, cookie, run_id);
+    let response =
+        wait_for_terminal_attachment_preview_v1(router, runtime, cookie, run_id, scenario);
     let state =
         AttachmentPreviewStateV1::try_from(response.state).expect("known Attachment Preview state");
     assert_eq!(
         state,
         AttachmentPreviewStateV1::Ready,
-        "Attachment Preview rejected a safe supported source: {response:?}"
+        "Attachment Preview rejected safe supported source {scenario}: {response:?}"
     );
     response
 }
@@ -200,6 +202,7 @@ pub(super) fn wait_for_terminal_attachment_preview_v1(
     runtime: &tokio::runtime::Runtime,
     cookie: &str,
     run_id: &[u8],
+    scenario: &str,
 ) -> GetAttachmentPreviewResponseV1 {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
@@ -216,7 +219,7 @@ pub(super) fn wait_for_terminal_attachment_preview_v1(
         }
         assert!(
             Instant::now() < deadline,
-            "Attachment Preview did not reach a terminal state: {response:?}"
+            "Attachment Preview {scenario} did not reach a terminal state: {response:?}"
         );
         std::thread::sleep(Duration::from_millis(25));
     }

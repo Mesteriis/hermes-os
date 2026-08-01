@@ -379,6 +379,11 @@ impl AttachmentPreviewManagedRuntimeV1 {
         &mut self,
         now_unix_millis: i64,
     ) -> Result<JobTickV1, AttachmentPreviewRuntimeErrorV1> {
+        self.persistence
+            .recover_expired_jobs(&self.logical_human_owner_id, now_unix_millis)
+            .await
+            .inspect_err(|_| developer_job_stage("recover_expired"))
+            .map_err(persistence_error)?;
         let Some(claimed) = self
             .persistence
             .claim_next_job(
@@ -390,6 +395,7 @@ impl AttachmentPreviewManagedRuntimeV1 {
                 JOB_LEASE_MILLIS,
             )
             .await
+            .inspect_err(|_| developer_job_stage("claim"))
             .map_err(persistence_error)?
         else {
             return Ok(JobTickV1::Idle);
@@ -436,6 +442,7 @@ impl AttachmentPreviewManagedRuntimeV1 {
                 now_unix_millis,
             )
             .await
+            .inspect_err(|_| developer_job_stage("record_target_receipt"))
             .map_err(persistence_error)?;
         self.persistence
             .complete_job(
@@ -453,6 +460,7 @@ impl AttachmentPreviewManagedRuntimeV1 {
                 now_unix_millis,
             )
             .await
+            .inspect_err(|_| developer_job_stage("complete"))
             .map_err(persistence_error)?;
         Ok(JobTickV1::Completed)
     }
@@ -543,6 +551,12 @@ impl AttachmentPreviewManagedRuntimeV1 {
             )
             .map_err(|_| AttachmentPreviewRuntimeErrorV1::Unavailable)?;
         Ok(true)
+    }
+}
+
+fn developer_job_stage(stage: &str) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_attachment_preview_job_denied stage={stage}");
     }
 }
 

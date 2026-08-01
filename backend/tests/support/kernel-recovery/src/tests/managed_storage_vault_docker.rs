@@ -155,6 +155,8 @@ mod archive_inspection_managed_setup;
 mod attachment_preview_gateway_fixture;
 #[path = "managed_storage_vault_docker/attachment_preview_managed_flow.rs"]
 mod attachment_preview_managed_flow;
+#[path = "managed_storage_vault_docker/attachment_preview_managed_formats.rs"]
+mod attachment_preview_managed_formats;
 #[path = "managed_storage_vault_docker/attachment_preview_managed_setup.rs"]
 mod attachment_preview_managed_setup;
 #[path = "managed_storage_vault_docker/attachment_security_blob_fixture.rs"]

@@ -179,11 +179,11 @@ where
                 if let Some(expected_sha256) = session.expected_plaintext_sha256() {
                     self.store
                         .write_receipt_bound(request, expected_sha256)
-                        .map_err(|_| developer_denied("write"))?;
+                        .map_err(|error| developer_storage_denied("write", &error))?;
                 } else {
                     self.store
                         .write_new(request)
-                        .map_err(|_| developer_denied("write"))?;
+                        .map_err(|error| developer_storage_denied("write", &error))?;
                 }
                 Ok(BlobDataResponseV1 {
                     plaintext: Vec::new(),
@@ -216,7 +216,7 @@ where
                         range,
                         now,
                     )
-                    .map_err(|_| developer_denied("read"))?;
+                    .map_err(|error| developer_storage_denied("read", &error))?;
                 if !exact_plaintext_binding(session.expected_plaintext_sha256(), &plaintext) {
                     return Err(());
                 }
@@ -323,6 +323,12 @@ fn exact_plaintext_binding(expected_plaintext_sha256: Option<&[u8; 32]>, plainte
 fn developer_denied(stage: &str) {
     if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
         eprintln!("developer_blob_data_request_denied stage={stage}");
+    }
+}
+
+fn developer_storage_denied(stage: &str, error: &hermes_blob_runtime::storage::BlobLifecycleError) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_blob_data_request_denied stage={stage} error={error:?}");
     }
 }
 

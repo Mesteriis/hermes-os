@@ -7122,7 +7122,7 @@ function expectedSlice(currentSlice) {
   if (
     currentSlice === 'attachment_preview_assembly_v1'
     || currentSlice === 'attachment_preview_managed_admission_v1'
-    || currentSlice === 'attachment_preview_gateway_blob_sse_v1'
+    || currentSlice === 'attachment_preview_managed_formats_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,

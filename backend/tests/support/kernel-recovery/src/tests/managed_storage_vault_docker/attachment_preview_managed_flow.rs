@@ -8,6 +8,7 @@ use super::{
         read_attachment_preview_blob_v1, read_terminal_attachment_preview_sse_event_v1,
         wait_for_ready_attachment_preview_v1,
     },
+    attachment_preview_managed_formats::assert_managed_attachment_preview_formats_v1,
     attachment_security_blob_fixture::AttachmentSecurityBlobSourceFixture,
     attachment_security_clamav_fixture::AttachmentSecurityClamAvFixture,
     attachment_security_event_flow::{
@@ -170,8 +171,13 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
     );
     assert_eq!(accepted.run_id.len(), 16);
 
-    let ready =
-        wait_for_ready_attachment_preview_v1(&router, &gateway_runtime, &cookie, &accepted.run_id);
+    let ready = wait_for_ready_attachment_preview_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        &accepted.run_id,
+        "text",
+    );
     assert_eq!(ready.attachment_anchor_id, attachment.attachment_anchor_id);
     assert_eq!(ready.state, AttachmentPreviewStateV1::Ready as i32);
     assert_eq!(ready.preview_kind, AttachmentPreviewKindV1::Text as i32);
@@ -235,6 +241,17 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
         ticket.opaque_read_ticket,
     );
     assert_eq!(replay_status, StatusCode::NOT_FOUND);
+
+    assert_managed_attachment_preview_formats_v1(
+        &store,
+        &supervisor,
+        &data,
+        &blob_source,
+        &clamav,
+        &router,
+        &gateway_runtime,
+        &cookie,
+    );
 
     assert!(
         realtime

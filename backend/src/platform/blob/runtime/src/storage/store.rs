@@ -75,9 +75,14 @@ impl EncryptedBlobStore {
             .key_for(reference, fence, custody, now_unix_ms)
             .map_err(BlobStorageError::Lease)?;
         let target = root::blob_path(&self.content_root, reference);
-        root::validate_private_regular_file(&target)?;
-        let encrypted = fs::read(target).map_err(|_| BlobStorageError::Filesystem)?;
-        let plaintext = format::decrypt(reference, custody, lease.key_revision(), key, &encrypted)?;
+        root::validate_private_regular_file(&target)
+            .inspect_err(|_| developer_storage_stage("validate_file"))?;
+        let encrypted = fs::read(target).map_err(|_| {
+            developer_storage_stage("read_file");
+            BlobStorageError::Filesystem
+        })?;
+        let plaintext = format::decrypt(reference, custody, lease.key_revision(), key, &encrypted)
+            .inspect_err(|_| developer_storage_stage("decrypt"))?;
         if u64::try_from(plaintext.len()) != Ok(reference.declared_size()) {
             return Err(BlobStorageError::MalformedCiphertext);
         }
@@ -186,6 +191,12 @@ impl EncryptedBlobStore {
         File::open(&self.content_root)
             .and_then(|directory| directory.sync_all())
             .map_err(|_| BlobStorageError::Filesystem)
+    }
+}
+
+fn developer_storage_stage(stage: &str) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_blob_storage_read_denied stage={stage}");
     }
 }
 
