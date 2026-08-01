@@ -367,6 +367,11 @@ test('managed runtime composes exact Event Blob parser client SSE and OCR resour
   assert.match(clientPort, /request\.logical_owner_id != logical_owner_id/);
   assert.match(realtime, /PublishClientRealtime/);
   assert.match(parser, /detect_attachment_text_parser_v1/);
+  assert.match(parser, /matches_artifact_identity_v1/);
+  assert.match(parser, /configuration\.executable_sha256/);
+  assert.match(parser, /configuration\.english_model_sha256/);
+  assert.match(parser, /configuration\.russian_model_sha256/);
+  assert.match(runtime, /matches_artifact_identity_v1/);
   assert.match(ocrResources, /attachment_text_extraction\.ocr\.eng\.v1/);
   assert.match(ocrResources, /attachment_text_extraction\.ocr\.runner\.v1/);
   assert.match(ocrResources, /attachment_text_extraction\.ocr\.rus\.v1/);
@@ -489,6 +494,8 @@ test('managed conformance stages exact OCR resources through the workflow releas
   assert.match(flow, /text-extraction-malformed-pdf/);
   assert.match(flow, /text-extraction-unsupported/);
   assert.match(flow, /text-extraction-parser-unavailable/);
+  assert.match(flow, /replace_attachment_text_parser_identity_v1/);
+  assert.match(flow, /stale_parser_identity/);
   assert.match(flow, /stop\(blob_binding::BLOB_PROCESS_ID\)/);
   assert.match(flow, /AttachmentTextExtractionErrorCodeV1::Unavailable/);
   assert.match(flow, /remove_staged_attachment_text_extraction_ocr_runner_v1/);

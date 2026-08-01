@@ -60,8 +60,37 @@ impl AttachmentTextExtractionParserRuntimeV1 {
             text_utf8: normalized.bytes,
             format: format(parser),
             extraction_truncated: normalized.extraction_truncated,
-            parser_identity_sha256: parser_identity(parser),
+            parser_identity_sha256: self.parser_identity_v1(parser),
         })
+    }
+
+    #[must_use]
+    pub fn matches_artifact_identity_v1(
+        &self,
+        format: AttachmentTextFormatV1,
+        artifact_identity_sha256: [u8; 32],
+    ) -> bool {
+        self.parser_identity_v1(parser_kind(format)) == artifact_identity_sha256
+    }
+
+    fn parser_identity_v1(&self, parser: AttachmentTextParserKindV1) -> [u8; 32] {
+        let mut digest = Sha256::new();
+        digest.update(b"hermes.attachment-text-extraction.parser-identity.v1\0");
+        match parser {
+            AttachmentTextParserKindV1::PlainUtf8 => digest.update(b"plain-v1"),
+            AttachmentTextParserKindV1::Pdf => digest.update(b"pdf-text-extract-0.2.0-v1"),
+            AttachmentTextParserKindV1::Docx => digest.update(b"docx-quick-xml-0.41.0-v1"),
+            AttachmentTextParserKindV1::Ocr => {
+                digest.update(b"tesseract-eng-rus-v1\0");
+                let Some(configuration) = self.ocr.as_ref() else {
+                    return [0; 32];
+                };
+                digest.update(configuration.executable_sha256);
+                digest.update(configuration.english_model_sha256);
+                digest.update(configuration.russian_model_sha256);
+            }
+        }
+        digest.finalize().into()
     }
 }
 
@@ -74,17 +103,13 @@ const fn format(parser: AttachmentTextParserKindV1) -> AttachmentTextFormatV1 {
     }
 }
 
-fn parser_identity(parser: AttachmentTextParserKindV1) -> [u8; 32] {
-    let label = match parser {
-        AttachmentTextParserKindV1::PlainUtf8 => b"plain-v1".as_slice(),
-        AttachmentTextParserKindV1::Pdf => b"pdf-text-extract-0.2.0-v1".as_slice(),
-        AttachmentTextParserKindV1::Docx => b"docx-quick-xml-0.41.0-v1".as_slice(),
-        AttachmentTextParserKindV1::Ocr => b"tesseract-eng-rus-v1".as_slice(),
-    };
-    let mut digest = Sha256::new();
-    digest.update(b"hermes.attachment-text-extraction.parser-identity.v1\0");
-    digest.update(label);
-    digest.finalize().into()
+const fn parser_kind(format: AttachmentTextFormatV1) -> AttachmentTextParserKindV1 {
+    match format {
+        AttachmentTextFormatV1::PlainUtf8 => AttachmentTextParserKindV1::PlainUtf8,
+        AttachmentTextFormatV1::Pdf => AttachmentTextParserKindV1::Pdf,
+        AttachmentTextFormatV1::Docx => AttachmentTextParserKindV1::Docx,
+        AttachmentTextFormatV1::Ocr => AttachmentTextParserKindV1::Ocr,
+    }
 }
 
 const fn map_error(error: AttachmentTextParserErrorV1) -> AttachmentTextRuntimeParseErrorV1 {
@@ -132,6 +157,40 @@ mod tests {
         assert_eq!(
             runtime.extract(b"\x89PNG\r\n\x1a\nbody"),
             Err(AttachmentTextRuntimeParseErrorV1::ParserUnavailable)
+        );
+        assert!(!runtime.matches_artifact_identity_v1(AttachmentTextFormatV1::Ocr, [1; 32]));
+    }
+
+    #[test]
+    fn artifact_identity_is_exact_for_the_current_parser_revision() {
+        let runtime = AttachmentTextExtractionParserRuntimeV1::new(None);
+        let parsed = runtime.extract(b"Hermes").expect("plain extraction");
+        assert!(runtime.matches_artifact_identity_v1(
+            AttachmentTextFormatV1::PlainUtf8,
+            parsed.parser_identity_sha256,
+        ));
+        assert!(
+            !runtime.matches_artifact_identity_v1(AttachmentTextFormatV1::PlainUtf8, [0x55; 32],)
+        );
+
+        let first =
+            AttachmentTextExtractionParserRuntimeV1::new(Some(TesseractOcrConfigurationV1 {
+                executable: "runner".into(),
+                executable_sha256: [1; 32],
+                tessdata_directory: "tessdata".into(),
+                english_model_sha256: [2; 32],
+                russian_model_sha256: [3; 32],
+                private_work_directory: "work".into(),
+                timeout_millis: 1,
+            }));
+        let second =
+            AttachmentTextExtractionParserRuntimeV1::new(Some(TesseractOcrConfigurationV1 {
+                english_model_sha256: [4; 32],
+                ..first.ocr.clone().expect("first OCR configuration")
+            }));
+        assert_ne!(
+            first.parser_identity_v1(AttachmentTextParserKindV1::Ocr),
+            second.parser_identity_v1(AttachmentTextParserKindV1::Ocr),
         );
     }
 }

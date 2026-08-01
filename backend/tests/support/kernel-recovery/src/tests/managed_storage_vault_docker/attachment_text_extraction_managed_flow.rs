@@ -19,6 +19,7 @@ use super::{
     },
     attachment_text_extraction_persistence_fixture::{
         AttachmentTextExtractionDiagnosticsV1, attachment_text_extraction_diagnostics_v1,
+        replace_attachment_text_parser_identity_v1,
     },
     attachment_text_extraction_source_fixtures::{
         attachment_text_docx_source_v1, attachment_text_ocr_png_source_v1,
@@ -44,6 +45,7 @@ use hermes_attachment_text_extraction_api::{
         StartAttachmentTextExtractionResponseV1,
     },
 };
+use hermes_attachment_text_extraction_runtime::AttachmentTextExtractionParserRuntimeV1;
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
@@ -588,6 +590,51 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
         AttachmentTextExtractionStateV1::Rejected,
         AttachmentTextExtractionErrorCodeV1::ParserUnavailable,
     );
+
+    let current_parser_identity = AttachmentTextExtractionParserRuntimeV1::new(None)
+        .extract(PRIVATE_SOURCE_TEXT)
+        .expect("current plain parser identity")
+        .parser_identity_sha256;
+    let stale_parser_identity = [0x77; 32];
+    assert_ne!(current_parser_identity, stale_parser_identity);
+    replace_attachment_text_parser_identity_v1(
+        ATTACHMENT_TEXT_EXTRACTION_LOGICAL_OWNER_ID_V1,
+        &accepted.run_id,
+        current_parser_identity,
+        stale_parser_identity,
+    );
+    let stale_revision_read = post_attachment_text_proto_v1::<_, ReadAttachmentTextResponseV1>(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        ATTACHMENT_TEXT_EXTRACTION_CONTENT_CONNECT_PATH_V1,
+        ReadAttachmentTextRequestV1 {
+            protocol_major: 1,
+            run_id: accepted.run_id.clone(),
+        },
+    );
+    assert_eq!(
+        text_error_v1(stale_revision_read.error),
+        AttachmentTextExtractionErrorCodeV1::Unavailable
+    );
+    assert!(stale_revision_read.text_utf8.is_empty());
+    replace_attachment_text_parser_identity_v1(
+        ATTACHMENT_TEXT_EXTRACTION_LOGICAL_OWNER_ID_V1,
+        &accepted.run_id,
+        stale_parser_identity,
+        current_parser_identity,
+    );
+    let current_revision_read = post_attachment_text_proto_v1::<_, ReadAttachmentTextResponseV1>(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        ATTACHMENT_TEXT_EXTRACTION_CONTENT_CONNECT_PATH_V1,
+        ReadAttachmentTextRequestV1 {
+            protocol_major: 1,
+            run_id: accepted.run_id.clone(),
+        },
+    );
+    assert_eq!(current_revision_read, read);
     assert_eq!(
         attachment_text_extraction_diagnostics_v1(),
         AttachmentTextExtractionDiagnosticsV1 {

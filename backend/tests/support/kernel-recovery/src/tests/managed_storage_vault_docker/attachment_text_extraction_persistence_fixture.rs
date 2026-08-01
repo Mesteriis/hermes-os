@@ -27,30 +27,7 @@ pub(super) fn attachment_text_extraction_diagnostics_v1() -> AttachmentTextExtra
     tokio::runtime::Runtime::new()
         .expect("Attachment Text Extraction diagnostics runtime")
         .block_on(async {
-            let password = Zeroizing::new(
-                std::fs::read_to_string(required(
-                    "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",
-                ))
-                .expect("read disposable PostgreSQL credential")
-                .trim()
-                .to_owned(),
-            );
-            let options = PgConnectOptions::new()
-                .host(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST"))
-                .port(
-                    required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")
-                        .parse()
-                        .expect("valid PostgreSQL port"),
-                )
-                .username("hermes_postgres_admin")
-                .password(password.as_str())
-                .database("hermes_storage_authenticated")
-                .ssl_mode(PgSslMode::Disable);
-            let pool = PgPoolOptions::new()
-                .max_connections(1)
-                .connect_with(options)
-                .await
-                .expect("connect Attachment Text Extraction diagnostics");
+            let pool = attachment_text_extraction_diagnostics_pool_v1().await;
             let row = sqlx::query(
                 "SELECT \
                  (SELECT count(*) FROM hermes_data.attachment_text_extraction_scan_candidates) AS candidates, \
@@ -90,4 +67,59 @@ pub(super) fn attachment_text_extraction_diagnostics_v1() -> AttachmentTextExtra
                     .expect("security result count"),
             }
         })
+}
+
+pub(super) fn replace_attachment_text_parser_identity_v1(
+    logical_owner_id: &str,
+    run_id: &[u8],
+    expected_identity_sha256: [u8; 32],
+    replacement_identity_sha256: [u8; 32],
+) {
+    assert_eq!(run_id.len(), 16);
+    assert!(expected_identity_sha256.iter().any(|byte| *byte != 0));
+    assert!(replacement_identity_sha256.iter().any(|byte| *byte != 0));
+    tokio::runtime::Runtime::new()
+        .expect("Attachment Text Extraction parser revision diagnostics runtime")
+        .block_on(async {
+            let pool = attachment_text_extraction_diagnostics_pool_v1().await;
+            let changed = sqlx::query(
+                "UPDATE hermes_data.attachment_text_extraction_artifacts SET parser_identity_sha256=$4 WHERE logical_owner_id=$1 AND run_id=$2 AND parser_identity_sha256=$3",
+            )
+            .bind(logical_owner_id)
+            .bind(run_id)
+            .bind(expected_identity_sha256.as_slice())
+            .bind(replacement_identity_sha256.as_slice())
+            .execute(&pool)
+            .await
+            .expect("replace disposable Text Extraction parser identity")
+            .rows_affected();
+            assert_eq!(changed, 1, "parser identity replacement must use exact CAS");
+        });
+}
+
+async fn attachment_text_extraction_diagnostics_pool_v1() -> sqlx::PgPool {
+    let password = Zeroizing::new(
+        std::fs::read_to_string(required(
+            "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",
+        ))
+        .expect("read disposable PostgreSQL credential")
+        .trim()
+        .to_owned(),
+    );
+    let options = PgConnectOptions::new()
+        .host(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST"))
+        .port(
+            required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")
+                .parse()
+                .expect("valid PostgreSQL port"),
+        )
+        .username("hermes_postgres_admin")
+        .password(password.as_str())
+        .database("hermes_storage_authenticated")
+        .ssl_mode(PgSslMode::Disable);
+    PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .expect("connect Attachment Text Extraction diagnostics")
 }

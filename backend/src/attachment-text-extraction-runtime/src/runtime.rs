@@ -491,6 +491,14 @@ impl AttachmentTextExtractionManagedRuntimeV1 {
                     .map_err(persistence_error)?
                 {
                     None => read_text_error_response_v1(request_id, run_id, WireError::NotFound),
+                    Some(artifact)
+                        if !self.parser.matches_artifact_identity_v1(
+                            artifact.format,
+                            artifact.parser_identity_sha256,
+                        ) =>
+                    {
+                        read_text_error_response_v1(request_id, run_id, WireError::Unavailable)
+                    }
                     Some(artifact) => {
                         match read_artifact_v1(&mut self.control_channel, &artifact) {
                             Ok(text) => read_text_response_v1(
